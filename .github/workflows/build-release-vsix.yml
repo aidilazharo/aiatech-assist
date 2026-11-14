@@ -85,13 +85,15 @@ jobs:
           FILE: ${{ steps.meta.outputs.filename }}
         run: |
           test -s "../$FILE"
-          sha256sum "../$FILE" | tee vsix.sha256
+          mkdir -p dist
+          cp "../$FILE" "dist/$FILE"
+          (cd dist && sha256sum "$FILE" > vsix.sha256)
           {
             echo "### ATGV v${{ steps.meta.outputs.version }}"
             echo "VSIX: $FILE"
             echo 'Tests and VSIX activation verification passed.'
             echo 'SHA-256:'
-            cat vsix.sha256
+            cat dist/vsix.sha256
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload VSIX build artifact
@@ -100,8 +102,8 @@ jobs:
         with:
           name: atgv-vsix-${{ steps.meta.outputs.version }}-build-${{ github.run_number }}
           path: |
-            ../${{ steps.meta.outputs.filename }}
-            vsix.sha256
+            dist/${{ steps.meta.outputs.filename }}
+            dist/vsix.sha256
           if-no-files-found: error
           retention-days: 90
 
