@@ -1,0 +1,92 @@
+name: Import verified ATGV extension source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .atgv-import/READY
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: atgv-source-import-main
+  cancel-in-progress: false
+
+jobs:
+  import:
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Verify and extract ATGV v0.3.49 source archive
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path, PurePosixPath
+          import base64, hashlib, io, json, shutil, stat, zipfile
+
+          root = Path.cwd()
+          staged = root / '.atgv-import'
+          pieces = sorted(staged.glob('part-*.b64'))
+          expected = [f'part-{i:03d}.b64' for i in range(50)]
+          if [p.name for p in pieces] != expected:
+              raise SystemExit('ATGV source import requires all 50 numbered source parts.')
+          payload = base64.b64decode(''.join(p.read_text(encoding='ascii') for p in pieces), validate=True)
+          expected_sha = 'a6bf1a251487c6cea1720e03f3f1310dda94e07a34c8c9e33d7d731b75021a39'
+          actual = hashlib.sha256(payload).hexdigest()
+          if actual != expected_sha:
+              raise SystemExit('ATGV source archive SHA-256 mismatch; refusing import.')
+          with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+              names = archive.infolist()
+              if len(names) > 1200 or sum(e.file_size for e in names) > 32 * 1024 * 1024:
+                  raise SystemExit('Unexpected ATGV source archive inventory.')
+              entries = []
+              for item in names:
+                  posix = PurePosixPath(item.filename)
+                  if item.is_dir():
+                      continue
+                  if not posix.parts or posix.parts[0] != 'ATGV-AIATECH-Assist-v0.3.49-Source':
+                      raise SystemExit('Unexpected ATGV source archive root.')
+                  relative = posix.parts[1:]
+                  if not relative or any(p in ('', '.', '..', '.git', 'node_modules') for p in relative) or '\\' in item.filename:
+                      raise SystemExit('Unsafe source archive path: ' + item.filename)
+                  if stat.S_ISLNK((item.external_attr >> 16) & 0xffff):
+                      raise SystemExit('ATGV source archive contains a symbolic link.')
+                  entries.append((item, root.joinpath(*relative)))
+              if len(entries) < 100:
+                  raise SystemExit('Incomplete extension source: expected more than 100 files.')
+              for item, target in entries:
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  target.write_bytes(archive.read(item))
+          package = json.loads((root / 'package.json').read_text())
+          if package.get('name') != 'atgv-aiatech-assist' or package.get('version') != '0.3.49':
+              raise SystemExit('ATGV package name/version does not match import.')
+          if not (root / 'scripts/build-vsix.js').is_file() or not (root / 'src/extension.js').is_file():
+              raise SystemExit('ATGV source entry points are absent.')
+          shutil.rmtree(staged)
+          print('PASS: verified source imported, temporary parts removed.',len(entries),'files')
+          PY
+      - name: Commit verified extension source to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "feat: publish verified ATGV v0.3.49 source with dual GitHub update checks"
+          git push origin HEAD:main
+      - name: Trigger release build for imported source
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run build-release-vsix.yml --ref main
+          echo "Imported main source and queued the verified VSIX release build." >> "$GITHUB_STEP_SUMMARY"
