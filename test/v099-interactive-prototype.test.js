@@ -1,0 +1,73 @@
+'use strict';
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const designs=require('../src/design-proposals');
+const artifacts=require('../src/design-artifacts');
+const root=path.join(__dirname,'..');
+const source=fs.readFileSync(path.join(root,'test','generated','extension-source.txt'),'utf8');
+const js=fs.readFileSync(path.join(root,'media','start.js'),'utf8');
+const css=fs.readFileSync(path.join(root,'media','start.css'),'utf8');
+const example={title:'Onboarding <pilot>',summary:'Interactive review',screens:[{name:'Dashboard',purpose:'Welcome',components:['New request button','Search field','Requests table'],interactions:['Open a request']},{name:'Request Details',purpose:'Inspect request',components:['Approval button','Comment field'],interactions:['Approve or reject']}],flows:['Dashboard to Request Details'],assumptions:[],questions:[]};
+test('Screen Mockups replaces prototype as sixth design choice while retaining legacy prototype read access',()=>{
+ assert.equal(designs.KINDS.prototype,'Interactive UI Prototype');
+ assert.doesNotMatch(js,/\['prototype','Interactive UI Prototype'\]/);
+ assert.match(js,/prototype:\['interactive-prototype\.html'/); // Historical exports remain readable.
+ assert.match(js,/design-kind-panel/);
+ assert.match(js,/design-revisions/);
+ assert.match(css,/\.design-kind-panel\[open\]/);
+ assert.doesNotMatch(source,/Generated Designs &amp; Diagrams/);
+ assert.doesNotMatch(source,/Solution Design Workspace/);
+ assert.match(source,/Design process progress/);
+ assert.match(js,/\['mockup','Screen Mockups'\]/);
+});
+test('prototype HTML is offline, navigable, safe and exported with structured screens',()=>{
+ const validated=designs.validate(example,'prototype');
+ assert.equal(validated.screens.length,2);
+ const out=artifacts.outputFiles('prototype',example);
+ assert.deepEqual(Object.keys(out).sort(),['design-specification.md','design-specification.json','interactive-prototype.html','prototype-navigation.json','prototype-screens.json'].sort());
+ const html=out['interactive-prototype.html'];
+ assert.match(html,/Content-Security-Policy/);
+ assert.match(html,/connect-src 'none'/);
+ assert.match(html,/data-screen="1"/);
+ assert.match(html,/data-page="1" hidden/);
+ assert.match(html,/querySelectorAll\('\[data-screen\]'\)/);
+ assert.match(html,/addEventListener\('click'/);
+ assert.match(html,/simulated; no data is saved/);
+ assert.match(html,/&lt;pilot&gt;/);
+ assert.doesNotMatch(html,/<pilot>/);
+ assert.equal(JSON.parse(out['prototype-screens.json']).length,2);
+});
+test('prototype encodes untrusted labels and excludes generated active code',()=>{
+ const malicious={...example,title:'</title><script>alert(1)</script>',screens:[{name:'" onclick="alert(1)',purpose:'<iframe src="https://x">',components:['<script>alert(1)</script> button'],interactions:['Continue']} ]};
+ const html=artifacts.outputFiles('prototype',malicious)['interactive-prototype.html'];
+ assert.match(html,/&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+ assert.match(html,/&quot; onclick=&quot;alert\(1\)/);
+ assert.doesNotMatch(html,/<iframe/);
+ assert.equal((html.match(/<script>/g)||[]).length,1);
+});
+test('ATGV Start closes editors, reloads once, and persists the reopen marker',async()=>{
+ const a=source.indexOf('async function start(options={})'),b=source.indexOf('\nasync function notice(',a);
+ assert.ok(a>0&&b>a);
+ const events=[],state=new Map();
+ const vscode={commands:{executeCommand:async name=>events.push(name)},window:{tabGroups:{all:[{tabs:[]}]}}};
+ const context={workspaceState:{update:async(k,v)=>{events.push('store:'+k);state.set(k,v);}}};
+ const start=new Function('vscode','ready','context','uiInformation',source.slice(a,b)+'\nreturn start;')(vscode,Promise.resolve(),context,()=>{});
+ await start();
+ assert.deepEqual(events,['workbench.action.closeAllEditors','store:atgvAssist.startAfterWindowReload','workbench.action.reloadWindow']);
+ assert.equal(state.get('atgvAssist.startAfterWindowReload'),true);
+ assert.match(source,/const pendingFromStart=!!context\.workspaceState\.get\(pendingStart,false\)/);
+ assert.match(source,/executeCommand\('atgvAssist\.start',\{skipReload:true\}\)/);
+ assert.match(source,/dashboard\?start\(\{skipReload:true\}\)/);
+});
+test('ATGV Start does not reload if tabs remain after a cancelled close',async()=>{
+ const a=source.indexOf('async function start(options={})'),b=source.indexOf('\nasync function notice(',a);
+ const events=[],state=new Map();
+ const vscode={commands:{executeCommand:async name=>events.push(name)},window:{tabGroups:{all:[{tabs:[{id:'unsaved'}]}]}}};
+ const context={workspaceState:{update:async(k,v)=>state.set(k,v)}};
+ const start=new Function('vscode','ready','context','uiInformation',source.slice(a,b)+'\nreturn start;')(vscode,Promise.resolve(),context,()=>events.push('cancel-notice'));
+ await start();
+ assert.deepEqual(events,['workbench.action.closeAllEditors','cancel-notice']);
+ assert.equal(state.size,0);
+});

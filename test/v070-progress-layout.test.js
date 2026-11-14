@@ -1,0 +1,41 @@
+'use strict';
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const root=path.join(__dirname,'..');
+const html=fs.readFileSync(path.join(root,'test','generated','extension-source.txt'),'utf8');
+const css=fs.readFileSync(path.join(root,'media','start.css'),'utf8');
+const ui=fs.readFileSync(path.join(root,'media','start.js'),'utf8');
+const manifest=require('../package.json');
+test('Gantt explanatory sentence is removed and existing timeline remains available',()=>{
+ assert.doesNotMatch(html,/Role schedule and recorded progress\. Update role dates in Settings\./);
+ assert.match(html,/id="overviewGanttDetails"/);
+ assert.match(html,/id="ganttChart"/);
+});
+test('Uploaded Documents uses an accessible progress track beneath its heading',()=>{
+ const start=html.indexOf('class="source-documents-panel"');
+ const end=html.indexOf('id="sourceDocuments"',start);
+ const section=html.slice(start,end);
+ assert.ok(start>=0&&end>start);
+ assert.match(section,/Uploaded documents/);
+ assert.match(section,/id="sourceCapacityProgress"[^>]*role="progressbar"/);
+ assert.match(section,/aria-valuemax="1"/);
+ assert.match(ui,/sourceTrack\.setAttribute\('aria-valuenow',String\(sources\.length\)\)/);
+ assert.match(ui,/Math\.min\(100,sources\.length\*100\)/);
+});
+test('AI Review uses only the shared header progress and retains status messaging',()=>{
+ assert.doesNotMatch(html,/id="reviewHeadingProgress"/);
+ assert.match(html,/id="baRunning"[^>]*role="status"/);
+ assert.match(ui,/\$\('baRunning'\)\.classList\.toggle\('hidden',!baBusyTask\)/);
+ assert.match(html,/id="baReviewStageMessage"/);
+});
+test('Sidebar buttons have thin borders without removing active styling',()=>{
+ assert.match(css,/\.sidebar \.nav-item\{border:1px solid rgba\(178,192,211,\.23\)\}/);
+ assert.match(css,/\.sidebar \.nav-item\.current\{border-color:rgba\(103,161,240,\.7\)\}/);
+});
+test('Release metadata is consistent',()=>{
+ assert.equal(manifest.version,'0.3.49');
+ assert.equal(manifest.atgvDisplayVersion,'0.3.49');
+ assert.match(html,/0\.3\.49/);
+});

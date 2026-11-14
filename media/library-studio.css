@@ -1,0 +1,410 @@
+/* Catalog sync icon: one action for fetch, validate, install and refresh. */
+#libraryView #libraryCheckUpdates{display:inline-flex;align-items:center;justify-content:center;gap:7px}
+#libraryView #libraryCheckUpdates .library-sync-icon{width:15px;height:15px;flex:none}
+#libraryView #libraryCheckUpdates.is-syncing .library-sync-icon{animation:atgvCatalogSyncSpin .9s linear infinite}
+@keyframes atgvCatalogSyncSpin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){#libraryView #libraryCheckUpdates.is-syncing .library-sync-icon{animation:none}}
+
+/* ATGV Library Studio: inherits VS Code theme, respects compact SDLC layout. */
+#libraryView{max-width:none;width:100%;padding:18px 26px}
+#libraryView .section-title{display:flex;align-items:flex-start;gap:14px;justify-content:space-between;flex-wrap:wrap}
+#libraryView .section-title h1{margin:0}
+#libraryView .section-title h2{margin:0}
+#libraryView section{margin:0;padding:15px;min-width:0;border-color:var(--atgv-line)}
+.library-studio-filters{display:grid;grid-template-columns:minmax(210px,2fr) minmax(155px,1fr) minmax(185px,1fr);gap:12px;margin:15px 0}
+.library-studio-filters input,.library-studio-filters select{height:35px;width:100%;max-width:100%;min-width:0;background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--atgv-line);border-radius:6px;padding:6px 10px}
+.library-supporting-toggle{display:inline-flex;align-items:center;gap:7px;margin:-3px 0 12px;font-size:11px;color:var(--vscode-descriptionForeground);cursor:pointer}
+.library-supporting-toggle input{margin:0;accent-color:var(--vscode-button-background)}
+.library-studio-layout{display:grid;grid-template-columns:minmax(220px,34%) minmax(0,1fr);gap:12px;align-items:stretch}
+.library-studio-list{display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden}
+.library-studio-list #libraryItems{display:grid;grid-auto-rows:max-content;align-content:start;gap:5px;flex:1 1 0;height:0;min-height:0;overflow-y:auto;scrollbar-width:thin;padding-right:3px}
+.library-resource-option{display:flex;align-items:start;flex-direction:column;gap:3px;min-width:0;text-align:left;white-space:normal;padding:9px 11px;border:1px solid var(--atgv-line);border-radius:6px;background:var(--vscode-editor-background);color:var(--vscode-foreground)}
+.library-resource-option:hover,.library-resource-option[aria-selected="true"]{border-color:var(--atgv-accent);background:var(--vscode-list-activeSelectionBackground)}
+.library-resource-option strong{font-size:12px;overflow-wrap:anywhere}
+.library-item-path{font-size:10px;opacity:.75;overflow-wrap:anywhere}
+.library-item-flags{font-size:10px;color:var(--vscode-charts-blue,#64a8ef)}
+.library-studio-editor #libraryEditor{display:block;width:100%;height:340px;resize:vertical;min-height:180px;max-height:70vh;margin:8px 0 10px;background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--atgv-line);border-radius:6px;padding:12px;font:12px/1.55 var(--vscode-editor-font-family,monospace);tab-size:2}
+.library-studio-editor #libraryEditor[readonly]{cursor:text;opacity:1}
+.library-studio-editor #libraryEditor:focus-visible{outline:2px solid var(--vscode-focusBorder);outline-offset:2px}
+.library-studio-actions{display:flex;gap:7px;flex-wrap:wrap;margin:11px 0}
+.library-studio-actions button{font-size:11px;padding:7px 10px}
+.library-update-badge{color:var(--vscode-editorWarning-foreground,#e3b25d);border:1px solid currentColor;border-radius:999px;padding:4px 8px;font-size:10px}
+.library-comparison{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;max-width:100%;overflow:hidden}
+.library-comparison pre{max-height:300px;min-height:100px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid var(--atgv-line);border-radius:5px;padding:10px;background:var(--vscode-editor-background);font-size:11px}
+.library-new-skill{display:grid;gap:7px;border:1px solid var(--atgv-accent);border-radius:6px;padding:12px}
+#libraryView #libraryActionStatus{overflow-wrap:anywhere}
+@media(max-width:860px){.library-studio-filters{grid-template-columns:1fr 1fr}.library-studio-filters .field:first-child{grid-column:1/-1}.library-studio-layout{grid-template-columns:1fr}.library-studio-list #libraryItems{height:260px;max-height:260px;flex:0 0 260px}}
+@media(max-width:520px){.library-studio-filters{grid-template-columns:1fr}.library-studio-filters .field:first-child{grid-column:auto}.library-comparison{grid-template-columns:1fr}}
+
+/* Offline CodeMirror integration; theme uses VS Code color tokens. */
+#libraryView .CodeMirror{height:340px;min-height:180px;max-height:70vh;margin:8px 0 10px;background:var(--vscode-editor-background);color:var(--vscode-editor-foreground,var(--vscode-foreground));border:1px solid var(--atgv-line);border-radius:6px;font:12px/1.55 var(--vscode-editor-font-family,monospace)}
+#libraryView .CodeMirror-gutters{background:var(--vscode-sideBar-background,var(--vscode-editor-background));border-right:1px solid var(--atgv-line)}
+#libraryView .CodeMirror-linenumber{color:var(--vscode-editorLineNumber-foreground,#888)}
+#libraryView .CodeMirror-cursor{border-left-color:var(--vscode-editorCursor-foreground,#ddd)}
+#libraryView .CodeMirror-selected{background:var(--vscode-editor-selectionBackground,#264f78)}
+#libraryView .CodeMirror-focused .CodeMirror-selected{background:var(--vscode-editor-selectionBackground,#264f78)}
+#libraryView .cm-keyword,#libraryView .cm-atom{color:var(--vscode-debugTokenExpression-name,#569cd6)}
+#libraryView .cm-string{color:var(--vscode-debugTokenExpression-string,#ce9178)}
+#libraryView .cm-number{color:var(--vscode-debugTokenExpression-number,#b5cea8)}
+#libraryView .cm-comment{color:var(--vscode-editorCodeLens-foreground,#6a9955)}
+#libraryView .cm-property,#libraryView .cm-def{color:var(--vscode-symbolIcon-propertyForeground,#9cdcfe)}
+#libraryView .cm-error{color:var(--vscode-errorForeground,#f66);text-decoration:underline wavy}
+#libraryView .cm-atgv-error{background:var(--vscode-inputValidation-errorBackground,rgba(224,86,86,.18))}
+#libraryView .library-language-badge{font-size:10px;display:inline-block;margin-left:10px;color:var(--vscode-descriptionForeground)}
+#libraryView .library-diagnostics{padding:7px 10px;border-radius:5px;border:1px solid var(--atgv-line);font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere;margin:6px 0}
+#libraryView .library-diagnostics.error{border-color:var(--vscode-errorForeground,#e55);color:var(--vscode-errorForeground,#e55)}
+#libraryView .library-diagnostics.warning{border-color:var(--vscode-editorWarning-foreground,#e2a65e)}
+#libraryView .library-diagnostics.success{border-color:var(--vscode-testing-iconPassed,#4caf50)}
+
+/* Harness checks are placed immediately below the code editor, above the preview note. */
+#libraryView .library-harness-tests{display:block;margin:10px 0 12px;padding:10px 12px;border:1px solid var(--atgv-line);background:var(--vscode-editor-background);border-radius:6px}
+#libraryView .library-harness-tests.hidden{display:none}
+#libraryView .library-harness-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+#libraryView .library-harness-heading h3{font-size:12px;margin:0 0 3px}
+#libraryView .library-harness-heading p{font-size:10px;margin:0}
+#libraryView .library-harness-test-row{display:grid;grid-template-columns:minmax(85px,110px) minmax(65px,85px) minmax(0,1fr);gap:10px;padding:6px 0;border-bottom:1px solid var(--atgv-line);font-size:11px}
+#libraryView .library-harness-results p{font-size:10px;margin:8px 0 0}
+#libraryView .library-test-pass{color:var(--vscode-testing-iconPassed,#4caf50)}
+#libraryView .library-test-fail{color:var(--vscode-errorForeground,#e55)}
+#libraryView .library-test-untested{color:var(--vscode-editorWarning-foreground,#e2a65e)}
+@media(max-width:640px){#libraryView .library-harness-test-row{grid-template-columns:85px 85px}#libraryView .library-harness-test-row span:last-child{grid-column:1/-1}}
+
+/* v0.3.29: animated circular progress for agent/harness configuration tests. */
+#libraryView .library-harness-summary{display:flex;gap:14px;align-items:center;margin:4px 0 10px}
+#libraryView .library-harness-progress{position:relative;flex:0 0 72px;width:72px;height:72px;display:grid;place-items:center}
+#libraryView .library-harness-ring{display:block}
+#libraryView .library-harness-ring-track,#libraryView .library-harness-ring-value{fill:none;stroke-width:4}
+#libraryView .library-harness-ring-track{stroke:var(--vscode-editorWidget-border,var(--atgv-line))}
+#libraryView .library-harness-ring-value{stroke:var(--vscode-testing-iconPassed,#4caf50);stroke-linecap:round;transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset .65s ease}
+#libraryView .library-harness-progress.is-running .library-harness-ring{animation:atgvHarnessSpin 1.15s linear infinite}
+#libraryView .library-harness-progress.is-running .library-harness-ring-value{stroke:var(--vscode-progressBar-background,#4da3e0)}
+#libraryView .library-harness-percent{position:absolute;font-weight:700;font-size:14px;font-variant-numeric:tabular-nums}
+#libraryView .library-harness-summary-copy{min-width:0;overflow-wrap:anywhere}
+#libraryView .library-harness-summary-copy strong{font-size:12px}
+#libraryView .library-harness-summary-copy p{font-size:10px;margin:5px 0 0;line-height:1.35}
+#libraryView .library-harness-next-steps{font-size:11px;margin-top:10px}
+#libraryView .library-harness-next-steps summary{cursor:pointer;font-weight:600}
+#libraryView .library-harness-next-steps li{margin:7px 0;line-height:1.4}
+#libraryView .library-harness-next-steps p{font-size:10px}
+@keyframes atgvHarnessSpin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){#libraryView .library-harness-ring-value{transition:none}#libraryView .library-harness-progress.is-running .library-harness-ring{animation:none}}
+@media(max-width:480px){#libraryView .library-harness-summary{align-items:flex-start}}
+
+/* Agent/Harness image test: reproducible images and recorded model evidence. */
+#libraryView .library-icon-button{display:inline-grid;place-items:center;width:32px;height:32px;padding:6px}
+#libraryView .library-icon-button.hidden{display:none}
+#libraryView #libraryItems.hidden,#libraryView .library-image-results-panel.hidden,#libraryView .library-harness-target.hidden{display:none}
+#libraryView .library-harness-target{display:flex;align-items:center;gap:8px;margin:10px 0}
+#libraryView .library-harness-target label{font-size:11px;white-space:nowrap}
+#libraryView .library-harness-target select{max-width:100%;min-width:0;flex:1;background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--atgv-line);border-radius:5px;padding:7px}
+#libraryView .library-image-results-panel{display:flex;flex-direction:column;gap:10px;overflow-y:auto;min-height:0;flex:1}
+#libraryView .library-image-history{display:flex;flex-direction:column;gap:5px;max-height:155px;overflow-y:auto}
+#libraryView .library-image-result-option{display:flex;flex-direction:column;gap:2px;align-items:flex-start;background:var(--vscode-editor-background);color:var(--vscode-foreground);border:1px solid var(--atgv-line);border-radius:6px;padding:7px;text-align:left;font-size:10px;white-space:normal}
+#libraryView .library-image-result-option strong{font-size:11px;overflow-wrap:anywhere}
+#libraryView .library-image-result-option span{opacity:.75;overflow-wrap:anywhere}
+#libraryView .library-image-preview{display:grid;place-items:center;min-height:150px;max-height:270px;background:var(--vscode-editor-background);border:1px solid var(--atgv-line);border-radius:7px;padding:9px}
+#libraryView .library-generated-image{width:min(100%,240px);height:auto;aspect-ratio:1;object-fit:contain}
+#libraryView #libraryImageCode{white-space:pre;overflow:auto;max-height:200px;padding:10px;background:var(--vscode-editor-background);border:1px solid var(--atgv-line);border-radius:6px;font:11px/1.45 var(--vscode-editor-font-family,monospace)}
+#libraryView .library-image-verdict{display:flex;gap:8px}
+#libraryView .library-image-test{margin:12px 0 0;padding:12px;background:var(--vscode-sideBar-background,var(--vscode-editor-background));border:1px solid var(--atgv-line);border-radius:6px;display:grid;gap:8px}
+#libraryView .library-image-test-head{display:flex;gap:9px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+#libraryView .library-image-test label{font-size:11px;font-weight:600}
+#libraryView .library-image-test textarea{min-width:0;width:100%;min-height:52px;resize:vertical;border:1px solid var(--atgv-line);border-radius:6px;background:var(--vscode-input-background);color:var(--vscode-input-foreground);padding:8px}
+#libraryView .library-image-test-controls{display:flex;gap:8px;align-items:end;flex-wrap:wrap}
+#libraryView .library-image-test-controls label{flex:1;min-width:140px}
+#libraryView .library-image-test-controls select{display:block;width:100%;height:33px;border:1px solid var(--atgv-line);border-radius:6px;background:var(--vscode-input-background);color:var(--vscode-input-foreground)}
+#libraryView .library-image-trace-row{display:grid;grid-template-columns:85px 105px minmax(0,1fr);gap:8px;border-bottom:1px solid var(--atgv-line);padding:6px 0;font-size:10px}
+#libraryView .library-image-results-panel p{font-size:10px;margin:2px 0}
+@media(max-width:600px){#libraryView .library-image-trace-row{grid-template-columns:75px 105px}#libraryView .library-image-trace-row span:last-child{grid-column:1/-1}}
+
+/* v0.3.32: Keep the catalog sync action at the far right of the title. */
+#libraryView .library-titlebar{display:flex;align-items:center;justify-content:space-between;flex-wrap:nowrap;gap:12px;width:100%}
+#libraryView .library-titlebar > div:first-child{flex:1 1 auto;min-width:0}
+#libraryView .library-titlebar > .stack{flex:0 0 auto;margin-left:auto}
+#libraryView .library-code-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px;padding:9px;border:1px solid var(--atgv-line);border-radius:6px;min-width:0}
+#libraryView .library-code-options legend{font-size:11px;font-weight:600;padding:0 5px}
+#libraryView .library-code-options label{display:flex;align-items:start;gap:7px;font-size:11px;font-weight:400;min-width:0}
+#libraryView .library-code-options label:has(input:disabled){opacity:.55;cursor:not-allowed}
+#libraryView .library-code-options input{flex:none;margin:2px 0 0;accent-color:var(--vscode-button-background)}
+#libraryView .library-code-options p{grid-column:1/-1;line-height:1.4;margin:0;font-size:10px}
+#libraryView .library-harness-test-row{grid-template-columns:minmax(75px,100px) minmax(145px,190px) minmax(0,1fr)}
+@media(max-width:700px){#libraryView .library-code-options{grid-template-columns:1fr}#libraryView .library-harness-test-row{grid-template-columns:78px minmax(0,1fr)}#libraryView .library-harness-test-row span:last-child{grid-column:1/-1}#libraryView .library-titlebar{flex-wrap:nowrap}#libraryView .library-titlebar > .stack{max-width:65%;min-width:0}#libraryView #libraryCheckUpdates{white-space:nowrap}}
+
+#libraryView .library-harness-edit-help{font-size:11px;margin-top:10px}
+#libraryView .library-harness-edit-help summary{cursor:pointer;font-weight:600}
+#libraryView .library-harness-edit-help p{font-size:10px;line-height:1.5}
+/* v0.3.33: concise runtime health and related agent/workflow/skill tabs. */
+#libraryView .library-editor-error{color:var(--vscode-errorForeground,#e66)}
+#libraryView .library-related-tabs{display:flex;gap:6px;overflow-x:auto;max-width:100%;margin:10px 0 4px;padding:3px 1px 7px;scrollbar-width:thin}
+#libraryView .library-related-tabs.hidden{display:none}
+#libraryView .library-related-tab{flex:0 0 auto;white-space:nowrap;font-size:11px;padding:6px 10px;border-radius:5px}
+#libraryView .library-related-tab[aria-selected="true"]{border-color:var(--vscode-focusBorder,#449aff);background:var(--vscode-list-activeSelectionBackground,#23405e)}
+#libraryView #libraryImageReplay{font-size:11px;margin:6px 0}
+#libraryView .library-image-preview:has(.library-replayed-image){grid-template-columns:1fr 1fr;gap:8px}
+#libraryView .library-replayed-image{outline:2px solid var(--vscode-testing-iconPassed,#4caf50);outline-offset:-2px}
+
+/* v0.3.34: Four circular agent-test steps directly below image-test title. */
+#libraryView .library-harness-tests{padding:0;background:transparent;border:0}
+#libraryView .library-harness-tests>.library-image-test{margin:0}
+#libraryView .library-agent-step-header{font-size:11px;font-weight:600;margin:6px 0 0}
+#libraryView .library-agent-step-progress{min-width:0;margin:3px 0 0}
+#libraryView .library-agent-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;position:relative}
+#libraryView .library-agent-step{position:relative;min-width:0;display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;padding:4px 0}
+#libraryView .library-agent-step:not(:last-child):after{content:"";position:absolute;top:22px;left:calc(50% + 25px);width:calc(100% - 50px);height:2px;background:var(--atgv-line);z-index:0}
+#libraryView .library-agent-step-circle{z-index:1;display:grid;place-items:center;width:38px;height:38px;border:3px solid var(--vscode-editorWidget-border,var(--atgv-line));border-radius:50%;background:var(--vscode-editor-background);font-weight:700;font-size:14px;transition:border-color .25s,color .25s,background .25s}
+#libraryView .library-agent-step strong{font-size:11px}
+#libraryView .library-agent-step-state{font-size:10px;color:var(--vscode-descriptionForeground)}
+#libraryView .library-agent-step-partial .library-agent-step-circle{border-color:var(--vscode-testing-iconPassed,#4caf50);color:var(--vscode-testing-iconPassed,#4caf50)}
+#libraryView .library-agent-step-fail .library-agent-step-circle{border-color:var(--vscode-errorForeground,#e55);color:var(--vscode-errorForeground,#e55)}
+#libraryView .library-agent-step-progress.is-running .library-agent-step-circle{animation:atgvAgentStepPulse .9s ease-in-out infinite alternate}
+@keyframes atgvAgentStepPulse{from{opacity:.6;transform:scale(.94)}to{opacity:1;transform:scale(1.05)}}
+#libraryView .library-agent-step-summary{margin:3px 0 0;font-size:11px;font-weight:600}
+#libraryView .library-agent-step-coverage{margin:0;font-size:10px}
+#libraryView .library-agent-step-evidence{font-size:11px}
+#libraryView .library-agent-step-evidence summary{cursor:pointer;margin:4px 0 1px}
+#libraryView .library-code-replay{grid-column:1/-1;min-width:0;margin-top:5px}
+#libraryView .library-code-replay summary{font-size:11px;cursor:pointer}
+#libraryView .library-code-replay-actions{display:flex;flex-wrap:wrap;align-items:center;gap:9px}
+#libraryView .library-code-replay-actions p{min-width:0}
+#libraryView .library-code-replay #libraryImageCode{max-width:100%;white-space:pre;overflow:auto}
+@media(max-width:480px){#libraryView .library-agent-step-circle{width:31px;height:31px}#libraryView .library-agent-step:not(:last-child):after{top:18px;left:calc(50% + 21px);width:calc(100% - 42px)}#libraryView .library-agent-step strong{font-size:10px}}
+@media(prefers-reduced-motion:reduce){#libraryView .library-agent-step-progress.is-running .library-agent-step-circle{animation:none}#libraryView .library-agent-step-circle{transition:none}}
+
+/* v0.3.35: image result panel is content-sized; transparent preview with no empty placeholder. */
+#libraryView .library-image-preview{display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:10px;min-height:0;max-height:none;background:transparent;border:0;border-radius:0;padding:0}
+#libraryView .library-image-preview.hidden,#libraryView .library-image-preview:empty{display:none}
+#libraryView .library-generated-image{display:block;width:min(100%,240px);height:auto;aspect-ratio:1;object-fit:contain;background:transparent}
+#libraryView .library-image-preview:has(.library-replayed-image){display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+#libraryView .library-image-code-tabs{display:grid;gap:7px;border:1px solid var(--atgv-line);border-radius:7px;padding:10px;min-width:0}
+#libraryView .library-image-code-tabs.hidden{display:none}
+#libraryView .library-code-tabs-heading{display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap;font-size:11px}
+#libraryView .library-code-tablist{display:flex;gap:4px;flex-wrap:wrap}
+#libraryView .library-code-tab{font-size:10px;padding:5px 8px;flex:1 1 auto;min-width:0}
+#libraryView .library-code-tab[aria-selected="true"]{background:var(--vscode-list-activeSelectionBackground,var(--vscode-button-background));outline:1px solid var(--vscode-focusBorder,var(--atgv-accent))}
+#libraryView .library-image-code-tabs details summary{cursor:pointer;font-size:11px}
+#libraryView .library-image-code-tabs #libraryImageCode{max-width:100%;overflow-x:auto;white-space:pre;max-height:200px}
+#libraryView .library-image-code-tabs .library-code-replay-actions{align-items:center;gap:8px}
+#libraryView .library-code-replay-actions p{font-size:10px}
+#libraryView .library-image-verdict{margin-top:2px}
+/* Read-only catalog relationship map, derived from the validated file discovery list. */
+#libraryView .library-relationships-button{display:inline-flex;gap:6px;align-items:center;font-size:11px;margin:5px 0 9px;padding:6px 10px}
+#libraryView .library-relationships-button.hidden,#libraryView .library-relation-panel.hidden{display:none}
+#libraryView .library-relation-panel{margin:0 0 10px;padding:12px;border:1px solid var(--atgv-line);border-radius:7px;background:var(--vscode-sideBar-background,var(--vscode-editor-background))}
+#libraryView .library-relation-heading{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:12px;margin-bottom:12px}
+#libraryView .library-relation-heading button{font-size:11px;padding:5px 9px}
+#libraryView .library-relation-graph{display:flex;align-items:stretch;gap:7px;overflow:auto;max-width:100%;padding:5px 0 7px}
+#libraryView .library-relation-stage{flex:1 0 140px;min-width:125px;max-width:230px;display:flex;flex-direction:column;align-items:stretch;gap:6px;border:1px solid var(--atgv-line);border-radius:6px;padding:8px}
+#libraryView .library-relation-stage>strong{font-size:11px;text-align:center}
+#libraryView .library-relation-node{display:block;white-space:normal;overflow-wrap:anywhere;text-align:left;font-size:10px;padding:7px}
+#libraryView .library-relation-current{outline:2px solid var(--vscode-focusBorder,#449aff)}
+#libraryView .library-relation-arrow{align-self:center;flex:0 0 auto;font-size:19px;color:var(--vscode-descriptionForeground)}
+@media(max-width:650px){#libraryView .library-relation-stage{flex-basis:155px}#libraryView .library-image-preview:has(.library-replayed-image){grid-template-columns:1fr}}
+
+/* v0.3.36 — Interactive, draw.io-like resource map and polished Library Studio layout. */
+#libraryView .library-studio-layout{grid-template-columns:minmax(255px,34%) minmax(0,1fr);gap:14px}
+#libraryView .library-studio-list,#libraryView .library-studio-editor{border:1px solid var(--atgv-line);border-radius:9px;background:var(--vscode-sideBar-background,var(--vscode-editor-background));box-shadow:0 2px 9px rgba(0,0,0,.06)}
+#libraryView .library-studio-editor>.section-title h2{font-size:17px;font-weight:650;line-height:1.3;overflow-wrap:anywhere}
+#libraryView .library-studio-editor>.section-title p{font-size:10px;margin:4px 0 1px;overflow-wrap:anywhere}
+#libraryView .library-related-tab{font-size:11px;max-width:210px;overflow:hidden;text-overflow:ellipsis}
+#libraryView .library-resource-option strong{font-size:12px}
+#libraryView .library-relation-panel{padding:12px;border-radius:9px;background:var(--vscode-editor-background)}
+#libraryView .library-relation-heading{margin-bottom:10px;align-items:center}
+#libraryView .library-relation-toolbar{display:flex;align-items:center;justify-content:flex-end;gap:5px;flex-wrap:wrap}
+#libraryView .library-relation-toolbar button{min-width:29px;min-height:29px;padding:5px 8px;font-size:11px}
+#libraryView #libraryRelationZoomValue{min-width:39px;text-align:center;font-size:11px;font-variant-numeric:tabular-nums;color:var(--vscode-descriptionForeground)}
+#libraryView .library-relation-graph{position:relative;display:block;height:390px;max-height:55vh;width:100%;min-width:0;overflow:hidden;touch-action:none;cursor:grab;background-color:var(--vscode-editor-background);background-image:radial-gradient(var(--vscode-editorWidget-border,rgba(128,128,128,.23)) .75px,transparent .75px);background-size:19px 19px;border:1px solid var(--atgv-line);border-radius:7px;padding:0;user-select:none}
+#libraryView .library-relation-graph:active{cursor:grabbing}
+#libraryView .library-relation-world{position:absolute;left:0;top:0;transform-origin:top left;will-change:transform}
+#libraryView .library-relation-links{position:absolute;inset:0;overflow:visible;pointer-events:none}
+#libraryView .library-relation-link{stroke:var(--vscode-charts-blue,#579ce8);stroke-width:2;opacity:.75;vector-effect:non-scaling-stroke}
+#libraryView .library-relation-canvas-node{position:absolute;display:flex;flex-direction:column;gap:5px;width:208px;min-height:60px;padding:9px 11px;text-align:left;white-space:normal;overflow-wrap:anywhere;color:var(--vscode-foreground);background:var(--vscode-sideBar-background,var(--vscode-editor-background));border:1px solid var(--atgv-line);border-left:4px solid var(--vscode-charts-blue,#579ce8);border-radius:7px;box-shadow:0 2px 9px rgba(0,0,0,.17);cursor:move;touch-action:none}
+#libraryView .library-relation-canvas-node:hover,#libraryView .library-relation-canvas-node:focus-visible{border-color:var(--vscode-focusBorder,#5b9af9);outline:2px solid var(--vscode-focusBorder,#5b9af9);outline-offset:1px;z-index:3}
+#libraryView .library-relation-canvas-node .library-relation-kind{font-size:10px;color:var(--vscode-descriptionForeground)}
+#libraryView .library-relation-canvas-node strong{font-size:12px;line-height:1.3}
+#libraryView .library-node-workflow{border-left-color:var(--vscode-charts-purple,#a68cdb)}
+#libraryView .library-node-role{border-left-color:var(--vscode-charts-green,#61b797)}
+#libraryView .library-node-skill{border-left-color:var(--vscode-charts-orange,#df9b51)}
+#libraryView .library-node-metadata{border-left-color:var(--vscode-charts-yellow,#daba57)}
+#libraryView .library-node-policy{border-left-color:var(--vscode-charts-red,#c77)}
+#libraryView .library-relation-hint{font-size:10px;line-height:1.5;color:var(--vscode-descriptionForeground);margin-top:8px}
+@media(max-width:860px){#libraryView .library-studio-layout{grid-template-columns:1fr}#libraryView .library-relation-graph{height:350px}}
+@media(prefers-reduced-motion:reduce){#libraryView .library-relation-world{will-change:auto}}
+
+/* Agent check summary follows the reference layout, above resource tabs and code. */
+#libraryView .library-agent-dashboard{margin:12px 0 9px;padding:10px 12px;border:1px solid var(--atgv-line);border-radius:8px;background:var(--vscode-editor-background)}
+#libraryView .library-agent-dashboard.hidden{display:none}
+#libraryView .library-agent-dashboard-top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:9px;font-size:11px}
+#libraryView .library-agent-dashboard-top button{font-size:11px;padding:6px 10px}
+#libraryView .library-agent-dashboard .library-agent-steps{padding:2px 0}
+#libraryView .library-agent-dashboard .library-agent-step-summary,#libraryView .library-agent-dashboard .library-agent-step-coverage{margin-top:7px}
+#libraryView .library-agent-dashboard .library-agent-step-evidence{margin-top:5px}
+
+/* v0.3.37 · screenshot-aligned Library Studio controls. Functional states and IDs unchanged. */
+#libraryView .library-image-code-tabs{gap:9px;padding:10px;border-radius:8px;background:var(--vscode-sideBar-background,var(--vscode-editor-background))}
+#libraryView .library-code-tabs-heading{flex-wrap:nowrap;font-weight:600;gap:5px}
+#libraryView .library-code-tabs-heading #libraryCodeAvailability{font-weight:400;font-size:10px;text-align:right}
+#libraryView .library-code-tablist{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:3px;min-width:0}
+#libraryView .library-code-tab{width:100%;padding:7px 3px;font-size:10px;line-height:1.4;border-radius:4px;background:var(--vscode-button-background,#1365a4);color:var(--vscode-button-foreground,#fff);white-space:nowrap}
+#libraryView .library-code-tab[aria-selected="true"]{background:var(--vscode-list-activeSelectionBackground,#234565);outline:1px solid var(--vscode-focusBorder,#449aff);outline-offset:-1px}
+#libraryView .library-code-source-frame{display:block;min-width:0;max-width:100%}
+#libraryView .library-code-source-frame #libraryImageCode{box-sizing:border-box;width:100%;min-height:74px;max-height:144px;margin:0;padding:9px;border-radius:6px;background:var(--vscode-editor-background,#1f1f21);border:1px solid var(--atgv-line);overflow:auto;white-space:pre;scrollbar-width:thin;line-height:1.5}
+#libraryView .library-image-code-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;flex-wrap:wrap}
+#libraryView .library-code-replay-actions{display:flex;align-items:center;gap:7px;flex:1 1 auto;min-width:0}
+#libraryView .library-code-replay-actions #libraryImageReplay{margin:0;padding:8px 12px;flex:0 0 auto}
+#libraryView .library-image-code-actions #libraryImageReplayStatus{flex:1 1 auto;min-width:0;margin:0;font-size:10px}
+#libraryView .library-image-code-actions .library-image-verdict{display:flex;justify-content:flex-end;gap:7px;margin:0;margin-left:auto}
+#libraryView .library-image-code-actions .library-image-verdict.hidden{display:none}
+#libraryView .library-image-code-actions .library-image-verdict button{min-width:43px;padding:8px 10px}
+/* Agent/harness selector, then actions, then editor: no detached toolbars. */
+#libraryView .library-harness-target{margin:10px 0 7px;display:grid;grid-template-columns:max-content minmax(0,1fr);align-items:center;gap:10px}
+#libraryView .library-harness-target label{font-size:11px;font-weight:600;color:var(--vscode-foreground)}
+#libraryView .library-harness-target select{height:34px;max-width:100%;padding:5px 10px}
+#libraryView .library-studio-editor .library-studio-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:7px 0 10px}
+#libraryView .library-studio-editor .library-studio-actions button{min-height:32px;padding:7px 10px;white-space:nowrap}
+#libraryView .library-studio-editor .library-studio-actions .library-relationships-button{margin:0}
+#libraryView .library-studio-editor .library-related-tabs{margin:5px 0 7px;padding:2px 1px 5px}
+#libraryView .library-studio-editor .library-related-tab{padding:5px 9px}
+#libraryView .library-studio-editor #libraryEditorLabel{font-weight:600;font-size:11px}
+#libraryView .library-studio-editor #libraryEditor,#libraryView .library-studio-editor .CodeMirror{height:354px;margin:9px 0 8px}
+/* Four circular checks with a clean continuous step-connector strip. */
+#libraryView .library-agent-dashboard{border:0;border-radius:0;padding:3px 0 9px;background:transparent;margin:7px 0 8px}
+#libraryView .library-agent-dashboard-top{margin:0 0 6px;align-items:center}
+#libraryView .library-agent-dashboard-top strong{font-weight:600}
+#libraryView .library-agent-dashboard .library-agent-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));padding:7px 7px 6px;gap:0;background:var(--vscode-editor-background,#202123);border-radius:5px}
+#libraryView .library-agent-step{gap:3px;padding:0 2px;min-width:0}
+#libraryView .library-agent-step:not(:last-child):after{top:20px;left:calc(50% + 25px);width:calc(100% - 50px);height:2px;background:var(--vscode-editorWidget-border,#4a4b4d)}
+#libraryView .library-agent-step-circle{width:40px;height:40px;border-width:3px;font-size:16px}
+#libraryView .library-agent-step strong{font-size:11px}
+#libraryView .library-agent-step-state{font-size:10px}
+#libraryView .library-agent-step-summary,#libraryView .library-agent-step-coverage{font-size:10px}
+#libraryView .library-agent-dashboard .library-agent-step-evidence{margin-top:3px}
+@media(max-width:580px){#libraryView .library-harness-target{grid-template-columns:1fr;gap:5px}#libraryView .library-image-code-actions{align-items:stretch}#libraryView .library-image-code-actions .library-image-verdict{justify-content:flex-end}#libraryView .library-agent-step-circle{width:33px;height:33px}#libraryView .library-agent-step:not(:last-child):after{top:17px;left:calc(50% + 21px);width:calc(100% - 42px)}}
+@media(prefers-reduced-motion:reduce){#libraryView .library-agent-step-circle{transition:none}}
+
+/* v0.3.38: related files use one accessible dropdown rather than a scrolling tabstrip. */
+#libraryView .library-studio-editor .library-related-files{display:block;margin:5px 0 8px;max-width:100%}
+#libraryView .library-studio-editor .library-related-files.hidden{display:none}
+#libraryView .library-related-files select{display:block;width:100%;min-width:0;min-height:34px;max-width:100%;padding:5px 10px}
+#libraryView .library-harness-target{display:block;min-width:0;margin:8px 0 7px}
+#libraryView .library-harness-target.hidden{display:none}
+#libraryView .library-harness-target select{display:block;width:100%;min-width:0;max-width:100%}
+#libraryView .library-studio-editor .CodeMirror.CodeMirror-wrap{overflow-wrap:anywhere}
+#libraryView .library-studio-editor #libraryEditor{white-space:pre-wrap;overflow-wrap:anywhere}
+
+/* v0.3.40: no check summaries or panel backgrounds; template overlays are explicit. */
+#libraryView .library-agent-dashboard{border:0!important;background:transparent!important;box-shadow:none!important;padding:0!important}
+#libraryView .library-agent-dashboard .library-agent-steps{background:transparent!important;border:0!important;padding:6px 0!important}
+#libraryView .library-image-test select#libraryImageCase{width:100%;min-height:33px;margin:5px 0 10px}
+#libraryView .library-image-overlay-stage{position:relative;display:inline-grid;place-items:center;width:min(100%,256px);aspect-ratio:1}
+#libraryView .library-image-overlay-stage .library-generated-image{grid-area:1/1;display:block;width:100%;height:100%}
+#libraryView .library-image-overlay-stage .library-image-reference-overlay{grid-area:1/1;display:block;width:100%;height:100%;opacity:.45;pointer-events:none;filter:drop-shadow(0 0 1px #fff)}
+#libraryView .library-image-overlay-stage .library-image-reference-overlay.hidden{display:none}
+#libraryView .library-image-accuracy{width:100%;text-align:center;font-variant-numeric:tabular-nums;font-size:11px;font-weight:600;line-height:1.5}
+#libraryView .library-image-overlay-toggle{font-size:11px;margin:auto}
+
+#libraryView .library-reference-preview-row{display:flex;align-items:center;gap:12px;margin:4px 0 8px;min-height:52px}
+#libraryView #libraryImageReferencePreview{width:52px;height:52px;object-fit:contain;border:1px solid var(--atgv-line);border-radius:5px;background:transparent}
+#libraryView .library-reference-preview-row span{flex:1;min-width:0;font-size:11px}
+#libraryView .library-image-preview:has(.library-replayed-image) .library-image-overlay-stage{grid-column:1;grid-row:1}
+#libraryView .library-image-preview:has(.library-replayed-image) .library-replayed-image{grid-column:2;grid-row:1;max-width:100%}
+#libraryView .library-image-preview:has(.library-replayed-image) .library-image-accuracy,
+#libraryView .library-image-preview:has(.library-replayed-image) .library-image-overlay-toggle{grid-column:1/-1}
+
+/* v0.3.40: source wraps to panel width and grows with the content. */
+#libraryView .library-code-source-frame #libraryImageCode{
+ width:100%;height:auto;min-height:3.8em;max-height:none;overflow-x:hidden;
+ overflow-y:visible;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;
+ tab-size:2;line-height:1.5;padding:10px 12px;
+}
+#libraryView .library-code-source-frame{height:auto;max-height:none;overflow:visible}
+/* A relationship graph replaces, rather than stacks on, the editor. */
+#libraryView #libraryEditorWorkspace.hidden{display:none}
+#libraryView .library-random-controls{display:grid;grid-template-columns:minmax(135px,1fr) minmax(115px,1fr) auto;align-items:end;gap:8px}
+#libraryView .library-random-controls label{min-width:0}
+#libraryView .library-random-controls select,#libraryView .library-random-controls input{display:block;width:100%;height:34px;box-sizing:border-box;margin-top:5px;background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--atgv-line);border-radius:5px;padding:6px}
+#libraryView .library-random-controls button{white-space:nowrap;min-height:34px}
+@media(max-width:700px){#libraryView .library-random-controls{grid-template-columns:repeat(2,minmax(0,1fr))}#libraryView .library-random-controls button{grid-column:1/-1}}
+
+/* v0.3.40: source code wraps and grows to its text, avoiding horizontal scroll. */
+#libraryView .library-code-source-frame #libraryImageCode{
+ box-sizing:border-box;width:100%;height:auto;min-height:3.8em;max-height:none;
+ overflow-x:hidden;overflow-y:visible;white-space:pre-wrap;
+ overflow-wrap:anywhere;word-break:break-word;tab-size:2;line-height:1.55;
+ padding:10px 12px;
+}
+#libraryView .library-code-source-frame{height:auto;max-height:none;overflow:visible}
+#libraryView #libraryEditorWorkspace.hidden{display:none}
+#libraryView .library-random-controls{display:grid;grid-template-columns:minmax(125px,1fr) minmax(110px,1fr) auto;align-items:end;gap:8px}
+#libraryView .library-random-controls label{min-width:0}
+#libraryView .library-random-controls select,#libraryView .library-random-controls input{display:block;width:100%;height:34px;box-sizing:border-box;margin-top:5px;background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--atgv-line);border-radius:5px;padding:6px}
+#libraryView .library-random-controls button{white-space:nowrap;min-height:34px}
+@media(max-width:700px){#libraryView .library-random-controls{grid-template-columns:repeat(2,minmax(0,1fr))}#libraryView .library-random-controls button{grid-column:1/-1}}
+
+/* v0.3.41: paired selectors, editable code and grounded visual-test evidence. */
+#libraryView .library-selection-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:center;margin:6px 0}
+#libraryView .library-selection-row .library-harness-target,#libraryView .library-selection-row .library-related-files{margin:0;padding:0;min-width:0;max-width:100%}
+#libraryView .library-selection-row select{width:100%;min-width:0;max-width:100%;height:34px}
+#libraryView .library-code-source-frame textarea#libraryImageCode{
+  box-sizing:border-box;display:block;width:100%;min-height:90px;height:auto;max-height:380px;
+  overflow-x:hidden;overflow-y:auto;white-space:pre-wrap;overflow-wrap:anywhere;
+  word-break:break-word;resize:vertical;line-height:1.45;
+  font:11px/1.5 var(--vscode-editor-font-family,monospace);
+  color:var(--vscode-editor-foreground);background:var(--vscode-editor-background);
+}
+#libraryView .library-visual-questions{margin:10px 0;padding:10px;border:1px solid var(--atgv-line);border-radius:6px;font-size:11px}
+#libraryView .library-visual-questions.hidden{display:none}
+#libraryView .library-vision-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
+#libraryView .library-vision-heading>strong{min-width:0;overflow-wrap:anywhere}
+#libraryView .library-vision-summary{margin-top:5px}
+#libraryView .library-vision-question{margin-top:5px;line-height:1.5}
+#libraryView .library-vision-response{margin-top:6px;overflow-wrap:anywhere;color:var(--vscode-descriptionForeground)}
+@media(max-width:640px){#libraryView .library-selection-row{grid-template-columns:1fr}}
+
+/* Image-input status reflects real API capability and an optional user-initiated PNG probe. */
+#libraryView .library-vision-support{margin:5px 0 8px;font-size:11px;overflow-wrap:anywhere}
+#libraryView .library-vision-support[data-vision-status="verified"]{color:var(--vscode-testing-iconPassed, #4dbb8c)}
+#libraryView .library-vision-support[data-vision-status="unsupported"]{color:var(--vscode-editorWarning-foreground, #d6a449)}
+#libraryView #libraryImageVerifyVision{white-space:nowrap;min-height:33px}
+
+/* v0.3.44: one overall agent benchmark score aligned with the resource title. */
+#libraryView .library-resource-title-row{align-items:center;flex-wrap:nowrap}
+#libraryView .library-resource-title-row>div:first-child{min-width:0;flex:1 1 auto}
+#libraryView .library-overall-score{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;gap:2px;
+  max-width:45%;text-align:right;font-variant-numeric:tabular-nums}
+#libraryView .library-overall-score.hidden{display:none}
+#libraryView .library-overall-score-label{font-size:11px;color:var(--vscode-descriptionForeground)}
+#libraryView .library-overall-score strong{font-size:19px;color:var(--vscode-foreground)}
+#libraryView .library-overall-score strong[data-status="complete"]{color:var(--vscode-charts-blue,#76aaff)}
+#libraryView .library-overall-score-detail{font-size:10px;line-height:1.4;color:var(--vscode-descriptionForeground);overflow-wrap:anywhere}
+#libraryView .library-vision-answer-row{border-top:1px solid var(--atgv-line);padding:8px 0}
+#libraryView .library-vision-answer-row:first-of-type{margin-top:8px}
+#libraryView .library-vision-answer-title{display:flex;align-items:center;justify-content:space-between;gap:8px}
+#libraryView .library-vision-check-status{font-weight:600}
+#libraryView .library-vision-check-status[data-status="pass"]{color:var(--vscode-testing-iconPassed,#4dbb8c)}
+#libraryView .library-vision-check-status[data-status="fail"]{color:var(--vscode-testing-iconFailed,#f87171)}
+#libraryView .library-vision-answer-row p{margin:3px 0;overflow-wrap:anywhere}
+#libraryView .library-vision-expected{font-size:11px;color:var(--vscode-descriptionForeground)}
+#libraryView .library-vision-answer{font-size:12px}
+#libraryView .library-vision-invalid-response{white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:530px){#libraryView .library-resource-title-row{align-items:flex-start}
+ #libraryView .library-overall-score{max-width:53%} #libraryView .library-overall-score-detail{font-size:9px}}
+
+/* ATGV 0.3.45: source-grounded decision and hallucination assessment */
+#libraryView .library-quality-benchmark{padding:12px;border:1px solid var(--atgv-line);border-radius:6px;display:grid;gap:9px;background:var(--vscode-sideBar-background,var(--vscode-editor-background));margin-bottom:10px}
+#libraryView .library-quality-controls{display:flex;align-items:end;flex-wrap:wrap;gap:8px}
+#libraryView .library-quality-controls>label:not(.library-quality-checkbox){display:grid;gap:4px;min-width:170px;flex:1;font-size:11px;font-weight:600}
+#libraryView .library-quality-controls select{height:34px;min-width:0;background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--atgv-line);border-radius:5px}
+#libraryView .library-quality-checkbox{display:flex;align-items:center;gap:6px;font-size:11px;line-height:1.4;padding-bottom:7px}
+#libraryView .library-quality-checkbox input{accent-color:var(--vscode-button-background)}
+#libraryView .library-quality-score-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+#libraryView .library-quality-score-item{background:var(--vscode-editor-background);padding:9px;border:1px solid var(--atgv-line);border-radius:5px;display:grid;gap:4px}
+#libraryView .library-quality-score-item strong{font-size:19px;font-weight:700}
+#libraryView .library-quality-score-item span{font-size:11px;color:var(--vscode-descriptionForeground);overflow-wrap:anywhere}
+#libraryView .library-quality-finding{margin:5px 0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px;line-height:1.5}
+#libraryView .library-quality-report details{margin-top:8px;padding:8px;border:1px solid var(--atgv-line);border-radius:5px}
+#libraryView .library-quality-report summary{cursor:pointer;font-weight:600}
+#libraryView .library-quality-benchmark [data-critical="true"]{color:var(--vscode-errorForeground,#f87171)}
+@media(max-width:600px){#libraryView .library-quality-score-grid{grid-template-columns:1fr}#libraryView .library-quality-controls{align-items:stretch}}
+
+#libraryView .library-quality-history-label{display:grid;gap:4px;font-weight:600;font-size:11px}
+#libraryView .library-quality-history-label select{width:100%;min-height:33px;background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--atgv-line);border-radius:5px}

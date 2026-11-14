@@ -1,6 +1,0 @@
-ATGV 0.3.49 verified source archive
-sha256 a6bf1a251487c6cea1720e03f3f1310dda94e07a34c8c9e33d7d731b75021a39
-parts 50
-bytes-base64 2722196
-
-Import retry with legacy whitespace preservation.

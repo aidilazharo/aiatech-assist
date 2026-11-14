@@ -1,0 +1,98 @@
+'use strict';
+const crypto=require('node:crypto');
+const {ProjectMemory}=require('../service/ai/memory');
+const {flattenApproved,plan}=require('./br-workflow');
+const hash=value=>crypto.createHash('sha256').update(typeof value==='string'?value:JSON.stringify(value)).digest('hex');
+const statuses=new Set(['blocked','ready','in-progress','ai-draft-ready','needs-input','in-review','changes-requested','approved','completed','stale']);
+const modes=new Set(['ai','hybrid','manual']);
+function open(root){const memory=new ProjectMemory(root);memory.db.exec(`CREATE TABLE IF NOT EXISTS delivery_items (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, role_id TEXT NOT NULL, task_id TEXT NOT NULL, br_id TEXT NOT NULL, br_revision INTEGER NOT NULL, jira_path TEXT NOT NULL, jira_key TEXT NOT NULL, jira_type TEXT NOT NULL, jira_title TEXT NOT NULL, title TEXT NOT NULL, path TEXT NOT NULL, status TEXT NOT NULL, generation_status TEXT NOT NULL DEFAULT 'not-started', mode TEXT NOT NULL, owner TEXT NOT NULL DEFAULT '', blockers TEXT NOT NULL DEFAULT '[]', context_digest TEXT NOT NULL, content TEXT NOT NULL DEFAULT '', draft_revision INTEGER NOT NULL DEFAULT 0, review TEXT NOT NULL DEFAULT '{}', evidence TEXT NOT NULL DEFAULT '[]', updated TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS delivery_context_events (id TEXT PRIMARY KEY, item_id TEXT NOT NULL, from_revision INTEGER NOT NULL, to_revision INTEGER NOT NULL, reason TEXT NOT NULL, created TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS delivery_sessions (session_id TEXT PRIMARY KEY, item_id TEXT NOT NULL, owner TEXT NOT NULL, started TEXT NOT NULL, updated TEXT NOT NULL, active INTEGER NOT NULL);
+ CREATE TABLE IF NOT EXISTS delivery_revisions (id TEXT PRIMARY KEY, item_id TEXT NOT NULL, revision INTEGER NOT NULL, actor TEXT NOT NULL, content TEXT NOT NULL, digest TEXT NOT NULL, created TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS delivery_suggestions (id TEXT PRIMARY KEY, item_id TEXT NOT NULL, base_revision INTEGER NOT NULL, content TEXT NOT NULL, sources TEXT NOT NULL, assumptions TEXT NOT NULL, questions TEXT NOT NULL, next_action TEXT NOT NULL, status TEXT NOT NULL, created TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS delivery_reviews (id TEXT PRIMARY KEY, item_id TEXT NOT NULL, revision INTEGER NOT NULL, reviewer TEXT NOT NULL, action TEXT NOT NULL, remarks TEXT NOT NULL, created TEXT NOT NULL);
+ CREATE INDEX IF NOT EXISTS delivery_items_role ON delivery_items(role_id,status);
+ CREATE INDEX IF NOT EXISTS delivery_suggestions_item ON delivery_suggestions(item_id,status);`);
+ if(!memory.db.prepare('PRAGMA table_info(delivery_suggestions)').all().some(x=>x.name==='selection'))memory.db.exec("ALTER TABLE delivery_suggestions ADD COLUMN selection TEXT NOT NULL DEFAULT ''");
+ return memory;}
+function row(item){if(!item)return null;return {...item,blockers:JSON.parse(item.blockers),review:JSON.parse(item.review),evidence:JSON.parse(item.evidence),suggestions:undefined};}
+function itemFor(memory,id){const item=row(memory.db.prepare('SELECT * FROM delivery_items WHERE id=?').get(id));if(!item)throw Error('Work item was not found. Refresh My Work.');return item;}
+function recommend(role,task){const text=(role.id+' '+task.id+' '+task.label+' '+(task.document||'')).toLowerCase();if(!task.document||/sign.?off|approval|decision|execution|results|test.report|penetration|release gate|code.review|monitoring|incident|meeting/.test(text))return 'manual';if(/architecture|journey|wireframe|risk|design|test.case|plan|backlog|story|schema|runbook|threat|guide|documentation/.test(text))return 'hybrid';return 'ai';}
+function issueFor(register,brId,roleId){const all=Object.entries(register.synced||{}).filter(([p,x])=>p===brId||p.startsWith(brId+'/')).filter(([,x])=>x?.key);
+ const children=all.filter(([p])=>p.split('/').length>1);const story=children.filter(([p])=>p.split('/').length>2);
+ const chosen=(/developer|technical-lead|qa|uat|scrum|security|ai-ml/.test(roleId)?story[0]||children[0]:null)||all.find(([p])=>p===brId)||all[0];
+ return chosen?{path:chosen[0],key:chosen[1].key,type:chosen[1].issueType||chosen[1].kind||'Issue',title:chosen[1].title||chosen[0]}:null;
+}
+function issuesFor(register,brId,roleId){
+ const all=Object.entries(register.synced||{}).filter(([p,x])=>(p===brId||p.startsWith(brId+'/'))&&x?.key);
+ const depth=p=>p.split('/').length;
+ const prefer=/developer|technical-lead|qa|uat|scrum|security|ai-ml/.test(roleId)?3:/architect|ux|product-owner|data-engineer/.test(roleId)?2:1;
+ const subset=all.filter(([p])=>depth(p)===prefer);
+ const fallback=all.filter(([p])=>depth(p)===1);
+ return (subset.length?subset:fallback).map(([p,x])=>({path:p,key:x.key,type:x.issueType||x.kind||'Issue',title:x.title||p}));
+}
+function activate(root,{projectId,register,readiness,roles}){
+ const memory=open(root);let created=0,updated=0,stale=0;
+ try{
+  const approved=new Map((register.brs||[]).filter(b=>b.status==='approved'&&b.approvedContent&&!b.needsRefresh&&!b.externalReviewRequired&&!b.dependencyReviewRequired&&!b.roleReviewRequired).map(b=>[b.id,b]));
+  const pending=new Set(plan(register).filter(x=>x.action!=='retire').map(x=>x.path.split('/')[0]));
+  const now=new Date().toISOString();const seen=new Set();memory.tx(()=>{
+   for(const handoff of readiness.handoffs||[]){const role=roles.find(r=>r.id===handoff.roleId);if(!role)continue;
+    for(const h of handoff.items||[]){const br=h.brId==='project'?null:approved.get(h.brId);
+     if(h.brId!=='project'&&(!br||pending.has(h.brId)))continue;
+     const issues=br?issuesFor(register,h.brId,role.id):[{path:'',key:'',type:'',title:''}];
+     if(br&&!issues.length)continue;
+     const brRevision=br?.approvedRevision||0;
+     for(const jira of issues)for(const task of role.tasks||[]){
+      const id=hash([projectId,role.id,h.brId,task.id,jira.path]).slice(0,40);seen.add(id);
+      const contextDigest=hash([h.brId,brRevision,jira?.path||'',jira?.key||'',role.id,task.id,task.document||'']);
+      const old=memory.db.prepare('SELECT * FROM delivery_items WHERE id=?').get(id);
+      const blockers=[...(h.blockers||[])];const desired=blockers.length?'blocked':h.status==='blocked'?'blocked':'ready';
+      const status=old&&(old.br_revision!==brRevision||old.context_digest!==contextDigest)?'stale':old?.status==='completed'?'completed':old?.status==='approved'?'approved':blockers.length?'blocked':old?.status&&old.status!=='blocked'?old.status:desired;
+      const args=[projectId,role.id,task.id,h.brId,brRevision,jira?.path||'',jira?.key||'',jira?.type||'',jira?.title||'',task.label,task.document||'',status,recommend(role,task),JSON.stringify(blockers),contextDigest,now,id];
+      if(old&&old.br_revision!==brRevision){memory.db.prepare('INSERT INTO delivery_context_events VALUES(?,?,?,?,?,?)').run(crypto.randomUUID(),id,old.br_revision,brRevision,'Approved BR revision changed',now);}
+      if(old){memory.db.prepare(`UPDATE delivery_items SET project_id=?,role_id=?,task_id=?,br_id=?,br_revision=?,jira_path=?,jira_key=?,jira_type=?,jira_title=?,title=?,path=?,status=?,mode=CASE WHEN draft_revision=0 THEN ? ELSE mode END,blockers=?,context_digest=?,updated=? WHERE id=?`).run(...args);updated++;if(status==='stale'&&old.status!=='stale')stale++;}
+      else{memory.db.prepare(`INSERT INTO delivery_items (project_id,role_id,task_id,br_id,br_revision,jira_path,jira_key,jira_type,jira_title,title,path,status,mode,blockers,context_digest,updated,id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(...args);created++;}
+     }
+    }
+   }
+   for(const old of memory.db.prepare('SELECT id,br_id,status FROM delivery_items WHERE project_id=?').all(projectId)){
+    if(seen.has(old.id)||old.status==='stale')continue;
+    memory.db.prepare('UPDATE delivery_items SET status=?,blockers=?,updated=? WHERE id=?').run('stale',JSON.stringify(['Approved BR/JIRA or role configuration no longer matches this work item']),now,old.id);
+    stale++;
+   }
+  });
+  return {created,updated,stale};
+ }finally{memory.close();}
+}
+function list(root,{roleId,owner,filter='all'}={}){const memory=open(root);try{
+ let items=memory.db.prepare('SELECT * FROM delivery_items ORDER BY updated DESC LIMIT 3000').all().map(row);
+ const background=memory.proposals('pending');
+ for(const item of items)item.backgroundDraftCount=background.filter(x=>x.metadata?.roleId===item.role_id&&x.metadata?.taskId===item.task_id).length;
+ if(roleId)items=items.filter(x=>x.role_id===roleId);if(filter==='mine')items=items.filter(x=>owner&&x.owner===owner);else if(filter==='ai-drafts')items=items.filter(x=>x.generation_status==='ready'||x.backgroundDraftCount>0);else if(filter==='awaiting-review')items=items.filter(x=>x.status==='in-review');else if(filter!=='all')items=items.filter(x=>x.status===filter);
+ const summary={};for(const item of items)summary[item.status]=(summary[item.status]||0)+1;
+ return {items,summary,reviews:memory.db.prepare('SELECT * FROM delivery_reviews ORDER BY created DESC LIMIT 40').all()};
+ }finally{memory.close();}}
+function context(root,id,register){const memory=open(root);try{const item=itemFor(memory,id),br=(register.brs||[]).find(x=>x.id===item.br_id);const approved=br?.approvedRevisions?.find(x=>x.revision===item.br_revision)?.content||((br?.approvedRevision===item.br_revision)?br?.approvedContent:null);if(item.br_id!=='project'&&!approved)throw Error('Approved BR revision is no longer available.');return {item,approved,suggestions:memory.db.prepare('SELECT * FROM delivery_suggestions WHERE item_id=? ORDER BY created DESC LIMIT 30').all(id).map(x=>({...x,sources:JSON.parse(x.sources),assumptions:JSON.parse(x.assumptions),questions:JSON.parse(x.questions)})),history:memory.db.prepare('SELECT revision,digest,actor,created FROM delivery_revisions WHERE item_id=? ORDER BY revision DESC LIMIT 25').all(id)};}finally{memory.close();}}
+function rebase(root,id,actor){const memory=open(root);try{return memory.tx(()=>{const item=itemFor(memory,id);if(!actor||item.owner!==actor)throw Error('Only the assigned work owner may rebase a stale item.');if(item.status!=='stale'||item.blockers.length)throw Error('Rebase is permitted only after all prerequisites are cleared.');const now=new Date().toISOString();memory.db.prepare('UPDATE delivery_items SET status=?,generation_status=?,review=?,updated=? WHERE id=?').run('changes-requested','outdated','{}',now,id);memory.event('delivery-rebased',{id,actor,brId:item.br_id,brRevision:item.br_revision});return itemFor(memory,id);});}finally{memory.close();}}
+function compare(root,id,revision){const memory=open(root);try{const item=itemFor(memory,id);if(!Number.isInteger(revision)||revision<1||revision>=item.draft_revision)throw Error('Select an earlier draft revision.');const previous=memory.db.prepare('SELECT content FROM delivery_revisions WHERE item_id=? AND revision=?').get(id,revision);if(!previous)throw Error('Earlier draft is no longer available.');return {revision,previous:previous.content,currentRevision:item.draft_revision,current:item.content};}finally{memory.close();}}
+function start(root,id,actor){if(!actor)throw Error('Assign to Me before starting work.');const memory=open(root);try{return memory.tx(()=>{const item=itemFor(memory,id);if(item.status==='blocked'||item.status==='stale')throw Error('Work is blocked: '+(item.blockers.join('; ')||'Approved BR/JIRA revision changed'));if(item.owner&&item.owner!==actor)throw Error('Work is owned by another user. Request transfer.');const now=new Date().toISOString(),session=memory.db.prepare('SELECT * FROM delivery_sessions WHERE item_id=? AND active=1 ORDER BY started DESC LIMIT 1').get(id);const sessionId=session?.session_id||crypto.randomUUID();if(!session)memory.db.prepare('INSERT INTO delivery_sessions VALUES(?,?,?,?,?,?)').run(sessionId,id,actor,now,now,1);else if(session.owner!==actor)throw Error('Existing work session belongs to another user.');memory.db.prepare('UPDATE delivery_items SET owner=?,status=?,updated=? WHERE id=?').run(actor,['ready','needs-input','changes-requested'].includes(item.status)?'in-progress':item.status,now,id);return {...itemFor(memory,id),sessionId};});}finally{memory.close();}}
+function save(root,id,actor,{content,revision,mode,evidence=[]}){if(typeof content!=='string'||Buffer.byteLength(content,'utf8')>512000)throw Error('Invalid work draft.');if(!Number.isInteger(revision)||revision<0)throw Error('Expected draft revision is required.');if(mode!==undefined&&!modes.has(mode))throw Error('Unknown execution mode.');if(!Array.isArray(evidence)||evidence.length>30||evidence.some(x=>typeof x!=='string'||x.length>500||/^\s*$/.test(x)))throw Error('Invalid evidence references.');const memory=open(root);try{return memory.tx(()=>{const item=itemFor(memory,id);if(item.owner!==actor||!actor)throw Error('Work owner authorization failed.');if(['blocked','stale','approved','completed','in-review'].includes(item.status))throw Error('This work cannot be edited in its current status.');if(revision!==item.draft_revision)throw Error('Another user or session saved a newer revision. Refresh work before editing.');const next=revision+1,now=new Date().toISOString();memory.db.prepare('INSERT INTO delivery_revisions VALUES(?,?,?,?,?,?,?)').run(crypto.randomUUID(),id,next,actor,content,hash(content),now);memory.db.prepare('UPDATE delivery_items SET content=?,mode=?,draft_revision=?,status=?,evidence=?,updated=? WHERE id=?').run(content,mode||item.mode,next,'in-progress',JSON.stringify(evidence),now,id);return itemFor(memory,id);});}finally{memory.close();}}
+function suggestion(root,id,actor,{content,sources=[],assumptions=[],questions=[],nextAction='',selection=''}){if(typeof content!=='string'||content.length>80000||!content.trim()||typeof selection!=='string'||selection.length>12000)throw Error('Invalid AI response.');if([sources,assumptions,questions].some(a=>!Array.isArray(a)||a.length>50||a.some(s=>typeof s!=='string'||s.length>1500)))throw Error('Invalid AI proposal data.');const memory=open(root);try{return memory.tx(()=>{const item=itemFor(memory,id);if(item.owner!==actor||!actor)throw Error('Work owner authorization failed.');if(['blocked','stale','completed','approved'].includes(item.status))throw Error('Cannot generate for blocked or approved work.');const suggestionId=hash([id,item.draft_revision,content,selection]),now=new Date().toISOString();
+ memory.db.prepare('INSERT INTO delivery_suggestions (id,item_id,base_revision,content,sources,assumptions,questions,next_action,status,created,selection) VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING').run(suggestionId,id,item.draft_revision,content,JSON.stringify(sources),JSON.stringify(assumptions),JSON.stringify(questions),String(nextAction).slice(0,2000),'pending',now,selection);memory.db.prepare('UPDATE delivery_items SET generation_status=?,status=?,updated=? WHERE id=?').run('ready',questions.length?'needs-input':'ai-draft-ready',now,id);return {suggestionId,item:itemFor(memory,id)};});}finally{memory.close();}}
+function resolveSuggestion(root,id,actor,suggestionId,action){if(!['accept','reject'].includes(action))throw Error('Invalid AI suggestion action.');const memory=open(root);try{return memory.tx(()=>{const item=itemFor(memory,id);if(item.owner!==actor||!actor)throw Error('Work owner authorization failed.');const prop=memory.db.prepare('SELECT * FROM delivery_suggestions WHERE id=? AND item_id=?').get(suggestionId,id);if(!prop||prop.status!=='pending')throw Error('Suggestion already handled.');if(prop.base_revision!==item.draft_revision)throw Error('Draft changed. Regenerate or compare before accepting.');memory.db.prepare('UPDATE delivery_suggestions SET status=? WHERE id=?').run(action==='accept'?'accepted':'rejected',suggestionId);const now=new Date().toISOString();if(action==='accept'){
+ let nextContent;
+ if(prop.selection){const parts=item.content.split(prop.selection);if(parts.length!==2)throw Error('Selected text changed or appears more than once. Compare manually before applying AI edits.');nextContent=parts.join(prop.content);}else nextContent=item.content.trimEnd()+'\n\n## ATGV AI Draft Proposal\n\n'+prop.content+'\n';
+ const next=item.draft_revision+1;
+ memory.db.prepare('INSERT INTO delivery_revisions VALUES(?,?,?,?,?,?,?)').run(crypto.randomUUID(),id,next,actor,nextContent,hash(nextContent),now);
+ memory.db.prepare('UPDATE delivery_items SET content=?,draft_revision=?,generation_status=?,status=?,updated=? WHERE id=?').run(nextContent,next,'accepted','in-progress',now,id);
+ }else memory.db.prepare('UPDATE delivery_items SET generation_status=?,status=?,updated=? WHERE id=?').run('rejected','in-progress',now,id);
+ return itemFor(memory,id);});}finally{memory.close();}}
+function submit(root,id,actor,revision){const memory=open(root);try{return memory.tx(()=>{const item=itemFor(memory,id);if(!actor||item.owner!==actor)throw Error('Only the assigned owner may submit this work.');if(item.draft_revision!==revision)throw Error('The draft revision changed.');if(!['in-progress','ai-draft-ready','needs-input','changes-requested'].includes(item.status))throw Error('This work is not ready for review.');if(!item.content.trim())throw Error('Save document content before submitting.');memory.db.prepare('UPDATE delivery_items SET status=?,updated=? WHERE id=?').run('in-review',new Date().toISOString(),id);return itemFor(memory,id);});}finally{memory.close();}}
+function review(root,id,actor,{action,remarks='',revision}){if(!['approve','changes-requested','reject'].includes(action))throw Error('Invalid review action.');if(typeof remarks!=='string'||remarks.length>4000)throw Error('Invalid review message.');const memory=open(root);try{return memory.tx(()=>{const item=itemFor(memory,id);if(!actor||item.owner===actor)throw Error('An independent authorized reviewer is required.');if(item.status!=='in-review'||item.draft_revision!==revision)throw Error('Work is no longer awaiting this review.');if(action!=='approve'&&!remarks.trim())throw Error('Review feedback is required.');const now=new Date().toISOString(),status=action==='approve'?'approved':'changes-requested';memory.db.prepare('INSERT INTO delivery_reviews VALUES(?,?,?,?,?,?,?)').run(crypto.randomUUID(),id,revision,actor,action,remarks,now);memory.db.prepare('UPDATE delivery_items SET status=?,review=?,updated=? WHERE id=?').run(status,JSON.stringify({action,remarks,revision,reviewer:actor,date:now}),now,id);
+ memory.recordDecision('delivery-review',{id,roleId:item.role_id,brId:item.br_id,brRevision:item.br_revision,jiraKey:item.jira_key,revision,reviewer:actor,action,date:now});
+ return itemFor(memory,id);});}finally{memory.close();}}
+function complete(root,id,actor,revision){const memory=open(root);try{return memory.tx(()=>{const item=itemFor(memory,id);if(item.owner!==actor||!actor||item.status!=='approved'||item.draft_revision!==revision||item.review.action!=='approve'||item.review.revision!==revision)throw Error('Approved revision and assigned owner required for completion.');if(item.mode==='manual'&&!item.evidence.length)throw Error('Manual activities require an evidence reference before completion.');const now=new Date().toISOString();memory.db.prepare('UPDATE delivery_items SET status=?,updated=? WHERE id=?').run('completed',now,id);
+ memory.recordDecision('delivery-completion',{id,roleId:item.role_id,brId:item.br_id,brRevision:item.br_revision,jiraKey:item.jira_key,revision,actor,date:now,evidenceCount:item.evidence.length});
+ return itemFor(memory,id);});}finally{memory.close();}}
+module.exports={open,activate,list,context,start,rebase,save,suggestion,resolveSuggestion,submit,review,complete,compare,recommend,hash,statuses,modes,issueFor,issuesFor};

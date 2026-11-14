@@ -1,0 +1,33 @@
+'use strict';
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const root=path.join(__dirname,'..');
+const host=fs.readFileSync(path.join(root,'test/generated/extension-source.txt'),'utf8');
+const webview=fs.readFileSync(path.join(root,'media/start.js'),'utf8');
+const css=fs.readFileSync(path.join(root,'media/start.css'),'utf8');
+const workspace=host.slice(host.indexOf('<section id="developerTaskDashboard"'),host.indexOf('<div id="developerManualTickets"'));
+test('v0.3.13 puts History immediately left of Activity in the workspace tab row',()=>{
+ const tabs=workspace.slice(workspace.indexOf('class="developer-br-output-tabs"'),workspace.indexOf('id="developerBrSubtabs"'));
+ const history=tabs.indexOf('data-developer-br-group="history"');
+ const activity=tabs.indexOf('data-developer-br-group="activity"');
+ assert.ok(history>0);
+ assert.ok(activity>history);
+ assert.ok(!tabs.slice(history+'data-developer-br-group="history"'.length,activity).includes('data-developer-br-group='));
+ assert.match(tabs,/aria-label="History" title="History"/);
+ assert.match(tabs,/aria-label="Activity" title="Activity"/);
+ assert.doesNotMatch(workspace,/id="developerBrRecoveryPanel"|<details><summary>History<\/summary>/);
+});
+test('v0.3.13 displays persisted repair events in History and live log in Activity',()=>{
+ assert.match(workspace,/<pre id="developerBrRecoveryHistory" class="developer-br-output-content hidden"[^>]*>No repair attempts recorded\.<\/pre>/);
+ assert.match(webview,/history:\['repair-history'\],activity:\['logs'\]/);
+ assert.match(webview,/history:'repair-history',activity:'logs'/);
+ assert.match(webview,/developerBrTab==='repair-history'/);
+ assert.match(webview,/\$\('developerBrRecoveryHistory'\)\.classList\.toggle\('hidden',!recoveryOpen\)/);
+ assert.match(webview,/\$\('developerBrOutput'\)\.classList\.toggle\('hidden',artifactsOpen\|\|categoryOpen\|\|recoveryOpen\)/);
+ assert.match(webview,/developerBrRecovery=null;developerBrPreviewOnly=false;\$\('developerBrRecoveryHistory'\)\.textContent='No repair attempts recorded\.'/);
+ assert.match(webview,/\$\('developerBrRecoveryHistory'\)\.textContent=show\?/);
+ assert.match(webview,/developerBrActivity\.length\?developerBrActivity\.join/);
+ assert.match(css,/\.developer-br-output-content\{/);
+});

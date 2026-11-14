@@ -1,0 +1,65 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mxfile host="app.diagrams.net" modified="2026-11-03T00:00:00.000Z" agent="ATGV-Audit" version="24.7.17" type="device">
+  <diagram name="ATGV Integration Overview" id="01-integration-overview">
+    <mxGraphModel dx="1550" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="host" value="ATGV VS Code Extension" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=middle;arcSize=13;fillColor=#1E293B;strokeColor=#FFFFFF;strokeWidth=2;fontSize=15;fontColor=#FFFFFF;fontStyle=1;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="90" y="200" width="310" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="store" value="Local BR + SDLC Repository" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=middle;arcSize=13;fillColor=#E9F7EF;strokeColor=#167C49;strokeWidth=2;fontSize=15;fontColor=#1F2937;fontStyle=1;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="90" y="420" width="310" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="jira" value="Jira / TECH COCKPIT (TC)" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=middle;arcSize=13;fillColor=#E6F0FF;strokeColor=#185ABC;strokeWidth=2;fontSize=15;fontColor=#1F2937;fontStyle=1;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="585" y="80" width="320" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="conf" value="Confluence / TCC" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=middle;arcSize=13;fillColor=#E8F4F9;strokeColor=#0E7490;strokeWidth=2;fontSize=15;fontColor=#1F2937;fontStyle=1;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="585" y="270" width="320" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="catalog" value="GitHub / tech-stacks-skills" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=middle;arcSize=13;fillColor=#F1ECFC;strokeColor=#6E40C9;strokeWidth=2;fontSize=15;fontColor=#1F2937;fontStyle=1;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="90" width="340" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="code" value="GitHub / tech-cockpit" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=middle;arcSize=13;fillColor=#F1ECFC;strokeColor=#6E40C9;strokeWidth=2;fontSize=15;fontColor=#1F2937;fontStyle=1;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="300" width="340" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="gate" value="Human approval + idempotent mapping" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=middle;arcSize=13;fillColor=#FFF4D6;strokeColor=#996900;strokeWidth=2;fontSize=15;fontColor=#1F2937;fontStyle=1;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="585" y="485" width="440" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="ledger" value="Traceability + Jira key ledger" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=middle;arcSize=13;fillColor=#E9F7EF;strokeColor=#167C49;strokeWidth=2;fontSize=15;fontColor=#1F2937;fontStyle=1;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="485" width="340" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="e0" value="Local persistence" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#64748B;strokeWidth=2;fontSize=12;fontColor=#374151;" edge="1" parent="1" source="host" target="store">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" value="Issue read / approved publish" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#64748B;strokeWidth=2;fontSize=12;fontColor=#374151;" edge="1" parent="1" source="host" target="jira">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" value="Approved document sync" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#64748B;strokeWidth=2;fontSize=12;fontColor=#374151;" edge="1" parent="1" source="host" target="conf">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" value="Pull-only skills &amp; templates" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#64748B;strokeWidth=2;fontSize=12;fontColor=#374151;" edge="1" parent="1" source="host" target="catalog">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" value="Branch / PR (optional)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#64748B;strokeWidth=2;fontSize=12;fontColor=#374151;dashed=1;dashPattern=6 4;" edge="1" parent="1" source="host" target="code">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" value="Approved BR revisions" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#64748B;strokeWidth=2;fontSize=12;fontColor=#374151;" edge="1" parent="1" source="store" target="gate">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" value="Stable IDs" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#CA8A04;strokeWidth=2;fontSize=12;fontColor=#374151;" edge="1" parent="1" source="gate" target="ledger">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" value="Reconcile before CREATE" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#CA8A04;strokeWidth=2;fontSize=12;fontColor=#374151;" edge="1" parent="1" source="ledger" target="jira">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" value="Approved docs only" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#CA8A04;strokeWidth=2;fontSize=12;fontColor=#374151;" edge="1" parent="1" source="gate" target="conf">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="notes" value="&lt;b&gt;ATGV Integration Overview&lt;/b&gt;&lt;br/&gt;Solid arrows: intended existing extension integration paths; dashed: optional repo workflow dependent on configuration.&lt;br/&gt;Connector read tests succeeded in this audit; live VS Code authentication and writes have not been exercised.&lt;br/&gt;Never place tokens in project files or diagrams. Validate approved BR revision, Jira hierarchy, and Confluence version." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FAFAFA;strokeColor=#CBD5E1;fontColor=#334155;align=left;verticalAlign=top;spacing=12;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="65" y="895" width="1480" height="165" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

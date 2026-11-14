@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "name": "ATGV AIATECH Assist UI/UX Design System",
+  "id": "atgv-ui",
+  "version": "1.0.0",
+  "description": "Canonical design tokens for the entire ATGV VS Code webview. Maintain this JSON and regenerate media/atgv-ui-theme.css; do not duplicate token values in role-specific CSS.",
+  "theme": {
+    "mode": "vscode-adaptive",
+    "fontFamily": "var(--vscode-font-family, system-ui, sans-serif)",
+    "foreground": "var(--vscode-foreground, #e2e5ea)",
+    "background": "var(--vscode-editor-background, #20242a)",
+    "surface": "var(--vscode-editorWidget-background, var(--vscode-editor-background, #20242a))",
+    "border": "var(--vscode-panel-border, #545a65)",
+    "muted": "var(--vscode-descriptionForeground, #9da8b7)",
+    "focus": "var(--vscode-focusBorder, #4f9cf5)",
+    "states": {
+      "idle": "var(--vscode-panel-border, #697383)",
+      "active": "var(--vscode-charts-blue, #4f9cf5)",
+      "complete": "var(--vscode-testing-iconPassed, #38a87d)",
+      "warning": "var(--vscode-editorWarning-foreground, #d9ac51)",
+      "error": "var(--vscode-errorForeground, #ea6d78)"
+    }
+  },
+  "typography": {
+    "bodyPx": 13,
+    "pageTitlePx": 20,
+    "sectionTitlePx": 16,
+    "subsectionTitlePx": 14,
+    "labelPx": 12,
+    "captionPx": 11,
+    "circleValuePx": 15,
+    "bodyLineHeight": 1.5,
+    "headingLineHeight": 1.35,
+    "weightNormal": 400,
+    "weightMedium": 600,
+    "weightTitle": 700
+  },
+  "spacing": {"unitPx": 4, "controlHeightPx": 34, "cardRadiusPx": 8},
+  "progress": {
+    "circleDiameterPx": 46,
+    "circleBorderPx": 2,
+    "ringTrackThicknessPx": 5,
+    "circleGapPx": 6,
+    "transitionMs": 240,
+    "pulseDurationMs": 1700,
+    "pulseScale": 1.08,
+    "pulseOpacity": 0.32,
+    "completedAnimation": "none",
+    "inactiveAnimation": "none"
+  },
+  "components": {
+    "overviewRing": "#landingView .overview-phase-ring",
+    "baMilestone": "#discoveryView .discovery-workflow .workflow-step .milestone-circle",
+    "uxMilestone": "#planningView .design-milestone-list .atgv-milestone .milestone-circle",
+    "roleStepper": "#roleStepButtons .role-circle-step-marker",
+    "developerTdd": "#workView .developer-br-steps .developer-br-stage::before"
+  },
+  "accessibility": {
+    "respectsVSCodeTheme": true,
+    "reducedMotionSupported": true,
+    "progressAriaRequired": true,
+    "minimumTouchTargetPx": 34,
+    "rules": [
+      "Only active or current stages animate; finished and inactive stages remain still",
+      "Do not claim a phase completed without corresponding verified task state",
+      "Keep status color accompanied by explicit text or accessible status",
+      "Color choices inherit VS Code theme tokens; never use color as the sole status indicator"
+    ]
+  },
+  "usage": {
+    "generate": "npm run ui:generate",
+    "verify": "npm run ui:check",
+    "output": "media/atgv-ui-theme.css",
+    "guideline": "Apply shared tokens to all roles and Overview; keep component-specific spacing and workflow semantics"
+  }
+}

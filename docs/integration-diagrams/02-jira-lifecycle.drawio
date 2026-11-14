@@ -1,0 +1,56 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mxfile host="app.diagrams.net" modified="2026-11-03T00:00:00.000Z" agent="ATGV-Audit" version="24.7.17" type="device">
+  <diagram name="Jira Publication and Recovery" id="02-jira-lifecycle">
+    <mxGraphModel dx="1550" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="source" value="Approved Business Requirement" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=middle;arcSize=13;fillColor=#E9F7EF;strokeColor=#167C49;strokeWidth=2;fontSize=15;fontColor=#1F2937;fontStyle=1;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="85" y="165" width="300" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="preview" value="Generate Jira Change Preview" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=middle;arcSize=13;fillColor=#F4F6FA;strokeColor=#334155;strokeWidth=2;fontSize=15;fontColor=#1F2937;fontStyle=1;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="475" y="165" width="305" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="approve" value="Human Approves Preview" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=middle;arcSize=13;fillColor=#FFF4D6;strokeColor=#996900;strokeWidth=2;fontSize=15;fontColor=#1F2937;fontStyle=1;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="870" y="165" width="305" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="match" value="Reconcile Stable BR-ID → Jira Key" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=middle;arcSize=13;fillColor=#F4F6FA;strokeColor=#334155;strokeWidth=2;fontSize=15;fontColor=#1F2937;fontStyle=1;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="870" y="375" width="320" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="jira" value="Jira API / TC" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=middle;arcSize=13;fillColor=#E6F0FF;strokeColor=#185ABC;strokeWidth=2;fontSize=15;fontColor=#1F2937;fontStyle=1;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="1260" y="375" width="270" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="ledger" value="Persist Confirmed Result" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=middle;arcSize=13;fillColor=#E9F7EF;strokeColor=#167C49;strokeWidth=2;fontSize=15;fontColor=#1F2937;fontStyle=1;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="475" y="375" width="305" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="retry" value="Interrupted? Reconcile &amp; Review Remaining" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=middle;arcSize=13;fillColor=#FCE7E7;strokeColor=#AD2828;strokeWidth=2;fontSize=15;fontColor=#1F2937;fontStyle=1;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="475" y="580" width="350" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="e0" value="Read-only proposal" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#64748B;strokeWidth=2;fontSize=12;fontColor=#374151;" edge="1" parent="1" source="source" target="preview">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" value="Review CREATE / UPDATE" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#CA8A04;strokeWidth=2;fontSize=12;fontColor=#374151;" edge="1" parent="1" source="preview" target="approve">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" value="Permission and revision check" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#CA8A04;strokeWidth=2;fontSize=12;fontColor=#374151;" edge="1" parent="1" source="approve" target="match">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" value="CREATE only if unmapped" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#CA8A04;strokeWidth=2;fontSize=12;fontColor=#374151;" edge="1" parent="1" source="match" target="jira">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" value="Confirmed key &amp; status" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#64748B;strokeWidth=2;fontSize=12;fontColor=#374151;" edge="1" parent="1" source="jira" target="ledger">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" value="Partial / failed run" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#64748B;strokeWidth=2;fontSize=12;fontColor=#374151;" edge="1" parent="1" source="ledger" target="retry">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" value="Fresh preview + reapproval" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#CA8A04;strokeWidth=2;fontSize=12;fontColor=#374151;" edge="1" parent="1" source="retry" target="preview">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="notes" value="&lt;b&gt;Jira Publication and Recovery&lt;/b&gt;&lt;br/&gt;Publication is user-approved; no direct delete-on-source-replacement.&lt;br/&gt;Preflight before every CREATE. Never mark complete before saving and verifying the Jira key.&lt;br/&gt;Actual remote write/retry behavior is not proven by the read-only connector checks." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FAFAFA;strokeColor=#CBD5E1;fontColor=#334155;align=left;verticalAlign=top;spacing=12;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="65" y="895" width="1480" height="165" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

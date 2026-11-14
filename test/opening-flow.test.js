@@ -1,0 +1,30 @@
+'use strict';
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const {OpeningFlow}=require('../src/opening-flow');
+const candidate={id:'claims',name:'Claims',settings:{jira:{projectKey:'CLM'},confluence:{spaceId:'101',spaceKey:'CLM',spaceName:'Claims',baseUrl:'https://example.atlassian.net/wiki'}}};
+test('the four-step project gate rejects all out-of-order transitions',()=>{
+  const flow=new OpeningFlow();
+  assert.equal(flow.snapshot().phase,'search');
+  assert.throws(()=>flow.tested(),/Required step: selected/);
+  assert.throws(()=>flow.initialized(),/Required step: tested/);
+  assert.throws(()=>flow.opened(),/Required step: initialized/);
+  flow.select(candidate);
+  assert.equal(flow.snapshot().candidate.settings.confluence.spaceId,'101');
+  assert.throws(()=>flow.opened(),/Required step: initialized/);
+  flow.tested(['GitHub not configured (optional).']);
+  assert.equal(flow.snapshot().phase,'tested');
+  assert.equal(flow.snapshot().warnings.length,1);
+  flow.initialized();
+  flow.opened();
+  assert.equal(flow.snapshot().phase,'open');
+  flow.reset();
+  assert.equal(flow.snapshot().candidate,null);
+});
+test('new selection clears an earlier test and snapshots do not leak project URL overrides',()=>{
+  const flow=new OpeningFlow();
+  flow.select({...candidate,settings:{...candidate.settings,jira:{...candidate.settings.jira,email:'secret@example.com',baseUrl:'https://example.atlassian.net'}}});
+  assert.equal(flow.snapshot().candidate.settings.jira.email,undefined);
+  flow.tested();flow.select(candidate);
+  assert.equal(flow.phase,'selected');
+});

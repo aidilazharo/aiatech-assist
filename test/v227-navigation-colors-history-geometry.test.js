@@ -1,0 +1,34 @@
+'use strict';
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const root=path.join(__dirname,'..');
+const ui=fs.readFileSync(path.join(root,'media/start.js'),'utf8');
+const css=fs.readFileSync(path.join(root,'media/start.css'),'utf8');
+const host=fs.readFileSync(path.join(root,'test/generated/extension-source.txt'),'utf8');
+const progress=require('../media/ba-progress');
+const {getNextStep}=require('../media/jira-workflow-tables');
+test('Next navigation is primary only when the previous milestone is completed',()=>{
+ assert.match(ui,/previousButton\.dataset\.milestoneState=previousDefinition\?\.complete\?'completed':'pending'/);
+ assert.match(ui,/nextButton\.dataset\.milestoneState=ready\?'ready':'blocked'/);
+ assert.match(css,/button\[data-milestone-state="completed"\]\{background:var\(--vscode-button-secondaryBackground/);
+ assert.match(css,/#baNextStep\[data-milestone-state="ready"\]:not\(:disabled\)/);
+ assert.match(css,/button\[data-milestone-state\]:disabled\{opacity:\.65;cursor:not-allowed/);
+ assert.match(ui,/previousButton\.disabled=!previousDefinition\?\.selectable\|\|navigatingBusy/);
+ assert.match(ui,/nextButton\.disabled=!ready/);
+ const steps=progress.derive({started:true,hasSources:true,mappingDone:true,savedDiscovery:true});
+ assert.equal(steps.find(x=>x.key==='start').complete,true);
+ assert.equal(steps.find(x=>x.key==='review').complete,false);
+ assert.equal(getNextStep(steps,'mapping',false)?.key,'review');
+ assert.equal(getNextStep(steps,'mapping',true),null);
+});
+test('BR history and published Jira history have same 56px row, padding, caret and font',()=>{
+ assert.match(host,/id="baCompletedList"/);
+ assert.match(host,/id="baCompletedJiraHistory"/);
+ assert.match(css,/:is\(\.ba-completed-br-section,\.ba-completed-jira-history\)\{[^}]*min-height:56px;padding:0/);
+ assert.match(css,/:is\(\.ba-completed-br-heading,\.ba-completed-jira-history>summary\)\{[^}]*min-height:56px;margin:0;padding:13px 16px/);
+ assert.match(css,/\.ba-completed-br-heading::before,#discoveryView \.ba-completed-flat \.ba-completed-jira-history>summary::before\{content:'▸'/);
+ assert.match(css,/\.ba-completed-br-title\{flex:1 1 auto;min-width:0;font-size:12px/);
+ assert.match(css,/#discoveryView #baCompletedList\{display:flex;flex-direction:column;gap:var\(--ba-panel-gap\)\}/);
+});

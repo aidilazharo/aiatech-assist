@@ -1,0 +1,51 @@
+'use strict';
+const test=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs'),path=require('node:path');
+const visuals=require('../src/ux-design-visual');const exporter=require('../src/ux-prototype-export');
+const host=fs.readFileSync(path.join(__dirname,'../test/generated/extension-source.txt'),'utf8');
+const ui=fs.readFileSync(path.join(__dirname,'../media/start.js'),'utf8');
+const css=fs.readFileSync(path.join(__dirname,'../media/start.css'),'utf8');
+const screen={name:'Equipment requests',purpose:'A request list',components:['Photo attachment','Search field','Requests table','Submit button','Navigation sidebar']};
+const record={exists:true,status:'review',key:'TC-392',revisionNumber:3,prototype:{screens:[{name:'Request screen',purpose:'Apply safely',components:['Search input','Submit button'],interactions:['Confirm then continue']} ]}};
+test('wireframe is grayscale crossed-placeholder structural sketch, distinct from UI mockup',()=>{
+ const wire=visuals.screenSvg(screen,{kind:'wireframe',key:'TC-392'});
+ const mock=visuals.screenSvg(screen,{kind:'mockup',key:'TC-392'});
+ assert.match(wire,/LOW-FIDELITY SKETCH/);assert.match(wire,/WIREFRAME/);
+ assert.match(wire,/stroke="#666"/);assert.match(wire,/Requests table/);
+ assert.doesNotMatch(wire,/#2765d8|#17283d|ATGV  \/  TC-392/);
+ assert.notEqual(wire,mock);assert.match(mock,/DESIGN DRAFT/);
+});
+test('offline prototype HTML has working local navigation and protects against untrusted HTML',()=>{
+ const value={...record,prototype:{screens:[{name:'</script><img src=x>',purpose:'<img onerror=alert(1)>',components:['Name input','Save button'],interactions:['Proceed']}]}};
+ const html=exporter.render(value);
+ assert.match(html,/Content-Security-Policy/);assert.match(html,/connect-src 'none'/);
+ assert.match(html,/const design=/);assert.match(html,/document\.createElement/);assert.match(html,/addEventListener\('click'/);
+ assert.doesNotMatch(html,/<img src=x>|<img onerror=alert/);
+ assert.match(html,/\\u003c\/script\\u003e/);
+ assert.doesNotMatch(html,/fetch\(|XMLHttpRequest|https:\/\//);
+ assert.throws(()=>exporter.render({...record,status:'rejected'}),/UI\/UX draft/);
+});
+test('workspace groups Jira and framework selectors ahead of generation with optional image references underneath',()=>{
+ const section=host.slice(host.indexOf('<section id="uxDesignWorkspace"'),host.indexOf('<section id="roleJiraWork"'));
+ const toolbar=section.indexOf('class="ux-design-toolbar"'),header=section.indexOf('ux-design-heading');
+ assert.ok(header>0&&toolbar>header);
+ assert.ok(section.indexOf('id="uxDesignVersionInfo"')<toolbar);
+ assert.ok(section.indexOf('id="uxSelectedTicket"')>toolbar);
+ assert.ok(section.indexOf('id="uxSelectedTicket"')<section.indexOf('id="uxUploadReference"'));
+ assert.ok(section.indexOf('id="uxGenerateUIUX"')<section.indexOf('id="uxUploadReference"'));
+ assert.match(section,/<label for="uxSelectedTicket">Business Requirement \/ Jira Epic<\/label>/);
+ assert.match(section,/id="uxDesignFramework"/);
+ assert.doesNotMatch(section,/Generate one complete, reviewable UI\/UX design for an assigned Jira ticket/);
+ assert.match(css,/\.ux-design-heading/);assert.match(css,/\.ux-reference-thumb/);
+});
+test('preview has collapsed details, external browser button and no inline prototype renderer',()=>{
+ const page=host.slice(host.indexOf('<main id="uxPreviewView"'),host.indexOf('<main id="documentsView"'));
+ assert.equal((page.match(/<details class="ux-preview-group"/g)||[]).length,4);
+ assert.match(page,/id="uxReviewActions" class="ux-review-actions hidden"/);
+ assert.ok(page.indexOf('id="uxReviewActions"')>page.indexOf('id="uxRejectDesign"'));
+ assert.ok(page.indexOf('id="uxReviewActions"')<page.indexOf('<section id="uxDesignPreviewPage"'));
+ assert.doesNotMatch(page,/<details[^>]*\sopen(?:\s|>)/);
+ assert.match(page,/id="uxOpenPrototypeBrowser"/);assert.doesNotMatch(page,/<summary>Interactive Prototype<\/summary>|id="uxPrototypePreview"/);
+ assert.match(ui,/send\('uxPrototypeOpenBrowser'/);assert.match(ui,/\.querySelectorAll\('details\.ux-preview-group'\)/);
+ assert.match(host,/case 'uxPrototypeOpenBrowser':/);assert.match(host,/uxDesignPipeline\.read\(aiRoot\(\),key\)/);
+ assert.match(host,/vscode\.env\.openExternal\(vscode\.Uri\.file\(file\)\)/);
+});

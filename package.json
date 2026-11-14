@@ -1,0 +1,172 @@
+{
+  "name": "atgv-aiatech-assist",
+  "displayName": "ATGV AIATECH Assist",
+  "description": "Webview-based SDLC work with ownership handoffs, Jira/GitHub actions, Confluence document sync and approved AI draft orchestration.",
+  "version": "0.3.49",
+  "atgvDisplayVersion": "0.3.49",
+  "publisher": "aia-my",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "vscode": "^1.94.0"
+  },
+  "categories": [
+    "Other",
+    "Machine Learning",
+    "SCM"
+  ],
+  "keywords": [
+    "ATGV",
+    "AIA",
+    "Jira",
+    "Confluence",
+    "GitHub",
+    "RAG",
+    "knowledge base"
+  ],
+  "main": "./src/extension.js",
+  "activationEvents": [
+    "onCommand:atgvAssist.start",
+    "onCommand:atgvAssist.refreshUnifiedArtifacts",
+    "onCommand:atgvAssist.reset",
+    "onCommand:atgvAssist.restart",
+    "onStartupFinished"
+  ],
+  "icon": "assets/icon.png",
+  "contributes": {
+    "commands": [
+      {
+        "command": "atgvAssist.start",
+        "title": "ATGV: Start",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "atgvAssist.refreshUnifiedArtifacts",
+        "title": "ATGV: Refresh Shared Project Artifacts",
+        "icon": "$(files)"
+      },
+      {
+        "command": "atgvAssist.restart",
+        "title": "ATGV: Restart",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "atgvAssist.reset",
+        "title": "ATGV: Reset",
+        "icon": "$(trash)"
+      }
+    ],
+    "configuration": {
+      "title": "ATGV AIATECH Assist",
+      "properties": {
+        "atgvAssist.sync.maxItems": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500,
+          "default": 100,
+          "description": "Maximum items to synchronize from each service per run."
+        },
+        "atgvAssist.sync.maxFileKb": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024,
+          "default": 256,
+          "description": "Maximum indexed document size in KiB."
+        },
+        "atgvAssist.rag.provider": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "none",
+            "ollama",
+            "openai-compatible",
+            "codex",
+            "openai",
+            "anthropic",
+            "azure-openai"
+          ],
+          "default": "auto",
+          "description": "AI provider: VS Code models, local Codex agent, cloud APIs, Ollama or compatible endpoints."
+        },
+        "atgvAssist.rag.model": {
+          "type": "string",
+          "default": "",
+          "description": "Approved AI model ID or Azure deployment (required for cloud APIs)."
+        },
+        "atgvAssist.rag.endpoint": {
+          "type": "string",
+          "default": "http://localhost:11434",
+          "description": "Endpoint URL for Ollama, compatible services, or Azure OpenAI. Cloud API integrations require HTTPS."
+        },
+        "atgvAssist.rag.maxChunks": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12,
+          "default": 5,
+          "description": "Maximum retrieved chunks included in answer context."
+        },
+        "atgvAssist.ai.preferredVendor": {
+          "type": "string",
+          "default": "",
+          "description": "Optional vendor preference (e.g. openai, anthropic, copilot) for Auto model selection. Blank searches all accessible VS Code model providers."
+        },
+        "atgvAssist.ai.selectedModel": {
+          "type": "string",
+          "default": "",
+          "description": "Selected VS Code AI model identity. Empty uses automatic best-available selection. Use the model picker in the ATGV header."
+        },
+        "atgvAssist.ai.codexTransport": {
+          "type": "string",
+          "enum": [
+            "https",
+            "default"
+          ],
+          "default": "https",
+          "description": "Codex connection mode: HTTPS compatibility (recommended behind restrictive networks) or Codex default transport which may use WebSocket."
+        },
+        "atgvAssist.updates.autoCheckExtension": {
+          "type": "boolean",
+          "default": true,
+          "description": "Check GitHub Releases for extension updates. Saved across ATGV resets."
+        },
+        "atgvAssist.updates.autoCheckLibrary": {
+          "type": "boolean",
+          "default": true,
+          "description": "Check SDLC Catalog main for newer commits. Saved across ATGV resets."
+        },
+        "atgvAssist.updates.promptForUpdates": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a confirmation modal when updates become available. Saved across ATGV resets."
+        },
+        "atgvAssist.updates.checkOnStartup": {
+          "type": "boolean",
+          "default": true,
+          "description": "Check for updates after VS Code starts. Saved across ATGV resets."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "test": "node scripts/generate-source-test-index.js && node --test test/*.test.js",
+    "ui:generate": "node scripts/generate-ui-theme.js",
+    "ui:check": "node scripts/generate-ui-theme.js --check",
+    "platform:check": "node scripts/check-platform.js",
+    "version:set": "node scripts/set-version.js",
+    "package": "node scripts/build-vsix.js",
+    "vendor:offline": "node scripts/vendor-offline.js",
+    "vendor:local": "node scripts/vendor-local-launcher.js",
+    "service:start": "node service/server.js",
+    "service:user": "node scripts/create-service-user.js"
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "ATGV connection secrets and enterprise knowledge synchronization require a trusted workspace."
+    }
+  },
+  "author": {
+    "name": "Muhamad Aidil Azhar Salim",
+    "email": "muhamadaidilazhar.salim@aia.com"
+  }
+}

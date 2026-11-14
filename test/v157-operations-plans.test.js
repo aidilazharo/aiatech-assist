@@ -1,0 +1,2 @@
+'use strict';const {test}=require('node:test');const assert=require('node:assert/strict');const {getPlan}=require('../src/role-step-engine');
+for(const id of ['product-owner','project-manager','scrum-master','operations-support','technical-writer'])test('operations role plan '+id,()=>{const s=getPlan({id,tasks:[{id:'legacy',label:'Legacy'}]});assert.equal(s.length,4);assert.ok(s.every(x=>x.requiredCount>0));});

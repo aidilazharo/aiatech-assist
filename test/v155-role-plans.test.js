@@ -1,0 +1,2 @@
+'use strict';const {test}=require('node:test');const assert=require('node:assert/strict');const {getPlan}=require('../src/role-step-engine');
+for(const [id,first] of [['business-analyst','discover'],['solution-architect','architecture'],['ux-designer','flows'],['software-developer','jira']])test('core role has planned 4-stage workflow: '+id,()=>{const steps=getPlan({id,tasks:[{id:'legacy',label:'Legacy'}]});assert.equal(steps.length,4);assert.equal(steps[0].id,first);assert.ok(steps.every(s=>s.outputTitles.length>=1&&s.requiredCount>=1));});

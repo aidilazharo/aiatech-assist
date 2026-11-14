@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "description": "Non-secret workspace template configuration. Live Jira/GitHub credentials and extension defaults are maintained in VS Code global state and SecretStorage.",
+  "branding": "./branding",
+  "templates": "./templates",
+  "skills": "./skills"
+}
