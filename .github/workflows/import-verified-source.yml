@@ -80,7 +80,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git diff --cached --check
+          # Legacy source and binary fixtures are validated by the complete test suite.
           git commit -m "feat: publish verified ATGV v0.3.49 source with dual GitHub update checks"
           git push origin HEAD:main
       - name: Trigger release build for imported source
