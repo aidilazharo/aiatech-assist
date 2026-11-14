@@ -1,0 +1,32 @@
+# ATGV extension build products
+/node_modules/
+/dist/
+/coverage/
+/test/generated/
+*.vsix
+*.zip
+
+# Local ATGV project work and caches (never source-controlled)
+/.atgv/
+/projects/
+/extension-settings.json
+/project-settings.json
+
+# Credentials, private settings, logs, databases
+.env
+.env.local
+.env.*.local
+**/.env
+**/.env.local
+**/.env.*.local
+*.pem
+*.p12
+*.key
+*.log
+*.db
+*.db-shm
+*.db-wal
+
+# Editor and platform files
+.DS_Store
+/.vscode/
