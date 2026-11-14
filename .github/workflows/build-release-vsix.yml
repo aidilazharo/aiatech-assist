@@ -1,0 +1,146 @@
+name: Build and release ATGV VSIX
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: atgv-vsix-main-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Test and package VSIX
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    outputs:
+      source_ready: ${{ steps.source.outputs.ready }}
+      version: ${{ steps.meta.outputs.version }}
+      filename: ${{ steps.meta.outputs.filename }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Check for ATGV source
+        id: source
+        shell: bash
+        run: |
+          if [[ -f package.json && -f src/extension.js && -f scripts/build-vsix.js ]]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo 'ATGV source is not yet committed; skipping packaging and release.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Set up Node.js
+        if: steps.source.outputs.ready == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Python
+        if: steps.source.outputs.ready == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Read extension version
+        if: steps.source.outputs.ready == 'true'
+        id: meta
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const pkg = require('./package.json');
+          if (pkg.name !== 'atgv-aiatech-assist' || !/^\d+\.\d+\.\d+$/.test(pkg.version)) {
+            throw new Error('Unexpected ATGV package name or version');
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,
+            'version=' + pkg.version + '\n' +
+            'filename=' + pkg.name + '-' + pkg.version + '.vsix\n');
+          NODE
+
+      - name: Run regression suite
+        if: steps.source.outputs.ready == 'true'
+        run: npm test
+
+      - name: Validate UI theme
+        if: steps.source.outputs.ready == 'true'
+        run: npm run ui:check
+
+      - name: Compile and verify VSIX
+        if: steps.source.outputs.ready == 'true'
+        run: npm run package
+
+      - name: Verify VSIX output and checksum
+        if: steps.source.outputs.ready == 'true'
+        shell: bash
+        env:
+          FILE: ${{ steps.meta.outputs.filename }}
+        run: |
+          test -s "../$FILE"
+          sha256sum "../$FILE" | tee vsix.sha256
+          {
+            echo "### ATGV v${{ steps.meta.outputs.version }}"
+            echo "VSIX: $FILE"
+            echo 'Tests and VSIX activation verification passed.'
+            echo 'SHA-256:'
+            cat vsix.sha256
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload VSIX build artifact
+        if: steps.source.outputs.ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: atgv-vsix-${{ steps.meta.outputs.version }}-build-${{ github.run_number }}
+          path: |
+            ../${{ steps.meta.outputs.filename }}
+            vsix.sha256
+          if-no-files-found: error
+          retention-days: 90
+
+  release:
+    name: Publish GitHub prerelease
+    needs: build
+    if: needs.build.outputs.source_ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified VSIX
+        uses: actions/download-artifact@v4
+        with:
+          name: atgv-vsix-${{ needs.build.outputs.version }}-build-${{ github.run_number }}
+          path: dist
+
+      - name: Publish release for this main commit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.build.outputs.version }}
+          FILE: ${{ needs.build.outputs.filename }}
+          SOURCE_SHA: ${{ github.sha }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          tag="v${VERSION}-build.${BUILD_NUMBER}"
+          test -s "dist/${FILE}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" "dist/${FILE}" "dist/vsix.sha256" \
+              --target "$SOURCE_SHA" \
+              --title "ATGV v${VERSION} (build ${BUILD_NUMBER})" \
+              --notes "Automated main-branch VSIX build. Source commit: ${SOURCE_SHA}. Regression suite and package verification passed." \
+              --prerelease \
+              --latest=false
+          else
+            gh release upload "$tag" "dist/${FILE}" "dist/vsix.sha256" --clobber
+          fi
+          echo "GitHub prerelease: $tag" >> "$GITHUB_STEP_SUMMARY"
