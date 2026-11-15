@@ -176,8 +176,10 @@ function normalizeProjectInput(input = {}, existing) {
             stackId: techStackId, companionId: techStackCompanionId,
             root: path.normalize(requestedPreparation.root),
             branch: typeof requestedPreparation.branch === 'string' && (
-               /^bootstrap\/[a-z0-9-]{1,80}$/.test(requestedPreparation.branch) ||
-               new RegExp('^migration/'+techStackId+'-catalog-[a-z0-9-]{1,80}
+                /^bootstrap\/[a-z0-9-]{1,80}$/.test(requestedPreparation.branch) ||
+                (/^migration\/[a-z0-9-]{1,120}$/.test(requestedPreparation.branch) &&
+                 requestedPreparation.branch.startsWith('migration/'+techStackId+'-catalog-'))
+            ) ? requestedPreparation.branch : '',
             baseBranch: validGithubBranch(requestedPreparation.baseBranch || '') || 'main',
             sha: typeof requestedPreparation.sha === 'string' && /^[a-f0-9]{40}$/.test(requestedPreparation.sha) ? requestedPreparation.sha : '',
             remotePushed: requestedPreparation.remotePushed === true,
