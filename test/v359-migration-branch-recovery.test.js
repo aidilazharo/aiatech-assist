@@ -57,7 +57,7 @@ test('branch recovery refuses ambiguous refs, mismatched SHAs and missing verifi
  await assert.rejects(recovery.recover({root:dir,project:project(dir,sha,'')}),/Multiple ATGV stack branches/);
  git(dir,'branch','-D','bootstrap/react-initial');
  const other='e'.repeat(40);
- await assert.rejects(recovery.recover({root:dir,project:project(dir,other,'')}),/no matching local migration\\/bootstrap branch/);
+ await assert.rejects(recovery.recover({root:dir,project:project(dir,other,'')}),/no matching local migration/);
  await assert.rejects(recovery.recover({root:dir,project:project(dir,'','')}),/verified Git revision are missing/);
  assert.equal(git(dir,'branch','--show-current'),'main');
  assert.equal(git(dir,'status','--porcelain'),'');
