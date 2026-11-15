@@ -5,7 +5,7 @@
   opening:{label:'Open a Project',description:'Find and open your ATGV workspace.',steps:[
    s('search','Find an ATGV project','Search existing Confluence spaces and local project folders. Search never changes project content.','#gateQuery','opening'),
    s('results','Choose a project','Choose an existing project or select New Project to configure a new workspace.','#gateLocal','opening'),
-   s('open','Open the workspace','After choosing a project, use Open Project. If no project is selected, this button appears once you select one.','#gatePrimary','opening')
+   s('open','Open the workspace','Click Open Project on a project row to open it directly; no second confirmation screen appears.','#gateFinder','opening')
   ]},
   workspace:{label:'Workspace Essentials',description:'Navigate projects, roles, documents, and help.',steps:[
    s('overview','Project overview','Review SDLC progress and the active project here.','#overviewActive','overview'),

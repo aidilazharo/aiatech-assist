@@ -29,7 +29,7 @@ test('dashboard renderer obtains current extension context, vendor asset availab
  const render=createDashboardHtml(()=>context,()=>null);
  const webview={asWebviewUri:value=>typeof value==='string'?value:value.fsPath,cspSource:'vscode-resource:'};
  const first=render(webview);
- assert.match(first,/v0\.3\.55/);
+ assert.ok(first.includes('v'+require('../package.json').atgvDisplayVersion));
  assert.match(first,/id="appHeader"/);
  assert.match(first,/\/extension-A\/media\/start\.js/);
  assert.match(first,/name="atgv-vendor-libs" content="missing"/);
