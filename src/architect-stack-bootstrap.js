@@ -57,7 +57,7 @@ async function allocateEphemeralPort(hostname){
  return new Promise((resolve,reject)=>{
   const listener=net.createServer();
   listener.once('error',reject);
-  listener.listen(0,hostname,()=>{
+  listener.listen(0,hostname==='[::1]'?'::1':hostname,()=>{
    const port=listener.address().port;
    listener.close(error=>error?reject(error):resolve(port));
   });
