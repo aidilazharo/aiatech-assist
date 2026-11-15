@@ -91,3 +91,13 @@ test('isolated detached architect preview reports its approved logical branch on
  assert.equal(evidence.branch,branch);
  await server.stop({root,stackId:'react',driver});
 });
+
+test('Run Server and Test & Run recover the exact saved branch, not an inferred arbitrary branch',async()=>{
+ const runtime=await fs.readFile(path.join(__dirname,'../src/lib/runtime/extension-runtime.js'),'utf8');
+ const run=runtime.slice(runtime.indexOf("case 'architectRunServer':{"),runtime.indexOf("case 'architectStopServer':{"));
+ const tests=runtime.slice(runtime.indexOf("case 'architectTestStack':{"),runtime.indexOf("case 'architectServerStatus':{"));
+ assert.match(run,/architect-stack-branch-recovery/);
+ assert.match(run,/registry\.update\(activeProject\.id,recovery\.project\)/);
+ assert.match(tests,/architect-stack-branch-recovery/);
+ assert.match(tests,/registry\.update\(activeProject\.id,recovered\.project\)/);
+});
