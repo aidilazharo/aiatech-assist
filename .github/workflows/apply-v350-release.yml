@@ -29,7 +29,7 @@ jobs:
         run: |
           set -euo pipefail
           patch=.atgv-updates/v0.3.50-source.patch
-          echo 'a766b386dcceebbd49e78af1fcf4394e187c2a300ef8ad4c2b195828a12d14d0  .atgv-updates/v0.3.50-source.patch' | sha256sum --check
+          echo '0e87d20972beba3a42a9ee84350e6084962b5bb803802199b98ba593fda40431  .atgv-updates/v0.3.50-source.patch' | sha256sum --check
           test "$(node -p "require('./package.json').version")" = "0.3.49"
           git apply --check "$patch"
           git apply --whitespace=nowarn "$patch"
