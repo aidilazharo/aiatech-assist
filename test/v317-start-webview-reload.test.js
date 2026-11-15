@@ -25,7 +25,7 @@ test('each ATGV Start internal reopen reloads webview HTML, not just reveals the
   tree:{refresh:()=>{}},startupSequence:0,startupScan:null,
   html:()=>`<html>ATGV fresh ${++serial}</html>`,
   refreshDashboard:async()=>events.push(['refresh']),
-  autoLoadWorkspaceProject:async seq=>events.push(['load',seq]),
+  finishManualProjectDiscovery:async seq=>events.push(['manual-list',seq]),
   startupIsComplete:()=>true,startupSessionVerified:false,startupVerifiedSignature:'',
   report:()=>{}
  };
@@ -38,7 +38,8 @@ test('each ATGV Start internal reopen reloads webview HTML, not just reveals the
  ]);
  assert.equal(events.filter(([name])=>name==='reveal').length,2);
  assert.equal(events.filter(([name])=>name==='refresh').length,2);
- assert.deepEqual(events.filter(([name])=>name==='load').map(x=>x[1]),[1,2]);
+ assert.deepEqual(events.filter(([name])=>name==='manual-list').map(x=>x[1]),[1,2]);
+ assert.equal(events.some(([name])=>name==='load'||name==='open'),false,'Startup must never auto-open the last project');
  assert.equal(events.some(([name,type])=>name==='send'&&type==='openingStart'),false,
    'A fresh webview must not receive an obsolete partial-reset message');
 });

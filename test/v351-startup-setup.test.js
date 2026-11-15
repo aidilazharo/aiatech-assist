@@ -69,7 +69,7 @@ test('host requires live Jira, Confluence, GitHub and library checks before savi
  assert.doesNotMatch(host,/showInformationMessage\(`ATGV v\$\{release\.version\} is available \(installed:/);
 });
 test('version and AIA email placeholders are consistent',()=>{
- const pkg=require('../package.json');assert.equal(pkg.version,'0.3.53');assert.equal(pkg.atgvDisplayVersion,'0.3.53');
+ const pkg=require('../package.json');assert.equal(pkg.version,'0.3.55');assert.equal(pkg.atgvDisplayVersion,'0.3.55');
  const html=read('src/lib/webview/dashboard-html.js');
  assert.match(html,/field\('jiraEmail'/);assert.match(html,/user\.name@aia\.com/);
  assert.match(html,/my-fow-technology-app-techassists-enterprise-cockpit/);

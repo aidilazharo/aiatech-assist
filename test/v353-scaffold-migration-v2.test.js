@@ -47,7 +47,7 @@ async function withRepo(callback,{remote=false,windows=false}={}){
   return await callback({temp,root,upstream,baseCommit});
  }finally{await fs.rm(temp,{recursive:true,force:true,maxRetries:10,retryDelay:100});}
 }
-test('v0.3.53 migrates committed React starter on a distinct branch; main and bootstrap remain intact',()=>withRepo(async({root,baseCommit})=>{
+test('v0.3.55 migrates committed React starter on a distinct branch; main and bootstrap remain intact',()=>withRepo(async({root,baseCommit})=>{
  const old=git(root,'show','bootstrap/react-initial:src/main.jsx');
  const change=await migration.migrate({root,stackIds:['react']});
  assert.equal(change.migrated,true);
@@ -65,7 +65,7 @@ test('v0.3.53 migrates committed React starter on a distinct branch; main and bo
  assert.equal(git(root,'rev-parse','bootstrap/react-initial'),baseCommit);
  assert.equal(git(root,'show','HEAD:atgv.bootstrap.json').includes('"catalogVersion": "1.1.12"'),true);
 }));
-test('v0.3.53 accepts Windows CRLF only when templateDigest verifies the original template',()=>withRepo(async({root})=>{
+test('v0.3.55 accepts Windows CRLF only when templateDigest verifies the original template',()=>withRepo(async({root})=>{
  const file=path.join(root,'src/main.jsx');
  // Simulate Git for Windows checkout: committed blob LF, worktree CRLF.
  const src=await fs.readFile(file,'utf8');
@@ -75,7 +75,7 @@ test('v0.3.53 accepts Windows CRLF only when templateDigest verifies the origina
  assert.equal(change.provenance,'verified-CRLF-only');
  assert.equal((await architect.generatedCommitPlan(root,['react'])).migration,true);
 },{windows:true}));
-test('v0.3.53 refuses genuinely modified committed application code and keeps bootstrap branch',()=>withRepo(async({root,baseCommit})=>{
+test('v0.3.55 refuses genuinely modified committed application code and keeps bootstrap branch',()=>withRepo(async({root,baseCommit})=>{
  await fs.appendFile(path.join(root,'src/main.jsx'),'// real customization\n');
  git(root,'add','.');git(root,'commit','-m','legitimate custom code');
  const before=await fs.readFile(path.join(root,'src/main.jsx'),'utf8');
@@ -84,7 +84,7 @@ test('v0.3.53 refuses genuinely modified committed application code and keeps bo
  assert.equal(await fs.readFile(path.join(root,'src/main.jsx'),'utf8'),before);
  assert.equal(git(root,'show','HEAD:src/main.jsx'),before.trim());
 }));
-test('v0.3.53 refuses unrelated uncommitted files and an existing migration branch',()=>withRepo(async({root})=>{
+test('v0.3.55 refuses unrelated uncommitted files and an existing migration branch',()=>withRepo(async({root})=>{
  await fs.writeFile(path.join(root,'unrelated.txt'),'preserve');
  await assert.rejects(migration.migrate({root,stackIds:['react']}),/uncommitted|unrelated/);
  await fs.rm(path.join(root,'unrelated.txt'));
@@ -93,7 +93,7 @@ test('v0.3.53 refuses unrelated uncommitted files and an existing migration bran
  await assert.rejects(migration.migrate({root,stackIds:['react']}),/already exists/);
  assert.equal(git(root,'branch','--show-current'),'bootstrap/react-initial');
 }));
-test('v0.3.53 full Save Stack tests, commits and publishes *only* verified migration branch',()=>withRepo(async({root,upstream,baseCommit})=>{
+test('v0.3.55 full Save Stack tests, commits and publishes *only* verified migration branch',()=>withRepo(async({root,upstream,baseCommit})=>{
  const mainCommit=git(root,'rev-parse','main');
  const effects={install:async()=>{},execute:async(_root,{operation})=>{
   assert.equal(await fs.stat(path.join(root,'src/main.tsx')).then(()=>true,()=>false),true);
@@ -109,7 +109,7 @@ test('v0.3.53 full Save Stack tests, commits and publishes *only* verified migra
  assert.equal(git(upstream,'rev-parse','refs/heads/'+output.branch),output.repo.sha);
  assert.equal(git(root,'status','--porcelain'),'');
 },{remote:true}));
-test('v0.3.53 does not publish when migrated starter tests fail; existing bootstrap remote unchanged',()=>withRepo(async({root,upstream,baseCommit})=>{
+test('v0.3.55 does not publish when migrated starter tests fail; existing bootstrap remote unchanged',()=>withRepo(async({root,upstream,baseCommit})=>{
  const fail={install:async()=>{},execute:async()=>({passed:false,logs:'intentional red test'})};
  await assert.rejects(bootstrap.bootstrap({root,stackId:'react',effects:fail}),/test failed/);
  assert.match(git(root,'branch','--show-current'),/^migration\//);

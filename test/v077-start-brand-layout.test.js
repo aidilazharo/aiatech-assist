@@ -21,7 +21,7 @@ test('start page displays logo, title, version, settings and guide on a single a
 });
 test('version is updated and retained in extension header',()=>{
  const manifest=JSON.parse(read('package.json'));
- assert.equal(manifest.version,'0.3.53');
- assert.equal(manifest.atgvDisplayVersion,'0.3.53');
+ assert.equal(manifest.version,'0.3.55');
+ assert.equal(manifest.atgvDisplayVersion,'0.3.55');
  assert.match(host,/class="brand-version">v\$\{extensionVersion\}/);
 });

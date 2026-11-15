@@ -145,6 +145,18 @@ async function preflight(root,stackId,auth,generation=0,baseBranch='main'){
  }
  return {branch:isMigration?repo.branch:branch,baseBranch,baseSha,publishedSha};
 }
+function describePushFailure(error,branch,baseBranch='main'){
+ const detail=String(error?.message||'Git push failed.');
+ const lower=detail.toLowerCase();
+ let guidance='Check the GitHub PAT repository Contents: write permission, organization branch rules, and the destination origin URL.';
+ if(/non-fast-forward|fetch first|rejected.*fetch|stale info/.test(lower))guidance='A different remote commit exists. Fetch and reconcile the branch; ATGV will never force-push.';
+ else if(/protected branch|repository rule|ruleset|gh006|gh013|pre-receive hook|push declined/.test(lower))guidance='GitHub branch protection or an organization ruleset rejected this branch. Ask an administrator to allow the ATGV branch prefix; do not bypass main protection.';
+ else if(/permission|403|denied|not allowed|write access|access rights|authentication|401/.test(lower))guidance='The authenticated account may not have permission to create this branch. Verify the GitHub PAT and repository write access.';
+ else if(/could not resolve|timed out|network|connection|unable to access/.test(lower))guidance='GitHub was unreachable. Check network, proxy or VPN, then retry without resetting the local branch.';
+ const failure=Error('Could not push the verified ATGV branch '+branch+' to origin. '+baseBranch+' was not modified. '+guidance+' Git reported: '+detail);
+ failure.diagnosticLogs=[error?.diagnosticLogs||'','Branch: '+branch,'Protected base (unchanged): '+baseBranch,'Recovery: '+guidance].filter(Boolean).join('\n\n');
+ return failure;
+}
 async function publish(root,branch,baseSha,auth,baseBranch='main'){
  const heads=await git(root,auth,'ls-remote','--heads','origin');
  if(remoteHash(heads,baseBranch)!==baseSha)throw Error('Remote base branch changed while preparing the stack. Nothing was pushed. Reconcile the branch manually.');
@@ -153,7 +165,8 @@ async function publish(root,branch,baseSha,auth,baseBranch='main'){
  const remote=remoteHash(heads,branch);
  if(remote&&remote!==repo.sha)throw Error('The remote bootstrap branch differs from the local branch. Refusing to overwrite it.');
  if(remote===repo.sha)return {repo,pushed:false};
- await git(root,auth,'push','--set-upstream','origin',branch);
+ try{await git(root,auth,'push','--set-upstream','origin',branch);}
+ catch(error){throw describePushFailure(error,branch,baseBranch);}
  const after=await git(root,auth,'ls-remote','--heads','origin');
  if(remoteHash(after,branch)!==repo.sha)throw Error('Git push returned without the expected remote branch revision. Verify GitHub manually.');
  return {repo,pushed:true};
@@ -243,4 +256,4 @@ async function bootstrap({root,stackId,generation=0,baseBranch='main',token='',o
   throw error;
  }
 }
-module.exports={bootstrap,preflight,publish,stackConfig,branchFor,remoteHash,waitForHttp,portAvailable,ensureLocalBuildExcludes};
+module.exports={bootstrap,preflight,publish,describePushFailure,stackConfig,branchFor,remoteHash,waitForHttp,portAvailable,ensureLocalBuildExcludes};

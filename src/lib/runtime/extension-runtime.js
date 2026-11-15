@@ -9,7 +9,7 @@ const {KnowledgeStore}=require('../../knowledge');
 const knowledgeWorkspace=require('../../knowledge-workspace');
 const {ProjectRegistry,projectConfig,normalizeExtensionSettings,normalizeProjectInput,projectSlug,parseRepoUrl}=require('../../projects');
 const {OpeningFlow}=require('../../opening-flow');
-const {workspaceForFolder,chooseProject,within}=require('../../project-discovery');
+const {workspaceForFolder,within}=require('../../project-discovery');
 const {listStacks,ensureWorkspaceLibrary,scaffoldProject,removeManagedWorkspaceLibrary}=require('../../tech-stacks');
 const {initializeWorkspaceFolders,installationSignature,lifecycleAction}=require('../../bootstrap');
 const catalogVendorLibraries=require('../../catalog-vendor-libraries');
@@ -1028,45 +1028,11 @@ async function focusAtgvWorkspace(){
     try{await vscode.commands.executeCommand(id);}catch(e){report('Could not hide workbench view '+id+': '+e.message);}
   }
 }
-async function startupProgress(percent,message){
- startupScan={status:'running',percent,message};
+async function finishManualProjectDiscovery(sequence){
+ if(sequence!==startupSequence)return;
+ startupScan={status:'complete',percent:100,message:'Choose a project from Recent Projects or Workspace Projects to open it. No project is selected automatically.'};
  await dashboard?.webview.postMessage({type:'startupScan',...startupScan});
-}
-async function autoLoadWorkspaceProject(sequence){
- try{
-  await startupProgress(12,'Searching the current workspace for ATGV projects…');
-  const folder=vscode.workspace.workspaceFolders?.[0];
-  if(!folder||!registry){startupScan={status:'complete',percent:100,message:'Open a folder in VS Code before using ATGV.','error':'no-folder'};return;}
-  const located=await workspaceForFolder(folder.uri.fsPath);
-  if(sequence!==startupSequence)return;
-  await startupProgress(35,'Reading project configuration and checking available projects…');
-  const projects=await registry.list();
-  const editorPath=vscode.window.activeTextEditor?.document?.uri?.scheme==='file'?vscode.window.activeTextEditor.document.uri.fsPath:'';
-  const preferredId=context.workspaceState.get('atgvAssist.activeProject','');
-  const matched=chooseProject(projects,{root:registry.workspace,folderId:located.projectId,preferredId,activeFile:editorPath});
-  if(sequence!==startupSequence)return;
-  if(!matched){
-   startupScan={status:'complete',percent:100,message:projects.length>1?'Multiple ATGV projects found. Select a project to open.':projects.length===1?'Project could not be matched. Select it below.':'No registered ATGV project found. Import a folder or create a project.'};
-   return;
-  }
-  await startupProgress(62,`Loading ${matched.name} and its project metadata…`);
-  openingFlow.select(matched);
-  openingFlow.tested(['Auto-opened from local workspace metadata. Remote connections have not been verified.']);
-  openingFlow.initialized();
-  openingOffline=true;
-  await activateProject(matched.id);
-  if(sequence!==startupSequence)return;
-  openingFlow.opened();
-  await startupProgress(92,`Restoring ${matched.name} work and role information…`);
-  await rememberOpened(matched.id);
-  startupScan={status:'complete',percent:100,message:`${matched.name} loaded from the current workspace.`};
-  report('Automatically opened local project '+matched.id);
- }catch(e){
-  report('Workspace project detection: '+e.message);
-  openingGeneration++;openingFlow.reset();openingOffline=false;++activationEpoch;activeProject=undefined;store=undefined;
-  startupScan={status:'complete',percent:100,message:'Project auto-load unavailable. Select a project manually. '+e.message};
- }
- finally{if(sequence===startupSequence){await dashboard?.webview.postMessage({type:'startupScan',...startupScan});await refreshDashboard();}}
+ await refreshDashboard();
 }
 async function restart(){
   await ready;
@@ -1108,7 +1074,7 @@ async function start(options={}){
     dashboard.webview.html=html(dashboard.webview);webviewVendorDir=installedVendorAssets?.dir||null;
     report('ATGV Start reloaded the existing webview.');
     await refreshDashboard();
-    if(startupIsComplete())await autoLoadWorkspaceProject(sequence);
+    if(startupIsComplete())await finishManualProjectDiscovery(sequence);
     else{startupScan={status:'complete',percent:100,message:'Complete the connection setup to search projects.'};await refreshDashboard();}
     return;
   }
@@ -1122,7 +1088,7 @@ async function start(options={}){
   modelStatusPoll=setInterval(()=>{invalidateModelStatus();if(dashboard)refreshDashboard().catch(e=>report('Model badge refresh: '+e.message));},60000);
   modelStatusPoll.unref?.();
   await refreshDashboard();
-  if(startupIsComplete())await autoLoadWorkspaceProject(sequence);
+  if(startupIsComplete())await finishManualProjectDiscovery(sequence);
   else{startupScan={status:'complete',percent:100,message:'Complete the connection setup to search projects.'};await refreshDashboard();}
 }
 async function notice(message,error=false){if(dashboard)await dashboard.webview.postMessage({type:'notice',message,error});}
@@ -4454,9 +4420,31 @@ async function handleDashboardMessage(msg){
         if(!failed){
           const finalRepo=await developerGit.repository(root);
           const proof=gate.evidence({stackId:project.techStackId,companionId:project.techStackCompanionId||'',repo:finalRepo,results});
-          const updated=await registry.update(activeProject.id,{...project,techStackValidation:proof,techStackServerVerification:null,techStackApproval:null});activeProject=updated;
+          let updated=await registry.update(activeProject.id,{...project,techStackValidation:proof,techStackServerVerification:null,techStackApproval:null});activeProject=updated;
           architectErrorLogs.clear(updated.id,'test');
-          await dashboard?.webview.postMessage({type:'architectStackState',value:{message:`Tests, build and local process smoke checks passed for ${results.length/3} target(s). Review results and approve the stack to enable Developers.`}});
+          // The user confirmed Test & Run, including execution of local code.
+          // Following a successful build, start the matching saved revision
+          // automatically, without another button or taking over another app.
+          let serverMessage='';
+          try{
+            const server=require('../../architect-server');
+            const reconciled=await require('../../architect-server-verification').startAfterSuccessfulTest({
+              project:updated,
+              verify:()=>server.verify({root,stackId:updated.techStackId}),
+              start:()=>server.start({root,stackId:updated.techStackId,prepared:updated.techStackPrepared,allowManagedHandoff:false,openBrowser:async()=>true})
+            });
+            if(reconciled.proof){
+              updated=await registry.update(updated.id,{...updated,techStackServerVerification:reconciled.proof});activeProject=updated;
+              serverMessage=' Application server started and verified.';
+            }else serverMessage=' Application server not started: '+String(reconciled.state?.message||'Verification did not match the tested revision.');
+            await dashboard?.webview.postMessage({type:'architectServerState',projectId:updated.id,value:reconciled.state});
+          }catch(error){
+            const reason=String(error.message||'Unknown startup error');
+            architectErrorLogs.append(updated.id,'server','Automatic server startup after Test & Run failed: '+reason+'\n'+String(error.diagnosticLogs||''));
+            serverMessage=' Automatic server start failed: '+reason+' (download the Server Error Log).';
+            await dashboard?.webview.postMessage({type:'architectServerState',projectId:updated.id,value:{running:false,healthy:false,message:serverMessage}});
+          }
+          await dashboard?.webview.postMessage({type:'architectStackState',value:{message:`Tests, build and smoke checks passed for ${results.length/3} target(s).`+serverMessage}});
           await refreshDashboard();
         }else{
           const updated=await registry.update(activeProject.id,{...project,techStackValidation:null,techStackServerVerification:null,techStackApproval:null});activeProject=updated;
@@ -4487,7 +4475,7 @@ async function handleDashboardMessage(msg){
             const latest=await registry.read(projectId);
             if(serial!==architectServerOperationSerial||activeProject?.id!==projectId)break;
             if(latest?.techStackPrepared?.sha!==project.techStackPrepared.sha||latest.techStackId!==project.techStackId)break;
-            const proof=require('../../architect-server-verification').evidenceIfHealthy(latest,state);
+            const proof=require('../../architect-server-verification').retainVerifiedEvidence(latest,state);
             const prior=require('../../architect-stack-approval').serverVerified(latest);
             if((!!proof)!==prior){
               activeProject=await registry.update(projectId,{...latest,techStackServerVerification:proof||null});
@@ -4530,7 +4518,9 @@ async function handleDashboardMessage(msg){
         if(!prepared||prepared.stackId!==project.techStackId)throw Error('Save the selected technology stack first.');
         const result=await require('../../architect-server').stop({root:prepared.root,stackId:project.techStackId});
         architectServerOperationSerial++;
-        activeProject=await registry.update(activeProject.id,{...project,techStackServerVerification:null});
+        // Stop changes the process state, not historical HTTP verification for
+        // this exact saved/tested SHA. Approval still checks live health.
+        activeProject=project;
         architectErrorLogs.clear(activeProject.id,'server');
         await refreshDashboard();
         await dashboard?.webview.postMessage({type:'architectServerState',projectId:activeProject.id,value:result});break;

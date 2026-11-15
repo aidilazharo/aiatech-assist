@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.3.53';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.3.55';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -103,17 +103,18 @@ function html(webview,{resumeLibrary=false}={}){
        <div class="field"><label for="startupProjectRepo">GitHub project repository URL</label><input type="url" id="startupProjectRepo" placeholder="https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-cockpit" required></div>
        <div class="field"><label for="startupLibraryRepo">GitHub SDLC Library repository URL</label><input type="url" id="startupLibraryRepo" placeholder="https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills" required></div>
       </div><div class="atgv-startup-actions"><button type="submit" id="startupTestConnections">Test &amp; Save Connections</button><span id="startupConnectionMessage" role="status" aria-live="polite">Verify Jira, Confluence and both GitHub repositories to continue.</span></div></form>
-      <div class="atgv-startup-footer"><button type="button" id="startupPrevious" class="secondary" disabled>← Previous</button><p id="startupProceedInfo" role="status">Checking computer prerequisites…</p><button type="button" id="startupProceed" disabled>Next →</button></div>
+      <div class="atgv-startup-footer"><button type="button" id="startupPrevious" class="secondary hidden" disabled>← Previous</button><p id="startupProceedInfo" role="status">Checking computer prerequisites…</p><button type="button" id="startupProceed" disabled>Next →</button></div>
     </section>
     <section id="gateFinder" class="gate-finder hidden">
-      <div class="gate-search-bar"><input id="gateQuery" type="search" aria-label="Search projects" placeholder="Search Confluence spaces or local projects…"><button type="button" id="gateSearch">Search</button></div>
+      <div class="gate-search-bar"><input id="gateQuery" type="search" aria-label="Search projects" placeholder="Search Confluence spaces or local projects…"><button type="button" id="gateSearch">Search</button><button id="gateManual" class="secondary" type="button">+ New Project</button></div>
       <p id="gateSearchMessage" class="muted" role="status" aria-live="polite"></p>
       <div id="workspaceSearch" class="workspace-search" role="status" aria-live="polite"><div class="workspace-search-row"><span class="gate-spinner" aria-hidden="true"></span><strong id="workspaceSearchTitle">Searching the current workspace…</strong><span id="workspaceSearchPercent">0%</span></div><div id="workspaceSearchMessage" class="workspace-search-message">Looking for existing project information.</div><div class="workspace-search-track" role="progressbar" aria-label="Project search and load progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="workspaceSearchTrack"><div id="workspaceSearchFill" class="workspace-search-fill"></div></div></div>
       <div id="gateProgress" class="gate-progress hidden" role="status" aria-live="polite"><span class="gate-spinner" aria-hidden="true"></span><span id="gateProgressText">Checking connections…</span></div>
       <div id="gateRecentSection" class="hidden"><div class="gate-local-header"><h2>Recent Projects</h2></div><div id="gateRecent" class="gate-list"></div></div>
       <div id="gateRemoteSection" class="hidden"><div class="gate-local-header"><h2>Confluence Spaces</h2><span id="gateResultsCount" class="muted"></span></div><div id="gateRemote" class="gate-list"></div></div>
-      <div class="gate-local-header"><h2>Workspace Projects</h2><button id="gateManual" class="secondary" type="button">+ New Project</button></div><div id="gateLocal" class="gate-list"></div>
+      <div id="gateWorkspaceSection"><div class="gate-local-header"><h2>Workspace Projects</h2></div><div id="gateLocal" class="gate-list"></div></div>
       <section id="gateUnmanagedSection" class="hidden" aria-label="Unregistered project folders"><h3>Existing folders to import</h3><p class="muted">These folders already exist under projects/ but are not registered. Import preserves their files and normalizes project IDs to lowercase.</p><div id="gateUnmanaged" class="gate-list"></div></section>
+      <div class="atgv-startup-footer gate-search-footer"><button id="gateSearchPrevious" type="button" class="secondary">← Previous</button><p role="status" class="muted">Choose a project to open. Projects are never opened automatically.</p></div>
     </section>
     <section id="gateSelection" class="gate-selection hidden"><button id="gateChange" class="secondary">← Back to projects</button><span id="gatePhaseBadge" class="pill">Selected</span><h2 id="gateProjectName">Project</h2><p id="gateProjectInfo" class="muted"></p><div class="gate-checks"><span id="gateCheckSelect">✓ Selected</span><span id="gateCheckTest">○ Connection</span><span id="gateCheckInit">○ Workspace</span></div><p id="gateStepStatus" role="status" aria-live="polite" class="muted"></p><div class="gate-actions"><button id="gatePrimary" type="button">Open Project</button><button id="gateOffline" type="button" class="secondary hidden">Open Local Workspace</button></div>
     </section>

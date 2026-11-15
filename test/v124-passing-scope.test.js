@@ -60,5 +60,5 @@ test('webview design impact candidates agree with host about unknown provenance'
  const js=fs.readFileSync(path.join(__dirname,'../media/start.js'),'utf8');
  assert.match(js,/!revisions\.has\(String\(ref\.id\|\|''\)\)/);
  assert.match(js,/Number\.isSafeInteger\(Number\(ref\.revision\)\)/);
- const pkg=require('../package.json');assert.equal(pkg.version,'0.3.53');
+ const pkg=require('../package.json');assert.equal(pkg.version,'0.3.55');
 });

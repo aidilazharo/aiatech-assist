@@ -1387,8 +1387,9 @@ button:focus-visible{outline:2px solid var(--vscode-focusBorder,#649ed2);outline
 @media(prefers-reduced-motion:reduce){#discoveryView .br-deletion-spinner,#discoveryView .br-deletion-progress-fill{animation:none!important;transition:none!important}}
 
 /* Single Solution Architect app-server toggle (v0.2.86). */
-#workView #architectServerToggle[data-running="true"]{border-color:#e35c69;color:#ffc4c9;background:rgba(184,51,71,.12)}
-#workView #architectServerToggle[data-running="true"]:hover:not(:disabled){background:rgba(184,51,71,.22)}
+#workView #architectServerToggle[data-running="true"]{border:1px solid #c12e3e;color:#fff;background:#b52636;font-weight:600}
+#workView #architectServerToggle[data-running="true"]:hover:not(:disabled){background:#d43145;color:#fff}
+#workView #architectServerToggle[data-running="true"]:disabled{opacity:.65;color:#fff;background:#8d2530}
 
 /* v0.2.87: action-ready Next buttons are blue; disabled steps stay neutral. */
 #discoveryView #baNextStep.ba-step-next-complete:not(:disabled),
@@ -1771,3 +1772,9 @@ button:focus-visible{outline:2px solid var(--vscode-focusBorder,#649ed2);outline
 #startupConnectionForm .atgv-startup-connection-grid input{min-width:0;max-width:100%;height:34px;min-height:34px;padding:6px 9px;font-size:12px;}
 #startupConnectionForm .atgv-startup-actions{margin-top:14px;}
 @media(max-width:740px){#startupConnectionForm .atgv-startup-connection-grid{grid-template-columns:minmax(0,1fr);gap:10px;}#startupConnectionForm{padding:16px;}}
+
+/* v0.3.54: Search Project is an explicit user-choice step; keep Previous in its footer. */
+#gateFinder .gate-search-footer{border-top:1px solid var(--vscode-panel-border);padding-top:14px;margin-top:18px;}
+#gateFinder .gate-search-footer p{flex:1;text-align:right;margin:0;font-size:11px;}
+#gateFinder .gate-search-bar #gateManual{flex:0 0 auto;}
+@media(max-width:640px){#gateFinder .gate-search-bar{flex-wrap:wrap;}#gateFinder .gate-search-bar input{flex:1 1 100%;}#gateFinder .gate-search-footer p{text-align:left;}}

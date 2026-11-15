@@ -151,9 +151,9 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
                                                                               
     await commands.get('atgvAssist.start')({skipReload:true});
     assert.match(panel.webview.html, /<html lang="en">/);
-    assert.equal(messages.at(-1)?.opening?.phase,'open');
-    assert.equal(messages.at(-1)?.openingOffline,true);
-    assert.ok(messages.some(m=>m.type==='startupScan'&&/Searching|Reading|Loading/.test(m.message)));
+    assert.equal(messages.at(-1)?.opening?.phase,'search','Restart must require explicit project selection');
+    assert.equal(messages.at(-1)?.activeId,null,'Previously opened project must not re-open automatically');
+    assert.ok(messages.some(m=>m.type==='startupScan'&&/Choose a project/.test(m.message)));
     handler({command:'openingBack'});
     await until(()=>messages.at(-1)?.opening?.phase==='search');
     handler({command:'create',project:makeProject('claims','CLM')});

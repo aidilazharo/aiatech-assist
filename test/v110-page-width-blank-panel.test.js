@@ -8,8 +8,8 @@ const host=read('test/generated/extension-source.txt'), ui=read('media/start.js'
 const pkg=require('../package.json');
 
 test('v0.1.17 keeps a single ATGV editor view and consistent responsive right-page bounds',()=>{
- assert.equal(pkg.version,'0.3.53');
- assert.equal(pkg.atgvDisplayVersion,'0.3.53');
+ assert.equal(pkg.version,'0.3.55');
+ assert.equal(pkg.atgvDisplayVersion,'0.3.55');
  assert.match(css,/--atgv-page-content-min:520px/);
  assert.match(css,/--atgv-page-content-max:1200px/);
  assert.match(css,/--atgv-design-list-max:1200px/);

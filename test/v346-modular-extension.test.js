@@ -8,7 +8,7 @@ const root=path.join(__dirname,'..');
 const entry=fs.readFileSync(path.join(root,'src/extension.js'),'utf8');
 const runtime=fs.readFileSync(path.join(root,'src/lib/runtime/extension-runtime.js'),'utf8');
 const renderer=fs.readFileSync(path.join(root,'src/lib/webview/dashboard-html.js'),'utf8');
-test('0.3.53 entry point delegates to packaged internal runtime instead of containing monolithic SDLC implementation',()=>{
+test('0.3.55 entry point delegates to packaged internal runtime instead of containing monolithic SDLC implementation',()=>{
  assert.ok(entry.split('\n').length<10);
  assert.match(entry,/module\.exports=require\('\.\/lib\/runtime\/extension-runtime'\)/);
  assert.match(runtime,/function activate\(ctx\)/);
@@ -29,7 +29,7 @@ test('dashboard renderer obtains current extension context, vendor asset availab
  const render=createDashboardHtml(()=>context,()=>null);
  const webview={asWebviewUri:value=>typeof value==='string'?value:value.fsPath,cspSource:'vscode-resource:'};
  const first=render(webview);
- assert.match(first,/v0\.3\.53/);
+ assert.match(first,/v0\.3\.55/);
  assert.match(first,/id="appHeader"/);
  assert.match(first,/\/extension-A\/media\/start\.js/);
  assert.match(first,/name="atgv-vendor-libs" content="missing"/);

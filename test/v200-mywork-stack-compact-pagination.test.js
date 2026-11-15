@@ -42,6 +42,6 @@ test('Technology Stack prerequisites are compact with expandable remote package 
 
 test('release version follows v0.1.99 rollover convention',()=>{
  const pkg=require('../package.json');
- assert.equal(pkg.version,'0.3.53');
- assert.equal(pkg.atgvDisplayVersion,'0.3.53');
+ assert.equal(pkg.version,'0.3.55');
+ assert.equal(pkg.atgvDisplayVersion,'0.3.55');
 });

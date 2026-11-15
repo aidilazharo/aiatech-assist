@@ -510,8 +510,8 @@ function launchFromGate(selection={}){
 }
 function renderGate(){
   const selected=!!opening.candidate;
-  $('gateFinder').classList.toggle('hidden',selected);
-  $('gateSelection').classList.toggle('hidden',!selected);
+  $('gateFinder').classList.toggle('hidden',startupSetupRequired||selected);
+  $('gateSelection').classList.toggle('hidden',startupSetupRequired||!selected);
   $('gateProgress').classList.toggle('hidden',!gateBusy);
   if(selected){
     const p=opening.candidate,conf=p.settings?.confluence||{};
@@ -549,8 +549,8 @@ function renderGateResults(){
   for(const p of recentProjects)gateProjectRow(recent,p,{recent:true});
   const local=$('gateLocal');local.replaceChildren();
   const others=all.filter(p=>!recentIds.includes(p.id));
+  $('gateWorkspaceSection').classList.toggle('hidden',!others.length&&!!recentProjects.length);
   if(!others.length&&!recentProjects.length){const p=document.createElement('p');p.className='muted';p.textContent=q?'No matching local projects. Search Confluence to discover more.':'No saved projects. Search Confluence or create a project.';local.append(p);}
-  else if(!others.length){const p=document.createElement('p');p.className='muted';p.textContent='All local projects appear above.';local.append(p);}
   for(const p of others)gateProjectRow(local,p);
   const unregistered=$('gateUnmanaged');unregistered.replaceChildren();
   const candidates=unmanagedFolders.filter(item=>[item.folder,item.id,item.name].some(value=>value.toLowerCase().includes(q)));
@@ -596,6 +596,13 @@ $('gateQuery').addEventListener('input',()=>{gateSearchId=null;spaces=[];gateSea
 $('gateQuery').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('gateSearch').click();}});
 $('gateManual').addEventListener('click',()=>openProject());
 $('gateChange').addEventListener('click',()=>{gateError='';gateOfflineAvailable=false;send('openingBack');});
+$('gateSearchPrevious').addEventListener('click',()=>{
+ if(gateBusy)return;
+ startupReturnToConnections=true;startupPage=1;startupConnectionVerified=false;
+ if(!startupPrereqRequested){startupPrereqRequested=true;send('startupReadiness');}
+ $('startupConnectionMessage').textContent='Test & Save Connections to continue to Search Project.';
+ showStartupStep(true);$('startupJiraUrl').focus();
+});
 $('gatePrimary').addEventListener('click',()=>launchFromGate());
 $('gateOffline').addEventListener('click',()=>{
   if(gateBusy||!gateOfflineAvailable)return;
@@ -1711,6 +1718,13 @@ function architectLiveServerReady(project,stackId){
   (!validated.sha||validated.sha===prepared.sha)&&live?.running===true&&live.healthy===true&&
   live.sha===prepared.sha&&live.branch===prepared.branch&&architectServerSnapshotProjectId===activeId);
 }
+function architectServerRequirementReady(project,stackId){
+ const prepared=project?.techStackPrepared,validated=project?.techStackValidation,proof=project?.techStackServerVerification;
+ return !!(prepared&&prepared.stackId===stackId&&project.techStackId===stackId&&prepared.remotePushed===true&&
+   validated?.status==='tested'&&validated.stackId===stackId&&(!validated.sha||validated.sha===prepared.sha)&&
+   proof?.status==='verified'&&proof.sha===prepared.sha&&proof.branch===prepared.branch&&
+   proof.root===prepared.root&&proof.stackId===stackId);
+}
 function renderArchitectRequirements(project){
  const stackId=$('architectStackSelect').value;
  const stack=techStacks.find(item=>item.id===stackId);
@@ -1739,8 +1753,8 @@ function renderArchitectRequirements(project){
   ['dependencies','Dependencies','Required packages / native restore',verified],
   ['tests','Automated tests',unit||'Selected stack test command',tested],
   ['build','Application build',stack.buildCommand||'Selected stack build command',tested],
-  ['server','Application server',stack.previewUrl||'Selected stack preview',architectLiveServerReady(project,stackId)],
-  ['push','Remote bootstrap branch','Git commit and push (main protected)',pushed],
+  ['server','Application server',architectServerRequirementReady(project,stackId)?'HTTP health verified for saved Git revision'+(architectServerSnapshot.running?' · Running':' · Stopped'):(stack.previewUrl||'Selected stack preview'),architectServerRequirementReady(project,stackId)],
+  ['push','Remote stack branch',project?.techStackPrepared?.branch||'Push verified bootstrap/migration branch (main unchanged)',pushed],
   ['approval','Architect approval','Required before Developer workflow',approved]
  ];
  // Package names and version constraints come only from the activated GitHub
@@ -1753,7 +1767,7 @@ function renderArchitectRequirements(project){
  let done=0;
  for(const [id,title,description,actual] of checks){
   const unavailable=(id==='api'&&!stack.apiBaseUrl)||(id==='orm'&&!stack.orm)||(id==='sqlite'&&!stack.database);
-  const complete=!unavailable&&(id==='server'?actual:(actual||live.completed.has(id)));
+  const complete=!unavailable&&(['server','push'].includes(id)?actual:(actual||live.completed.has(id)));
   const running=!unavailable&&!complete&&!live.failed&&(live.active===id||(id.startsWith('package:')&&live.active==='dependencies'));
   const failed=unavailable||(!complete&&(live.failed===id||(id.startsWith('package:')&&live.failed==='dependencies')));
   if(complete)done++;
@@ -1763,6 +1777,7 @@ function renderArchitectRequirements(project){
   const name=document.createElement('strong');name.textContent=title;
   const detail=document.createElement('span');detail.textContent=description;detail.title=description;
   content.append(name,detail);
+  if(id==='push'&&failed){detail.textContent='Push failed; inspect Download Stack Error Log for the exact GitHub response. Main was not changed.';detail.title=detail.textContent;}
   const state=document.createElement('span');state.className='architect-requirement-state';
   const successLabel=['api','orm','sqlite','scaffold'].includes(id)?'Prepared':['tests','build'].includes(id)?'Passed':id==='push'?'Pushed':id==='approval'?'Approved':'Ready';
   state.textContent=complete?successLabel:unavailable?'Not defined':failed?'Failed':running?'Checking':'Pending';
@@ -1807,7 +1822,7 @@ function refreshArchitectStageClasses(project){
  const saved=!!(stackId&&prepared?.stackId===stackId&&project?.techStackId===stackId);
  const tested=saved&&project?.techStackValidation?.status==='tested'&&project.techStackValidation.stackId===stackId;
  const approved=tested&&project?.techStackApproval?.status==='approved'&&project.techStackApproval.stackId===stackId;
- const serverReady=architectLiveServerReady(project,stackId);
+ const serverReady=architectServerRequirementReady(project,stackId);
  for(const [id,done,current] of [
   ['architectSaveStage',saved,!saved],['architectDependenciesStage',tested,saved&&!tested],
   ['architectTestStage',tested,tested&&!serverReady],['architectApproveStage',approved,serverReady&&!approved]
@@ -1815,7 +1830,7 @@ function refreshArchitectStageClasses(project){
   const step=$(id);step.classList.toggle('complete',!!done);step.classList.toggle('current',!!current);
   step.setAttribute('aria-label',step.textContent.trim()+': '+(done?'Completed':current?'Current step':'Pending'));
  }
- $('architectApprovalStatus').textContent=approved?'Approved for Developers · '+new Date(project.techStackApproval.approvedAt||Date.now()).toLocaleString():serverReady?'Server verified · ready for architect approval.':tested?'Run Server successfully to enable approval.':saved?'Complete Test & Run, then Run Server.':'';
+ $('architectApprovalStatus').textContent=approved?'Approved for Developers · '+new Date(project.techStackApproval.approvedAt||Date.now()).toLocaleString():serverReady?(architectLiveServerReady(project,stackId)?'Server running and verified · ready for architect approval.':'Application server was verified for this commit and is now stopped. Restart before approval.'):tested?'Run Server successfully to enable approval.':saved?'Complete Test & Run, then Run Server.':'';
 }
 function syncArchitectStackButtons(project){
  const stackId=$('architectStackSelect').value;
@@ -6790,6 +6805,7 @@ function updateArchitectServerControls(saved){
  toggle.textContent=architectServerBusy?(running?'Stopping Server…':'Starting Server…'):(running?'Stop Server':'Run Server');
  toggle.setAttribute('aria-pressed',running?'true':'false');
  toggle.dataset.running=running?'true':'false';
+ toggle.classList.toggle('atgv-stop-server',running);
  toggle.title=running?'Stop this stack’s ATGV-managed app server':'Start this stack’s app server';
  $('architectServerStatus').textContent=architectServerSnapshot.message||'App server stopped';
  $('architectServerStatus').dataset.running=architectServerSnapshot.running?'true':'false';
@@ -6992,13 +7008,14 @@ window.addEventListener('message',event=>{
 // reserved exclusively for VSIX releases, not catalog or setup notifications.
 const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluenceUrl',email:'startupEmail',
  githubUrl:'startupGithubUrl',projectRepoUrl:'startupProjectRepo',libraryRepoUrl:'startupLibraryRepo'};
-let startupFormInitialized=false,startupPrereqRequested=false,startupConnectionVerified=false,startupSetupRequired=true;
+let startupFormInitialized=false,startupPrereqRequested=false,startupConnectionVerified=false,startupSetupRequired=true,startupReturnToConnections=false;
 let startupVerifying=false,startupScanComplete=false,startupPage=0,startupInstallingModule='';
 function startupPayload(){return Object.fromEntries(Object.entries(startupFieldMap).map(([key,id])=>[key,$(id).value.trim()]));}
 function renderStartupPage(){
  if(!startupSetupRequired)return;
  $('startupComputerCard').classList.toggle('hidden',startupPage!==0);
  $('startupConnectionForm').classList.toggle('hidden',startupPage!==1);
+ $('startupPrevious').classList.toggle('hidden',startupPage===0);
  $('startupPrevious').disabled=startupPage===0||startupVerifying||!!startupInstallingModule;
  $('startupProceed').disabled=startupVerifying||!!startupInstallingModule||(startupPage===0?!startupScanComplete:!startupConnectionVerified);
  $('startupProceed').textContent=startupPage===0?'Next →':'Next: Search Project →';
@@ -7008,7 +7025,8 @@ function renderStartupPage(){
 function showStartupStep(required){
  startupSetupRequired=required;
  $('startupSetup').classList.toggle('hidden',!required);
- $('gateFinder').classList.toggle('hidden',required);
+ $('gateFinder').classList.toggle('hidden',required||!!opening.candidate);
+ $('gateSelection').classList.toggle('hidden',required||!opening.candidate);
  if(required)renderStartupPage();
 }
 function renderStartupConfig(config){
@@ -7019,7 +7037,7 @@ function renderStartupConfig(config){
   for(const [key,id] of Object.entries(startupFieldMap))$(id).value=saved[key]||defaults[key]||'';
   startupFormInitialized=true;
  }
- showStartupStep(required);
+ showStartupStep(required||startupReturnToConnections);
  if(required&&!startupPrereqRequested){startupPrereqRequested=true;send('startupReadiness');}
 }
 function renderStartupStackReadiness(result){
@@ -7121,7 +7139,7 @@ window.addEventListener('message',event=>{
   if(startupConnectionVerified){$('startupAtlassianToken').value='';$('startupGithubToken').value='';}
   renderStartupPage();
  }
- if(message.type==='startupProceedResult'&&message.success){showStartupStep(false);$('gateQuery').focus();}
+ if(message.type==='startupProceedResult'&&message.success){startupReturnToConnections=false;showStartupStep(false);$('gateQuery').focus();}
 });
 
 let displayedExtensionUpgrade=null;
