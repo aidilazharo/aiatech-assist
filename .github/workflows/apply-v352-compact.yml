@@ -1,0 +1,52 @@
+name: Apply verified ATGV v0.3.52 onboarding improvements
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .atgv-updates/READY
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: atgv-v352-import
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Verify and apply exact v0.3.52 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .atgv-updates/v352-compact-{0,1,2}.b64 | base64 --decode > /tmp/atgv-v352.patch
+          echo '1718308687a0abe0ae88fc3b8d697001aaab45393b514c793c0b0e286ea5286d  /tmp/atgv-v352.patch' | sha256sum --check
+          test "$(wc -c </tmp/atgv-v352.patch)" -eq 68180
+          test "$(node -p "require('./package.json').version")" = "0.3.51"
+          git apply --check /tmp/atgv-v352.patch
+          git apply --whitespace=nowarn /tmp/atgv-v352.patch
+          test "$(node -p "require('./package.json').version")" = "0.3.52"
+          grep -Fq 'atgv-startup-connection-grid' src/lib/webview/dashboard-html.js
+          if grep -Fq 'Suggested AIA values are provided below' src/lib/webview/dashboard-html.js; then
+            echo 'Obsolete onboarding paragraph is still present'; exit 1
+          fi
+          test -f src/lib/startup-install.js
+          test -f test/v352-setup-wizard-install.test.js
+          rm -rf .atgv-updates
+      - name: Publish verified sources to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: v0.3.52 stepwise onboarding, installers and compact connections form"
+          git push origin HEAD:main
