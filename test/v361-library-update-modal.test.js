@@ -24,12 +24,14 @@ test('SDLC Library update offers use the same ATGV branded modal as extension up
  assert.match(js,/event\.key==='Escape'/);
  assert.match(js,/libraryUpdatePriorFocus/);
 });
-test('release URL and all four update actions stay on one row without checkboxes',()=>{
+test('only three update actions stay on one row without release URL controls',()=>{
  const html=read('src/lib/webview/dashboard-html.js'),ui=read('media/start.js'),css=read('media/start.css');
  const section=html.slice(html.indexOf('id="settingsSoftwareUpdateGroup"'),html.indexOf('id="projectView"'));
  assert.match(section,/class="software-update-toolbar"/);
- for(const id of ['softwareReleaseRepositoryUrl','saveSoftwareUpdateSettings','checkSoftwareUpdates','installExtensionRelease','viewExtensionRelease'])
+ for(const id of ['checkSoftwareUpdates','installExtensionRelease','viewExtensionRelease'])
   assert.ok(section.includes('id="'+id+'"'),id);
+ for(const id of ['softwareReleaseRepositoryUrl','saveSoftwareUpdateSettings'])
+  assert.ok(!section.includes('id="'+id+'"'),id);
  for(const id of ['softwareAutoExtension','softwareAutoLibrary','softwarePromptUpdates','softwareCheckOnStartup']){
   assert.ok(!section.includes('id="'+id+'"'),id);
   assert.ok(!ui.includes("$('"+id+"')"),id);
@@ -43,5 +45,5 @@ test('all four update checks and consent prompts are mandatory with legacy setti
   assert.ok(runtime.includes(key+':true'),key);
   assert.equal(pkg.contributes.configuration.properties['atgvAssist.updates.'+key].default,true);
  }
- assert.match(runtime,/await cfg\(\)\.update\('updates\.'\+key,true/);
+ assert.doesNotMatch(runtime,/await cfg\(\)\.update\('updates\.'\+key,true/);
 });
