@@ -355,12 +355,15 @@ function scheduleCatalogChecks(){
   catalogWatch.unref?.();
 }
 
-// Software update preferences live in VS Code user settings, outside ATGV Reset.
+// Release URLs come from verified repository configuration, never from user-entered settings.
+const extensionSourceRepository=require('../../../package.json').repository.url;
 let softwareUpdateTimer=null,softwareStartupTimer=null,softwareCheckBusy=false;
 let extensionRelease=null,extensionUpdateChecked='',extensionUpdateError='',libraryUpdateError='';
 function updatePreferences(){
- const c=cfg();return {
-  releaseRepositoryUrl:c.get('updates.releaseRepositoryUrl',releaseUpdater.DEFAULT_RELEASE_URL),
+ const libraryRepository=catalogConfig().repositoryUrl;
+ return {
+  releaseRepositoryUrl:releaseUpdater.releaseUrlForRepository(extensionSourceRepository),
+  libraryReleaseUrl:libraryRepository?releaseUpdater.releaseUrlForRepository(libraryRepository):'',
   // Required checks and consent prompts cannot be disabled by legacy saved settings.
   autoCheckExtension:true,
   autoCheckLibrary:true,
@@ -3713,21 +3716,6 @@ async function handleDashboardMessage(msg){
       }
       case 'checkSoftwareUpdates':{
         await checkSoftwareUpdates({prompt:true,interactive:true,force:true});break;
-      }
-      case 'saveSoftwareUpdateSettings':{
-        const value=msg.settings;
-        if(!value||typeof value!=='object')throw Error('Invalid update settings.');
-        const previousRepository=releaseUpdater.parseRepositoryUrl(updatePreferences().releaseRepositoryUrl);
-        const nextRepository=releaseUpdater.parseRepositoryUrl(value.releaseRepositoryUrl);
-        await cfg().update('updates.releaseRepositoryUrl',nextRepository.url,vscode.ConfigurationTarget.Global);
-        // All update checks and opt-in confirmations remain required.
-        for(const key of ['autoCheckExtension','autoCheckLibrary','promptForUpdates','checkOnStartup']){
-          await cfg().update('updates.'+key,true,vscode.ConfigurationTarget.Global);
-        }
-        if(previousRepository.repository!==nextRepository.repository){
-          extensionRelease=null;extensionUpdateChecked='';extensionUpdateError='';
-        }
-        scheduleSoftwareUpdates();await publishUpdateStatus();break;
       }
       case 'viewExtensionRelease':{
         if(!extensionRelease)throw Error('Check for an available extension release first.');
