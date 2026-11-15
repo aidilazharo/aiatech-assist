@@ -18,16 +18,18 @@ test('first step hides Previous and Search Project alone offers Previous back to
  assert.match(js,/startupReturnToConnections=false;showStartupStep\(false\)/);
 });
 
-test('project search and selected project are mutually exclusive; no duplicate open section',()=>{
- const html=read('src/lib/webview/dashboard-html.js');
- const js=read('media/start.js');
- assert.match(js,/gateFinder'\)\.classList\.toggle\('hidden',startupSetupRequired\|\|selected\)/);
- assert.match(js,/gateSelection'\)\.classList\.toggle\('hidden',startupSetupRequired\|\|!selected\)/);
- assert.match(js,/gateFinder'\)\.classList\.toggle\('hidden',required\|\|!!opening\.candidate\)/);
- assert.match(js,/gateSelection'\)\.classList\.toggle\('hidden',required\|\|!opening\.candidate\)/);
- assert.equal((html.match(/id="gateManual"/g)||[]).length,1,'New Project remains available without a redundant empty Workspace Projects panel');
- assert.match(js,/gateWorkspaceSection'\)\.classList\.toggle\('hidden',!others\.length&&!!recentProjects\.length\)/);
- assert.doesNotMatch(js,/All local projects appear above/);
+test('project rows launch without duplicate project-selection confirmation',()=>{
+ const html=read('src/lib/webview/dashboard-html.js'),js=read('media/start.js');
+ assert.ok(js.includes("gateFinder').classList.toggle('hidden',startupSetupRequired)"));
+ assert.ok(js.includes("gateFinder').classList.toggle('hidden',required)"));
+ assert.doesNotMatch(html,/id="(?:gateSelection|gatePrimary|gateChange)"/);
+ assert.doesNotMatch(js,/gateSelection|gatePrimary|gateChange|gateStepStatus/);
+ for(const id of ['gateOpeningError','gateRecovery','gateOffline'])
+  assert.equal((html.match(new RegExp('id="'+id+'"','g'))||[]).length,1);
+ assert.ok(js.includes("gateOpeningError').textContent=gateError"));
+ assert.ok(js.includes("gateRecovery').classList.toggle('hidden',!gateOfflineAvailable)"));
+ assert.equal((html.match(/id="gateManual"/g)||[]).length,1);
+ assert.ok(js.includes("gateWorkspaceSection').classList.toggle('hidden',!others.length&&!!recentProjects.length)"));
 });
 
 test('ATGV start never automatically opens a saved or sole project',async()=>{
@@ -56,7 +58,7 @@ test('project is opened only by explicit user action, never as a state or readin
  const js=read('media/start.js');
  const runtime=read('src/lib/runtime/extension-runtime.js');
  assert.match(js,/action\.addEventListener\('click',\(\)=>launchFromGate\(\{projectId:project\.id\}\)\)/);
- assert.match(js,/\$\('gatePrimary'\)\.addEventListener\('click',\(\)=>launchFromGate\(\)\)/);
+ assert.ok(js.includes("button.addEventListener('click',()=>launchFromGate({spaceId:sp.id}))"));
  assert.match(runtime,/case 'openingAuto':\{/);
  assert.doesNotMatch(runtime,/Auto-opened from local workspace metadata/);
 });

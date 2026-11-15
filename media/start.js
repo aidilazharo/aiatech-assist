@@ -495,7 +495,6 @@ function setView(next){
   window.dispatchEvent(new Event('atgv:viewchange'));
 }
 function cell(row,text){const el=document.createElement('td');el.textContent=text;row.append(el);}
-function openingAction(phase){return phase==='open'?null:['Open Project','openingAuto'];}
 function showGate(){
   workspaceOpened=false;gateBusy=false;document.body.classList.add('gate-mode');
   setView('gate');renderGate();
@@ -509,25 +508,13 @@ function launchFromGate(selection={}){
   send('openingAuto',selection);
 }
 function renderGate(){
-  const selected=!!opening.candidate;
-  $('gateFinder').classList.toggle('hidden',startupSetupRequired||selected);
-  $('gateSelection').classList.toggle('hidden',startupSetupRequired||!selected);
+  // Project row actions already launch the complete opening sequence.
+  $('gateFinder').classList.toggle('hidden',startupSetupRequired);
   $('gateProgress').classList.toggle('hidden',!gateBusy);
-  if(selected){
-    const p=opening.candidate,conf=p.settings?.confluence||{};
-    $('gateProjectName').textContent=p.name;
-    $('gateProjectInfo').textContent=[`projects/${p.id}`,conf.spaceKey?`Confluence: ${conf.spaceName||conf.spaceKey}`:'Confluence not linked',p.settings?.github?.repo?`GitHub: ${p.settings.github.owner}/${p.settings.github.repo}`:'GitHub optional'].join('  ·  ');
-    $('gatePhaseBadge').textContent=gateError?'Check needed':opening.phase==='open'?'Ready':'Project selected';
-    $('gateCheckSelect').textContent='✓ Project selected';
-    $('gateCheckTest').textContent=['tested','initialized','open'].includes(opening.phase)?'✓ Connection':'○ Connection';
-    $('gateCheckInit').textContent=['initialized','open'].includes(opening.phase)?'✓ Workspace':'○ Workspace';
-    $('gatePrimary').disabled=gateBusy;
-    $('gatePrimary').textContent=gateBusy?'Opening…':'Open Project';
-    $('gateStepStatus').textContent=gateError||(!gateBusy?'Open your project to continue.':'');
-    $('gateStepStatus').classList.toggle('error',!!gateError);
-    $('gateOffline').classList.toggle('hidden',!gateOfflineAvailable);
-    $('gateOffline').disabled=gateBusy;
-  }
+  $('gateOpeningError').textContent=gateError;
+  $('gateOpeningError').classList.toggle('hidden',!gateError);
+  $('gateRecovery').classList.toggle('hidden',!gateOfflineAvailable);
+  $('gateOffline').disabled=gateBusy;
   renderGateResults();
 }
 function gateProjectRow(root,project,{recent=false}={}){
@@ -595,7 +582,6 @@ $('gateSearch').addEventListener('click',()=>{
 $('gateQuery').addEventListener('input',()=>{gateSearchId=null;spaces=[];gateSearched=false;$('gateSearchMessage').textContent='';renderGateResults();});
 $('gateQuery').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('gateSearch').click();}});
 $('gateManual').addEventListener('click',()=>openProject());
-$('gateChange').addEventListener('click',()=>{gateError='';gateOfflineAvailable=false;send('openingBack');});
 $('gateSearchPrevious').addEventListener('click',()=>{
  if(gateBusy)return;
  startupReturnToConnections=true;startupPage=1;startupConnectionVerified=false;
@@ -603,7 +589,6 @@ $('gateSearchPrevious').addEventListener('click',()=>{
  $('startupConnectionMessage').textContent='Test & Save Connections to continue to Search Project.';
  showStartupStep(true);$('startupJiraUrl').focus();
 });
-$('gatePrimary').addEventListener('click',()=>launchFromGate());
 $('gateOffline').addEventListener('click',()=>{
   if(gateBusy||!gateOfflineAvailable)return;
   gateBusy=true;gateError='';gateOfflineAvailable=false;renderGate();send('openingOffline');
@@ -6567,7 +6552,7 @@ window.addEventListener('message',event=>{
     if(m.error&&designBusy){designBatchPending=false;if(designBusyKind){const current=designProcessState[designBusyKind];setDesignProcess(designBusyKind,current?.percent||0,'Failed: '+(m.message||'Design generation failed.'),'error');}designBusy=false;designBusyKind='';renderDesignCards();$('designStatus').textContent='';}if(m.error){$('designSaveDraft').disabled=false;}
     if(m.error&&view==='knowledge'){$('knowledgeSync').disabled=!activeId;$('knowledgeSyncStatus').textContent=m.message||'Knowledge synchronization failed.';}
     if(m.error&&view==='landing'){$('overviewKnowledgeStatus').textContent=m.message||'Project knowledge request failed.';$('overviewKnowledgeSync').disabled=!activeId;}
-    if(m.error&&sourceRemoving){sourceRemoving=false;renderSourceDocuments();}status(m.message,!!m.error);if(m.error&&view==='discovery'&&discoveryDirty){discoveryAutosaving=false;discoveryAutosaveSnapshot=null;$('discoverySave').disabled=false;$('baDiscoverySaveStatus').textContent='Save failed · Retry';}if(m.error&&view==='documentEditor'&&docDirty){docSaving=false;$('docSave').disabled=false;$('docEditorStatus').textContent=m.message;}if(m.error&&gateBusy){gateBusy=false;gateError=m.message;renderGate();$('gateStepStatus').textContent=m.message;}}
+    if(m.error&&sourceRemoving){sourceRemoving=false;renderSourceDocuments();}status(m.message,!!m.error);if(m.error&&view==='discovery'&&discoveryDirty){discoveryAutosaving=false;discoveryAutosaveSnapshot=null;$('discoverySave').disabled=false;$('baDiscoverySaveStatus').textContent='Save failed · Retry';}if(m.error&&view==='documentEditor'&&docDirty){docSaving=false;$('docSave').disabled=false;$('docEditorStatus').textContent=m.message;}if(m.error&&gateBusy){gateBusy=false;gateError=m.message;renderGate();}}
   if(m.type==='discovered'){
     if(m.origin==='settings'){if(m.requestId!==settingsSearchId||read('settingsSpaceQuery').replace(/\s+/g,' ').toLocaleLowerCase()!==String(m.query).toLocaleLowerCase())return;}
     else if(m.requestId!==gateSearchId||read('gateQuery').replace(/\s+/g,' ').toLocaleLowerCase()!==String(m.query).toLocaleLowerCase())return;
@@ -7025,8 +7010,7 @@ function renderStartupPage(){
 function showStartupStep(required){
  startupSetupRequired=required;
  $('startupSetup').classList.toggle('hidden',!required);
- $('gateFinder').classList.toggle('hidden',required||!!opening.candidate);
- $('gateSelection').classList.toggle('hidden',required||!opening.candidate);
+ $('gateFinder').classList.toggle('hidden',required);
  if(required)renderStartupPage();
 }
 function renderStartupConfig(config){
