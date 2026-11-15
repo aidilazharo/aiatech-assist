@@ -4222,10 +4222,6 @@ let latestSoftwareUpdateState=null;
 function renderSoftwareUpdates(data,force=false){
  if(!data)return;
  latestSoftwareUpdateState=data;
- const opts=data.settings||{};
- if(force||!document.activeElement?.closest('#settingsSoftwareUpdateGroup')){
-  $('softwareReleaseRepositoryUrl').value=opts.releaseRepositoryUrl||'https://github.com/aidilazharo/aiatech-assist/releases';
- }
  const version=data.installedVersion||'?';
  $('softwareExtensionStatus').textContent=data.extensionError?`Extension: ${data.extensionError}`:data.latest?`Extension v${data.latest.version} available (installed v${version}). Release: ${data.latest.tag}.`:data.extensionLastCheck?`Extension v${version} is up to date (checked ${new Date(data.extensionLastCheck).toLocaleString()}).`:`Installed extension: v${version}; not checked yet.`;
  $('softwareLibraryStatus').textContent=data.libraryError?`Library: ${data.libraryError}`:data.libraryLatest?`Library main SHA: ${data.libraryLatest.slice(0,12)}. See SDLC Catalog for installed SHA and Pull Catalog.`:'Library: no remote check completed yet.';
@@ -4237,16 +4233,6 @@ window.addEventListener('message',event=>{
  const m=event.data||{};
  if(m.type==='state'&&m.updates)renderSoftwareUpdates(m.updates);
  if(m.type==='softwareUpdateState')renderSoftwareUpdates(m.value);
-});
-$('saveSoftwareUpdateSettings').addEventListener('click',()=>{
- const releaseRepositoryUrl=$('softwareReleaseRepositoryUrl').value.trim();
- if(!/^https:\/\/github\.com\/[A-Za-z0-9-]+\/[A-Za-z0-9_.-]+(?:\/releases)?\/?$/.test(releaseRepositoryUrl)){
-  $('softwareExtensionStatus').textContent='Enter a valid GitHub Releases URL, for example https://github.com/aidilazharo/aiatech-assist/releases.';
-  return;
- }
- const settings={releaseRepositoryUrl,autoCheckExtension:true,autoCheckLibrary:true,promptForUpdates:true,checkOnStartup:true};
- send('saveSoftwareUpdateSettings',{settings});
- $('softwareExtensionStatus').textContent='Saving release URL…';
 });
 $('checkSoftwareUpdates').addEventListener('click',()=>{
  $('softwareExtensionStatus').textContent='Checking extension releases…';
