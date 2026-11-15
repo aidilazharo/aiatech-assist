@@ -4499,7 +4499,7 @@ async function handleDashboardMessage(msg){
       }
       case 'architectRunServer':{
         architectServerOperationSerial++;
-        requireOpened();architectErrorLogs.begin(activeProject.id,'server');const project=await registry.read(activeProject.id),prepared=project.techStackPrepared;
+        requireOpened();architectErrorLogs.begin(activeProject.id,'server');let project=await registry.read(activeProject.id),prepared=project.techStackPrepared;
         if(!prepared||prepared.stackId!==project.techStackId)throw Error('Save the selected technology stack first.');
         const root=await architectRepository.resolve(context.workspaceState,activeProject.id,developerGit,{projectRoot:aiRoot(),githubOwner:effectiveConfig(activeProject).get('github.owner'),githubRepo:effectiveConfig(activeProject).get('github.repo')});
         if(root!==prepared.root)throw Error('The configured checkout differs from the saved stack repository.');
@@ -4510,6 +4510,17 @@ async function handleDashboardMessage(msg){
         const confirmed=await uiWarning('Run the selected application scripts from the project repository and open its localhost preview in an external browser? This executes local project code. No files will be committed, pushed or deleted.'+handoffNotice,{modal:true},'Run Server');
         if(confirmed!=='Run Server'){
           await dashboard?.webview.postMessage({type:'architectServerState',projectId:activeProject.id,value:{message:'Run Server cancelled. No application was started.'}});break;
+        }
+        // Older project registry versions silently discarded migration/* branch
+        // names. Recover only one local ATGV branch at the exact saved commit.
+        const recovery=await require('../../architect-stack-branch-recovery').recover({root,project});
+        if(recovery.recovered){
+          project=await registry.update(activeProject.id,recovery.project);
+          activeProject=project;
+          prepared=project.techStackPrepared;
+          const note='Recovered saved stack branch '+recovery.branch+' from Git SHA '+prepared.sha.slice(0,12)+'.';
+          architectErrorLogs.append(activeProject.id,'server','Stage: '+note);
+          await dashboard?.webview.postMessage({type:'architectStackProgress',projectId:activeProject.id,message:note});
         }
         const result=await require('../../architect-server').start({root,stackId:project.techStackId,prepared,allowManagedHandoff:mustHandoff,openBrowser:url=>vscode.env.openExternal(vscode.Uri.parse(url))});
         if(result.running!==true)throw Error('Run Server did not confirm a healthy running application. Approval remains disabled.');
