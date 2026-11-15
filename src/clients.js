@@ -21,8 +21,9 @@ function baseAtlassian(config) { return validateUrl(config.get('jira.baseUrl').t
 function baseConfluence(config) {
     const jira = baseAtlassian(config), raw = config.get('confluence.baseUrl') || `${jira}/wiki`;
     const conf = validateUrl(raw).replace(/\/$/, '');
-    if (new URL(conf).origin !== new URL(jira).origin)
-        throw new Error('Confluence URL must use the same origin as Jira when using the same API token.');
+    if (new URL(conf).origin !== new URL(jira).origin &&
+        (!new URL(conf).hostname.endsWith('.atlassian.net') || !new URL(jira).hostname.endsWith('.atlassian.net')))
+        throw new Error('Separate Jira and Confluence sites must use trusted Atlassian Cloud domains.');
     return conf.endsWith('/wiki') ? conf : conf + '/wiki';
 }
 function atlassianAuth(config, token) { return { token, basicEmail: config.get('jira.email').trim() }; }
@@ -48,7 +49,7 @@ async function getConfluenceSpace(config, token) {
     return sp;
 }
 async function listConfluence(config, token, limit) {
-    const site = baseAtlassian(config), confluence = baseConfluence(config), sp = await getConfluenceSpace(config, token);
+    const confluence = baseConfluence(config), site = new URL(confluence).origin, sp = await getConfluenceSpace(config, token);
     let next = `${confluence}/api/v2/spaces/${encodeURIComponent(sp.id)}/pages?limit=${Math.min(100, limit)}`, docs = [];
     const auth = atlassianAuth(config, token);
     while (next && docs.length < limit) {

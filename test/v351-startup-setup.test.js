@@ -24,7 +24,6 @@ test('connection form disallows incorrect service origins, untrusted URL forms a
  const base=defaults.DEFAULTS;
  for(const config of [
   {...base,jiraUrl:'http://aiamy-jira-azure.atlassian.net'},
-  {...base,confluenceUrl:'https://other.atlassian.net/wiki'},
   {...base,confluenceUrl:'https://aiamy-jira-azure.atlassian.net/other'},
   {...base,projectRepoUrl:'https://github.com/evil/another'},
   {...base,githubUrl:'https://github.com/aiamalaysia/extra'},
@@ -70,7 +69,7 @@ test('host requires live Jira, Confluence, GitHub and library checks before savi
  assert.doesNotMatch(host,/showInformationMessage\(`ATGV v\$\{release\.version\} is available \(installed:/);
 });
 test('version and AIA email placeholders are consistent',()=>{
- const pkg=require('../package.json');assert.equal(pkg.version,'0.3.51');assert.equal(pkg.atgvDisplayVersion,'0.3.51');
+ const pkg=require('../package.json');assert.equal(pkg.version,'0.3.52');assert.equal(pkg.atgvDisplayVersion,'0.3.52');
  const html=read('src/lib/webview/dashboard-html.js');
  assert.match(html,/field\('jiraEmail'/);assert.match(html,/user\.name@aia\.com/);
  assert.match(html,/my-fow-technology-app-techassists-enterprise-cockpit/);

@@ -35,6 +35,6 @@ test('new BR action starts cycle then opens native upload; resume pending cycle 
 });
 
 test('release version is 0.2.42 and BA workflow still has Start plus nine other milestones',()=>{
- assert.equal(require('../package.json').version,'0.3.51');
+ assert.equal(require('../package.json').version,'0.3.52');
  assert.equal((host.match(/class="workflow-step atgv-milestone"/g)||[]).length,10);
 });

@@ -10,7 +10,7 @@ const css=fs.readFileSync(path.join(root,'media/start.css'),'utf8');
 const pkg=require('../package.json');
 
 test('v0.1.17 uses one focused design preview inside ATGV, not a second VS Code editor group',()=>{
- assert.equal(pkg.version,'0.3.51');assert.equal(pkg.atgvDisplayVersion,'0.3.51');
+ assert.equal(pkg.version,'0.3.52');assert.equal(pkg.atgvDisplayVersion,'0.3.52');
  assert.doesNotMatch(host,/ViewColumn\.Two|editorLayoutTwoColumns|createWebviewPanel\('atgvAssist\.designTab'/);
  for(const id of ['designPreviewKind','designPreviewTitle','designPreviewSummary','designPreviewMeta','designClosePreview','designVisualTitle','designProductFoundation','designScreenTabs','designScreenMockups','designOpenMockupBrowser']){
   assert.equal((host.match(new RegExp('id="'+id+'"','g'))||[]).length,1,'single mounted control '+id);

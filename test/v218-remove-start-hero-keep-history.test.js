@@ -27,5 +27,5 @@ test('keeps only the header New Business Requirement, Start milestone, and colla
 test('does not change 10-step workflow or hide completed history outside Start',()=>{
  assert.equal((host.match(/class="workflow-step atgv-milestone"/g)||[]).length,10);
  assert.match(ui,/\$\('baCompletedSection'\)\.classList\.toggle\('hidden',displayed!=='start'\)/);
- assert.equal(require('../package.json').version,'0.3.51');
+ assert.equal(require('../package.json').version,'0.3.52');
 });

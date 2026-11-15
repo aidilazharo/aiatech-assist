@@ -95,8 +95,12 @@ function normalizeSettings(fields = {}) {
         result.jira.baseUrl = validateUrl(result.jira.baseUrl).replace(/\/wiki\/?$/, '');
     if (result.confluence.baseUrl) {
         result.confluence.baseUrl = validateUrl(result.confluence.baseUrl).replace(/\/$/, '');
-        if (result.jira.baseUrl && new URL(result.confluence.baseUrl).origin !== new URL(result.jira.baseUrl).origin)
-            throw new Error('Confluence URL must use the same Atlassian site as Jira when sharing credentials.');
+        // Separate Atlassian Cloud sites may use the same account email/token.
+        // Validate access to each site independently before saving onboarding.
+        if (result.jira.baseUrl && new URL(result.confluence.baseUrl).origin !== new URL(result.jira.baseUrl).origin &&
+            (!new URL(result.confluence.baseUrl).hostname.endsWith('.atlassian.net') ||
+             !new URL(result.jira.baseUrl).hostname.endsWith('.atlassian.net')))
+            throw new Error('Separate Jira and Confluence sites must use trusted Atlassian Cloud domains.');
         if (!result.confluence.baseUrl.endsWith('/wiki'))
             result.confluence.baseUrl += '/wiki';
     }

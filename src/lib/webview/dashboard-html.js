@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.3.51';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.3.52';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -87,20 +87,23 @@ function html(webview,{resumeLibrary=false}={}){
     <div class="gate-top"><div class="gate-identity gate-lead-identity"><img src="${brand}" alt="AIA" class="gate-logo"/><span class="gate-product-title"><h1>AIATECH ASSIST</h1><small>v${extensionVersion}</small></span></div><div class="gate-header-actions"><button type="button" id="gateSettings" class="secondary gate-settings-button" aria-label="Settings">⚙ Settings</button><button id="gateGuideHelp" type="button" class="guide-icon-button" aria-label="Open interactive user guide" title="Interactive User Guide" aria-haspopup="dialog" aria-controls="guideMenu"><svg class="guide-help-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.65 9a2.5 2.5 0 0 1 4.7 1.2c0 1.8-2.35 2-2.35 3.7"/><path d="M12 17.3h.01"/></svg></button></div></div>
     <div id="gateFolderAlert" class="gate-folder-alert hidden" role="alert"><div><strong>Open a VS Code folder to continue</strong><p>ATGV needs an open folder to find or create project files. Select a folder before searching or creating a project.</p></div><button id="gateOpenFolder" type="button">Open Folder</button></div>
     <section id="startupSetup" class="atgv-startup-setup" aria-label="ATGV computer readiness and connection setup">
-      <div class="atgv-startup-heading"><div><span class="atgv-startup-eyebrow">GETTING STARTED</span><h2>Computer &amp; Connection Readiness</h2><p>Check local prerequisites for all five technology stacks, then verify your organization connections before searching projects.</p></div><button id="startupRecheck" type="button" class="secondary">Recheck Computer</button></div>
-      <div class="atgv-startup-steps" role="list"><span role="listitem" id="startupStep1" class="is-active">1. Computer</span><span role="listitem" id="startupStep2">2. Connections</span><span role="listitem" id="startupStep3">3. Search Project</span></div>
-      <div class="atgv-startup-card"><h3>Technology stack prerequisites</h3><p id="startupToolMessage" class="muted" role="status">Checking installed runtimes and command-line tools…</p><div id="startupStackGrid" class="atgv-startup-stack-grid"></div><p class="muted">Expand a stack to inspect each component. This tests your computer's prerequisites; project dependencies are tested during stack installation.</p></div>
-      <form id="startupConnectionForm" class="atgv-startup-card hidden"><h3>Jira, Confluence &amp; GitHub connections</h3><p class="muted">Suggested AIA values are provided below. Existing saved settings are retained. Jira and Confluence use the same Atlassian account and API token.</p><div class="form-grid">
+      <div id="startupComputerCard" class="atgv-startup-card">
+       <div class="atgv-startup-section-title"><h3>Technology stack prerequisites</h3><button id="startupRefresh" type="button" class="secondary" aria-label="Refresh computer prerequisites" title="Refresh computer prerequisites">↻ Refresh</button></div>
+       <p id="startupToolMessage" class="muted" role="status" aria-live="polite">Checking installed runtimes and command-line tools…</p>
+       <div id="startupStackGrid" class="atgv-startup-stack-grid"></div>
+       <p class="muted">Select a stack to inspect its components. Install missing tools individually, then Refresh to check them. These checks confirm host prerequisites, not a completed application build.</p>
+      </div>
+      <form id="startupConnectionForm" class="atgv-startup-card hidden"><h3>Jira, Confluence &amp; GitHub connections</h3><div class="form-grid atgv-startup-connection-grid">
        <div class="field"><label for="startupJiraUrl">Jira URL</label><input type="url" id="startupJiraUrl" placeholder="https://aiamy-jira-azure.atlassian.net" required></div>
        <div class="field"><label for="startupConfluenceUrl">Confluence URL</label><input type="url" id="startupConfluenceUrl" placeholder="https://aiamy-jira-azure.atlassian.net/wiki" required></div>
        <div class="field"><label for="startupEmail">Jira &amp; Confluence email</label><input type="email" id="startupEmail" placeholder="user.name@aia.com" required></div>
        <div class="field"><label for="startupAtlassianToken">Atlassian API token</label><input type="password" id="startupAtlassianToken" autocomplete="new-password" placeholder="Enter token or retain securely saved token"></div>
-       <div class="field full"><label for="startupGithubUrl">GitHub organization URL</label><input type="url" id="startupGithubUrl" placeholder="https://github.com/aiamalaysia" required></div>
-       <div class="field full"><label for="startupProjectRepo">GitHub project repository URL</label><input type="url" id="startupProjectRepo" placeholder="https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-cockpit" required></div>
-       <div class="field full"><label for="startupLibraryRepo">GitHub SDLC Library repository URL</label><input type="url" id="startupLibraryRepo" placeholder="https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills" required></div>
-       <div class="field full"><label for="startupGithubToken">GitHub personal access token</label><input type="password" id="startupGithubToken" autocomplete="new-password" placeholder="Enter PAT or retain securely saved token"></div>
+       <div class="field"><label for="startupGithubUrl">GitHub organization URL</label><input type="url" id="startupGithubUrl" placeholder="https://github.com/aiamalaysia" required></div>
+       <div class="field"><label for="startupGithubToken">GitHub personal access token</label><input type="password" id="startupGithubToken" autocomplete="new-password" placeholder="Enter PAT or retain securely saved token"></div>
+       <div class="field"><label for="startupProjectRepo">GitHub project repository URL</label><input type="url" id="startupProjectRepo" placeholder="https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-cockpit" required></div>
+       <div class="field"><label for="startupLibraryRepo">GitHub SDLC Library repository URL</label><input type="url" id="startupLibraryRepo" placeholder="https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills" required></div>
       </div><div class="atgv-startup-actions"><button type="submit" id="startupTestConnections">Test &amp; Save Connections</button><span id="startupConnectionMessage" role="status" aria-live="polite">Verify Jira, Confluence and both GitHub repositories to continue.</span></div></form>
-      <div class="atgv-startup-footer"><p id="startupProceedInfo" role="status">Connection tests are required before project search.</p><button type="button" id="startupProceed" disabled>Proceed to Search Project →</button></div>
+      <div class="atgv-startup-footer"><button type="button" id="startupPrevious" class="secondary" disabled>← Previous</button><p id="startupProceedInfo" role="status">Checking computer prerequisites…</p><button type="button" id="startupProceed" disabled>Next →</button></div>
     </section>
     <section id="gateFinder" class="gate-finder hidden">
       <div class="gate-search-bar"><input id="gateQuery" type="search" aria-label="Search projects" placeholder="Search Confluence spaces or local projects…"><button type="button" id="gateSearch">Search</button></div>

@@ -48,6 +48,6 @@ test('AI design validation safely normalizes common structured text fields',()=>
 
 test('version is 0.1.37',async()=>{
  const manifest=JSON.parse(await fs.readFile(path.join(__dirname,'..','package.json'),'utf8'));
- assert.equal(manifest.version,'0.3.51');
- assert.equal(manifest.atgvDisplayVersion,'0.3.51');
+ assert.equal(manifest.version,'0.3.52');
+ assert.equal(manifest.atgvDisplayVersion,'0.3.52');
 });

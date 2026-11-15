@@ -44,5 +44,5 @@ test('preview hero follows Solution Designs page and keeps review safeguards',()
  assert.match(js,/if\(!reason\)/);
 });
 test('release version is 0.2.42',()=>{
- const pkg=require('../package.json');assert.equal(pkg.version,'0.3.51');assert.equal(pkg.atgvDisplayVersion,'0.3.51');
+ const pkg=require('../package.json');assert.equal(pkg.version,'0.3.52');assert.equal(pkg.atgvDisplayVersion,'0.3.52');
 });

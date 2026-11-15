@@ -1749,3 +1749,25 @@ button:focus-visible{outline:2px solid var(--vscode-focusBorder,#649ed2);outline
 .atgv-upgrade-versions>span{font-size:19px;color:var(--vscode-textLink-foreground);}
 .atgv-upgrade-assurance{font-size:12px;color:var(--vscode-descriptionForeground);}
 .atgv-upgrade-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:23px;}
+
+/* Two-page readiness wizard; the project finder remains the final destination. */
+.atgv-startup-section-title{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:6px;}
+.atgv-startup-section-title h3{margin:0;}
+.atgv-startup-section-title button{white-space:nowrap;min-width:86px;}
+.atgv-module-row{align-items:center!important;min-width:0;}
+.atgv-module-description{display:flex;flex-direction:column;gap:3px;min-width:0;overflow-wrap:anywhere;}
+.atgv-module-description small{max-width:210px;}
+.atgv-module-install{flex:none;font-size:11px!important;padding:5px 8px!important;}
+.atgv-module-progress{display:block;width:100%;height:5px;accent-color:var(--vscode-progressBar-background,#2478bc);margin-top:3px;}
+.atgv-startup-footer{border-top:1px solid var(--vscode-panel-border);padding-top:15px;}
+.atgv-startup-footer p{flex:1;text-align:center;font-size:12px;}
+
+/* Compact onboarding connection form: two fields per row without breaking small webviews. */
+#startupConnectionForm{padding:18px 20px;}
+#startupConnectionForm h3{margin:0 0 14px;}
+#startupConnectionForm .atgv-startup-connection-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:11px 14px;align-items:start;}
+#startupConnectionForm .atgv-startup-connection-grid .field{min-width:0;gap:3px;}
+#startupConnectionForm .atgv-startup-connection-grid label{margin:0;font-size:11px;}
+#startupConnectionForm .atgv-startup-connection-grid input{min-width:0;max-width:100%;height:34px;min-height:34px;padding:6px 9px;font-size:12px;}
+#startupConnectionForm .atgv-startup-actions{margin-top:14px;}
+@media(max-width:740px){#startupConnectionForm .atgv-startup-connection-grid{grid-template-columns:minmax(0,1fr);gap:10px;}#startupConnectionForm{padding:16px;}}

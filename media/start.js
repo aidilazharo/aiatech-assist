@@ -6993,14 +6993,23 @@ window.addEventListener('message',event=>{
 const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluenceUrl',email:'startupEmail',
  githubUrl:'startupGithubUrl',projectRepoUrl:'startupProjectRepo',libraryRepoUrl:'startupLibraryRepo'};
 let startupFormInitialized=false,startupPrereqRequested=false,startupConnectionVerified=false,startupSetupRequired=true;
-let startupVerifying=false;
+let startupVerifying=false,startupScanComplete=false,startupPage=0,startupInstallingModule='';
 function startupPayload(){return Object.fromEntries(Object.entries(startupFieldMap).map(([key,id])=>[key,$(id).value.trim()]));}
+function renderStartupPage(){
+ if(!startupSetupRequired)return;
+ $('startupComputerCard').classList.toggle('hidden',startupPage!==0);
+ $('startupConnectionForm').classList.toggle('hidden',startupPage!==1);
+ $('startupPrevious').disabled=startupPage===0||startupVerifying||!!startupInstallingModule;
+ $('startupProceed').disabled=startupVerifying||!!startupInstallingModule||(startupPage===0?!startupScanComplete:!startupConnectionVerified);
+ $('startupProceed').textContent=startupPage===0?'Next →':'Next: Search Project →';
+ $('startupProceedInfo').textContent=startupPage===0?(startupScanComplete?'Review available modules, then select Next.':'Checking computer prerequisites…'):
+  startupConnectionVerified?'Connections verified. Select Next to search projects.':'Test & Save Connections to enable Next.';
+}
 function showStartupStep(required){
  startupSetupRequired=required;
  $('startupSetup').classList.toggle('hidden',!required);
  $('gateFinder').classList.toggle('hidden',required);
- $('startupStep1').classList.toggle('is-active',required);
- $('startupStep3').classList.toggle('is-active',!required);
+ if(required)renderStartupPage();
 }
 function renderStartupConfig(config){
  if(!config)return;
@@ -7015,10 +7024,13 @@ function renderStartupConfig(config){
 }
 function renderStartupStackReadiness(result){
  const grid=$('startupStackGrid');grid.replaceChildren();
- if(!result||!Array.isArray(result.stacks)){$('startupToolMessage').textContent='Prerequisite scan failed. Select Recheck Computer to retry.';return;}
+ if(!result||!Array.isArray(result.stacks)){
+  startupScanComplete=false;$('startupToolMessage').textContent='Unable to scan computer prerequisites. Select Refresh to retry.';
+  renderStartupPage();return;
+ }
+ startupScanComplete=true;
  const ready=result.stacks.filter(s=>s.ready).length;
  $('startupToolMessage').textContent=`${ready} of ${result.stacks.length} technology stacks have their required host tools available. Select a stack to inspect components.`;
- $('startupConnectionForm').classList.remove('hidden');$('startupStep2').classList.add('is-active');
  for(const stack of result.stacks){
   const details=document.createElement('details');details.className='atgv-startup-stack '+(stack.ready?'is-ready':'is-missing');
   const summary=document.createElement('summary');
@@ -7027,61 +7039,89 @@ function renderStartupStackReadiness(result){
   summary.append(title,badge);details.append(summary);
   const list=document.createElement('ul');
   for(const component of stack.components||[]){
-   const item=document.createElement('li');const label=document.createElement('span');label.textContent=component.id+(component.required?'':' (optional)');
+   const item=document.createElement('li');item.className='atgv-module-row';
+   const description=document.createElement('div');description.className='atgv-module-description';
+   const label=document.createElement('span');label.textContent=component.id+(component.required?'':' (optional)');
    const indicator=document.createElement('small');indicator.textContent=component.installed?(component.compatible?'Installed · ':'Version too old · ')+(component.version||'Detected'):'Not installed'+(component.minimum?' · requires '+component.minimum:'');
-   item.append(label,indicator);list.append(item);
+   description.append(label,indicator);item.append(description);
+   if(!component.compatible){
+    const button=document.createElement('button');button.type='button';button.className='secondary atgv-module-install';button.textContent='Install';
+    button.disabled=!!startupInstallingModule;
+    button.setAttribute('aria-label',`Install ${component.id} prerequisite`);
+    button.addEventListener('click',()=>{
+     if(startupInstallingModule)return;
+     startupInstallingModule=component.id;button.disabled=true;button.textContent='Installing…';
+     const progress=document.createElement('progress');progress.className='atgv-module-progress';progress.setAttribute('aria-label',`${component.id} installation in progress`);progress.max=100;
+     description.append(progress);renderStartupPage();
+     $('startupToolMessage').textContent=`Preparing ${component.id} installation…`;
+     send('startupInstallModule',{id:component.id});
+    });
+    item.append(button);
+   }
+   list.append(item);
   }
   details.append(list);grid.append(details);
  }
+ renderStartupPage();
 }
 function invalidateStartupConnection(){
  if(!startupSetupRequired)return;
  startupConnectionVerified=false;
- $('startupProceed').disabled=true;
- $('startupProceedInfo').textContent='Connection settings changed. Test and save again before proceeding.';
- $('startupStep2').classList.add('is-active');
+ $('startupConnectionMessage').textContent='Connection settings changed. Test and save again before proceeding.';
+ renderStartupPage();
 }
 for(const id of Object.values(startupFieldMap))$(id).addEventListener('input',invalidateStartupConnection);
 for(const id of ['startupAtlassianToken','startupGithubToken'])$(id).addEventListener('input',invalidateStartupConnection);
-$('startupRecheck').addEventListener('click',()=>{
- $('startupToolMessage').textContent='Checking local computer prerequisites…';
- $('startupRecheck').disabled=true;send('startupReadiness');
+$('startupRefresh').addEventListener('click',()=>{
+ if(startupInstallingModule)return;
+ startupScanComplete=false;
+ $('startupToolMessage').textContent='Refreshing local computer prerequisites…';
+ $('startupRefresh').disabled=true;renderStartupPage();send('startupReadiness');
+});
+$('startupPrevious').addEventListener('click',()=>{
+ if(startupPage===1&&!startupVerifying&&!startupInstallingModule){startupPage=0;renderStartupPage();}
 });
 $('startupConnectionForm').addEventListener('submit',event=>{
  event.preventDefault();if(startupVerifying)return;
  startupConnectionVerified=false;startupVerifying=true;
- $('startupProceed').disabled=true;$('startupTestConnections').disabled=true;
+ $('startupTestConnections').disabled=true;renderStartupPage();
  $('startupConnectionMessage').textContent='Testing Jira, Confluence, GitHub account, project repository and library main branch…';
  send('startupTestConnections',{settings:startupPayload(),atlassianToken:read('startupAtlassianToken'),githubToken:read('startupGithubToken')});
 });
 $('startupProceed').addEventListener('click',()=>{
- if(!startupConnectionVerified||startupVerifying)return;
- $('startupProceed').disabled=true;
- $('startupProceedInfo').textContent='Opening project search…';
+ if(startupVerifying||startupInstallingModule)return;
+ if(startupPage===0){if(!startupScanComplete)return;startupPage=1;renderStartupPage();$('startupJiraUrl').focus();return;}
+ if(!startupConnectionVerified)return;
+ $('startupProceed').disabled=true;$('startupProceedInfo').textContent='Opening project search…';
  send('startupProceed',{settings:startupPayload()});
 });
 window.addEventListener('message',event=>{
  const message=event.data||{};
  if(message.type==='state'&&message.startupSetup)renderStartupConfig(message.startupSetup);
  if(message.type==='startupReadinessResult'){
-  $('startupRecheck').disabled=false;
-  if(message.error){$('startupToolMessage').textContent=message.error;$('startupConnectionForm').classList.remove('hidden');$('startupStep2').classList.add('is-active');}
+  $('startupRefresh').disabled=false;
+  if(message.error){startupScanComplete=false;$('startupToolMessage').textContent=message.error;renderStartupPage();}
   else renderStartupStackReadiness(message.value);
+ }
+ if(message.type==='startupModuleProgress'){
+  if(message.id!==startupInstallingModule)return;
+  const status=String(message.status||'');
+  $('startupToolMessage').textContent=message.detail||`Installing ${message.id}…`;
+  if(status==='complete'||status==='error'||status==='manual'){
+   startupInstallingModule='';
+   $('startupRefresh').disabled=true;startupScanComplete=false;renderStartupPage();
+   send('startupReadiness');
+  }
  }
  if(message.type==='startupConnectionsResult'){
   startupVerifying=false;$('startupTestConnections').disabled=false;
   startupConnectionVerified=message.success===true;
   $('startupConnectionMessage').textContent=message.message||'Connection test did not complete.';
   $('startupConnectionMessage').className=startupConnectionVerified?'test-status success':'test-status error';
-  $('startupProceed').disabled=!startupConnectionVerified;
-  $('startupStep2').classList.toggle('is-active',!startupConnectionVerified);
-  $('startupProceedInfo').textContent=startupConnectionVerified?'All required connections verified. Continue to project search.':'Complete the connection tests to unlock project search.';
   if(startupConnectionVerified){$('startupAtlassianToken').value='';$('startupGithubToken').value='';}
+  renderStartupPage();
  }
- if(message.type==='startupProceedResult'&&message.success){
-  showStartupStep(false);
-  $('gateQuery').focus();
- }
+ if(message.type==='startupProceedResult'&&message.success){showStartupStep(false);$('gateQuery').focus();}
 });
 
 let displayedExtensionUpgrade=null;

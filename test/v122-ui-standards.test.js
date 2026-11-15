@@ -55,7 +55,7 @@ test('design revisions expose direct delete action and retain the approved workf
  assert.match(host,/id="designApprove" disabled/);
 });
 test('v0.1.37 metadata and 9-step workflow remain consistent',()=>{
- const pkg=require('../package.json');assert.equal(pkg.version,'0.3.51');assert.equal(pkg.atgvDisplayVersion,'0.3.51');
+ const pkg=require('../package.json');assert.equal(pkg.version,'0.3.52');assert.equal(pkg.atgvDisplayVersion,'0.3.52');
  assert.equal((host.match(/class="workflow-step atgv-milestone"/g)||[]).length,10);
- assert.match(host,/atgvDisplayVersion :'0\.3\.51'/);
+ assert.match(host,/atgvDisplayVersion :'0\.3\.52'/);
 });

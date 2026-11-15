@@ -42,6 +42,7 @@ const localContentBackup=require('../backup/local-content-backup');
 const releaseUpdater=require('../updates/github-release-updater');
 const startupReadiness=require('../startup-readiness');
 const startupSetup=require('../startup-setup');
+const startupInstall=require('../startup-install');
 const jiraControl=require('../../jira-change-control');
 const jiraDuplicates=require('../../jira-duplicate-cleanup');
 const jiraProjectInventory=require('../../jira-project-inventory');
@@ -107,6 +108,7 @@ let architectServerOperationSerial=0;
 const pendingAiConsents=new Map();
 const pendingHostDialogs=new Map();
 const pendingExtensionUpgradeOffers=new Map();
+let startupModuleInstalling=false;
 let startupSessionVerified=false;
 let startupVerifiedSignature='';
 async function askHostDialog(type,message,opts={}){
@@ -3575,6 +3577,36 @@ async function handleDashboardMessage(msg){
       case 'startupReadiness':{
         try{const result=await startupReadiness.check();await dashboard?.webview.postMessage({type:'startupReadinessResult',value:result});}
         catch(error){await dashboard?.webview.postMessage({type:'startupReadinessResult',error:error.message});}
+        break;
+      }
+      case 'startupInstallModule':{
+        const id=String(msg.id||'');
+        if(startupModuleInstalling){
+          await dashboard?.webview.postMessage({type:'startupModuleProgress',id,status:'error',detail:'Another prerequisite installation is already running.'});
+          break;
+        }
+        startupModuleInstalling=true;
+        try{
+          const plan=startupInstall.plan(id);
+          const proceed=await vscode.window.showWarningMessage(
+            `Install ${id} prerequisite using ${plan.summary}? This may download software, modify the host computer, and require administrator approval. Existing project files will not be changed by ATGV.`,
+            {modal:true},'Install');
+          if(proceed!=='Install'){
+            await dashboard?.webview.postMessage({type:'startupModuleProgress',id,status:'manual',detail:`${id} installation cancelled.`});
+            break;
+          }
+          if(!plan.command){
+            await vscode.env.openExternal(vscode.Uri.parse(plan.guideUrl));
+            await dashboard?.webview.postMessage({type:'startupModuleProgress',id,status:'manual',detail:`No approved automatic installer for ${id} on this platform. Opened official installation instructions.`});
+            break;
+          }
+          const result=await startupInstall.install(id,{onProgress:detail=>{
+            void dashboard?.webview.postMessage({type:'startupModuleProgress',id,...detail}).catch(()=>{});
+          }});
+          await dashboard?.webview.postMessage({type:'startupModuleProgress',id,status:'complete',detail:result.detail});
+        }catch(error){
+          await dashboard?.webview.postMessage({type:'startupModuleProgress',id,status:'error',detail:`${id} installation: ${error.message}`});
+        }finally{startupModuleInstalling=false;}
         break;
       }
       case 'startupTestConnections':{

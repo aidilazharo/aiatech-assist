@@ -25,9 +25,11 @@ function validate(input){
   const url=new URL(data[key]);
   if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||!url.hostname.endsWith('.atlassian.net'))throw Error('Enter a secure Atlassian Cloud URL for '+key+'.');
   if(key==='jiraUrl'&&url.pathname.replace(/\/$/,'')!=='')throw Error('Jira URL must be the site base URL.');
-  if(key==='confluenceUrl'&&url.pathname.replace(/\/$/,'')!=='/wiki')throw Error('Confluence URL must end in /wiki.');
+  if(key==='confluenceUrl'){
+   if(!['','/wiki'].includes(url.pathname.replace(/\/$/,'')))throw Error('Confluence URL must be the site base URL or end in /wiki.');
+   data[key]=url.origin+'/wiki';
+  }
  }
- if(new URL(data.jiraUrl).origin!==new URL(data.confluenceUrl).origin)throw Error('Jira and Confluence must share the same Atlassian site to use one account token.');
  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email))throw Error('Enter a valid Jira and Confluence account email.');
  const organization=new URL(data.githubUrl);
  if(organization.protocol!=='https:'||organization.hostname!=='github.com'||organization.search||organization.hash||organization.username||organization.password||!/^\/[A-Za-z0-9_.-]+\/?$/.test(organization.pathname))throw Error('Enter a GitHub organization URL.');

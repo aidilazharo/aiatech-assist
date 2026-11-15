@@ -35,7 +35,7 @@ test('Sidebar buttons have thin borders without removing active styling',()=>{
  assert.match(css,/\.sidebar \.nav-item\.current\{border-color:rgba\(103,161,240,\.7\)\}/);
 });
 test('Release metadata is consistent',()=>{
- assert.equal(manifest.version,'0.3.51');
- assert.equal(manifest.atgvDisplayVersion,'0.3.51');
- assert.match(html,/0\.3\.51/);
+ assert.equal(manifest.version,'0.3.52');
+ assert.equal(manifest.atgvDisplayVersion,'0.3.52');
+ assert.match(html,/0\.3\.52/);
 });

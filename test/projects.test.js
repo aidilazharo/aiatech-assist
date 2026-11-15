@@ -118,7 +118,7 @@ test('extension Jira defaults, discovered Confluence metadata, and GitHub creden
   assert.equal(config.get('github.repo'),'specific-docs');
   assert.doesNotMatch(JSON.stringify(custom),/must-not-persist/);
   assert.doesNotMatch(JSON.stringify(defaults),/Token/);
-  assert.throws(()=>normalizeExtensionSettings({jira:{baseUrl:'https://aia.atlassian.net'},confluence:{baseUrl:'https://evil.com/wiki'}}),/same Atlassian site/);
+  assert.throws(()=>normalizeExtensionSettings({jira:{baseUrl:'https://aia.atlassian.net'},confluence:{baseUrl:'https://evil.com/wiki'}}),/trusted Atlassian Cloud/);
   assert.throws(()=>normalizeProjectInput({name:'Other',settings:{confluence:{spaceId:'abc'}}}),/digits only/);
 });
 
