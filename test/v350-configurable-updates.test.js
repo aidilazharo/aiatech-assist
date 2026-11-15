@@ -68,16 +68,22 @@ test('verification downloads from selected repository only and enforces checksum
  const bad=async(url)=>url.endsWith('/131')?Buffer.from('tampered'):Buffer.from(`${checksum}  ${filename}\n`);
  await assert.rejects(updater.downloadVerified(selected,{directory:temp,request:bad}),/checksum verification/);
 });
-test('VS Code settings expose a persisted release URL and independent library update checking',()=>{
+test('release URLs derive from source repositories and are not manually editable',()=>{
  const pkg=require('../package.json');assert.match(pkg.version,/^\d+\.\d+\.\d+$/);
- assert.equal(pkg.contributes.configuration.properties['atgvAssist.updates.releaseRepositoryUrl'].default,updater.DEFAULT_RELEASE_URL);
+ assert.equal(pkg.repository.url,'https://github.com/aidilazharo/aiatech-assist.git');
+ assert.equal(updater.releaseUrlForRepository(pkg.repository.url),updater.DEFAULT_RELEASE_URL);
+ assert.equal(updater.releaseUrlForRepository('https://github.com/aidilazharo/tech-stacks-skills'),'https://github.com/aidilazharo/tech-stacks-skills/releases');
+ assert.equal(pkg.contributes.configuration.properties['atgvAssist.updates.releaseRepositoryUrl'],undefined);
  const runtime=require('node:fs').readFileSync(path.join(__dirname,'../src/lib/runtime/extension-runtime.js'),'utf8');
  const html=require('node:fs').readFileSync(path.join(__dirname,'../src/lib/webview/dashboard-html.js'),'utf8');
  const js=require('node:fs').readFileSync(path.join(__dirname,'../media/start.js'),'utf8');
- assert.ok(html.includes('id="softwareReleaseRepositoryUrl"'));
- assert.ok(js.includes("$('softwareReleaseRepositoryUrl').value"));
- assert.match(runtime,/update\('updates\.releaseRepositoryUrl'/);
- assert.match(runtime,/repositoryUrl:updatePreferences\(\)\.releaseRepositoryUrl/);
- assert.match(runtime,/if\(previousRepository\.repository!==nextRepository\.repository\)/);
+ assert.ok(!html.includes('id="softwareReleaseRepositoryUrl"'));
+ assert.ok(!html.includes('id="saveSoftwareUpdateSettings"'));
+ assert.ok(!js.includes("$('softwareReleaseRepositoryUrl')"));
+ assert.ok(!js.includes("'saveSoftwareUpdateSettings'"));
+ assert.ok(!runtime.includes("case 'saveSoftwareUpdateSettings':"));
+ assert.ok(!runtime.includes("c.get('updates.releaseRepositoryUrl'"));
+ assert.match(runtime,/releaseRepositoryUrl:releaseUpdater\.releaseUrlForRepository\(extensionSourceRepository\)/);
+ assert.match(runtime,/libraryReleaseUrl:libraryRepository\?releaseUpdater\.releaseUrlForRepository\(libraryRepository\):''/);
  assert.match(runtime,/if\(force\|\|config\.autoCheckLibrary\)/);
 });
