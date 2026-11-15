@@ -4406,7 +4406,17 @@ async function handleDashboardMessage(msg){
           try{
             const prior=developerGit.localLogs();
             const reuse=prior.running&&prior.cwd===path.join(root,target.relative);
-            if(!reuse)launched=await developerGit.runLocal(root,{relative:target.relative});
+            if(!reuse){
+              const startup=require('../../architect-stack-bootstrap');
+              const previewConfig=await startup.stackConfig(root,project.techStackId);
+              const selection=await startup.chooseAvailablePreviewUrl(previewConfig.previewUrl);
+              if(selection.changed){
+                const notice='Preview port '+selection.previousPort+' is occupied. Test & Run will use '+selection.url;
+                architectErrorLogs.append(activeProject.id,'test','Stage: '+notice);
+                await dashboard?.webview.postMessage({type:'architectStackProgress',projectId:activeProject.id,message:notice});
+              }
+              launched=await developerGit.runLocal(root,{relative:target.relative,previewUrl:selection.url});
+            }
             await new Promise(resolve=>setTimeout(resolve,2200));
             const info=developerGit.localLogs();
             architectErrorLogs.append(activeProject.id,'test',require('../../stack-process-diagnostics').capture({stage:'application startup',bin:info.command||'application',cwd:info.cwd||path.join(root,target.relative),logs:info.logs,exitCode:info.exitCode,signal:info.signal}));
