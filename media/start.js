@@ -734,6 +734,7 @@ function updateState(msg){
   if(!aiProviderLoaded){aiProviderLoaded=true;send('getAiProviderState');}
   projects=msg.projects||[];activeId=msg.activeId||null;healthData=msg.health||null;usedRoleIds=new Set(msg.usedRoles||[]);designState=msg.designState||null;approvedDesignHash=msg.approvedDesignHash||'';blueprintRegistry=msg.blueprintRegister||null;blueprintAssessment=msg.blueprintAssessment||null;extensionSettings=msg.extensionSettings||{};techStacks=msg.techStacks||[];renderCatalog(msg.catalog);jiraBrowseBaseUrl=msg.jiraBrowseBaseUrl||'';
   recentIds=msg.recentProjects||[];projectReadiness=msg.projectReadiness||{};unmanagedFolders=msg.unmanagedFolders||[];
+   architectErrorLogProjectId=msg.activeId||'';architectErrorLogCount=Number(msg.architectErrorLogCount)||0;
   if(msg.aiService)renderAIService(msg.aiService);
   renderWorkspaceSearch(msg.startupScan);
   const prior=opening.phase;
@@ -1684,7 +1685,7 @@ function architectProgressTask(message){
  if(/dependencies|npm |nuget|dotnet restore|maven|installing |restoring /.test(value))return 'dependencies';
  if(/running test|testing, building|test checks/.test(value))return 'tests';
  if(/running build|build checks/.test(value))return 'build';
- if(/launching|reusing.*application|running application|opening the running application/.test(value))return 'server';
+ if(/launching|reusing.*application|running application|opening the running application|checking application server preview port/.test(value))return 'server';
  if(/committing|pushing|push to github/.test(value))return 'push';
  return '';
 }
@@ -1762,7 +1763,7 @@ function renderArchitectRequirements(project){
   const name=document.createElement('strong');name.textContent=title;
   const detail=document.createElement('span');detail.textContent=description;detail.title=description;
   content.append(name,detail);
-  if(id==='push'&&failed){detail.textContent='Push failed; inspect Download Stack Error Log for the exact GitHub response. Main was not changed.';detail.title=detail.textContent;}
+  if(id==='push'&&failed){detail.textContent='Push failed; inspect Download All Error Logs for the exact GitHub response. Main was not changed.';detail.title=detail.textContent;}
   const state=document.createElement('span');state.className='architect-requirement-state';
   const successLabel=['api','orm','sqlite','scaffold'].includes(id)?'Prepared':['tests','build'].includes(id)?'Passed':id==='push'?'Pushed':id==='approval'?'Approved':'Ready';
   state.textContent=complete?successLabel:unavailable?'Not defined':failed?'Failed':running?'Checking':'Pending';
@@ -6769,20 +6770,26 @@ window.addEventListener('message',event=>{
  const msg=event.data||{};
  if(msg.type==='catalogState')renderArchitectCatalogStatus();
  if(msg.type==='architectCatalogAction'){architectCatalogBusy=false;renderArchitectCatalogStatus();if(msg.message)$('architectCatalogStatus').textContent=msg.message;
-   if(msg.logAvailable&&msg.logKind){architectFailureLogs.stack={projectId:activeId,kind:msg.logKind};updateArchitectFailureLogButtons();}}
+   if(msg.logAvailable)architectRecordErrorLog(msg);}
 });
 let architectServerBusy=false,architectServerSnapshot={running:false,message:'App server stopped'},architectServerSnapshotProjectId='';
 let architectServerStatusRequest=0,architectServerStatusAccepted=0;
-let architectFailureLogs={test:null,server:null,stack:null};
+let architectErrorLogProjectId='',architectErrorLogCount=0;
 function updateArchitectFailureLogButtons(){
- const test=architectFailureLogs.test,server=architectFailureLogs.server;
- $('architectDownloadTestLog').classList.toggle('hidden',!test||test!==activeId);
- $('architectDownloadServerLog').classList.toggle('hidden',!server||server!==activeId);
- $('architectDownloadStackLog').classList.toggle('hidden',!architectFailureLogs.stack||architectFailureLogs.stack.projectId!==activeId);
+ const button=$('architectDownloadUnifiedLog');
+ const available=!!(activeId&&architectErrorLogProjectId===activeId&&architectErrorLogCount>0);
+ button.disabled=!available;
+ button.title=available?'Download '+architectErrorLogCount+' recorded Technology Stack error(s) in one report.':'No Technology Stack errors recorded for this project during this session.';
 }
-$('architectDownloadTestLog').addEventListener('click',()=>send('architectDownloadErrorLog',{kind:'test'}));
-$('architectDownloadServerLog').addEventListener('click',()=>send('architectDownloadErrorLog',{kind:'server'}));
-$('architectDownloadStackLog').addEventListener('click',()=>{if(architectFailureLogs.stack?.projectId===activeId)send('architectDownloadErrorLog',{kind:architectFailureLogs.stack.kind});});
+function architectRecordErrorLog(message){
+ if(!message?.logAvailable||message.projectId!==activeId)return;
+ if(architectErrorLogProjectId!==activeId){architectErrorLogProjectId=activeId;architectErrorLogCount=0;}
+ architectErrorLogCount=Math.max(architectErrorLogCount+1,Number(message.logCount)||0);
+ updateArchitectFailureLogButtons();
+}
+$('architectDownloadUnifiedLog').addEventListener('click',()=>{
+ if(activeId&&architectErrorLogProjectId===activeId&&architectErrorLogCount>0)send('architectDownloadErrorLog',{kind:'all'});
+});
 function updateArchitectServerControls(saved){
  const toggle=$('architectServerToggle');
  const running=architectServerSnapshotProjectId===activeId&&!!architectServerSnapshot.running;
@@ -6797,7 +6804,6 @@ function updateArchitectServerControls(saved){
 }
 function architectServerAction(command){
  if(architectServerBusy||!activeId)return;
- if(command==='architectRunServer'){architectFailureLogs.server=null;updateArchitectFailureLogButtons();}
  architectServerBusy=true;
  architectServerSnapshot={...architectServerSnapshot,message:command==='architectRunServer'?'Starting application server…':'Stopping application server…'};
  processActivityUpsert('server','Application Server',architectServerSnapshot.message,'running');
@@ -6807,9 +6813,6 @@ function architectServerAction(command){
 $('architectServerToggle').addEventListener('click',()=>architectServerAction(architectServerSnapshotProjectId===activeId&&architectServerSnapshot.running?'architectStopServer':'architectRunServer'));
 function architectBegin(action,message){
  if(architectActionBusy)return false;
- if(action==='architectTestStack')architectFailureLogs.test=null;
- if(['architectSaveStack','architectResetStack','architectApproveStack'].includes(action))architectFailureLogs.stack=null;
- updateArchitectFailureLogButtons();
  architectActionBusy=true;architectPendingAction=action;architectLastMessage=message;
  processActivityUpsert('stack','Technology Stack',message,'running');
  const live=architectChecklistSession($('architectStackSelect').value);
@@ -6939,7 +6942,7 @@ window.addEventListener('message',event=>{
    updateArchitectServerControls(!!projects.find(p=>p.id===activeId)?.techStackPrepared);syncArchitectStackButtons(projects.find(p=>p.id===activeId));renderArchitectRequirements(projects.find(p=>p.id===activeId));refreshArchitectStageClasses(projects.find(p=>p.id===activeId));
  }
  if(msg.type==='architectServerError'&&msg.projectId===activeId){
-   if(msg.logAvailable){architectFailureLogs.server=activeId;updateArchitectFailureLogButtons();}
+   if(msg.logAvailable)architectRecordErrorLog(msg);
    architectServerBusy=false;architectServerSnapshot={...architectServerSnapshot,message:'Server action failed: '+(msg.message||'Check local app logs.')};architectServerSnapshotProjectId=msg.projectId;send('architectServerStatus',{requestId:++architectServerStatusRequest});
    updateArchitectServerControls(!!projects.find(p=>p.id===activeId)?.techStackPrepared);syncArchitectStackButtons(projects.find(p=>p.id===activeId));renderArchitectRequirements(projects.find(p=>p.id===activeId));refreshArchitectStageClasses(projects.find(p=>p.id===activeId));
  }
@@ -6964,13 +6967,9 @@ window.addEventListener('message',event=>{
    architectActionBusy=false;renderRoleWork();
  }
  if(msg.type==='architectStackCancelled'||msg.type==='architectStackError'){
-   if(msg.type==='architectStackError'&&msg.logAvailable){
-     if(msg.command==='architectTestStack')architectFailureLogs.test=activeId;
-     else architectFailureLogs.stack={projectId:activeId,kind:msg.logKind||'save'};
-     updateArchitectFailureLogButtons();
-   }
+   if(msg.type==='architectStackError'&&msg.logAvailable)architectRecordErrorLog(msg);
    const live=architectChecklistSession($('architectStackSelect').value);
-   if(msg.type==='architectStackError')live.failed=live.active||'dependencies';
+   if(msg.type==='architectStackError')live.failed=msg.failedStep||live.active||'dependencies';
    live.active='';architectPendingAction='';architectActionBusy=false;
    architectLastMessage=(msg.type==='architectStackCancelled'?'No changes made. ':'Stack action failed: ')+(msg.message||'');
    renderArchitectRequirements(projects.find(p=>p.id===activeId));
