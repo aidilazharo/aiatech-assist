@@ -26,6 +26,11 @@ function parseRepositoryUrl(input=DEFAULT_RELEASE_URL){
  const repository=match[1]+'/'+match[2];
  return {repository,url:`https://github.com/${repository}/releases`,api:`https://api.github.com/repos/${repository}/releases?per_page=30`};
 }
+/** Derive trusted GitHub Releases URLs only from repository metadata. */
+function releaseUrlForRepository(repositoryUrl){
+ if(typeof repositoryUrl!=='string'||!repositoryUrl.trim())throw Error('GitHub repository source is unavailable.');
+ return parseRepositoryUrl(repositoryUrl.trim().replace(/\.git$/i,'')).url;
+}
 const MAX_JSON=1024*1024,MAX_ASSET=80*1024*1024;
 function parseVersion(value){
  const match=/^v?(\d+)\.(\d+)\.(\d+)(?:-build\.(\d+))?$/.exec(String(value||'').trim());
@@ -121,4 +126,4 @@ async function downloadVerified(release,{token='',directory,request=getBytes}={}
  await fs.writeFile(target+'.part',vsix,{mode:0o600});await fs.rename(target+'.part',target);
  return target;
 }
-module.exports={REPO,API,DEFAULT_RELEASE_URL,parseRepositoryUrl,parseVersion,compareVersion,selectRelease,verifyChecksum,latestRelease,downloadVerified,getBytes};
+module.exports={REPO,API,DEFAULT_RELEASE_URL,parseRepositoryUrl,releaseUrlForRepository,parseVersion,compareVersion,selectRelease,verifyChecksum,latestRelease,downloadVerified,getBytes};
