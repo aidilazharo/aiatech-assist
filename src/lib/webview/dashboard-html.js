@@ -230,15 +230,13 @@ function html(webview,{resumeLibrary=false}={}){
       <p id="localBackupStatus" class="muted" role="status" aria-live="polite">No backup or restore running.</p>
     </section></div></details>
     <details class="ext-settings-accordion" id="settingsSoftwareUpdateGroup" data-requirement="required"><summary><span>8. Extension &amp; SDLC Library Updates</span><span class="ext-settings-badge" data-state="required">Required</span></summary><div class="ext-settings-content"><section>
-      <p class="muted">ATGV checks the configured GitHub repository Releases page and the SDLC Catalog's main branch. Update checks never modify local projects or remote repositories.</p>
-      <div class="software-update-toolbar" role="group" aria-label="GitHub release URL and update actions">
-        <label class="software-update-url" for="softwareReleaseRepositoryUrl"><span class="sr-only">GitHub Extension Releases URL</span><input id="softwareReleaseRepositoryUrl" aria-label="GitHub Extension Releases URL" type="url" required spellcheck="false" placeholder="https://github.com/OWNER/REPOSITORY/releases" autocomplete="off" value="https://github.com/aidilazharo/aiatech-assist/releases"></label>
-        <button type="button" id="saveSoftwareUpdateSettings">Save URL</button>
+      <p class="muted">ATGV detects the extension Releases source from its GitHub repository and the SDLC Library source from the configured catalog repository. Update checks never modify local projects or remote repositories.</p>
+      <div class="software-update-toolbar" role="group" aria-label="Software update actions">
         <button type="button" id="checkSoftwareUpdates" class="secondary">Check Updates</button>
         <button type="button" id="installExtensionRelease" class="secondary" disabled>Install Verified VSIX</button>
         <button type="button" id="viewExtensionRelease" class="secondary" disabled>View GitHub Release</button>
       </div>
-      <p class="muted">Extension and SDLC Library checks run automatically, including at startup; update notifications always require confirmation. The release URL must be a trusted github.com repository.</p>
+      <p class="muted">Extension and SDLC Library checks run automatically, including at startup; update notifications always require confirmation. Release sources are detected automatically and cannot be edited.</p>
       <p id="softwareExtensionStatus" class="test-status muted" role="status" aria-live="polite">Extension: not checked.</p>
       <p id="softwareLibraryStatus" class="test-status muted" role="status" aria-live="polite">Library: check the SDLC Catalog section for its installed version.</p>
       <p class="muted">Installation is optional, validates GitHub's published SHA-256 checksum, and requires a VS Code reload. Private releases require a saved GitHub token or VS Code GitHub sign-in. Catalog downloads use the existing pinned and verified Pull Catalog process.</p>
