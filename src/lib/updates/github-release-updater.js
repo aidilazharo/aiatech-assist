@@ -10,7 +10,22 @@ const path=require('node:path');
 const {URL}=require('node:url');
 
 const REPO='aidilazharo/aiatech-assist';
+const DEFAULT_RELEASE_URL=`https://github.com/${REPO}/releases`;
 const API=`https://api.github.com/repos/${REPO}/releases?per_page=30`;
+/** Accept only a GitHub repository or its Releases landing URL, never an arbitrary API endpoint. */
+function parseRepositoryUrl(input=DEFAULT_RELEASE_URL){
+ if(typeof input!=='string'||input.length>300)throw Error('Enter a valid GitHub repository Releases URL.');
+ let url;try{url=new URL(input.trim());}catch{throw Error('Enter a valid GitHub repository Releases URL.');}
+ if(url.protocol!=='https:'||url.hostname!=='github.com'||url.username||url.password||url.port||url.search||url.hash){
+  throw Error('Release URL must use https://github.com without credentials, ports or query parameters.');
+ }
+ const match=/^\/([a-zA-Z0-9-]{1,39})\/([a-zA-Z0-9_.-]{1,100})(?:\/releases)?\/?$/.exec(url.pathname);
+ if(!match||match[2]==='.'||match[2]==='..'||match[2].endsWith('.git')){
+  throw Error('Use https://github.com/OWNER/REPOSITORY/releases.');
+ }
+ const repository=match[1]+'/'+match[2];
+ return {repository,url:`https://github.com/${repository}/releases`,api:`https://api.github.com/repos/${repository}/releases?per_page=30`};
+}
 const MAX_JSON=1024*1024,MAX_ASSET=80*1024*1024;
 function parseVersion(value){
  const match=/^v?(\d+)\.(\d+)\.(\d+)(?:-build\.(\d+))?$/.exec(String(value||'').trim());
@@ -20,15 +35,16 @@ function compareVersion(a,b){
  const aa=parseVersion(a),bb=parseVersion(b);if(!aa||!bb)return null;
  for(let i=0;i<3;i++){if(aa[i]!==bb[i])return aa[i]>bb[i]?1:-1;}return 0;
 }
-function validAsset(asset,name){
+function validAsset(asset,name,repository=REPO){
  return asset&&asset.name===name&&Number.isSafeInteger(asset.size)&&asset.size>0&&asset.size<=MAX_ASSET&&
     typeof asset.url==='string'&&new URL(asset.url).hostname==='api.github.com'&&
-    asset.url.startsWith(`https://api.github.com/repos/${REPO}/releases/assets/`);
+    asset.url.startsWith(`https://api.github.com/repos/${repository}/releases/assets/`);
 }
-function selectRelease(releases,currentVersion){
+function selectRelease(releases,currentVersion,repositoryUrl=DEFAULT_RELEASE_URL){
+ const {repository,url:releaseUrl}=parseRepositoryUrl(repositoryUrl);
  if(!Array.isArray(releases))throw Error('Invalid GitHub Releases response.');
  const candidates=releases.filter(r=>r&&!r.draft&&parseVersion(r.tag_name)&&compareVersion(r.tag_name,currentVersion)>0)
-  .filter(r=>typeof r.html_url==='string'&&r.html_url.startsWith(`https://github.com/${REPO}/releases/tag/`))
+  .filter(r=>typeof r.html_url==='string'&&r.html_url.startsWith(`https://github.com/${repository}/releases/tag/`))
   .sort((a,b)=>{
    const x=parseVersion(a.tag_name),y=parseVersion(b.tag_name);
    for(let i=0;i<4;i++)if(x[i]!==y[i])return y[i]-x[i];
@@ -37,9 +53,9 @@ function selectRelease(releases,currentVersion){
  for(const release of candidates){
   const version=parseVersion(release.tag_name).slice(0,3).join('.');
   const name=`atgv-aiatech-assist-${version}.vsix`;
-  const asset=(release.assets||[]).find(a=>validAsset(a,name));
-  const checksum=(release.assets||[]).find(a=>validAsset(a,'vsix.sha256'));
-  if(asset&&checksum)return {version,tag:release.tag_name,url:release.html_url,description:String(release.body||'').slice(0,1500),asset,checksum};
+  const asset=(release.assets||[]).find(a=>validAsset(a,name,repository));
+  const checksum=(release.assets||[]).find(a=>validAsset(a,'vsix.sha256',repository));
+  if(asset&&checksum)return {version,tag:release.tag_name,url:release.html_url,repository,releaseUrl,description:String(release.body||'').slice(0,1500),asset,checksum};
  }
  return null;
 }
@@ -71,11 +87,12 @@ function getBytes(url,{token='',maxBytes=MAX_JSON,accept='application/vnd.github
   request.on('error',reject);
  });
 }
-async function latestRelease({version,token='',request=getBytes}={}){
- const bytes=await request(API,{token,maxBytes:MAX_JSON});
+async function latestRelease({version,token='',repositoryUrl=DEFAULT_RELEASE_URL,request=getBytes}={}){
+ const repo=parseRepositoryUrl(repositoryUrl);
+ const bytes=await request(repo.api,{token,maxBytes:MAX_JSON});
  let data;try{data=JSON.parse(bytes.toString('utf8'));}catch{throw Error('Invalid GitHub Releases JSON.');}
  if(data&&data.message&&!Array.isArray(data))throw Error('GitHub Releases unavailable. Check connection and permissions.');
- return selectRelease(data,version);
+ return selectRelease(data,version,repo.url);
 }
 function verifyChecksum(checksumBytes,assetBytes,filename){
  const lines=checksumBytes.toString('utf8').split(/\r?\n/);
@@ -90,7 +107,9 @@ function verifyChecksum(checksumBytes,assetBytes,filename){
 async function downloadVerified(release,{token='',directory,request=getBytes}={}){
  if(!release||!directory)throw Error('Verified release and local staging directory required.');
  const filename=`atgv-aiatech-assist-${release.version}.vsix`;
- if(!validAsset(release.asset,filename)||!validAsset(release.checksum,'vsix.sha256'))throw Error('Release assets are not trusted GitHub API assets.');
+ const repo=parseRepositoryUrl(release.releaseUrl||DEFAULT_RELEASE_URL);
+ if(release.repository&&release.repository!==repo.repository)throw Error('Release repository does not match its source.');
+ if(!validAsset(release.asset,filename,repo.repository)||!validAsset(release.checksum,'vsix.sha256',repo.repository))throw Error('Release assets are not trusted GitHub API assets.');
  const [vsix,checksum]=await Promise.all([
   request(release.asset.url,{token,maxBytes:MAX_ASSET,accept:'application/octet-stream'}),
   request(release.checksum.url,{token,maxBytes:10000,accept:'application/octet-stream'})
@@ -102,4 +121,4 @@ async function downloadVerified(release,{token='',directory,request=getBytes}={}
  await fs.writeFile(target+'.part',vsix,{mode:0o600});await fs.rename(target+'.part',target);
  return target;
 }
-module.exports={REPO,API,parseVersion,compareVersion,selectRelease,verifyChecksum,latestRelease,downloadVerified,getBytes};
+module.exports={REPO,API,DEFAULT_RELEASE_URL,parseRepositoryUrl,parseVersion,compareVersion,selectRelease,verifyChecksum,latestRelease,downloadVerified,getBytes};

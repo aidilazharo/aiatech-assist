@@ -4216,6 +4216,7 @@ function renderSoftwareUpdates(data,force=false){
  latestSoftwareUpdateState=data;
  const opts=data.settings||{};
  if(force||!document.activeElement?.closest('#settingsSoftwareUpdateGroup')){
+  $('softwareReleaseRepositoryUrl').value=opts.releaseRepositoryUrl||'https://github.com/aidilazharo/aiatech-assist/releases';
   $('softwareAutoExtension').checked=opts.autoCheckExtension!==false;
   $('softwareAutoLibrary').checked=opts.autoCheckLibrary!==false;
   $('softwarePromptUpdates').checked=opts.promptForUpdates!==false;
@@ -4234,7 +4235,12 @@ window.addEventListener('message',event=>{
  if(m.type==='softwareUpdateState')renderSoftwareUpdates(m.value);
 });
 $('saveSoftwareUpdateSettings').addEventListener('click',()=>{
- const settings={autoCheckExtension:$('softwareAutoExtension').checked,autoCheckLibrary:$('softwareAutoLibrary').checked,promptForUpdates:$('softwarePromptUpdates').checked,checkOnStartup:$('softwareCheckOnStartup').checked};
+ const releaseRepositoryUrl=$('softwareReleaseRepositoryUrl').value.trim();
+ if(!/^https:\/\/github\.com\/[A-Za-z0-9-]+\/[A-Za-z0-9_.-]+(?:\/releases)?\/?$/.test(releaseRepositoryUrl)){
+  $('softwareExtensionStatus').textContent='Enter a valid GitHub Releases URL, for example https://github.com/aidilazharo/aiatech-assist/releases.';
+  return;
+ }
+ const settings={releaseRepositoryUrl,autoCheckExtension:$('softwareAutoExtension').checked,autoCheckLibrary:$('softwareAutoLibrary').checked,promptForUpdates:$('softwarePromptUpdates').checked,checkOnStartup:$('softwareCheckOnStartup').checked};
  send('saveSoftwareUpdateSettings',{settings});
  $('softwareExtensionStatus').textContent='Update settings saved.';
 });

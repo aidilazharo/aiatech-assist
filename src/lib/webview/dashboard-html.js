@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.3.49';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.3.50';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -176,7 +176,9 @@ function html(webview,{resumeLibrary=false}={}){
       <p id="localBackupStatus" class="muted" role="status" aria-live="polite">No backup or restore running.</p>
     </section></div></details>
     <details class="ext-settings-accordion" id="settingsSoftwareUpdateGroup" data-requirement="optional"><summary><span>8. Extension &amp; SDLC Library Updates</span><span class="ext-settings-badge" data-state="optional">Optional</span></summary><div class="ext-settings-content"><section>
-      <p class="muted">ATGV checks GitHub Releases in the private <code>aidilazharo/aiatech-assist</code> repository and checks the configured SDLC Catalog's main branch. Update checks never modify local projects or remote repositories.</p>
+      <p class="muted">ATGV checks the configured GitHub repository Releases page and the SDLC Catalog's main branch. Update checks never modify local projects or remote repositories.</p>
+      <div class="form-grid"><label class="field full" for="softwareReleaseRepositoryUrl">GitHub Extension Releases URL<input id="softwareReleaseRepositoryUrl" type="url" required spellcheck="false" placeholder="https://github.com/OWNER/REPOSITORY/releases" autocomplete="off" value="https://github.com/aidilazharo/aiatech-assist/releases"></label></div>
+      <p class="muted">Only github.com repository Releases URLs are accepted. Use the trusted owner and repository; changing this source changes who publishes upgrade files.</p>
       <div class="form-grid"><label class="field full"><input id="softwareAutoExtension" type="checkbox" checked> Automatically check for newer ATGV VSIX releases</label><label class="field full"><input id="softwareAutoLibrary" type="checkbox" checked> Automatically check SDLC Library updates</label><label class="field full"><input id="softwarePromptUpdates" type="checkbox" checked> Show upgrade confirmation dialogs</label><label class="field full"><input id="softwareCheckOnStartup" type="checkbox" checked> Check for updates when VS Code starts</label></div>
       <div class="stack actions"><button type="button" id="saveSoftwareUpdateSettings">Save Update Settings</button><button type="button" id="checkSoftwareUpdates" class="secondary">Check Both Now</button><button type="button" id="installExtensionRelease" class="secondary" disabled>Install Verified VSIX</button><button type="button" id="viewExtensionRelease" class="secondary" disabled>View GitHub Release</button></div>
       <p id="softwareExtensionStatus" class="test-status muted" role="status" aria-live="polite">Extension: not checked.</p>

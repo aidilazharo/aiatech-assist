@@ -50,7 +50,7 @@ test('Previous and Next Step share one standalone section rather than being repa
 
 test('release version is 0.2.42 without changing the ten milestone definitions',()=>{
  const pkg=require('../package.json');
- assert.equal(pkg.version,'0.3.49');
- assert.equal(pkg.atgvDisplayVersion,'0.3.49');
+ assert.equal(pkg.version,'0.3.50');
+ assert.equal(pkg.atgvDisplayVersion,'0.3.50');
  assert.equal((html.match(/class="workflow-step atgv-milestone"/g)||[]).length,10);
 });

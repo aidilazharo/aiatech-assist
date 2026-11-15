@@ -335,6 +335,7 @@ let softwareUpdateTimer=null,softwareStartupTimer=null,softwareCheckBusy=false;
 let extensionRelease=null,extensionUpdateChecked='',extensionUpdateError='',libraryUpdateError='';
 function updatePreferences(){
  const c=cfg();return {
+  releaseRepositoryUrl:c.get('updates.releaseRepositoryUrl',releaseUpdater.DEFAULT_RELEASE_URL),
   autoCheckExtension:c.get('updates.autoCheckExtension',true)!==false,
   autoCheckLibrary:c.get('updates.autoCheckLibrary',true)!==false,
   promptForUpdates:c.get('updates.promptForUpdates',true)!==false,
@@ -359,9 +360,10 @@ async function releaseAccessToken({interactive=false}={}){
 async function promptExtensionRelease(release,token){
  if(!updatePreferences().promptForUpdates||!release)return;
  const key='atgvAssist.updates.promptedRelease';
- if(context.globalState.get(key)===(release.tag||''))return;
- await context.globalState.update(key,release.tag);
- const answer=await vscode.window.showInformationMessage(`ATGV v${release.version} is available (installed: v${require('../../../package.json').version}). Upgrade using the verified GitHub release?`,{modal:true},'Install Upgrade','View Release','Later');
+ const promptId=(release.repository||releaseUpdater.REPO)+'|'+(release.tag||'');
+ if(context.globalState.get(key)===promptId)return;
+ await context.globalState.update(key,promptId);
+ const answer=await vscode.window.showInformationMessage(`ATGV v${release.version} is available (installed: v${require('../../../package.json').version}). Upgrade from ${release.repository||releaseUpdater.REPO} using the verified GitHub release?`,{modal:true},'Install Upgrade','View Release','Later');
  if(answer==='View Release')await vscode.env.openExternal(vscode.Uri.parse(release.url));
  if(answer==='Install Upgrade'){
   try{
@@ -375,7 +377,7 @@ async function promptExtensionRelease(release,token){
 async function checkExtensionRelease({prompt=false,interactive=false}={}){
  const token=await releaseAccessToken({interactive});
  try{
-  const result=await releaseUpdater.latestRelease({version:require('../../../package.json').version,token});
+  const result=await releaseUpdater.latestRelease({version:require('../../../package.json').version,token,repositoryUrl:updatePreferences().releaseRepositoryUrl});
   extensionRelease=result;extensionUpdateError='';extensionUpdateChecked=new Date().toISOString();
   if(prompt&&result)await promptExtensionRelease(result,token);
   return result;
@@ -3502,9 +3504,17 @@ async function handleDashboardMessage(msg){
       case 'saveSoftwareUpdateSettings':{
         const value=msg.settings;
         if(!value||typeof value!=='object')throw Error('Invalid update settings.');
+        const previousRepository=releaseUpdater.parseRepositoryUrl(updatePreferences().releaseRepositoryUrl);
+        const nextRepository=releaseUpdater.parseRepositoryUrl(value.releaseRepositoryUrl);
         for(const key of ['autoCheckExtension','autoCheckLibrary','promptForUpdates','checkOnStartup']){
           if(typeof value[key]!=='boolean')throw Error('Invalid update preference: '+key);
+        }
+        await cfg().update('updates.releaseRepositoryUrl',nextRepository.url,vscode.ConfigurationTarget.Global);
+        for(const key of ['autoCheckExtension','autoCheckLibrary','promptForUpdates','checkOnStartup']){
           await cfg().update('updates.'+key,value[key],vscode.ConfigurationTarget.Global);
+        }
+        if(previousRepository.repository!==nextRepository.repository){
+          extensionRelease=null;extensionUpdateChecked='';extensionUpdateError='';
         }
         scheduleSoftwareUpdates();await publishUpdateStatus();break;
       }

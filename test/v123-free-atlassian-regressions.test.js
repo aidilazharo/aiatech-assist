@@ -85,5 +85,5 @@ test('verified Jira Free protections do not claim Jira-side lock enforcement',()
  assert.match(src,/remoteFingerprint\(current\)!==previous\.remoteDigest/);
  assert.match(src,/no trusted Jira retirement baseline/);
  assert.match(src,/Jira retirement blocked: missing trusted baseline/);
- const pkg=require('../package.json');assert.equal(pkg.version,'0.3.49');assert.equal(pkg.atgvDisplayVersion,'0.3.49');
+ const pkg=require('../package.json');assert.equal(pkg.version,'0.3.50');assert.equal(pkg.atgvDisplayVersion,'0.3.50');
 });
