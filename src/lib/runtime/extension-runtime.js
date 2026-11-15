@@ -1012,7 +1012,7 @@ async function dashboardState(){
   }
   const roleSteps=activeProject&&openingFlow.phase==='open'?await roleStepEngine.overview(registry,activeProject.id,currentWork.roles):{scopeId:'project',roles:[]};
   const consolidatedSdlc=activeProject&&openingFlow.phase==='open'?await roleStepEngine.consolidated(registry,activeProject.id,currentWork.roles):{roles:[],scopes:0,verifiedEvidence:0,outputs:0};
-  return {projectConnections,emptyWorkspace:emptyWorkspace&&!unmanagedFolders.length,guideAutoShown,baSelectedSources,delivery,unifiedRepository,usedRoles,designState,approvedDesignHash,blueprintRegister,blueprintAssessment,health,aiService,unmanagedFolders,brState,exportRecoveryFailures:exportRecovery?.failures||[],jiraBrowseBaseUrl,roleSettings,timeline,modelStatus,recentProjects,projectReadiness,openingOffline,startupScan,startupSetup:await startupStatus(),serviceConfigured,serviceUrl,coordinationProvider:coordinationProvider(),remoteLinks:links,autoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.autoSync.'+activeProject.id,false)),jiraAutoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.jiraAutoSync.'+activeProject.id,false)),discovery:discoveryState,flow:flowState,type:'state',projects,techStacks,activeId:openingFlow.phase==='open'?activeProject?.id||null:null,opening:openingFlow.snapshot(),summary:openingFlow.phase==='open'?store?.summary()||{documents:0,chunks:0}:{documents:0,chunks:0},workspace:getWorkspace()?.uri.fsPath||null,extensionSettings,jiraTokenSaved,githubTokenSaved,catalog:await catalogUiState(),updates:updateStatus(),work:currentWork,roleSteps,consolidatedSdlc};
+  return {architectErrorLogCount:activeProject?.id?architectErrorLogs.count(activeProject.id):0,projectConnections,emptyWorkspace:emptyWorkspace&&!unmanagedFolders.length,guideAutoShown,baSelectedSources,delivery,unifiedRepository,usedRoles,designState,approvedDesignHash,blueprintRegister,blueprintAssessment,health,aiService,unmanagedFolders,brState,exportRecoveryFailures:exportRecovery?.failures||[],jiraBrowseBaseUrl,roleSettings,timeline,modelStatus,recentProjects,projectReadiness,openingOffline,startupScan,startupSetup:await startupStatus(),serviceConfigured,serviceUrl,coordinationProvider:coordinationProvider(),remoteLinks:links,autoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.autoSync.'+activeProject.id,false)),jiraAutoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.jiraAutoSync.'+activeProject.id,false)),discovery:discoveryState,flow:flowState,type:'state',projects,techStacks,activeId:openingFlow.phase==='open'?activeProject?.id||null:null,opening:openingFlow.snapshot(),summary:openingFlow.phase==='open'?store?.summary()||{documents:0,chunks:0}:{documents:0,chunks:0},workspace:getWorkspace()?.uri.fsPath||null,extensionSettings,jiraTokenSaved,githubTokenSaved,catalog:await catalogUiState(),updates:updateStatus(),work:currentWork,roleSteps,consolidatedSdlc};
 }
 async function publishBlueprintState(){
   if(!dashboard||!activeProject)return;
@@ -4204,12 +4204,12 @@ async function handleDashboardMessage(msg){
       }
       case 'architectDownloadErrorLog':{
         requireOpened();
-        const kind=String(msg.kind||'');
+        const kind='all';
         const item=architectErrorLogs.get(activeProject.id,kind);
-        if(!item)throw Error('No '+kind+' failure log is available for the selected project. Run the check again first.');
+        if(!item)throw Error('No technology stack errors have been recorded for this project during this ATGV session.');
         const name=architectErrorLogs.filename(activeProject.id,kind);
         const target=await vscode.window.showSaveDialog({
-          title:'Save ATGV Technology Stack Error Log',
+          title:'Save ATGV Unified Technology Stack Error Report',
           defaultUri:vscode.Uri.file(path.join(require('node:os').homedir(),name)),
           filters:{'Text logs':['log','txt']},saveLabel:'Save Error Log'
         });
@@ -4217,7 +4217,7 @@ async function handleDashboardMessage(msg){
           // The report is already sanitized and is never automatically written
           // inside the Git checkout. The user picks its destination explicitly.
           await vscode.workspace.fs.writeFile(target,Buffer.from(item.content,'utf8'));
-          await dashboard?.webview.postMessage({type:'architectErrorLogSaved',projectId:activeProject.id,kind,message:'Error log saved: '+target.fsPath});
+          await dashboard?.webview.postMessage({type:'architectErrorLogSaved',projectId:activeProject.id,kind,count:item.count,message:'Unified error log saved: '+target.fsPath});
         }
         break;
       }
@@ -4505,7 +4505,7 @@ async function handleDashboardMessage(msg){
         if(result.running!==true)throw Error('Run Server did not confirm a healthy running application. Approval remains disabled.');
         const healthyState=await require('../../architect-server').verify({root,stackId:project.techStackId});
         const verification=require('../../architect-server-verification').evidenceIfHealthy(project,healthyState);
-        if(!verification)throw Error('The server started, but verification did not match the saved stack commit or HTTP health. Review the server error log, then retry Run Server.');
+        if(!verification)throw Error('The server started, but verification did not match the saved stack commit or HTTP health. Download All Error Logs, then retry Run Server.');
         architectServerOperationSerial++;
         activeProject=await registry.update(activeProject.id,{...project,techStackServerVerification:verification});
         architectErrorLogs.clear(activeProject.id,'server');
@@ -7029,7 +7029,7 @@ async function handleDashboardMessage(msg){
     if(['designDelete','designOpenMockupBrowser'].includes(msg.command))await dashboard?.webview.postMessage({type:'designActionError',message:e.message});
     if(msg.command.startsWith('delivery'))await dashboard?.webview.postMessage({type:'deliveryOperationError',message:e.message});
     if(String(msg.command||'').startsWith('uxDesign')||String(msg.command||'').startsWith('uxPipeline')||String(msg.command||'').startsWith('uxFramework')||msg.command==='uxPrototypeOpenBrowser'||msg.command==='uxPublishFrontend')await dashboard?.webview.postMessage({type:'uxDesignError',projectId:activeProject?.id,message:e.message});
-    const architectLogKinds={architectSaveStack:'save',architectResetStack:'reset',architectTestStack:'test',architectRunServer:'server',architectStopServer:'server',architectApproveStack:'approval',architectCheckStackUpdates:'catalog',architectPullStackUpdates:'catalog'};
+    const architectLogKinds={architectSaveStack:'save',architectResetStack:'reset',architectTestStack:'test',architectRunServer:'server',architectStopServer:'server',architectServerStatus:'server',architectApproveStack:'approval',architectCheckStackUpdates:'catalog',architectPullStackUpdates:'catalog'};
     if(architectLogKinds[msg.command]&&activeProject?.id){
       const kind=architectLogKinds[msg.command];
       const last=developerGit.localLogs();
@@ -7040,9 +7040,9 @@ async function handleDashboardMessage(msg){
         details:e.diagnosticLogs||ownOutput||e.stack||e.message,
         version:require('../../../package.json').atgvDisplayVersion});
     }
-    if(['architectSaveStack','architectResetStack','architectTestStack','architectApproveStack'].includes(msg.command))await dashboard?.webview.postMessage({type:'architectStackError',projectId:activeProject?.id,command:msg.command,logAvailable:true,logKind:architectLogKinds[msg.command],message:architectErrorLogs.redact(e.message)});
-    if(['architectCheckStackUpdates','architectPullStackUpdates'].includes(msg.command))await dashboard?.webview.postMessage({type:'architectCatalogAction',projectId:activeProject?.id,success:false,logAvailable:true,logKind:'catalog',message:architectErrorLogs.redact(e.message)});
-    if(['architectRunServer','architectStopServer','architectServerStatus'].includes(msg.command))await dashboard?.webview.postMessage({type:'architectServerError',projectId:activeProject?.id,command:msg.command,logAvailable:true,message:architectErrorLogs.redact(e.message)});
+    if(['architectSaveStack','architectResetStack','architectTestStack','architectApproveStack'].includes(msg.command))await dashboard?.webview.postMessage({type:'architectStackError',projectId:activeProject?.id,command:msg.command,logAvailable:true,logKind:architectLogKinds[msg.command],logCount:architectErrorLogs.count(activeProject?.id),failedStep:/local preview port is occupied/i.test(String(e.message||''))?'server':undefined,message:architectErrorLogs.redact(e.message)});
+    if(['architectCheckStackUpdates','architectPullStackUpdates'].includes(msg.command))await dashboard?.webview.postMessage({type:'architectCatalogAction',projectId:activeProject?.id,success:false,logAvailable:true,logKind:'catalog',logCount:architectErrorLogs.count(activeProject?.id),message:architectErrorLogs.redact(e.message)});
+    if(['architectRunServer','architectStopServer','architectServerStatus'].includes(msg.command))await dashboard?.webview.postMessage({type:'architectServerError',projectId:activeProject?.id,command:msg.command,logAvailable:true,logCount:architectErrorLogs.count(activeProject?.id),message:architectErrorLogs.redact(e.message)});
     if(msg.command==='deleteBREverywhere')await dashboard?.webview.postMessage({type:'brDeletionProgress',projectId:activeProject?.id,phase:'failed',message:'Deletion stopped: '+String(e.message||e).slice(0,450),deleted:0,total:0});
     if(['developerBrRun','developerBrPreviewDraft'].includes(msg.command))await dashboard?.webview.postMessage({type:'developerBrFailed',projectId:activeProject?.id,brId:msg.brId,stage:'failed',message:e.message});
     if(['developerBrRetryLocal','developerBrStartServer','developerBrStop','developerBrOpenPreview'].includes(msg.command))await dashboard?.webview.postMessage({type:'developerBrActionError',projectId:activeProject?.id,brId:msg.brId||developerBrLast?.brId||'',message:e.message});
