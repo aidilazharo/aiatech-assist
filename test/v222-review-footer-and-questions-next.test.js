@@ -46,5 +46,5 @@ test('release metadata is v0.2.98',()=>{
  const pkg=require('../package.json');
  assert.match(pkg.version,/^\d+\.\d+\.\d+$/);
  assert.equal(pkg.atgvDisplayVersion,pkg.version);
- assert.match(host,/atgvDisplayVersion :'0\.3\.55'/);
+ assert.ok(host.includes("atgvDisplayVersion :'"+pkg.version+"'"));
 });

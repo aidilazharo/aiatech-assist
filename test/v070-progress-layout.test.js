@@ -37,5 +37,5 @@ test('Sidebar buttons have thin borders without removing active styling',()=>{
 test('Release metadata is consistent',()=>{
  assert.match(manifest.version,/^\d+\.\d+\.\d+$/);
  assert.equal(manifest.atgvDisplayVersion,manifest.version);
- assert.match(html,/0\.3\.55/);
+ assert.ok(html.includes("atgvDisplayVersion :'"+manifest.version+"'"));
 });

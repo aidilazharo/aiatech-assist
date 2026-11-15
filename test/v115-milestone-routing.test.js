@@ -55,6 +55,6 @@ test('all main sidebar route values have a corresponding navigation branch',()=>
 test('v0.1.37 display version agrees with packaging SemVer and no editor group is created by previews',()=>{
  const pkg=require('../package.json');
  assert.match(pkg.version,/^\d+\.\d+\.\d+$/);assert.equal(pkg.atgvDisplayVersion,pkg.version);
- assert.match(host,/atgvDisplayVersion :'0\.3\.55'/);
+ assert.ok(host.includes("atgvDisplayVersion :'"+pkg.version+"'"));
  assert.doesNotMatch(js,/editorLayoutTwoColumns|ViewColumn\.Two/);
 });

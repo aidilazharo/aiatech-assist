@@ -57,5 +57,5 @@ test('design revisions expose direct delete action and retain the approved workf
 test('v0.1.37 metadata and 9-step workflow remain consistent',()=>{
  const pkg=require('../package.json');assert.match(pkg.version,/^\d+\.\d+\.\d+$/);assert.equal(pkg.atgvDisplayVersion,pkg.version);
  assert.equal((host.match(/class="workflow-step atgv-milestone"/g)||[]).length,10);
- assert.match(host,/atgvDisplayVersion :'0\.3\.55'/);
+ assert.ok(host.includes("atgvDisplayVersion :'"+pkg.version+"'"));
 });
