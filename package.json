@@ -2,8 +2,8 @@
   "name": "atgv-aiatech-assist",
   "displayName": "ATGV AIATECH Assist",
   "description": "Webview-based SDLC work with ownership handoffs, Jira/GitHub actions, Confluence document sync and approved AI draft orchestration.",
-  "version": "0.3.64",
-  "atgvDisplayVersion": "0.3.64",
+  "version": "0.3.65",
+  "atgvDisplayVersion": "0.3.65",
   "publisher": "aia-my",
   "private": true,
   "license": "UNLICENSED",
@@ -124,11 +124,6 @@
           "default": "https",
           "description": "Codex connection mode: HTTPS compatibility (recommended behind restrictive networks) or Codex default transport which may use WebSocket."
         },
-        "atgvAssist.updates.releaseRepositoryUrl": {
-          "type": "string",
-          "default": "https://github.com/aidilazharo/aiatech-assist/releases",
-          "description": "Trusted GitHub repository Releases URL checked for ATGV VSIX upgrades. Use https://github.com/OWNER/REPO/releases. Preserved across ATGV resets."
-        },
         "atgvAssist.updates.autoCheckExtension": {
           "type": "boolean",
           "default": true,
@@ -173,5 +168,9 @@
   "author": {
     "name": "Muhamad Aidil Azhar Salim",
     "email": "muhamadaidilazhar.salim@aia.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aidilazharo/aiatech-assist.git"
   }
 }
