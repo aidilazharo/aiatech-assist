@@ -48,7 +48,7 @@ async function portAvailable(url){
  const u=new URL(url);
  return new Promise(resolve=>{
   const server=net.createServer();server.once('error',()=>resolve(false));
-  server.listen(Number(u.port),u.hostname,()=>server.close(()=>resolve(true)));
+  server.listen(Number(u.port),u.hostname==='[::1]'?'::1':u.hostname,()=>server.close(()=>resolve(true)));
  });
 }
 // Probe a preferred localhost preview URL, then select an unused port without
