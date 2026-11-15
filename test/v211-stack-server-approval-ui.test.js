@@ -52,6 +52,8 @@ test('server approval is enforced in host and re-evaluated after server status c
  assert.match(block,/gate\.requireServerVerification\(verifiedProject\)/);
  assert.match(host,/techStackServerVerification:verification/);
  assert.match(host,/techStackServerVerification:null/);
- assert.match(ui,/\!serverVerified\|\|approved/);
+ assert.match(ui,/const canRequestApproval=!!\(saved&&tested&&prepared\?\.remotePushed===true\)/);
+ assert.match(ui,/architectApproveStack'\)\.disabled=architectActionBusy\|\|!canRequestApproval\|\|approved/);
+ assert.match(block,/if\(!serverState\.running\|\|!serverState\.healthy\)throw Error/);
  assert.match(ui,/architectServerSnapshotProjectId===activeId/);
 });
