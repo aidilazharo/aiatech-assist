@@ -3,6 +3,10 @@
 // through VS Code's Save dialog. No project log file is generated or committed.
 const entries=new Map();
 const traces=new Map();
+// Retain recent project-specific errors even after successful retries.
+const history=new Map();
+const HISTORY_LIMIT=24;
+const COMBINED_LIMIT=1024*1024;
 const LOG_LIMIT=512*1024;
 const kinds={save:'Save Stack',install:'Install Dependencies',reset:'Reset Tech Stack',test:'Test & Run',server:'Run Server',approval:'Approve Stack',catalog:'Catalog Update'};
 function redact(input){
@@ -42,14 +46,41 @@ function store({projectId,kind,stackId='',repository='',branch='',error='',detai
  ].join('\n');
  const clean=redact(body);
  const content=clean.length>LOG_LIMIT?'[Earlier log output omitted; last 512 KiB retained]\n'+clean.slice(-LOG_LIMIT):clean;
- entries.set(key,{content,createdAt:new Date().toISOString(),kind,projectId:String(projectId)});
+ const report={content,createdAt:new Date().toISOString(),kind,projectId:String(projectId)};
+ entries.set(key,report);
  if(entries.size>30)entries.delete(entries.keys().next().value);
- return {available:true,kind};
+ const projectKey=String(projectId),prior=history.get(projectKey)||[];
+ history.delete(projectKey);
+ history.set(projectKey,[...prior,report].slice(-HISTORY_LIMIT));
+ while(history.size>30)history.delete(history.keys().next().value);
+ return {available:true,kind,count:history.get(projectKey).length};
 }
-function get(projectId,kind){return entries.get(String(projectId)+'|'+kindKey(kind))||null;}
+function count(projectId){return history.get(String(projectId))?.length||0;}
+function combined(projectId){
+ const items=history.get(String(projectId))||[];
+ if(!items.length)return null;
+ const header=[
+  'ATGV AIATECH Assist — Unified Technology Stack Error Report',
+  'Exported: '+new Date().toISOString(),
+  'Project: '+String(projectId),
+  'Recorded failures: '+items.length,
+  'Scope: Save Stack, Reset, Dependencies, Test & Run, Server, Approval and Catalog',
+  'Errors are chronological. This report retains recent in-session history.',
+  ''
+ ].join('\n');
+ const sections=items.map((item,index)=>[
+  '========== ERROR '+(index+1)+' / '+items.length+' · '+kinds[item.kind]+' · '+item.createdAt+' ==========',
+  item.content
+ ].join('\n')).join('\n\n');
+ const full=header+'\n'+sections+'\n';
+ const truncated=full.length>COMBINED_LIMIT;
+ const content=truncated?header+'\n[Earlier diagnostic output omitted; latest 1 MiB retained]\n'+full.slice(-COMBINED_LIMIT):full;
+ return {content:redact(content),createdAt:items[items.length-1].createdAt,kind:'all',projectId:String(projectId),count:items.length,truncated};
+}
+function get(projectId,kind){return kind==='all'?combined(projectId):entries.get(String(projectId)+'|'+kindKey(kind))||null;}
 function clear(projectId,kind){const key=String(projectId)+'|'+kindKey(kind);entries.delete(key);traces.delete(key);}
 function filename(projectId,kind){
  const safe=String(projectId||'project').toLowerCase().replace(/[^a-z0-9_-]/g,'-').slice(0,45)||'project';
- return 'atgv-'+safe+'-'+kindKey(kind)+'-error-'+new Date().toISOString().replace(/[:.]/g,'-')+'.log';
+ return 'atgv-'+safe+'-'+(kind==='all'?'unified':kindKey(kind))+'-errors-'+new Date().toISOString().replace(/[:.]/g,'-')+'.log';
 }
-module.exports={redact,store,get,clear,begin,append,filename};
+module.exports={redact,store,get,count,clear,begin,append,filename};
