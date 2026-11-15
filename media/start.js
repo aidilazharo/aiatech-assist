@@ -1739,7 +1739,7 @@ function renderArchitectRequirements(project){
   ['dependencies','Dependencies','Required packages / native restore',verified],
   ['tests','Automated tests',unit||'Selected stack test command',tested],
   ['build','Application build',stack.buildCommand||'Selected stack build command',tested],
-  ['server','Application server',architectServerRequirementReady(project,stackId)?'HTTP health verified for saved Git revision'+(architectServerSnapshot.running?' · Running':' · Stopped'):(stack.previewUrl||'Selected stack preview'),architectServerRequirementReady(project,stackId)],
+  ['server','Application server',architectServerRequirementReady(project,stackId)?'HTTP health verified for saved Git revision'+(architectServerSnapshot.running?' · Running · '+(architectServerSnapshot.url||project?.techStackPrepared?.previewUrl||stack.previewUrl):' · Stopped'):(architectServerSnapshot.url||project?.techStackPrepared?.previewUrl||stack.previewUrl||'Selected stack preview'),architectServerRequirementReady(project,stackId)],
   ['push','Remote stack branch',project?.techStackPrepared?.branch||'Push verified bootstrap/migration branch (main unchanged)',pushed],
   ['approval','Architect approval','Required before Developer workflow',approved]
  ];
@@ -6801,6 +6801,10 @@ function updateArchitectServerControls(saved){
  toggle.title=running?'Stop this stack’s ATGV-managed app server':'Start this stack’s app server';
  $('architectServerStatus').textContent=architectServerSnapshot.message||'App server stopped';
  $('architectServerStatus').dataset.running=architectServerSnapshot.running?'true':'false';
+ const address=$('architectServerAddress'),url=architectServerSnapshotProjectId===activeId&&running?String(architectServerSnapshot.url||''):'';
+ address.textContent=url?'Preview address: '+url:'';
+ address.title=url?'Current verified local application address: '+url:'';
+ address.classList.toggle('hidden',!url);
 }
 function architectServerAction(command){
  if(architectServerBusy||!activeId)return;
