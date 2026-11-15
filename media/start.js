@@ -6941,7 +6941,7 @@ window.addEventListener('message',event=>{
    if(!architectServerBusy&&requestId>=architectServerStatusAccepted){architectServerStatusAccepted=requestId;architectServerSnapshot=msg.value||{running:false};architectServerSnapshotProjectId=msg.projectId;const active=projects.find(p=>p.id===activeId);updateArchitectServerControls(!!active?.techStackPrepared);syncArchitectStackButtons(active);renderArchitectRequirements(active);refreshArchitectStageClasses(active);}
  }
  if(msg.type==='architectServerState'&&msg.projectId===activeId){
-   architectServerStatusAccepted=architectServerStatusRequest;
+   architectServerStatusAccepted=architectServerStatusRequest+1;
    architectServerBusy=false;architectServerSnapshot=msg.value||{running:false};architectServerSnapshotProjectId=msg.projectId;
    updateArchitectServerControls(!!projects.find(p=>p.id===activeId)?.techStackPrepared);syncArchitectStackButtons(projects.find(p=>p.id===activeId));renderArchitectRequirements(projects.find(p=>p.id===activeId));refreshArchitectStageClasses(projects.find(p=>p.id===activeId));
    // Fetch the actual managed-process state after the Save/Run/Stop render cycle.
