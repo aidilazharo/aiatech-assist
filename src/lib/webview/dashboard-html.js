@@ -211,7 +211,7 @@ function html(webview,{resumeLibrary=false}={}){
       <div class="stack actions"><button type="button" id="backupLocalContent">Backup Local Content</button><button type="button" id="restoreLocalContent" class="secondary">Restore Local Content</button></div>
       <p id="localBackupStatus" class="muted" role="status" aria-live="polite">No backup or restore running.</p>
     </section></div></details>
-    <details class="ext-settings-accordion" id="settingsSoftwareUpdateGroup" data-requirement="optional"><summary><span>8. Extension &amp; SDLC Library Updates</span><span class="ext-settings-badge" data-state="optional">Optional</span></summary><div class="ext-settings-content"><section>
+    <details class="ext-settings-accordion" id="settingsSoftwareUpdateGroup" data-requirement="required"><summary><span>8. Extension &amp; SDLC Library Updates</span><span class="ext-settings-badge" data-state="required">Required</span></summary><div class="ext-settings-content"><section>
       <p class="muted">ATGV checks the configured GitHub repository Releases page and the SDLC Catalog's main branch. Update checks never modify local projects or remote repositories.</p>
       <div class="software-update-toolbar" role="group" aria-label="GitHub release URL and update actions">
         <label class="software-update-url" for="softwareReleaseRepositoryUrl"><span class="sr-only">GitHub Extension Releases URL</span><input id="softwareReleaseRepositoryUrl" aria-label="GitHub Extension Releases URL" type="url" required spellcheck="false" placeholder="https://github.com/OWNER/REPOSITORY/releases" autocomplete="off" value="https://github.com/aidilazharo/aiatech-assist/releases"></label>
