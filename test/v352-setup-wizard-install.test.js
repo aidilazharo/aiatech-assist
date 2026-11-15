@@ -73,7 +73,10 @@ test('Installer is gated by explicit user approval and emits progress after a tr
  const runtime=read('src/lib/runtime/extension-runtime.js');
  assert.match(runtime,/case 'startupInstallModule'/);
  assert.match(runtime,/startupInstall\.plan\(id\)/);
- assert.match(runtime,/vscode\.window\.showWarningMessage\(/);
+ assert.match(runtime,/offerBrandedPrerequisiteInstall\(plan\)/);
+ assert.match(runtime,/pendingPrerequisiteInstallOffers/);
+ assert.match(runtime,/case 'startupPrerequisiteDecision':/);
+ assert.match(runtime,/plan\.command/);
  assert.match(runtime,/startupInstall\.install\(id/);
  assert.match(runtime,/status:'error'/);
 });

@@ -44,11 +44,11 @@ async function install(id,{platform=process.platform,spawnImpl=spawn,onProgress=
   const timer=setTimeout(()=>{child.kill();finish(Error(`Installation timed out: ${id}. Review package manager logs.`));},timeoutMs);
   function finish(error){
    if(finished)return;finished=true;clearTimeout(timer);
-   if(error){reject(error);return;}
-   resolve({status:'complete',...step,detail:`${id} installation command completed. Refresh to verify; a VS Code restart may be needed for PATH changes.`,output:tail.slice(-1500)});
+   if(error){error.installOutput=tail.slice(-12000);reject(error);return;}
+   resolve({status:'complete',...step,detail:`${id} installation command completed. Refresh to verify; a VS Code restart may be needed for PATH changes.`,output:tail.slice(-10000)});
   }
   function update(chunk){
-   tail=(tail+String(chunk||'')).slice(-2000);
+   tail=(tail+String(chunk||'')).slice(-12000);
    const now=Date.now();if(now-lastUpdate<600)return;lastUpdate=now;
    const message=tail.split(/[\r\n]/).map(s=>s.trim()).filter(Boolean).at(-1)||'Installation in progress';
    onProgress({status:'running',detail:`${id}: ${message.slice(0,180)}`});
@@ -56,7 +56,7 @@ async function install(id,{platform=process.platform,spawnImpl=spawn,onProgress=
   child.stdout?.on('data',update);child.stderr?.on('data',update);
   child.once('error',error=>finish(Error(`Cannot launch installer for ${id}: ${error.message}`)));
   child.once('close',(code,signal)=>{
-   if(code!==0)finish(Error(`${id} installer failed (${signal||'exit '+code}). ${tail.slice(-400)}`));
+   if(code!==0){const failed=Error(`${id} installer failed (${signal||'exit '+code}). ${tail.slice(-400)}`);failed.exitCode=code;failed.signal=signal;finish(failed);}
    else finish();
   });
  });

@@ -6948,6 +6948,7 @@ const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluence
  githubUrl:'startupGithubUrl',projectRepoUrl:'startupProjectRepo',libraryRepoUrl:'startupLibraryRepo'};
 let startupFormInitialized=false,startupPrereqRequested=false,startupConnectionVerified=false,startupSetupRequired=true,startupReturnToConnections=false;
 let startupVerifying=false,startupScanComplete=false,startupPage=0,startupInstallingModule='';
+let startupLastInstalledTool='';
 function startupPayload(){return Object.fromEntries(Object.entries(startupFieldMap).map(([key,id])=>[key,$(id).value.trim()]));}
 function renderStartupPage(){
  if(!startupSetupRequired)return;
@@ -6978,7 +6979,7 @@ function renderStartupConfig(config){
  if(required&&!startupPrereqRequested){startupPrereqRequested=true;send('startupReadiness');}
 }
 function renderStartupStackReadiness(result){
- const grid=$('startupStackGrid');grid.replaceChildren();
+ const grid=$('startupStackGrid');const expanded=new Set([...grid.querySelectorAll('details[open]')].map(x=>x.dataset.stackId));grid.replaceChildren();
  if(!result||!Array.isArray(result.stacks)){
   startupScanComplete=false;$('startupToolMessage').textContent='Unable to scan computer prerequisites. Select Refresh to retry.';
   renderStartupPage();return;
@@ -6987,7 +6988,7 @@ function renderStartupStackReadiness(result){
  const ready=result.stacks.filter(s=>s.ready).length;
  $('startupToolMessage').textContent=`${ready} of ${result.stacks.length} technology stacks have their required host tools available. Select a stack to inspect components.`;
  for(const stack of result.stacks){
-  const details=document.createElement('details');details.className='atgv-startup-stack '+(stack.ready?'is-ready':'is-missing');
+  const details=document.createElement('details');details.className='atgv-startup-stack '+(stack.ready?'is-ready':'is-missing');details.dataset.stackId=stack.id;details.open=expanded.has(stack.id)||stack.components.some(c=>c.id===startupLastInstalledTool);
   const summary=document.createElement('summary');
   const title=document.createElement('span');title.textContent=stack.name;
   const badge=document.createElement('span');badge.className='atgv-stack-ready';badge.textContent=stack.ready?'Ready':'Needs tools';
@@ -7005,7 +7006,10 @@ function renderStartupStackReadiness(result){
     button.setAttribute('aria-label',`Install ${component.id} prerequisite`);
     button.addEventListener('click',()=>{
      if(startupInstallingModule)return;
-     startupInstallingModule=component.id;button.disabled=true;button.textContent='Installing…';
+     startupInstallingModule=component.id;startupLastInstalledTool=component.id;button.disabled=true;button.textContent='Installing…';
+     for(const control of grid.querySelectorAll('.atgv-module-install'))control.disabled=true;
+     $('startupInstallFeedback').textContent='Preparing '+component.id+' installer. Confirmation is required before modifying the computer.';
+     $('startupInstallFeedback').className='atgv-startup-install-feedback muted';
      const progress=document.createElement('progress');progress.className='atgv-module-progress';progress.setAttribute('aria-label',`${component.id} installation in progress`);progress.max=100;
      description.append(progress);renderStartupPage();
      $('startupToolMessage').textContent=`Preparing ${component.id} installation…`;
@@ -7027,6 +7031,7 @@ function invalidateStartupConnection(){
 }
 for(const id of Object.values(startupFieldMap))$(id).addEventListener('input',invalidateStartupConnection);
 for(const id of ['startupAtlassianToken','startupGithubToken'])$(id).addEventListener('input',invalidateStartupConnection);
+for(const id of ['startupUnifiedLog','gateUnifiedLog'])$(id).addEventListener('click',()=>send('startupExportUnifiedLog'));
 $('startupRefresh').addEventListener('click',()=>{
  if(startupInstallingModule)return;
  startupScanComplete=false;
@@ -7055,18 +7060,24 @@ window.addEventListener('message',event=>{
  if(message.type==='state'&&message.startupSetup)renderStartupConfig(message.startupSetup);
  if(message.type==='startupReadinessResult'){
   $('startupRefresh').disabled=false;
-  if(message.error){startupScanComplete=false;$('startupToolMessage').textContent=message.error;renderStartupPage();}
+  if(message.error){startupScanComplete=false;$('startupToolMessage').textContent=message.error;$('startupInstallFeedback').textContent='Prerequisite scan failed. Download Unified Error Log for details.';$('startupInstallFeedback').className='atgv-startup-install-feedback error';renderStartupPage();}
   else renderStartupStackReadiness(message.value);
  }
  if(message.type==='startupModuleProgress'){
   if(message.id!==startupInstallingModule)return;
   const status=String(message.status||'');
   $('startupToolMessage').textContent=message.detail||`Installing ${message.id}…`;
-  if(status==='complete'||status==='error'||status==='manual'){
+  if(['verified','unverified','complete','error','manual'].includes(status)){
+   $('startupInstallFeedback').textContent=message.detail||'Installer finished. Download Unified Error Log for verification details.';
+   $('startupInstallFeedback').className='atgv-startup-install-feedback '+(status==='verified'?'success':status==='manual'?'muted':'error');
    startupInstallingModule='';
    $('startupRefresh').disabled=true;startupScanComplete=false;renderStartupPage();
    send('startupReadiness');
   }
+ }
+ if(message.type==='startupDiagnosticSaved'){
+  $('startupInstallFeedback').textContent=message.message||'Unified startup diagnostics saved.';
+  $('startupInstallFeedback').className='atgv-startup-install-feedback success';
  }
  if(message.type==='startupConnectionsResult'){
   startupVerifying=false;$('startupTestConnections').disabled=false;
@@ -7077,6 +7088,48 @@ window.addEventListener('message',event=>{
   renderStartupPage();
  }
  if(message.type==='startupProceedResult'&&message.success){startupReturnToConnections=false;showStartupStep(false);$('gateQuery').focus();}
+});
+
+let activePrerequisiteRequest=null,prerequisitePriorFocus=null;
+function closePrerequisiteModal(action='Cancel'){
+ if(!activePrerequisiteRequest)return;
+ const pending=activePrerequisiteRequest;
+ activePrerequisiteRequest=null;
+ const modal=$('startupPrerequisiteModal');
+ modal.classList.add('hidden');modal.setAttribute('aria-hidden','true');
+ const oldFocus=prerequisitePriorFocus;prerequisitePriorFocus=null;
+ if(oldFocus&&oldFocus.isConnected)oldFocus.focus();
+ send('startupPrerequisiteDecision',{requestId:pending.requestId,id:pending.id,action});
+}
+$('startupPrerequisiteCancel').addEventListener('click',()=>closePrerequisiteModal('Cancel'));
+$('startupPrerequisiteInstall').addEventListener('click',()=>closePrerequisiteModal('Install'));
+$('startupPrerequisiteModal').addEventListener('keydown',event=>{
+ if(event.key==='Escape'){event.preventDefault();closePrerequisiteModal('Cancel');return;}
+ if(event.key==='Tab'){
+  const first=$('startupPrerequisiteCancel'),last=$('startupPrerequisiteInstall');
+  if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+  else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+ }
+});
+window.addEventListener('message',event=>{
+ const request=event.data||{};
+ if(request.type!=='startupPrerequisiteOffer'||!request.requestId)return;
+ if(activePrerequisiteRequest)closePrerequisiteModal('Cancel');
+ activePrerequisiteRequest={requestId:request.requestId,id:request.id};
+ prerequisitePriorFocus=document.activeElement;
+ const tool=String(request.id||'software').replace(/[^a-zA-Z0-9 -]/g,'');
+ $('startupPrerequisiteTitle').textContent=request.automatic?'Install '+tool+' prerequisite?':'Open '+tool+' installation guide?';
+ $('startupPrerequisiteDescription').textContent=request.automatic?
+  'Confirm that ATGV may run the approved installation command on your computer.':
+  'No automatic installer is approved for this platform. You can open official installation instructions.';
+ $('startupPrerequisiteCommand').textContent=String(request.command||'Official installation instructions');
+ $('startupPrerequisiteInstall').textContent=request.automatic?'Install':'Open Guide';
+ $('startupPrerequisiteAssurance').textContent=request.automatic?
+  'This action may download software, modify the host computer, and require administrator approval. Existing project files will not be changed by ATGV.':
+  'ATGV will open an external installation guide only. It will not execute an installer or modify existing project files.';
+ const modal=$('startupPrerequisiteModal');
+ modal.classList.remove('hidden');modal.setAttribute('aria-hidden','false');
+ $('startupPrerequisiteInstall').focus();
 });
 
 let displayedLibraryUpdate=null,libraryUpdatePriorFocus=null;

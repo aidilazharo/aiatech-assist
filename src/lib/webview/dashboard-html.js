@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.3.62';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.3.63';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -56,6 +56,15 @@ function html(webview,{resumeLibrary=false}={}){
     <p id="extensionUpgradeSource" class="muted"></p><p class="atgv-upgrade-assurance">Verified release asset and SHA-256 checksum. Installation requires your confirmation.</p>
     <div class="atgv-upgrade-actions"><button type="button" id="extensionUpgradeLater" class="secondary">Later</button><button type="button" id="extensionUpgradeView" class="secondary">View Release</button><button type="button" id="extensionUpgradeInstall">Install Upgrade</button></div>
   </div></div>
+  <div id="startupPrerequisiteModal" class="modal-overlay hidden" aria-hidden="true"><div class="modal-card atgv-upgrade-modal atgv-prerequisite-modal" role="dialog" aria-modal="true" aria-labelledby="startupPrerequisiteTitle" aria-describedby="startupPrerequisiteDescription startupPrerequisiteAssurance">
+    <div class="atgv-upgrade-brand"><img src="${brand}" alt="ATGV AIATECH Assist logo"><div><strong>AIATECH ASSIST</strong><span>PREREQUISITE INSTALLATION</span></div></div>
+    <span class="atgv-upgrade-kicker">INSTALLATION REQUIRES APPROVAL</span>
+    <h2 id="startupPrerequisiteTitle">Install required software?</h2>
+    <p id="startupPrerequisiteDescription">Review the installer before changing your computer.</p>
+    <div class="atgv-prerequisite-command"><small>APPROVED INSTALLATION COMMAND</small><code id="startupPrerequisiteCommand"></code></div>
+    <p id="startupPrerequisiteAssurance" class="atgv-upgrade-assurance">This action may download software, modify the host computer, and require administrator approval. ATGV will not change existing project files.</p>
+    <div class="atgv-upgrade-actions"><button type="button" id="startupPrerequisiteCancel" class="secondary">Cancel</button><button type="button" id="startupPrerequisiteInstall">Install</button></div>
+  </div></div>
   <div id="libraryUpdateModal" class="modal-overlay hidden" aria-hidden="true"><div class="modal-card atgv-upgrade-modal" role="dialog" aria-modal="true" aria-labelledby="libraryUpdateTitle" aria-describedby="libraryUpdateDescription">
     <div class="atgv-upgrade-brand"><img src="${brand}" alt="ATGV AIATECH Assist logo"><div><strong>AIATECH ASSIST</strong><span>VERIFIED SDLC LIBRARY UPDATE</span></div></div>
     <span class="atgv-upgrade-kicker">UPDATE AVAILABLE</span><h2 id="libraryUpdateTitle">An SDLC Library update is ready</h2>
@@ -100,6 +109,8 @@ function html(webview,{resumeLibrary=false}={}){
        <p id="startupToolMessage" class="muted" role="status" aria-live="polite">Checking installed runtimes and command-line tools…</p>
        <div id="startupStackGrid" class="atgv-startup-stack-grid"></div>
        <p class="muted">Select a stack to inspect its components. Install missing tools individually, then Refresh to check them. These checks confirm host prerequisites, not a completed application build.</p>
+       <p id="startupInstallFeedback" class="atgv-startup-install-feedback muted" role="status" aria-live="polite"></p>
+       <div class="atgv-startup-diagnostics-footer"><button type="button" id="startupUnifiedLog" class="secondary" title="Download persistent installation results, detection checks and project-opening errors">Download Unified Error Log</button><span class="muted">Includes installer status, verification and troubleshooting details.</span></div>
       </div>
       <form id="startupConnectionForm" class="atgv-startup-card hidden"><h3>Jira, Confluence &amp; GitHub connections</h3><div class="form-grid atgv-startup-connection-grid">
        <div class="field"><label for="startupJiraUrl">Jira URL</label><input type="url" id="startupJiraUrl" placeholder="https://aiamy-jira-azure.atlassian.net" required></div>
@@ -123,7 +134,7 @@ function html(webview,{resumeLibrary=false}={}){
       <div id="gateRemoteSection" class="hidden"><div class="gate-local-header"><h2>Confluence Spaces</h2><span id="gateResultsCount" class="muted"></span></div><div id="gateRemote" class="gate-list"></div></div>
       <div id="gateWorkspaceSection"><div class="gate-local-header"><h2>Workspace Projects</h2></div><div id="gateLocal" class="gate-list"></div></div>
       <section id="gateUnmanagedSection" class="hidden" aria-label="Unregistered project folders"><h3>Existing folders to import</h3><p class="muted">These folders already exist under projects/ but are not registered. Import preserves their files and normalizes project IDs to lowercase.</p><div id="gateUnmanaged" class="gate-list"></div></section>
-      <div class="atgv-startup-footer gate-search-footer"><button id="gateSearchPrevious" type="button" class="secondary">← Previous</button><p role="status" class="muted">Choose a project to open. Projects are never opened automatically.</p></div>
+      <div class="atgv-startup-footer gate-search-footer"><button id="gateUnifiedLog" type="button" class="secondary" title="Download prerequisite and project-opening diagnostic log">Unified Error Log</button><button id="gateSearchPrevious" type="button" class="secondary">← Previous</button><p role="status" class="muted">Choose a project to open. Projects are never opened automatically.</p></div>
     </section>
     </section>
    </main>

@@ -43,6 +43,7 @@ const releaseUpdater=require('../updates/github-release-updater');
 const startupReadiness=require('../startup-readiness');
 const startupSetup=require('../startup-setup');
 const startupInstall=require('../startup-install');
+const startupDiagnostics=require('../startup-diagnostics');
 const jiraControl=require('../../jira-change-control');
 const jiraDuplicates=require('../../jira-duplicate-cleanup');
 const jiraProjectInventory=require('../../jira-project-inventory');
@@ -109,9 +110,25 @@ const pendingAiConsents=new Map();
 const pendingHostDialogs=new Map();
 const pendingExtensionUpgradeOffers=new Map();
 const pendingLibraryUpdateOffers=new Map();
+const pendingPrerequisiteInstallOffers=new Map();
 let startupModuleInstalling=false;
 let startupSessionVerified=false;
 let startupVerifiedSignature='';
+async function recordStartupDiagnostic(entry){
+ try{return await startupDiagnostics.append(context.globalStorageUri.fsPath,entry);}
+ catch(error){report('Startup diagnostic write failed: '+error.message);return null;}
+}
+async function exportStartupDiagnostics(){
+ const content=await startupDiagnostics.report(context.globalStorageUri.fsPath);
+ const uri=await vscode.window.showSaveDialog({
+  title:'Save ATGV Unified Startup and Prerequisite Error Log',
+  defaultUri:vscode.Uri.file(path.join(require('node:os').homedir(),'atgv-unified-startup-errors.log')),
+  filters:{'Text logs':['log','txt']},saveLabel:'Save Unified Log'
+ });
+ if(uri){await vscode.workspace.fs.writeFile(uri,Buffer.from(content,'utf8'));
+  await dashboard?.webview.postMessage({type:'startupDiagnosticSaved',message:'Unified error log saved to '+uri.fsPath});
+ }
+}
 async function askHostDialog(type,message,opts={}){
  if(!dashboard){
   if(type==='confirm'){
@@ -409,6 +426,30 @@ async function checkExtensionRelease({prompt=false,interactive=false}={}){
  }catch(error){extensionUpdateError=error.message;report('GitHub extension release check: '+error.message);if(interactive)throw error;return null;}
  finally{await publishUpdateStatus();}
 }
+// A desktop prerequisite may change the host system. Keep the approved command
+// on the extension host and request explicit consent from the branded webview.
+async function offerBrandedPrerequisiteInstall(plan){
+ const message='Install '+plan.id+' prerequisite using '+plan.summary+'? This may download software, modify the host computer, and require administrator approval. Existing project files will not be changed by ATGV.';
+ if(!dashboard)return vscode.window.showWarningMessage(message,{modal:true},'Install');
+ const requestId=crypto.randomUUID();
+ return new Promise(resolve=>{
+  const finish=answer=>{
+   const entry=pendingPrerequisiteInstallOffers.get(requestId);
+   if(!entry)return;
+   clearTimeout(entry.timer);
+   pendingPrerequisiteInstallOffers.delete(requestId);
+   resolve(answer==='Install'?'Install':undefined);
+  };
+  const timer=setTimeout(()=>finish(undefined),120000);
+  timer.unref?.();
+  pendingPrerequisiteInstallOffers.set(requestId,{resolve:finish,timer,toolId:plan.id});
+  Promise.resolve(dashboard.webview.postMessage({
+   type:'startupPrerequisiteOffer',requestId,
+   id:plan.id,command:plan.summary,automatic:!!plan.command
+  })).then(delivered=>{if(!delivered)finish(undefined);}).catch(()=>finish(undefined));
+ });
+}
+
 async function offerBrandedLibraryUpdate({repository,installedVersion,installedSha,remoteSha}){
  const message='An SDLC Library update is available on '+repository+'/main ('+remoteSha.slice(0,12)+'). Download the verified catalog? Active project files remain unchanged.';
  if(!dashboard)return vscode.window.showInformationMessage(message,{modal:true},'Pull Library','Later');
@@ -1113,7 +1154,7 @@ async function start(options={}){
   // handshake as soon as its scripts execute. Do not lose that first message.
   dashboard.webview.onDidReceiveMessage(message=>{guarded(()=>handleDashboardMessage(message));});
   dashboard.webview.html=html(dashboard.webview);webviewVendorDir=installedVendorAssets?.dir||null;
-  dashboard.onDidDispose(()=>{for(const [key,item] of pendingHostDialogs){clearTimeout(item.timer);item.resolve(undefined);pendingHostDialogs.delete(key);}for(const [key,item] of pendingExtensionUpgradeOffers){clearTimeout(item.timer);item.resolve('Later');pendingExtensionUpgradeOffers.delete(key);}for(const [key,item] of pendingLibraryUpdateOffers){clearTimeout(item.timer);item.resolve('Later');pendingLibraryUpdateOffers.delete(key);}dashboard=undefined;pendingTests={jira:null,github:null};if(modelStatusPoll){clearInterval(modelStatusPoll);modelStatusPoll=null;}});
+  dashboard.onDidDispose(()=>{for(const [key,item] of pendingHostDialogs){clearTimeout(item.timer);item.resolve(undefined);pendingHostDialogs.delete(key);}for(const [key,item] of pendingExtensionUpgradeOffers){clearTimeout(item.timer);item.resolve('Later');pendingExtensionUpgradeOffers.delete(key);}for(const [key,item] of pendingLibraryUpdateOffers){clearTimeout(item.timer);item.resolve('Later');pendingLibraryUpdateOffers.delete(key);}for(const [key,item] of pendingPrerequisiteInstallOffers){item.resolve(undefined);}dashboard=undefined;pendingTests={jira:null,github:null};if(modelStatusPoll){clearInterval(modelStatusPoll);modelStatusPoll=null;}});
   if(modelStatusPoll)clearInterval(modelStatusPoll);
   modelStatusPoll=setInterval(()=>{invalidateModelStatus();if(dashboard)refreshDashboard().catch(e=>report('Model badge refresh: '+e.message));},60000);
   modelStatusPoll.unref?.();
@@ -1357,8 +1398,17 @@ async function openVerifiedProject(){
   const p=await registry.read(openingFlow.candidate.id);
   if(p.settings?.confluence?.spaceKey!==openingFlow.candidate.settings?.confluence?.spaceKey)
     throw new Error('Project changed since initialization. Select and test it again.');
-  await activateProject(p.id);
+  // Set the confirmed opening state before project activation publishes any
+  // webview or background service state. Keep it reversible on failure.
   openingFlow.opened();
+  try{await activateProject(p.id);}
+  catch(error){
+   openingFlow.phase='initialized';
+   if(activeProject?.id===p.id){activeProject=undefined;store=undefined;++activationEpoch;}
+   await recordStartupDiagnostic({stage:'project-opening',projectId:p.id,status:'failed',detail:error.message});
+   throw error;
+  }
+  await recordStartupDiagnostic({stage:'project-opening',projectId:p.id,status:'opened'});
   await rememberOpened(p.id);
   await focusAtgvWorkspace();
   return `Opened ${p.name}. SDLC navigation is now available.`;
@@ -3571,38 +3621,68 @@ async function handleDashboardMessage(msg){
     await ready;
     switch(msg.command){
       case 'startupReadiness':{
-        try{const result=await startupReadiness.check();await dashboard?.webview.postMessage({type:'startupReadinessResult',value:result});}
-        catch(error){await dashboard?.webview.postMessage({type:'startupReadinessResult',error:error.message});}
+        try{
+          const result=await startupReadiness.check();
+          const tools=Object.entries(result.tools||{}).map(([name,item])=>name+': '+(item.installed?'detected '+item.version+' via '+(item.source||'PATH'):'not detected'+(item.error?' ('+item.error+')':''))).join(' | ');
+          await recordStartupDiagnostic({stage:'readiness-scan',status:'complete',detail:tools});
+          await dashboard?.webview.postMessage({type:'startupReadinessResult',value:result});
+        }
+        catch(error){
+          await recordStartupDiagnostic({stage:'readiness-scan',status:'failed',detail:error.message});
+          await dashboard?.webview.postMessage({type:'startupReadinessResult',error:error.message});
+        }
         break;
+      }
+      case 'startupExportUnifiedLog':{
+        await exportStartupDiagnostics();break;
       }
       case 'startupInstallModule':{
         const id=String(msg.id||'');
         if(startupModuleInstalling){
+          await recordStartupDiagnostic({stage:'prerequisite-install',tool:id,status:'rejected',detail:'Another installation is in progress.'});
           await dashboard?.webview.postMessage({type:'startupModuleProgress',id,status:'error',detail:'Another prerequisite installation is already running.'});
           break;
         }
         startupModuleInstalling=true;
         try{
           const plan=startupInstall.plan(id);
-          const proceed=await vscode.window.showWarningMessage(
-            `Install ${id} prerequisite using ${plan.summary}? This may download software, modify the host computer, and require administrator approval. Existing project files will not be changed by ATGV.`,
-            {modal:true},'Install');
+          await recordStartupDiagnostic({stage:'prerequisite-consent',tool:id,status:'prompted',command:plan.summary,detail:'Awaiting explicit approval.'});
+          const proceed=await offerBrandedPrerequisiteInstall(plan);
           if(proceed!=='Install'){
+            await recordStartupDiagnostic({stage:'prerequisite-consent',tool:id,status:'cancelled',command:plan.summary});
             await dashboard?.webview.postMessage({type:'startupModuleProgress',id,status:'manual',detail:`${id} installation cancelled.`});
             break;
           }
           if(!plan.command){
             await vscode.env.openExternal(vscode.Uri.parse(plan.guideUrl));
+            await recordStartupDiagnostic({stage:'prerequisite-install',tool:id,status:'manual',detail:'Opened official installation instructions; no installer executed.'});
             await dashboard?.webview.postMessage({type:'startupModuleProgress',id,status:'manual',detail:`No approved automatic installer for ${id} on this platform. Opened official installation instructions.`});
             break;
           }
+          await recordStartupDiagnostic({stage:'prerequisite-install',tool:id,status:'running',command:plan.summary});
           const result=await startupInstall.install(id,{onProgress:detail=>{
             void dashboard?.webview.postMessage({type:'startupModuleProgress',id,...detail}).catch(()=>{});
           }});
-          await dashboard?.webview.postMessage({type:'startupModuleProgress',id,status:'complete',detail:result.detail});
+          await recordStartupDiagnostic({stage:'prerequisite-install',tool:id,status:'command-succeeded',command:plan.summary,detail:result.detail,output:result.output,exitCode:0});
+          // A package-manager exit code alone is not evidence the tool exists.
+          // Recheck its actual executable/version before showing Installed.
+          const checked=await startupReadiness.check();
+          const found=checked.tools?.[id],requirements=checked.stacks.flatMap(stack=>stack.components).filter(c=>c.id===id&&c.required);
+          const compatible=found?.installed&&requirements.every(component=>component.compatible);
+          const verified=!!(found?.installed&&compatible);
+          await recordStartupDiagnostic({stage:'post-install-verification',tool:id,status:verified?'verified':'not-detected',
+            detectedVersion:found?.version||'',detectionSource:found?.source||'',detail:verified?'Executable found and version checked.':'Installer returned success but the executable was not detected or does not meet the required version. Restart VS Code to refresh PATH, then press Refresh. The log contains installer output.'});
+          await dashboard?.webview.postMessage({type:'startupModuleProgress',id,status:verified?'verified':'unverified',detail:verified?`${id} installed and verified: ${found.version}.`:`${id} installer finished, but the executable could not be verified. See Unified Error Log; restart VS Code and Refresh.`});
+          await dashboard?.webview.postMessage({type:'startupReadinessResult',value:checked});
         }catch(error){
-          await dashboard?.webview.postMessage({type:'startupModuleProgress',id,status:'error',detail:`${id} installation: ${error.message}`});
+          await recordStartupDiagnostic({stage:'prerequisite-install',tool:id,status:'failed',detail:error.message,output:error.installOutput||'',exitCode:error.exitCode,signal:error.signal});
+          await dashboard?.webview.postMessage({type:'startupModuleProgress',id,status:'error',detail:`${id} installation failed: ${error.message}. See Unified Error Log.`});
         }finally{startupModuleInstalling=false;}
+        break;
+      }
+      case 'startupPrerequisiteDecision':{
+        const entry=pendingPrerequisiteInstallOffers.get(msg.requestId);
+        if(entry&&entry.toolId===msg.id)entry.resolve(msg.action==='Install'?'Install':undefined);
         break;
       }
       case 'startupTestConnections':{
@@ -5827,6 +5907,7 @@ async function handleDashboardMessage(msg){
           await refreshDashboard();
         }catch(e){
           report('Project launch: '+e.message);
+          await recordStartupDiagnostic({stage:'project-opening',status:'failed',projectId:openingFlow.candidate?.id||'',detail:e.message});
           const localProject=openingFlow.candidate&&await registry.read(openingFlow.candidate.id).then(()=>true,e=>{if(e.code==='ENOENT')return false;throw e;});
           await dashboard?.webview.postMessage({type:'openingError',message:e.message,canOffline:!!localProject&&openingFlow.phase==='selected'});
           await refreshDashboard();
@@ -5835,7 +5916,7 @@ async function handleDashboardMessage(msg){
       }
       case 'openingOffline':{
         try{await guardedOpeningStep(()=>launchLocalOffline());await refreshDashboard();}
-        catch(e){report('Offline opening: '+e.message);await dashboard?.webview.postMessage({type:'openingError',message:e.message,canOffline:false});await refreshDashboard();}
+        catch(e){report('Offline opening: '+e.message);await recordStartupDiagnostic({stage:'project-opening-offline',status:'failed',projectId:openingFlow.candidate?.id||'',detail:e.message});await dashboard?.webview.postMessage({type:'openingError',message:e.message,canOffline:false});await refreshDashboard();}
         break;
       }
       case 'openingTest':{
