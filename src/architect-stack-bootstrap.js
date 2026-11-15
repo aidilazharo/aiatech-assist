@@ -51,6 +51,38 @@ async function portAvailable(url){
   server.listen(Number(u.port),u.hostname,()=>server.close(()=>resolve(true)));
  });
 }
+// Probe a preferred localhost preview URL, then select an unused port without
+// stopping or taking over any other process. All candidates keep the original path.
+async function allocateEphemeralPort(hostname){
+ return new Promise((resolve,reject)=>{
+  const listener=net.createServer();
+  listener.once('error',reject);
+  listener.listen(0,hostname,()=>{
+   const port=listener.address().port;
+   listener.close(error=>error?reject(error):resolve(port));
+  });
+ });
+}
+async function chooseAvailablePreviewUrl(preferred,{portAvailable:available=portAvailable,allocatePort=allocateEphemeralPort,scanLimit=64}={}){
+ const original=new URL(preferred);
+ if(original.protocol!=='http:'||!['127.0.0.1','localhost','[::1]'].includes(original.hostname)||original.username||original.password)
+  throw Error('Application preview must use an ordinary localhost HTTP URL.');
+ const basePort=Number(original.port);
+ if(!Number.isInteger(basePort)||basePort<1||basePort>65535)throw Error('Application preview must specify a valid local port.');
+ const candidate=port=>{const next=new URL(original);next.port=String(port);return next.href;};
+ if(await available(candidate(basePort)))return {url:candidate(basePort),changed:false,port:basePort,previousPort:basePort};
+ for(let offset=1;offset<=scanLimit;offset++){
+  const port=1024+((basePort-1024+offset)%(65535-1024));
+  if(port===basePort)continue;
+  if(await available(candidate(port)))return {url:candidate(port),changed:true,port,previousPort:basePort};
+ }
+ // If adjacent ports are occupied, ask the OS for a currently available port.
+ for(let attempt=0;attempt<16;attempt++){
+  const port=await allocatePort(original.hostname);
+  if(port>0&&port!==basePort&&await available(candidate(port)))return {url:candidate(port),changed:true,port,previousPort:basePort};
+ }
+ throw Error('No available localhost port could be found for the application preview. No external process was stopped.');
+}
 async function waitForHttp(url,isRunning,timeout=60000){
  const start=Date.now();
  while(Date.now()-start<timeout){
@@ -216,15 +248,18 @@ async function bootstrap({root,stackId,generation=0,baseBranch='main',token='',o
    results.push(result);
   }
   await progress('Build checks passed; checking application server preview port…');
-  const config=await stackConfig(root,stackId);const url=config.previewUrl;
-  if(!url)throw Error('The selected technology does not have a configured localhost preview.');
+  const config=await stackConfig(root,stackId);
+  if(!config.previewUrl)throw Error('The selected technology does not have a configured localhost preview.');
   const prior=developer.localLogs(),sameProcess=prior.running&&prior.cwd===path.join(root,target.relative);
-  if(!sameProcess&&!await (effects.portAvailable||portAvailable)(url))throw Error('Local preview port is occupied: '+url+'. Stop the other application before retrying.');
+  const choice=sameProcess?{url:prior.previewUrl||config.previewUrl,changed:false}:
+   await chooseAvailablePreviewUrl(config.previewUrl,{portAvailable:effects.portAvailable||portAvailable,allocatePort:effects.allocatePort||allocateEphemeralPort});
+  const url=choice.url;
+  if(choice.changed)await progress('Preview port '+choice.previousPort+' is occupied. Using available application address: '+url);
   await progress((sameProcess?'Reusing':'Launching')+' application and checking '+url+'…');
   let opened=false,launched=false;
   try{
    if(!sameProcess){
-    await (effects.launch||developer.runLocal)(root,{relative:target.relative,env:{}});
+    await (effects.launch||developer.runLocal)(root,{relative:target.relative,env:{},previewUrl:url});
     launched=true;
    }
    await (effects.waitHealth||waitForHttp)(url,effects.isRunning||(()=>developer.localLogs().running));
@@ -257,4 +292,4 @@ async function bootstrap({root,stackId,generation=0,baseBranch='main',token='',o
   throw error;
  }
 }
-module.exports={bootstrap,preflight,publish,describePushFailure,stackConfig,branchFor,remoteHash,waitForHttp,portAvailable,ensureLocalBuildExcludes};
+module.exports={bootstrap,preflight,publish,describePushFailure,stackConfig,branchFor,remoteHash,waitForHttp,portAvailable,allocateEphemeralPort,chooseAvailablePreviewUrl,ensureLocalBuildExcludes};
