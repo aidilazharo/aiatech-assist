@@ -76,13 +76,49 @@ test('Test & Run diagnostics include npm test failure stdout stderr and exit sta
 test('UI exposes downloadable log for Save Stack, Test & Run, Run and Stop Server',async()=>{
  const host=await fs.readFile(path.join(__dirname,'../test/generated/extension-source.txt'),'utf8');
  const frontend=await fs.readFile(path.join(__dirname,'../media/start.js'),'utf8');
+ assert.match(host,/id="architectDownloadUnifiedLog"/);
+ assert.match(frontend,/architectDownloadUnifiedLog/);
  for(const id of ['architectDownloadStackLog','architectDownloadTestLog','architectDownloadServerLog']){
-  assert.ok(host.includes('id="'+id+'"'));assert.ok(frontend.includes("$('"+id+"')"));
+  assert.ok(!host.includes('id="'+id+'"'),id+' must not appear');
+  assert.ok(!frontend.includes("$('"+id+"')"),id+' should have no listener');
  }
  for(const cmd of ['architectSaveStack','architectTestStack','architectRunServer','architectStopServer'])assert.match(host,new RegExp(cmd+":'(?:save|test|server)'"));
  assert.match(host,/showSaveDialog/);
  assert.match(host,/workspace\.fs\.writeFile/);
+ assert.match(host,/const kind='all'/);
 });
+
+test('unified report preserves chronological redacted errors after successful retries',()=>{
+ const project=ref+'-unified',other=project+'-other';
+ for(const [kind,message] of [['save','Port 5173 occupied'],['test','Build script failed'],['server','HTTP health timeout'],['catalog','Catalog fetch failed']]){
+  reports.begin(project,kind);
+  reports.append(project,kind,'Stage: '+message);
+  reports.store({projectId:project,kind,stackId:'react',error:Error(message+' access_token=secret1')});
+  reports.clear(project,kind);
+ }
+ reports.begin(other,'save');
+ reports.store({projectId:other,kind:'save',error:'Unrelated project failure'});
+ const combined=reports.get(project,'all');
+ assert.ok(combined);
+ assert.equal(combined.count,4);
+ assert.equal(reports.count(project),4);
+ for(const word of ['Port 5173 occupied','Build script failed','HTTP health timeout','Catalog fetch failed'])
+  assert.ok(combined.content.includes(word),word);
+ assert.ok(!combined.content.includes('Unrelated project failure'));
+ assert.ok(!combined.content.includes('secret1'));
+ assert.ok(combined.content.indexOf('Port 5173 occupied')<combined.content.indexOf('Catalog fetch failed'));
+ assert.match(reports.filename(project,'all'),/unified-errors-/);
+ assert.equal(reports.get('missing-project','all'),null);
+});
+
+test('port conflict is reported in server stage, not a build failure',()=>{
+ const ui=require('node:fs').readFileSync(path.join(__dirname,'../media/start.js'),'utf8');
+ const bootstrap=require('node:fs').readFileSync(path.join(__dirname,'../src/architect-stack-bootstrap.js'),'utf8');
+ assert.match(bootstrap,/Build checks passed; checking application server preview port/);
+ assert.match(ui,/checking application server preview port/);
+ assert.match(ui,/live\.failed=msg\.failedStep\|\|live\.active/);
+});
+
 
 
 test('Run Server reports captured npm startup errors and exit metadata',async()=>{
