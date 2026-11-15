@@ -1829,6 +1829,7 @@ function syncArchitectStackButtons(project){
  const approved=tested&&project?.techStackApproval?.status==='approved'&&project.techStackApproval.stackId===stackId;
  const proof=project?.techStackServerVerification;
  const serverVerified=!!(saved&&tested&&architectLiveServerReady(project,stackId));
+ const canRequestApproval=!!(saved&&tested&&prepared?.remotePushed===true);
  const save=$('architectSaveStack');
  // A different prepared stack can be replaced only through a confirmed,
  // clean-checkout Git reset. Keep the action available and explain that path.
@@ -1837,8 +1838,12 @@ function syncArchitectStackButtons(project){
  save.title=switching?'Review Git safety checks and confirm switching from '+prepared.stackId+' to '+stackId+'. Previous branches remain intact.':'';
  $('architectResetStack').disabled=architectActionBusy||!project?.techStackId;
  $('architectTestStack').disabled=architectActionBusy||!saved||approved;
- $('architectApproveStack').disabled=architectActionBusy||!tested||!serverVerified||approved;
- $('architectApproveStack').title=!tested?'Complete Test & Run first.':!serverVerified&&!approved?'Run Server successfully for this saved stack before approval.':'';
+ // Leave the action available once Save and Test & Run have been verified.
+ // Host-side approval STILL requires a healthy ATGV-owned process at the exact
+ // pinned Git SHA. Keeping the button clickable surfaces the precise failure
+ // instead of leaving users with an unexplained disabled control.
+ $('architectApproveStack').disabled=architectActionBusy||!canRequestApproval||approved;
+ $('architectApproveStack').title=!tested?'Complete Test & Run first.':!prepared?.remotePushed?'Push the verified stack branch using Save Stack before approval.':!serverVerified?'Click to recheck the live server and show any revision/HTTP error. Run Server if it is stopped.':'Confirm approval for Developers.';
 }
 
 let roleJiraProject='',roleJiraLoading=false,roleJiraLoaded=false,roleJiraItems=[],roleJiraIncomplete=false,roleJiraRequest=0;

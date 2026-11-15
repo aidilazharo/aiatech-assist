@@ -4528,22 +4528,29 @@ async function handleDashboardMessage(msg){
           let launched=null;
           try{
             const prior=developerGit.localLogs();
-            const reuse=prior.running&&prior.cwd===path.join(root,target.relative);
+            const reuse=prior.running&&path.resolve(prior.cwd||'')===path.resolve(path.join(root,target.relative))&&prior.head===inspection.repo.sha;
+            const startup=require('../../architect-stack-bootstrap');
+            let previewUrl=reuse?prior.previewUrl||'':'';
             if(!reuse){
-              const startup=require('../../architect-stack-bootstrap');
               const previewConfig=await startup.stackConfig(root,project.techStackId);
-              const selection=await startup.chooseAvailablePreviewUrl(previewConfig.previewUrl);
-              if(selection.changed){
-                const notice='Preview port '+selection.previousPort+' is occupied. Test & Run will use '+selection.url;
+              const dualService=['react','angular'].includes(project.techStackId);
+              const options=dualService
+                ?await startup.chooseAvailableRuntimePorts(previewConfig.previewUrl,previewConfig.apiBaseUrl||'http://127.0.0.1:3001/')
+                :{url:(await startup.chooseAvailablePreviewUrl(previewConfig.previewUrl)).url,apiPort:null};
+              previewUrl=options.url;
+              if(options.frontend?.changed||options.api?.changed){
+                const notice='Test & Run selected frontend '+previewUrl+(options.apiPort?' and API port '+options.apiPort:'')+' to avoid occupied ports.';
                 architectErrorLogs.append(activeProject.id,'test','Stage: '+notice);
                 await dashboard?.webview.postMessage({type:'architectStackProgress',projectId:activeProject.id,message:notice});
               }
-              launched=await developerGit.runLocal(root,{relative:target.relative,previewUrl:selection.url});
+              launched=await developerGit.runLocal(root,{relative:target.relative,previewUrl,apiPort:options.apiPort});
             }
-            await new Promise(resolve=>setTimeout(resolve,2200));
             const info=developerGit.localLogs();
-            architectErrorLogs.append(activeProject.id,'test',require('../../stack-process-diagnostics').capture({stage:'application startup',bin:info.command||'application',cwd:info.cwd||path.join(root,target.relative),logs:info.logs,exitCode:info.exitCode,signal:info.signal}));
-            const passed=info.running===true;
+            if(!info.running)throw Error('Application process exited before readiness verification: '+String(info.logs||'').slice(-500));
+            await startup.waitForHttp(previewUrl||info.previewUrl,()=>developerGit.localLogs().running,30000,info.instanceId||'');
+            const verified=developerGit.localLogs();
+            architectErrorLogs.append(activeProject.id,'test',require('../../stack-process-diagnostics').capture({stage:'application startup and HTTP readiness',bin:verified.command||'application',cwd:verified.cwd||path.join(root,target.relative),logs:verified.logs,exitCode:verified.exitCode,signal:verified.signal}));
+            const passed=verified.running===true;
             results.push({relative:target.relative,operation:'run',passed,head:inspection.repo.sha,at:new Date().toISOString()});
             if(!passed)failed='App exited during startup: '+(target.relative||'root')+'. '+info.logs.slice(-300);
           }catch(error){if(error.diagnosticLogs)architectErrorLogs.append(activeProject.id,'test',error.diagnosticLogs);failed='Run failed: '+(target.relative||'root')+': '+error.message;}
@@ -4674,9 +4681,9 @@ async function handleDashboardMessage(msg){
         const root=await architectRepository.resolve(context.workspaceState,activeProject.id,developerGit,{projectRoot:aiRoot(),githubOwner:effectiveConfig(activeProject).get('github.owner'),githubRepo:effectiveConfig(activeProject).get('github.repo')});
         if(!project.techStackPrepared||project.techStackPrepared.root!==root||project.techStackPrepared.stackId!==project.techStackId)throw Error('Save the current stack before approval.');
         const serverState=await require('../../architect-server').verify({root,stackId:project.techStackId});
-        if(!serverState.running||!serverState.healthy)throw Error('Run Server must be running and HTTP healthy for the tested stack revision before Developer approval.');
+        if(!serverState.running||!serverState.healthy)throw Error('Run Server must be running and HTTP healthy for the tested stack revision before Developer approval. '+String(serverState.message||'Check server status and the unified stack error log.'));
         const healthyProof=require('../../architect-server-verification').evidenceIfHealthy(project,serverState);
-        if(!healthyProof)throw Error('The running application does not match the tested and saved stack commit. Re-run Test & Run, then Run Server.');
+        if(!healthyProof)throw Error('The running application does not match the tested and saved stack commit. Saved SHA: '+String(project.techStackPrepared.sha||'').slice(0,12)+'; running SHA: '+String(serverState.sha||'').slice(0,12)+'; saved branch: '+String(project.techStackPrepared.branch||'missing')+'; observed branch: '+String(serverState.branch||'missing')+'. Re-run Test & Run on the saved revision, then Run Server.');
         // Save Stack may have succeeded before its verification was stored.
         // Reconcile that evidence now without skipping the host-side health gate.
         const verifiedProject={...project,techStackServerVerification:healthyProof};
