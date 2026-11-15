@@ -654,6 +654,7 @@ function openProject(id=null,source=null){
   for(const input of ['jira.baseUrl','jira.email','jira.jql','confluence.parentPageId','github.owner','github.repo','github.branch','github.pathPrefix','github.apiUrl']){
     const [group,key]=input.split('.');field(input,val(p,group,key));
   }
+  field('github.branch','main');
                                                                               
   if(p?.settings?.atlassian){field('jira.baseUrl',p.settings.atlassian.baseUrl||'');field('jira.email',p.settings.atlassian.email||'');}
   $('formTitle').textContent=p?'Project Settings: '+p.name:'New Project';
@@ -674,6 +675,7 @@ function readProjectForm(){
     'jira.baseUrl','jira.email','jira.projectKey','jira.jql','github.owner','github.repo','github.branch','github.pathPrefix','github.apiUrl'];
   const settings={jira:{},confluence:{},github:{},development:{previewWithoutTests:$('projectPreviewWithoutTests').checked}};
   for(const input of names){const [group,key]=input.split('.');settings[group][key]=read(input);}
+  settings.github.branch='main';
   return {id:read('id'),name:read('name'),techStackId:selectedTechStackId,schedule:{startDate:read('projectStartDate'),endDate:read('projectEndDate')},settings};
 }
 function catalogFormConfig(){return {repositoryUrl:read('catalogRepoUrl'),ref:read('catalogRef'),authentication:read('catalogAuth'),autoCheck:$('catalogAutoCheck').checked,offlineCache:true};}
@@ -777,7 +779,7 @@ function updateState(msg){
     field('jiraProjectKey',extensionSettings.jira?.projectKey||'');
   }
   if(document.activeElement?.closest('form')!==$('githubForm')){
-    field('githubOwner',extensionSettings.github?.owner||'');field('githubRepository',extensionSettings.github?.repo||'');setGithubBranch(extensionSettings.github?.branch||'');
+    field('githubOwner',extensionSettings.github?.owner||'');field('githubRepository',extensionSettings.github?.repo||'');setGithubBranch();
     showGithubRepoPreview();
   }
   $('settingsBack').textContent=workspaceOpened?'← Back to Workspace':'← Back to Projects';
@@ -4276,14 +4278,25 @@ for(const id of ['settingsExtensionTab','extensionToProjectSettings','projectToE
 $('projectToExtensionSettings').addEventListener('click',()=>navigate('settings'));
 $('sidebarSwitchProject').addEventListener('click',()=>navigate('projects'));
 
-function setGithubBranch(value){
-  const select=$('githubBranch'),branch=String(value||'');
-  if(![...select.options].some(o=>o.value===branch)){
-    const option=document.createElement('option');option.value=branch;option.textContent=branch+' · saved selection';select.append(option);
-  }
-  select.value=branch;
+function setGithubBranch(){field('githubBranch','main');}
+function showGithubRepoPreview(){
+ const owner=read('githubOwner').trim(),repo=read('githubRepository').trim();
+ const url=$('githubRepositoryUrl');url.value=owner&&repo?'https://github.com/'+owner+'/'+repo:'';url.setCustomValidity('');
 }
-function showGithubRepoPreview(){const owner=read('githubOwner').trim(),repo=read('githubRepository').trim();$('githubRepoPreview').textContent=owner&&repo?'https://github.com/'+owner+'/'+repo:'Choose an accessible repository from the list.';}
+function parseGithubRepositoryUrl(value){
+ const input=String(value||'').trim();
+ if(!input)return null;
+ const match=/^https:\/\/github\.com\/([A-Za-z0-9-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/?$/i.exec(input);
+ return match?{owner:match[1],repo:match[2]}:null;
+}
+function syncGithubRepositoryUrl(){
+ const input=$('githubRepositoryUrl'),text=input.value.trim();
+ if(!text){field('githubRepository','');input.setCustomValidity('');return;}
+ const parsed=parseGithubRepositoryUrl(text);
+ if(!parsed){field('githubRepository','');input.setCustomValidity('Enter a valid https://github.com/OWNER/REPOSITORY URL.');return;}
+ input.setCustomValidity('');
+ field('githubOwner',parsed.owner);field('githubRepository',parsed.repo);
+}
 function testIds(section){return section==='jira'?['testAtlassian','saveAtlassian','jiraTestStatus']:['testGithub','saveGithub','githubTestStatus'];}
 function invalidateTest(section){
   ++testRevisions[section];
@@ -4295,9 +4308,9 @@ function invalidateTest(section){
 for(const id of ['jiraBaseUrl','jiraEmail','jiraProjectKey','jiraToken']){
   $(id).addEventListener('input',()=>invalidateTest('jira'));
 }
-for(const id of ['githubOwner','githubRepository','githubPersonalToken','githubBranch']){
-  $(id).addEventListener('input',()=>invalidateTest('github'));
-}
+$('githubOwner').addEventListener('input',()=>{if(read('githubRepository'))showGithubRepoPreview();invalidateTest('github');});
+$('githubRepositoryUrl').addEventListener('input',()=>{syncGithubRepositoryUrl();invalidateTest('github');});
+$('githubPersonalToken').addEventListener('input',()=>invalidateTest('github'));
 function requestTest(section){
   const [testId,saveId,statusId]=testIds(section);
   const form=section==='jira'?'extensionForm':'githubForm';
@@ -4306,47 +4319,17 @@ function requestTest(section){
   $(testId).disabled=true;$(saveId).disabled=true;$(saveId).classList.add('hidden');
   $(statusId).className='test-status muted';$(statusId).textContent='Testing connection…';
   if(section==='jira')send('testExtensionJira',{requestId,settings:{jira:{baseUrl:read('jiraBaseUrl'),email:read('jiraEmail'),projectKey:read('jiraProjectKey')}},token:read('jiraToken')});
-  else send('testExtensionGithub',{requestId,settings:{owner:read('githubOwner'),repo:read('githubRepository'),branch:read('githubBranch')},token:read('githubPersonalToken')});
+  else send('testExtensionGithub',{requestId,settings:{owner:read('githubOwner'),repo:read('githubRepository'),branch:read('githubRepository')?'main':''},token:read('githubPersonalToken')});
 }
 $('testAtlassian').addEventListener('click',()=>requestTest('jira'));
 $('testGithub').addEventListener('click',()=>requestTest('github'));
-let githubRepoRequestId=0,githubBranchRequestId=0;
-function requestGithubBranches(){
-  const owner=read('githubOwner').trim(),repo=read('githubRepository').trim();
-  if(!owner||!repo){$('githubBranchStatus').textContent='Choose a repository first.';return;}
-  const requestId=++githubBranchRequestId;
-  $('listGithubBranches').disabled=true;
-  $('githubBranchStatus').textContent='Loading available branches…';
-  send('listExtensionGithubBranches',{requestId,owner,repo,token:read('githubPersonalToken')});
-}
-$('listGithubBranches').addEventListener('click',requestGithubBranches);
-
-$('listGithubRepos').addEventListener('click',()=>{
-  const requestId=++githubRepoRequestId;
-  $('listGithubRepos').disabled=true;
-  $('githubRepoListStatus').textContent='Listing accessible repositories…';
-  $('githubRepoChoices').disabled=true;
-  send('listExtensionGithubRepositories',{requestId,owner:read('githubOwner'),token:read('githubPersonalToken')});
-});
-for(const id of ['githubOwner','githubRepository'])$(''+id).addEventListener('input',()=>{
-  ++githubBranchRequestId;const select=$('githubBranch');select.replaceChildren();
-  const option=document.createElement('option');option.value='';option.textContent='GitHub default branch (automatic)';select.append(option);
-  $('githubBranchStatus').textContent='Repository changed. Select List Branches to refresh.';
-});
-$('githubRepoChoices').addEventListener('change',()=>{
-  const selected=$('githubRepoChoices').value;if(!selected)return;
-  const parts=selected.split('/');if(parts.length!==2)return;
-  field('githubOwner',parts[0]);field('githubRepository',parts[1]);showGithubRepoPreview();
-  setGithubBranch('');invalidateTest('github');requestGithubBranches();
-  $('githubRepoListStatus').textContent='Selected '+selected+'. Test GitHub Connection before saving.';
-});
 $('extensionForm').addEventListener('submit',e=>{
   e.preventDefault();if($('saveAtlassian').disabled)return;
   send('saveExtension',{settings:{jira:{baseUrl:read('jiraBaseUrl'),email:read('jiraEmail'),projectKey:read('jiraProjectKey')}}});
 });
 $('githubForm').addEventListener('submit',e=>{
   e.preventDefault();if($('saveGithub').disabled)return;
-  send('saveGithub',{settings:{owner:read('githubOwner'),repo:read('githubRepository'),branch:read('githubBranch')}});
+  send('saveGithub',{settings:{owner:read('githubOwner'),repo:read('githubRepository'),branch:read('githubRepository')?'main':''}});
 });
 let aiProviderEditing=false,aiProviderLoaded=false;
 function renderAIProviderState(data){
@@ -6568,37 +6551,6 @@ window.addEventListener('message',event=>{
     $('catalogStatus').textContent=m.message||'';$('catalogStatus').className='test-status'+(m.success?' success':' error');
     if(m.success&&['pull','save'].includes(m.action))field('catalogToken','');
   }
-  if(m.type==='githubBranchesResult'){
-    if(m.requestId!==githubBranchRequestId||m.owner!==read('githubOwner').trim()||m.repo!==read('githubRepository').trim())return;
-    $('listGithubBranches').disabled=false;
-    if(!m.success){$('githubBranchStatus').textContent=m.message||'Could not list branches.';return;}
-    const select=$('githubBranch'),chosen=select.value;
-    select.replaceChildren();
-    const auto=document.createElement('option');auto.value='';auto.textContent='Default branch ('+(m.defaultBranch||'GitHub')+')';select.append(auto);
-    const branches=Array.isArray(m.branches)?m.branches:[];
-    for(const branch of branches){
-      const option=document.createElement('option');option.value=branch.name;option.textContent=branch.name+(branch.default?' · default':'')+(branch.protected?' · protected':'');select.append(option);
-    }
-    setGithubBranch(chosen);
-    $('githubBranchStatus').textContent=branches.length+' branch(es) found'+(m.truncated?' (first 300 shown)':'')+'. Choose a branch, then Test GitHub Connection and save.';
-  }
-  if(m.type==='githubRepositoriesResult'){
-    if(m.requestId!==githubRepoRequestId)return;
-    $('listGithubRepos').disabled=false;
-    const choices=$('githubRepoChoices');choices.replaceChildren();
-    const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent='Select a repository';choices.append(placeholder);
-    if(!m.success){choices.disabled=true;$('githubRepoListStatus').textContent=m.message||'Repository listing failed.';return;}
-    const repos=Array.isArray(m.repositories)?m.repositories:[];
-    for(const repo of repos){
-      const option=document.createElement('option');option.value=repo.fullName;option.textContent=repo.fullName+(repo.private?' · Private':' · Public')+(repo.archived?' · Archived':'');choices.append(option);
-    }
-    choices.disabled=!repos.length;
-    const configured=(read('githubOwner')+'/'+read('githubRepository')).toLowerCase();
-    const match=repos.find(repo=>String(repo.fullName||'').toLowerCase()===configured);
-    if(match)choices.value=match.fullName;
-    showGithubRepoPreview();
-    $('githubRepoListStatus').textContent=repos.length+' repositories found'+(m.truncated?' (first 100 shown)':'')+'. Choose one, then test and save the connection.';
-  }
   if(m.type==='connectionTestResult'){
     if(!['jira','github'].includes(m.section)||m.requestId!==testRevisions[m.section])return;
     const [testId,saveId,statusId]=testIds(m.section);
@@ -6609,7 +6561,7 @@ window.addEventListener('message',event=>{
       if(m.section==='jira'){field('jiraToken','');field('jiraProjectKey',m.fields?.projectKey||'');}
       else {
         field('githubPersonalToken','');
-        field('githubOwner',m.fields.owner);field('githubRepository',m.fields.repo);setGithubBranch(m.fields.branch||'');showGithubRepoPreview();
+        field('githubOwner',m.fields.owner);field('githubRepository',m.fields.repo);setGithubBranch();showGithubRepoPreview();
       }
       $(saveId).disabled=false;$(saveId).classList.remove('hidden');
     }else{$(saveId).disabled=true;$(saveId).classList.add('hidden');}
@@ -6633,7 +6585,7 @@ window.addEventListener('message',event=>{
     if(m.section==='github'){
       $('githubTestStatus').textContent=m.message||'GitHub settings saved.';
       $('githubTestStatus').className='test-status success';
-      // Keep the last saved repository visible even when List Repositories has not run.
+      // Keep the verified GitHub repository URL visible after saving.
       showGithubRepoPreview();
     }
     if(m.section==='jira'){spaces=[];jiraProjects=[];settingsSearchId=null;gateSearchId=null;$('settingsSpaces').replaceChildren();$('settingsSpaceMessage').textContent='Enter a space name or key to search.';}

@@ -269,9 +269,39 @@ async function executeLocal(root, { relative = '', operation = 'test', onDiagnos
         return { passed: false, operation, head, at, logs: ((e.stdout || '') + '\n' + (e.stderr || '') + '\n' + e.message).slice(-96000), diagnosticLogs:details, relative };
     }
 }
+// Legacy scaffolds pin the Vite/Angular API proxy to 3001. Set a runtime-only
+// proxy overlay instead of editing approved/committed source or stopping the port
+// owner. The overlay is ignored in this checkout's .git/info/exclude.
+async function createRuntimeProxyOverlay(repoRoot,cwd,apiPort,viteSource){
+ if(apiPort===null||apiPort===3001||viteSource.includes('process.env.API_PORT'))return null;
+ const vite=!!viteSource;
+ const angular=!vite&&!!(await fs.readFile(path.join(cwd,'proxy.conf.json'),'utf8').catch(()=>''));
+ if(!vite&&!angular)throw Error('This application has no supported runtime API proxy configuration. Preserve its source and use a verified stack migration.');
+ const gitExclude=await git(repoRoot,'rev-parse','--git-path','info/exclude');
+ const excludePath=path.isAbsolute(gitExclude)?gitExclude:path.join(repoRoot,gitExclude);
+ const old=await fs.readFile(excludePath,'utf8').catch(error=>error.code==='ENOENT'?'':Promise.reject(error));
+ const marker='vite.config.atgv-runtime-*.mts';
+ const markerNg='proxy.atgv-runtime-*.json';
+ if(!old.includes(marker)||!old.includes(markerNg)){
+  await fs.mkdir(path.dirname(excludePath),{recursive:true});
+  await fs.appendFile(excludePath,(old.endsWith('\n')?'':'\n')+
+   '# ATGV generated untracked preview proxy overlays\n'+
+   (!old.includes(marker)?marker+'\n':'')+(!old.includes(markerNg)?markerNg+'\n':''));
+ }
+ const name=vite?'vite.config.atgv-runtime-'+crypto.randomUUID()+'.mts':'proxy.atgv-runtime-'+crypto.randomUUID()+'.json';
+ const location=path.join(cwd,name);
+ const content=vite?
+  "import original from './vite.config.ts';\n"+
+  "import { mergeConfig } from 'vite';\n"+
+  "export default async environment => mergeConfig((typeof original==='function'?await original(environment):await original)||{}, "+
+  JSON.stringify({server:{proxy:{'/api':{target:'http://127.0.0.1:'+apiPort,secure:false,changeOrigin:false}}}})+");\n"
+  :JSON.stringify({'/api':{target:'http://127.0.0.1:'+apiPort,secure:false,changeOrigin:false}},null,2)+'\n';
+ await fs.writeFile(location,content,{flag:'wx',mode:0o600});
+ return {file:name,location,kind:vite?'vite':'angular'};
+}
 // Use runtime-only CLI port arguments for the known ATGV catalog starters.
 // No package.json or approved source file is modified by port selection.
-async function previewCommand(cmd,target,cwd,previewUrl){
+async function previewCommand(cmd,target,cwd,previewUrl,proxyOverlay=null){
  if(!previewUrl)return cmd;
  const endpoint=new URL(previewUrl),port=Number(endpoint.port);
  if(endpoint.protocol!=='http:'||!['127.0.0.1','localhost','[::1]'].includes(endpoint.hostname)||!Number.isInteger(port)||port<1||port>65535)
@@ -282,15 +312,17 @@ async function previewCommand(cmd,target,cwd,previewUrl){
  const script=String(pkg.scripts?.[scriptName]||'').trim();
  const known=script.match(/^concurrently -k "(vite|ng serve) --host 127\.0\.0\.1 --port (\d+)" "(node server\/index\.mjs)"$/);
  if(known){
-  const frontend=known[1]+' --host 127.0.0.1 --port '+port+(known[1]==='vite'?' --strictPort':'');
+  const frontend=known[1]+' --host 127.0.0.1 --port '+port+(known[1]==='vite'?' --strictPort':'')+
+   (proxyOverlay?' '+(known[1]==='vite'?'--config ':'--proxy-config ')+proxyOverlay.file:'');
   return npmCommand(['exec','--offline','--','concurrently','-k',frontend,known[3]]);
  }
  if(/^vite(?:\s|$)/.test(script)&&!known&&/--port\s+\d+/.test(script)){
-  return npmCommand(['exec','--offline','--','vite','--host','127.0.0.1','--port',String(port),'--strictPort']);
+  return npmCommand(['exec','--offline','--','vite','--host','127.0.0.1','--port',String(port),'--strictPort',...(proxyOverlay?['--config',proxyOverlay.file]:[])]);
  }
  if(/^ng serve(?:\s|$)/.test(script)&&/--port\s+\d+/.test(script)){
-  return npmCommand(['exec','--offline','--','ng','serve','--host','127.0.0.1','--port',String(port)]);
+  return npmCommand(['exec','--offline','--','ng','serve','--host','127.0.0.1','--port',String(port),...(proxyOverlay?['--proxy-config',proxyOverlay.file]:[])]);
  }
+ if(proxyOverlay)throw Error('The legacy API proxy cannot be overridden by an unrecognized launch command. Approved project files were not modified.');
  return cmd;
 }
 let activeProcess = null;
@@ -302,15 +334,17 @@ async function runLocal(root, { relative = '', env = {}, previewUrl = '', apiPor
     if (!target)
         throw Error('Select a detected application.');
     const cwd=path.join(info.repo.root,target.relative);
-    const cmd=await previewCommand(approvedCommand(target,'run'),target,cwd,previewUrl);
+    let cmd;
+    let runtimeProxy=null;
     const port=previewUrl?Number(new URL(previewUrl).port):null;
     const selectedApiPort=apiPort===null?null:Number(apiPort);
     if(selectedApiPort!==null&&(!Number.isInteger(selectedApiPort)||selectedApiPort<1||selectedApiPort>65535||selectedApiPort===port))
         throw Error('ATGV API port must be a valid local port distinct from the frontend.');
     const apiSource=await fs.readFile(path.join(cwd,'server/index.mjs'),'utf8').catch(()=>'');
     const viteSource=await fs.readFile(path.join(cwd,'vite.config.ts'),'utf8').catch(()=>'');
-    if(selectedApiPort!==null&&selectedApiPort!==3001&&!viteSource.includes('process.env.API_PORT'))
-        throw Error('This starter has a fixed API proxy to port 3001. Upgrade through verified SDLC Catalog migration before using an alternate API port. No unrelated listener was stopped.');
+    runtimeProxy=await createRuntimeProxyOverlay(info.repo.root,cwd,selectedApiPort,viteSource);
+    try{cmd=await previewCommand(approvedCommand(target,'run'),target,cwd,previewUrl,runtimeProxy);}
+    catch(error){if(runtimeProxy)await fs.rm(runtimeProxy.location,{force:true}).catch(()=>{});throw error;}
     const instanceId=apiSource.includes('ATGV_INSTANCE_ID')?crypto.randomUUID():'';
     const runtimeEnv={
      ...(port?{PORT:String(port),PREVIEW_PORT:String(port),ATGV_PREVIEW_PORT:String(port),ASPNETCORE_URLS:'http://127.0.0.1:'+port,SERVER_PORT:String(port)}:{}),
@@ -318,8 +352,10 @@ async function runLocal(root, { relative = '', env = {}, previewUrl = '', apiPor
      ...(instanceId?{ATGV_INSTANCE_ID:instanceId,ATGV_STARTED_AT:new Date().toISOString()}:{}),
      VITE_ATGV_PROJECT:path.basename(info.repo.root),VITE_ATGV_BRANCH:info.repo.branch||'',VITE_ATGV_REVISION:info.repo.sha||''
     };
-    const child = spawn(cmd.bin, cmd.args, { cwd, env: { ...process.env, ...env, ...runtimeEnv }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], shell: false, detached: process.platform !== 'win32' });
-    const entry = { child, cwd, previewUrl, apiPort:selectedApiPort, instanceId, command:diagnostic.commandLine(cmd.bin,cmd.args), logs: '', head: info.repo.sha, relative, exitCode:null, signal:null };
+    let child;
+    try{child=spawn(cmd.bin, cmd.args, { cwd, env: { ...process.env, ...env, ...runtimeEnv }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], shell: false, detached: process.platform !== 'win32' });}
+    catch(error){if(runtimeProxy)await fs.rm(runtimeProxy.location,{force:true}).catch(()=>{});throw error;}
+    const entry = { child, cwd, previewUrl, apiPort:selectedApiPort, instanceId, runtimeProxy, command:diagnostic.commandLine(cmd.bin,cmd.args), logs: '', head: info.repo.sha, relative, exitCode:null, signal:null };
     activeProcess = entry;
     lastProcess = entry;
     const read = (label,data) => { entry.logs = (entry.logs + '['+label+'] '+String(data)).slice(-256*1024); };
@@ -327,13 +363,16 @@ async function runLocal(root, { relative = '', env = {}, previewUrl = '', apiPor
     child.stderr?.on('data', data=>read('stderr',data));
     child.on('error', e => read('spawn-error',e.message));
     child.on('exit', (code,signal) => { entry.exitCode=code;entry.signal=signal; if (activeProcess === entry)
-        activeProcess = null; });
+        activeProcess = null;
+        if(runtimeProxy)fs.rm(runtimeProxy.location,{force:true}).catch(error=>read('cleanup',error.message));
+    });
     try {
         await new Promise((resolve, reject) => { child.once('spawn', resolve); child.once('error', reject); });
     }
     catch (error) {
         if (activeProcess === entry)
             activeProcess = null;
+        if(runtimeProxy)await fs.rm(runtimeProxy.location,{force:true}).catch(()=>{});
         throw diagnostic.attach(Error('Unable to start local application: ' + error.message),{stage:'start application',bin:cmd.bin,args:cmd.args,cwd,logs:entry.logs,exitCode:entry.exitCode??error.code,signal:entry.signal});
     }
     return { pid: child.pid, relative, head: entry.head, message: 'Application process started'+(previewUrl?' at '+previewUrl:'. Review logs for the actual local URL.') };
@@ -416,4 +455,4 @@ async function artifactSnapshot(root, key, base='main') {
         source:'Git files from '+found.basis+' on '+repo.branch};
 }
 
-module.exports = { readinessFlags, checkReadiness, readArtifactFiles, artifactSnapshot, findLocalStoryBranch, jiraKey, branchName, repository, findStoryBranch, matchesGithubRepo, createBranch, resumeBranch, initLocalBaseline, commitBootstrap, configureOrigin, publishBootstrap, cloneConfigured, pushStory, inspectScripts, executeLocal, previewCommand, runLocal, stopLocal, localLogs };
+module.exports = { readinessFlags, checkReadiness, readArtifactFiles, artifactSnapshot, createRuntimeProxyOverlay, findLocalStoryBranch, jiraKey, branchName, repository, findStoryBranch, matchesGithubRepo, createBranch, resumeBranch, initLocalBaseline, commitBootstrap, configureOrigin, publishBootstrap, cloneConfigured, pushStory, inspectScripts, executeLocal, previewCommand, runLocal, stopLocal, localLogs };

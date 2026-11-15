@@ -215,6 +215,9 @@ function projectConfig(project, extensionSettings = {}, globalConfig = { get: (_
         return projectSettings[group]?.[field] || extensionSettings[group]?.[field] || EXTENSION_DEFAULTS[group]?.[field] || '';
     };
     return { get(key, defaultValue) {
+            // Configured repository operations always start from main. Dedicated
+            // approved bootstrap and developer worktrees retain their own branches.
+            if (key === 'github.branch') return 'main';
             if (key === 'jira.jql') {
                 const explicit = projectSettings.jira?.jql;
                 if (explicit)

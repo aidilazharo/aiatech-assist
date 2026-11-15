@@ -1786,3 +1786,50 @@ button:focus-visible{outline:2px solid var(--vscode-focusBorder,#649ed2);outline
 #settingsSoftwareUpdateGroup .software-update-url input{box-sizing:border-box;width:100%;min-height:36px;padding:7px 10px;}
 #settingsSoftwareUpdateGroup .software-update-toolbar button{flex:0 0 auto;min-height:36px;white-space:nowrap;padding:6px 11px;}
 #settingsSoftwareUpdateGroup .software-update-toolbar :focus-visible{outline:2px solid var(--vscode-focusBorder);outline-offset:2px;}
+
+/* v0.3.62 — Settings typography and card dimensions follow one scale. */
+:is(#settingsView,#projectView) .settings-group-label{
+ margin:15px 0 8px;font-size:11px;line-height:1.4;font-weight:700;letter-spacing:.12em;
+ text-transform:uppercase;color:var(--vscode-descriptionForeground);
+}
+:is(#settingsView,#projectView) .ext-settings-accordion,
+#projectView .project-settings-panel{
+ box-sizing:border-box;width:100%;margin:8px 0;border:1px solid var(--vscode-panel-border,#45454a);
+ border-radius:8px;overflow:hidden;
+}
+:is(#settingsView,#projectView) .ext-settings-accordion>summary,
+#projectView .project-settings-panel>.project-settings-panel-summary{
+ box-sizing:border-box;min-height:48px;padding:11px 15px;font-size:14px;line-height:1.45;
+ font-weight:700;gap:10px;
+}
+#projectView .project-settings-panel>.project-settings-panel-summary:before{
+ font-size:11px;
+}
+#projectView .project-settings-panel-body{padding:12px 16px 18px;}
+/* The editable GitHub owner, repository URL, token and actions stay in a single row. */
+#settingsView #githubForm .github-settings-toolbar{
+ display:flex;align-items:flex-end;flex-wrap:nowrap;gap:9px;overflow-x:auto;
+ padding:2px 0 8px;max-width:100%;scrollbar-width:thin;
+}
+#settingsView #githubForm .github-settings-owner{flex:0 0 150px;min-width:135px;}
+#settingsView #githubForm .github-settings-repository{flex:1 0 265px;min-width:220px;}
+#settingsView #githubForm .github-settings-token{flex:1 0 225px;min-width:190px;}
+#settingsView #githubForm .github-settings-toolbar .field{
+ display:flex;flex-direction:column;gap:5px;margin:0!important;min-width:0;
+}
+#settingsView #githubForm .github-settings-toolbar label{font-size:12px;line-height:1.35;}
+#settingsView #githubForm .github-settings-toolbar input:not([type="hidden"]){
+ box-sizing:border-box;width:100%;min-height:37px;height:37px;font-size:12px;
+}
+#settingsView #githubForm .github-settings-toolbar>button{
+ flex:0 0 auto;min-height:37px;height:37px;margin:0;white-space:nowrap;
+ font-size:12px;padding:7px 11px;
+}
+#settingsView #githubForm .github-settings-toolbar .hidden{display:none!important;}
+#settingsView #githubForm .github-settings-feedback{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;margin:7px 0;}
+#settingsView #githubForm .github-settings-feedback .test-status{margin:0!important;}
+@media(max-width:700px){
+ :is(#settingsView,#projectView) .ext-settings-accordion>summary,
+ #projectView .project-settings-panel>.project-settings-panel-summary{padding:10px 12px;min-height:46px;}
+ #projectView .project-settings-panel-body{padding:10px 12px 16px;}
+}

@@ -393,7 +393,9 @@ async function promptExtensionRelease(release,token){
    const folder=path.join(context.globalStorageUri.fsPath,'updates');
    const vsix=await releaseUpdater.downloadVerified(release,{token,directory:folder});
    await vscode.commands.executeCommand('workbench.extensions.installExtension',vscode.Uri.file(vsix));
-   await vscode.window.showInformationMessage(`ATGV v${release.version} installed. Reload VS Code when convenient to activate it.`,'Reload Window').then(choice=>choice==='Reload Window'?vscode.commands.executeCommand('workbench.action.reloadWindow'):undefined);
+   // Only a successfully installed, checksum-verified VSIX triggers restart.
+   // The existing restart flag recreates ATGV Start with a fresh webview.
+   await restart();
   }catch(error){report('Verified ATGV upgrade failed: '+error.message);await vscode.window.showErrorMessage(`Automatic upgrade failed: ${error.message} Use the GitHub release page for manual installation.`,'View Release').then(choice=>choice==='View Release'?vscode.env.openExternal(vscode.Uri.parse(release.url)):undefined);}
  }
 }
@@ -1145,7 +1147,7 @@ function jiraCandidate(msg){
 }
 function githubCandidate(msg){
   const next=normalizeExtensionSettings({...extensionSettings,github:{...extensionSettings.github,
-    owner:String(msg.settings?.owner||'').trim(),repo:String(msg.settings?.repo||'').trim(),branch:String(msg.settings?.branch||'').trim()}});
+    owner:String(msg.settings?.owner||'').trim(),repo:String(msg.settings?.repo||'').trim(),branch:String(msg.settings?.repo||'').trim()?'main':''}});
   const fields={owner:next.github.owner||'',repo:next.github.repo||'',branch:next.github.branch||''};
   // A GitHub account and PAT may be saved before selecting a project repository.
   // Repositories require an owner, but a standalone owner is useful for discovery.
@@ -1251,7 +1253,7 @@ async function testExtensionGithub(msg){
       const user=await requestJson(`${identity.endpoint.replace(/\/$/,'')}/user`,{token,headers:{Accept:'application/vnd.github+json'}});
       if(!user||(!user.login&&!user.id))throw new Error('GitHub authentication did not return an account. Check the personal access token.');
       pendingTests.github={fields,token:enteredToken,identity,repoConfigured:false};
-      return {message:`GitHub account verified (${String(user.login||user.id)}). You can save the token now, then list and choose a repository.`,fields,repoConfigured:false};
+      return {message:`GitHub account verified (${String(user.login||user.id)}). You can save the token now and enter a repository URL later.`,fields,repoConfigured:false};
     }
     if(fields.owner){
       const user=await requestJson(`${identity.endpoint.replace(/\/$/,'')}/users/${encodeURIComponent(fields.owner)}`,{headers:{Accept:'application/vnd.github+json'}});
@@ -1270,10 +1272,10 @@ async function testExtensionGithub(msg){
   }
   if(fields.branch){
     try{await requestJson(`${githubRepoInfo(config).route}/branches/${encodeURIComponent(fields.branch)}`,{token,headers:{Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'}});}
-    catch(error){throw Error('GitHub branch '+fields.branch+' is not accessible. Choose a branch from List Branches and test again. '+error.message);}
+    catch(error){throw Error('GitHub branch '+fields.branch+' is not accessible. The configured repository must provide main; verify repository access and test again. '+error.message);}
   }
   pendingTests.github={fields,token:enteredToken,identity,repoConfigured:true};
-  return {message:`GitHub connection successful (${repo.fullName}${repo.private?', private':''}). Branch: ${fields.branch||repo.defaultBranch||'repository default'}${fields.branch?' (verified)':' (default)'}. You can now save GitHub settings.`,fields,repoConfigured:true};
+  return {message:`GitHub connection successful (${repo.fullName}${repo.private?', private':''}). Branch: ${fields.branch||repo.defaultBranch||'repository default'}${fields.branch?' (verified)':' (default)'}. You can now save the verified main-branch GitHub settings.`,fields,repoConfigured:true};
 }
                                                                               
                                                                                   
@@ -3657,7 +3659,8 @@ async function handleDashboardMessage(msg){
         const release=extensionRelease,token=await releaseAccessToken({interactive:true});
         const file=await releaseUpdater.downloadVerified(release,{token,directory:path.join(context.globalStorageUri.fsPath,'updates')});
         await vscode.commands.executeCommand('workbench.extensions.installExtension',vscode.Uri.file(file));
-        await vscode.window.showInformationMessage('ATGV update installed. Reload VS Code to use the new version.','Reload Window').then(choice=>choice==='Reload Window'?vscode.commands.executeCommand('workbench.action.reloadWindow'):undefined);break;
+        // Direct installation uses the same seamless reload and fresh webview as the branded upgrade modal.
+        await restart();break;
       }
       case 'backupLocalContent':{
         try{const result=await backupLocalContent();if(result?.cancelled)await dashboard?.webview.postMessage({type:'localBackupAction',action:'backup',success:true,message:'Backup cancelled. No files changed.'});}
@@ -5431,7 +5434,7 @@ async function handleDashboardMessage(msg){
               :' · Local repository ready'+(checkout.branch?' on '+checkout.branch:'')+'.';
           }catch(error){cloneStatus=' · Automatic project clone needs attention: '+String(error.message||error).slice(0,260);report('Automatic GitHub clone: '+String(error.message||error));}
         }
-        await refreshDashboard();await dashboard?.webview.postMessage({type:'settingsSaved',section:'github',message:(verified.disabled?'Optional GitHub connection cleared.':verified.repoConfigured?'GitHub repository, branch and credentials saved.':'GitHub account/credentials saved; choose a repository when ready.')+cloneStatus});
+        await refreshDashboard();await dashboard?.webview.postMessage({type:'settingsSaved',section:'github',message:(verified.disabled?'Optional GitHub connection cleared.':verified.repoConfigured?'GitHub repository (main) and credentials saved.':'GitHub account/credentials saved; choose a repository when ready.')+cloneStatus});
         // Confirmation belongs in GitHub's inline status, not the unrelated Jira section.
         if(cloneStatus.includes('needs attention'))report('GitHub checkout needs attention: '+cloneStatus);
         break;

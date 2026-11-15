@@ -36,11 +36,14 @@ test('ordinary ownership sync cannot show success banner; offline warning remain
  assert.ok(!ui.includes("notifyTop(opsOwnerCached?'Offline ownership cache loaded. Pending changes will sync when online.':'Ownership synchronized.'"));
  assert.match(ui,/if\(opsOwnerCached\)notifyTop\('Offline ownership cache loaded/);
 });
-test('GitHub selector is safely populated using textContent and requires test before Save',()=>{
+test('GitHub URL is edited directly and must pass connection test before Save',()=>{
  const ui=read('media/start.js'),host=read('test/generated/extension-source.txt');
- assert.match(host,/id="listGithubRepos"/);assert.match(host,/id="githubRepoChoices"/);
- assert.match(ui,/m\.type==='githubRepositoriesResult'/);assert.match(ui,/option\.textContent=repo\.fullName/);
- assert.match(ui,/invalidateTest\('github'\)/);assert.match(host,/case 'listExtensionGithubRepositories'/);
+ assert.match(host,/id="githubRepositoryUrl"/);
+ assert.doesNotMatch(host,/id="githubRepoChoices"/);
+ assert.doesNotMatch(host,/id="listGithubRepos"/);
+ assert.match(ui,/syncGithubRepositoryUrl/);
+ assert.match(ui,/invalidateTest\('github'\)/);
+ assert.match(host,/case 'testExtensionGithub':/);
 });
 test('nine-step workflow is flat and uses shared flat milestone styling',()=>{
  const css=read('media/start.css');assert.match(css,/#discoveryView \.discovery-workflow \.workflow-step/);assert.match(css,/outline:none!important/);assert.match(css,/text-decoration:none!important/);assert.match(css,/box-shadow:none!important/);
