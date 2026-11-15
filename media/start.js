@@ -4218,10 +4218,6 @@ function renderSoftwareUpdates(data,force=false){
  const opts=data.settings||{};
  if(force||!document.activeElement?.closest('#settingsSoftwareUpdateGroup')){
   $('softwareReleaseRepositoryUrl').value=opts.releaseRepositoryUrl||'https://github.com/aidilazharo/aiatech-assist/releases';
-  $('softwareAutoExtension').checked=opts.autoCheckExtension!==false;
-  $('softwareAutoLibrary').checked=opts.autoCheckLibrary!==false;
-  $('softwarePromptUpdates').checked=opts.promptForUpdates!==false;
-  $('softwareCheckOnStartup').checked=opts.checkOnStartup!==false;
  }
  const version=data.installedVersion||'?';
  $('softwareExtensionStatus').textContent=data.extensionError?`Extension: ${data.extensionError}`:data.latest?`Extension v${data.latest.version} available (installed v${version}). Release: ${data.latest.tag}.`:data.extensionLastCheck?`Extension v${version} is up to date (checked ${new Date(data.extensionLastCheck).toLocaleString()}).`:`Installed extension: v${version}; not checked yet.`;
@@ -4241,9 +4237,9 @@ $('saveSoftwareUpdateSettings').addEventListener('click',()=>{
   $('softwareExtensionStatus').textContent='Enter a valid GitHub Releases URL, for example https://github.com/aidilazharo/aiatech-assist/releases.';
   return;
  }
- const settings={releaseRepositoryUrl,autoCheckExtension:$('softwareAutoExtension').checked,autoCheckLibrary:$('softwareAutoLibrary').checked,promptForUpdates:$('softwarePromptUpdates').checked,checkOnStartup:$('softwareCheckOnStartup').checked};
+ const settings={releaseRepositoryUrl,autoCheckExtension:true,autoCheckLibrary:true,promptForUpdates:true,checkOnStartup:true};
  send('saveSoftwareUpdateSettings',{settings});
- $('softwareExtensionStatus').textContent='Update settings saved.';
+ $('softwareExtensionStatus').textContent='Saving release URL…';
 });
 $('checkSoftwareUpdates').addEventListener('click',()=>{
  $('softwareExtensionStatus').textContent='Checking extension releases…';
@@ -7129,6 +7125,40 @@ window.addEventListener('message',event=>{
   renderStartupPage();
  }
  if(message.type==='startupProceedResult'&&message.success){startupReturnToConnections=false;showStartupStep(false);$('gateQuery').focus();}
+});
+
+let displayedLibraryUpdate=null,libraryUpdatePriorFocus=null;
+function closeLibraryUpdate(action='Later'){
+ if(!displayedLibraryUpdate)return;
+ const requestId=displayedLibraryUpdate;displayedLibraryUpdate=null;
+ const modal=$('libraryUpdateModal');modal.classList.add('hidden');modal.setAttribute('aria-hidden','true');
+ const focus=libraryUpdatePriorFocus;libraryUpdatePriorFocus=null;
+ if(focus&&focus.isConnected)focus.focus();
+ send('libraryUpdateDecision',{requestId,action});
+}
+$('libraryUpdateLater').addEventListener('click',()=>closeLibraryUpdate('Later'));
+$('libraryUpdatePull').addEventListener('click',()=>closeLibraryUpdate('Pull Library'));
+$('libraryUpdateModal').addEventListener('keydown',event=>{
+ if(event.key==='Escape'){event.preventDefault();closeLibraryUpdate('Later');return;}
+ if(event.key==='Tab'){
+  const first=$('libraryUpdateLater'),last=$('libraryUpdatePull');
+  if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+  else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+ }
+});
+window.addEventListener('message',event=>{
+ const message=event.data||{};
+ if(message.type!=='libraryUpdateOffer'||!message.requestId)return;
+ if(displayedLibraryUpdate)closeLibraryUpdate('Later');
+ displayedLibraryUpdate=message.requestId;
+ libraryUpdatePriorFocus=document.activeElement;
+ const installed=String(message.installedVersion||'');
+ $('libraryUpdateCurrent').textContent=installed?'v'+installed:String(message.installedSha||'unknown').slice(0,12);
+ $('libraryUpdateNext').textContent=String(message.remoteSha||'unknown').slice(0,12);
+ $('libraryUpdateDescription').textContent='A verified SDLC Catalog update is available on the configured GitHub main branch.';
+ $('libraryUpdateSource').textContent='GitHub: '+String(message.repository||'tech-stacks-skills')+'/main · '+String(message.remoteSha||'').slice(0,12);
+ const modal=$('libraryUpdateModal');modal.classList.remove('hidden');modal.setAttribute('aria-hidden','false');
+ $('libraryUpdatePull').focus();
 });
 
 let displayedExtensionUpgrade=null;

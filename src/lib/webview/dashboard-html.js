@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.3.60';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.3.61';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -55,6 +55,14 @@ function html(webview,{resumeLibrary=false}={}){
     <div class="atgv-upgrade-versions"><div><small>INSTALLED</small><strong id="extensionUpgradeCurrent">—</strong></div><span aria-hidden="true">→</span><div><small>AVAILABLE</small><strong id="extensionUpgradeNext">—</strong></div></div>
     <p id="extensionUpgradeSource" class="muted"></p><p class="atgv-upgrade-assurance">Verified release asset and SHA-256 checksum. Installation requires your confirmation.</p>
     <div class="atgv-upgrade-actions"><button type="button" id="extensionUpgradeLater" class="secondary">Later</button><button type="button" id="extensionUpgradeView" class="secondary">View Release</button><button type="button" id="extensionUpgradeInstall">Install Upgrade</button></div>
+  </div></div>
+  <div id="libraryUpdateModal" class="modal-overlay hidden" aria-hidden="true"><div class="modal-card atgv-upgrade-modal" role="dialog" aria-modal="true" aria-labelledby="libraryUpdateTitle" aria-describedby="libraryUpdateDescription">
+    <div class="atgv-upgrade-brand"><img src="${brand}" alt="ATGV AIATECH Assist logo"><div><strong>AIATECH ASSIST</strong><span>VERIFIED SDLC LIBRARY UPDATE</span></div></div>
+    <span class="atgv-upgrade-kicker">UPDATE AVAILABLE</span><h2 id="libraryUpdateTitle">An SDLC Library update is ready</h2>
+    <p id="libraryUpdateDescription">Download the latest verified catalog from GitHub main.</p>
+    <div class="atgv-upgrade-versions"><div><small>INSTALLED CATALOG</small><strong id="libraryUpdateCurrent">—</strong></div><span aria-hidden="true">→</span><div><small>AVAILABLE ON MAIN</small><strong id="libraryUpdateNext">—</strong></div></div>
+    <p id="libraryUpdateSource" class="muted"></p><p class="atgv-upgrade-assurance">The catalog will be downloaded and verified. Active project files stay unchanged; installation requires your confirmation.</p>
+    <div class="atgv-upgrade-actions"><button type="button" id="libraryUpdateLater" class="secondary">Later</button><button type="button" id="libraryUpdatePull">Pull Library</button></div>
   </div></div>
   <div id="projectConnectionModal" class="modal-overlay hidden" aria-hidden="true"><div class="modal-card project-connection-modal-card" role="dialog" aria-modal="true" aria-labelledby="projectConnectionModalTitle"><div class="section-title"><div><h2 id="projectConnectionModalTitle">Project connection</h2><p id="projectConnectionModalDescription" class="muted">Test access before saving the project mapping.</p></div><button type="button" id="projectConnectionModalClose" class="secondary">Close</button></div><form id="projectConnectionForm"><label for="projectConnectionKey" id="projectConnectionKeyLabel">Project key</label><input id="projectConnectionKey" type="text" maxlength="40" autocomplete="off" spellcheck="false" required placeholder="Key" aria-describedby="projectConnectionTestStatus"><p id="projectConnectionTestStatus" role="status" aria-live="polite" class="test-status muted">Enter a key and test permissions before saving.</p><div class="stack actions"><button type="button" id="projectConnectionTest" class="secondary">Test Permissions</button><button type="submit" id="projectConnectionSave" disabled>Save Mapping</button><button type="button" id="projectConnectionCancel" class="secondary">Cancel</button></div></form></div></div>
   <div id="jiraInventoryModal" class="modal-overlay hidden" aria-hidden="true"><div class="modal-card modal-wide jira-inventory-modal" role="dialog" aria-modal="true" aria-labelledby="jiraInventoryModalTitle">
@@ -205,10 +213,14 @@ function html(webview,{resumeLibrary=false}={}){
     </section></div></details>
     <details class="ext-settings-accordion" id="settingsSoftwareUpdateGroup" data-requirement="optional"><summary><span>8. Extension &amp; SDLC Library Updates</span><span class="ext-settings-badge" data-state="optional">Optional</span></summary><div class="ext-settings-content"><section>
       <p class="muted">ATGV checks the configured GitHub repository Releases page and the SDLC Catalog's main branch. Update checks never modify local projects or remote repositories.</p>
-      <div class="form-grid"><label class="field full" for="softwareReleaseRepositoryUrl">GitHub Extension Releases URL<input id="softwareReleaseRepositoryUrl" type="url" required spellcheck="false" placeholder="https://github.com/OWNER/REPOSITORY/releases" autocomplete="off" value="https://github.com/aidilazharo/aiatech-assist/releases"></label></div>
-      <p class="muted">Only github.com repository Releases URLs are accepted. Use the trusted owner and repository; changing this source changes who publishes upgrade files.</p>
-      <div class="form-grid"><label class="field full"><input id="softwareAutoExtension" type="checkbox" checked> Automatically check for newer ATGV VSIX releases</label><label class="field full"><input id="softwareAutoLibrary" type="checkbox" checked> Automatically check SDLC Library updates</label><label class="field full"><input id="softwarePromptUpdates" type="checkbox" checked> Show upgrade confirmation dialogs</label><label class="field full"><input id="softwareCheckOnStartup" type="checkbox" checked> Check for updates when VS Code starts</label></div>
-      <div class="stack actions"><button type="button" id="saveSoftwareUpdateSettings">Save Update Settings</button><button type="button" id="checkSoftwareUpdates" class="secondary">Check Both Now</button><button type="button" id="installExtensionRelease" class="secondary" disabled>Install Verified VSIX</button><button type="button" id="viewExtensionRelease" class="secondary" disabled>View GitHub Release</button></div>
+      <div class="software-update-toolbar" role="group" aria-label="GitHub release URL and update actions">
+        <label class="software-update-url" for="softwareReleaseRepositoryUrl"><span class="sr-only">GitHub Extension Releases URL</span><input id="softwareReleaseRepositoryUrl" aria-label="GitHub Extension Releases URL" type="url" required spellcheck="false" placeholder="https://github.com/OWNER/REPOSITORY/releases" autocomplete="off" value="https://github.com/aidilazharo/aiatech-assist/releases"></label>
+        <button type="button" id="saveSoftwareUpdateSettings">Save URL</button>
+        <button type="button" id="checkSoftwareUpdates" class="secondary">Check Updates</button>
+        <button type="button" id="installExtensionRelease" class="secondary" disabled>Install Verified VSIX</button>
+        <button type="button" id="viewExtensionRelease" class="secondary" disabled>View GitHub Release</button>
+      </div>
+      <p class="muted">Extension and SDLC Library checks run automatically, including at startup; update notifications always require confirmation. The release URL must be a trusted github.com repository.</p>
       <p id="softwareExtensionStatus" class="test-status muted" role="status" aria-live="polite">Extension: not checked.</p>
       <p id="softwareLibraryStatus" class="test-status muted" role="status" aria-live="polite">Library: check the SDLC Catalog section for its installed version.</p>
       <p class="muted">Installation is optional, validates GitHub's published SHA-256 checksum, and requires a VS Code reload. Private releases require a saved GitHub token or VS Code GitHub sign-in. Catalog downloads use the existing pinned and verified Pull Catalog process.</p>

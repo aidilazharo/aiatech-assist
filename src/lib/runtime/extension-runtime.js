@@ -108,6 +108,7 @@ let architectServerOperationSerial=0;
 const pendingAiConsents=new Map();
 const pendingHostDialogs=new Map();
 const pendingExtensionUpgradeOffers=new Map();
+const pendingLibraryUpdateOffers=new Map();
 let startupModuleInstalling=false;
 let startupSessionVerified=false;
 let startupVerifiedSignature='';
@@ -343,10 +344,11 @@ let extensionRelease=null,extensionUpdateChecked='',extensionUpdateError='',libr
 function updatePreferences(){
  const c=cfg();return {
   releaseRepositoryUrl:c.get('updates.releaseRepositoryUrl',releaseUpdater.DEFAULT_RELEASE_URL),
-  autoCheckExtension:c.get('updates.autoCheckExtension',true)!==false,
-  autoCheckLibrary:c.get('updates.autoCheckLibrary',true)!==false,
-  promptForUpdates:c.get('updates.promptForUpdates',true)!==false,
-  checkOnStartup:c.get('updates.checkOnStartup',true)!==false
+  // Required checks and consent prompts cannot be disabled by legacy saved settings.
+  autoCheckExtension:true,
+  autoCheckLibrary:true,
+  promptForUpdates:true,
+  checkOnStartup:true
  };
 }
 function updateStatus(){return {settings:updatePreferences(),installedVersion:require('../../../package.json').version,
@@ -405,20 +407,46 @@ async function checkExtensionRelease({prompt=false,interactive=false}={}){
  }catch(error){extensionUpdateError=error.message;report('GitHub extension release check: '+error.message);if(interactive)throw error;return null;}
  finally{await publishUpdateStatus();}
 }
+async function offerBrandedLibraryUpdate({repository,installedVersion,installedSha,remoteSha}){
+ const message='An SDLC Library update is available on '+repository+'/main ('+remoteSha.slice(0,12)+'). Download the verified catalog? Active project files remain unchanged.';
+ if(!dashboard)return vscode.window.showInformationMessage(message,{modal:true},'Pull Library','Later');
+ const requestId=crypto.randomUUID();
+ return new Promise(resolve=>{
+  const timer=setTimeout(()=>{
+   const entry=pendingLibraryUpdateOffers.get(requestId);
+   if(entry){pendingLibraryUpdateOffers.delete(requestId);resolve('Later');}
+  },120000);
+  timer.unref?.();
+  pendingLibraryUpdateOffers.set(requestId,{resolve,timer});
+  Promise.resolve(dashboard.webview.postMessage({type:'libraryUpdateOffer',requestId,
+   repository,installedVersion:installedVersion||'',installedSha:installedSha||'',remoteSha}))
+   .then(ok=>{
+    if(!ok){const entry=pendingLibraryUpdateOffers.get(requestId);
+     if(entry){clearTimeout(entry.timer);pendingLibraryUpdateOffers.delete(requestId);resolve('Later');}}
+   }).catch(()=>{
+    const entry=pendingLibraryUpdateOffers.get(requestId);
+    if(entry){clearTimeout(entry.timer);pendingLibraryUpdateOffers.delete(requestId);resolve('Later');}
+   });
+ });
+}
 async function checkLibraryRelease({prompt=false,interactive=false}={}){
  const config=catalogConfig();if(!config.repositoryUrl){libraryUpdateError='Set the SDLC Catalog repository in Settings.';await publishUpdateStatus();return null;}
  try{
   if(catalogBusy)return null;
   await catalogCheck({interactive});libraryUpdateError=catalogLastError;
-  const remote=catalogRemote?.sha||'',installed=(await catalogUiState()).installed?.sha||'';
+  const remote=catalogRemote?.sha||'',installedCatalog=(await catalogUiState()).installed||{},installed=installedCatalog.sha||'';
   if(!remote||!installed||remote===installed)return null;
   if(prompt&&updatePreferences().promptForUpdates){
    const key='atgvAssist.updates.promptedLibrary';
    if(context.globalState.get(key)!==remote){
     await context.globalState.update(key,remote);
-    const answer=await vscode.window.showInformationMessage(`An SDLC Library update is available on tech-stacks-skills/main (${remote.slice(0,12)}). Download the verified catalog? Active project files will remain unchanged.`,{modal:true},'Pull Library','Later');
+    const answer=await offerBrandedLibraryUpdate({
+     repository:catalogRemote?.repository||'tech-stacks-skills',
+     installedVersion:installedCatalog.version||'',
+     installedSha:installed,remoteSha:remote
+    });
     if(answer==='Pull Library'){
-     if(!getWorkspace()){await vscode.window.showInformationMessage('Open an ATGV workspace to update the SDLC Library.');}
+     if(!getWorkspace()){await uiInformation('Open an ATGV workspace to update the SDLC Library.');}
      else await handleDashboardMessage({type:'catalogPull'});
     }
    }
@@ -1083,7 +1111,7 @@ async function start(options={}){
   // handshake as soon as its scripts execute. Do not lose that first message.
   dashboard.webview.onDidReceiveMessage(message=>{guarded(()=>handleDashboardMessage(message));});
   dashboard.webview.html=html(dashboard.webview);webviewVendorDir=installedVendorAssets?.dir||null;
-  dashboard.onDidDispose(()=>{for(const [key,item] of pendingHostDialogs){clearTimeout(item.timer);item.resolve(undefined);pendingHostDialogs.delete(key);}for(const [key,item] of pendingExtensionUpgradeOffers){clearTimeout(item.timer);item.resolve('Later');pendingExtensionUpgradeOffers.delete(key);}dashboard=undefined;pendingTests={jira:null,github:null};if(modelStatusPoll){clearInterval(modelStatusPoll);modelStatusPoll=null;}});
+  dashboard.onDidDispose(()=>{for(const [key,item] of pendingHostDialogs){clearTimeout(item.timer);item.resolve(undefined);pendingHostDialogs.delete(key);}for(const [key,item] of pendingExtensionUpgradeOffers){clearTimeout(item.timer);item.resolve('Later');pendingExtensionUpgradeOffers.delete(key);}for(const [key,item] of pendingLibraryUpdateOffers){clearTimeout(item.timer);item.resolve('Later');pendingLibraryUpdateOffers.delete(key);}dashboard=undefined;pendingTests={jira:null,github:null};if(modelStatusPoll){clearInterval(modelStatusPoll);modelStatusPoll=null;}});
   if(modelStatusPoll)clearInterval(modelStatusPoll);
   modelStatusPoll=setInterval(()=>{invalidateModelStatus();if(dashboard)refreshDashboard().catch(e=>report('Model badge refresh: '+e.message));},60000);
   modelStatusPoll.unref?.();
@@ -3595,6 +3623,12 @@ async function handleDashboardMessage(msg){
           entry.resolve(['Install Upgrade','View Release','Later'].includes(msg.action)?msg.action:'Later');}
         break;
       }
+      case 'libraryUpdateDecision':{
+        const entry=pendingLibraryUpdateOffers.get(msg.requestId);
+        if(entry){pendingLibraryUpdateOffers.delete(msg.requestId);clearTimeout(entry.timer);
+          entry.resolve(msg.action==='Pull Library'?'Pull Library':'Later');}
+        break;
+      }
       case 'checkSoftwareUpdates':{
         await checkSoftwareUpdates({prompt:true,interactive:true,force:true});break;
       }
@@ -3603,12 +3637,10 @@ async function handleDashboardMessage(msg){
         if(!value||typeof value!=='object')throw Error('Invalid update settings.');
         const previousRepository=releaseUpdater.parseRepositoryUrl(updatePreferences().releaseRepositoryUrl);
         const nextRepository=releaseUpdater.parseRepositoryUrl(value.releaseRepositoryUrl);
-        for(const key of ['autoCheckExtension','autoCheckLibrary','promptForUpdates','checkOnStartup']){
-          if(typeof value[key]!=='boolean')throw Error('Invalid update preference: '+key);
-        }
         await cfg().update('updates.releaseRepositoryUrl',nextRepository.url,vscode.ConfigurationTarget.Global);
+        // All update checks and opt-in confirmations remain required.
         for(const key of ['autoCheckExtension','autoCheckLibrary','promptForUpdates','checkOnStartup']){
-          await cfg().update('updates.'+key,value[key],vscode.ConfigurationTarget.Global);
+          await cfg().update('updates.'+key,true,vscode.ConfigurationTarget.Global);
         }
         if(previousRepository.repository!==nextRepository.repository){
           extensionRelease=null;extensionUpdateChecked='';extensionUpdateError='';
