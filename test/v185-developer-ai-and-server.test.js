@@ -64,12 +64,19 @@ test('Server refuses a different project process, missing dependencies, or wrong
  assert.equal(previewDriver.counters().starts,1);
  await server.stop({root:'/tmp/atgv-repo',stackId:'react',driver:previewDriver});
 });
-test('Server refuses port conflicts and stops only its failed launches',async()=>{
+test('Server chooses another port when the configured one is occupied and stops only its failed launches',async()=>{
  const driver=fakeDriver();
- await assert.rejects(server.start({root:'/tmp/atgv-repo',stackId:'react',prepared,driver,effects:{portAvailable:async()=>false}}),/already occupied/);
- assert.deepEqual(driver.counters(),{starts:0,stops:0,active:false});
+ let opened='';
+ const started=await server.start({root:'/tmp/atgv-repo',stackId:'react',prepared,driver,openBrowser:async url=>(opened=url,true),
+  effects:{portAvailable:async url=>!url.includes(':5173/'),waitForHttp:async()=>{}}});
+ assert.equal(opened,'http://127.0.0.1:5174/');
+ assert.equal(started.url,opened);
+ assert.match(started.message,/alternate available port selected/);
+ assert.deepEqual(driver.counters(),{starts:1,stops:0,active:true});
+ assert.equal((await server.verify({root:'/tmp/atgv-repo',stackId:'react',driver,effects:{waitForHttp:async()=>{}}})).url,opened);
+ await server.stop({root:'/tmp/atgv-repo',stackId:'react',driver});
  await assert.rejects(server.start({root:'/tmp/atgv-repo',stackId:'react',prepared,driver,effects:{portAvailable:async()=>true,waitForHttp:async()=>{throw Error('unhealthy');}}}),/unhealthy/);
- assert.deepEqual(driver.counters(),{starts:1,stops:1,active:false});
+ assert.deepEqual(driver.counters(),{starts:2,stops:2,active:false});
 });
 test('Server status is scoped to the selected checkout',async()=>{
  const other=fakeDriver({running:true,cwd:'/tmp/other'});
