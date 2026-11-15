@@ -78,7 +78,7 @@ async function imported(workspace,repositoryUrl){
  let state;
  try{state=JSON.parse(await fs.readFile(path.join(base(workspace),'state.json'),'utf8'));}
  catch(e){if(e.code==='ENOENT')return null;throw Error('Offline library metadata is damaged; existing data was retained.');}
- const catalog=require('./github-sdlc-catalog'),p=catalog.parseRepository(repositoryUrl||'');
+ const catalog=require('./github-sdlc-catalog'),p=catalog.parseRepository(repositoryUrl||('https://github.com/'+state.repository));
  if(!p||state.repository.toLowerCase()!==(p.owner+'/'+p.repo).toLowerCase())return null;
  if(state.schema!==1||state.source!=='zip'||!/^[a-f0-9]{64}$/.test(state.archiveHash)||
    !state.assets||Object.keys(state.assets).length>MAX_ASSETS)throw Error('Offline library metadata is invalid.');
