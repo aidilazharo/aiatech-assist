@@ -48,6 +48,6 @@ test('panel is only exposed during Jira Preview with relevant requests or blocke
 
 test('release metadata is consistent for v0.2.42', () => {
   const pkg = require('../package.json');
-  assert.equal(pkg.version, '0.3.52');
-  assert.equal(pkg.atgvDisplayVersion, '0.3.52');
+  assert.equal(pkg.version, '0.3.53');
+  assert.equal(pkg.atgvDisplayVersion, '0.3.53');
 });

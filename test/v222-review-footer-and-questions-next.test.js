@@ -44,7 +44,7 @@ test('all AI Review controls live after findings in the review footer, not in th
 
 test('release metadata is v0.2.98',()=>{
  const pkg=require('../package.json');
- assert.equal(pkg.version,'0.3.52');
- assert.equal(pkg.atgvDisplayVersion,'0.3.52');
- assert.match(host,/atgvDisplayVersion :'0\.3\.52'/);
+ assert.equal(pkg.version,'0.3.53');
+ assert.equal(pkg.atgvDisplayVersion,'0.3.53');
+ assert.match(host,/atgvDisplayVersion :'0\.3\.53'/);
 });

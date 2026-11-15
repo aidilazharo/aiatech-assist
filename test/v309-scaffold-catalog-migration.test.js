@@ -76,7 +76,7 @@ test('v0.3.09 rejects staged or unrelated work and preserves old scaffold',()=>w
 }));
 test('v0.3.09 rejects tracked existing starter without rewriting it',()=>withDraft(async({root})=>{
  git(root,'add','.');git(root,'commit','-m','initial starter');
- await assert.rejects(migration.migrate({root,stackIds:['react']}),/tracked, ignored or missing/);
+ await assert.rejects(migration.migrate({root,stackIds:['react']}),/tracked, ignored or missing|requires the existing bootstrap branch/);
  assert.ok(await exists(path.join(root,'src/main.jsx')));
 }));
 test('v0.3.09 rejects additional file at new scaffold path',()=>withDraft(async({root})=>{

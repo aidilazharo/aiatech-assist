@@ -54,4 +54,4 @@ test('six-step UI/UX workflow has one generation action, ticket upload and a rev
  assert.match(web,/send\('uxDesignReferenceUpload'/);
  assert.match(css,/max-width:520px;height:38px/);
 });
-test('version is 0.2.42',()=>{const pkg=require('../package.json');assert.equal(pkg.version,'0.3.52');assert.equal(pkg.atgvDisplayVersion,'0.3.52');});
+test('version is 0.2.42',()=>{const pkg=require('../package.json');assert.equal(pkg.version,'0.3.53');assert.equal(pkg.atgvDisplayVersion,'0.3.53');});

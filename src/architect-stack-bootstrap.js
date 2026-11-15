@@ -82,11 +82,19 @@ async function preflight(root,stackId,auth,generation=0,baseBranch='main'){
  const {activeManifest}=require('./github-sdlc-catalog');const workspace=await skeleton.workspaceFor(root);const manifest=await activeManifest(workspace);
  if(!manifest.techStacks.includes(stackId))throw Error('Selected stack is absent from activated GitHub catalog. Pull the catalog.');
  const repo=await developer.repository(root),branch=branchFor(stackId,generation);
+ const isMigration=String(repo.branch||'').startsWith('migration/');
+ let migrationMeta=null;
+ if(isMigration){
+  migrationMeta=await fs.readFile(path.join(root,'atgv.bootstrap.json'),'utf8').then(JSON.parse,()=>null);
+  if(migrationMeta?.migration?.schema!==1||migrationMeta.migration.branch!==repo.branch||
+    migrationMeta.stacks?.length!==1||migrationMeta.stacks[0]!==stackId||
+    migrationMeta.migration.sourceBranch!==branch)throw Error('Unknown migration branch or starter manifest. No automatic changes allowed.');
+ }
  if(!repo.remote)throw Error('Configure a GitHub origin in Settings before saving the stack.');
- if(!repo.clean && repo.branch!==branch)throw Error('Uncommitted work in the checkout. Save or stash it before creating the bootstrap branch.');
- if(repo.branch!==baseBranch&&repo.branch!==branch)throw Error('Save Stack requires the base branch, or its existing '+branch+' recovery branch. Currently on '+(repo.branch||'an unnamed branch')+'.');
+ if(!repo.clean && repo.branch!==branch&&!isMigration)throw Error('Uncommitted work in the checkout. Save or stash it before creating the bootstrap branch.');
+ if(repo.branch!==baseBranch&&repo.branch!==branch&&!isMigration)throw Error('Save Stack requires the base branch, bootstrap branch, or verified migration recovery branch. Currently on '+(repo.branch||'an unnamed branch')+'.');
  const heads=await git(root,auth,'ls-remote','--heads','origin');
- const baseSha=remoteHash(heads,baseBranch),publishedSha=remoteHash(heads,branch);
+ const baseSha=remoteHash(heads,baseBranch),publishedSha=remoteHash(heads,isMigration?repo.branch:branch);
  if(!baseSha&&heads.trim())throw Error('GitHub has other branches but no base branch. Configure and review base before bootstrapping.');
  if(repo.branch===baseBranch){
   if(!repo.clean)throw Error('The base branch has local changes. Commit or stash them before Save Stack.');
@@ -122,15 +130,20 @@ async function preflight(root,stackId,auth,generation=0,baseBranch='main'){
    else await git(root,auth,'switch','-c',branch,'FETCH_HEAD');
   }else await git(root,auth,'switch','-c',branch);
  }else{
-  // Retry after a failed install, startup, push or authentication. Never merge or reset.
-  if(publishedSha&&repo.sha!==publishedSha)throw Error('Local bootstrap branch differs from GitHub. Review both revisions; no force push or reset is allowed.');
+  // Retry after failed install/test/push; verified migration branches are recoverable.
+  if(publishedSha&&repo.sha!==publishedSha)throw Error('Local bootstrap/migration branch differs from GitHub. Review both revisions; no force push or reset is allowed.');
   if(!await fs.stat(path.join(root,'atgv.bootstrap.json')).then(s=>s.isFile(),()=>false))throw Error('Bootstrap branch does not contain an ATGV starter manifest. Review this branch manually before running application code.');
+  if(isMigration){
+   const existing=await git(root,auth,'rev-parse',branch).catch(()=>null);
+   if(existing!==migrationMeta.migration.baseCommit)throw Error('Migration source branch has changed. Preserve work and reconcile manually.');
+   await architect.generatedCommitPlan(root,[stackId]);
+  }
   if(baseSha){
    const ancestor=await git(root,auth,'merge-base',baseBranch,'HEAD').catch(()=>null);
    if(ancestor&&ancestor!==baseSha)throw Error('Bootstrap branch is based on a different base revision. Review before continuing.');
   }
  }
- return {branch,baseBranch,baseSha,publishedSha};
+ return {branch:isMigration?repo.branch:branch,baseBranch,baseSha,publishedSha};
 }
 async function publish(root,branch,baseSha,auth,baseBranch='main'){
  const heads=await git(root,auth,'ls-remote','--heads','origin');
@@ -157,10 +170,12 @@ async function bootstrap({root,stackId,generation=0,baseBranch='main',token='',o
   await progress('Preparing '+base.branch+' and copying the '+stackId+' skeleton…');
   const prepared=await architect.save(root,[stackId]);
   await ensureLocalBuildExcludes(root);
-  // Reconcile a pristine older draft whose generated file inventory changed
-  // (e.g. src/main.jsx -> src/main.tsx). User edits and tracked files block.
+  // Upgrade verified legacy drafts, including committed starters, on a distinct branch.
   const migrated=await require('./architect-scaffold-migration').migrate({root,stackIds:[stackId],onProgress:progress});
-  if(migrated.migrated)remember('Verified legacy '+stackId+' starter migrated to current SDLC Catalog without overwriting user work.');
+  if(migrated.migrated){
+   if(migrated.branch)base.branch=migrated.branch;
+   remember('Verified legacy '+stackId+' starter migrated to current SDLC Catalog without overwriting user work.');
+  }
   // Only known, byte-identical untracked legacy SQLite tests may be repaired.
   // The originals are backed up in Git metadata, and user edits are protected.
   const repaired=await require('./architect-scaffold-repair').repair({root,stackIds:[stackId],onProgress:progress});

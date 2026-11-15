@@ -69,6 +69,15 @@ async function generatedCommitPlan(folder,stackIds){
  const meta=JSON.parse(await fs.readFile(path.join(info.root,'atgv.bootstrap.json'),'utf8'));
  const generated=require('./architect-scaffold-repair').checkInventory(meta,files);
  const allowed=new Set(generated);
+ const branch=await git(info.root,'branch','--show-current');
+ const migration=meta.migration;
+ const verifiedMigration=migration?.schema===1&&migration.branch===branch&&branch.startsWith('migration/')&&
+  /^[0-9a-f]{40}$/.test(migration.baseCommit||'')&&
+  typeof migration.sourceBranch==='string'&&migration.sourceBranch.startsWith('bootstrap/')&&
+  Array.isArray(migration.removed)&&migration.removed.every(s=>typeof s==='string'&&s&&!s.includes('..')&&!s.includes('\\')&&!s.startsWith('/'))&&
+  await git(info.root,'merge-base',migration.sourceBranch,'HEAD').then(v=>v===migration.baseCommit,()=>false);
+ if(migration&&!verifiedMigration)throw Error('Invalid or changed migration provenance. No files staged.');
+ if(verifiedMigration)for(const name of migration.removed)allowed.add(name);
  for(const relative of generated){
   const target=path.join(info.root,relative),st=await fs.lstat(target).catch(()=>null);
   if(!st?.isFile()||st.isSymbolicLink())throw Error('Starter file missing or unsafe: '+relative);
@@ -80,22 +89,31 @@ async function generatedCommitPlan(folder,stackIds){
     throw Error('The starter manifest was changed. Review and commit manually.');
   }else if(!actual.equals(files[relative]))throw Error('Starter file was edited: '+relative+'. Review and commit manually before testing.');
  }
- const output=await exec('git',['-C',info.root,'status','--porcelain','-z','--untracked-files=all'],{timeout:45000,maxBuffer:1024*1024});
+ const output=await exec('git',['-C',info.root,'-c','status.renames=false','status','--porcelain','-z','--untracked-files=all'],{timeout:45000,maxBuffer:1024*1024});
  const records=output.stdout.split('\0').filter(Boolean);
  if(!records.length)return {root:info.root,files:[],needsCommit:false};
  const seen=new Set();
  for(const record of records){
   const code=record.slice(0,2),relative=record.slice(3);
-  if(code!=='??'||!allowed.has(relative))throw Error('The repository contains non-starter or previously staged changes ('+relative+'). Review and commit them manually.');
+  if(!allowed.has(relative)||(verifiedMigration?!['??',' M',' D'].includes(code):code!=='??'))throw Error('The repository contains non-starter or previously staged changes ('+relative+'). Review and commit them manually.');
   seen.add(relative);
  }
- if(seen.size!==allowed.size)throw Error('Some starter files are already tracked or changed. Review and commit manually.');
+ if(!verifiedMigration&&seen.size!==allowed.size)throw Error('Some starter files are already tracked or changed. Review and commit manually.');
+ if(verifiedMigration){
+  for(const relative of migration.removed){const st=await fs.lstat(path.join(info.root,relative)).catch(()=>null);if(st)throw Error('Removed migration source reappeared: '+relative);}
+  if(!seen.has('atgv.bootstrap.json'))throw Error('Migration manifest must be included in the verified change set.');
+  for(const name of seen)if(!generated.includes(name)&&!migration.removed.includes(name))throw Error('Unexpected changed file in migration: '+name);
+  // The migration base and every change remain confined to the recorded Git branch.
+  const current=(await git(info.root,'rev-parse','HEAD'));
+  if(current!==migration.baseCommit)throw Error('Migration branch HEAD changed since the verified snapshot. Review manually.');
+  return {root:info.root,files:[...seen],needsCommit:true,migration:true};
+ }
  return {root:info.root,files:[...allowed],needsCommit:true};
 }
 async function commitGenerated(plan){
  if(!plan.needsCommit)return false;
- await git(plan.root,'add','--',...plan.files);
- try{await git(plan.root,'commit','-m','chore: add reviewed ATGV technology stack starter');}
+ await git(plan.root,'add','-A','--',...plan.files);
+ try{await git(plan.root,'commit','-m',plan.migration?'chore: migrate verified ATGV technology stack starter':'chore: add reviewed ATGV technology stack starter');}
  catch(error){await git(plan.root,'reset','--',...plan.files).catch(()=>{});throw Error('Could not create the starter commit. Configure Git author identity and retry: '+String(error.message).slice(0,300));}
  return true;
 }

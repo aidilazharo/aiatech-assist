@@ -47,7 +47,9 @@ async function skeletonFiles(ids, root){
             files[relative]=repairSQLiteStarterTest(relative,contents);
         }
     }
-    const header={schema:1,stacks:ids,source:'github-main-catalog',catalogVersion:manifest.version,
+    const active=await catalog.activeRoot(workspace);
+    const header={schema:1,stacks:ids,source:'github-main-catalog',catalogVersion:manifest.version,catalogCommit:active.sha,
+        fileDigests:Object.fromEntries(Object.entries(files).map(([name,bytes])=>[name,crypto.createHash('sha256').update(bytes).digest('hex')])),
         // Pin a hash of every downloaded file; prevents drift during retries.
         templateDigest:crypto.createHash('sha256').update(Object.keys(files).sort().map(name=>name+'\0'+crypto.createHash('sha256').update(files[name]).digest('hex')).join('\n')).digest('hex'),
         status:'draft'};
@@ -73,6 +75,7 @@ async function generateSkeleton(root,ids){
     if(conflicts.length)throw Error('Cannot overwrite existing application files: '+conflicts.slice(0,6).join(', '));
     for(const name of existing)delete files[name];
     const meta=JSON.parse(files['atgv.bootstrap.json']);meta.generatedFiles=Object.keys(files).sort();
+    for(const p of existing)delete meta.fileDigests[p];
     files['atgv.bootstrap.json']=Buffer.from(JSON.stringify(meta,null,2)+'\n');
     const written=[];
     try{for(const [name,body] of Object.entries(files)){
