@@ -268,17 +268,44 @@ async function executeLocal(root, { relative = '', operation = 'test', onDiagnos
         return { passed: false, operation, head, at, logs: ((e.stdout || '') + '\n' + (e.stderr || '') + '\n' + e.message).slice(-96000), diagnosticLogs:details, relative };
     }
 }
+// Use runtime-only CLI port arguments for the known ATGV catalog starters.
+// No package.json or approved source file is modified by port selection.
+async function previewCommand(cmd,target,cwd,previewUrl){
+ if(!previewUrl)return cmd;
+ const endpoint=new URL(previewUrl),port=Number(endpoint.port);
+ if(endpoint.protocol!=='http:'||!['127.0.0.1','localhost','[::1]'].includes(endpoint.hostname)||!Number.isInteger(port)||port<1||port>65535)
+  throw Error('Preview override requires a valid localhost HTTP port.');
+ if(target.kind!=='npm')return cmd;
+ const pkg=JSON.parse(await fs.readFile(path.join(cwd,'package.json'),'utf8'));
+ const scriptName=target.scripts.includes('dev')?'dev':'start';
+ const script=String(pkg.scripts?.[scriptName]||'').trim();
+ const known=script.match(/^concurrently -k "(vite|ng serve) --host 127\.0\.0\.1 --port (\d+)" "(node server\/index\.mjs)"$/);
+ if(known&&port!==Number(known[2])){
+  const frontend=known[1]+' --host 127.0.0.1 --port '+port+(known[1]==='vite'?' --strictPort':'');
+  return npmCommand(['exec','--offline','--','concurrently','-k',frontend,known[3]]);
+ }
+ if(/^vite(?:\s|$)/.test(script)&&!known&&/--port\s+\d+/.test(script)){
+  return npmCommand(['exec','--offline','--','vite','--host','127.0.0.1','--port',String(port),'--strictPort']);
+ }
+ if(/^ng serve(?:\s|$)/.test(script)&&/--port\s+\d+/.test(script)){
+  return npmCommand(['exec','--offline','--','ng','serve','--host','127.0.0.1','--port',String(port)]);
+ }
+ return cmd;
+}
 let activeProcess = null;
 let lastProcess = null;
-async function runLocal(root, { relative = '', env = {} } = {}) {
+async function runLocal(root, { relative = '', env = {}, previewUrl = '' } = {}) {
     if (activeProcess && activeProcess.child.exitCode === null)
         throw Error('An application is already running. Stop it before starting another.');
     const info = await inspectScripts(root), target = info.targets.find(t => t.relative === relative);
     if (!target)
         throw Error('Select a detected application.');
-    const cmd = approvedCommand(target, 'run'), cwd = path.join(info.repo.root, target.relative);
-    const child = spawn(cmd.bin, cmd.args, { cwd, env: { ...process.env, ...env }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], shell: false, detached: process.platform !== 'win32' });
-    const entry = { child, cwd, command:diagnostic.commandLine(cmd.bin,cmd.args), logs: '', head: info.repo.sha, relative, exitCode:null, signal:null };
+    const cwd=path.join(info.repo.root,target.relative);
+    const cmd=await previewCommand(approvedCommand(target,'run'),target,cwd,previewUrl);
+    const port=previewUrl?Number(new URL(previewUrl).port):null;
+    const runtimeEnv=port?{PORT:String(port),PREVIEW_PORT:String(port),ATGV_PREVIEW_PORT:String(port),ASPNETCORE_URLS:'http://127.0.0.1:'+port,SERVER_PORT:String(port)}:{};
+    const child = spawn(cmd.bin, cmd.args, { cwd, env: { ...process.env, ...runtimeEnv, ...env }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], shell: false, detached: process.platform !== 'win32' });
+    const entry = { child, cwd, previewUrl, command:diagnostic.commandLine(cmd.bin,cmd.args), logs: '', head: info.repo.sha, relative, exitCode:null, signal:null };
     activeProcess = entry;
     lastProcess = entry;
     const read = (label,data) => { entry.logs = (entry.logs + '['+label+'] '+String(data)).slice(-256*1024); };
@@ -295,7 +322,7 @@ async function runLocal(root, { relative = '', env = {} } = {}) {
             activeProcess = null;
         throw diagnostic.attach(Error('Unable to start local application: ' + error.message),{stage:'start application',bin:cmd.bin,args:cmd.args,cwd,logs:entry.logs,exitCode:entry.exitCode??error.code,signal:entry.signal});
     }
-    return { pid: child.pid, relative, head: entry.head, message: 'Application process started. Review logs for the actual local URL.' };
+    return { pid: child.pid, relative, head: entry.head, message: 'Application process started'+(previewUrl?' at '+previewUrl:'. Review logs for the actual local URL.') };
 }
 async function stopLocal() { if (!activeProcess)
     return { stopped: false }; const entry = activeProcess; activeProcess = null; if (process.platform !== 'win32') {
@@ -314,7 +341,7 @@ else {
             await run('taskkill', ['/T', '/F', '/PID', String(entry.child.pid)], { windowsHide: true, timeout: 12000 });
     } catch { entry.child.kill(); }
 } return { stopped: true, logs: entry.logs }; }
-function localLogs() { const entry=activeProcess||lastProcess;return entry ? { running: !!activeProcess&&entry.child.exitCode === null && !entry.child.killed, pid:entry.child.pid, logs: entry.logs, cwd: entry.cwd, relative: entry.relative, head: entry.head, command:entry.command, exitCode:entry.exitCode, signal:entry.signal } : { running: false, pid:null, logs: '' }; }
+function localLogs() { const entry=activeProcess||lastProcess;return entry ? { running: !!activeProcess&&entry.child.exitCode === null && !entry.child.killed, pid:entry.child.pid, logs: entry.logs, cwd: entry.cwd, relative: entry.relative, head: entry.head, command:entry.command, previewUrl:entry.previewUrl, exitCode:entry.exitCode, signal:entry.signal } : { running: false, pid:null, logs: '' }; }
 function readinessFlags({hasRepo=false, clean=false, matched=false, baseFound=false, stackId='', targets=[]}={}) {
   const blockers=[];
   if(!stackId) blockers.push('Solution Architect has not selected a technology stack');
