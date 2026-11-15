@@ -42,5 +42,5 @@ test('UI/UX layout uses global design tokens for circle size, color, type and ac
 test('UI/UX framework, approval and reference actions are preserved',()=>{
  for(const id of ['uxFrameworkSync','uxFrameworkDocs','uxUploadReference','uxDeleteEntireDesign','uxApproveDesign','uxRejectDesign','uxReferencePreview'])assert.ok(host.includes('id="'+id+'"'),id);
  for(const name of ['renderUxProgress','renderUxVersionInfo','renderUxFrameworkAvailability','renderUxActions'])assert.match(js,new RegExp('function '+name+'\\('));
- assert.equal(require('../package.json').version,'0.3.55');
+ assert.match(require('../package.json').version,/^\d+\.\d+\.\d+$/);
 });

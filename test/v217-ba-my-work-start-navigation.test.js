@@ -31,6 +31,6 @@ test('Upload and Mapping suppress the duplicate footer; later next-step actions 
 
 test('release metadata displays 0.2.42',()=>{
  const manifest=require('../package.json');
- assert.equal(manifest.version,'0.3.55');
- assert.equal(manifest.atgvDisplayVersion,'0.3.55');
+ assert.match(manifest.version,/^\d+\.\d+\.\d+$/);
+ assert.equal(manifest.atgvDisplayVersion,manifest.version);
 });

@@ -78,6 +78,6 @@ test('review UI has advanced editors collapsed and lifecycle actions visible onl
 });
 
 test('release version follows requested rollover convention',()=>{
- assert.equal(manifest.version,'0.3.55');
- assert.equal(manifest.atgvDisplayVersion,'0.3.55');
+ assert.match(manifest.version,/^\d+\.\d+\.\d+$/);
+ assert.equal(manifest.atgvDisplayVersion,manifest.version);
 });

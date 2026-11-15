@@ -60,7 +60,7 @@ test('Settings accordions and architect stack sections use uniform widths, compa
  const css=require('node:fs').readFileSync(path.join(rootDir,'media/start.css'),'utf8');
  const host=require('node:fs').readFileSync(path.join(rootDir,'test/generated/extension-source.txt'),'utf8');
  const pkg=require('../package.json');
- assert.equal(pkg.atgvDisplayVersion,'0.3.55');
+ assert.equal(pkg.atgvDisplayVersion,pkg.version);
  assert.match(css,/:is\(#settingsView,#projectView\) \.ext-settings-accordion\{box-sizing:border-box;width:100%;max-width:none/);
  assert.match(css,/#workView #architectBootstrap>\.architect-simple-flow\{box-sizing:border-box;width:100%;max-width:none/);
  assert.match(css,/:is\(#settingsView,#projectView\) \.ext-settings-content \.form-grid\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);

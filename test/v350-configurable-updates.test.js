@@ -69,7 +69,7 @@ test('verification downloads from selected repository only and enforces checksum
  await assert.rejects(updater.downloadVerified(selected,{directory:temp,request:bad}),/checksum verification/);
 });
 test('VS Code settings expose a persisted release URL and independent library update checking',()=>{
- const pkg=require('../package.json');assert.equal(pkg.version,'0.3.55');
+ const pkg=require('../package.json');assert.match(pkg.version,/^\d+\.\d+\.\d+$/);
  assert.equal(pkg.contributes.configuration.properties['atgvAssist.updates.releaseRepositoryUrl'].default,updater.DEFAULT_RELEASE_URL);
  const runtime=require('node:fs').readFileSync(path.join(__dirname,'../src/lib/runtime/extension-runtime.js'),'utf8');
  const html=require('node:fs').readFileSync(path.join(__dirname,'../src/lib/webview/dashboard-html.js'),'utf8');

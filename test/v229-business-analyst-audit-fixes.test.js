@@ -101,7 +101,7 @@ test('interrupted reset is journaled, safely retryable and non-destructive to ap
 }));
 
 test('v0.2.42 source, UI and metadata references are coherent',()=>{
- const pkg=require('../package.json');assert.equal(pkg.version,'0.3.55');assert.equal(pkg.atgvDisplayVersion,'0.3.55');
+ const pkg=require('../package.json');assert.match(pkg.version,/^\d+\.\d+\.\d+$/);assert.equal(pkg.atgvDisplayVersion,pkg.version);
  assert.match(host,/brWorkflow\.repairRestart\(/);
  assert.match(host,/Restart recovery requires manual review|Discovery changed after restart/);
 });

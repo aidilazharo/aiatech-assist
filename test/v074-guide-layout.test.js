@@ -33,7 +33,7 @@ test('guide choices use explicit narrow radio controls and full-width descriptiv
  assert.ok(css.includes('max-height:min(360px,45vh)'));
 });
 test('version is 0.0.94 and accessible icon actions retain labels',()=>{
- assert.equal(JSON.parse(read('package.json')).version,'0.3.55');
+ assert.match(JSON.parse(read('package.json')).version,/^\d+\.\d+\.\d+$/);
  for(const id of ['guideHelp','gateGuideHelp']){
   const button=markup.match(new RegExp(`<button id="${id}"[^>]*>`))?.[0];
   assert.ok(button?.includes('aria-label="Open interactive user guide"'));

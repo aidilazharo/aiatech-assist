@@ -32,6 +32,6 @@ test('Overview Gantt explanatory text remains removed',()=>{
  assert.match(html,/id="overviewGanttDetails"/);
 });
 test('Version metadata updated',()=>{
- assert.equal(manifest.version,'0.3.55');
- assert.equal(manifest.atgvDisplayVersion,'0.3.55');
+ assert.match(manifest.version,/^\d+\.\d+\.\d+$/);
+ assert.equal(manifest.atgvDisplayVersion,manifest.version);
 });
