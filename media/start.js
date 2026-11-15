@@ -6987,3 +6987,131 @@ window.addEventListener('message',event=>{
 });
 
 
+
+// ATGV first-run setup lives on the Start page. The upgrade modal below is
+// reserved exclusively for VSIX releases, not catalog or setup notifications.
+const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluenceUrl',email:'startupEmail',
+ githubUrl:'startupGithubUrl',projectRepoUrl:'startupProjectRepo',libraryRepoUrl:'startupLibraryRepo'};
+let startupFormInitialized=false,startupPrereqRequested=false,startupConnectionVerified=false,startupSetupRequired=true;
+let startupVerifying=false;
+function startupPayload(){return Object.fromEntries(Object.entries(startupFieldMap).map(([key,id])=>[key,$(id).value.trim()]));}
+function showStartupStep(required){
+ startupSetupRequired=required;
+ $('startupSetup').classList.toggle('hidden',!required);
+ $('gateFinder').classList.toggle('hidden',required);
+ $('startupStep1').classList.toggle('is-active',required);
+ $('startupStep3').classList.toggle('is-active',!required);
+}
+function renderStartupConfig(config){
+ if(!config)return;
+ const required=config.required===true;
+ if(!startupFormInitialized){
+  const saved=config.saved||{},defaults=config.defaults||{};
+  for(const [key,id] of Object.entries(startupFieldMap))$(id).value=saved[key]||defaults[key]||'';
+  startupFormInitialized=true;
+ }
+ showStartupStep(required);
+ if(required&&!startupPrereqRequested){startupPrereqRequested=true;send('startupReadiness');}
+}
+function renderStartupStackReadiness(result){
+ const grid=$('startupStackGrid');grid.replaceChildren();
+ if(!result||!Array.isArray(result.stacks)){$('startupToolMessage').textContent='Prerequisite scan failed. Select Recheck Computer to retry.';return;}
+ const ready=result.stacks.filter(s=>s.ready).length;
+ $('startupToolMessage').textContent=`${ready} of ${result.stacks.length} technology stacks have their required host tools available. Select a stack to inspect components.`;
+ $('startupConnectionForm').classList.remove('hidden');$('startupStep2').classList.add('is-active');
+ for(const stack of result.stacks){
+  const details=document.createElement('details');details.className='atgv-startup-stack '+(stack.ready?'is-ready':'is-missing');
+  const summary=document.createElement('summary');
+  const title=document.createElement('span');title.textContent=stack.name;
+  const badge=document.createElement('span');badge.className='atgv-stack-ready';badge.textContent=stack.ready?'Ready':'Needs tools';
+  summary.append(title,badge);details.append(summary);
+  const list=document.createElement('ul');
+  for(const component of stack.components||[]){
+   const item=document.createElement('li');const label=document.createElement('span');label.textContent=component.id+(component.required?'':' (optional)');
+   const indicator=document.createElement('small');indicator.textContent=component.installed?(component.compatible?'Installed · ':'Version too old · ')+(component.version||'Detected'):'Not installed'+(component.minimum?' · requires '+component.minimum:'');
+   item.append(label,indicator);list.append(item);
+  }
+  details.append(list);grid.append(details);
+ }
+}
+function invalidateStartupConnection(){
+ if(!startupSetupRequired)return;
+ startupConnectionVerified=false;
+ $('startupProceed').disabled=true;
+ $('startupProceedInfo').textContent='Connection settings changed. Test and save again before proceeding.';
+ $('startupStep2').classList.add('is-active');
+}
+for(const id of Object.values(startupFieldMap))$(id).addEventListener('input',invalidateStartupConnection);
+for(const id of ['startupAtlassianToken','startupGithubToken'])$(id).addEventListener('input',invalidateStartupConnection);
+$('startupRecheck').addEventListener('click',()=>{
+ $('startupToolMessage').textContent='Checking local computer prerequisites…';
+ $('startupRecheck').disabled=true;send('startupReadiness');
+});
+$('startupConnectionForm').addEventListener('submit',event=>{
+ event.preventDefault();if(startupVerifying)return;
+ startupConnectionVerified=false;startupVerifying=true;
+ $('startupProceed').disabled=true;$('startupTestConnections').disabled=true;
+ $('startupConnectionMessage').textContent='Testing Jira, Confluence, GitHub account, project repository and library main branch…';
+ send('startupTestConnections',{settings:startupPayload(),atlassianToken:read('startupAtlassianToken'),githubToken:read('startupGithubToken')});
+});
+$('startupProceed').addEventListener('click',()=>{
+ if(!startupConnectionVerified||startupVerifying)return;
+ $('startupProceed').disabled=true;
+ $('startupProceedInfo').textContent='Opening project search…';
+ send('startupProceed',{settings:startupPayload()});
+});
+window.addEventListener('message',event=>{
+ const message=event.data||{};
+ if(message.type==='state'&&message.startupSetup)renderStartupConfig(message.startupSetup);
+ if(message.type==='startupReadinessResult'){
+  $('startupRecheck').disabled=false;
+  if(message.error){$('startupToolMessage').textContent=message.error;$('startupConnectionForm').classList.remove('hidden');$('startupStep2').classList.add('is-active');}
+  else renderStartupStackReadiness(message.value);
+ }
+ if(message.type==='startupConnectionsResult'){
+  startupVerifying=false;$('startupTestConnections').disabled=false;
+  startupConnectionVerified=message.success===true;
+  $('startupConnectionMessage').textContent=message.message||'Connection test did not complete.';
+  $('startupConnectionMessage').className=startupConnectionVerified?'test-status success':'test-status error';
+  $('startupProceed').disabled=!startupConnectionVerified;
+  $('startupStep2').classList.toggle('is-active',!startupConnectionVerified);
+  $('startupProceedInfo').textContent=startupConnectionVerified?'All required connections verified. Continue to project search.':'Complete the connection tests to unlock project search.';
+  if(startupConnectionVerified){$('startupAtlassianToken').value='';$('startupGithubToken').value='';}
+ }
+ if(message.type==='startupProceedResult'&&message.success){
+  showStartupStep(false);
+  $('gateQuery').focus();
+ }
+});
+
+let displayedExtensionUpgrade=null;
+function closeExtensionUpgrade(action='Later'){
+ if(!displayedExtensionUpgrade)return;
+ const requestId=displayedExtensionUpgrade;displayedExtensionUpgrade=null;
+ const modal=$('extensionUpgradeModal');modal.classList.add('hidden');modal.setAttribute('aria-hidden','true');
+ send('extensionUpgradeDecision',{requestId,action});
+}
+$('extensionUpgradeLater').addEventListener('click',()=>closeExtensionUpgrade('Later'));
+$('extensionUpgradeView').addEventListener('click',()=>closeExtensionUpgrade('View Release'));
+$('extensionUpgradeInstall').addEventListener('click',()=>closeExtensionUpgrade('Install Upgrade'));
+$('extensionUpgradeModal').addEventListener('keydown',event=>{
+ if(event.key==='Escape'){event.preventDefault();closeExtensionUpgrade('Later');return;}
+ if(event.key==='Tab'){
+  const controls=['extensionUpgradeLater','extensionUpgradeView','extensionUpgradeInstall'].map($);
+  const first=controls[0],last=controls.at(-1);
+  if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+  else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+ }
+});
+window.addEventListener('message',event=>{
+ const message=event.data||{};
+ if(message.type!=='extensionUpgradeOffer'||!message.requestId)return;
+ if(displayedExtensionUpgrade)closeExtensionUpgrade('Later');
+ displayedExtensionUpgrade=message.requestId;
+ $('extensionUpgradeCurrent').textContent='v'+String(message.currentVersion||'?');
+ $('extensionUpgradeNext').textContent='v'+String(message.version||'?');
+ $('extensionUpgradeDescription').textContent=`ATGV v${message.version||'?'} is available. Review and install the verified extension release when ready.`;
+ $('extensionUpgradeSource').textContent='GitHub: '+String(message.repository||'')+' · '+String(message.tag||'');
+ const modal=$('extensionUpgradeModal');modal.classList.remove('hidden');modal.setAttribute('aria-hidden','false');
+ $('extensionUpgradeInstall').focus();
+});

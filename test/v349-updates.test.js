@@ -34,7 +34,7 @@ test('checksum verification accepts exact release asset bytes and rejects tamper
  assert.throws(()=>updater.verifyChecksum(Buffer.from(sha+'  different.vsix\n'),bytes,filename),/checksum verification/);
 });
 test('settings and runtime expose dual update checks, safe prompts and verified installation',()=>{
- const pkg=require('../package.json');assert.equal(pkg.version,'0.3.50');
+ const pkg=require('../package.json');assert.equal(pkg.version,'0.3.51');
  for(const key of ['autoCheckExtension','autoCheckLibrary','promptForUpdates','checkOnStartup']){
   assert.equal(pkg.contributes.configuration.properties['atgvAssist.updates.'+key].default,true);
  }

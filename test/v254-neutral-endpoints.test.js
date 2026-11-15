@@ -6,7 +6,7 @@ const repos=require('../src/architect-repository');
 const ext=fs.readFileSync(path.join(__dirname,'../test/generated/extension-source.txt'),'utf8');
 test('neutral catalog onboarding keeps user-configurable URL and no active personal repository default',()=>{
  assert.equal(catalog.DEFAULT_CONFIG.repositoryUrl,'');
- assert.match(ext,/example-org\/tech-stacks-skills/);
+ assert.match(ext,/aiamalaysia\/my-fow-technology-app-techassists-enterprise-skills/);
  // The extension updater intentionally pins the official ATGV release repository;
  // it must not override the user-selected SDLC Catalog default.
  assert.doesNotMatch(catalog.DEFAULT_CONFIG.repositoryUrl,/aidilazharo/i);

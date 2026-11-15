@@ -21,6 +21,6 @@ test('solution design previews never create or require VS Code editor group 2',(
 
 test('v0.1.07 metadata is consistent',()=>{
   const pkg=JSON.parse(read('package.json'));
-  assert.equal(pkg.version,'0.3.50');
-  assert.equal(pkg.atgvDisplayVersion,'0.3.50');
+  assert.equal(pkg.version,'0.3.51');
+  assert.equal(pkg.atgvDisplayVersion,'0.3.51');
 });

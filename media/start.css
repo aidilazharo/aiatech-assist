@@ -1707,3 +1707,45 @@ button:focus-visible{outline:2px solid var(--vscode-focusBorder,#649ed2);outline
 @media(max-width:760px){#workView.role-ux-designer .ux-design-heading{grid-template-columns:minmax(0,1fr)}#workView.role-ux-designer .ux-design-heading #uxDesignVersionInfo{text-align:left;max-width:none}#workView.role-ux-designer .ux-revision-current{justify-content:flex-start}#workView.role-ux-designer .ux-design-workflow{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 4px}#workView.role-ux-designer .ux-design-workflow::before{display:none}#workView.role-ux-designer .ux-design-toolbar .ux-design-reference-row{grid-template-columns:minmax(0,1fr)}#workView.role-ux-designer .ux-design-toolbar .ux-design-actions{grid-column:auto;width:100%;justify-self:stretch}}
 @media(max-width:440px){#workView.role-ux-designer .ux-design-workflow{grid-template-columns:repeat(2,minmax(0,1fr))}#workView.role-ux-designer .ux-design-progress-panel{padding:12px 9px}}
 @media(prefers-reduced-motion:reduce){#workView.role-ux-designer .ux-workflow-step.running .ux-workflow-number{animation:none;transition:none;transform:none}}
+
+/* First-run readiness is a Start page, never a modal. */
+.atgv-startup-setup{max-width:1060px;margin:18px auto 28px;display:grid;gap:18px;}
+.atgv-startup-heading{display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap;}
+.atgv-startup-heading h2{margin:3px 0 6px;font-size:24px;letter-spacing:-.4px;}
+.atgv-startup-heading p{margin:0;max-width:700px;color:var(--vscode-descriptionForeground);}
+.atgv-startup-eyebrow,.atgv-upgrade-kicker{font-size:11px;font-weight:750;letter-spacing:1.6px;color:var(--vscode-textLink-foreground);}
+.atgv-startup-steps{display:flex;gap:8px;flex-wrap:wrap;}
+.atgv-startup-steps span{flex:1;padding:11px 15px;border:1px solid var(--vscode-panel-border);border-radius:8px;font-weight:650;color:var(--vscode-descriptionForeground);}
+.atgv-startup-steps .is-active{border-color:var(--vscode-focusBorder);color:var(--vscode-foreground);background:var(--vscode-list-hoverBackground);}
+.atgv-startup-card{background:var(--vscode-editor-background);border:1px solid var(--vscode-panel-border);border-radius:12px;padding:22px;}
+.atgv-startup-card h3{margin:0 0 8px;font-size:16px;}
+.atgv-startup-stack-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:10px;margin:18px 0 14px;align-items:start;}
+.atgv-startup-stack{border:1px solid var(--vscode-panel-border);border-radius:9px;background:var(--vscode-sideBar-background);overflow:hidden;}
+.atgv-startup-stack summary{display:flex;justify-content:space-between;align-items:center;gap:6px;cursor:pointer;padding:13px 11px;font-weight:650;list-style:none;}
+.atgv-startup-stack summary::-webkit-details-marker{display:none;}
+.atgv-startup-stack summary:focus-visible{outline:2px solid var(--vscode-focusBorder);outline-offset:-2px;}
+.atgv-startup-stack .atgv-stack-ready{font-size:11px;padding:3px 6px;border-radius:5px;background:var(--vscode-editorWidget-background);color:var(--vscode-descriptionForeground);white-space:nowrap;}
+.atgv-startup-stack.is-ready .atgv-stack-ready{color:var(--vscode-testing-iconPassed);}
+.atgv-startup-stack.is-missing .atgv-stack-ready{color:var(--vscode-testing-iconFailed);}
+.atgv-startup-stack ul{padding:0 12px 10px;margin:0;list-style:none;font-size:12px;}
+.atgv-startup-stack li{padding:7px 0;border-top:1px solid var(--vscode-panel-border);display:flex;justify-content:space-between;gap:8px;align-items:start;}
+.atgv-startup-stack li small{color:var(--vscode-descriptionForeground);}
+.atgv-startup-actions{display:flex;gap:13px;align-items:center;flex-wrap:wrap;margin-top:20px;}
+.atgv-startup-footer{display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap;}
+.atgv-startup-footer p{color:var(--vscode-descriptionForeground);}
+/* Branded modal is intentionally exclusive to extension upgrades. */
+.atgv-upgrade-modal{max-width:520px;width:min(92vw,520px);padding:27px;border:1px solid var(--vscode-focusBorder);border-radius:14px;box-shadow:0 22px 80px rgba(0,0,0,.4);}
+.atgv-upgrade-brand{display:flex;gap:14px;align-items:center;margin-bottom:26px;}
+.atgv-upgrade-brand img{width:51px;height:51px;object-fit:contain;}
+.atgv-upgrade-brand div{display:grid;gap:3px;}
+.atgv-upgrade-brand strong{font-size:16px;letter-spacing:.5px;}
+.atgv-upgrade-brand span{font-size:10px;letter-spacing:1.5px;color:var(--vscode-descriptionForeground);}
+.atgv-upgrade-modal h2{margin:8px 0 10px;font-size:23px;}
+.atgv-upgrade-modal p{line-height:1.55;}
+.atgv-upgrade-versions{display:flex;align-items:center;justify-content:center;gap:24px;border:1px solid var(--vscode-panel-border);border-radius:10px;background:var(--vscode-editor-background);padding:17px;margin:20px 0 13px;}
+.atgv-upgrade-versions div{display:grid;gap:7px;min-width:110px;}
+.atgv-upgrade-versions small{font-size:10px;letter-spacing:1px;color:var(--vscode-descriptionForeground);}
+.atgv-upgrade-versions strong{font-size:22px;}
+.atgv-upgrade-versions>span{font-size:19px;color:var(--vscode-textLink-foreground);}
+.atgv-upgrade-assurance{font-size:12px;color:var(--vscode-descriptionForeground);}
+.atgv-upgrade-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:23px;}

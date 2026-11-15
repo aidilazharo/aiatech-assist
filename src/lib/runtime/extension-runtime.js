@@ -40,6 +40,8 @@ const resetEverywhere=require('../../reset-everywhere');
 const localReset=require('../reset/local-reset');
 const localContentBackup=require('../backup/local-content-backup');
 const releaseUpdater=require('../updates/github-release-updater');
+const startupReadiness=require('../startup-readiness');
+const startupSetup=require('../startup-setup');
 const jiraControl=require('../../jira-change-control');
 const jiraDuplicates=require('../../jira-duplicate-cleanup');
 const jiraProjectInventory=require('../../jira-project-inventory');
@@ -104,6 +106,9 @@ let localBackupBusy=false;
 let architectServerOperationSerial=0;
 const pendingAiConsents=new Map();
 const pendingHostDialogs=new Map();
+const pendingExtensionUpgradeOffers=new Map();
+let startupSessionVerified=false;
+let startupVerifiedSignature='';
 async function askHostDialog(type,message,opts={}){
  if(!dashboard){
   if(type==='confirm'){
@@ -357,13 +362,27 @@ async function releaseAccessToken({interactive=false}={}){
  try{return (await vscode.authentication.getSession('github',['repo'],interactive?{createIfNone:true}:{silent:true}))?.accessToken||'';}
  catch{return '';}
 }
+async function offerBrandedExtensionUpgrade(release){
+ if(!dashboard)return vscode.window.showInformationMessage(`ATGV v${release.version} is available. Install the verified GitHub release?`,{modal:true},'Install Upgrade','View Release','Later');
+ const requestId=crypto.randomUUID();
+ return new Promise(resolve=>{
+  const timer=setTimeout(()=>{pendingExtensionUpgradeOffers.delete(requestId);resolve('Later');},120000);
+  timer.unref?.();
+  pendingExtensionUpgradeOffers.set(requestId,{resolve,timer});
+  Promise.resolve(dashboard.webview.postMessage({type:'extensionUpgradeOffer',requestId,
+    currentVersion:require('../../../package.json').version,version:release.version,
+    repository:release.repository||releaseUpdater.REPO,tag:release.tag,url:release.url})).then(success=>{
+      if(!success){const entry=pendingExtensionUpgradeOffers.get(requestId);if(entry){clearTimeout(entry.timer);pendingExtensionUpgradeOffers.delete(requestId);resolve('Later');}}
+    }).catch(()=>{clearTimeout(timer);pendingExtensionUpgradeOffers.delete(requestId);resolve('Later');});
+ });
+}
 async function promptExtensionRelease(release,token){
  if(!updatePreferences().promptForUpdates||!release)return;
  const key='atgvAssist.updates.promptedRelease';
  const promptId=(release.repository||releaseUpdater.REPO)+'|'+(release.tag||'');
  if(context.globalState.get(key)===promptId)return;
  await context.globalState.update(key,promptId);
- const answer=await vscode.window.showInformationMessage(`ATGV v${release.version} is available (installed: v${require('../../../package.json').version}). Upgrade from ${release.repository||releaseUpdater.REPO} using the verified GitHub release?`,{modal:true},'Install Upgrade','View Release','Later');
+ const answer=await offerBrandedExtensionUpgrade(release);
  if(answer==='View Release')await vscode.env.openExternal(vscode.Uri.parse(release.url));
  if(answer==='Install Upgrade'){
   try{
@@ -867,6 +886,58 @@ async function aiDrafts(){
  }
  return generated;
 }
+function startupIsComplete(){return context.globalState.get('atgvAssist.startupSetup.completed',false)===true;}
+async function startupStatus(){
+ const saved=extensionSettings||{},catalog=catalogConfig();
+ return {required:!startupIsComplete(),defaults:startupSetup.DEFAULTS,
+  saved:{jiraUrl:saved.jira?.baseUrl||'',confluenceUrl:saved.confluence?.baseUrl||'',email:saved.jira?.email||'',
+   githubUrl:saved.github?.owner?'https://github.com/'+saved.github.owner:'',
+   projectRepoUrl:saved.github?.owner&&saved.github?.repo?'https://github.com/'+saved.github.owner+'/'+saved.github.repo:'',
+   libraryRepoUrl:catalog.repositoryUrl||''}};
+}
+async function testAndSaveStartupConnections(message){
+ startupSessionVerified=false;startupVerifiedSignature='';
+ const data=startupSetup.validate(message.settings);
+ const enteredAtlassian=String(message.atlassianToken||'').trim();
+ const enteredGithub=String(message.githubToken||'').trim();
+ const settings=normalizeExtensionSettings({...extensionSettings,
+  jira:{...extensionSettings.jira,baseUrl:data.jiraUrl,email:data.email},
+  confluence:{...extensionSettings.confluence,baseUrl:data.confluenceUrl},
+  github:{...extensionSettings.github,owner:data.project.owner,repo:data.project.repo,branch:''}});
+ const config=projectConfig(null,settings,cfg());
+ const atlIdentity={endpoint:validateUrl(data.jiraUrl),email:data.email};
+ const gitIdentity={endpoint:validateUrl(config.get('github.apiUrl')),email:''};
+ const atlassian=enteredAtlassian||await readToken(globalSecretKey('atlassian'),atlIdentity);
+ if(!atlassian)throw Error('Enter an Atlassian API token to verify Jira and Confluence.');
+ const github=enteredGithub||await readToken(globalSecretKey('github'),gitIdentity);
+ if(!github)throw Error('Enter a GitHub personal access token to verify the project and SDLC Library repositories.');
+ // Read-only checks run before saving anything. This prevents an invalid
+ // onboarding form from overwriting working credentials and saved defaults.
+ await testJiraConnection(config,atlassian);
+ const spaces=await requestJson(data.confluenceUrl.replace(/\/$/,'')+'/api/v2/spaces?limit=1',
+  {token:atlassian,basicEmail:data.email});
+ if(!Array.isArray(spaces?.results))throw Error('Confluence did not return an accessible spaces list. Check the URL and token scopes.');
+ await requestJson('https://api.github.com/user',{token:github});
+ const gitHeaders={Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'};
+ for(const repo of [data.project,data.library]){
+  const resource=`https://api.github.com/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.repo)}`;
+  const detail=await requestJson(resource,{token:github,headers:gitHeaders});
+  if(String(detail.full_name||'').toLowerCase()!==(repo.owner+'/'+repo.repo).toLowerCase())throw Error('GitHub returned an unexpected repository identity.');
+ }
+ const libraryConf=sdlcCatalog.normalizeConfig({repositoryUrl:data.libraryRepoUrl,ref:'main',authentication:'token',autoCheck:true,offlineCache:true});
+ const library=await sdlcCatalog.remoteInfo(libraryConf,github);
+ if(!library?.sha)throw Error('SDLC Library main branch was not accessible.');
+ // Do not store raw tokens in extension settings or send them to the webview.
+ await context.globalState.update('atgvAssist.extensionSettings',settings);
+ if(enteredAtlassian)await storeToken(globalSecretKey('atlassian'),atlIdentity,atlassian);
+ if(enteredGithub)await storeToken(globalSecretKey('github'),gitIdentity,github);
+ await context.secrets.store('atgvAssist.sdlcCatalogToken',github);
+ await context.globalState.update('atgvAssist.sdlcCatalog',libraryConf);
+ extensionSettings=settings;pendingTests={jira:null,github:null};
+ catalogRemote=null;catalogLastCheck='';catalogLastError='';scheduleCatalogChecks();
+ startupSessionVerified=true;startupVerifiedSignature=sha(JSON.stringify(data));
+ return {success:true,librarySha:library.sha.slice(0,12),message:'Jira and Confluence authenticated; GitHub account and both repositories verified. Settings saved securely. Proceed to project search.'};
+}
 async function dashboardState(){
   const projects=registry?await registry.list():[];
   const workspaceFolder=getWorkspace()?.uri.fsPath||null;
@@ -939,7 +1010,7 @@ async function dashboardState(){
   }
   const roleSteps=activeProject&&openingFlow.phase==='open'?await roleStepEngine.overview(registry,activeProject.id,currentWork.roles):{scopeId:'project',roles:[]};
   const consolidatedSdlc=activeProject&&openingFlow.phase==='open'?await roleStepEngine.consolidated(registry,activeProject.id,currentWork.roles):{roles:[],scopes:0,verifiedEvidence:0,outputs:0};
-  return {projectConnections,emptyWorkspace:emptyWorkspace&&!unmanagedFolders.length,guideAutoShown,baSelectedSources,delivery,unifiedRepository,usedRoles,designState,approvedDesignHash,blueprintRegister,blueprintAssessment,health,aiService,unmanagedFolders,brState,exportRecoveryFailures:exportRecovery?.failures||[],jiraBrowseBaseUrl,roleSettings,timeline,modelStatus,recentProjects,projectReadiness,openingOffline,startupScan,serviceConfigured,serviceUrl,coordinationProvider:coordinationProvider(),remoteLinks:links,autoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.autoSync.'+activeProject.id,false)),jiraAutoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.jiraAutoSync.'+activeProject.id,false)),discovery:discoveryState,flow:flowState,type:'state',projects,techStacks,activeId:openingFlow.phase==='open'?activeProject?.id||null:null,opening:openingFlow.snapshot(),summary:openingFlow.phase==='open'?store?.summary()||{documents:0,chunks:0}:{documents:0,chunks:0},workspace:getWorkspace()?.uri.fsPath||null,extensionSettings,jiraTokenSaved,githubTokenSaved,catalog:await catalogUiState(),updates:updateStatus(),work:currentWork,roleSteps,consolidatedSdlc};
+  return {projectConnections,emptyWorkspace:emptyWorkspace&&!unmanagedFolders.length,guideAutoShown,baSelectedSources,delivery,unifiedRepository,usedRoles,designState,approvedDesignHash,blueprintRegister,blueprintAssessment,health,aiService,unmanagedFolders,brState,exportRecoveryFailures:exportRecovery?.failures||[],jiraBrowseBaseUrl,roleSettings,timeline,modelStatus,recentProjects,projectReadiness,openingOffline,startupScan,startupSetup:await startupStatus(),serviceConfigured,serviceUrl,coordinationProvider:coordinationProvider(),remoteLinks:links,autoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.autoSync.'+activeProject.id,false)),jiraAutoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.jiraAutoSync.'+activeProject.id,false)),discovery:discoveryState,flow:flowState,type:'state',projects,techStacks,activeId:openingFlow.phase==='open'?activeProject?.id||null:null,opening:openingFlow.snapshot(),summary:openingFlow.phase==='open'?store?.summary()||{documents:0,chunks:0}:{documents:0,chunks:0},workspace:getWorkspace()?.uri.fsPath||null,extensionSettings,jiraTokenSaved,githubTokenSaved,catalog:await catalogUiState(),updates:updateStatus(),work:currentWork,roleSteps,consolidatedSdlc};
 }
 async function publishBlueprintState(){
   if(!dashboard||!activeProject)return;
@@ -1004,6 +1075,7 @@ async function restart(){
 }
 async function start(options={}){
   await ready;
+  startupSessionVerified=false;startupVerifiedSignature='';
   if(!options.skipReload){
     const pendingKey='atgvAssist.startAfterWindowReload';
     await vscode.commands.executeCommand('workbench.action.closeAllEditors');
@@ -1034,7 +1106,8 @@ async function start(options={}){
     dashboard.webview.html=html(dashboard.webview);webviewVendorDir=installedVendorAssets?.dir||null;
     report('ATGV Start reloaded the existing webview.');
     await refreshDashboard();
-    await autoLoadWorkspaceProject(sequence);
+    if(startupIsComplete())await autoLoadWorkspaceProject(sequence);
+    else{startupScan={status:'complete',percent:100,message:'Complete the connection setup to search projects.'};await refreshDashboard();}
     return;
   }
   dashboard=vscode.window.createWebviewPanel('atgvAssist.start','ATGV: Start',vscode.ViewColumn.One,{enableScripts:true,retainContextWhenHidden:true,localResourceRoots:[vscode.Uri.joinPath(context.extensionUri,'media'),...(installedVendorAssets?[vscode.Uri.file(installedVendorAssets.dir)]:[])]});
@@ -1042,12 +1115,13 @@ async function start(options={}){
   // handshake as soon as its scripts execute. Do not lose that first message.
   dashboard.webview.onDidReceiveMessage(message=>{guarded(()=>handleDashboardMessage(message));});
   dashboard.webview.html=html(dashboard.webview);webviewVendorDir=installedVendorAssets?.dir||null;
-  dashboard.onDidDispose(()=>{for(const [key,item] of pendingHostDialogs){clearTimeout(item.timer);item.resolve(undefined);pendingHostDialogs.delete(key);}dashboard=undefined;pendingTests={jira:null,github:null};if(modelStatusPoll){clearInterval(modelStatusPoll);modelStatusPoll=null;}});
+  dashboard.onDidDispose(()=>{for(const [key,item] of pendingHostDialogs){clearTimeout(item.timer);item.resolve(undefined);pendingHostDialogs.delete(key);}for(const [key,item] of pendingExtensionUpgradeOffers){clearTimeout(item.timer);item.resolve('Later');pendingExtensionUpgradeOffers.delete(key);}dashboard=undefined;pendingTests={jira:null,github:null};if(modelStatusPoll){clearInterval(modelStatusPoll);modelStatusPoll=null;}});
   if(modelStatusPoll)clearInterval(modelStatusPoll);
   modelStatusPoll=setInterval(()=>{invalidateModelStatus();if(dashboard)refreshDashboard().catch(e=>report('Model badge refresh: '+e.message));},60000);
   modelStatusPoll.unref?.();
   await refreshDashboard();
-  await autoLoadWorkspaceProject(sequence);
+  if(startupIsComplete())await autoLoadWorkspaceProject(sequence);
+  else{startupScan={status:'complete',percent:100,message:'Complete the connection setup to search projects.'};await refreshDashboard();}
 }
 async function notice(message,error=false){if(dashboard)await dashboard.webview.postMessage({type:'notice',message,error});}
 async function discoverSpaces(query,origin='gate',requestId=null){
@@ -3498,6 +3572,31 @@ async function handleDashboardMessage(msg){
   try{
     await ready;
     switch(msg.command){
+      case 'startupReadiness':{
+        try{const result=await startupReadiness.check();await dashboard?.webview.postMessage({type:'startupReadinessResult',value:result});}
+        catch(error){await dashboard?.webview.postMessage({type:'startupReadinessResult',error:error.message});}
+        break;
+      }
+      case 'startupTestConnections':{
+        try{const result=await testAndSaveStartupConnections(msg);
+          await dashboard?.webview.postMessage({type:'startupConnectionsResult',...result});
+          await refreshDashboard();}
+        catch(error){startupSessionVerified=false;await dashboard?.webview.postMessage({type:'startupConnectionsResult',success:false,message:error.message});}
+        break;
+      }
+      case 'startupProceed':{
+        if(!startupSessionVerified||startupVerifiedSignature!==sha(JSON.stringify(startupSetup.validate(msg.settings))))throw Error('Test Jira, Confluence and GitHub connections with the current fields before proceeding.');
+        await context.globalState.update('atgvAssist.startupSetup.completed',true);
+        startupSessionVerified=false;startupVerifiedSignature='';
+        await dashboard?.webview.postMessage({type:'startupProceedResult',success:true});
+        await refreshDashboard();break;
+      }
+      case 'extensionUpgradeDecision':{
+        const entry=pendingExtensionUpgradeOffers.get(msg.requestId);
+        if(entry){pendingExtensionUpgradeOffers.delete(msg.requestId);clearTimeout(entry.timer);
+          entry.resolve(['Install Upgrade','View Release','Later'].includes(msg.action)?msg.action:'Later');}
+        break;
+      }
       case 'checkSoftwareUpdates':{
         await checkSoftwareUpdates({prompt:true,interactive:true,force:true});break;
       }
@@ -5209,6 +5308,7 @@ async function handleDashboardMessage(msg){
         if(!verified||!fieldsEqual(verified.fields,fields))
           throw new Error('Test Jira Connection successfully with the current settings before saving.');
         await context.globalState.update('atgvAssist.extensionSettings',next);
+        await context.globalState.update('atgvAssist.startupSetup.completed',false);
         if(verified.token)await storeToken(globalSecretKey('atlassian'),verified.identity,verified.token);
         extensionSettings=next;pendingTests.jira=null;
         if(openingFlow.candidate&&openingFlow.phase!=='open')openingFlow.select(openingFlow.candidate);
@@ -5222,6 +5322,7 @@ async function handleDashboardMessage(msg){
         if(!verified||!fieldsEqual(verified.fields,fields))
           throw new Error('Test GitHub Connection with the current settings before saving.');
         await context.globalState.update('atgvAssist.extensionSettings',next);
+        await context.globalState.update('atgvAssist.startupSetup.completed',false);
         if(verified.disabled)await context.secrets.delete(globalSecretKey('github'));
         else if(verified.token)await storeToken(globalSecretKey('github'),verified.identity,verified.token);
         extensionSettings=next;pendingTests.github=null;
@@ -5569,6 +5670,7 @@ async function handleDashboardMessage(msg){
         if(config.authentication==='token'&&String(msg.token||'').trim())await context.secrets.store('atgvAssist.sdlcCatalogToken',String(msg.token).trim());
         if(config.authentication==='public')await context.secrets.delete('atgvAssist.sdlcCatalogToken');
         await context.globalState.update('atgvAssist.sdlcCatalog',config);
+        await context.globalState.update('atgvAssist.startupSetup.completed',false);
         catalogRemote=null;catalogLastCheck='';catalogLastError='';scheduleCatalogChecks();
         await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});
         await dashboard?.webview.postMessage({type:'catalogAction',action:'save',success:true,message:'Read-only GitHub SDLC Catalog settings saved.'});

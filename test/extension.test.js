@@ -139,6 +139,7 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
     assert.equal(workspaceState.get('atgvAssist.activeProject'),'finance-knowledge');
     assert.deepEqual(workspaceState.get('atgvAssist.recentProjects'),['finance-knowledge']);
                                                                                         
+    globalState.set('atgvAssist.startupSetup.completed',true); // Existing verified users skip first-run setup.
     await commands.get('atgvAssist.start')({skipReload:true});
     handler({command:'openingAuto',projectId:'finance-knowledge'});
     await until(()=>messages.some(m=>m.type==='openingProgress'&&m.stage==='done'));

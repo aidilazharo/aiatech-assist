@@ -53,5 +53,5 @@ test('webview includes local scripts, accessible guide overlay, keyboard navigat
  assert.ok(controller.includes("send('guideLoad')"));
  assert.ok(controller.includes("send('guideSave'"));
  assert.ok(controller.includes("if(!activeTarget.disabled"));
- assert.equal(read('package.json').includes('"version": "0.3.50"'),true);
+ assert.equal(read('package.json').includes('"version": "0.3.51"'),true);
 });

@@ -30,5 +30,5 @@ test('workspace main and design tabs align left without centered width restricti
  assert.match(css,/\.content-pane main\.narrow\{[\s\S]*?margin-left:0;margin-right:0;text-align:left/);
  assert.match(css,/body:not\(\.gate-mode\) \.app-layout\{[\s\S]*?max-width:none/);
  assert.match(design,/max-width:none;margin:0;text-align:left\}\.section-heading/);
- assert.deepEqual([pkg.version,pkg.atgvDisplayVersion],['0.3.50','0.3.50']);
+ assert.deepEqual([pkg.version,pkg.atgvDisplayVersion],['0.3.51','0.3.51']);
 });

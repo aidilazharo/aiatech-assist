@@ -9,8 +9,8 @@ const updater = require('../src/lib/updates/github-release-updater');
 
 const alternate='https://github.com/testmaintainer/custom-assist/releases';
 const repo='testmaintainer/custom-assist';
-const filename='atgv-aiatech-assist-0.3.51.vsix';
-function release({version='0.3.51',assetRepo=repo,linkRepo=repo}={}){
+const filename='atgv-aiatech-assist-0.3.52.vsix';
+function release({version='0.3.52',assetRepo=repo,linkRepo=repo}={}){
  const tag=`v${version}-build.7`;
  return {tag_name:tag,html_url:`https://github.com/${linkRepo}/releases/tag/${tag}`,draft:false,assets:[
   {name:`atgv-aiatech-assist-${version}.vsix`,url:`https://api.github.com/repos/${assetRepo}/releases/assets/131`,size:8},
@@ -43,13 +43,13 @@ test('release lookup uses configured repository and rejects wrong-repository ass
   seen=url;headers=options;
   return Buffer.from(JSON.stringify([release()]));
  };
- const got=await updater.latestRelease({version:'0.3.50',repositoryUrl:alternate,request});
+ const got=await updater.latestRelease({version:'0.3.51',repositoryUrl:alternate,request});
  assert.equal(seen,`https://api.github.com/repos/${repo}/releases?per_page=30`);
  assert.equal(got.repository,repo);
  assert.equal(got.releaseUrl,alternate);
  assert.ok(headers.maxBytes>0);
- assert.equal(updater.selectRelease([release({assetRepo:'anotherowner/other'})],'0.3.50',alternate),null);
- assert.equal(updater.selectRelease([release({linkRepo:'anotherowner/other'})],'0.3.50',alternate),null);
+ assert.equal(updater.selectRelease([release({assetRepo:'anotherowner/other'})],'0.3.51',alternate),null);
+ assert.equal(updater.selectRelease([release({linkRepo:'anotherowner/other'})],'0.3.51',alternate),null);
 });
 test('verification downloads from selected repository only and enforces checksum',async(t)=>{
  const temp=await fs.mkdtemp(path.join(os.tmpdir(),'atgv350-release-'));
@@ -58,7 +58,7 @@ test('verification downloads from selected repository only and enforces checksum
  const checksum=crypto.createHash('sha256').update(binary).digest('hex');
  const manifest=release();
  manifest.assets[0].size=binary.length;
- const selected=updater.selectRelease([manifest],'0.3.50',alternate);
+ const selected=updater.selectRelease([manifest],'0.3.51',alternate);
  const fetch=async(url)=> url.endsWith('/131')?binary:Buffer.from(`${checksum}  ${filename}\n`);
  const installed=await updater.downloadVerified(selected,{directory:temp,request:fetch});
  assert.equal(path.basename(installed),filename);
@@ -69,7 +69,7 @@ test('verification downloads from selected repository only and enforces checksum
  await assert.rejects(updater.downloadVerified(selected,{directory:temp,request:bad}),/checksum verification/);
 });
 test('VS Code settings expose a persisted release URL and independent library update checking',()=>{
- const pkg=require('../package.json');assert.equal(pkg.version,'0.3.50');
+ const pkg=require('../package.json');assert.equal(pkg.version,'0.3.51');
  assert.equal(pkg.contributes.configuration.properties['atgvAssist.updates.releaseRepositoryUrl'].default,updater.DEFAULT_RELEASE_URL);
  const runtime=require('node:fs').readFileSync(path.join(__dirname,'../src/lib/runtime/extension-runtime.js'),'utf8');
  const html=require('node:fs').readFileSync(path.join(__dirname,'../src/lib/webview/dashboard-html.js'),'utf8');

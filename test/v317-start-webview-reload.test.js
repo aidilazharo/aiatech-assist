@@ -26,6 +26,7 @@ test('each ATGV Start internal reopen reloads webview HTML, not just reveals the
   html:()=>`<html>ATGV fresh ${++serial}</html>`,
   refreshDashboard:async()=>events.push(['refresh']),
   autoLoadWorkspaceProject:async seq=>events.push(['load',seq]),
+  startupIsComplete:()=>true,startupSessionVerified:false,startupVerifiedSignature:'',
   report:()=>{}
  };
  vm.createContext(env);
