@@ -414,7 +414,7 @@ function html(webview,{resumeLibrary=false}={}){
       <div id="architectRequiredComponents" class="architect-required-components hidden" aria-label="Required technology stack components">
         <div class="architect-requirement-heading">
           <strong id="architectRequirementsTitle">Selected stack</strong>
-          <div class="architect-server-actions"><button type="button" id="architectServerToggle" class="secondary" aria-pressed="false" disabled>Run Server</button><span id="architectServerStatus" class="architect-server-status muted" role="status" aria-live="polite">Server stopped</span></div>
+          <div class="architect-server-actions"><button type="button" id="architectServerToggle" class="secondary" aria-pressed="false" disabled>Run Server</button><span id="architectServerStatus" class="architect-server-status muted" role="status" aria-live="polite">Server stopped</span><span id="architectServerAddress" class="architect-server-address muted hidden" role="status" aria-live="polite"></span></div>
           <div class="architect-requirement-tools"><span id="architectRequirementsCount" class="muted" aria-live="polite">0 of 0 ready</span><button type="button" id="architectPackageToggle" class="secondary hidden" aria-expanded="false" aria-controls="architectRequirementsList">Show packages</button></div>
         </div>
         <div id="architectRequirementsList" class="architect-requirement-list" role="list"></div>
