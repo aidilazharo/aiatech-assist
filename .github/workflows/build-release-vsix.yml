@@ -21,6 +21,7 @@ jobs:
       source_ready: ${{ steps.source.outputs.ready }}
       version: ${{ steps.meta.outputs.version }}
       filename: ${{ steps.meta.outputs.filename }}
+      source_filename: ${{ steps.meta.outputs.source_filename }}
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -63,7 +64,8 @@ jobs:
           }
           fs.appendFileSync(process.env.GITHUB_OUTPUT,
             'version=' + pkg.version + '\n' +
-            'filename=' + pkg.name + '-' + pkg.version + '.vsix\n');
+            'filename=' + pkg.name + '-' + pkg.version + '.vsix\n' +
+            'source_filename=ATGV-AIATECH-Assist-v' + pkg.version + '-Source.zip\n');
           NODE
 
       - name: Run regression suite
@@ -96,7 +98,21 @@ jobs:
             cat dist/vsix.sha256
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload VSIX build artifact
+      - name: Archive committed source and verify ZIP
+        if: steps.source.outputs.ready == 'true'
+        shell: bash
+        env:
+          SOURCE_FILE: ${{ steps.meta.outputs.source_filename }}
+          SOURCE_VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          git archive --format=zip --prefix="ATGV-AIATECH-Assist-v${SOURCE_VERSION}-Source/" -o "dist/${SOURCE_FILE}" HEAD
+          test -s "dist/${SOURCE_FILE}"
+          unzip -tqq "dist/${SOURCE_FILE}"
+          (cd dist && sha256sum "${SOURCE_FILE}" > source.sha256)
+          echo "Complete source ZIP: ${SOURCE_FILE}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload VSIX and source ZIP build artifacts
         if: steps.source.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
@@ -104,6 +120,8 @@ jobs:
           path: |
             dist/${{ steps.meta.outputs.filename }}
             dist/vsix.sha256
+            dist/${{ steps.meta.outputs.source_filename }}
+            dist/source.sha256
           if-no-files-found: error
           retention-days: 90
 
@@ -129,20 +147,22 @@ jobs:
           GH_REPO: ${{ github.repository }}
           VERSION: ${{ needs.build.outputs.version }}
           FILE: ${{ needs.build.outputs.filename }}
+          SOURCE_FILE: ${{ needs.build.outputs.source_filename }}
           SOURCE_SHA: ${{ github.sha }}
           BUILD_NUMBER: ${{ github.run_number }}
         run: |
           set -euo pipefail
           tag="v${VERSION}-build.${BUILD_NUMBER}"
           test -s "dist/${FILE}"
+          test -s "dist/${SOURCE_FILE}"
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" "dist/${FILE}" "dist/vsix.sha256" \
+            gh release create "$tag" "dist/${FILE}" "dist/vsix.sha256" "dist/${SOURCE_FILE}" "dist/source.sha256" \
               --target "$SOURCE_SHA" \
               --title "ATGV v${VERSION} (build ${BUILD_NUMBER})" \
               --notes "Automated main-branch VSIX build. Source commit: ${SOURCE_SHA}. Regression suite and package verification passed." \
               --prerelease \
               --latest=false
           else
-            gh release upload "$tag" "dist/${FILE}" "dist/vsix.sha256" --clobber
+            gh release upload "$tag" "dist/${FILE}" "dist/vsix.sha256" "dist/${SOURCE_FILE}" "dist/source.sha256" --clobber
           fi
           echo "GitHub prerelease: $tag" >> "$GITHUB_STEP_SUMMARY"
