@@ -211,10 +211,11 @@ async function bootstrap({root,stackId,generation=0,baseBranch='main',token='',o
    const result=await (effects.execute||developer.executeLocal)(root,{relative:target.relative,operation,onDiagnostic:remember});
    if(!result.passed){
     remember(result.diagnosticLogs||('Operation '+operation+' failed: '+String(result.logs||'No output.')));
-    throw Error(operation+' failed in '+(target.relative||'repository root')+'. See error log for full stdout/stderr.');
+    throw Error(operation+' failed in '+(target.relative||'repository root')+'. Download All Error Logs for full stdout/stderr.');
    }
    results.push(result);
   }
+  await progress('Build checks passed; checking application server preview port…');
   const config=await stackConfig(root,stackId);const url=config.previewUrl;
   if(!url)throw Error('The selected technology does not have a configured localhost preview.');
   const prior=developer.localLogs(),sameProcess=prior.running&&prior.cwd===path.join(root,target.relative);
