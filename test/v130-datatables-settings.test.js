@@ -36,7 +36,7 @@ test('Extension and Project Settings retain independent save scopes inside one t
  assert.match(css,/ext-settings-badge\[data-state="ready"\]/);
 });
 test('existing save and test controls retain identity across both settings pages',()=>{
- for(const id of ['extensionForm','settingsSpaceSearch','settingsSpaceQuery','githubForm','listGithubRepos','catalogForm','aiProviderTest','coordinationProvider','roleSettingsForm','aiServiceSave','extensionToProjectSettings','projectToExtensionSettings'])assert.ok(html.includes('id="'+id+'"'),id);
+ for(const id of ['extensionForm','settingsSpaceSearch','settingsSpaceQuery','githubForm','githubRepositoryUrl','testGithub','catalogForm','aiProviderTest','coordinationProvider','roleSettingsForm','aiServiceSave','extensionToProjectSettings','projectToExtensionSettings'])assert.ok(html.includes('id="'+id+'"'),id);
  assert.doesNotMatch(js,/\$\('settingsProject'\)/);
  assert.match(js,/Choosing a space edits only the visible project's unsaved form/);
  assert.match(js,/Save Project Settings to apply this space/);
