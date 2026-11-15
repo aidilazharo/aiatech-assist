@@ -30,7 +30,7 @@ test('handoff waits for port release, but never kills processes occupying extern
  const fake=driver();let probes=0;
  await server.start({root,stackId:'react',prepared,driver:fake,allowManagedHandoff:true,openBrowser:async()=>true,effects:{portAvailable:async()=>++probes>=3,waitForPortRelease:async(_url)=>{probes++;return true;},waitForHttp:async()=>{}}});
  assert.deepEqual(fake.counters(),{live:true,cwd:root,starts:1,stops:1});
- const second=driver();await assert.rejects(server.start({root,stackId:'react',prepared,driver:second,allowManagedHandoff:true,effects:{portAvailable:async()=>false,waitForPortRelease:async()=>false}}),/port is already occupied/);
+ const second=driver();await assert.rejects(server.start({root,stackId:'react',prepared,driver:second,allowManagedHandoff:true,effects:{portAvailable:async()=>false,waitForPortRelease:async()=>false}}),/No available localhost port/);
  assert.equal(second.counters().starts,0);assert.equal(second.counters().stops,1);
 });
 test('server status identifies when a different ATGV-managed server is active',async()=>{
