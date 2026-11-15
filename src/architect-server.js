@@ -18,7 +18,7 @@ async function targetFor(root,stackId,driver=developer){
  if(inspection.targets.length!==1)throw Error('Expected exactly one application target in the selected project repository.');
  const target=inspection.targets[0];
  if(!['dev','start','run'].some(script=>target.scripts?.includes(script)))throw Error('The application has no runnable script.');
- return {url,inspection,target,cwd:path.join(inspection.repo.root,target.relative)};
+ return {url,apiUrl:config.apiBaseUrl||'http://127.0.0.1:3001/',inspection,target,cwd:path.join(inspection.repo.root,target.relative)};
 }
 async function status({root,stackId,driver=developer}={}){
  if(!root||!stackId)return {running:false,message:'Save a stack to enable the application server.'};
@@ -35,7 +35,7 @@ async function status({root,stackId,driver=developer}={}){
    path.resolve(source)===path.resolve(pin.root)&&
    target.inspection.repo.sha===pin.sha;
  const branch=pinned?pin.branch:(target.inspection.repo.branch||'');
- return {running,otherRunning:!running,url:actualUrl,sha:target.inspection.repo.sha||'',branch,relative:target.target.relative,message:running?'App server running · '+actualUrl:'Another ATGV-managed app server is running. Run Server can switch to this stack.'};
+ return {running,otherRunning:!running,url:actualUrl,apiPort:running?entry.apiPort:null,sha:(running&&entry.head)||target.inspection.repo.sha||'',branch,relative:target.target.relative,message:running?'App server running · '+actualUrl+(entry.apiPort?' · API port '+entry.apiPort:''):'Another ATGV-managed app server is running. Run Server can switch to this stack.'};
 }
 async function start({root,stackId,prepared,driver=developer,openBrowser=async()=>true,allowManagedHandoff=false,effects={}}={}){
  if(!prepared||prepared.stackId!==stackId||path.resolve(prepared.root||'')!==path.resolve(root||''))throw Error('Save the selected technology stack in this project repository first.');
@@ -48,13 +48,18 @@ async function start({root,stackId,prepared,driver=developer,openBrowser=async()
   const result=await makePreview({root,branch:prepared.branch,sha:prepared.sha});
   launchRoot=result.root;isolated=true;
  }else if(!baseline.repo.clean)throw Error('The approved stack checkout contains uncommitted changes. Run the approved revision from an isolated preview instead.');
- const {url:configuredUrl,inspection,target,cwd}=await targetFor(launchRoot,stackId,driver);
+ const {url:configuredUrl,apiUrl,inspection,target,cwd}=await targetFor(launchRoot,stackId,driver);
  if(prepared.sha&&inspection.repo.sha!==prepared.sha)throw Error('Saved stack Git revision differs from the application checkout. No server was started.');
  let url=prepared.previewUrl||configuredUrl;
  if(!isolated&&inspection.repo.branch!==prepared.branch)throw Error('The current checkout changed during server startup. Retry.');
  if(driver===developer)await (effects.ensureDependencies||dependencies.ensureForTarget)(launchRoot,target,{onDiagnostic:effects.onDiagnostic||(async()=>{}),onProgress:effects.onProgress||(async()=>{})});
  else if(!target.installed)throw Error('Dependencies are missing. Save Stack automatically installs the approved dependencies; complete Save Stack first.');
  let prior=driver.localLogs(),handedOff=false;
+ if(prior.running&&path.resolve(prior.cwd||'')===path.resolve(cwd)&&prior.head&&inspection.repo.sha&&prior.head!==inspection.repo.sha){
+  await driver.stopLocal();
+  if(driver.localLogs().running)throw Error('Previous ATGV server did not exit after its Git revision changed.');
+  prior=driver.localLogs();handedOff=true;
+ }
  if(prior.running&&path.resolve(prior.cwd||'')!==path.resolve(cwd)){
   if(!allowManagedHandoff)throw Error('A different app server is running. Confirm switching the ATGV-managed server before starting this stack.');
   // Only stop the exact ATGV-tracked child that was visible at handoff time;
@@ -85,9 +90,14 @@ async function start({root,stackId,prepared,driver=developer,openBrowser=async()
     const choice=await bootstrap.chooseAvailablePreviewUrl(url,{portAvailable,allocatePort:effects.allocatePort||bootstrap.allocateEphemeralPort});
     url=choice.url;
    }
-   await driver.runLocal(launchRoot,{relative:target.relative,env:{},previewUrl:url});started=true;
+   const dualService=stackId==='react'||stackId==='angular';
+   const chosen=dualService?await bootstrap.chooseAvailableRuntimePorts(url,apiUrl,{
+    portAvailable,allocatePort:effects.allocatePort||bootstrap.allocateEphemeralPort
+   }):{url,apiPort:null};
+   url=chosen.url;
+   await driver.runLocal(launchRoot,{relative:target.relative,env:{},previewUrl:url,apiPort:chosen.apiPort});started=true;
   }else url=prior.previewUrl||previewUrls.get(identity(root,stackId))||url;
-  await (effects.waitForHttp||bootstrap.waitForHttp)(url,()=>driver.localLogs().running);
+  await (effects.waitForHttp||bootstrap.waitForHttp)(url,()=>driver.localLogs().running,60000,driver.localLogs().instanceId||'');
   if(await openBrowser(url)===false)throw Error('The app started but VS Code could not open an external browser.');
   if(isolated){
    previewRoots.set(identity(root,stackId),launchRoot);
@@ -109,7 +119,7 @@ async function verify({root,stackId,driver=developer,effects={}}={}){
  const state=await status({root,stackId,driver});
  if(!state.running||!state.url)return {...state,healthy:false};
  try{
-  await (effects.waitForHttp||bootstrap.waitForHttp)(state.url,()=>driver.localLogs().running,3500);
+  await (effects.waitForHttp||bootstrap.waitForHttp)(state.url,()=>driver.localLogs().running,3500,driver.localLogs().instanceId||'');
   // A second read prevents racing a server exit, checkout change or another
   // process acquiring the port while the HTTP probe was in flight.
   const checked=await status({root,stackId,driver});

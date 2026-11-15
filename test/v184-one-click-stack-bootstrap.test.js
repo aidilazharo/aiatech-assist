@@ -42,7 +42,7 @@ test('Save Stack starts from application-empty main, verifies in browser and pus
  assert.equal(outcome.branch,'bootstrap/react-initial');assert.equal(outcome.pushed,true);
  assert.equal(outcome.validation.status,'tested');assert.equal(outcome.validation.results.length,3);
  assert.equal(outcome.repo.clean,true);
- assert.deepEqual(actions,['install','test','build','launch','health','browser']);
+ assert.deepEqual(actions,['install','test','build','launch','health','browser','stop']);
  assert.equal(git(work,'rev-parse','refs/heads/main'),mainSha);
  assert.equal(git(remote,'rev-parse','refs/heads/main'),mainSha);
  assert.equal(git(remote,'rev-parse','refs/heads/bootstrap/react-initial'),outcome.repo.sha);

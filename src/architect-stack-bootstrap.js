@@ -83,7 +83,34 @@ async function chooseAvailablePreviewUrl(preferred,{portAvailable:available=port
  }
  throw Error('No available localhost port could be found for the application preview. No external process was stopped.');
 }
-async function waitForHttp(url,isRunning,timeout=60000){
+// Allocate separate available frontend and API ports without touching foreign processes.
+async function chooseAvailableRuntimePorts(frontendPreferred,apiPreferred='http://127.0.0.1:3001/',options={}){
+ const frontend=await chooseAvailablePreviewUrl(frontendPreferred,options);
+ const available=options.portAvailable||portAvailable;
+ const api=await chooseAvailablePreviewUrl(apiPreferred,{...options,
+  portAvailable:async url=>Number(new URL(url).port)!==frontend.port&&await available(url)});
+ return {url:frontend.url,apiPort:api.port,apiUrl:api.url,frontend,api};
+}
+// HTTP 200 alone cannot prove this is the API started by the current ATGV run.
+async function verifyApiIdentity(previewUrl,expectedInstanceId){
+ const endpoint=new URL('/api/health',previewUrl);
+ const health=await new Promise((resolve,reject)=>{
+  const req=http.get(endpoint,{timeout:2500},res=>{
+   let body='';
+   res.setEncoding('utf8');
+   res.on('data',chunk=>{body+=chunk;if(body.length>16384)req.destroy(Error('API health response exceeded limit'));});
+   res.on('end',()=>{
+    if(res.statusCode!==200)return reject(Error('API health returned HTTP '+res.statusCode));
+    try{resolve(JSON.parse(body));}catch{reject(Error('API health did not return JSON'));}
+   });
+  });
+  req.on('timeout',()=>req.destroy(Error('API health timed out')));req.on('error',reject);
+ });
+ if(health.status!=='ok'||health.instanceId!==expectedInstanceId)
+  throw Error('Local API identity mismatch. The preview may be connected to another process, so it cannot be accepted as healthy.');
+ return health;
+}
+async function waitForHttp(url,isRunning,timeout=60000,expectedInstanceId=''){
  const start=Date.now();
  while(Date.now()-start<timeout){
   if(!isRunning())throw Error('Application exited before becoming ready. Inspect the local run logs.');
@@ -92,8 +119,8 @@ async function waitForHttp(url,isRunning,timeout=60000){
     const req=http.get(url,{timeout:2000},res=>{res.resume();resolve(res.statusCode||0);});
     req.once('timeout',()=>req.destroy(Error('Local health check timed out')));req.once('error',reject);
    });
-   if(code>=200&&code<400)return url;
-  }catch{} // The server is still starting.
+   if(code>=200&&code<400){if(expectedInstanceId)await verifyApiIdentity(url,expectedInstanceId);return url;}
+  }catch(error){if(expectedInstanceId&&/identity mismatch/i.test(String(error.message||'')))throw error;} // The server is still starting.
   await new Promise(resolve=>setTimeout(resolve,750));
  }
  throw Error('Application did not become healthy at '+url+' within the startup deadline.');
@@ -250,23 +277,42 @@ async function bootstrap({root,stackId,generation=0,baseBranch='main',token='',o
   await progress('Build checks passed; checking application server preview port…');
   const config=await stackConfig(root,stackId);
   if(!config.previewUrl)throw Error('The selected technology does not have a configured localhost preview.');
-  const prior=developer.localLogs(),sameProcess=prior.running&&prior.cwd===path.join(root,target.relative);
-  const choice=sameProcess?{url:prior.previewUrl||config.previewUrl,changed:false}:
-   await chooseAvailablePreviewUrl(config.previewUrl,{portAvailable:effects.portAvailable||portAvailable,allocatePort:effects.allocatePort||allocateEphemeralPort});
-  const url=choice.url;
-  if(choice.changed)await progress('Preview port '+choice.previousPort+' is occupied. Using available application address: '+url);
-  await progress((sameProcess?'Reusing':'Launching')+' application and checking '+url+'…');
+  let prior=developer.localLogs();
+  const sameProcess=prior.running&&path.resolve(prior.cwd||'')===path.resolve(path.join(root,target.relative))&&prior.head===inspect.repo.sha;
+  if(prior.running&&!sameProcess){
+   await progress('Stopping previously tracked ATGV application before starting the selected stack…');
+   await (effects.stop||developer.stopLocal)();
+   if(developer.localLogs().running)throw Error('Previous ATGV-managed server did not exit; no duplicate was launched.');
+   prior=developer.localLogs();
+  }
+  const dualService=stackId==='react'||stackId==='angular';
+  const portOptions={portAvailable:effects.portAvailable||portAvailable,allocatePort:effects.allocatePort||allocateEphemeralPort};
+  let chosen;
+  if(sameProcess)chosen={url:prior.previewUrl||config.previewUrl,apiPort:dualService?(prior.apiPort||3001):null,frontend:{changed:false},api:{changed:false}};
+  else if(dualService)chosen=await chooseAvailableRuntimePorts(config.previewUrl,config.apiBaseUrl||'http://127.0.0.1:3001/',portOptions);
+  else {const frontend=await chooseAvailablePreviewUrl(config.previewUrl,portOptions);chosen={url:frontend.url,apiPort:null,frontend,api:{changed:false}};}
+  const url=chosen.url;
+  if(chosen.frontend.changed)await progress('Preview port '+chosen.frontend.previousPort+' is occupied. Using '+url);
+  if(chosen.api.changed)await progress('API port '+chosen.api.previousPort+' is occupied. Using http://127.0.0.1:'+chosen.apiPort+'/');
+  await progress((sameProcess?'Reusing':'Launching')+' application and checking '+url+(chosen.apiPort?' (API '+chosen.apiPort+')':'')+'…');
   let opened=false,launched=false;
   try{
    if(!sameProcess){
-    await (effects.launch||developer.runLocal)(root,{relative:target.relative,env:{},previewUrl:url});
+    await (effects.launch||developer.runLocal)(root,{relative:target.relative,env:{},previewUrl:url,apiPort:chosen.apiPort});
     launched=true;
    }
-   await (effects.waitHealth||waitForHttp)(url,effects.isRunning||(()=>developer.localLogs().running));
+   await (effects.waitHealth||waitForHttp)(url,effects.isRunning||(()=>developer.localLogs().running),60000,developer.localLogs().instanceId||'');
    await progress('Opening the running application in your external browser…');
    const visible=await openBrowser(url);
    if(visible===false)throw Error('Could not open the external browser. No commit or push was performed.');
    opened=true;
+   // Stop the temporary pre-commit ATGV preview. The host will restart and
+   // attest the committed SHA, without changing the Developer checkout.
+   if(launched||sameProcess){
+    await progress('Stopping temporary preview before final Git revision verification…');
+    await (effects.stop||developer.stopLocal)();
+    if(developer.localLogs().running)throw Error('Temporary preview is still running; refusing inaccurate server revision evidence.');
+   }
    // Recheck every generated file before staging. A modified or unrelated file
    // must not be silently committed on behalf of the user.
    const plan=await architect.generatedCommitPlan(root,[stackId]);
@@ -292,4 +338,4 @@ async function bootstrap({root,stackId,generation=0,baseBranch='main',token='',o
   throw error;
  }
 }
-module.exports={bootstrap,preflight,publish,describePushFailure,stackConfig,branchFor,remoteHash,waitForHttp,portAvailable,allocateEphemeralPort,chooseAvailablePreviewUrl,ensureLocalBuildExcludes};
+module.exports={bootstrap,preflight,publish,describePushFailure,stackConfig,branchFor,remoteHash,waitForHttp,verifyApiIdentity,portAvailable,allocateEphemeralPort,chooseAvailablePreviewUrl,chooseAvailableRuntimePorts,ensureLocalBuildExcludes};

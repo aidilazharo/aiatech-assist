@@ -3,6 +3,7 @@ const { execFile, spawn } = require('node:child_process');
 const { promisify } = require('node:util');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const diagnostic = require('./stack-process-diagnostics');
 const {npmCommand} = require('./platform-process');
 const run = promisify(execFile);
@@ -280,7 +281,7 @@ async function previewCommand(cmd,target,cwd,previewUrl){
  const scriptName=target.scripts.includes('dev')?'dev':'start';
  const script=String(pkg.scripts?.[scriptName]||'').trim();
  const known=script.match(/^concurrently -k "(vite|ng serve) --host 127\.0\.0\.1 --port (\d+)" "(node server\/index\.mjs)"$/);
- if(known&&port!==Number(known[2])){
+ if(known){
   const frontend=known[1]+' --host 127.0.0.1 --port '+port+(known[1]==='vite'?' --strictPort':'');
   return npmCommand(['exec','--offline','--','concurrently','-k',frontend,known[3]]);
  }
@@ -294,7 +295,7 @@ async function previewCommand(cmd,target,cwd,previewUrl){
 }
 let activeProcess = null;
 let lastProcess = null;
-async function runLocal(root, { relative = '', env = {}, previewUrl = '' } = {}) {
+async function runLocal(root, { relative = '', env = {}, previewUrl = '', apiPort = null } = {}) {
     if (activeProcess && activeProcess.child.exitCode === null)
         throw Error('An application is already running. Stop it before starting another.');
     const info = await inspectScripts(root), target = info.targets.find(t => t.relative === relative);
@@ -303,9 +304,22 @@ async function runLocal(root, { relative = '', env = {}, previewUrl = '' } = {})
     const cwd=path.join(info.repo.root,target.relative);
     const cmd=await previewCommand(approvedCommand(target,'run'),target,cwd,previewUrl);
     const port=previewUrl?Number(new URL(previewUrl).port):null;
-    const runtimeEnv=port?{PORT:String(port),PREVIEW_PORT:String(port),ATGV_PREVIEW_PORT:String(port),ASPNETCORE_URLS:'http://127.0.0.1:'+port,SERVER_PORT:String(port)}:{};
-    const child = spawn(cmd.bin, cmd.args, { cwd, env: { ...process.env, ...runtimeEnv, ...env }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], shell: false, detached: process.platform !== 'win32' });
-    const entry = { child, cwd, previewUrl, command:diagnostic.commandLine(cmd.bin,cmd.args), logs: '', head: info.repo.sha, relative, exitCode:null, signal:null };
+    const selectedApiPort=apiPort===null?null:Number(apiPort);
+    if(selectedApiPort!==null&&(!Number.isInteger(selectedApiPort)||selectedApiPort<1||selectedApiPort>65535||selectedApiPort===port))
+        throw Error('ATGV API port must be a valid local port distinct from the frontend.');
+    const apiSource=await fs.readFile(path.join(cwd,'server/index.mjs'),'utf8').catch(()=>'');
+    const viteSource=await fs.readFile(path.join(cwd,'vite.config.ts'),'utf8').catch(()=>'');
+    if(selectedApiPort!==null&&selectedApiPort!==3001&&!viteSource.includes('process.env.API_PORT'))
+        throw Error('This starter has a fixed API proxy to port 3001. Upgrade through verified SDLC Catalog migration before using an alternate API port. No unrelated listener was stopped.');
+    const instanceId=apiSource.includes('ATGV_INSTANCE_ID')?crypto.randomUUID():'';
+    const runtimeEnv={
+     ...(port?{PORT:String(port),PREVIEW_PORT:String(port),ATGV_PREVIEW_PORT:String(port),ASPNETCORE_URLS:'http://127.0.0.1:'+port,SERVER_PORT:String(port)}:{}),
+     ...(selectedApiPort!==null?{API_PORT:String(selectedApiPort),ATGV_API_PORT:String(selectedApiPort),VITE_ATGV_API_PORT:String(selectedApiPort)}:{}),
+     ...(instanceId?{ATGV_INSTANCE_ID:instanceId,ATGV_STARTED_AT:new Date().toISOString()}:{}),
+     VITE_ATGV_PROJECT:path.basename(info.repo.root),VITE_ATGV_BRANCH:info.repo.branch||'',VITE_ATGV_REVISION:info.repo.sha||''
+    };
+    const child = spawn(cmd.bin, cmd.args, { cwd, env: { ...process.env, ...env, ...runtimeEnv }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], shell: false, detached: process.platform !== 'win32' });
+    const entry = { child, cwd, previewUrl, apiPort:selectedApiPort, instanceId, command:diagnostic.commandLine(cmd.bin,cmd.args), logs: '', head: info.repo.sha, relative, exitCode:null, signal:null };
     activeProcess = entry;
     lastProcess = entry;
     const read = (label,data) => { entry.logs = (entry.logs + '['+label+'] '+String(data)).slice(-256*1024); };
@@ -325,7 +339,7 @@ async function runLocal(root, { relative = '', env = {}, previewUrl = '' } = {})
     return { pid: child.pid, relative, head: entry.head, message: 'Application process started'+(previewUrl?' at '+previewUrl:'. Review logs for the actual local URL.') };
 }
 async function stopLocal() { if (!activeProcess)
-    return { stopped: false }; const entry = activeProcess; activeProcess = null; if (process.platform !== 'win32') {
+    return { stopped: false }; const entry = activeProcess; if (process.platform !== 'win32') {
     try {
         process.kill(-entry.child.pid, 'SIGTERM');
     }
@@ -340,8 +354,16 @@ else {
         if (Number.isInteger(entry.child.pid) && entry.child.pid > 0)
             await run('taskkill', ['/T', '/F', '/PID', String(entry.child.pid)], { windowsHide: true, timeout: 12000 });
     } catch { entry.child.kill(); }
-} return { stopped: true, logs: entry.logs }; }
-function localLogs() { const entry=activeProcess||lastProcess;return entry ? { running: !!activeProcess&&entry.child.exitCode === null && !entry.child.killed, pid:entry.child.pid, logs: entry.logs, cwd: entry.cwd, relative: entry.relative, head: entry.head, command:entry.command, previewUrl:entry.previewUrl, exitCode:entry.exitCode, signal:entry.signal } : { running: false, pid:null, logs: '' }; }
+}
+await Promise.race([
+ new Promise(resolve=>(entry.child.exitCode!==null||entry.child.signalCode!==null)?resolve():entry.child.once('exit',resolve)),
+ new Promise(resolve=>setTimeout(resolve,3500))
+]);
+if(entry.child.exitCode===null&&entry.child.signalCode===null)
+ throw Error('ATGV-managed process did not exit; it remains tracked.');
+if(activeProcess===entry)activeProcess=null;
+return { stopped: true, logs: entry.logs }; }
+function localLogs() { const entry=activeProcess||lastProcess;return entry ? { running: !!activeProcess&&entry.child.exitCode === null && entry.child.signalCode === null, pid:entry.child.pid, logs: entry.logs, cwd: entry.cwd, relative: entry.relative, head: entry.head, command:entry.command, previewUrl:entry.previewUrl, apiPort:entry.apiPort, instanceId:entry.instanceId, exitCode:entry.exitCode, signal:entry.signal } : { running: false, pid:null, logs: '' }; }
 function readinessFlags({hasRepo=false, clean=false, matched=false, baseFound=false, stackId='', targets=[]}={}) {
   const blockers=[];
   if(!stackId) blockers.push('Solution Architect has not selected a technology stack');

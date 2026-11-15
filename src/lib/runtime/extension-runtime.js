@@ -4339,7 +4339,7 @@ async function handleDashboardMessage(msg){
         }
         const orchestrator=require('../../architect-stack-bootstrap');
         const progress=async stage=>{architectErrorLogs.append(activeProject.id,'save','Stage: '+stage);return dashboard?.webview.postMessage({type:'architectStackProgress',projectId:activeProject.id,message:stage});};
-        const result=await orchestrator.bootstrap({root,stackId:id,generation:preparedProject.techStackGeneration||0,baseBranch,token:await getGithubToken(activeProject),onProgress:progress,openBrowser:url=>vscode.env.openExternal(vscode.Uri.parse(url))});
+        const result=await orchestrator.bootstrap({root,stackId:id,generation:preparedProject.techStackGeneration||0,baseBranch,token:await getGithubToken(activeProject),onProgress:progress,openBrowser:async()=>true});
         const savedProject={...preparedProject,techStackId:id,techStackCompanionId:'',techStackValidation:result.validation,techStackServerVerification:null,techStackApproval:null,techStackPrepared:{stackId:id,companionId:'',root:result.repo.root,branch:result.branch,baseBranch,sha:result.repo.sha,remotePushed:true,previewUrl:result.previewUrl,at:new Date().toISOString()}};
         // Bootstrap launches before commit/push, so a pre-commit server observation
         // may not correspond to the final SHA. Persist the finished revision first.
@@ -4352,7 +4352,7 @@ async function handleDashboardMessage(msg){
           verify:()=>serverModule.verify({root:result.repo.root,stackId:id}),
           // Save Stack already requested permission to launch this app; only
           // restart when no other managed process owns the server.
-          start:()=>serverModule.start({root:result.repo.root,stackId:id,prepared:updated.techStackPrepared,allowManagedHandoff:false,openBrowser:async()=>true})
+          start:()=>serverModule.start({root:result.repo.root,stackId:id,prepared:updated.techStackPrepared,allowManagedHandoff:false,openBrowser:url=>vscode.env.openExternal(vscode.Uri.parse(url))})
         });
         if(finalServer.proof){
           updated=await registry.update(activeProject.id,{...updated,techStackServerVerification:finalServer.proof});
@@ -4367,7 +4367,7 @@ async function handleDashboardMessage(msg){
         // Save Stack or a role re-render previously left the checklist Pending.
         const serverSnapshot=finalServer.state||{running:false,healthy:false,message:'Server status unavailable'};
         await dashboard?.webview.postMessage({type:'architectServerState',projectId:updated.id,value:{...serverSnapshot,healthy:!!finalServer.proof}});
-        await dashboard?.webview.postMessage({type:'architectStackState',value:{message:'Stack installed and tested: '+result.previewUrl+' · '+result.branch+' '+(result.pushed?'pushed to GitHub':'already on GitHub')+' ('+result.repo.sha.slice(0,7)+'). '+(updated.techStackServerVerification?'Application server verified; ready for Architect approval.':'Application server verification pending; use Run Server, then Approve for Developers.')}});
+        await dashboard?.webview.postMessage({type:'architectStackState',value:{message:'Stack installed and tested: '+(finalServer.state?.url||result.previewUrl)+' · '+result.branch+' '+(result.pushed?'pushed to GitHub':'already on GitHub')+' ('+result.repo.sha.slice(0,7)+'). '+(updated.techStackServerVerification?'Application server verified; ready for Architect approval.':'Application server verification pending; use Run Server, then Approve for Developers.')}});
         break;
       }
       case 'architectTestStack':{
