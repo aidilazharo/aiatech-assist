@@ -8,6 +8,7 @@ const dependencies=require('./stack-dependency-helper');
 const preview=require('./architect-preview-worktree');
 const previewRoots=new Map();
 const previewUrls=new Map();
+const previewRevisions=new Map();
 const identity=(root,stackId)=>path.resolve(root)+'|'+stackId;
 async function targetFor(root,stackId,driver=developer){
  const config=driver.catalogStackConfig?await driver.catalogStackConfig(stackId):await bootstrap.stackConfig(root,stackId);
@@ -29,7 +30,12 @@ async function status({root,stackId,driver=developer}={}){
  try{target=await targetFor(source,stackId,driver);}catch{return {running:false,message:'App server unavailable'};}
  const running=path.resolve(entry.cwd||'')===path.resolve(target.cwd);
  const actualUrl=running?(entry.previewUrl||previewUrls.get(identity(root,stackId))||target.url):target.url;
- return {running,otherRunning:!running,url:actualUrl,sha:target.inspection.repo.sha||'',branch:target.inspection.repo.branch||'',relative:target.target.relative,message:running?'App server running · '+actualUrl:'Another ATGV-managed app server is running. Run Server can switch to this stack.'};
+ const pin=previewRevisions.get(identity(root,stackId));
+ const pinned=running&&pin&&path.resolve(source)!==path.resolve(root)&&
+   path.resolve(source)===path.resolve(pin.root)&&
+   target.inspection.repo.sha===pin.sha;
+ const branch=pinned?pin.branch:(target.inspection.repo.branch||'');
+ return {running,otherRunning:!running,url:actualUrl,sha:target.inspection.repo.sha||'',branch,relative:target.target.relative,message:running?'App server running · '+actualUrl:'Another ATGV-managed app server is running. Run Server can switch to this stack.'};
 }
 async function start({root,stackId,prepared,driver=developer,openBrowser=async()=>true,allowManagedHandoff=false,effects={}}={}){
  if(!prepared||prepared.stackId!==stackId||path.resolve(prepared.root||'')!==path.resolve(root||''))throw Error('Save the selected technology stack in this project repository first.');
@@ -43,6 +49,7 @@ async function start({root,stackId,prepared,driver=developer,openBrowser=async()
   launchRoot=result.root;isolated=true;
  }else if(!baseline.repo.clean)throw Error('The approved stack checkout contains uncommitted changes. Run the approved revision from an isolated preview instead.');
  const {url:configuredUrl,inspection,target,cwd}=await targetFor(launchRoot,stackId,driver);
+ if(prepared.sha&&inspection.repo.sha!==prepared.sha)throw Error('Saved stack Git revision differs from the application checkout. No server was started.');
  let url=prepared.previewUrl||configuredUrl;
  if(!isolated&&inspection.repo.branch!==prepared.branch)throw Error('The current checkout changed during server startup. Retry.');
  if(driver===developer)await (effects.ensureDependencies||dependencies.ensureForTarget)(launchRoot,target,{onDiagnostic:effects.onDiagnostic||(async()=>{}),onProgress:effects.onProgress||(async()=>{})});
@@ -82,7 +89,13 @@ async function start({root,stackId,prepared,driver=developer,openBrowser=async()
   }else url=prior.previewUrl||previewUrls.get(identity(root,stackId))||url;
   await (effects.waitForHttp||bootstrap.waitForHttp)(url,()=>driver.localLogs().running);
   if(await openBrowser(url)===false)throw Error('The app started but VS Code could not open an external browser.');
-  previewRoots.set(identity(root,stackId),launchRoot);
+  if(isolated){
+   previewRoots.set(identity(root,stackId),launchRoot);
+   if(prepared.sha)previewRevisions.set(identity(root,stackId),{root:launchRoot,sha:prepared.sha,branch:prepared.branch});
+  }else{
+   previewRoots.delete(identity(root,stackId));
+   previewRevisions.delete(identity(root,stackId));
+  }
   previewUrls.set(identity(root,stackId),url);
   return {...await status({root,stackId,driver}),url,healthy:true,message:'App server running · '+url+(url!==configuredUrl?' · alternate available port selected':'')+(handedOff?' · switched from previous ATGV-managed app':'')+(isolated?' · isolated approved-revision preview (Developer branch unchanged)':'')};
  }catch(error){
