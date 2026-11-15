@@ -394,4 +394,4 @@ async function artifactSnapshot(root, key, base='main') {
         source:'Git files from '+found.basis+' on '+repo.branch};
 }
 
-module.exports = { readinessFlags, checkReadiness, readArtifactFiles, artifactSnapshot, findLocalStoryBranch, jiraKey, branchName, repository, findStoryBranch, matchesGithubRepo, createBranch, resumeBranch, initLocalBaseline, commitBootstrap, configureOrigin, publishBootstrap, cloneConfigured, pushStory, inspectScripts, executeLocal, runLocal, stopLocal, localLogs };
+module.exports = { readinessFlags, checkReadiness, readArtifactFiles, artifactSnapshot, findLocalStoryBranch, jiraKey, branchName, repository, findStoryBranch, matchesGithubRepo, createBranch, resumeBranch, initLocalBaseline, commitBootstrap, configureOrigin, publishBootstrap, cloneConfigured, pushStory, inspectScripts, executeLocal, previewCommand, runLocal, stopLocal, localLogs };
