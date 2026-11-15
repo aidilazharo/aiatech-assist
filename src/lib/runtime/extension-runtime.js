@@ -4371,9 +4371,17 @@ async function handleDashboardMessage(msg){
         break;
       }
       case 'architectTestStack':{
-        requireOpened();architectErrorLogs.begin(activeProject.id,'test');const gate=require('../../architect-stack-approval');const project=await registry.read(activeProject.id);
+        requireOpened();architectErrorLogs.begin(activeProject.id,'test');const gate=require('../../architect-stack-approval');let project=await registry.read(activeProject.id);
         gate.selection(project.techStackId,project.techStackCompanionId||'');
         const root=await architectRepository.resolve(context.workspaceState,activeProject.id,developerGit,{projectRoot:aiRoot(),githubOwner:effectiveConfig(activeProject).get('github.owner'),githubRepo:effectiveConfig(activeProject).get('github.repo')});
+        if(project.techStackPrepared&&!project.techStackPrepared.branch){
+          const recovered=await require('../../architect-stack-branch-recovery').recover({root,project});
+          if(recovered.recovered){
+            project=await registry.update(activeProject.id,recovered.project);
+            activeProject=project;
+            architectErrorLogs.append(project.id,'test','Stage: Recovered validated stack branch '+recovered.branch+' from exact saved Git SHA.');
+          }
+        }
         const prepared=project.techStackPrepared;
         if(!prepared||prepared.root!==root||prepared.stackId!==project.techStackId||prepared.companionId!==(project.techStackCompanionId||''))throw Error('Save the technology stack in the configured project repository first.');
         const architectSimple=require('../../architect-simple-workflow');
