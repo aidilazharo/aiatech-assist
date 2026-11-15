@@ -175,7 +175,282 @@ function normalizeProjectInput(input = {}, existing) {
         techStackPrepared = {
             stackId: techStackId, companionId: techStackCompanionId,
             root: path.normalize(requestedPreparation.root),
-            branch: typeof requestedPreparation.branch === 'string' && /^bootstrap\/[a-z0-9-]{1,80}$/.test(requestedPreparation.branch) ? requestedPreparation.branch : '',
+            branch: typeof requestedPreparation.branch === 'string' && (
+               /^bootstrap\/[a-z0-9-]{1,80}$/.test(requestedPreparation.branch) ||
+               new RegExp('^migration/'+techStackId+'-catalog-[a-z0-9-]{1,80}
+            baseBranch: validGithubBranch(requestedPreparation.baseBranch || '') || 'main',
+            sha: typeof requestedPreparation.sha === 'string' && /^[a-f0-9]{40}$/.test(requestedPreparation.sha) ? requestedPreparation.sha : '',
+            remotePushed: requestedPreparation.remotePushed === true,
+            previewUrl: typeof requestedPreparation.previewUrl === 'string' ? requestedPreparation.previewUrl.slice(0, 255) : '',
+            at: String(requestedPreparation.at || '').slice(0, 60)
+        };
+    }
+    const techStackValidation = stackChanged ? null : (input.techStackValidation === undefined ? existing?.techStackValidation || null : input.techStackValidation);
+    const techStackApproval = stackChanged ? null : (input.techStackApproval === undefined ? existing?.techStackApproval || null : input.techStackApproval);
+    const requestedServerVerification = stackChanged ? null : (input.techStackServerVerification === undefined ? existing?.techStackServerVerification || null : input.techStackServerVerification);
+    // A server smoke check is valid only for the prepared stack's exact revision.
+    const techStackServerVerification = techStackPrepared && requestedServerVerification?.status === 'verified' &&
+        requestedServerVerification.stackId === techStackId &&
+        (requestedServerVerification.companionId || '') === techStackCompanionId &&
+        requestedServerVerification.root === techStackPrepared.root &&
+        requestedServerVerification.sha === techStackPrepared.sha &&
+        requestedServerVerification.branch === techStackPrepared.branch &&
+        typeof requestedServerVerification.at === 'string' ? {
+          status: 'verified', stackId: techStackId, companionId: techStackCompanionId,
+          root: techStackPrepared.root, sha: techStackPrepared.sha,
+          branch: techStackPrepared.branch, at: requestedServerVerification.at.slice(0,60)
+        } : null;
+    return { schema: 4, id, name, techStackId, techStackCompanionId, techStackGeneration, techStackPrepared, techStackValidation, techStackServerVerification, techStackApproval, createdAt: existing?.createdAt || now, updatedAt: now, schedule: normalizeProjectSchedule(input.schedule, existing?.schedule), settings: normalizeSettings(input.settings === undefined ? (existing?.settings || {}) : input.settings) };
+}
+function projectConfig(project, extensionSettings = {}, globalConfig = { get: (_, fallback) => fallback }) {
+    const projectSettings = project?.settings || {};
+    const getRaw = (key) => {
+        if (!CONNECTION_KEYS.includes(key))
+            return undefined;
+        const [group, field] = key.split('.');
+        if (group === 'jira' && ['baseUrl', 'email'].includes(field))
+            return projectSettings.jira?.[field] || projectSettings.atlassian?.[field] || extensionSettings.jira?.[field] || extensionSettings.atlassian?.[field] || '';
+        return projectSettings[group]?.[field] || extensionSettings[group]?.[field] || EXTENSION_DEFAULTS[group]?.[field] || '';
+    };
+    return { get(key, defaultValue) {
+            if (key === 'jira.jql') {
+                const explicit = projectSettings.jira?.jql;
+                if (explicit)
+                    return explicit;
+                const projectKey = projectSettings.jira?.projectKey || extensionSettings.jira?.projectKey;
+                if (projectKey)
+                    return `project = "${projectKey}" ORDER BY updated DESC`;
+                return extensionSettings.jira?.jql || '';
+            }
+            if (LEGACY_ALIASES[key])
+                return getRaw(LEGACY_ALIASES[key]);
+            if (key === 'confluence.baseUrl') {
+                const explicit = getRaw(key);
+                return explicit || (getRaw('jira.baseUrl') ? getRaw('jira.baseUrl') + '/wiki' : '');
+            }
+            if (CONNECTION_KEYS.includes(key))
+                return getRaw(key);
+            return globalConfig.get(key, defaultValue);
+        } };
+}
+class ProjectRegistry {
+    constructor(workspacePath) {
+        if (!path.isAbsolute(workspacePath))
+            throw new Error('Absolute workspace path required.');
+        this.workspace = workspacePath;
+        this.root = path.join(workspacePath, 'projects');
+    }
+    fileFor(id) { if (!ID_RE.test(id))
+        throw new Error('Invalid project ID.'); return path.join(this.root, id, 'atgv.project.json'); }
+    async ensureRoot() {
+        let st;
+        try {
+            st = await fs.lstat(this.root);
+        }
+        catch (e) {
+            if (e.code !== 'ENOENT')
+                throw e;
+        }
+        if (st && (!st.isDirectory() || st.isSymbolicLink()))
+            throw new Error('Projects folder must be a real directory, not a symlink.');
+        if (!st)
+            await fs.mkdir(this.root, { recursive: true });
+        st = await fs.lstat(this.root);
+        if (!st.isDirectory() || st.isSymbolicLink())
+            throw new Error('Projects folder must be a real directory.');
+        return this.root;
+    }
+    async list() {
+        let entries;
+        try {
+            entries = await fs.readdir(this.root, { withFileTypes: true });
+        }
+        catch (e) {
+            if (e.code === 'ENOENT')
+                return [];
+            throw e;
+        }
+        const result = [];
+        for (const item of entries) {
+            if (!item.isDirectory() || !ID_RE.test(item.name))
+                continue;
+            try {
+                result.push(await this.read(item.name));
+            }
+            catch (e) {
+                if (e.code !== 'ENOENT')
+                    throw e;
+            }
+        }
+        return result.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    async unmanagedFolders() {
+        let entries;
+        try {
+            entries = await fs.readdir(this.root, { withFileTypes: true });
+        }
+        catch (e) {
+            if (e.code === 'ENOENT')
+                return [];
+            throw e;
+        }
+        const names = entries.filter(entry => entry.isDirectory() && IMPORT_FOLDER_RE.test(entry.name)).map(entry => entry.name);
+        const result = [];
+        for (const folder of names) {
+            const id = folder.toLowerCase(), file = path.join(this.root, folder, 'atgv.project.json');
+            let manifest = null, error = '', hasManifest = false;
+            try {
+                const st = await fs.lstat(file);
+                hasManifest = true;
+                if (!st.isFile() || st.isSymbolicLink())
+                    throw new Error('Project manifest must be a regular file.');
+                manifest = JSON.parse(await fs.readFile(file, 'utf8'));
+                if (!manifest || !Number.isInteger(manifest.schema) || ![1, 2, 3, 4].includes(manifest.schema) || typeof manifest.id !== 'string' || manifest.id.toLowerCase() !== id || !manifest.name)
+                    throw new Error('Existing project manifest does not match this folder.');
+                normalizeProjectInput({ ...manifest, id }, { ...manifest, id });
+            }
+            catch (e) {
+                if (e.code !== 'ENOENT')
+                    error = e.message;
+            }
+            if (folder === id && manifest && !error)
+                continue;
+            const duplicate = names.some(name => name !== folder && name.toLowerCase() === id);
+            const blocked = Boolean(error || duplicate);
+            result.push({ folder, id, name: manifest?.name || folder, hasManifest, blocked, reason: error || (duplicate ? 'Another project folder has the same ID ignoring letter case.' : '') });
+        }
+        return result.sort((a, b) => a.folder.localeCompare(b.folder));
+    }
+    async importExistingFolder(folder) {
+        if (typeof folder !== 'string' || !IMPORT_FOLDER_RE.test(folder))
+            throw new Error('Invalid project folder name.');
+        await this.ensureRoot();
+        const candidate = (await this.unmanagedFolders()).find(item => item.folder === folder);
+        if (!candidate)
+            throw new Error('This folder is already registered or cannot be imported. Refresh the project list.');
+        if (candidate.blocked)
+            throw new Error(candidate.reason);
+        const source = path.join(this.root, folder), target = path.join(this.root, candidate.id);
+        const st = await fs.lstat(source);
+        if (!st.isDirectory() || st.isSymbolicLink())
+            throw new Error('Project folder must be a real directory.');
+        let old = null;
+        if (candidate.hasManifest) {
+            old = JSON.parse(await fs.readFile(path.join(source, 'atgv.project.json'), 'utf8'));
+            if (old.id.toLowerCase() !== candidate.id)
+                throw new Error('Project manifest changed. Refresh and retry.');
+        }
+        const item = old ? { ...old, id: candidate.id } : normalizeProjectInput({ id: candidate.id, name: folder });
+        const normalized = normalizeProjectInput(item, { ...item, id: candidate.id });
+        if (old) {
+            item.id = candidate.id;
+            item.updatedAt = normalized.updatedAt;
+        }
+        let moved = false;
+        if (source !== target) {
+            try {
+                const existing = await fs.lstat(target);
+                if (existing.dev !== st.dev || existing.ino !== st.ino)
+                    throw new Error('Destination project folder already exists.');
+            }
+            catch (e) {
+                if (e.code !== 'ENOENT')
+                    throw e;
+            }
+            await fs.rename(source, target);
+            moved = true;
+        }
+        const config = path.join(target, 'atgv.project.json');
+        try {
+            if (old) {
+                const tmp = config + '.import-' + process.pid + '.tmp';
+                await fs.writeFile(tmp, JSON.stringify(item, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+                try {
+                    await fs.rename(tmp, config);
+                }
+                catch (e) {
+                    await fs.rm(tmp, { force: true });
+                    throw e;
+                }
+            }
+            else
+                await fs.writeFile(config, JSON.stringify(item, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+            return await this.read(candidate.id);
+        }
+        catch (e) {
+            if (moved)
+                await fs.rename(target, source).catch(() => { });
+            throw e;
+        }
+    }
+    async read(id) {
+        const file = this.fileFor(id);
+        for (const p of [this.root, path.dirname(file), file]) {
+            const st = await fs.lstat(p);
+            if (st.isSymbolicLink())
+                throw new Error('ATGV project paths must not be symbolic links.');
+        }
+        const item = JSON.parse(await fs.readFile(file, 'utf8'));
+        if (item.id !== id || ![1, 2, 3, 4].includes(item.schema))
+            throw new Error(`Invalid project settings for ${id}.`);
+        normalizeProjectInput(item, item);
+        return item;
+    }
+    async create(input) {
+        const item = normalizeProjectInput(input);
+        const dir = path.dirname(this.fileFor(item.id));
+        await this.ensureRoot();
+        const folders = await fs.readdir(this.root);
+        if (folders.some(name => name.toLowerCase() === item.id)) {
+            const error = new Error(`Project folder ${item.id} already exists (folder names are case-insensitive). Import the existing folder instead.`);
+            error.code = 'EEXIST';
+            throw error;
+        }
+        await fs.mkdir(dir);
+        try {
+            await fs.writeFile(this.fileFor(item.id), JSON.stringify(item, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+        }
+        catch (e) {
+            await fs.rmdir(dir).catch(() => { });
+            throw e;
+        }
+        return item;
+    }
+    async update(id, input) {
+        const existing = await this.read(id);
+        const next = normalizeProjectInput(input, existing);
+        const file = this.fileFor(id), tmp = file + '.tmp';
+        await fs.writeFile(tmp, JSON.stringify(next, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+        try {
+            await fs.rename(tmp, file);
+        }
+        catch (e) {
+            await fs.rm(tmp, { force: true });
+            throw e;
+        }
+        return next;
+    }
+    async resetFolder() {
+        if (path.basename(this.root) !== 'projects' || path.dirname(this.root) !== this.workspace)
+            throw new Error('Unsafe reset target.');
+        let st;
+        try {
+            st = await fs.lstat(this.root);
+        }
+        catch (e) {
+            if (e.code === 'ENOENT')
+                return;
+            throw e;
+        }
+        if (!st.isDirectory() || st.isSymbolicLink())
+            throw new Error('Refusing reset: projects is not a regular folder.');
+        for (const name of await fs.readdir(this.root))
+            await fs.rm(path.join(this.root, name), { recursive: true, force: true });
+    }
+}
+module.exports = { projectSlug, parseRepoUrl, normalizeGithubRepository, normalizeExtensionSettings, normalizeProjectInput, normalizeProjectSchedule, projectConfig, ProjectRegistry, EXTENSION_DEFAULTS, validGithubBranch };
+).test(requestedPreparation.branch)
+             ) ? requestedPreparation.branch : '',
             baseBranch: validGithubBranch(requestedPreparation.baseBranch || '') || 'main',
             sha: typeof requestedPreparation.sha === 'string' && /^[a-f0-9]{40}$/.test(requestedPreparation.sha) ? requestedPreparation.sha : '',
             remotePushed: requestedPreparation.remotePushed === true,
