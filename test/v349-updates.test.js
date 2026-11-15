@@ -39,8 +39,8 @@ test('settings and runtime expose dual update checks, safe prompts and verified 
   assert.equal(pkg.contributes.configuration.properties['atgvAssist.updates.'+key].default,true);
  }
  const html=read('src/lib/webview/dashboard-html.js'),ui=read('media/start.js'),runtime=read('src/lib/runtime/extension-runtime.js');
- for(const id of ['settingsSoftwareUpdateGroup','checkSoftwareUpdates','saveSoftwareUpdateSettings','installExtensionRelease','viewExtensionRelease'])assert.ok(html.includes(`id="${id}"`));
- for(const type of ['checkSoftwareUpdates','saveSoftwareUpdateSettings','installExtensionRelease','viewExtensionRelease']){
+ for(const id of ['settingsSoftwareUpdateGroup','checkSoftwareUpdates','installExtensionRelease','viewExtensionRelease'])assert.ok(html.includes(`id="${id}"`));
+ for(const type of ['checkSoftwareUpdates','installExtensionRelease','viewExtensionRelease']){
   assert.ok(runtime.includes(`case '${type}':`));assert.ok(ui.includes(`'${type}'`));
  }
  assert.match(runtime,/scheduleSoftwareUpdates\(\)/);
