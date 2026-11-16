@@ -29,17 +29,17 @@ test('verified activation updates exactly one version; remote only cannot preten
 });
 test('no Library Pull buttons appear beside either header logo',()=>{
  for(const id of ['headerLibraryPull','gateLibraryPull']){
-  assert.doesNotMatch(html,new RegExp('id="'+id+'"'));
+  assert.ok(!html.includes('id="'+id+'"'),id);
   assert.ok(!ui.includes("'"+id+"'"),id);
  }
- assert.doesNotMatch(css,/\\.header-library-pull/);
- // Updates remain in Settings and still reach the pinned GitHub verification path.
- assert.match(html,/id="catalogPull"/);
- assert.match(ui,/\\$\\('catalogPull'\\)\\.addEventListener\\('click'/);
- assert.match(ui,/send\\('catalogPull'\\)/);
+ assert.ok(!css.includes('.header-library-pull'));
+ // The verified pull action remains available in the Catalog settings.
+ assert.ok(html.includes('id="catalogPull"'));
+ assert.ok(ui.includes("$('catalogPull').addEventListener('click'"));
+ assert.ok(ui.includes("send('catalogPull')"));
 });
 test('compact logo and header styles move brand closer to left',()=>{
- assert.match(css,/v0\.3\.80: keep the mark/);
+ assert.match(css,/v0\.3\.81: keep branding compact/);
  assert.match(css,/padding-inline-start:8px!important/);
  assert.match(css,/\.brand-area\{gap:5px!important/);
  assert.match(css,/\.brand-logo\{display:block;width:42px!important/);
