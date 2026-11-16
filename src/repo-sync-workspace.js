@@ -2,6 +2,7 @@
 // Independent ATGV: Workspace webview for Repo A main -> Repo B pull request.
 const crypto=require('node:crypto');
 const repoSync=require('./repo-sync-pr');
+const repoCredentials=require('./repo-sync-credentials');
 let panel=null;
 function escapeHtml(value){return String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));}
 function workspaceHtml({nonce,version,cspSource}){
@@ -28,6 +29,10 @@ button:hover:not(:disabled){filter:brightness(1.1)}button:disabled{opacity:.52;c
 .folder,.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 #destinationLabel{font-size:11px;font-weight:500;overflow-wrap:anywhere;min-width:0;flex:1}
 .actions{margin:19px 0 13px}.note{line-height:1.55}
+.connection-action{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.connection-status{font-size:12px;color:var(--vscode-descriptionForeground,#afb5bd)}
+.connection-status[data-state=success]{color:var(--vscode-testing-iconPassed,#49c18b)}
+.connection-status[data-state=error]{color:var(--vscode-errorForeground,#e4787d)}
 ol{line-height:1.85;padding-left:20px}
 .status{min-height:49px;border:1px solid var(--vscode-panel-border,#50535b);border-radius:6px;padding:13px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55}
 .status[data-state=success]{border-color:var(--vscode-testing-iconPassed,#3aaf80)}
@@ -39,23 +44,25 @@ ol{line-height:1.85;padding-left:20px}
 <main><p class="muted">Copy eligible tracked files from the selected Repo A branch into a matching, review-only branch of Repo B. Separate GitHub PATs authenticate each repository; Repo B main is never changed directly.</p>
 <form id="repoSyncForm"><div class="grid">
 <section class="card"><h2>1. Source · Repo A</h2>
-<p class="muted">Use a read-only Source PAT saved securely in VS Code. ATGV fetches the latest commit of the chosen branch.</p>
-<label for="sourceUrl">GitHub repository URL</label><input id="sourceUrl" type="url" required placeholder="https://github.com/OWNER/repo-a" autocomplete="off" spellcheck="false">
+<p class="muted">Paste a GitHub HTTPS URL with username:PAT (read access). The URL is masked. Once tested, only the PAT is stored in VS Code SecretStorage.</p>
+<label for="sourceUrl">GitHub repository URL with PAT</label><input id="sourceUrl" type="password" required placeholder="https://USERNAME:TOKEN@github.com/OWNER/repo-a" autocomplete="off" spellcheck="false">
+<div class="connection-action"><button id="testSource" type="button" class="secondary">Test Connection</button><span id="sourceConnection" class="connection-status" role="status" aria-live="polite">Not tested</span></div>
 <label for="sourceBranch">Source branch name</label><input id="sourceBranch" type="text" required maxlength="110" value="main" placeholder="main or feature/my-branch">
 <label for="copyScope">Copy scope</label><input id="copyScope" type="text" maxlength="280" value="." placeholder="src/components or .">
 <p class="muted note">A dot copies all eligible tracked files. Secrets, Git internals, generated dependencies and release workflows are excluded.</p>
 </section>
 <section class="card"><h2>2. Destination · Repo B</h2>
-<p class="muted">Use a Destination PAT with repository write permission. Select a clean Repo B Git folder outside your current ATGV project/workspace. Both PATs are stored in VS Code SecretStorage, not this form.</p>
-<label for="destinationRepo">Destination GitHub URL (optional; verifies local origin)</label><input id="destinationRepo" type="url" required placeholder="https://github.com/OWNER/repo-b" autocomplete="off" spellcheck="false">
+<p class="muted">Paste a GitHub HTTPS URL with username:PAT (write access). Credentials are removed from the form after testing. Choose a clean Repo B Git folder outside your current ATGV workspace.</p>
+<label for="destinationRepo">Destination GitHub URL with PAT</label><input id="destinationRepo" type="password" required placeholder="https://USERNAME:TOKEN@github.com/OWNER/repo-b" autocomplete="off" spellcheck="false">
+<div class="connection-action"><button id="testDestination" type="button" class="secondary">Test Connection</button><span id="destinationConnection" class="connection-status" role="status" aria-live="polite">Not tested</span></div>
 <label>Local Repo B Git root (must be outside ATGV workspace)</label><div class="folder"><button id="selectRepoB" type="button" class="secondary">Choose Repo B folder</button><strong id="destinationLabel">No folder selected</strong></div>
 <label for="baseBranch">PR base branch</label><input id="baseBranch" type="text" maxlength="110" placeholder="GitHub default branch (auto)">
-<p class="muted note">ATGV verifies Repo B origin, fetches its base, then creates or safely reuses sync/&lt;source-repo&gt;/&lt;source-branch&gt;. The original source commit message is reused with provenance trailers.</p>
+<p class="muted note">ATGV clones Repo A to a temporary folder. AI reads verified source metadata and suggests a safe Repo B sync branch, commit message and PR details. The copy is staged with Git, committed and published only after validation.</p>
 </section>
 <section class="card full"><h2>3. Publish pull request</h2>
-<ol class="muted"><li>Prompt for Source and Destination PATs when not saved</li><li>Verify source branch, Git identity, and selected folder outside ATGV</li><li>Create/reuse the safe branch, copy files and retain the source commit message</li><li>Push using the Destination PAT and create/reuse a PR with a short AI description</li></ol>
+<ol class="muted"><li>Test Repo A read access and Repo B write access with independent PATs</li><li>Clone Repo A to a temporary folder and read safe source metadata for AI planning</li><li>Create/reuse an AI-named review branch in Repo B, copy eligible files and run git add</li><li>Commit with AI-generated message, push and create PR with AI-written details</li></ol>
 <div class="actions"><button id="createPr" type="submit">Sync Repo A → Repo B · Push & Create PR</button><button id="openPr" type="button" class="secondary" hidden disabled>Open Created PR</button></div>
-<div id="syncStatus" class="status" role="status" aria-live="polite" data-state="ready">Install Git and GitHub CLI, then select a separate Repo B Git folder. Source and Destination PATs will be requested securely when needed; no gh auth login is required.</div>
+<div id="syncStatus" class="status" role="status" aria-live="polite" data-state="ready">Paste username:PAT URLs, test both connections and select an external Repo B Git folder. Git and GitHub CLI are required for push/PR; no gh auth login is required.</div>
 </section></div></form>
 <p class="muted note">Repo B-only files and release workflows are preserved. The tool never merges the PR automatically. Review and test the changes before merging.</p>
 </main>
@@ -68,29 +75,57 @@ function show(message,state){get('syncStatus').textContent=String(message||'');g
 function buttons(){
  get('createPr').disabled=busy||!folder;
  get('selectRepoB').disabled=busy;
- get('openPr').disabled=busy||!createdPr;
- get('openPr').hidden=!createdPr;
+ get('testSource').disabled=busy;get('testDestination').disabled=busy;
+ get('openPr').disabled=busy||!createdPr;get('openPr').hidden=!createdPr;
  get('repoSyncForm').setAttribute('aria-busy',String(busy));
 }
+function consumeUrl(id){
+ const field=get(id),raw=field.value.trim();
+ // Strip a credential-bearing URL immediately; retain only credential-free URL.
+ try{
+  const u=new URL(raw);
+  field.value=u.protocol==='https:'&&u.hostname==='github.com'&&!u.search&&!u.hash?'https://github.com'+u.pathname:'';
+ }catch{field.value='';}
+ return raw;
+}
+const connectionNode=kind=>get(kind==='Source'?'sourceConnection':'destinationConnection');
+function testRepository(kind){
+ if(busy)return;
+ const raw=consumeUrl(kind==='Source'?'sourceUrl':'destinationRepo');
+ busy=true;buttons();
+ const node=connectionNode(kind);node.textContent='Testing GitHub permissions…';node.dataset.state='ready';
+ vscode.postMessage({command:'testRepoConnection',kind,url:raw});
+}
+get('testSource').addEventListener('click',()=>testRepository('Source'));
+get('testDestination').addEventListener('click',()=>testRepository('Destination'));
+for(const id of ['sourceUrl','destinationRepo'])get(id).addEventListener('input',()=>{
+ const node=connectionNode(id==='sourceUrl'?'Source':'Destination');node.textContent='Not tested';node.dataset.state='ready';
+});
 get('selectRepoB').addEventListener('click',()=>vscode.postMessage({command:'selectRepoB'}));
 get('repoSyncForm').addEventListener('submit',e=>{
  e.preventDefault();
  if(busy||!folder||!get('repoSyncForm').reportValidity())return;
  busy=true;createdPr='';buttons();show('Confirm the operation in VS Code. No files have changed yet.');
- vscode.postMessage({command:'createSyncPr',sourceUrl:get('sourceUrl').value.trim(),sourceBranch:get('sourceBranch').value.trim()||'main',destinationUrl:get('destinationRepo').value.trim(),copyScope:get('copyScope').value.trim()||'.',baseBranch:get('baseBranch').value.trim()});
+ vscode.postMessage({command:'createSyncPr',sourceUrl:consumeUrl('sourceUrl'),sourceBranch:get('sourceBranch').value.trim()||'main',destinationUrl:consumeUrl('destinationRepo'),copyScope:get('copyScope').value.trim()||'.',baseBranch:get('baseBranch').value.trim()});
 });
 get('openPr').addEventListener('click',()=>{if(createdPr)vscode.postMessage({command:'openCreatedPr'});});
 window.addEventListener('message',e=>{
  const data=e.data||{};
  if(data.type==='repoBSelected'){folder=String(data.folder||'');get('destinationLabel').textContent=folder||'No folder selected';buttons();}
  if(data.type==='repoSyncProgress')show(data.message||'Synchronising…');
+ if(data.type==='repoConnectionResult'){
+  const id=data.kind==='Source'?'sourceUrl':'destinationRepo',node=connectionNode(data.kind);
+  if(data.safeUrl)get(id).value=String(data.safeUrl);
+  node.textContent=String(data.message||'Connection test finished.');node.dataset.state=data.success?'success':'error';
+  if(!data.duringSync){busy=false;buttons();}
+ }
  if(data.type==='repoSyncResult'){busy=false;createdPr=data.success?String(data.prUrl||''):'';buttons();show(data.message||'Sync finished.',data.success?'success':'error');}
 });
 buttons();
 </script></body></html>`;
  return html.replaceAll('__CSP__',escapeHtml(csp).replaceAll('&#39;',"'")).replaceAll('__NONCE__',escapeHtml(nonce)).replaceAll('__VERSION__',escapeHtml(version));
 }
-function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,workspaceRoot='',describePr=async()=>''}={}){
+function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,workspaceRoot='',describePr=async()=>'',planSync=async()=>null,testConnection=repoCredentials.verifyConnection}={}){
  if(panel){panel.reveal();return panel;}
  const current=vscode.window.createWebviewPanel('atgvAssist.workspace','ATGV: Workspace',vscode.ViewColumn.One,{enableScripts:true,retainContextWhenHidden:true});
  panel=current;
@@ -98,71 +133,92 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,workspaceRoot=''
  const patKey=(kind,repo)=>'atgvAssist.repoSync.'+kind+'.'+crypto.createHash('sha256').update(repo.name.toLowerCase()).digest('hex');
  async function readPat(kind,repo){
   if(!secrets?.get||!secrets?.store)throw Error('VS Code SecretStorage is required to protect GitHub PATs.');
-  const key=patKey(kind,repo);let token=await secrets.get(key);
+  const key=patKey(kind,repo),saved=repo.token?null:await secrets.get(key);
+  let token=repo.token||saved;
   if(!token){
-   token=await vscode.window.showInputBox({title:'GitHub '+kind+' PAT',prompt:'Enter the Personal Access Token for '+repo.name+'. PAT is stored encrypted by VS Code, never in the webview or Git URL.',password:true,ignoreFocusOut:true,validateInput:value=>value&&value.trim().length>=20?null:'Enter a PAT (at least 20 characters).'});
+   token=await vscode.window.showInputBox({title:'GitHub '+kind+' PAT',prompt:'Enter the PAT for '+repo.name+'. ATGV stores it encrypted only after a successful access test.',password:true,ignoreFocusOut:true,validateInput:value=>value&&value.trim().length>=20?null:'Enter a PAT of at least 20 characters.'});
    if(!token)throw Error(kind+' PAT entry was cancelled. Nothing was copied.');
-   await secrets.store(key,token.trim());
   }
-  return {key,token};
+  return {key,token:String(token).trim(),save:!saved||!!repo.token};
+ }
+ async function verifiedPat(kind,repo){
+  const credentials=await readPat(kind,repo);
+  const access=await testConnection(repo,credentials.token,kind);
+  if(credentials.save)await secrets.store(credentials.key,credentials.token);
+  return {...credentials,access};
  }
  const post=async data=>{if(panel===current)await current.webview.postMessage(data);};
+ const sanitize=(error,tokens=[])=>{
+  let message=String(error?.message||error);
+  for(const token of tokens)if(token)message=message.split(token).join('[REDACTED]');
+  return message.slice(0,550);
+ };
  current.onDidDispose(()=>{if(panel===current)panel=null;});
  current.webview.onDidReceiveMessage(async message=>{
   if(!message||typeof message.command!=='string')return;
-  try{
-   if(message.command==='selectRepoB'){
-    if(busy)return;
-    const picked=await vscode.window.showOpenDialog({
-     canSelectFolders:true,canSelectFiles:false,canSelectMany:false,
-     openLabel:'Select Repo B Git root',
-     title:'ATGV Workspace: Select existing local Repo B repository'
-    });
-    if(picked?.[0]){selectedFolder=picked[0].fsPath;await post({type:'repoBSelected',folder:selectedFolder});}
-    return;
-   }
-   if(message.command==='openCreatedPr'){if(createdPr)await vscode.env.openExternal(vscode.Uri.parse(createdPr));return;}
-   if(message.command!=='createSyncPr')return;
-   if(busy){await post({type:'repoSyncResult',success:false,message:'A repository sync is already running.'});return;}
-   busy=true;createdPr='';
+  if(message.command==='selectRepoB'){
+   if(busy)return;
    try{
-    if(!selectedFolder)throw Error('Choose a Repo B Git folder outside the ATGV workspace first.');
-    const source=repoSync.githubUrl(message.sourceUrl);
-    const scope=repoSync.scopeName(message.copyScope||'.');
-    const sourceBranch=repoSync.baseName(message.sourceBranch||'main');
-    const expectedDestination=message.destinationUrl?repoSync.githubUrl(message.destinationUrl):null;
-    const base=message.baseBranch?repoSync.baseName(message.baseBranch):'';
-    const response=await vscode.window.showWarningMessage(
-     'Repo A: '+source.name+' ('+sourceBranch+')\nRepo B: '+selectedFolder+
-     '\nScope: '+scope+'\nPR base: '+(base||'GitHub default branch')+
-     '\n\nCopy into a review branch, reuse the source commit message, push with the Destination PAT, and create a PR?',
-     {modal:true},'Create Sync PR'
-    );
-    if(response!=='Create Sync PR'){
-     await post({type:'repoSyncResult',success:false,message:'Cancelled. No files were changed.'});
-     return;
-    }
-    const sourceCredentials=await readPat('Source',source);
-    if(!expectedDestination)throw Error('Enter the destination GitHub repository URL before syncing.');
-    const destinationCredentials=await readPat('Destination',expectedDestination);
-    const outcome=await repoSync.sync({
-     sourceUrl:source.url,sourceBranch,destinationFolder:selectedFolder,copyScope:scope,baseBranch:base,
-     sourcePat:sourceCredentials.token,destPat:destinationCredentials.token,workspaceRoot,
-     destinationUrl:expectedDestination.url,
-     describePr,onProgress:event=>post({type:'repoSyncProgress',stage:event.stage,message:event.message})
-    });
-    createdPr=outcome.prUrl||'';
-    const summary=outcome.unchanged?outcome.message:
-     'PR created: '+outcome.prUrl+'\nSource: '+outcome.sourceRepo+' / '+outcome.sourceBranch+' @ '+outcome.sourceSha+
-     '\nDestination: '+outcome.destinationRepo+'/'+outcome.base+
-     '\nBranch: '+outcome.branch+'\nFiles selected: '+outcome.fileCount;
-    await post({type:'repoSyncResult',success:true,prUrl:createdPr,message:summary});
-    onLog('Repo Sync: '+summary);
-   }finally{busy=false;}
-  }catch(error){
-   onLog('Repo Sync failed: '+String(error.message||error));
-   await post({type:'repoSyncResult',success:false,message:String(error.message||error)});
+    const picked=await vscode.window.showOpenDialog({canSelectFolders:true,canSelectFiles:false,canSelectMany:false,openLabel:'Select Repo B Git root',title:'ATGV Workspace: Select existing local Repo B repository'});
+    if(picked?.[0]){selectedFolder=picked[0].fsPath;await post({type:'repoBSelected',folder:selectedFolder});}
+   }catch(error){await post({type:'repoSyncResult',success:false,message:sanitize(error)});}
+   return;
   }
+  if(message.command==='openCreatedPr'){if(createdPr)await vscode.env.openExternal(vscode.Uri.parse(createdPr));return;}
+  if(message.command==='testRepoConnection'){
+   const kind=message.kind;
+   if(busy){await post({type:'repoConnectionResult',kind,success:false,message:'A repository operation is already running.'});return;}
+   busy=true;let parsed=null,token='';
+   try{
+    if(!['Source','Destination'].includes(kind))throw Error('Select Source or Destination.');
+    parsed=repoCredentials.parseCredentialUrl(message.url);
+    const credentials=await verifiedPat(kind,parsed);token=credentials.token;
+    await post({type:'repoConnectionResult',kind,success:true,safeUrl:parsed.webUrl,message:'Connected · '+parsed.name+' · '+(kind==='Source'?'read':'write')+' access verified'});
+   }catch(error){
+    const reason=sanitize(error,[token,parsed?.token]);onLog('Repo '+String(kind||'')+' connection test: '+reason);
+    await post({type:'repoConnectionResult',kind,success:false,safeUrl:parsed?.webUrl||'',message:reason});
+   }finally{busy=false;}
+   return;
+  }
+  if(message.command!=='createSyncPr')return;
+  if(busy){await post({type:'repoSyncResult',success:false,message:'A repository operation is already running.'});return;}
+  busy=true;createdPr='';
+  let sourcePat='',destPat='',source=null,destination=null;
+  try{
+   if(!selectedFolder)throw Error('Choose a Repo B Git folder outside ATGV workspace first.');
+   source=repoCredentials.parseCredentialUrl(message.sourceUrl);
+   destination=repoCredentials.parseCredentialUrl(message.destinationUrl);
+   const scope=repoSync.scopeName(message.copyScope||'.');
+   const sourceBranch=repoSync.baseName(message.sourceBranch||'main');
+   const base=message.baseBranch?repoSync.baseName(message.baseBranch):'';
+   const response=await vscode.window.showWarningMessage(
+    'Repo A: '+source.name+' ('+sourceBranch+')\nRepo B: '+destination.name+' in '+selectedFolder+
+    '\nScope: '+scope+'\nPR base: '+(base||'GitHub default branch')+
+    '\n\nVerify both PATs, clone to temp, create an AI-planned review branch, commit, push and open PR?',
+    {modal:true},'Create Sync PR');
+   if(response!=='Create Sync PR'){await post({type:'repoSyncResult',success:false,message:'Cancelled. No files were changed.'});return;}
+   await post({type:'repoSyncProgress',message:'Testing both GitHub PAT permissions…'});
+   const sourceCredentials=await verifiedPat('Source',source);sourcePat=sourceCredentials.token;
+   await post({type:'repoConnectionResult',kind:'Source',duringSync:true,success:true,safeUrl:source.webUrl,message:'Connected · '+source.name+' · read access verified'});
+   const destinationCredentials=await verifiedPat('Destination',destination);destPat=destinationCredentials.token;
+   await post({type:'repoConnectionResult',kind:'Destination',duringSync:true,success:true,safeUrl:destination.webUrl,message:'Connected · '+destination.name+' · write access verified'});
+   const outcome=await repoSync.sync({
+    sourceUrl:source.url,sourceBranch,destinationFolder:selectedFolder,copyScope:scope,baseBranch:base,
+    sourcePat,destPat,workspaceRoot,destinationUrl:destination.url,
+    planSync,describePr,onProgress:event=>post({type:'repoSyncProgress',stage:event.stage,message:event.message})
+   });
+   createdPr=outcome.prUrl||'';
+   const summary=outcome.unchanged?outcome.message:
+    'PR created: '+outcome.prUrl+'\nSource: '+outcome.sourceRepo+' / '+outcome.sourceBranch+' @ '+outcome.sourceSha+
+    '\nDestination: '+outcome.destinationRepo+'/'+outcome.base+
+    '\nBranch: '+outcome.branch+'\nFiles selected: '+outcome.fileCount;
+   await post({type:'repoSyncResult',success:true,prUrl:createdPr,message:summary});
+   onLog('Repo Sync: '+summary);
+  }catch(error){
+   const reason=sanitize(error,[sourcePat,destPat,source?.token,destination?.token]);
+   onLog('Repo Sync failed: '+reason);
+   await post({type:'repoSyncResult',success:false,message:reason});
+  }finally{busy=false;}
  });
  current.webview.html=workspaceHtml({nonce:crypto.randomBytes(18).toString('base64'),version,cspSource:current.webview.cspSource});
  return current;
