@@ -8,7 +8,9 @@ test('extension and library versions are beneath AIATECH ASSIST in both headers'
  assert.match(markup,/class="brand-logo-stack"/);
  assert.match(markup,/class="gate-logo-stack"/);
  for(const id of ['headerLibraryVersion','gateLibraryVersion'])assert.ok(markup.includes('id="'+id+'"'));
- assert.match(ui,/updateBrandLibraryVersion\(state.installed\?\.version\|\|state.remote\?\.version\|\|''\)/);
+ assert.match(ui,/updateBrandLibraryVersion\(state\)/);
+  assert.match(ui,/const installed=String\(state\?\.installed\?\.version\|\|''\)/);
+  assert.match(ui,/const available=String\(state\?\.remote\?\.version\|\|''\)/);
  const brand=markup.slice(markup.indexOf('<div class="brand-area">'),markup.indexOf('<div class="header-context">'));
  assert.ok(brand.indexOf('brand-name')<brand.indexOf('brand-versions'));
 });
