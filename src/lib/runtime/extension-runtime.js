@@ -720,7 +720,10 @@ async function activateProject(id){
   activeProject=project;store=nextStore;
   liveRemoteState={projectId:project.id,phase:openingOffline?'offline':'idle',lastAttempt:'',lastSuccess:'',results:{},errors:{}};
   await context.workspaceState.update('atgvAssist.activeProject',project.id);
-  tree?.refresh();await aiSchedule();await refreshDashboard();
+  // Persist the open-project navigation state before the first dashboard update:
+  // background Jira/Confluence refresh must not make an incomplete opening
+  // appear finished or hide the selected project from the recent list.
+  tree?.refresh();await aiSchedule();await rememberOpened(project.id);await refreshDashboard();
   ownershipRetryTimer=setInterval(()=>{
    if(activeProject?.id===project.id&&coordinationProvider()==='jira-confluence'){
     sharedOwnershipSnapshot({force:true}).then(result=>{
