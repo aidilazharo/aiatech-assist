@@ -707,8 +707,9 @@ function renderCatalog(state,{forceFields=false}={}){
   const span=document.createElement('span');span.textContent=`${label}: ${value??'—'}`;counts.append(span);
  }
  const remote=state.remote;
- $('catalogUpdates').textContent=installed?.offline?'Offline ZIP active. When verified GitHub main becomes accessible, ATGV will replace and safely remove the temporary import.':
-  remote?(installed?.sha===remote.sha?'Catalog is up to date.':`Update available: ${remote.sha.slice(0,12)}. Pull Catalog to download; project files will not be overwritten.`):(state.lastCheck?`Last check: ${new Date(state.lastCheck).toLocaleString()}`:'No remote check performed.');
+ $('catalogUpdates').textContent=installed?.offline?
+  (remote?.version?`ZIP v${installed.version} selected; GitHub main v${remote.version} is older.`:'Offline ZIP active. GitHub version has not been verified yet.'):
+  remote?(state.updateAvailable?`Update available: ${remote.sha.slice(0,12)}. Pull Catalog to download; project files will not be overwritten.`:'Catalog is up to date.'):(state.lastCheck?`Last check: ${new Date(state.lastCheck).toLocaleString()}`:'No remote check performed.');
  if(state.error)$('catalogStatus').textContent=state.error;
  for(const id of ['catalogSave','catalogTest','catalogPull','catalogCheck'])$(id).disabled=!!state.busy||catalogBusyUI;
 }
@@ -6707,11 +6708,11 @@ function devSetStep(id,message){const element=$(id);if(element)element.textConte
 let architectCatalogBusy=false;
 function renderArchitectCatalogStatus(){
  const installed=catalogState?.installed,remote=catalogState?.remote,configured=!!catalogState?.config?.repositoryUrl;
- const newer=!!(remote?.sha&&installed?.sha!==remote.sha);
+ const newer=!!catalogState?.updateAvailable;
  $('architectCheckStackUpdates').disabled=architectCatalogBusy||!!catalogState?.busy||!configured;
  $('architectPullStackUpdates').disabled=architectCatalogBusy||!!catalogState?.busy||!configured||!newer;
  if(!configured){$('architectCatalogStatus').textContent='Configure the SDLC Catalog in Extension Settings first.';return;}
- $('architectCatalogStatus').textContent=remote?(newer?'Update available · '+remote.sha.slice(0,12)+' · review and pull the versioned catalog.':`Catalog up to date · ${installed?.version||'current'} · ${remote.sha.slice(0,12)}`):installed?`Installed ${installed.version} · Check Updates to compare with GitHub main.`:'No catalog installed · Check Updates to discover the latest version.';
+ $('architectCatalogStatus').textContent=installed?.offline&&remote?.version?'Using newer ZIP v'+installed.version+' · GitHub main v'+remote.version+'.':remote?(newer?'Update available · '+remote.sha.slice(0,12)+' · review and pull the versioned catalog.':`Catalog up to date · ${installed?.version||'current'} · ${remote.sha.slice(0,12)}`):installed?`Installed ${installed.version} · Check Updates to compare with GitHub main.`:'No catalog installed · Check Updates to discover the latest version.';
 }
 
 $('architectCheckStackUpdates').addEventListener('click',()=>{architectCatalogBusy=true;$('architectCatalogStatus').textContent='Checking the SDLC Catalog main branch…';renderArchitectCatalogStatus();send('architectCheckStackUpdates');});
