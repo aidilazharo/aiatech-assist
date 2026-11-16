@@ -693,11 +693,38 @@ function updateHeaderUserName(email){
  $('headerUserName').textContent=valid?address:'Not configured';
  $('headerUserName').title=valid?'Jira account: '+address:'Configure your Jira email in Settings';
 }
+function fitBrandVersionLines(){
+ // The version line must match the rendered title width at both screen sizes,
+ // while remaining inside the logo/title block. Measure actual font metrics.
+ for(const [titleSelector,versionSelector,maxFont] of [
+  ['.app-header .brand-name','.app-header .brand-versions',11],
+  ['.gate-product-title h1','.gate-brand-versions',14]
+ ]){
+  const title=document.querySelector(titleSelector),version=document.querySelector(versionSelector);
+  if(!title||!version)continue;
+  const width=title.getBoundingClientRect().width;
+  if(!width)continue;
+  const context=document.createElement('canvas').getContext('2d');
+  if(!context)continue;
+  const style=getComputedStyle(version),label=version.textContent||'';
+  version.style.letterSpacing='0';
+  let low=6,high=maxFont;
+  for(let i=0;i<16;i++){
+   const mid=(low+high)/2;
+   context.font=(style.fontWeight||'500')+' '+mid+'px '+(style.fontFamily||'sans-serif');
+   if(context.measureText(label).width>width)high=mid;else low=mid;
+  }
+  version.style.fontSize=low.toFixed(2)+'px';
+  version.style.maxWidth=width.toFixed(1)+'px';
+ }
+}
 function updateBrandLibraryVersion(version){
  const label=version?' · Library v'+String(version):' · Library —';
  $('headerLibraryVersion').textContent=label;
  $('gateLibraryVersion').textContent=label;
+ fitBrandVersionLines();
 }
+window.addEventListener('resize',fitBrandVersionLines);
 function renderCatalog(state,{forceFields=false}={}){
  if(!state)return;
  catalogState=state;

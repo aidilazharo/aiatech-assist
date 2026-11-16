@@ -1921,3 +1921,13 @@ button:focus-visible{outline:2px solid var(--vscode-focusBorder,#649ed2);outline
  .app-header .brand-identity .brand-versions{font-size:9px}
  .gate-identity .gate-product-title .gate-brand-versions{font-size:10px}
 }
+
+/* v0.3.77: compact title-width identity, including the start gate. */
+.app-header .brand-identity{display:inline-flex;inline-size:max-content;max-inline-size:100%;gap:1px;line-height:1.05;align-items:flex-start;justify-content:center}
+.app-header .brand-identity .brand-name{display:block;font-size:16px;letter-spacing:.25px;font-weight:750;line-height:1.08;white-space:nowrap}
+.app-header .brand-identity .brand-versions{display:block;max-width:100%;font-size:9px;letter-spacing:-.12px;font-weight:500;line-height:1.2;white-space:nowrap;overflow:visible;overflow-wrap:normal}
+.app-header .brand-logo-stack{height:42px;display:flex;align-items:center;justify-content:center}
+.app-header .brand-logo-stack .brand-logo{max-height:42px}
+.gate-identity .gate-product-title{gap:2px;line-height:1.1}
+.gate-identity .gate-product-title .gate-brand-versions{font-size:11px;line-height:1.2;letter-spacing:.03px;white-space:nowrap;overflow-wrap:normal}
+@media(max-width:680px){.app-header .brand-identity .brand-name{font-size:12px;letter-spacing:0}.app-header .brand-identity .brand-versions{font-size:7px;letter-spacing:-.25px}.gate-identity .gate-product-title .gate-brand-versions{font-size:9px}}
