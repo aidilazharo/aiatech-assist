@@ -718,10 +718,18 @@ function fitBrandVersionLines(){
   version.style.maxWidth=width.toFixed(1)+'px';
  }
 }
-function updateBrandLibraryVersion(version){
- const label=version?' · Library v'+String(version):' · Library —';
- $('headerLibraryVersion').textContent=label;
- $('gateLibraryVersion').textContent=label;
+// The active workspace Library is distinct from a newer GitHub main release.
+function updateBrandLibraryVersion(state){
+ const installed=String(state?.installed?.version||'');
+ const available=String(state?.remote?.version||'');
+ const newer=!!state?.updateAvailable&&!!installed&&!!available;
+ const label=installed?' · Library v'+installed+(newer?' → v'+available:'')
+   :available?' · Library v'+available+' available':' · Library not installed';
+ const tip=installed?'Installed Library v'+installed+(newer?'; GitHub main v'+available+' available. Pull Catalog to activate.':'; active workspace selection.')
+   :available?'GitHub main v'+available+' available; open an ATGV workspace and Pull Catalog to install.':'No verified active Library or GitHub version yet.';
+ for(const id of ['headerLibraryVersion','gateLibraryVersion']){
+  $(id).textContent=label;$(id).title=tip;
+ }
  fitBrandVersionLines();
 }
 window.addEventListener('resize',fitBrandVersionLines);
@@ -729,7 +737,7 @@ function renderCatalog(state,{forceFields=false}={}){
  if(!state)return;
  catalogState=state;
  renderRoleSkillHeader();
- updateBrandLibraryVersion(state.installed?.version||state.remote?.version||'');
+ updateBrandLibraryVersion(state);
  const form=$('catalogForm');if(!form)return;
  if(forceFields||!form.contains(document.activeElement)){
    field('catalogRepoUrl',state.config?.repositoryUrl||'');field('catalogRef',state.config?.ref||'main');field('catalogAuth',state.config?.authentication||'github');
@@ -748,7 +756,7 @@ function renderCatalog(state,{forceFields=false}={}){
  const remote=state.remote;
  $('catalogUpdates').textContent=installed?.offline?
   (remote?.version?`Installed ZIP v${installed.version} · GitHub main v${remote.version}. ${state.updateAvailable?'Newer version available.':'No newer version available.'}`:'Offline ZIP active. GitHub version has not been verified yet.'):
-  remote?.version?(state.updateAvailable?`Library v${remote.version} available (installed v${installed?.version||'unknown'}). Pull Catalog to download; project files will not be overwritten.`:`Library v${installed?.version||remote.version} is up to date.`):(state.lastCheck?`Last check: ${new Date(state.lastCheck).toLocaleString()}`:'No verified remote version yet.');
+  remote?.version?(!installed?`Library v${remote.version} available on GitHub main. Open an ATGV workspace, then Pull Catalog to install.`:state.updateAvailable?`Library v${remote.version} available (installed v${installed.version}). Pull Catalog to download; project files will not be overwritten.`:`Library v${installed.version} is up to date.`):(state.lastCheck?`Last check: ${new Date(state.lastCheck).toLocaleString()}`:'No verified remote version yet.');
  if(state.error)$('catalogStatus').textContent=state.error;
  for(const id of ['catalogSave','catalogTest','catalogPull','catalogCheck'])$(id).disabled=!!state.busy||catalogBusyUI;
 }
