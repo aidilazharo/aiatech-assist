@@ -15,7 +15,7 @@
    s('settings','Open project settings','Open Settings, then select the Project Settings tab to configure the project.','[data-nav="settings"]','overview',true)
   ]},
   'start-settings':{label:'Start & Settings',description:'Use the start screen and settings to connect tools and configure roles.',steps:[
-   s('gate-settings','Open settings from the start screen','Extension Settings can be opened before any project is loaded.','#gateSettings','opening'),
+   s('gate-settings','Open connection setup','Use the connection setup below to configure Jira, Confluence, GitHub, and the SDLC Library before opening a project.','#startupConnectionForm','opening'),
    s('search','Search for a project','Use search to find Confluence spaces or existing local projects.','#gateQuery','opening'),
    s('role-settings','Manage enabled roles','Enable or disable SDLC roles for the selected project in Project Settings.','#roleSettingsSection','project-settings'),
    s('project-tools','Open project and tech stack settings','Select the technology stack and repository for the current project.','#techStackGrid','project-settings')

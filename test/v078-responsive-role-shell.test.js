@@ -16,9 +16,9 @@ test('wide monitors use centered capped shell without affecting smaller viewport
 test('start page settings and guide remain beside logo and aligned in same header row',()=>{
  const gate=markup.slice(markup.indexOf('<main id="gateView"'),markup.indexOf('<main id="settingsView"'));
  const identity=gate.indexOf('class="gate-identity gate-lead-identity"');
- const settings=gate.indexOf('id="gateSettings"'),guide=gate.indexOf('id="gateGuideHelp"');
+ const guide=gate.indexOf('id="gateGuideHelp"');
  const alert=gate.indexOf('id="gateFolderAlert"');
- assert.ok(identity>0&&identity<settings&&settings<guide&&guide<alert);
+ assert.ok(identity>0&&identity<guide&&guide<alert&&!gate.includes('id="gateSettings"'));
  assert.ok(css.includes('.gate-top .gate-header-actions{flex:0 0 auto;align-self:center;margin-left:auto}'));
  assert.ok(css.includes('@media(max-width:680px){.gate-top{gap:12px;'));
 });

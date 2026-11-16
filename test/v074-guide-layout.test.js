@@ -7,11 +7,11 @@ const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
 const markup=read('test/generated/extension-source.txt'),css=read('media/start.css'),controller=read('media/user-guide-controller.js');
 test('flat icon is the final action in the app header and the start screen',()=>{
  const top=markup.match(/<div class="header-end">(.*?)<\/div>/s)?.[1];
- assert.ok(top&&top.indexOf('id="headerModel"')<top.indexOf('id="guideHelp"'));
+ assert.ok(top&&top.includes('id="guideHelp"')&&top.indexOf('id="guideHelp"')<top.indexOf('id="headerUserName"'));
  assert.ok(top.includes('class="guide-icon-button"')&&top.includes('class="guide-help-icon"'));
  assert.ok(!top.includes(' Guide</span>'));
  const gate=markup.match(/<div class="gate-header-actions">(.*?)<\/div>/s)?.[1];
- assert.ok(gate&&gate.indexOf('id="gateSettings"')<gate.indexOf('id="gateGuideHelp"'));
+ assert.ok(gate&&gate.includes('id="gateGuideHelp"')&&!gate.includes('id="gateSettings"'));
  assert.ok(gate.includes('class="guide-icon-button"'));
 });
 test('guide has header, start, and settings launch points but none in role pages',()=>{

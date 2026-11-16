@@ -75,6 +75,62 @@ main h3, #landingView h3, #workView h3, #planningView h3, #discoveryView h3, #pr
 #discoveryView .discovery-workflow .workflow-step.current .milestone-circle::after {animation:none!important}
 #workView .developer-br-steps .developer-br-stage:not(.current)::before,#roleStepButtons .role-circle-step:not(.selected) .role-circle-step-marker,#landingView .overview-phase[data-state="complete"] .overview-phase-ring {animation:none!important}
 @media(prefers-reduced-motion:reduce){#landingView .overview-phase-ring,#roleStepButtons .role-circle-step-marker,#discoveryView .discovery-workflow .workflow-step .milestone-circle,#planningView .design-milestone-list .atgv-milestone .milestone-circle,#workView .developer-br-steps .developer-br-stage::before {animation:none!important;transition:none!important;transform:none!important}}
+
+/* v0.3.73: circular milestones adapt to their actual panel width.
+   The connector gap and circle diameter shrink together, keeping all stages on one line. */
+#landingView .overview-phase-grid,
+#roleStepButtons.role-circle-steps,
+#discoveryView .discovery-workflow,
+#planningView .design-milestone-list,
+#workView .ux-design-workflow,
+#workView .developer-br-steps{container-type:inline-size;min-width:0;width:100%;gap:clamp(2px,0.6cqi,8px)}
+#landingView .overview-phase-grid{--atgv-fluid-circle:clamp(20px,9cqi,46px);grid-template-columns:repeat(7,minmax(0,1fr))!important}
+#roleStepButtons.role-circle-steps{--atgv-fluid-circle:clamp(22px,10cqi,46px);grid-template-columns:repeat(var(--role-step-count,4),minmax(0,1fr))!important;overflow-x:hidden!important}
+#discoveryView .discovery-workflow{--atgv-fluid-circle:clamp(18px,7cqi,46px);grid-template-columns:repeat(10,minmax(0,1fr))!important;overflow-x:hidden!important}
+#planningView .design-milestone-list{--atgv-fluid-circle:clamp(20px,11cqi,46px);grid-template-columns:repeat(6,minmax(0,1fr))!important;overflow-x:hidden!important}
+#workView .ux-design-workflow{--atgv-fluid-circle:clamp(20px,11cqi,46px);grid-template-columns:repeat(6,minmax(0,1fr))!important;row-gap:0!important}
+#workView .developer-br-steps{--atgv-fluid-circle:clamp(18px,7cqi,46px);--atgv-tdd-circle:var(--atgv-fluid-circle)!important;grid-template-columns:repeat(9,minmax(0,1fr))!important;overflow-x:hidden!important}
+#landingView .overview-phase,#roleStepButtons .role-circle-step,#discoveryView .discovery-workflow .workflow-step,#planningView .design-milestone-list .atgv-milestone,#workView .ux-workflow-step,#workView .developer-br-stage{min-width:0!important;max-width:100%;padding-inline:clamp(1px,0.5cqi,7px);overflow-wrap:anywhere}
+#landingView .overview-phase-ring,#roleStepButtons .role-circle-step-marker,#discoveryView .discovery-workflow .workflow-step .milestone-circle,#planningView .design-milestone-list .atgv-milestone .milestone-circle,#workView .ux-design-workflow .ux-workflow-number{width:var(--atgv-fluid-circle)!important;height:var(--atgv-fluid-circle)!important;min-width:var(--atgv-fluid-circle)!important;flex:0 0 var(--atgv-fluid-circle)!important;font-size:clamp(9px,2.4cqi,15px)!important}
+#workView .developer-br-steps .developer-br-stage::before{width:var(--atgv-fluid-circle)!important;height:var(--atgv-fluid-circle)!important;flex:0 0 var(--atgv-fluid-circle)!important;font-size:clamp(9px,2.2cqi,15px)!important}
+#landingView .overview-phase-ring::before{inset:clamp(2px,0.75cqi,5px)!important}
+#landingView .overview-phase-value{font-size:clamp(9px,2.2cqi,15px)!important}
+#roleStepButtons .role-circle-step::after{top:calc(var(--atgv-fluid-circle) / 2 + 2px)!important;left:calc(50% + var(--atgv-fluid-circle) / 2 + 1px)!important;right:calc(-50% + var(--atgv-fluid-circle) / 2 + 1px)!important}
+#workView .developer-br-stage:not(:last-child)::after{top:calc(var(--atgv-fluid-circle) / 2)!important;left:calc(50% + var(--atgv-fluid-circle) / 2 + 1px)!important;width:calc(100% - var(--atgv-fluid-circle) - 2px)!important}
+#discoveryView .discovery-workflow::before,#discoveryView .discovery-workflow::after,#planningView .design-milestone-list::before,#planningView .design-milestone-list::after{top:calc(var(--atgv-fluid-circle) / 2 + 10px)!important}
+#workView .ux-design-workflow::before{top:calc(var(--atgv-fluid-circle) / 2 + 6px)!important;display:block!important}
+#landingView .overview-phase-label,#roleStepButtons .role-circle-step-title,#discoveryView .discovery-workflow .milestone-label,#planningView .design-milestone-list .milestone-label,#workView .developer-br-stage strong,#workView .ux-workflow-label{min-width:0;max-width:100%;font-size:clamp(9px,1.5cqi,12px)!important;overflow-wrap:anywhere}
+@keyframes atgv-ui-rotating-circle{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+#landingView .overview-phase[data-state="in-progress"] .overview-phase-ring::after,
+#roleStepButtons .role-circle-step.selected:not([data-status="completed"]):not([data-status="blocked"]) .role-circle-step-marker::after,
+#discoveryView .discovery-workflow .workflow-step.current:not([data-status="success"]) .milestone-circle::before,
+#planningView .design-milestone-list .atgv-milestone.current:not([data-status="success"]) .milestone-circle::before{
+  content:"";display:block;position:absolute;inset:-4px;border-radius:50%;
+  pointer-events:none;z-index:3;border:2px solid transparent;
+  border-top-color:var(--atgv-ui-active);border-right-color:var(--atgv-ui-active);
+  animation:atgv-ui-rotating-circle 1000ms linear infinite!important;
+}
+#landingView .overview-phase-ring,#roleStepButtons .role-circle-step-marker,
+#discoveryView .milestone-circle,#planningView .design-milestone-list .milestone-circle{position:relative}
+#workView .developer-br-stage.current{position:relative}
+#workView .developer-br-stage.current strong::before{
+  content:"";position:absolute;box-sizing:border-box;display:block;
+  width:calc(var(--atgv-fluid-circle) + 8px);height:calc(var(--atgv-fluid-circle) + 8px);
+  left:50%;top:-4px;margin-left:calc((var(--atgv-fluid-circle) + 8px) / -2);
+  pointer-events:none;z-index:3;border-radius:50%;border:2px solid transparent;
+  border-top-color:var(--atgv-ui-active);border-right-color:var(--atgv-ui-active);
+  animation:atgv-ui-rotating-circle 1000ms linear infinite!important;
+}
+/* UI/UX already has an independently rotating overlay; normalize it to the same profile. */
+#workView .ux-workflow-step.running .ux-workflow-number::after{animation:atgv-ui-rotating-circle 1000ms linear infinite!important}
+@media(prefers-reduced-motion:reduce){
+ #landingView .overview-phase[data-state="in-progress"] .overview-phase-ring::after,
+ #roleStepButtons .role-circle-step.selected .role-circle-step-marker::after,
+ #discoveryView .discovery-workflow .workflow-step.current .milestone-circle::before,
+ #planningView .design-milestone-list .atgv-milestone.current .milestone-circle::before,
+ #workView .developer-br-stage.current strong::before,
+ #workView .ux-workflow-step.running .ux-workflow-number::after{animation:none!important}
+}
 `;
 if(process.argv.includes('--check')) {
  if(!fs.existsSync(outFile)||fs.readFileSync(outFile,'utf8')!==css) {console.error('ATGV UI design-token CSS is out of sync: npm run ui:generate');process.exitCode=1;}

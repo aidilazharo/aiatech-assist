@@ -576,7 +576,6 @@ function renderGateResults(){
     row.append(text,button);remote.append(row);
   }
 }
-$('gateSettings').addEventListener('click',()=>navigate('settings'));
 $('gateOpenFolder').addEventListener('click',()=>send('openWorkspaceFolder'));
 for(const [id,provider] of [['guideJiraTokenLink','jira'],['guideConfluenceTokenLink','confluence'],['guideGithubTokenLink','github']])$(id).addEventListener('click',()=>send('guideTokenLink',{provider}));
 $('gateSearch').addEventListener('click',()=>{
@@ -687,9 +686,28 @@ function readProjectForm(){
   return {id:read('id'),name:read('name'),techStackId:selectedTechStackId,schedule:{startDate:read('projectStartDate'),endDate:read('projectEndDate')},settings};
 }
 function catalogFormConfig(){return {repositoryUrl:read('catalogRepoUrl'),ref:read('catalogRef'),authentication:read('catalogAuth'),autoCheck:$('catalogAutoCheck').checked,offlineCache:true};}
+// Identity is display-only and comes from the configured Atlassian email.
+function fullNameFromEmail(email){
+ const value=String(email||'').trim();
+ if(!/^[^@\s]+@[^@\s]+$/.test(value))return '';
+ const local=value.split('@')[0].split('+')[0];
+ const tokens=local.replace(/[._-]+/g,' ').trim().split(/\s+/).filter(Boolean);
+ return tokens.map(token=>token.charAt(0).toUpperCase()+token.slice(1).toLowerCase()).join(' ');
+}
+function updateHeaderUserName(email){
+ const name=fullNameFromEmail(email);
+ $('headerUserName').textContent=name||'Not configured';
+ $('headerUserName').title=name?'Signed in as '+name:'Configure your Jira email in Settings';
+}
+function updateBrandLibraryVersion(version){
+ const label=version?' · Library v'+String(version):' · Library —';
+ $('headerLibraryVersion').textContent=label;
+ $('gateLibraryVersion').textContent=label;
+}
 function renderCatalog(state,{forceFields=false}={}){
  if(!state)return;
  catalogState=state;
+ updateBrandLibraryVersion(state.installed?.version||state.remote?.version||'');
  renderRoleSkillHeader();
  const form=$('catalogForm');if(!form)return;
  if(forceFields||!form.contains(document.activeElement)){
@@ -746,7 +764,7 @@ function updateState(msg){
   $('gateSearch').disabled=!workspaceFolderAvailable;
   $('gateQuery').disabled=!workspaceFolderAvailable;
   if(!aiProviderLoaded){aiProviderLoaded=true;send('getAiProviderState');}
-  projects=msg.projects||[];activeId=msg.activeId||null;healthData=msg.health||null;usedRoleIds=new Set(msg.usedRoles||[]);designState=msg.designState||null;approvedDesignHash=msg.approvedDesignHash||'';blueprintRegistry=msg.blueprintRegister||null;blueprintAssessment=msg.blueprintAssessment||null;extensionSettings=msg.extensionSettings||{};techStacks=msg.techStacks||[];renderCatalog(msg.catalog);jiraBrowseBaseUrl=msg.jiraBrowseBaseUrl||'';
+  projects=msg.projects||[];activeId=msg.activeId||null;healthData=msg.health||null;usedRoleIds=new Set(msg.usedRoles||[]);designState=msg.designState||null;approvedDesignHash=msg.approvedDesignHash||'';blueprintRegistry=msg.blueprintRegister||null;blueprintAssessment=msg.blueprintAssessment||null;extensionSettings=msg.extensionSettings||{};updateHeaderUserName(extensionSettings.jira?.email||msg.startupSetup?.saved?.email);techStacks=msg.techStacks||[];renderCatalog(msg.catalog);jiraBrowseBaseUrl=msg.jiraBrowseBaseUrl||'';
   recentIds=msg.recentProjects||[];projectReadiness=msg.projectReadiness||{};unmanagedFolders=msg.unmanagedFolders||[];
    architectErrorLogProjectId=msg.activeId||'';architectErrorLogCount=Number(msg.architectErrorLogCount)||0;
   if(msg.aiService)renderAIService(msg.aiService);
@@ -6994,6 +7012,7 @@ function renderStartupConfig(config){
  const required=config.required===true;
  if(!startupFormInitialized){
   const saved=config.saved||{},defaults=config.defaults||{};
+  updateHeaderUserName(saved.email||extensionSettings.jira?.email);
   for(const [key,id] of Object.entries(startupFieldMap))$(id).value=saved[key]||defaults[key]||'';
   startupFormInitialized=true;
  }
@@ -7075,6 +7094,7 @@ $('startupRefresh').addEventListener('click',()=>{
 $('startupPrevious').addEventListener('click',()=>{
  if(startupPage===1&&!startupVerifying&&!startupInstallingModule){startupPage=0;renderStartupPage();}
 });
+$('startupEmail').addEventListener('input',()=>updateHeaderUserName(read('startupEmail')));
 $('startupLibraryZipUpload').addEventListener('click',()=>{
  const repositoryUrl=read('startupLibraryRepo');
  if(!/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?\/?$/i.test(repositoryUrl)){

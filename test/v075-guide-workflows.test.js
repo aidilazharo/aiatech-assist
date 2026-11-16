@@ -18,7 +18,7 @@ test('settings can be guided from the start screen and settings route is support
  const opening=list(['business-analyst'],false).map(g=>g.id);
  assert.ok(opening.includes('start-settings'));
  const settingsGuide=get('start-settings');
- assert.ok(settingsGuide.steps.some(step=>step.selector==='#gateSettings'));
+ assert.ok(settingsGuide.steps.some(step=>step.selector==='#startupConnectionForm'));
  assert.ok(settingsGuide.steps.some(step=>step.selector==='#roleSettingsSection'));
  assert.ok(controller.includes("if(step.route==='settings'){"));
 });

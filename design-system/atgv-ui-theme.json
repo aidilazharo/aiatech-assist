@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "name": "ATGV AIATECH Assist UI/UX Design System",
   "id": "atgv-ui",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Canonical design tokens for the entire ATGV VS Code webview. Maintain this JSON and regenerate media/atgv-ui-theme.css; do not duplicate token values in role-specific CSS.",
   "theme": {
     "mode": "vscode-adaptive",
@@ -35,7 +35,11 @@
     "weightMedium": 600,
     "weightTitle": 700
   },
-  "spacing": {"unitPx": 4, "controlHeightPx": 34, "cardRadiusPx": 8},
+  "spacing": {
+    "unitPx": 4,
+    "controlHeightPx": 34,
+    "cardRadiusPx": 8
+  },
   "progress": {
     "circleDiameterPx": 46,
     "circleBorderPx": 2,
@@ -46,7 +50,9 @@
     "pulseScale": 1.08,
     "pulseOpacity": 0.32,
     "completedAnimation": "none",
-    "inactiveAnimation": "none"
+    "inactiveAnimation": "none",
+    "responsive": true,
+    "rotationDurationMs": 1000
   },
   "components": {
     "overviewRing": "#landingView .overview-phase-ring",
@@ -64,7 +70,8 @@
       "Only active or current stages animate; finished and inactive stages remain still",
       "Do not claim a phase completed without corresponding verified task state",
       "Keep status color accompanied by explicit text or accessible status",
-      "Color choices inherit VS Code theme tokens; never use color as the sole status indicator"
+      "Color choices inherit VS Code theme tokens; never use color as the sole status indicator",
+      "Fit each circular milestone to the panel width without hiding or wrapping progress stages"
     ]
   },
   "usage": {
