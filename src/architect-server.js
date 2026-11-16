@@ -136,4 +136,31 @@ async function stop({root,stackId,driver=developer}={}){
  await driver.stopLocal();
  return {running:false,url:entry.previewUrl||previewUrls.get(identity(root,stackId))||target.url,message:'App server stopped.'};
 }
-module.exports={targetFor,status,verify,start,stop};
+// Reset/switch must stop EVERY ATGV-tracked process group belonging to this
+// project's checkout, including its isolated architect preview worktrees.
+// developer-git tracks one frontend+API child process group per extension host;
+// stopLocal terminates that group (not arbitrary listeners or other projects).
+async function stopProjectManaged({root,driver=developer}={}){
+ if(!root||!path.isAbsolute(root))throw Error('An absolute project Git root is required to stop its ATGV-managed servers.');
+ const resolved=path.resolve(root);
+ const own=(cwd,parent)=>cwd===parent||cwd.startsWith(parent+path.sep);
+ const previewParent=path.dirname(preview.previewLocation(resolved,'a'.repeat(40)));
+ let stopped=0;
+ for(let attempt=0;attempt<4;attempt++){
+  const entry=driver.localLogs();
+  if(!entry.running)break;
+  const cwd=path.resolve(entry.cwd||'');
+  if(!own(cwd,resolved)&&!own(cwd,previewParent))
+   throw Error('An ATGV-managed server for a different project is running. Reset will not stop or modify another project.');
+  await driver.stopLocal();
+  stopped++;
+  if(driver.localLogs().running)
+   throw Error('ATGV-managed server is still running. Reset was cancelled before changing Git files.');
+ }
+ if(driver.localLogs().running)throw Error('ATGV-managed server did not stop. Reset was cancelled before changing Git files.');
+ for(const key of [...previewRoots.keys()])if(key.startsWith(resolved+'|')){
+  previewRoots.delete(key);previewUrls.delete(key);previewRevisions.delete(key);
+ }
+ return {stopped,running:false,message:stopped?'Stopped '+stopped+' ATGV-managed application process group(s) before reset.':'No ATGV-managed application server was running.'};
+}
+module.exports={targetFor,status,verify,start,stop,stopProjectManaged};
