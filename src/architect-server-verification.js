@@ -42,6 +42,10 @@ async function reconcileAfterSave({project,verify,start,sleep=ms=>new Promise(re
 // never silently fall back to old evidence when a running server is unhealthy,
 // uses a different branch/SHA, or cannot be verified.
 function approvalEvidence(project,state){
+ const checked=project?.techStackValidation,prepared=project?.techStackPrepared;
+ if(checked?.status!=='tested'||!prepared||checked.stackId!==project.techStackId||
+    checked.sha!==prepared.sha||prepared.remotePushed!==true)
+  throw Error('The saved stack is not tested and pushed at the revision that passed HTTP verification. Re-run Test & Run and Save Stack.');
  if(state?.running===true){
   const fresh=evidenceIfHealthy(project,state);
   if(!fresh)throw Error('The running application is not HTTP healthy for the saved and tested stack commit. Stop or repair it, then use Run Server and Test & Run as needed.');
@@ -49,10 +53,6 @@ function approvalEvidence(project,state){
  }
  if(state?.running!==false)throw Error('Unable to determine whether the application server is stopped. Check server status before approval.');
  if(!gate.serverVerified(project))throw Error('No successful HTTP smoke verification exists for the current saved and tested stack revision. Use Run Server before approving for Developers.');
- const checked=project.techStackValidation,prepared=project.techStackPrepared;
- if(checked?.status!=='tested'||checked.stackId!==project.techStackId||
-    checked.sha!==prepared.sha||prepared.remotePushed!==true)
-  throw Error('The saved stack is not tested and pushed at the revision that passed HTTP verification. Re-run Test & Run and Save Stack.');
  return {proof:project.techStackServerVerification,source:'saved'};
 }
 // A stopped app must not erase historical verification of this exact tested
