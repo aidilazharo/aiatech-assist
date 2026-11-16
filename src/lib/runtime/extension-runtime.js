@@ -343,7 +343,10 @@ async function catalogUiState(){
      }catch(e){report('Catalog role variants '+id+': '+e.message);}
    }
  }
- return {config,installed,roleSkillDescriptions,roleSkillIdentifiers,roleSkillOptions,roleSkillSelections,remote:catalogRemote,lastCheck:catalogLastCheck,error:catalogLastError,busy:catalogBusy,credentialSaved:!!(await context.secrets.get('atgvAssist.sdlcCatalogToken')),readOnly:true};
+ const updateAvailable=!!catalogRemote?.sha&&(installed?.offline?
+   !!catalogRemote.version&&offlineLibrary.compareVersions(catalogRemote.version,installed.version)>0:
+   !installed||installed.sha!==catalogRemote.sha);
+ return {config,installed,roleSkillDescriptions,roleSkillIdentifiers,roleSkillOptions,roleSkillSelections,remote:catalogRemote,updateAvailable,lastCheck:catalogLastCheck,error:catalogLastError,busy:catalogBusy,credentialSaved:!!(await context.secrets.get('atgvAssist.sdlcCatalogToken')),readOnly:true};
 }
 async function catalogCheck({interactive=false}={}){
   if(catalogBusy)return;
