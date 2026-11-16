@@ -39,13 +39,14 @@ test('symlink target is rejected before clearing any cache',async t=>{
   assert.equal((await fs.stat(path.join(root,CACHE_DIRS[0]))).isDirectory(),true);
  }finally{await fs.rm(root,{recursive:true,force:true});await fs.rm(external,{recursive:true,force:true});}
 });
-test('Library header differentiates locally installed and remote available versions',()=>{
+test('Library header shows one active version while Settings retains available versions',()=>{
  assert.deepEqual(versions.compareInstalledRemote('','1.1.15'),{available:true,reason:'not-installed',installed:'',remote:'1.1.15'});
  assert.deepEqual(versions.compareInstalledRemote('1.1.12','1.1.15'),{available:true,reason:'newer',installed:'1.1.12',remote:'1.1.15'});
  assert.equal(versions.compareInstalledRemote('1.1.15','1.1.15').available,false);
  assert.equal(versions.displayLibraryUpdate('','1.1.15').message,'A verified SDLC Library is available for installation.');
  assert.match(ui,/updateBrandLibraryVersion\(state\)/);
- assert.match(ui,/Library v'\+installed\+\(newer\?' → v'\+available/);
+ assert.match(ui,/Library v'\+installed:' · Library not installed'/);
+ assert.doesNotMatch(ui.slice(ui.indexOf('function updateBrandLibraryVersion('),ui.indexOf("window.addEventListener('resize',fitBrandVersionLines)")),/state\?\.remote| → v/);
 });
 test('startup version polling is read-only, Pull Catalog remains pinned and failures visible',()=>{
  const begin=source.indexOf('async function catalogCheck('),end=source.indexOf('function scheduleCatalogChecks()',begin);

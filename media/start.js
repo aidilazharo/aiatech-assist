@@ -720,15 +720,25 @@ function fitBrandVersionLines(){
 }
 // The active workspace Library is distinct from a newer GitHub main release.
 function updateBrandLibraryVersion(state){
- const installed=String(state?.installed?.version||'');
- const available=String(state?.remote?.version||'');
- const newer=!!state?.updateAvailable&&!!installed&&!!available;
- const label=installed?' · Library v'+installed+(newer?' → v'+available:'')
-   :available?' · Library v'+available+' available':' · Library not installed';
- const tip=installed?'Installed Library v'+installed+(newer?'; GitHub main v'+available+' available. Pull Catalog to activate.':'; active workspace selection.')
-   :available?'GitHub main v'+available+' available; open an ATGV workspace and Pull Catalog to install.':'No verified active Library or GitHub version yet.';
+ // The title shows only the active, verified workspace Library, never the GitHub available version.
+ const installed=String(state?.installed?.version||'').trim();
+ const label=installed?' · Library v'+installed:' · Library not installed';
+ const title=installed?'Active Library v'+installed:'No active workspace Library. Pull Latest Library to install.';
  for(const id of ['headerLibraryVersion','gateLibraryVersion']){
-  $(id).textContent=label;$(id).title=tip;
+  const element=$(id);
+  if(element){element.textContent=label;element.title=title;}
+ }
+ // Pull is always available when a catalog is configured, even before version checking.
+ // It reuses the extension-host verified Pull Catalog implementation.
+ const enabled=!!state?.config?.repositoryUrl&&!state?.busy&&!catalogBusyUI;
+ for(const id of ['headerLibraryPull','gateLibraryPull']){
+  const button=$(id);
+  if(!button)continue;
+  button.disabled=!enabled;
+  button.title=!state?.config?.repositoryUrl?'Configure SDLC Catalog in Settings first':
+    state?.busy?'Library operation in progress':
+    state?.updateAvailable?'Pull and activate a newer verified GitHub Library':
+    'Fetch and verify the latest SDLC Library from GitHub';
  }
  fitBrandVersionLines();
 }
@@ -4430,6 +4440,14 @@ $('catalogAuth').addEventListener('change',()=>$('catalogTokenField').classList.
 $('catalogForm').addEventListener('submit',event=>{event.preventDefault();$('catalogStatus').textContent='Saving catalog settings…';send('catalogSave',{config:catalogFormConfig(),token:read('catalogToken')});});
 $('catalogTest').addEventListener('click',()=>{$('catalogStatus').textContent='Testing GitHub connection…';send('catalogTest',{config:catalogFormConfig(),token:read('catalogToken')});});
 $('catalogPull').addEventListener('click',()=>{$('catalogStatus').textContent='Pulling and validating the GitHub catalog…';send('catalogPull');});
+for(const id of ['headerLibraryPull','gateLibraryPull']){
+ $(id).addEventListener('click',()=>{
+  if(!catalogState?.config?.repositoryUrl||catalogState?.busy||catalogBusyUI)return;
+  $('catalogStatus').textContent='Pulling and verifying the latest SDLC Library…';
+  for(const buttonId of ['headerLibraryPull','gateLibraryPull'])$(buttonId).disabled=true;
+  send('catalogPull');
+ });
+}
 $('catalogCheck').addEventListener('click',()=>{$('catalogStatus').textContent='Checking approved catalog version…';send('catalogCheck');});
 $('clearTechStack').addEventListener('click',()=>{selectedTechStackId='';renderTechStacks();});
 $('back').addEventListener('click',()=>{if(roleSettingsDirty){status('Save project role settings before leaving Project Settings.',true);return;}if(workspaceOpened)navigate('overview');else showGate();});

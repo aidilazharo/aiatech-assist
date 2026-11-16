@@ -1931,3 +1931,26 @@ button:focus-visible{outline:2px solid var(--vscode-focusBorder,#649ed2);outline
 .gate-identity .gate-product-title{gap:2px;line-height:1.1}
 .gate-identity .gate-product-title .gate-brand-versions{font-size:11px;line-height:1.2;letter-spacing:.03px;white-space:nowrap;overflow-wrap:normal}
 @media(max-width:680px){.app-header .brand-identity .brand-name{font-size:12px;letter-spacing:0}.app-header .brand-identity .brand-versions{font-size:7px;letter-spacing:-.25px}.gate-identity .gate-product-title .gate-brand-versions{font-size:9px}}
+
+/* v0.3.80: keep the mark, title and verified Library pull compact and left-aligned. */
+body:not(.gate-mode) .app-header{padding-inline-start:8px!important;padding-inline-end:12px!important;gap:9px}
+body:not(.gate-mode) .app-header .brand-area{gap:5px!important;max-width:72%;min-width:0;overflow:visible}
+body:not(.gate-mode) .app-header .brand-logo-stack{width:42px;min-width:42px;flex:0 0 42px}
+body:not(.gate-mode) .app-header .brand-logo-stack .brand-logo{display:block;width:42px!important;height:42px!important;max-height:42px!important;object-fit:contain}
+body:not(.gate-mode) .app-header .brand-identity{gap:1px}
+.header-library-pull{flex:0 0 auto;min-width:0;min-height:28px;padding:5px 9px;margin-inline-start:7px;font-size:10px;line-height:1.25;font-weight:650;letter-spacing:0;white-space:nowrap;border-radius:5px}
+.header-library-pull:disabled{opacity:.48;cursor:not-allowed}
+.gate-identity{gap:6px!important}
+.gate-identity .gate-logo-stack{width:49px;min-width:49px;flex:0 0 49px}
+.gate-identity .gate-logo{display:block;width:49px!important;height:49px!important;max-width:49px!important;object-fit:contain}
+.gate-identity .header-library-pull{margin-inline-start:9px}
+@media(max-width:760px){
+ body:not(.gate-mode) .app-header{padding-inline-start:6px!important;padding-inline-end:6px!important}
+ body:not(.gate-mode) .app-header .brand-area{gap:3px!important;max-width:calc(100% - 50px)}
+ body:not(.gate-mode) .app-header .brand-logo-stack{width:32px;min-width:32px;flex-basis:32px}
+ body:not(.gate-mode) .app-header .brand-logo-stack .brand-logo{width:32px!important;height:36px!important}
+ .header-library-pull{font-size:9px;padding:4px 6px;margin-inline-start:4px;min-height:25px}
+ .gate-identity{gap:4px!important}
+ .gate-identity .gate-logo-stack{width:38px;min-width:38px;flex-basis:38px}
+ .gate-identity .gate-logo{width:38px!important;height:38px!important}
+}
