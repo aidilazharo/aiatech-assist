@@ -82,7 +82,7 @@ test('removes only unchanged offline copy after authenticated Git checkout is ve
  await offline.importZip({file,workspace,repositoryUrl:repo});
  const before=catalog.gitInstalled;
  try{
-  catalog.gitInstalled=async()=>({checkout:path.join(workspace,'.atgv','sdlc-catalog'),sha:'a'.repeat(40)});
+  catalog.gitInstalled=async()=>({checkout:path.join(workspace,'.atgv','sdlc-catalog'),sha:'a'.repeat(40),version:'1.1.15'});
   assert.equal(await offline.removeAfterVerifiedGit(workspace,repo),true);
   assert.equal(await offline.imported(workspace,repo),null);
   assert.equal((await fs.stat(file)).isFile(),true);
@@ -96,7 +96,7 @@ test('modified import must be preserved, never deleted after GitHub recovery',as
  await fs.writeFile(path.join(result.root,'roles','developer','SKILL.md'),'# Edited locally\n');
  const before=catalog.gitInstalled;
  try{
-  catalog.gitInstalled=async()=>({checkout:'/verified/catalog',sha:'a'.repeat(40)});
+  catalog.gitInstalled=async()=>({checkout:'/verified/catalog',sha:'a'.repeat(40),version:'1.1.15'});
   await assert.rejects(()=>offline.removeAfterVerifiedGit(workspace,repo),/modified/);
   assert.equal((await fs.stat(result.root)).isDirectory(),true);
  }finally{catalog.gitInstalled=before;}
