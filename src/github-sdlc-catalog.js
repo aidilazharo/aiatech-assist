@@ -7,6 +7,7 @@ const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const execFileAsync = promisify(execFile);
 const { requestJson } = require('./clients');
+const offlineLibrary = require('./offline-sdlc-library');
 const CANONICAL_REPO = 'https://github.com/example-org/tech-stacks-skills';
 const DEFAULT_CONFIG = Object.freeze({ repositoryUrl: '', ref: 'main', authentication: 'github', autoCheck: true, offlineCache: true });
 const MAX_FILES = 600, MAX_FILE_BYTES = 1024 * 1024, MAX_CATALOG_BYTES = 24 * 1024 * 1024;
@@ -650,7 +651,13 @@ async function syncGitWorkspace(config, token, workspace, storeRoot=null) {
     const action = (async () => {
         const snapshot = await syncGitCatalogCheckout(workspace, normalized.repositoryUrl, repository, token);
         const cleanup = await retireLegacyCatalogAssets(workspace, storeRoot, repository);
-        return { ...snapshot, removedLegacyVersions: cleanup.removed.length, preservedLegacyVersions: cleanup.preserved.length, archivedLegacyVersions: cleanup.archived.length };
+        // Delete only the temporary ZIP snapshot after verified Git main is active.
+        // A modified offline snapshot remains untouched and is reported for inspection.
+        let removedOffline=false,offlineCleanupError='';
+        try{removedOffline=await offlineLibrary.removeAfterVerifiedGit(workspace,normalized.repositoryUrl);}
+        catch(error){offlineCleanupError=error.message;}
+        return { ...snapshot, removedOffline,offlineCleanupError,
+            removedLegacyVersions: cleanup.removed.length, preservedLegacyVersions: cleanup.preserved.length, archivedLegacyVersions: cleanup.archived.length };
     })();
     gitCatalogUpdates.set(key, action);
     try { return await action; }
@@ -798,6 +805,15 @@ async function activeFile(workspace, relative, { maxBytes = 65536 } = {}) {
         if (!stat.isFile() || stat.isSymbolicLink() || stat.size > maxBytes) throw Error('Unsafe catalog asset: ' + relative);
         return fs.readFile(file, 'utf8');
     }
+    // Offline ZIP is a temporary user-supplied data snapshot, never represented as a Git commit.
+    const offline=await offlineLibrary.imported(workspace);
+    if(offline){
+        const file=path.join(offline.root,...relative.split('/'));
+        const stat=await fs.lstat(file).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
+        if(!stat)return null;
+        if(!stat.isFile()||stat.isSymbolicLink()||stat.size>maxBytes)throw Error('Unsafe offline catalog asset: '+relative);
+        return fs.readFile(file,'utf8');
+    }
     const base = path.join(workspace, '.atgv', 'catalog-assets');
     let pointer;
     try {
@@ -830,6 +846,8 @@ async function activeRoot(workspace) {
         const current = await gitInstalled(workspace, { repositoryUrl: 'https://github.com/' + active.repository });
         return { root, ...(current || active) };
     }
+    const offline=await offlineLibrary.imported(workspace);
+    if(offline)return offline;
     const base = path.join(workspace, '.atgv', 'catalog-assets');
     let active;
     try { active = JSON.parse(await fs.readFile(path.join(base, 'active.json'), 'utf8')); }
