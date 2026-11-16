@@ -79,7 +79,7 @@ function prDetails({source,destination,sha,scope,base,branch,count,changedFiles=
  };
 }
 function patEnvironment(pat,{githubCli=false}={}){
- const token=String(pat||'').trim();
+ const token=String(pat||'');
  if(!/^[^\s\x00-\x1f\x7f]{20,512}$/.test(token))throw Error('A valid GitHub Personal Access Token (PAT) is required for both repositories.');
  const basic=Buffer.from('x-access-token:'+token,'utf8').toString('base64');
  return {
