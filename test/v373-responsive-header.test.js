@@ -18,14 +18,29 @@ test('start has no settings action; model picker is under Handoffs in left navig
  assert.equal((markup.match(/id="headerModel"/g)||[]).length,1);
  assert.match(ui,/\$\('headerModel'\)\.addEventListener\('click',openModelPicker\)/);
 });
-test('user full name is derived from email and shown far right without remote lookup',()=>{
- const start=ui.indexOf('function fullNameFromEmail('),end=ui.indexOf('function updateHeaderUserName(',start);
- const name=new Function(ui.slice(start,end)+'return fullNameFromEmail')();
- assert.equal(name('muhamad.aidilazhar.salim@aia.com'),'Muhamad Aidilazhar Salim');
- assert.equal(name('john_doe+work@example.com'),'John Doe');
- assert.equal(name('no-at-sign'),'');
+test('top bar shows lower-case email and the interactive guide is far right',()=>{
+ const start=ui.indexOf('function updateHeaderUserName('),end=ui.indexOf('function updateBrandLibraryVersion(',start);
+ const node={textContent:'',title:''},set=new Function('
+test('every SDLC circular progress group has responsive circle sizing and running rotation',()=>{
+ for(const id of ['overview-phase-grid','roleStepButtons.role-circle-steps','discovery-workflow','design-milestone-list','ux-design-workflow','developer-br-steps'])
+  assert.ok(theme.includes(id),id);
+ assert.match(theme,/container-type:inline-size/);
+ assert.match(theme,/@keyframes atgv-ui-rotating-circle/);
+ assert.match(theme,/developer-br-stage.current strong::before/);
+ assert.match(theme,/role-circle-step.selected:not/);
+ assert.match(theme,/@media\(prefers-reduced-motion:reduce\)/);
+});
+test('manifest version matches extension display version',()=>{
+ const manifest=JSON.parse(read('package.json'));
+ assert.match(manifest.version,/^\d+\.\d+\.\d+$/);
+ assert.equal(manifest.atgvDisplayVersion,manifest.version);
+});
+,ui.slice(start,end)+'return updateHeaderUserName')(id=>node);
+ set('JANE.DOE+TEST@EXAMPLE.COM');
+ assert.equal(node.textContent,'jane.doe+test@example.com');
+ set('not-an-email');assert.equal(node.textContent,'Not configured');
  const top=markup.slice(markup.indexOf('<div class="header-end">'),markup.indexOf('</header>'));
- assert.ok(top.indexOf('id="headerUserName"')>top.indexOf('id="guideHelp"'));
+ assert.ok(top.indexOf('id="headerUserName"')<top.indexOf('id="guideHelp"'));
  assert.match(ui,/updateHeaderUserName\(extensionSettings\.jira\?\.email/);
 });
 test('every SDLC circular progress group has responsive circle sizing and running rotation',()=>{

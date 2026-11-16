@@ -686,18 +686,12 @@ function readProjectForm(){
   return {id:read('id'),name:read('name'),techStackId:selectedTechStackId,schedule:{startDate:read('projectStartDate'),endDate:read('projectEndDate')},settings};
 }
 function catalogFormConfig(){return {repositoryUrl:read('catalogRepoUrl'),ref:read('catalogRef'),authentication:read('catalogAuth'),autoCheck:$('catalogAutoCheck').checked,offlineCache:true};}
-// Identity is display-only and comes from the configured Atlassian email.
-function fullNameFromEmail(email){
- const value=String(email||'').trim();
- if(!/^[^@\s]+@[^@\s]+$/.test(value))return '';
- const local=value.split('@')[0].split('+')[0];
- const tokens=local.replace(/[._-]+/g,' ').trim().split(/\s+/).filter(Boolean);
- return tokens.map(token=>token.charAt(0).toUpperCase()+token.slice(1).toLowerCase()).join(' ');
-}
+// Show the actual configured Jira email, never a guessed full name.
 function updateHeaderUserName(email){
- const name=fullNameFromEmail(email);
- $('headerUserName').textContent=name||'Not configured';
- $('headerUserName').title=name?'Signed in as '+name:'Configure your Jira email in Settings';
+ const address=String(email||'').trim().toLowerCase();
+ const valid=/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(address);
+ $('headerUserName').textContent=valid?address:'Not configured';
+ $('headerUserName').title=valid?'Jira account: '+address:'Configure your Jira email in Settings';
 }
 function updateBrandLibraryVersion(version){
  const label=version?' · Library v'+String(version):' · Library —';
@@ -726,8 +720,8 @@ function renderCatalog(state,{forceFields=false}={}){
  }
  const remote=state.remote;
  $('catalogUpdates').textContent=installed?.offline?
-  (remote?.version?`ZIP v${installed.version} selected; GitHub main v${remote.version} is older.`:'Offline ZIP active. GitHub version has not been verified yet.'):
-  remote?(state.updateAvailable?`Update available: ${remote.sha.slice(0,12)}. Pull Catalog to download; project files will not be overwritten.`:'Catalog is up to date.'):(state.lastCheck?`Last check: ${new Date(state.lastCheck).toLocaleString()}`:'No remote check performed.');
+  (remote?.version?`Installed ZIP v${installed.version} · GitHub main v${remote.version}. ${state.updateAvailable?'Newer version available.':'No newer version available.'}`:'Offline ZIP active. GitHub version has not been verified yet.'):
+  remote?.version?(state.updateAvailable?`Library v${remote.version} available (installed v${installed?.version||'unknown'}). Pull Catalog to download; project files will not be overwritten.`:`Library v${installed?.version||remote.version} is up to date.`):(state.lastCheck?`Last check: ${new Date(state.lastCheck).toLocaleString()}`:'No verified remote version yet.');
  if(state.error)$('catalogStatus').textContent=state.error;
  for(const id of ['catalogSave','catalogTest','catalogPull','catalogCheck'])$(id).disabled=!!state.busy||catalogBusyUI;
 }
@@ -764,7 +758,7 @@ function updateState(msg){
   $('gateSearch').disabled=!workspaceFolderAvailable;
   $('gateQuery').disabled=!workspaceFolderAvailable;
   if(!aiProviderLoaded){aiProviderLoaded=true;send('getAiProviderState');}
-  projects=msg.projects||[];activeId=msg.activeId||null;healthData=msg.health||null;usedRoleIds=new Set(msg.usedRoles||[]);designState=msg.designState||null;approvedDesignHash=msg.approvedDesignHash||'';blueprintRegistry=msg.blueprintRegister||null;blueprintAssessment=msg.blueprintAssessment||null;extensionSettings=msg.extensionSettings||{};updateHeaderUserName(extensionSettings.jira?.email||msg.startupSetup?.saved?.email);techStacks=msg.techStacks||[];renderCatalog(msg.catalog);jiraBrowseBaseUrl=msg.jiraBrowseBaseUrl||'';
+  projects=msg.projects||[];activeId=msg.activeId||null;healthData=msg.health||null;usedRoleIds=new Set(msg.usedRoles||[]);designState=msg.designState||null;approvedDesignHash=msg.approvedDesignHash||'';blueprintRegistry=msg.blueprintRegister||null;blueprintAssessment=msg.blueprintAssessment||null;extensionSettings=msg.extensionSettings||{};updateHeaderUserName(extensionSettings.jira?.email||extensionSettings.atlassian?.email||msg.startupSetup?.saved?.email);techStacks=msg.techStacks||[];renderCatalog(msg.catalog);jiraBrowseBaseUrl=msg.jiraBrowseBaseUrl||'';
   recentIds=msg.recentProjects||[];projectReadiness=msg.projectReadiness||{};unmanagedFolders=msg.unmanagedFolders||[];
    architectErrorLogProjectId=msg.activeId||'';architectErrorLogCount=Number(msg.architectErrorLogCount)||0;
   if(msg.aiService)renderAIService(msg.aiService);
@@ -4254,7 +4248,7 @@ function renderSoftwareUpdates(data,force=false){
  latestSoftwareUpdateState=data;
  const version=data.installedVersion||'?';
  $('softwareExtensionStatus').textContent=data.extensionError?`Extension: ${data.extensionError}`:data.latest?`Extension v${data.latest.version} available (installed v${version}). Release: ${data.latest.tag}.`:data.extensionLastCheck?`Extension v${version} is up to date (checked ${new Date(data.extensionLastCheck).toLocaleString()}).`:`Installed extension: v${version}; not checked yet.`;
- $('softwareLibraryStatus').textContent=data.libraryError?`Library: ${data.libraryError}`:data.libraryLatest?`Library main SHA: ${data.libraryLatest.slice(0,12)}. See SDLC Catalog for installed SHA and Pull Catalog.`:'Library: no remote check completed yet.';
+ $('softwareLibraryStatus').textContent=data.libraryError?`Library: ${data.libraryError}`:data.libraryLatest?`Library on GitHub main: v${data.libraryLatest}. See SDLC Catalog to compare installed and available versions.`:'Library: no verified remote version yet.';
  $('viewExtensionRelease').disabled=!data.latest;
  $('installExtensionRelease').disabled=!data.latest;
  $('checkSoftwareUpdates').disabled=!!data.busy;
@@ -4837,8 +4831,13 @@ function renderBAJiraBackedEpics(){
   const info=brElement('div','ba-jira-recovery-info');
   info.append(brElement('strong','',(item.brId?item.brId+' · ':'')+item.summary));
   info.append(brElement('small','muted',item.key+' · '+(item.status||'Status unknown')+' · '+item.linkedIssueCount+' Jira descendant(s) verified by parent links · Unlinked to local BR'));
+  info.append(brElement('small','muted ba-jira-evidence-help','Original 12 discovery answers and uploaded file are not stored in this project. Open the ATGV project folder that published this BR to access its evidence; Jira alone cannot reconstruct it.'));
   const open=brElement('button','secondary','View Jira');open.type='button';
-  open.addEventListener('click',()=>openJiraIssueModal(item.key));card.append(info,open);root.append(card);
+  open.addEventListener('click',()=>openJiraIssueModal(item.key));
+  const switchProject=brElement('button','secondary','Switch Project');switchProject.type='button';
+  switchProject.title='Find the original ATGV project and its saved BR evidence';
+  switchProject.addEventListener('click',()=>navigate('projects'));
+  card.append(info,open,switchProject);root.append(card);
  }
  if(rows.length>50)root.append(brElement('p','muted',String(rows.length-50)+' additional unlinked Epics: use the Jira inventory below.'));
  if(jiraInventoryRunning)root.append(brElement('p','muted','Jira search is still running; counts may increase.'));
@@ -4989,6 +4988,18 @@ function renderBACompletedRecords(){
   const updatedBR=localBR?.externalReviewRequired||localBR?.needsRefresh;
   heading.append(brElement('span','ba-completed-br-meta',`${group.snapshots.length>1?group.snapshots.length+' published revisions · ':''}Approved R${latest?.approvedRevision||1}${updatedBR?' · Updated · Review required':' · Completed'}`));
   const latestTree=latest?ATGVCompletedBRHistory.jiraTree(latest):{count:0};
+  if(group.snapshots.some(snapshot=>Object.keys(snapshot.cycle?.discoveryAnswers||{}).length>0)){
+   const viewAnswers=brElement('button','secondary ba-view-br-answers','View 12 Answers');
+   viewAnswers.type='button';viewAnswers.title='Expand the completed BR and view saved discovery answers';
+   viewAnswers.addEventListener('click',event=>{
+    event.preventDefault();event.stopPropagation();details.open=true;
+    const answerTab=details.querySelector('.ba-completed-tabs [data-tab="answers"]');
+    if(answerTab)answerTab.click();
+    details.scrollIntoView?.({behavior:'smooth',block:'nearest'});
+   });
+   viewAnswers.addEventListener('keydown',event=>event.stopPropagation());
+   heading.append(viewAnswers);
+  }
   if(latestTree.count){
    const viewJira=brElement('button','secondary ba-view-jira','View Jira · '+latestTree.count+' linked');
    viewJira.type='button';viewJira.title=`View Jira · ${latestTree.count} linked`;
@@ -7228,10 +7239,11 @@ window.addEventListener('message',event=>{
  displayedLibraryUpdate=message.requestId;
  libraryUpdatePriorFocus=document.activeElement;
  const installed=String(message.installedVersion||'');
- $('libraryUpdateCurrent').textContent=installed?'v'+installed:String(message.installedSha||'unknown').slice(0,12);
- $('libraryUpdateNext').textContent=String(message.remoteSha||'unknown').slice(0,12);
- $('libraryUpdateDescription').textContent='A verified SDLC Catalog update is available on the configured GitHub main branch.';
- $('libraryUpdateSource').textContent='GitHub: '+String(message.repository||'tech-stacks-skills')+'/main · '+String(message.remoteSha||'').slice(0,12);
+ $('libraryUpdateCurrent').textContent=installed?'v'+installed:'Not installed';
+ const latest=String(message.remoteVersion||'');
+ $('libraryUpdateNext').textContent=latest?'v'+latest:'Version unavailable';
+ $('libraryUpdateDescription').textContent=latest?'A newer verified SDLC Library version is available on the configured GitHub main branch.':'The remote SDLC Library version could not be verified.';
+ $('libraryUpdateSource').textContent='GitHub: '+String(message.repository||'tech-stacks-skills')+'/main';
  const modal=$('libraryUpdateModal');modal.classList.remove('hidden');modal.setAttribute('aria-hidden','false');
  $('libraryUpdatePull').focus();
 });

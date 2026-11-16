@@ -13,7 +13,7 @@ test('start page displays logo, title, version, settings and guide on a single a
  assert.ok(row.includes('class="gate-identity gate-lead-identity"'));
  assert.ok(!row.includes('id="gateSettings"'));
  assert.ok(row.includes('id="gateGuideHelp"'));
- assert.match(gate,/<span class="gate-product-title"><h1>AIATECH ASSIST<\/h1><\/span>/);
+ assert.match(gate,/<span class="gate-product-title"><h1>AIATECH ASSIST<\/h1><small class="gate-brand-versions">Extension v\$\{extensionVersion\}/);
  assert.match(gate,/id="gateLibraryVersion"/);
  assert.doesNotMatch(gate,/<h1>Open a Project<\/h1>/);
  assert.equal((gate.match(/class="gate-identity gate-lead-identity"/g)||[]).length,1);

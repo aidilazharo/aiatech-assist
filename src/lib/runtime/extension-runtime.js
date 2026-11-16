@@ -13,6 +13,7 @@ const {workspaceForFolder,within}=require('../../project-discovery');
 const {listStacks,ensureWorkspaceLibrary,scaffoldProject,removeManagedWorkspaceLibrary}=require('../../tech-stacks');
 const {initializeWorkspaceFolders,installationSignature,lifecycleAction}=require('../../bootstrap');
 const catalogVendorLibraries=require('../../catalog-vendor-libraries');
+const libraryUpdateVersion=require('../../library-update-version');
 const repoSyncWorkspace=require('../../repo-sync-workspace');
 const {workState,toggleTask,openTaskDocument}=require('../../sdlc-work');
 const roleStepEngine=require('../../role-step-engine');
@@ -344,9 +345,7 @@ async function catalogUiState(){
      }catch(e){report('Catalog role variants '+id+': '+e.message);}
    }
  }
- const updateAvailable=!!catalogRemote?.sha&&(installed?.offline?
-   !!catalogRemote.version&&offlineLibrary.compareVersions(catalogRemote.version,installed.version)>0:
-   !installed||installed.sha!==catalogRemote.sha);
+ const updateAvailable=!!installed&&libraryUpdateVersion.compareInstalledRemote(installed.version,catalogRemote?.version).available;
  return {config,installed,roleSkillDescriptions,roleSkillIdentifiers,roleSkillOptions,roleSkillSelections,remote:catalogRemote,updateAvailable,lastCheck:catalogLastCheck,error:catalogLastError,busy:catalogBusy,credentialSaved:!!(await context.secrets.get('atgvAssist.sdlcCatalogToken')),readOnly:true};
 }
 async function catalogCheck({interactive=false}={}){
@@ -357,7 +356,9 @@ async function catalogCheck({interactive=false}={}){
     const token=await catalogToken(config,{interactive});
     const workspace=getWorkspace()?.uri.fsPath;
     const currentZip=workspace?await offlineLibrary.imported(workspace,config.repositoryUrl):null;
-    const info=currentZip?await sdlcCatalog.remoteVersion(config,token):await sdlcCatalog.remoteInfo(config,token);
+    // Read both remote version declarations at the same immutable GitHub main commit.
+    // A changed commit SHA by itself is NOT a newer SDLC Library.
+    const info=await sdlcCatalog.remoteVersion(config,token);
     catalogRemote={sha:info.sha,repository:info.repository,private:info.private,version:info.version||''};catalogLastCheck=new Date().toISOString();
     // An hourly check must never replace a newer ZIP with older GitHub main.
     if(currentZip){
@@ -368,7 +369,7 @@ async function catalogCheck({interactive=false}={}){
         else report('Library version comparison: GitHub v'+info.version+' selected over ZIP v'+currentZip.version+'.');
       }else report('Library version comparison: keeping newer ZIP v'+currentZip.version+'; GitHub main is v'+info.version+'.');
     }
-  }catch(error){catalogLastError=error.message;report('SDLC Catalog check: '+error.message);if(interactive)throw error;}
+   }catch(error){catalogRemote=null;catalogLastError=error.message;report('SDLC Catalog check: '+error.message);if(interactive)throw error;}
   finally{catalogBusy=false;await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});}
 }
 function scheduleCatalogChecks(){
@@ -399,7 +400,7 @@ function updateStatus(){return {settings:updatePreferences(),installedVersion:re
  latest:extensionRelease?{version:extensionRelease.version,tag:extensionRelease.tag,url:extensionRelease.url}:null,
  extensionLastCheck:extensionUpdateChecked,extensionError:extensionUpdateError,
  libraryLastCheck:catalogLastCheck,libraryError:libraryUpdateError,
- libraryLatest:catalogRemote?.sha||'',busy:softwareCheckBusy};}
+ libraryLatest:catalogRemote?.version||'',libraryLatestSha:catalogRemote?.sha||'',busy:softwareCheckBusy};}
 async function publishUpdateStatus(){await dashboard?.webview.postMessage({type:'softwareUpdateState',value:updateStatus()});}
 async function releaseAccessToken({interactive=false}={}){
  try{
@@ -477,8 +478,10 @@ async function offerBrandedPrerequisiteInstall(plan){
  });
 }
 
-async function offerBrandedLibraryUpdate({repository,installedVersion,installedSha,remoteSha}){
- const message='An SDLC Library update is available on '+repository+'/main ('+remoteSha.slice(0,12)+'). Download the verified catalog? Active project files remain unchanged.';
+async function offerBrandedLibraryUpdate({repository,installedVersion,remoteVersion}){
+ const comparison=libraryUpdateVersion.compareInstalledRemote(installedVersion,remoteVersion);
+ if(!comparison.available)throw Error('The remote library version is not newer than the installed library.');
+ const message='SDLC Library v'+comparison.remote+' is available on '+repository+'/main (installed v'+comparison.installed+'). Download the verified catalog? Active project files remain unchanged.';
  if(!dashboard)return vscode.window.showInformationMessage(message,{modal:true},'Pull Library','Later');
  const requestId=crypto.randomUUID();
  return new Promise(resolve=>{
@@ -489,7 +492,7 @@ async function offerBrandedLibraryUpdate({repository,installedVersion,installedS
   timer.unref?.();
   pendingLibraryUpdateOffers.set(requestId,{resolve,timer});
   Promise.resolve(dashboard.webview.postMessage({type:'libraryUpdateOffer',requestId,
-   repository,installedVersion:installedVersion||'',installedSha:installedSha||'',remoteSha}))
+   repository,installedVersion:comparison.installed,remoteVersion:comparison.remote}))
    .then(ok=>{
     if(!ok){const entry=pendingLibraryUpdateOffers.get(requestId);
      if(entry){clearTimeout(entry.timer);pendingLibraryUpdateOffers.delete(requestId);resolve('Later');}}
@@ -504,16 +507,16 @@ async function checkLibraryRelease({prompt=false,interactive=false}={}){
  try{
   if(catalogBusy)return null;
   await catalogCheck({interactive});libraryUpdateError=catalogLastError;
-  const remote=catalogRemote?.sha||'',installedCatalog=(await catalogUiState()).installed||{},installed=installedCatalog.sha||'';
-  if(!remote||!installed||remote===installed)return null;
+  const remote=catalogRemote?.version||'',installedCatalog=(await catalogUiState()).installed||{};
+  const comparison=libraryUpdateVersion.compareInstalledRemote(installedCatalog.version,remote);
+  if(!comparison.available)return null;
   if(prompt&&updatePreferences().promptForUpdates){
    const key='atgvAssist.updates.promptedLibrary';
    if(context.globalState.get(key)!==remote){
     await context.globalState.update(key,remote);
     const answer=await offerBrandedLibraryUpdate({
      repository:catalogRemote?.repository||'tech-stacks-skills',
-     installedVersion:installedCatalog.version||'',
-     installedSha:installed,remoteSha:remote
+     installedVersion:comparison.installed,remoteVersion:comparison.remote
     });
     if(answer==='Pull Library'){
      if(!getWorkspace()){await uiInformation('Open an ATGV workspace to update the SDLC Library.');}
