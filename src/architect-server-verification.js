@@ -36,6 +36,25 @@ async function reconcileAfterSave({project,verify,start,sleep=ms=>new Promise(re
  }
  return {proof:null,state:state||{running:false,healthy:false,message:lastError?.message||'Server unavailable'},restarted,error:lastError?.message||''};
 }
+// A successful HTTP smoke check for the exact saved/tested Git revision is a
+// durable approval prerequisite. Stopping that ATGV-owned process does not
+// invalidate the evidence. A running process must still be re-checked live:
+// never silently fall back to old evidence when a running server is unhealthy,
+// uses a different branch/SHA, or cannot be verified.
+function approvalEvidence(project,state){
+ if(state?.running===true){
+  const fresh=evidenceIfHealthy(project,state);
+  if(!fresh)throw Error('The running application is not HTTP healthy for the saved and tested stack commit. Stop or repair it, then use Run Server and Test & Run as needed.');
+  return {proof:fresh,source:'live'};
+ }
+ if(state?.running!==false)throw Error('Unable to determine whether the application server is stopped. Check server status before approval.');
+ if(!gate.serverVerified(project))throw Error('No successful HTTP smoke verification exists for the current saved and tested stack revision. Use Run Server before approving for Developers.');
+ const checked=project.techStackValidation,prepared=project.techStackPrepared;
+ if(checked?.status!=='tested'||checked.stackId!==project.techStackId||
+    checked.sha!==prepared.sha||prepared.remotePushed!==true)
+  throw Error('The saved stack is not tested and pushed at the revision that passed HTTP verification. Re-run Test & Run and Save Stack.');
+ return {proof:project.techStackServerVerification,source:'saved'};
+}
 // A stopped app must not erase historical verification of this exact tested
 // SHA. This is a readiness record, NOT permission to approve an offline server.
 function retainVerifiedEvidence(project,state){
@@ -60,4 +79,4 @@ async function startAfterSuccessfulTest({project,verify,start}={}){
  state=await verify();proof=evidenceIfHealthy(project,state);
  return {proof,state,started};
 }
-module.exports={evidenceIfHealthy,reconcileAfterSave,retainVerifiedEvidence,startAfterSuccessfulTest};
+module.exports={evidenceIfHealthy,reconcileAfterSave,retainVerifiedEvidence,startAfterSuccessfulTest,approvalEvidence};
