@@ -114,6 +114,7 @@ const pendingLibraryUpdateOffers=new Map();
 const pendingPrerequisiteInstallOffers=new Map();
 let startupModuleInstalling=false;
 let startupSessionVerified=false;
+let startupSessionProceedApproved=false;
 let startupVerifiedSignature='';
 async function recordStartupDiagnostic(entry){
  try{return await startupDiagnostics.append(context.globalStorageUri.fsPath,entry);}
@@ -319,8 +320,8 @@ async function roleSkillPrompt(roleId) {
 }
 async function catalogUiState(){
  const config=catalogConfig();let installed=null,roleSkillDescriptions={},roleSkillIdentifiers={},roleSkillOptions={},roleSkillSelections={};
- try{installed=(getWorkspace()?await sdlcCatalog.gitInstalled(getWorkspace().uri.fsPath,config):await sdlcCatalog.cached(config,context.globalStorageUri.fsPath));}catch(e){report('SDLC Catalog checkout: '+e.message);}
- if(!installed&&getWorkspace())try{installed=await offlineLibrary.imported(getWorkspace().uri.fsPath,config.repositoryUrl);}catch(e){report('Offline SDLC Catalog: '+e.message);}
+ try{if(getWorkspace())installed=await offlineLibrary.imported(getWorkspace().uri.fsPath,config.repositoryUrl);}catch(e){report('Offline SDLC Catalog: '+e.message);}
+ if(!installed)try{installed=(getWorkspace()?await sdlcCatalog.gitInstalled(getWorkspace().uri.fsPath,config):await sdlcCatalog.cached(config,context.globalStorageUri.fsPath));}catch(e){report('SDLC Catalog checkout: '+e.message);}
  if((installed?.offline||installed?.sha&&/^[a-f0-9]{40}$/.test(installed.sha))&&Array.isArray(installed.roles)&&getWorkspace()){
    for(const id of installed.roles.slice(0,100)){
      if(!/^[a-z][a-z0-9-]{0,79}$/.test(id))continue;
@@ -979,7 +980,7 @@ async function startupStatus(){
  const workspace=getWorkspace()?.uri.fsPath;
  let offline=null;
  try{if(workspace)offline=await offlineLibrary.imported(workspace);}catch(e){report('Offline Library startup status: '+e.message);}
- return {required:!startupIsComplete(),defaults:startupSetup.DEFAULTS,
+ return {required:!startupSessionProceedApproved,defaults:startupSetup.DEFAULTS,
   offlineLibrary:offline?{version:offline.version,filename:offline.filename,repository:offline.repository}:null,
   saved:{jiraUrl:saved.jira?.baseUrl||'',confluenceUrl:saved.confluence?.baseUrl||'',email:saved.jira?.email||'',
    githubUrl:saved.github?.owner?'https://github.com/'+saved.github.owner:'',
@@ -1131,7 +1132,7 @@ async function focusAtgvWorkspace(){
 }
 async function finishManualProjectDiscovery(sequence){
  if(sequence!==startupSequence)return;
- startupScan={status:'complete',percent:100,message:'Choose a project from Recent Projects or Workspace Projects to open it. No project is selected automatically.'};
+ startupScan={status:'complete',percent:100,message:'Review technology stack prerequisites and test Jira, Confluence and GitHub connections first. Choose a project only after setup is verified.'};
  await dashboard?.webview.postMessage({type:'startupScan',...startupScan});
  await refreshDashboard();
 }
@@ -1144,7 +1145,7 @@ async function restart(){
 }
 async function start(options={}){
   await ready;
-  startupSessionVerified=false;startupVerifiedSignature='';
+  startupSessionVerified=false;startupVerifiedSignature='';startupSessionProceedApproved=false;
   if(!options.skipReload){
     const pendingKey='atgvAssist.startAfterWindowReload';
     await vscode.commands.executeCommand('workbench.action.closeAllEditors');
@@ -1174,9 +1175,7 @@ async function start(options={}){
     dashboard.webview.options={...dashboard.webview.options,localResourceRoots:[vscode.Uri.joinPath(context.extensionUri,'media'),...(installedVendorAssets?[vscode.Uri.file(installedVendorAssets.dir)]:[])]};
     dashboard.webview.html=html(dashboard.webview);webviewVendorDir=installedVendorAssets?.dir||null;
     report('ATGV Start reloaded the existing webview.');
-    await refreshDashboard();
-    if(startupIsComplete())await finishManualProjectDiscovery(sequence);
-    else{startupScan={status:'complete',percent:100,message:'Complete the connection setup to search projects.'};await refreshDashboard();}
+    await finishManualProjectDiscovery(sequence);
     return;
   }
   dashboard=vscode.window.createWebviewPanel('atgvAssist.start','ATGV: Start',vscode.ViewColumn.One,{enableScripts:true,retainContextWhenHidden:true,localResourceRoots:[vscode.Uri.joinPath(context.extensionUri,'media'),...(installedVendorAssets?[vscode.Uri.file(installedVendorAssets.dir)]:[])]});
@@ -1188,9 +1187,7 @@ async function start(options={}){
   if(modelStatusPoll)clearInterval(modelStatusPoll);
   modelStatusPoll=setInterval(()=>{invalidateModelStatus();if(dashboard)refreshDashboard().catch(e=>report('Model badge refresh: '+e.message));},60000);
   modelStatusPoll.unref?.();
-  await refreshDashboard();
-  if(startupIsComplete())await finishManualProjectDiscovery(sequence);
-  else{startupScan={status:'complete',percent:100,message:'Complete the connection setup to search projects.'};await refreshDashboard();}
+  await finishManualProjectDiscovery(sequence);
 }
 async function notice(message,error=false){if(dashboard)await dashboard.webview.postMessage({type:'notice',message,error});}
 async function discoverSpaces(query,origin='gate',requestId=null){
@@ -1383,7 +1380,9 @@ async function testOpeningProject(){
     openingFlow.tested(cached.warnings);
     return 'Recent connection check reused.';
   }
+  await openingProgress('connection','Authenticating Jira…',17);
   const account=await testJiraConnection(config,token);
+  await openingProgress('connection','Verifying Confluence space…',26);
   const space=await getConfluenceSpace(config,token);
   const projectKey=config.get('jira.projectKey');
   const warnings=[];
@@ -1395,6 +1394,7 @@ async function testOpeningProject(){
                                                                                  
   if(config.get('github.owner')||config.get('github.repo')){
     if(!config.get('github.owner')||!config.get('github.repo'))throw new Error('Complete both GitHub fields, or remove the optional GitHub configuration.');
+    await openingProgress('connection','Checking GitHub repository permissions…',33);
     await testGithubConnection(config,gToken);
   }else warnings.push('GitHub not configured (optional).');
   openingFlow.tested(warnings);
@@ -1451,8 +1451,9 @@ async function rememberOpened(id){
   const next=[id,...(Array.isArray(old)?old:[]).filter(p=>p!==id)].slice(0,5);
   await context.workspaceState.update('atgvAssist.recentProjects',next);
 }
-async function openingProgress(stage,message){
-  await dashboard?.webview.postMessage({type:'openingProgress',stage,message});
+async function openingProgress(stage,message,percent){
+  const defaults={selected:5,connection:15,connectionsVerified:38,files:45,workspaceReady:72,workspace:80,done:100,error:0};
+  await dashboard?.webview.postMessage({type:'openingProgress',stage,message,percent:typeof percent==='number'?percent:defaults[stage]??10});
 }
 async function launchProject(msg){
   if(msg.projectId||msg.spaceId){
@@ -1463,8 +1464,10 @@ async function launchProject(msg){
   openingFlow.require('selected');openingOffline=false;
   await openingProgress('connection','Checking connections…');
   await testOpeningProject();
+  await openingProgress('connectionsVerified','Project connections verified.');
   await openingProgress('files','Preparing workspace…');
   await initializeOpeningProject();
+  await openingProgress('workspaceReady','Project workspace prepared.');
   await openingProgress('workspace','Opening project…');
   await openVerifiedProject();
   await rememberOpened(openingFlow.candidate.id);
@@ -1479,11 +1482,13 @@ async function launchLocalOffline(){
   if(project.settings?.confluence?.spaceKey!==openingFlow.candidate.settings?.confluence?.spaceKey)
     throw new Error('Project settings changed. Select the project again.');
   openingOffline=true;
+  await openingProgress('selected','Opening local project…');
   await openingProgress('files','Preparing local workspace…');
   await ensureWorkspaceLibrary(getWorkspace().uri.fsPath);
   await scaffoldProject(getWorkspace().uri.fsPath,project);
   openingFlow.tested(['Offline mode: remote services were not verified.']);
   openingFlow.initialized();
+  await openingProgress('workspace','Loading local project…');
   await openVerifiedProject();
   await rememberOpened(project.id);
   await openingProgress('done','Local workspace ready');
@@ -3652,7 +3657,8 @@ async function handleDashboardMessage(msg){
     switch(msg.command){
       case 'startupReadiness':{
         try{
-          const result=await startupReadiness.check();
+          await dashboard?.webview.postMessage({type:'startupReadinessProgress',percent:0,completed:0,total:Object.keys(startupReadiness.TOOLS).length,message:'Checking technology stack prerequisites…'});
+          const result=await startupReadiness.check({onProgress:progress=>dashboard?.webview.postMessage({type:'startupReadinessProgress',...progress})});
           const tools=Object.entries(result.tools||{}).map(([name,item])=>name+': '+(item.installed?'detected '+item.version+' via '+(item.source||'PATH'):'not detected'+(item.error?' ('+item.error+')':''))).join(' | ');
           await recordStartupDiagnostic({stage:'readiness-scan',status:'complete',detail:tools});
           await dashboard?.webview.postMessage({type:'startupReadinessResult',value:result});
@@ -3725,8 +3731,16 @@ async function handleDashboardMessage(msg){
             openLabel:'Import SDLC Library ZIP',filters:{'ZIP archives':['zip']}});
           if(!chosen?.length)break;
           const imported=await offlineLibrary.importZip({file:chosen[0].fsPath,workspace,repositoryUrl});
+          // Selected ZIP is an explicit temporary catalog source. Do not let a stale checkout mask it.
+          const active=await sdlcCatalog.activeManifest(workspace);
+          if(active.version!==imported.version||active.techStacks.length!==imported.stackCount)
+            throw Error('Offline ZIP was saved but its active catalog could not be verified. Review the import in Unified Error Log.');
+          const previous=catalogConfig();
+          await context.globalState.update('atgvAssist.sdlcCatalog',sdlcCatalog.normalizeConfig({...previous,repositoryUrl,ref:'main'}));
+          catalogLastError='';
+          await recordStartupDiagnostic({stage:'library-zip',status:'verified',detail:'Activated v'+imported.version+' from '+imported.filename+' ('+imported.roleCount+' roles; '+imported.stackCount+' stacks)'});
           await dashboard?.webview.postMessage({type:'offlineLibraryZipResult',success:true,
-            message:'Offline SDLC Library v'+imported.version+' imported ('+imported.roleCount+' roles, '+imported.stackCount+' stacks). The temporary copy will be removed after GitHub main is successfully verified.'});
+            message:'Offline SDLC Library v'+imported.version+(imported.unchanged?' already loaded':' loaded')+' ('+imported.roleCount+' roles, '+imported.stackCount+' stacks). All catalog references now use the ZIP until verified GitHub sync.'});
           await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});
           await refreshDashboard();
         }catch(error){
@@ -3745,6 +3759,7 @@ async function handleDashboardMessage(msg){
       case 'startupProceed':{
         if(!startupSessionVerified||startupVerifiedSignature!==sha(JSON.stringify(startupSetup.validate(msg.settings))))throw Error('Test Jira, Confluence and GitHub connections with the current fields before proceeding.');
         await context.globalState.update('atgvAssist.startupSetup.completed',true);
+        startupSessionProceedApproved=true;
         startupSessionVerified=false;startupVerifiedSignature='';
         await dashboard?.webview.postMessage({type:'startupProceedResult',success:true});
         await refreshDashboard();break;

@@ -73,17 +73,23 @@ async function findTrustedWindowsTool(name,{runner=run,env=process.env,fsApi=fs}
  }
  return null;
 }
-async function check({runner=run,platform=process.platform,env=process.env,fsApi=fs}={}){
+async function check({runner=run,platform=process.platform,env=process.env,fsApi=fs,onProgress=()=>{}}={}){
  const names=[...new Set(STACKS.flatMap(s=>[...s.required,...s.optional]))];
+ let completed=0;
+ const resultWithProgress=async(name,item)=>{
+  completed++;
+  try{await onProgress({name,completed,total:names.length,percent:Math.round(100*completed/names.length),message:'Checked '+name+' ('+completed+'/'+names.length+')'});}catch{}
+  return [name,item];
+ };
  const results=await Promise.all(names.map(async name=>{
   const item=TOOLS[name];try{
    const result=await runner(item.command,item.args,{timeout:3500,maxBuffer:32768,windowsHide:true,shell:platform==='win32'});
    const output=String(result.stdout||result.stderr||'').trim();
-   return [name,{installed:true,version:output.split(/\r?\n/)[0].slice(0,100),source:'PATH'}];
+   return resultWithProgress(name,{installed:true,version:output.split(/\r?\n/)[0].slice(0,100),source:'PATH'});
   }catch(error){
    const output=String(error.stderr||error.stdout||'').trim();
    const found=platform==='win32'?await findTrustedWindowsTool(name,{runner,env,fsApi}):null;
-   return [name,found||{installed:false,version:output.split(/\r?\n/)[0].slice(0,100),error:String(error.code||error.message||'').slice(0,160)}];
+   return resultWithProgress(name,found||{installed:false,version:output.split(/\r?\n/)[0].slice(0,100),error:String(error.code||error.message||'').slice(0,160)});
   }
  }));
  const tools=Object.fromEntries(results);

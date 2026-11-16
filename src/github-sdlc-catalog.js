@@ -7,6 +7,7 @@ const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const execFileAsync = promisify(execFile);
 const { requestJson } = require('./clients');
+const { githubIpAllowlistHint } = require('./github-ip-allowlist');
 const offlineLibrary = require('./offline-sdlc-library');
 const CANONICAL_REPO = 'https://github.com/example-org/tech-stacks-skills';
 const DEFAULT_CONFIG = Object.freeze({ repositoryUrl: '', ref: 'main', authentication: 'github', autoCheck: true, offlineCache: true });
@@ -385,7 +386,8 @@ async function runCatalogGit(dir, args, env, token='') {
                 continue;
             }
             const detail = String(error.stderr || error.message || '').replaceAll(token || '\u0000', '[redacted]').slice(0, 450);
-            throw Error('SDLC Catalog Git command failed: ' + detail, { cause: error });
+            const hint = githubIpAllowlistHint(403, detail);
+            throw Error('SDLC Catalog Git command failed: ' + detail + (hint ? ' ' + hint : ''), { cause: error });
         }
     }
     throw Error('SDLC Catalog cannot find the Git executable. Install Git, configure VS Code git.path, and reload VS Code. ' + String(missing?.message || 'Git is unavailable.').slice(0, 150));
@@ -794,6 +796,15 @@ async function activeFile(workspace, relative, { maxBytes = 65536 } = {}) {
     if (!workspace)
         return null;
     validPath(relative);
+    // Offline ZIP is a temporary user-supplied data snapshot, never represented as a Git commit.
+    const offline=await offlineLibrary.imported(workspace);
+    if(offline){
+        const file=path.join(offline.root,...relative.split('/'));
+        const stat=await fs.lstat(file).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
+        if(!stat)return null;
+        if(!stat.isFile()||stat.isSymbolicLink()||stat.size>maxBytes)throw Error('Unsafe offline catalog asset: '+relative);
+        return fs.readFile(file,'utf8');
+    }
     const gitRoot = gitCatalogFolder(workspace);
     const gitState = await fs.lstat(gitCatalogState(workspace)).catch(e => e.code === 'ENOENT' ? null : Promise.reject(e));
     if (gitState) {
@@ -804,15 +815,6 @@ async function activeFile(workspace, relative, { maxBytes = 65536 } = {}) {
         if (!stat) return null;
         if (!stat.isFile() || stat.isSymbolicLink() || stat.size > maxBytes) throw Error('Unsafe catalog asset: ' + relative);
         return fs.readFile(file, 'utf8');
-    }
-    // Offline ZIP is a temporary user-supplied data snapshot, never represented as a Git commit.
-    const offline=await offlineLibrary.imported(workspace);
-    if(offline){
-        const file=path.join(offline.root,...relative.split('/'));
-        const stat=await fs.lstat(file).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
-        if(!stat)return null;
-        if(!stat.isFile()||stat.isSymbolicLink()||stat.size>maxBytes)throw Error('Unsafe offline catalog asset: '+relative);
-        return fs.readFile(file,'utf8');
     }
     const base = path.join(workspace, '.atgv', 'catalog-assets');
     let pointer;
@@ -836,6 +838,9 @@ async function activeFile(workspace, relative, { maxBytes = 65536 } = {}) {
 }
 async function activeRoot(workspace) {
     if (!workspace) throw Error('Open an ATGV workspace and pull the SDLC Catalog from GitHub main.');
+    // An explicitly imported, checksum-verified ZIP remains active until a verified Git pull replaces it.
+    const offline=await offlineLibrary.imported(workspace);
+    if(offline)return offline;
     const gitState = await fs.readFile(gitCatalogState(workspace), 'utf8').catch(e => e.code === 'ENOENT' ? null : Promise.reject(e));
     if (gitState) {
         const active = JSON.parse(gitState);
@@ -846,8 +851,6 @@ async function activeRoot(workspace) {
         const current = await gitInstalled(workspace, { repositoryUrl: 'https://github.com/' + active.repository });
         return { root, ...(current || active) };
     }
-    const offline=await offlineLibrary.imported(workspace);
-    if(offline)return offline;
     const base = path.join(workspace, '.atgv', 'catalog-assets');
     let active;
     try { active = JSON.parse(await fs.readFile(path.join(base, 'active.json'), 'utf8')); }
