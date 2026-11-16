@@ -13,6 +13,7 @@ const {workspaceForFolder,within}=require('../../project-discovery');
 const {listStacks,ensureWorkspaceLibrary,scaffoldProject,removeManagedWorkspaceLibrary}=require('../../tech-stacks');
 const {initializeWorkspaceFolders,installationSignature,lifecycleAction}=require('../../bootstrap');
 const catalogVendorLibraries=require('../../catalog-vendor-libraries');
+const repoSyncWorkspace=require('../../repo-sync-workspace');
 const {workState,toggleTask,openTaskDocument}=require('../../sdlc-work');
 const roleStepEngine=require('../../role-step-engine');
 const handoffProgress=require('../../handoff-progress');
@@ -7668,7 +7669,8 @@ function activate(ctx){
    await uiInformation(`Shared project artifacts updated for all SDLC roles: ${refreshed.manifest.files.length} indexed files in ${refreshed.root}.`);
    return refreshed.root;
   };
-  const actions={start,restart,reset,refreshUnifiedArtifacts};
+  const workspace=()=>repoSyncWorkspace.open(vscode,{version:require('../../../package.json').version,onLog:report});
+  const actions={start,workspace,restart,reset,refreshUnifiedArtifacts};
   for(const [name,fn] of Object.entries(actions))ctx.subscriptions.push(vscode.commands.registerCommand('atgvAssist.'+name,async(...args)=>{await ready;return guarded(()=>fn(...args));}));
   ctx.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(()=>{++startupSequence;ready=initialize().then(()=>dashboard?start({skipReload:true}):undefined).catch(e=>report('Workspace change: '+e.message));}));
   if(vscode.workspace.onDidChangeConfiguration)ctx.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e=>{if(e.affectsConfiguration('atgvAssist.rag')||e.affectsConfiguration('atgvAssist.ai')){invalidateModelStatus();refreshDashboard().catch(err=>report('Model settings: '+err.message));}}));
