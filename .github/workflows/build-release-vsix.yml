@@ -10,8 +10,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: atgv-vsix-main-release
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'pull_request' && format('atgv-vsix-pr-{0}', github.event.pull_request.number) || 'atgv-vsix-main-release' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
