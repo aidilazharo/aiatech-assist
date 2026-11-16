@@ -691,13 +691,16 @@ function renderCatalog(state,{forceFields=false}={}){
  $('catalogTokenField').classList.toggle('hidden',read('catalogAuth')!=='token');
  $('catalogToken').placeholder=state.credentialSaved?'Token saved securely; leave blank to retain':'Read-only token with Contents: Read';
  const installed=state.installed;settingsCatalogInstalled=installed||null;updateExtensionSettingBadges();
- $('catalogInstalled').textContent=installed?`Installed SDLC Catalogue v${installed.version} · Git SHA ${installed.sha.slice(0,12)} · ${installed.repository} · ${new Date(installed.installedAt).toLocaleString()}`:'No downloaded catalogue yet.';
+ $('catalogInstalled').textContent=installed?(installed.offline?
+  `Offline SDLC Library ZIP v${installed.version} · ${installed.filename||'validated archive'} · Temporary until verified GitHub sync`:
+  `Installed SDLC Catalogue v${installed.version} · Git SHA ${installed.sha.slice(0,12)} · ${installed.repository} · ${new Date(installed.installedAt).toLocaleString()}`):'No downloaded catalogue yet.';
  const counts=$('catalogContents');counts.replaceChildren();
  for(const [label,value] of [['Role skills',installed?.roleCount],['Tech stacks',installed?.stackCount],['Workflows',installed?.workflows],['Templates',installed?.templates]]){
   const span=document.createElement('span');span.textContent=`${label}: ${value??'—'}`;counts.append(span);
  }
  const remote=state.remote;
- $('catalogUpdates').textContent=remote?(installed?.sha===remote.sha?'Catalog is up to date.':`Update available: ${remote.sha.slice(0,12)}. Pull Catalog to download; project files will not be overwritten.`):(state.lastCheck?`Last check: ${new Date(state.lastCheck).toLocaleString()}`:'No remote check performed.');
+ $('catalogUpdates').textContent=installed?.offline?'Offline ZIP active. When verified GitHub main becomes accessible, ATGV will replace and safely remove the temporary import.':
+  remote?(installed?.sha===remote.sha?'Catalog is up to date.':`Update available: ${remote.sha.slice(0,12)}. Pull Catalog to download; project files will not be overwritten.`):(state.lastCheck?`Last check: ${new Date(state.lastCheck).toLocaleString()}`:'No remote check performed.');
  if(state.error)$('catalogStatus').textContent=state.error;
  for(const id of ['catalogSave','catalogTest','catalogPull','catalogCheck'])$(id).disabled=!!state.busy||catalogBusyUI;
 }
@@ -713,7 +716,7 @@ function updateExtensionSettingBadges(){
  required('settingsConfluenceGroup',jiraReady&&!!(space?.spaceKey||space?.spaceId));
  const repo=extensionSettings.github||{};
  optional('settingsGithubGroup',!!(repo.owner&&repo.repo));
- optional('settingsCatalogGroup',!!settingsCatalogInstalled?.sha);
+ optional('settingsCatalogGroup',!!(settingsCatalogInstalled?.sha||settingsCatalogInstalled?.offline));
  const provider=read('aiProviderChoice');
  required('settingsAiGroup',provider!=='none'&&(settingsAiTested||provider==='auto'&&settingsModelReady));
  const coordination=read('coordinationProvider');
@@ -6966,6 +6969,8 @@ function renderStartupConfig(config){
   for(const [key,id] of Object.entries(startupFieldMap))$(id).value=saved[key]||defaults[key]||'';
   startupFormInitialized=true;
  }
+ const offline=config.offlineLibrary;
+ if(offline)$('startupLibraryZipStatus').textContent=`Offline ZIP v${offline.version} (${offline.filename}) active; will be removed after verified GitHub sync.`;
  showStartupStep(required||startupReturnToConnections);
  if(required&&!startupPrereqRequested){startupPrereqRequested=true;send('startupReadiness');}
 }
@@ -7032,6 +7037,15 @@ $('startupRefresh').addEventListener('click',()=>{
 $('startupPrevious').addEventListener('click',()=>{
  if(startupPage===1&&!startupVerifying&&!startupInstallingModule){startupPage=0;renderStartupPage();}
 });
+$('startupLibraryZipUpload').addEventListener('click',()=>{
+ const repositoryUrl=read('startupLibraryRepo');
+ if(!/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?\/?$/i.test(repositoryUrl)){
+  $('startupLibraryZipStatus').textContent='Enter a valid GitHub SDLC Library repository URL first.';
+  return;
+ }
+ $('startupLibraryZipStatus').textContent='Choose a SDLC Library ZIP file…';
+ send('importLibraryZip',{repositoryUrl});
+});
 $('startupConnectionForm').addEventListener('submit',event=>{
  event.preventDefault();if(startupVerifying)return;
  startupConnectionVerified=false;startupVerifying=true;
@@ -7049,6 +7063,10 @@ $('startupProceed').addEventListener('click',()=>{
 window.addEventListener('message',event=>{
  const message=event.data||{};
  if(message.type==='state'&&message.startupSetup)renderStartupConfig(message.startupSetup);
+ if(message.type==='offlineLibraryZipResult'){
+  $('startupLibraryZipStatus').textContent=message.message||'Offline ZIP import did not complete.';
+  $('startupLibraryZipStatus').className=message.success?'test-status success':'test-status error';
+ }
  if(message.type==='startupReadinessResult'){
   $('startupRefresh').disabled=false;
   if(message.error){startupScanComplete=false;$('startupToolMessage').textContent=message.error;$('startupInstallFeedback').textContent='Prerequisite scan failed. Download Unified Error Log for details.';$('startupInstallFeedback').className='atgv-startup-install-feedback error';renderStartupPage();}
