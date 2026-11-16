@@ -18,7 +18,7 @@ function zip(files){
   const entry=Buffer.alloc(46);entry.writeUInt32LE(0x02014b50,0);
   entry.writeUInt16LE(20,4);entry.writeUInt16LE(20,6);entry.writeUInt32LE(crc,16);
   entry.writeUInt32LE(data.length,20);entry.writeUInt32LE(data.length,24);
-  entry.writeUInt16LE(filename.length,28);entry.writeUInt32LE(0o100644<<16,38);
+  entry.writeUInt16LE(filename.length,28);entry.writeUInt32LE((0o100644<<16)>>>0,38);
   entry.writeUInt32LE(offset,42);central.push(entry,filename);
   offset+=header.length+filename.length+data.length;
  }
