@@ -185,7 +185,7 @@ async function remoteVersion(config,token,request=requestJson){
         const item=await request(remote.route+'/contents/'+name+'?ref='+remote.sha,options);
         if(item?.type!=='file'||item.encoding!=='base64'||typeof item.content!=='string')
             throw Error('GitHub catalog '+name+' is unavailable or invalid.');
-        const raw=Buffer.from(item.content.replace(/\\s/g,''),'base64');
+        const raw=Buffer.from(item.content.replace(/\s/g,''),'base64');
         if(raw.length>limit)throw Error('GitHub catalog '+name+' exceeds its size limit.');
         return raw.toString('utf8').trim();
     }
