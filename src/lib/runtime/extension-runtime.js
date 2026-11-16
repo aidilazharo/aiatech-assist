@@ -7798,7 +7798,7 @@ function activate(ctx){
   };
   const workspace=()=>repoSyncWorkspace.open(vscode,{
    version:require('../../../package.json').version,onLog:report,
-   secrets:context.secrets,workspaceRoot:getWorkspace()?.uri.fsPath||'',
+   secrets:context.secrets,preferences:context.globalState,workspaceRoot:getWorkspace()?.uri.fsPath||'',
    planSync:async facts=>{
     // Metadata extracted from the verified temporary clone only; never PATs,
     // workspace paths, source-code bodies, README text or private files.
