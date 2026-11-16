@@ -80,7 +80,7 @@ function prDetails({source,destination,sha,scope,base,branch,count,changedFiles=
 }
 function patEnvironment(pat,{githubCli=false}={}){
  const token=String(pat||'').trim();
- if(!/^[^\\s\\x00-\\x1f\\x7f]{20,512}$/.test(token))throw Error('A valid GitHub Personal Access Token (PAT) is required for both repositories.');
+ if(!/^[^\s\x00-\x1f\x7f]{20,512}$/.test(token))throw Error('A valid GitHub Personal Access Token (PAT) is required for both repositories.');
  const basic=Buffer.from('x-access-token:'+token,'utf8').toString('base64');
  return {
   GIT_CONFIG_COUNT:'1',
@@ -138,7 +138,7 @@ async function trackedFiles(source,scope){
  if(!valid.length)throw Error('No regular eligible files in selected scope.');
  return valid;
 }
-async function sync({sourceUrl,destinationFolder,copyScope='.',sourceBranch='main',baseBranch='',sourcePat,destPat,workspaceRoot='',onProgress=()=>{},runner=run,describePr=async()=>''}){
+async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.',sourceBranch='main',baseBranch='',sourcePat,destPat,workspaceRoot='',onProgress=()=>{},runner=run,describePr=async()=>''}){
  const source=githubUrl(sourceUrl),scope=scopeName(copyScope),chosenBranch=baseName(sourceBranch||'main');
  const sourceEnv=patEnvironment(sourcePat),destinationEnv=patEnvironment(destPat,{githubCli:true});
  const destRoot=await fs.realpath(String(destinationFolder||''));
@@ -162,6 +162,7 @@ async function sync({sourceUrl,destinationFolder,copyScope='.',sourceBranch='mai
  if(!oldBranch)throw Error('Repo B cannot be in detached HEAD.');
  const origin=await runner('git',['remote','get-url','origin'],{cwd:destRoot});
  const destination=githubUrl(origin,{origin:true});
+ if(destinationUrl&&githubUrl(destinationUrl).name.toLowerCase()!==destination.name.toLowerCase())throw Error('Repo B URL differs from selected folder origin; refusing to push.');
  if(!/^https:\/\/github\.com\//i.test(origin))throw Error('Repo B origin must be an HTTPS GitHub URL to authenticate securely with the destination PAT.');
  if(source.name.toLowerCase()===destination.name.toLowerCase())throw Error('Repo A and Repo B must be different repositories.');
  const remote=JSON.parse(await runner('gh',['repo','view',destination.name,'--json','nameWithOwner,defaultBranchRef'],{env:destinationEnv}));
