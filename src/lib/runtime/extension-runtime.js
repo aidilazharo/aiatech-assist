@@ -936,6 +936,20 @@ async function requireBAOwner(documentId){
   if(!snapshot.me||!record?.ownerId||record.ownerId!==snapshot.me)throw Error('Assign to Me is required to edit '+documentId+'. Open BA Work and claim ownership or request transfer.');
   return {actor:snapshot.me,revision:record.revision};
 }
+// Remote and local BR deletion require the SAME live, verified ownership
+// identity. BA role access alone does not authorize deletion of another BA's BR.
+async function requireVerifiedBRDeletionOwner(brIds){
+ const ids=[...new Set(brIds||[])];
+ if(ids.some(id=>!/^BR-[0-9]+$/.test(id)))throw Error('Invalid BR deletion scope.');
+ if(!ids.length)return null;
+ const owners=await listOwnership();
+ if(!owners.me||owners.cached||owners.scope==='local')throw Error('Deletion requires a current verified Jira + Confluence ownership identity. Reconnect online first.');
+ for(const id of ids){
+  const record=(owners.documents||[]).find(row=>row.documentId==='ba-br-'+id);
+  if(!record?.ownerId||record.ownerId!==owners.me)throw Error('Only the verified owner of '+id+' can delete it or its artifacts. Request ownership transfer first.');
+ }
+ return owners.me;
+}
 async function changeContributorActor(){
  const snapshot=await listOwnership();
  const actor=snapshot.me||(snapshot.scope==='local'?await localMemberId({prompt:true}):'');
@@ -1747,6 +1761,7 @@ async function deleteUploadedDiscoverySource(msg){
  if(current.revision!==msg.revision)throw Error('The uploaded source changed. Refresh and retry.');
  const impact=brWorkflow.activeSourceDeletionImpact(current,digest);
  const source=(current.sourceDocuments||[]).find(item=>item.digest===digest);
+ await requireVerifiedBRDeletionOwner(impact.requirements.map(item=>item.id));
  const names=impact.requirements.map(item=>item.id+' — '+item.title+(item.approved?' (approved)':''));
  const action='Delete Uploaded Source and Linked BRs';
  const message=`Delete uploaded document "${source.name}" from ATGV?\n\nLinked Business Requirements (${names.length}): ${names.join(', ')||'none'}\nLinked Jira issues (${impact.jiraKeys.length}): ${impact.jiraKeys.join(', ')||'none'}\n\nThe selected upload and its linked BR records will be removed from ATGV. Remote Jira and Confluence records will NOT be deleted. This cannot be undone without a project backup.`;
@@ -1774,6 +1789,7 @@ async function forceDeleteArchivedDiscoverySource(msg){
  const source=(current.archivedSources||[]).find(item=>item.digest===digest);
  if(!source)throw Error('Archived source was changed. Refresh and retry.');
  const action='Force Delete Source and Linked BRs';
+ await requireVerifiedBRDeletionOwner(impact.requirements.map(item=>item.id));
  const brNames=impact.requirements.map(item=>item.id+' — '+item.title+(item.approved?' (approved)':' (draft)'));
  const message=`Force delete archived document "${source.name}" and ${brNames.length} linked Business Requirement(s)?\n\n${brNames.length?brNames.join('\n'):'No directly linked BRs found.'}\n\nLinked Jira issues (${impact.jiraKeys.length}): ${impact.jiraKeys.join(', ')||'none'}\n\nThe archived document and linked BR records will be removed from ATGV, including completed-BR history and local BR exports. Existing remote Jira and Confluence records will NOT be deleted. Their references remain in an audit tombstone.`;
  const choice=await uiWarning(message,{modal:true,detail:'Permanent ATGV deletion. Restore from your backup if needed. Review linked BR IDs carefully; this action cannot be undone.'},action);
@@ -1802,6 +1818,7 @@ async function forceDeletePublishedBR(msg){
  if(msg.revision!==current.revision)throw Error('BR register changed. Refresh and retry.');
  const br=current.brs.find(item=>item.id===brId);
  if(!br)throw Error('Business Requirement no longer exists. Refresh and retry.');
+ await requireVerifiedBRDeletionOwner([brId]);
  const jiraKeys=[...new Set(Object.entries(current.synced||{}).filter(([nodePath,item])=>(nodePath===brId||nodePath.startsWith(brId+'/'))&&item?.key).map(([,item])=>item.key))];
  const action='Force Delete Published BR';
  const confirmed=await uiWarning(`Delete ${br.id} — ${br.title} from ATGV?\n\nThis also removes its approved revision records and local exports. Linked Jira issues (${jiraKeys.length}): ${jiraKeys.join(', ')||'none'}\n\nREMOTE Jira issues and Confluence pages will NOT be deleted, and their identities remain in the local audit tombstone.`,{modal:true,detail:'This action cannot be undone. Existing source documents stay available unless separately force-deleted.'},action);
@@ -1852,6 +1869,7 @@ async function deleteBREverywhere(msg){
    impact={requirements:[{id:brId,title:br.title}]};
   }else throw Error('Unknown remote deletion target.');
   const ids=impact.requirements.map(item=>item.id).sort();
+  await requireVerifiedBRDeletionOwner(ids);
   if(!ids.length){
    if(!source)throw Error('Select a Business Requirement to delete.');
    const unused=(type==='active-source'?initial.sourceDocuments:initial.archivedSources||[]).find(row=>row.digest===sourceDigest);
@@ -1896,6 +1914,7 @@ async function deleteBREverywhere(msg){
    assertDeletionProject();
    await deletionStatus('running','Removing draft BR and its local artifacts…');
    const actor=await verifiedBAActor();
+   await requireVerifiedBRDeletionOwner(ids);
    const current=await brWorkflow.load(registry,activeProject.id);
    if(current.revision!==initial.revision)throw Error('Draft changed before confirmation. Refresh.');
    let updated;
@@ -1973,12 +1992,14 @@ async function deleteBREverywhere(msg){
   }
   assertDeletionProject();
   const actor=await verifiedBAActor();
+  await requireVerifiedBRDeletionOwner(ids);
   await deletionStatus('running','Deleting verified Jira issues and moving Confluence pages to Trash…',0,todo.length);
   await notice(`Deleting ${todo.length} remote record(s) for ${ids.join(', ')}. Detailed status will be saved locally.`);
   let updated;const finalizeWarnings=[];
   await remoteBRDeletion.execute({
    registry,projectId:activeProject.id,job,config,token,
    loadRegister:()=>{assertDeletionProject();return brWorkflow.load(registry,deletionProjectId);},
+   authorize:()=>requireVerifiedBRDeletionOwner(ids),
    onProgress:async progress=>{
     report(`Delete Everywhere ${job.id}: ${progress.record} (${progress.deleted}/${progress.total})`);
     await dashboard?.webview.postMessage({type:'remoteDeletionProgress',projectId:deletionProjectId,brIds:ids,...progress});
