@@ -4704,8 +4704,8 @@ async function handleDashboardMessage(msg){
         if(!prepared||prepared.stackId!==project.techStackId)throw Error('Save the selected technology stack first.');
         const result=await require('../../architect-server').stop({root:prepared.root,stackId:project.techStackId});
         architectServerOperationSerial++;
-        // Stop changes the process state, not historical HTTP verification for
-        // this exact saved/tested SHA. Approval still checks live health.
+        // Stop changes process state, not saved/tested HTTP health evidence
+        // for this exact Git SHA. Developer approval rechecks the proof.
         activeProject=project;
         architectErrorLogs.clear(activeProject.id,'server');
         await refreshDashboard();
@@ -4716,11 +4716,9 @@ async function handleDashboardMessage(msg){
         const root=await architectRepository.resolve(context.workspaceState,activeProject.id,developerGit,{projectRoot:aiRoot(),githubOwner:effectiveConfig(activeProject).get('github.owner'),githubRepo:effectiveConfig(activeProject).get('github.repo')});
         if(!project.techStackPrepared||project.techStackPrepared.root!==root||project.techStackPrepared.stackId!==project.techStackId)throw Error('Save the current stack before approval.');
         const serverState=await require('../../architect-server').verify({root,stackId:project.techStackId});
-        if(!serverState.running||!serverState.healthy)throw Error('Run Server must be running and HTTP healthy for the tested stack revision before Developer approval. '+String(serverState.message||'Check server status and the unified stack error log.'));
-        const healthyProof=require('../../architect-server-verification').evidenceIfHealthy(project,serverState);
-        if(!healthyProof)throw Error('The running application does not match the tested and saved stack commit. Saved SHA: '+String(project.techStackPrepared.sha||'').slice(0,12)+'; running SHA: '+String(serverState.sha||'').slice(0,12)+'; saved branch: '+String(project.techStackPrepared.branch||'missing')+'; observed branch: '+String(serverState.branch||'missing')+'. Re-run Test & Run on the saved revision, then Run Server.');
-        // Save Stack may have succeeded before its verification was stored.
-        // Reconcile that evidence now without skipping the host-side health gate.
+        // A previously verified HTTP smoke check remains valid for its exact
+        // tested Git SHA after Stop Server. Reject live mismatches/unhealthy apps.
+        const {proof:healthyProof,source:verificationSource}=require('../../architect-server-verification').approvalEvidence(project,serverState);
         const verifiedProject={...project,techStackServerVerification:healthyProof};
         gate.requireServerVerification(verifiedProject);
         if(!gate.serverVerified(project)){
@@ -4733,7 +4731,7 @@ async function handleDashboardMessage(msg){
         const actor=await changeContributorActor();
         const proof=gate.approval(verifiedProject,repo,actor);
         const action='Approve Stack';
-        const confirmation=await uiWarning(`Approve ${proof.stackId}${proof.companionId?' + '+proof.companionId:''} for Developers?\n\nTests and build passed and the local application process remained running during the smoke check at Git revision ${proof.sha}. Approval will also publish the exact approved SHA to a GitHub tech-stack branch (no force-push). It does NOT approve a GitHub merge.`,{modal:true},action);
+        const confirmation=await uiWarning(`Approve ${proof.stackId}${proof.companionId?' + '+proof.companionId:''} for Developers?\n\nTests, build and HTTP smoke check passed for Git revision ${proof.sha}. Server verification: ${verificationSource==='saved'?'previously verified; application now stopped':'currently running and healthy'}. Approval will publish the exact approved SHA to a GitHub tech-stack branch (no force-push). It does NOT approve a GitHub merge.`,{modal:true},action);
         if(confirmation!==action)break;
         const published=await require('../../git-handoff-coordinator').publishApprovedStack({root,stackId:proof.stackId,generation:Number(project.techStackGeneration||1),sha:proof.sha});
         const remoteProof={...proof,remoteBranch:published.branch,remoteSha:published.sha,remoteVerified:true};
