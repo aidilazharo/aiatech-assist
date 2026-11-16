@@ -46,6 +46,7 @@ const releaseUpdater=require('../updates/github-release-updater');
 const startupReadiness=require('../startup-readiness');
 const startupSetup=require('../startup-setup');
 const startupInstall=require('../startup-install');
+const installCache=require('../../library-install-cache');
 const startupDiagnostics=require('../startup-diagnostics');
 const jiraControl=require('../../jira-change-control');
 const jiraDuplicates=require('../../jira-duplicate-cleanup');
@@ -329,9 +330,11 @@ async function roleSkillPrompt(roleId) {
 }
 async function catalogUiState(){
  const config=catalogConfig();let installed=null,roleSkillDescriptions={},roleSkillIdentifiers={},roleSkillOptions={},roleSkillSelections={};
- try{if(getWorkspace())installed=await sdlcCatalog.activeRoot(getWorkspace().uri.fsPath);}catch(e){if(!/not activated/.test(e.message))report('Active SDLC Catalog: '+e.message);}
- if(!installed)try{installed=(getWorkspace()?await sdlcCatalog.gitInstalled(getWorkspace().uri.fsPath,config):await sdlcCatalog.cached(config,context.globalStorageUri.fsPath));}catch(e){report('SDLC Catalog checkout: '+e.message);}
- if((installed?.offline||installed?.sha&&/^[a-f0-9]{40}$/.test(installed.sha))&&Array.isArray(installed.roles)&&getWorkspace()){
+  const workspace=getWorkspace()?.uri.fsPath||'';
+  // Never report a downloaded global cache as an activated workspace Library.
+  try{if(workspace)installed=await sdlcCatalog.activeRoot(workspace);}catch(e){if(!/not activated/.test(e.message))report('Active SDLC Catalog: '+e.message);}
+  if(!installed&&workspace)try{installed=await sdlcCatalog.gitInstalled(workspace,config);}catch(e){report('SDLC Catalog checkout: '+e.message);}
+if((installed?.offline||installed?.sha&&/^[a-f0-9]{40}$/.test(installed.sha))&&Array.isArray(installed.roles)&&getWorkspace()){
    for(const id of installed.roles.slice(0,100)){
      if(!/^[a-z][a-z0-9-]{0,79}$/.test(id))continue;
      try {
@@ -351,28 +354,26 @@ async function catalogUiState(){
  return {config,installed,roleSkillDescriptions,roleSkillIdentifiers,roleSkillOptions,roleSkillSelections,remote:catalogRemote,updateAvailable,lastCheck:catalogLastCheck,error:catalogLastError,busy:catalogBusy,credentialSaved:!!(await context.secrets.get('atgvAssist.sdlcCatalogToken')),readOnly:true};
 }
 async function catalogCheck({interactive=false}={}){
-  if(catalogBusy)return;
-  const config=catalogConfig();if(!config.repositoryUrl)return;
-  catalogBusy=true;catalogLastError='';
-  try{
-    const token=await catalogToken(config,{interactive});
-    const workspace=getWorkspace()?.uri.fsPath;
-    const currentZip=workspace?await offlineLibrary.imported(workspace,config.repositoryUrl):null;
-    // Read both remote version declarations at the same immutable GitHub main commit.
-    // A changed commit SHA by itself is NOT a newer SDLC Library.
-    const info=await sdlcCatalog.remoteVersion(config,token);
-    catalogRemote={sha:info.sha,repository:info.repository,private:info.private,version:info.version||''};catalogLastCheck=new Date().toISOString();
-    // An hourly check must never replace a newer ZIP with older GitHub main.
-    if(currentZip){
-      if(offlineLibrary.compareVersions(info.version,currentZip.version)>=0){
-        await ensureWorkspaceLibrary(workspace);
-        const synced=await sdlcCatalog.syncGitWorkspace(config,token,workspace,context.globalStorageUri.fsPath);
-        if(synced.offlineCleanupError)report('Offline Library cleanup: '+synced.offlineCleanupError);
-        else report('Library version comparison: GitHub v'+info.version+' selected over ZIP v'+currentZip.version+'.');
-      }else report('Library version comparison: keeping newer ZIP v'+currentZip.version+'; GitHub main is v'+info.version+'.');
-    }
-   }catch(error){catalogRemote=null;catalogLastError=error.message;report('SDLC Catalog check: '+error.message);if(interactive)throw error;}
-  finally{catalogBusy=false;await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});}
+ if(catalogBusy)return;
+ const config=catalogConfig();if(!config.repositoryUrl)return;
+ catalogBusy=true;catalogLastError='';
+ try{
+  const token=await catalogToken(config,{interactive});
+  // Verified read-only version check. Only approved Pull Catalog updates Git.
+  const info=await sdlcCatalog.remoteVersion(config,token);
+  catalogRemote={sha:info.sha,repository:info.repository,private:info.private,version:info.version||''};
+  catalogLastCheck=new Date().toISOString();
+  const workspace=getWorkspace()?.uri.fsPath;
+  if(workspace){
+   const installed=await sdlcCatalog.activeRoot(workspace).catch(error=>{
+    if(!/not activated/i.test(error.message))report('Library checkout check: '+error.message);
+    return null;
+   });
+   if(installed?.version&&libraryUpdateVersion.compareInstalledRemote(installed.version,info.version).available)
+    report('Library update available: active v'+installed.version+'; verified GitHub main v'+info.version+'. Awaiting Pull Catalog approval.');
+  }
+ }catch(error){catalogRemote=null;catalogLastError=error.message;report('SDLC Catalog check: '+error.message);if(interactive)throw error;}
+ finally{catalogBusy=false;await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});}
 }
 function scheduleCatalogChecks(){
   if(catalogWatch){clearInterval(catalogWatch);catalogWatch=null;}
@@ -483,7 +484,7 @@ async function offerBrandedPrerequisiteInstall(plan){
 async function offerBrandedLibraryUpdate({repository,installedVersion,remoteVersion}){
  const comparison=libraryUpdateVersion.compareInstalledRemote(installedVersion,remoteVersion);
  if(!comparison.available)throw Error('The remote library version is not newer than the installed library.');
- const message='SDLC Library v'+comparison.remote+' is available on '+repository+'/main (installed v'+comparison.installed+'). Download the verified catalog? Active project files remain unchanged.';
+ const message='SDLC Library v'+comparison.remote+' is available on '+repository+'/main '+(comparison.installed?'(installed v'+comparison.installed+')':'(not yet installed)')+'. Download the verified catalog? Active project files remain unchanged.';
  if(!dashboard)return vscode.window.showInformationMessage(message,{modal:true},'Pull Library','Later');
  const requestId=crypto.randomUUID();
  return new Promise(resolve=>{
@@ -512,11 +513,13 @@ async function checkLibraryRelease({prompt=false,interactive=false}={}){
   const remote=catalogRemote?.version||'',installedCatalog=(await catalogUiState()).installed||{};
   const comparison=libraryUpdateVersion.compareInstalledRemote(installedCatalog.version,remote);
   if(!comparison.available)return null;
-  if(prompt&&updatePreferences().promptForUpdates){
-   const key='atgvAssist.updates.promptedLibrary';
-   if(context.globalState.get(key)!==remote){
-    await context.globalState.update(key,remote);
-    const answer=await offerBrandedLibraryUpdate({
+  if(prompt&&updatePreferences().promptForUpdates&&getWorkspace()){
+    const key='atgvAssist.updates.promptedLibrary';
+    // Distinguish workspace and installed version so a different project is prompted.
+    const promptId=String(catalogRemote?.repository||'')+'|'+String(catalogRemote?.sha||remote)+'|'+(comparison.installed||'not-installed')+'|'+getWorkspace().uri.fsPath;
+    if(context.globalState.get(key)!==promptId){
+     await context.globalState.update(key,promptId);
+     const answer=await offerBrandedLibraryUpdate({
      repository:catalogRemote?.repository||'tech-stacks-skills',
      installedVersion:comparison.installed,remoteVersion:comparison.remote
     });
@@ -6042,7 +6045,12 @@ async function handleDashboardMessage(msg){
             const available=await sdlcCatalog.designFrameworkAvailability(getWorkspace().uri.fsPath);
             await dashboard?.webview.postMessage({type:'uxFrameworkCatalogChanged',projectId:activeProject.id,...available});
           }
-        }finally{catalogBusy=false;await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});}
+          await refreshDashboard();
+         }catch(error){
+          catalogLastError=String(error?.message||error).slice(0,600);
+          await dashboard?.webview.postMessage({type:'catalogAction',action:'pull',success:false,message:'Library update failed: '+catalogLastError});
+          throw error;
+         }finally{catalogBusy=false;await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});}
         break;
       }
       case 'openingSelect':{
@@ -7769,7 +7777,17 @@ async function installationStartup(){
 function activate(ctx){
   context=ctx;output=vscode.window.createOutputChannel('ATGV AIATECH Assist');
   ctx.subscriptions.push(output);
-  ready=initialize().catch(e=>{report('Initialization error: '+e.message);uiError('ATGV projects could not load: '+e.message);});
+  ready=(async()=>{
+   const signature=await installationSignature(ctx.extensionUri.fsPath,require('../../../package.json').version);
+   try{
+    const outcome=await installCache.clearOnReinstall({storageRoot:ctx.globalStorageUri.fsPath,signature,globalState:ctx.globalState});
+    if(outcome.changed)report('ATGV reinstall: cleared disposable caches: '+(outcome.removed.join(', ')||'none present')+'. Project files preserved.');
+   }catch(error){
+    report('ATGV reinstall cache cleanup deferred: '+error.message);
+    await recordStartupDiagnostic({stage:'extension-cache-cleanup',status:'error',detail:error.message});
+   }
+   await initialize();
+  })().catch(e=>{report('Initialization error: '+e.message);uiError('ATGV projects could not load: '+e.message);});
                                                                                            
   const refreshUnifiedArtifacts=async()=>{
    requireOpened();const id=activeProject.id;
