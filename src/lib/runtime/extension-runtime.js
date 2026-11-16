@@ -323,7 +323,7 @@ async function roleSkillPrompt(roleId) {
 }
 async function catalogUiState(){
  const config=catalogConfig();let installed=null,roleSkillDescriptions={},roleSkillIdentifiers={},roleSkillOptions={},roleSkillSelections={};
- try{if(getWorkspace())installed=await offlineLibrary.imported(getWorkspace().uri.fsPath,config.repositoryUrl);}catch(e){report('Offline SDLC Catalog: '+e.message);}
+ try{if(getWorkspace())installed=await sdlcCatalog.activeRoot(getWorkspace().uri.fsPath);}catch(e){if(!/not activated/.test(e.message))report('Active SDLC Catalog: '+e.message);}
  if(!installed)try{installed=(getWorkspace()?await sdlcCatalog.gitInstalled(getWorkspace().uri.fsPath,config):await sdlcCatalog.cached(config,context.globalStorageUri.fsPath));}catch(e){report('SDLC Catalog checkout: '+e.message);}
  if((installed?.offline||installed?.sha&&/^[a-f0-9]{40}$/.test(installed.sha))&&Array.isArray(installed.roles)&&getWorkspace()){
    for(const id of installed.roles.slice(0,100)){
@@ -349,15 +349,18 @@ async function catalogCheck({interactive=false}={}){
   catalogBusy=true;catalogLastError='';
   try{
     const token=await catalogToken(config,{interactive});
-    const info=await sdlcCatalog.remoteInfo(config,token);
-    catalogRemote={sha:info.sha,repository:info.repository,private:info.private};catalogLastCheck=new Date().toISOString();
     const workspace=getWorkspace()?.uri.fsPath;
-    // Only a successful, verified Git checkout replaces and removes an offline import.
-    if(workspace&&await offlineLibrary.imported(workspace,config.repositoryUrl)){
-      await ensureWorkspaceLibrary(workspace);
-      const synced=await sdlcCatalog.syncGitWorkspace(config,token,workspace,context.globalStorageUri.fsPath);
-      if(synced.offlineCleanupError)report('Offline Library cleanup: '+synced.offlineCleanupError);
-      else report('Offline Library replaced by verified GitHub main ('+synced.sha.slice(0,12)+').');
+    const currentZip=workspace?await offlineLibrary.imported(workspace,config.repositoryUrl):null;
+    const info=currentZip?await sdlcCatalog.remoteVersion(config,token):await sdlcCatalog.remoteInfo(config,token);
+    catalogRemote={sha:info.sha,repository:info.repository,private:info.private,version:info.version||''};catalogLastCheck=new Date().toISOString();
+    // An hourly check must never replace a newer ZIP with older GitHub main.
+    if(currentZip){
+      if(offlineLibrary.compareVersions(info.version,currentZip.version)>=0){
+        await ensureWorkspaceLibrary(workspace);
+        const synced=await sdlcCatalog.syncGitWorkspace(config,token,workspace,context.globalStorageUri.fsPath);
+        if(synced.offlineCleanupError)report('Offline Library cleanup: '+synced.offlineCleanupError);
+        else report('Library version comparison: GitHub v'+info.version+' selected over ZIP v'+currentZip.version+'.');
+      }else report('Library version comparison: keeping newer ZIP v'+currentZip.version+'; GitHub main is v'+info.version+'.');
     }
   }catch(error){catalogLastError=error.message;report('SDLC Catalog check: '+error.message);if(interactive)throw error;}
   finally{catalogBusy=false;await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});}
@@ -3733,17 +3736,35 @@ async function handleDashboardMessage(msg){
           const chosen=await vscode.window.showOpenDialog({canSelectFiles:true,canSelectFolders:false,canSelectMany:false,
             openLabel:'Import SDLC Library ZIP',filters:{'ZIP archives':['zip']}});
           if(!chosen?.length)break;
-          const imported=await offlineLibrary.importZip({file:chosen[0].fsPath,workspace,repositoryUrl});
-          // Selected ZIP is an explicit temporary catalog source. Do not let a stale checkout mask it.
+          const zip=await offlineLibrary.inspectZip(chosen[0].fsPath);
+          const previous=catalogConfig(),config=sdlcCatalog.normalizeConfig({...previous,repositoryUrl,ref:'main'});
+          let remote=null,token='',comparisonNote='';
+          try{
+            token=await catalogToken(config,{interactive:false});
+            remote=await sdlcCatalog.remoteVersion(config,token);
+          }catch(error){
+            // Offline import remains available, but never claim GitHub was checked.
+            comparisonNote=' GitHub version could not be verified: '+error.message+'.';
+            report('Library version check deferred: '+error.message);
+          }
+          let imported;
+          if(remote&&offlineLibrary.compareVersions(remote.version,zip.version)>=0){
+            // At equal versions prefer the authenticated, immutable GitHub revision.
+            // A failed verified pull is not permission to activate a known older ZIP.
+            await ensureWorkspaceLibrary(workspace);
+            await sdlcCatalog.syncGitWorkspace(config,token,workspace,context.globalStorageUri.fsPath);
+            imported=await sdlcCatalog.activeRoot(workspace);
+          }else imported=await offlineLibrary.importZip({file:chosen[0].fsPath,workspace,repositoryUrl});
           const active=await sdlcCatalog.activeManifest(workspace);
           if(active.version!==imported.version||active.techStacks.length!==imported.stackCount)
-            throw Error('Offline ZIP was saved but its active catalog could not be verified. Review the import in Unified Error Log.');
-          const previous=catalogConfig();
-          await context.globalState.update('atgvAssist.sdlcCatalog',sdlcCatalog.normalizeConfig({...previous,repositoryUrl,ref:'main'}));
+            throw Error('Selected Library version could not be verified. Review the import in Unified Error Log.');
+          await context.globalState.update('atgvAssist.sdlcCatalog',config);
           catalogLastError='';
-          await recordStartupDiagnostic({stage:'library-zip',status:'verified',detail:'Activated v'+imported.version+' from '+imported.filename+' ('+imported.roleCount+' roles; '+imported.stackCount+' stacks)'});
+          const source=imported.offline?'ZIP':'GitHub';
+          const comparison='Uploaded ZIP v'+zip.version+'; '+(remote?'GitHub main v'+remote.version:'GitHub version unavailable');
+          await recordStartupDiagnostic({stage:'library-zip',status:'verified',detail:comparison+'; activated '+source+' v'+active.version});
           await dashboard?.webview.postMessage({type:'offlineLibraryZipResult',success:true,
-            message:'Offline SDLC Library v'+imported.version+(imported.unchanged?' already loaded':' loaded')+' ('+imported.roleCount+' roles, '+imported.stackCount+' stacks). All catalog references now use the ZIP until verified GitHub sync.'});
+            message:comparison+'. Using latest verified '+source+' library v'+active.version+' ('+imported.roleCount+' roles, '+imported.stackCount+' stacks).'+comparisonNote});
           await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});
           // A successful ZIP import is also the source of trusted browser editor
           // assets. Update localResourceRoots and rebuild this webview so the
