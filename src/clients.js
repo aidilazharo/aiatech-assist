@@ -1,5 +1,6 @@
 'use strict';
 const { textFromAdf, htmlToText, validateUrl } = require('./utils');
+const { githubIpAllowlistHint } = require('./github-ip-allowlist');
 async function requestJson(url, options = {}) {
     const { token, basicEmail, method = 'GET', data, headers = {}, signal } = options;
     const auth = token ? (basicEmail ? 'Basic ' + Buffer.from(`${basicEmail}:${token}`).toString('base64') : 'Bearer ' + token) : undefined;
@@ -13,7 +14,10 @@ async function requestJson(url, options = {}) {
             content = (await response.text()).slice(0, 260);
         }
         catch { }
-        throw new Error(`HTTP ${response.status} from ${new URL(url).host}: ${content.replace(/<[^>]*>/g, '')}`);
+        const safeContent = content.replace(/<[^>]*>/g, '');
+        const hint = new URL(url).hostname === 'api.github.com'
+            ? githubIpAllowlistHint(response.status, safeContent) : '';
+        throw new Error(`HTTP ${response.status} from ${new URL(url).host}: ${safeContent}${hint ? ' ' + hint : ''}`);
     }
     return response.status === 204 ? {} : response.json();
 }

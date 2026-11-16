@@ -499,11 +499,19 @@ function showGate(){
   workspaceOpened=false;gateBusy=false;document.body.classList.add('gate-mode');
   setView('gate');renderGate();
 }
+function gateOpeningPercent(percent,message){
+ const value=Math.max(0,Math.min(100,Number(percent)||0));
+ $('gateOpenFill').style.width=value+'%';
+ $('gateOpenPercent').textContent=value+'%';
+ $('gateOpenTrack').setAttribute('aria-valuenow',String(value));
+ $('gateOpenTrack').setAttribute('aria-valuetext',String(message||'Opening project'));
+ $('gateProgressText').textContent=message||'Opening project…';
+}
 function launchFromGate(selection={}){
   if(gateBusy)return;
   gateError='';gateOfflineAvailable=false;gateBusy=true;
   $('gateProgress').classList.remove('hidden');
-  $('gateProgressText').textContent='Checking connections…';
+  gateOpeningPercent(5,'Selecting project…');
   renderGate();
   send('openingAuto',selection);
 }
@@ -591,7 +599,7 @@ $('gateSearchPrevious').addEventListener('click',()=>{
 });
 $('gateOffline').addEventListener('click',()=>{
   if(gateBusy||!gateOfflineAvailable)return;
-  gateBusy=true;gateError='';gateOfflineAvailable=false;renderGate();send('openingOffline');
+  gateBusy=true;gateError='';gateOfflineAvailable=false;gateOpeningPercent(5,'Opening local workspace…');renderGate();send('openingOffline');
 });
 function renderSpaceTable(id,rows){
   const root=$(id);root.replaceChildren();
@@ -6499,8 +6507,8 @@ window.addEventListener('message',event=>{
   }
   if(m.type==='startupScan')renderWorkspaceSearch(m);
   if(m.type==='openingStart'){gateError='';gateOfflineAvailable=false;spaces=[];jiraProjects=[];gateSearchId=null;settingsSearchId=null;gateSearched=false;$('gateSearchMessage').textContent='';showGate();status('');}
-  if(m.type==='openingProgress'){$('gateProgressText').textContent=m.message||'Preparing project…';$('gateProgress').classList.toggle('hidden',m.stage==='done');}
-  if(m.type==='openingError'){gateBusy=false;gateError=m.message||'Could not open project.';gateOfflineAvailable=!!m.canOffline;renderGate();}
+  if(m.type==='openingProgress'){gateOpeningPercent(m.percent,m.message);$('gateProgress').classList.toggle('hidden',m.stage==='done');}
+  if(m.type==='openingError'){gateBusy=false;gateError=m.message||'Could not open project.';gateOfflineAvailable=!!m.canOffline;gateOpeningPercent(0,'Project opening failed: '+gateError);renderGate();}
   if(m.type==='state')updateState(m);
   if(m.type==='notice'){
     if(view==='discovery'&&!m.error&&$('baInlineStatus')){
@@ -6943,6 +6951,25 @@ const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluence
 let startupFormInitialized=false,startupPrereqRequested=false,startupConnectionVerified=false,startupSetupRequired=true,startupReturnToConnections=false;
 let startupVerifying=false,startupScanComplete=false,startupPage=0,startupInstallingModule='';
 let startupLastInstalledTool='';
+const STARTUP_STACK_NAMES=['ReactJS','Angular','NestJS','.NET','Spring Boot'];
+function startupScanPercent(percent,message){
+ const value=Math.max(0,Math.min(100,Number(percent)||0));
+ $('startupScanToolFill').style.width=value+'%';
+ $('startupScanToolPercent').textContent=value+'%';
+ $('startupScanToolTrack').setAttribute('aria-valuenow',String(value));
+ $('startupScanToolTrack').setAttribute('aria-valuetext',String(message||'Checking tools'));
+ $('startupScanToolName').textContent=message||'Checking tools…';
+}
+function renderStartupScanPlaceholders(){
+ const grid=$('startupStackGrid');
+ if(grid.childElementCount)return;
+ for(const name of STARTUP_STACK_NAMES){
+  const card=document.createElement('div');card.className='atgv-startup-stack atgv-stack-pending';
+  const label=document.createElement('strong');label.textContent=name;
+  const status=document.createElement('small');status.textContent='Checking prerequisites…';
+  card.append(label,status);grid.append(card);
+ }
+}
 function startupPayload(){return Object.fromEntries(Object.entries(startupFieldMap).map(([key,id])=>[key,$(id).value.trim()]));}
 function renderStartupPage(){
  if(!startupSetupRequired)return;
@@ -6972,7 +6999,7 @@ function renderStartupConfig(config){
  const offline=config.offlineLibrary;
  if(offline)$('startupLibraryZipStatus').textContent=`Offline ZIP v${offline.version} (${offline.filename}) active; will be removed after verified GitHub sync.`;
  showStartupStep(required||startupReturnToConnections);
- if(required&&!startupPrereqRequested){startupPrereqRequested=true;send('startupReadiness');}
+ if(required&&!startupPrereqRequested){startupPrereqRequested=true;startupScanPercent(0,'Starting prerequisite scan…');renderStartupScanPlaceholders();send('startupReadiness');}
 }
 function renderStartupStackReadiness(result){
  const grid=$('startupStackGrid');const expanded=new Set([...grid.querySelectorAll('details[open]')].map(x=>x.dataset.stackId));grid.replaceChildren();
@@ -6981,6 +7008,7 @@ function renderStartupStackReadiness(result){
   renderStartupPage();return;
  }
  startupScanComplete=true;
+ startupScanPercent(100,'Completed prerequisite checks for all '+result.stacks.length+' technology stacks.');
  const ready=result.stacks.filter(s=>s.ready).length;
  $('startupToolMessage').textContent=`${ready} of ${result.stacks.length} technology stacks have their required host tools available. Select a stack to inspect components.`;
  for(const stack of result.stacks){
@@ -6989,6 +7017,14 @@ function renderStartupStackReadiness(result){
   const title=document.createElement('span');title.textContent=stack.name;
   const badge=document.createElement('span');badge.className='atgv-stack-ready';badge.textContent=stack.ready?'Ready':'Needs tools';
   summary.append(title,badge);details.append(summary);
+  const required=(stack.components||[]).filter(c=>c.required);
+  const compatible=required.filter(c=>c.compatible).length;
+  const readiness=document.createElement('div');readiness.className='atgv-stack-prerequisite-progress';
+  const count=document.createElement('small');count.textContent=compatible+'/'+required.length+' required tools available';
+  const track=document.createElement('div');track.className='workspace-search-track';track.setAttribute('role','progressbar');
+  track.setAttribute('aria-label',stack.name+' prerequisite readiness');track.setAttribute('aria-valuemin','0');track.setAttribute('aria-valuemax','100');
+  const value=required.length?Math.round(100*compatible/required.length):100;track.setAttribute('aria-valuenow',String(value));
+  const fill=document.createElement('div');fill.className='workspace-search-fill';fill.style.width=value+'%';track.append(fill);readiness.append(count,track);details.append(readiness);
   const list=document.createElement('ul');
   for(const component of stack.components||[]){
    const item=document.createElement('li');item.className='atgv-module-row';
@@ -7031,6 +7067,7 @@ for(const id of ['startupUnifiedLog','gateUnifiedLog'])$(id).addEventListener('c
 $('startupRefresh').addEventListener('click',()=>{
  if(startupInstallingModule)return;
  startupScanComplete=false;
+ startupScanPercent(0,'Refreshing local computer prerequisites…');
  $('startupToolMessage').textContent='Refreshing local computer prerequisites…';
  $('startupRefresh').disabled=true;renderStartupPage();send('startupReadiness');
 });
@@ -7067,9 +7104,12 @@ window.addEventListener('message',event=>{
   $('startupLibraryZipStatus').textContent=message.message||'Offline ZIP import did not complete.';
   $('startupLibraryZipStatus').className=message.success?'test-status success':'test-status error';
  }
+ if(message.type==='startupReadinessProgress'){
+  startupScanPercent(message.percent,message.message);
+ }
  if(message.type==='startupReadinessResult'){
   $('startupRefresh').disabled=false;
-  if(message.error){startupScanComplete=false;$('startupToolMessage').textContent=message.error;$('startupInstallFeedback').textContent='Prerequisite scan failed. Download Unified Error Log for details.';$('startupInstallFeedback').className='atgv-startup-install-feedback error';renderStartupPage();}
+  if(message.error){startupScanPercent(0,'Prerequisite scan failed.');startupScanComplete=false;$('startupToolMessage').textContent=message.error;$('startupInstallFeedback').textContent='Prerequisite scan failed. Download Unified Error Log for details.';$('startupInstallFeedback').className='atgv-startup-install-feedback error';renderStartupPage();}
   else renderStartupStackReadiness(message.value);
  }
  if(message.type==='startupModuleProgress'){
