@@ -7778,7 +7778,22 @@ function activate(ctx){
    await uiInformation(`Shared project artifacts updated for all SDLC roles: ${refreshed.manifest.files.length} indexed files in ${refreshed.root}.`);
    return refreshed.root;
   };
-  const workspace=()=>repoSyncWorkspace.open(vscode,{version:require('../../../package.json').version,onLog:report});
+  const workspace=()=>repoSyncWorkspace.open(vscode,{
+   version:require('../../../package.json').version,onLog:report,
+   secrets:context.secrets,workspaceRoot:getWorkspace()?.uri.fsPath||'',
+   describePr:async details=>{
+    // Only verified source metadata and filenames go to the selected AI,
+    // never source contents, Git PATs or files excluded from the copy.
+    const target=await activeAiTarget();
+    const prompt='Write a brief professional pull request summary in plain English (maximum 90 words). Explain the purpose, what changed, and what reviewers should check. Do not invent tests or completion claims. Return Markdown only. Verified metadata: '+JSON.stringify({
+     source:details.sourceRepo,sourceBranch:details.sourceBranch,sourceSha:details.sourceSha,
+     destination:details.destinationRepo,base:details.base,branch:details.branch,
+     sourceCommitMessage:String(details.sourceMessage||'').slice(0,700),
+     changedFiles:(details.changedFiles||[]).slice(0,65)
+    });
+    return aiAnswer(target,prompt,1800);
+   }
+  });
   const actions={start,workspace,restart,reset,refreshUnifiedArtifacts};
   for(const [name,fn] of Object.entries(actions))ctx.subscriptions.push(vscode.commands.registerCommand('atgvAssist.'+name,async(...args)=>{await ready;return guarded(()=>fn(...args));}));
   ctx.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(()=>{++startupSequence;ready=initialize().then(()=>dashboard?start({skipReload:true}):undefined).catch(e=>report('Workspace change: '+e.message));}));

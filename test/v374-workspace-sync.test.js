@@ -14,9 +14,11 @@ test('ATGV: Workspace command launches its own webview and has a controlled CSP'
  const content=workspace.workspaceHtml({nonce:'safe-abc',version:'0.3.74',cspSource:'vscode-resource:'});
  assert.match(content,/<h1>ATGV: Workspace<\/h1>/);
  assert.match(content,/nonce-safe-abc/);
- assert.match(content,/Create Branch, Commit & PR/);
+ assert.match(content,/Sync Repo A → Repo B · Push & Create PR/);
  assert.match(content,/id="selectRepoB"/);
  assert.match(content,/id="baseBranch"/);
+ assert.match(content,/id="sourceBranch"/);
+ assert.match(content,/id="destinationRepo"/);
  assert.match(content,/form-action 'none'; connect-src 'none'/);
  assert.doesNotMatch(content,/https:\/\/github\.com\/[^\s"'<>]+\/pull\/\d+/);
  const code=content.match(/<script nonce="safe-abc">([\s\S]*?)<\/script>/)?.[1];
@@ -47,23 +49,24 @@ test('PR title, commit and metadata identify the immutable Repo A main commit',(
 });
 test('ATGV Workspace handles separate panel, local folder selection, review and open PR',async()=>{
  const messages=[];let handler,disposed,revealed=0,opened='',created=0;
+ const memory=new Map();const secrets={get:async key=>memory.get(key),store:async(key,val)=>memory.set(key,val)};
  const panel={reveal:()=>revealed++,onDidDispose:fn=>{disposed=fn;},webview:{cspSource:'vscode-resource:',html:'',onDidReceiveMessage:fn=>{handler=fn;},postMessage:async data=>messages.push(data)}};
  const fake={
   ViewColumn:{One:1},Uri:{parse:value=>value},
   env:{openExternal:async url=>{opened=url;}},
   window:{createWebviewPanel:(kind,title)=>{assert.equal(kind,'atgvAssist.workspace');assert.equal(title,'ATGV: Workspace');created++;return panel;},
-   showOpenDialog:async()=>[{fsPath:'/chosen/repo-b'}],showWarningMessage:async()=> 'Create Sync PR'}
+   showOpenDialog:async()=>[{fsPath:'/chosen/repo-b'}],showWarningMessage:async()=> 'Create Sync PR',showInputBox:async()=> 'ghp_'+'x'.repeat(40)}
  };
  const original=sync.sync;
  try{
-  sync.sync=async args=>{assert.equal(args.destinationFolder,'/chosen/repo-b');assert.equal(args.copyScope,'src');return {prUrl:'https://github.com/Acme/repo-b/pull/12',sourceRepo:'Acme/repo-a',sourceSha:'b'.repeat(40),destinationRepo:'Acme/repo-b',base:'main',branch:'sync/test',fileCount:1};};
-  const first=workspace.open(fake,{version:'0.3.74'});
+  sync.sync=async args=>{assert.equal(args.destinationFolder,'/chosen/repo-b');assert.equal(args.copyScope,'src');assert.equal(args.sourceBranch,'main');assert.ok(args.sourcePat.startsWith('ghp_'));assert.ok(args.destPat.startsWith('ghp_'));return {prUrl:'https://github.com/Acme/repo-b/pull/12',sourceRepo:'Acme/repo-a',sourceSha:'b'.repeat(40),destinationRepo:'Acme/repo-b',base:'main',branch:'sync/test',fileCount:1};};
+  const first=workspace.open(fake,{version:'0.3.78',secrets,workspaceRoot:'/another/atgv'});
   assert.equal(first,panel);
   assert.equal(workspace.open(fake),panel);
   assert.equal(revealed,1);assert.equal(created,1);
   await handler({command:'selectRepoB'});
   assert.ok(messages.some(m=>m.type==='repoBSelected'&&m.folder==='/chosen/repo-b'));
-  await handler({command:'createSyncPr',sourceUrl:'https://github.com/Acme/repo-a',copyScope:'src'});
+  await handler({command:'createSyncPr',sourceUrl:'https://github.com/Acme/repo-a',destinationUrl:'https://github.com/Acme/repo-b',copyScope:'src'});
   assert.ok(messages.some(m=>m.type==='repoSyncResult'&&m.success&&m.prUrl.endsWith('/12')));
   await handler({command:'openCreatedPr'});
   assert.equal(opened,'https://github.com/Acme/repo-b/pull/12');
@@ -101,7 +104,8 @@ test('sync copies real tracked files, skips release workflows and creates a revi
  const runner=async(bin,args,{cwd}={})=>{
   if(bin==='gh'){
    if(args[0]==='repo')return JSON.stringify({nameWithOwner:'Acme/repo-b',defaultBranchRef:{name:'main'}});
-   if(args[0]==='pr'){
+   if(args[0]==='pr'&&args[1]==='list')return '[]';
+   if(args[0]==='pr'&&args[1]==='create'){
     prOptions=args;prBody=fs.readFileSync(args[args.indexOf('--body-file')+1],'utf8');
     return 'https://github.com/Acme/repo-b/pull/17';
    }
@@ -113,12 +117,13 @@ test('sync copies real tracked files, skips release workflows and creates a revi
   if(bin==='git'&&args[0]==='remote'&&args[1]==='get-url')return 'https://github.com/Acme/repo-b.git';
   return git(args,cwd||temp);
  };
- const result=await sync.sync({sourceUrl:'https://github.com/Acme/repo-a',destinationFolder:target,runner});
+ const result=await sync.sync({sourceUrl:'https://github.com/Acme/repo-a',destinationUrl:'https://github.com/Acme/repo-b',destinationFolder:target,sourcePat:'ghp_'+'s'.repeat(40),destPat:'ghp_'+'d'.repeat(40),runner});
  assert.equal(result.prUrl,'https://github.com/Acme/repo-b/pull/17');
+ await assert.rejects(()=>sync.sync({sourceUrl:'https://github.com/Acme/repo-a',destinationUrl:'https://github.com/Acme/wrong',destinationFolder:target,sourcePat:'ghp_'+'s'.repeat(40),destPat:'ghp_'+'d'.repeat(40),runner}),/Repo B URL differs/);
  assert.equal(result.sourceSha,sourceSha);
  assert.equal(result.base,'main');
  assert.equal(result.fileCount,2);
- assert.match(result.branch,/^sync\/repo-a-main-/);
+ assert.match(result.branch,/^sync\/repo-a\/main$/);
  assert.equal(git(['rev-parse','refs/remotes/origin/main'],target),originalTargetSha);
  assert.equal(fs.readFileSync(path.join(target,'src','main.js'),'utf8'),'module.exports=42;\n');
  assert.equal(fs.readFileSync(path.join(target,'existing.txt'),'utf8'),'destination-only\n');
@@ -127,4 +132,13 @@ test('sync copies real tracked files, skips release workflows and creates a revi
  assert.ok(prOptions.includes('--base')&&prOptions.includes('--head'));
  for(const field of [sourceSha,'Acme/repo-a','Acme/repo-b','src/main.js','README.md','Files changed: 2'])
   assert.ok(prBody.includes(field),field);
+});
+
+test('Repo Sync protects PATs in subprocess environment variables',async()=>{
+ assert.throws(()=>sync.patEnvironment('short'),/Personal Access Token/);
+ assert.throws(()=>sync.patEnvironment('x'.repeat(30)+String.fromCharCode(10)),/Personal Access Token/);
+ const env=sync.patEnvironment('ghp_'+'s'.repeat(40),{githubCli:true});
+ assert.ok(env.GIT_CONFIG_VALUE_0.startsWith('AUTHORIZATION: basic '));
+ assert.ok(env.GH_TOKEN.startsWith('ghp_'));
+ assert.equal('ghp_'+'s'.repeat(40) in env,false);
 });

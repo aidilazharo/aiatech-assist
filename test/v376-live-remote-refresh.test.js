@@ -61,6 +61,6 @@ test('BA/PM Jira inventory automatically reloads when stale, remote status is vi
 });
 test('extension metadata is consistent with this release',()=>{
  const pkg=require('../package.json');
- assert.equal(pkg.version,'0.3.77');
+ assert.equal(pkg.version,'0.3.78');
  assert.equal(pkg.atgvDisplayVersion,pkg.version);
 });

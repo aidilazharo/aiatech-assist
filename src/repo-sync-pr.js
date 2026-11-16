@@ -1,6 +1,6 @@
 'use strict';
-// Repo A (GitHub main) -> Repo B (local checkout -> new branch -> pull request).
-// All commands use execFile (no shell interpolation) and the existing Git/gh authentication.
+// Repo A selected branch -> Repo B Git checkout, using independent PATs for each repository.
+// GitHub credentials are supplied only through subprocess environments, never Git URLs or command arguments.
 const fs=require('node:fs/promises');
 const path=require('node:path');
 const os=require('node:os');
@@ -50,15 +50,15 @@ function branchName(repo,sha,clock=new Date(),suffix=crypto.randomBytes(3).toStr
  const label=String(repo||'repo-a').toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-|-$/g,'').slice(0,35)||'repo-a';
  return 'sync/'+label+'-main-'+String(sha).slice(0,10)+'-'+stamp+'-'+suffix;
 }
-function prDetails({source,destination,sha,scope,base,branch,count,changedFiles=[]}){
+function prDetails({source,destination,sha,scope,base,branch,count,changedFiles=[],sourceBranch='main'}){
  const short=sha.slice(0,10);
  return {
-  title:'sync: '+source.name+' main @ '+short,
-  commit:'sync: '+source.name+' main ('+short+') into '+destination.name,
+  title:'sync: '+source.name+' '+sourceBranch+' @ '+short,
+  commit:'sync: '+source.name+' '+sourceBranch+' ('+short+') into '+destination.name,
   body:[
    '## Source', '',
    '- Repository: '+source.name,
-   '- Branch: main',
+   '- Branch: '+(sourceBranch||'main'),
    '- Commit: '+sha,
    '- Copied scope: '+(scope==='.'?'all eligible tracked files':scope),
    '', '## Destination', '',
@@ -78,13 +78,29 @@ function prDetails({source,destination,sha,scope,base,branch,count,changedFiles=
   ].join('\n')
  };
 }
-async function run(bin,args,{cwd,timeout=120000}={}){
+function patEnvironment(pat,{githubCli=false}={}){
+ const token=String(pat||'');
+ if(!/^[^\s\x00-\x1f\x7f]{20,512}$/.test(token))throw Error('A valid GitHub Personal Access Token (PAT) is required for both repositories.');
+ const basic=Buffer.from('x-access-token:'+token,'utf8').toString('base64');
+ return {
+  GIT_CONFIG_COUNT:'1',
+  GIT_CONFIG_KEY_0:'http.https://github.com/.extraheader',
+  GIT_CONFIG_VALUE_0:'AUTHORIZATION: basic '+basic,
+  ...(githubCli?{GH_TOKEN:token,GITHUB_TOKEN:token}:{})
+ };
+}
+async function run(bin,args,{cwd,timeout=120000,env={}}={}){
  try{
   const result=await exec(bin,args,{cwd,timeout,maxBuffer:8*1024*1024,windowsHide:true,
-   env:{...process.env,GIT_TERMINAL_PROMPT:'0',GCM_INTERACTIVE:'Never'}});
+   env:{...process.env,GIT_TERMINAL_PROMPT:'0',GCM_INTERACTIVE:'Never',...env}});
   return String(result.stdout||'').trim();
  }catch(e){
-  const detail=String(e.stderr||e.message||'').trim().slice(0,800);
+  // Git error messages must not accidentally include environment secrets.
+  let detail=String(e.stderr||e.message||'').trim().slice(0,800);
+  const token=String(env.GH_TOKEN||'');
+  if(token)detail=detail.split(token).join('[REDACTED]');
+  const raw=String(env.GIT_CONFIG_VALUE_0||'');
+  if(raw)detail=detail.split(raw).join('[REDACTED]');
   throw Error(bin+' '+args[0]+' failed: '+detail);
  }
 }
@@ -122,15 +138,21 @@ async function trackedFiles(source,scope){
  if(!valid.length)throw Error('No regular eligible files in selected scope.');
  return valid;
 }
-async function sync({sourceUrl,destinationFolder,copyScope='.',baseBranch='',onProgress=()=>{},runner=run}){
- const source=githubUrl(sourceUrl),scope=scopeName(copyScope);
+async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.',sourceBranch='main',baseBranch='',sourcePat,destPat,workspaceRoot='',onProgress=()=>{},runner=run,describePr=async()=>''}){
+ const source=githubUrl(sourceUrl),scope=scopeName(copyScope),chosenBranch=baseName(sourceBranch||'main');
+ const sourceEnv=patEnvironment(sourcePat),destinationEnv=patEnvironment(destPat,{githubCli:true});
  const destRoot=await fs.realpath(String(destinationFolder||''));
  const stat=await fs.lstat(destRoot);
  if(!stat.isDirectory()||stat.isSymbolicLink())throw Error('Choose a regular Repo B folder.');
+ if(workspaceRoot){
+  const workspace=await fs.realpath(workspaceRoot);
+  const covers=(parent,child)=>child===parent||child.startsWith(parent+path.sep);
+  if(covers(workspace,destRoot)||covers(destRoot,workspace))
+   throw Error('Repo B must be a separate folder outside the current ATGV workspace (not its parent or child).');
+ }
  const notify=(stage,message)=>Promise.resolve(onProgress({stage,message}));
  await runner('git',['--version']);
  await runner('gh',['--version']);
- await runner('gh',['auth','status']);
  const top=await runner('git',['rev-parse','--show-toplevel'],{cwd:destRoot});
  const canonical=await fs.realpath(top);
  if(canonical!==destRoot)throw Error('Select the Repo B Git root, not a nested folder.');
@@ -140,57 +162,87 @@ async function sync({sourceUrl,destinationFolder,copyScope='.',baseBranch='',onP
  if(!oldBranch)throw Error('Repo B cannot be in detached HEAD.');
  const origin=await runner('git',['remote','get-url','origin'],{cwd:destRoot});
  const destination=githubUrl(origin,{origin:true});
+ if(destinationUrl&&githubUrl(destinationUrl).name.toLowerCase()!==destination.name.toLowerCase())throw Error('Repo B URL differs from selected folder origin; refusing to push.');
+ if(!/^https:\/\/github\.com\//i.test(origin))throw Error('Repo B origin must be an HTTPS GitHub URL to authenticate securely with the destination PAT.');
  if(source.name.toLowerCase()===destination.name.toLowerCase())throw Error('Repo A and Repo B must be different repositories.');
- const remote=JSON.parse(await runner('gh',['repo','view',destination.name,'--json','nameWithOwner,defaultBranchRef']));
+ const remote=JSON.parse(await runner('gh',['repo','view',destination.name,'--json','nameWithOwner,defaultBranchRef'],{env:destinationEnv}));
  if(remote.nameWithOwner?.toLowerCase()!==destination.name.toLowerCase())throw Error('Repo B GitHub identity differs from local origin.');
  const base=baseName(baseBranch||remote.defaultBranchRef?.name);
- await notify('clone','Reading latest '+source.name+' main…');
+ // Never use the original protected branch directly: retain its name under a review namespace.
+ const branch=baseName('sync/'+source.repo.toLowerCase().replace(/[^a-z0-9_-]/g,'-').slice(0,28)+'/'+chosenBranch);
+ await runner('git',['check-ref-format','--branch',branch],{cwd:destRoot});
+ await notify('clone','Reading '+source.name+' / '+chosenBranch+' with source PAT…');
  const temp=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-repo-sync-'));
- let branch='',files=[],switched=false,pushed=false;
+ let files=[],switched=false,pushed=false;
  try{
   const cloned=path.join(temp,'repo-a');
-  await runner('git',['clone','--quiet','--depth','1','--single-branch','--branch','main',source.url,cloned],{timeout:180000});
+  await runner('git',['clone','--quiet','--depth','1','--single-branch','--branch',chosenBranch,source.url,cloned],{timeout:180000,env:sourceEnv});
   const sha=await runner('git',['rev-parse','HEAD'],{cwd:cloned});
-  if(!/^[a-f0-9]{40}$/.test(sha))throw Error('Could not verify Repo A main commit.');
+  if(!/^[a-f0-9]{40}$/.test(sha))throw Error('Could not verify Repo A source commit.');
+  const sourceMessage=(await runner('git',['log','-1','--pretty=%B'],{cwd:cloned})).trim();
+  if(!sourceMessage||sourceMessage.length>12000)throw Error('Repo A commit message is missing or too large.');
   files=await trackedFiles(cloned,scope);
-  await notify('preflight',files.length+' verified files; checking '+destination.name+' base '+base+'…');
-  await runner('git',['fetch','origin','+refs/heads/'+base+':refs/remotes/origin/'+base],{cwd:destRoot,timeout:180000});
-  branch=branchName(source.repo,sha);
-  await runner('git',['check-ref-format','--branch',branch],{cwd:destRoot});
-  await runner('git',['switch','-c',branch,'origin/'+base],{cwd:destRoot});
-  switched=true;
-  await notify('copy','Copying '+files.length+' files into '+branch+'…');
+  await notify('preflight',files.length+' tracked files; checking '+destination.name+' / '+base+'…');
+  await runner('git',['fetch','origin','+refs/heads/'+base+':refs/remotes/origin/'+base],{cwd:destRoot,timeout:180000,env:destinationEnv});
+  const remoteBranch=(await runner('git',['ls-remote','--heads','origin','refs/heads/'+branch],{cwd:destRoot,env:destinationEnv})).trim();
+  if(remoteBranch){
+   await runner('git',['fetch','origin','+refs/heads/'+branch+':refs/remotes/origin/'+branch],{cwd:destRoot,timeout:180000,env:destinationEnv});
+   const previous=await runner('git',['log','-1','--pretty=%B','refs/remotes/origin/'+branch],{cwd:destRoot});
+   if(!previous.includes('ATGV-Sync-Source: '+source.name))throw Error('Repo B branch '+branch+' already exists but was not created by ATGV for this source. Refusing to overwrite it.');
+   const local=await runner('git',['branch','--list',branch],{cwd:destRoot});
+   if(local){
+    await runner('git',['switch',branch],{cwd:destRoot});
+    const localSha=await runner('git',['rev-parse','HEAD'],{cwd:destRoot});
+    const remoteSha=await runner('git',['rev-parse','refs/remotes/origin/'+branch],{cwd:destRoot});
+    if(localSha!==remoteSha)throw Error('Existing Repo B sync branch differs from origin; reconcile manually before reusing.');
+   }else await runner('git',['switch','-c',branch,'refs/remotes/origin/'+branch],{cwd:destRoot});
+   switched=true;
+  }else{
+   const local=await runner('git',['branch','--list',branch],{cwd:destRoot});
+   if(local)throw Error('Repo B has an unpublished branch '+branch+'. Resolve or publish it before reusing the name.');
+   await runner('git',['switch','-c',branch,'refs/remotes/origin/'+base],{cwd:destRoot});
+   switched=true;
+  }
+  await notify('copy','Copying '+files.length+' eligible files into '+branch+'…');
   for(const rel of files){
    const dest=await destinationFileSafe(destRoot,rel);
    await fs.mkdir(path.dirname(dest),{recursive:true});
    await fs.copyFile(path.join(cloned,...rel.split('/')),dest);
   }
-  for(let i=0;i<files.length;i+=100){
-   await runner('git',['add','--',...files.slice(i,i+100)],{cwd:destRoot});
-  }
+  for(let i=0;i<files.length;i+=100)await runner('git',['add','--',...files.slice(i,i+100)],{cwd:destRoot});
   const staged=await runner('git',['diff','--cached','--name-only','-z'],{cwd:destRoot});
   const changedFiles=staged.split('\0').filter(Boolean);
   if(!changedFiles.length){
-   await runner('git',['switch',oldBranch],{cwd:destRoot});
-   await runner('git',['branch','-D',branch],{cwd:destRoot});
-   switched=false;branch='';
-   return {unchanged:true,message:'Repo B already contains the same eligible files from Repo A.',sourceSha:sha,fileCount:files.length};
+   if(!remoteBranch){
+    await runner('git',['switch',oldBranch],{cwd:destRoot});
+    await runner('git',['branch','-D',branch],{cwd:destRoot});
+   }
+   switched=false;
+   return {unchanged:true,message:'Repo B already has the same eligible files from Repo A '+chosenBranch+'.',sourceSha:sha,sourceBranch:chosenBranch,fileCount:files.length};
   }
-  const details=prDetails({source,destination,sha,scope,base,branch,count:changedFiles.length,changedFiles});
-  await notify('commit','Committing source '+sha.slice(0,10)+'…');
-  await runner('git',['commit','-m',details.commit],{cwd:destRoot,timeout:180000});
-  await notify('push','Pushing new branch '+branch+'…');
-  await runner('git',['push','--set-upstream','origin',branch],{cwd:destRoot,timeout:180000});
+  const details=prDetails({source,destination,sha,scope,base,branch,count:changedFiles.length,changedFiles,sourceBranch:chosenBranch});
+  const commitMessage=sourceMessage+'\n\nATGV-Sync-Source: '+source.name+'\nATGV-Sync-SHA: '+sha;
+  await notify('commit','Committing with Repo A source message: '+sourceMessage.split('\n')[0].slice(0,120));
+  await runner('git',['commit','-m',commitMessage],{cwd:destRoot,timeout:180000});
+  await notify('push','Pushing '+branch+' using the destination PAT…');
+  await runner('git',['push','--set-upstream','origin',branch],{cwd:destRoot,timeout:180000,env:destinationEnv});
   pushed=true;
+  await notify('pr','Preparing a short AI-written PR description…');
+  let summary='';
+  try{summary=String(await describePr({sourceRepo:source.name,sourceBranch:chosenBranch,sourceSha:sha,destinationRepo:destination.name,base,branch,sourceMessage,changedFiles:changedFiles.slice(0,80)})||'').trim().slice(0,1300);}
+  catch(error){await notify('pr','AI summary unavailable; using the verified change details.');}
   const body=path.join(temp,'pull-request.md');
-  await fs.writeFile(body,details.body,'utf8');
-  await notify('pr','Creating pull request into '+destination.name+'/'+base+'…');
-  const prUrl=await runner('gh',['pr','create','--repo',destination.name,'--base',base,'--head',branch,'--title',details.title,'--body-file',body],{cwd:destRoot,timeout:180000});
-  if(!/^https:\/\/github\.com\/[^ \r\n]+\/pull\/\d+/.test(prUrl))throw Error('GitHub CLI did not return a valid pull request URL.');
-  return {prUrl,branch,sourceSha:sha,sourceRepo:source.name,destinationRepo:destination.name,base,fileCount:changedFiles.length,commitMessage:details.commit};
+  await fs.writeFile(body,(summary?summary+'\n\n': '')+details.body,'utf8');
+  await notify('pr','Creating or reusing the review PR for '+branch+'…');
+  const openPrs=JSON.parse(await runner('gh',['pr','list','--repo',destination.name,'--head',branch,'--state','open','--json','url'],{cwd:destRoot,env:destinationEnv}));
+  let prUrl='';
+  if(Array.isArray(openPrs)&&openPrs.length===1)prUrl=String(openPrs[0].url||'');
+  else prUrl=await runner('gh',['pr','create','--repo',destination.name,'--base',base,'--head',branch,'--title',details.title,'--body-file',body],{cwd:destRoot,timeout:180000,env:destinationEnv});
+  if(!/^https:\/\/github\.com\/[^ \r\n]+\/pull\/\d+$/.test(prUrl))throw Error('GitHub CLI did not return a valid pull request URL.');
+  return {prUrl,branch,sourceBranch:chosenBranch,sourceSha:sha,sourceRepo:source.name,destinationRepo:destination.name,base,fileCount:changedFiles.length,commitMessage};
  }catch(e){
-  const suffix=switched?' Repo B remains on new branch '+branch+(pushed?' (already pushed)':'')+' for manual inspection.':'';
+  const suffix=switched?' Repo B remains on branch '+branch+(pushed?' (already pushed)':'')+' for review.':'';
   throw Error(e.message+suffix);
  }finally{await fs.rm(temp,{recursive:true,force:true}).catch(()=>{});}
 }
-module.exports={githubUrl,baseName,scopeName,isAllowedPath,branchName,prDetails,sync};
+module.exports={githubUrl,baseName,scopeName,isAllowedPath,branchName,prDetails,patEnvironment,sync};
