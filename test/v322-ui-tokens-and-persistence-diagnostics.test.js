@@ -11,7 +11,9 @@ const host=fs.readFileSync(path.join(root,'test/generated/extension-source.txt')
 const pack=fs.readFileSync(path.join(root,'scripts/package-vsix.py'),'utf8');
 const tdd=require('../src/developer-tdd');
 test('v322: a single JSON design system owns sizing, text hierarchy, colors, animation',()=>{
- assert.equal(design.version,'1.0.0');
+ assert.equal(design.version,'1.0.1');
+ assert.equal(design.progress.responsive,true);
+ assert.equal(design.progress.rotationDurationMs,1000);
  assert.equal(design.progress.circleDiameterPx,46);
  assert.equal(design.progress.pulseDurationMs,1700);
  assert.deepEqual([design.typography.bodyPx,design.typography.pageTitlePx,design.typography.sectionTitlePx,design.typography.labelPx],[13,20,16,12]);

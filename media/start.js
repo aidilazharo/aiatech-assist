@@ -707,8 +707,8 @@ function updateBrandLibraryVersion(version){
 function renderCatalog(state,{forceFields=false}={}){
  if(!state)return;
  catalogState=state;
- updateBrandLibraryVersion(state.installed?.version||state.remote?.version||'');
  renderRoleSkillHeader();
+ updateBrandLibraryVersion(state.installed?.version||state.remote?.version||'');
  const form=$('catalogForm');if(!form)return;
  if(forceFields||!form.contains(document.activeElement)){
    field('catalogRepoUrl',state.config?.repositoryUrl||'');field('catalogRef',state.config?.ref||'main');field('catalogAuth',state.config?.authentication||'github');

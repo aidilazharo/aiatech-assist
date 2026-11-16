@@ -12,7 +12,8 @@ const a=source.indexOf('function html(webview,{resumeLibrary=false}={}){'),b=sou
 const html=new Function('vscode','context',source.slice(a,b)+'\nreturn html')({Uri:{joinPath:(_,...parts)=>parts.join('/')}},{extensionUri:{}})({asWebviewUri:u=>u,cspSource:'vscode-resource:'});
 test('header has a severity-aware dividing line, version under logo title and a separate accessible notification banner',()=>{
  assert.match(html,/<header class="app-header" id="appHeader" role="banner">/);
- assert.match(html,new RegExp('<span class="brand-identity"><span class="brand-name">AIATECH <b>ASSIST</b></span><span class="brand-version">v'+require('../package.json').atgvDisplayVersion.replace(/\./g,'\\.')+'</span>'));
+ assert.match(html,new RegExp('class="brand-versions">Extension v'+require('../package.json').atgvDisplayVersion.replace(/\./g,'\\.')));
+ assert.match(html,/id="headerLibraryVersion"/);
  assert.match(css,/\.top-notification.success\{border-bottom-color:#3fc78d\}/);
  assert.match(css,/\.top-notification.warning,\.top-notification.info\{border-bottom-color:#e7ad46\}/);
  assert.match(css,/\.top-notification.error\{border-bottom-color:#ff5964\}/);

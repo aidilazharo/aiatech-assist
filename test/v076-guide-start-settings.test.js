@@ -22,7 +22,8 @@ test('missing VS Code folder has visible error and actionable Open Folder contro
 });
 test('start screen shows version beneath title and removes ATGV PROJECT WORKSPACE kicker',()=>{
  assert.match(host,/class="gate-product-title"/);
- assert.match(host,/<small>v\$\{extensionVersion\}<\/small>/);
+ assert.match(host,/class="gate-brand-versions">Extension v\$\{extensionVersion\}/);
+ assert.match(host,/id="gateLibraryVersion"/);
  assert.ok(!host.includes('ATGV · PROJECT WORKSPACE'));
 });
 test('settings has a far-right guide button and official token links for Jira, Confluence, and GitHub',()=>{

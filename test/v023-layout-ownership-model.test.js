@@ -33,11 +33,15 @@ test('configured Ollama checks installed model, not merely server responsiveness
  assert.equal((await modelAvailability({config,fetchImpl:async()=>new Response(JSON.stringify({models:[]}),{status:200})})).state,'error');
  assert.throws(()=>checkEndpointUrl('http://remote.example/v1','openai-compatible'),/HTTPS/);
 });
-test('the single project action appears below role, and model name is only in far-right header',()=>{
+test('project switch remains below role and AI model selector lives below sidebar handoffs',()=>{
  const header=source.split('<header class="app-header"')[1].split('</header>')[0];
  const sidebar=source.split('<div class="sidebar-footer">')[1].split('</aside>')[0];
  assert.doesNotMatch(header,/SwitchProject/);
- assert.match(header,/id="headerModelName"/);assert.match(header,/id="headerModelState"/);
+ assert.doesNotMatch(header,/id="headerModelName"/);
+ assert.match(header,/id="headerUserName"/);
+ const navigation=source.split('<aside class="sidebar"')[1].split('</aside>')[0];
+ assert.ok(navigation.indexOf('id="headerModelName"')>navigation.indexOf('data-nav="operations"'));
+ assert.match(navigation,/id="headerModelState"/);
  assert.ok(sidebar.indexOf('id="sidebarRole"')<sidebar.indexOf('id="sidebarSwitchProject"'));
  assert.doesNotMatch(sidebar,/ACTIVE SDLC ROLE|sidebarRoleStage/);
  assert.match(script,/headerModelName/);assert.match(script,/headerModelState/);
