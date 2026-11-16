@@ -4,14 +4,11 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('atgv-vsix-pr-{0}', github.event.pull_request.number) || 'atgv-vsix-main-release' }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: atgv-vsix-main-release
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -131,7 +128,7 @@ jobs:
   release:
     name: Publish GitHub prerelease
     needs: build
-    if: needs.build.outputs.source_ready == 'true' && github.event_name != 'pull_request'
+    if: needs.build.outputs.source_ready == 'true'
     runs-on: ${{ vars.ATGV_LINUX_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 10
     permissions:
