@@ -1821,7 +1821,7 @@ function refreshArchitectStageClasses(project){
   const step=$(id);step.classList.toggle('complete',!!done);step.classList.toggle('current',!!current);
   step.setAttribute('aria-label',step.textContent.trim()+': '+(done?'Completed':current?'Current step':'Pending'));
  }
- $('architectApprovalStatus').textContent=approved?'Approved for Developers · '+new Date(project.techStackApproval.approvedAt||Date.now()).toLocaleString():serverReady?(architectLiveServerReady(project,stackId)?'Server running and verified · ready for architect approval.':'Application server was verified for this commit and is now stopped. Restart before approval.'):tested?'Run Server successfully to enable approval.':saved?'Complete Test & Run, then Run Server.':'';
+ $('architectApprovalStatus').textContent=approved?'Approved for Developers · '+new Date(project.techStackApproval.approvedAt||Date.now()).toLocaleString():serverReady?(architectLiveServerReady(project,stackId)?'Server running and verified · ready for architect approval.':'Application server was verified for this commit and is now stopped. Ready for Architect approval.'):tested?'Run Server successfully to enable approval.':saved?'Complete Test & Run, then Run Server.':'';
 }
 function syncArchitectStackButtons(project){
  const stackId=$('architectStackSelect').value;
@@ -1831,7 +1831,7 @@ function syncArchitectStackButtons(project){
  const tested=saved&&project?.techStackValidation?.status==='tested'&&project.techStackValidation.stackId===stackId;
  const approved=tested&&project?.techStackApproval?.status==='approved'&&project.techStackApproval.stackId===stackId;
  const proof=project?.techStackServerVerification;
- const serverVerified=!!(saved&&tested&&architectLiveServerReady(project,stackId));
+ const serverVerified=!!(saved&&tested&&architectServerRequirementReady(project,stackId));
  const canRequestApproval=!!(saved&&tested&&prepared?.remotePushed===true);
  const save=$('architectSaveStack');
  // A different prepared stack can be replaced only through a confirmed,
@@ -1842,11 +1842,11 @@ function syncArchitectStackButtons(project){
  $('architectResetStack').disabled=architectActionBusy||!project?.techStackId;
  $('architectTestStack').disabled=architectActionBusy||!saved||approved;
  // Leave the action available once Save and Test & Run have been verified.
- // Host-side approval STILL requires a healthy ATGV-owned process at the exact
- // pinned Git SHA. Keeping the button clickable surfaces the precise failure
- // instead of leaving users with an unexplained disabled control.
+ // Host-side approval requires SHA-pinned HTTP verification and passed tests.
+ // A cleanly stopped server retains this verification for the saved revision.
+ // Keep the button clickable to surface a precise error if evidence is missing.
  $('architectApproveStack').disabled=architectActionBusy||!canRequestApproval||approved;
- $('architectApproveStack').title=!tested?'Complete Test & Run first.':!prepared?.remotePushed?'Push the verified stack branch using Save Stack before approval.':!serverVerified?'Click to recheck the live server and show any revision/HTTP error. Run Server if it is stopped.':'Confirm approval for Developers.';
+ $('architectApproveStack').title=!tested?'Complete Test & Run first.':!prepared?.remotePushed?'Push the verified stack branch using Save Stack before approval.':!serverVerified?'Run Server once to verify HTTP health for the saved and tested revision.':'Confirm approval for Developers.';
 }
 
 let roleJiraProject='',roleJiraLoading=false,roleJiraLoaded=false,roleJiraItems=[],roleJiraIncomplete=false,roleJiraRequest=0;
