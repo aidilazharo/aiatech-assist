@@ -189,7 +189,7 @@ function createJob(plan,actor) {
   return {id:crypto.randomUUID(),status:'pending',brIds:plan.brIds,plan,actor,createdAt:new Date().toISOString(),results:{},lastError:'',finalized:false};
 }
 const recordId=row=>row.kind==='jira'?'jira:'+row.key:'confluence:'+row.pageId;
-async function execute({registry,projectId,job,config,token,loadRegister,finalize,request=requestJson,readJira=jiraReadIssue,getPage=getConfluencePage,getSpace=getConfluenceSpace,onProgress=async()=>{}}) {
+async function execute({registry,projectId,job,config,token,loadRegister,finalize,authorize=async()=>{},request=requestJson,readJira=jiraReadIssue,getPage=getConfluencePage,getSpace=getConfluenceSpace,onProgress=async()=>{}}) {
   const state=await readJobs(registry,projectId);
   const saved=state.jobs.find(j=>j.id===job.id);
   if (!saved) throw Error('Deletion job does not exist. Restart the preview.');
@@ -199,6 +199,8 @@ async function execute({registry,projectId,job,config,token,loadRegister,finaliz
   const allowed=new Set(plan.jira.map(row=>row.key));
   const save=async()=>{await saveJobs(registry,projectId,state);};
   const verifyScope=async()=>{
+    // Recheck actor ownership before EVERY destructive remote operation.
+    await authorize(plan.brIds);
     if (baseAtlassian(config)!==plan.site || validProjectKey(config.get('jira.projectKey'))!==plan.jiraProject) throw Error('Jira target changed since deletion approval.');
     const current=await loadRegister();
     if (current.revision!==plan.registerRevision) throw Error('BR register changed during remote deletion. Manual reconciliation is required.');
