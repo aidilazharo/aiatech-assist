@@ -11,7 +11,7 @@ test('repository lookup verifies identity and write permission without gh',async
  const result=await api.getRepository(repo,pat,request);
  assert.equal(result.defaultBranch,'main');
  assert.equal(calls.length,1);assert.deepEqual(calls[0].slice(0,4),[repo,pat,'GET','']);
- await assert.rejects(()=>api.getRepository(repo,pat,async()=>({status:200,body:{full_name:'Elsewhere/repo-b',default_branch:'main',permissions:{push:true}}})),/identity/);
+ await assert.rejects(()=>api.getRepository(repo,pat,async()=>({status:200,body:{full_name:'Elsewhere/repo-b',default_branch:'main',permissions:{push:true}}})),/destination repository/);
  await assert.rejects(()=>api.getRepository(repo,pat,async()=>({status:200,body:{full_name:'Org/repo-b',default_branch:'main',permissions:{push:false}}})),/write access/);
 });
 test('open PR lookup validates Repo B branch and PR base',async()=>{
