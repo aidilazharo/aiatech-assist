@@ -59,7 +59,7 @@ test('rejected Git push reports specific destination and repair guidance, never 
  const diverged=describePushFailure(Error('non-fast-forward'),branch);
  assert.match(diverged.message,/never force-push/);
 });
-test('UI has red Stop Server and persistent checklist readiness without bypassing live approval',()=>{
+test('UI has red Stop Server and persistent pinned-SHA approval readiness',()=>{
  const js=fs.readFileSync(path.join(root,'media/start.js'),'utf8');
  const css=fs.readFileSync(path.join(root,'media/start.css'),'utf8');
  const runtime=fs.readFileSync(path.join(root,'src/lib/runtime/extension-runtime.js'),'utf8');
@@ -75,7 +75,8 @@ test('UI has red Stop Server and persistent checklist readiness without bypassin
  const status=runtime.slice(runtime.indexOf("case 'architectServerStatus':{"),runtime.indexOf("case 'architectRunServer':{"));
  assert.match(status,/retainVerifiedEvidence/);
  const approve=runtime.slice(runtime.indexOf("case 'architectApproveStack':{"),runtime.indexOf("case 'architectApproveStack':{")+3500);
- assert.match(approve,/!serverState\.running\|\|!serverState\.healthy/);
+ assert.match(approve,/approvalEvidence\(project,serverState\)/);
+ assert.doesNotMatch(approve,/!serverState\.running\|\|!serverState\.healthy/);
  const tests=runtime.slice(runtime.indexOf("case 'architectTestStack':{"),runtime.indexOf("case 'architectServerStatus':{"));
  assert.match(tests,/startAfterSuccessfulTest/);
 });
