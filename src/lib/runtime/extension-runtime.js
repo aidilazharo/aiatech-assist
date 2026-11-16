@@ -198,13 +198,16 @@ async function prepareVendorAssets({syncIfMissing=false}={}){
     // depend on previously bundled assets. Once cached, it can work offline.
     const activeRoot=active?.checkout||active?.root;
     const hasBundle=activeRoot&&fsSync.existsSync(path.join(activeRoot,...catalogVendorLibraries.MANIFEST.split('/')));
-    if(syncIfMissing&&!installedVendorAssets&&!hasBundle&&catalogConfig().repositoryUrl){
+    if(syncIfMissing&&!installedVendorAssets&&!hasBundle&&!active?.offline&&catalogConfig().repositoryUrl){
       const config=catalogConfig(),token=await catalogToken(config,{interactive:false});
       active=await sdlcCatalog.syncGitWorkspace(config,token,workspace,storageRoot);
     }
-    // Imported ZIP assets are reference data. Never activate unverified webview JS bundles from ZIP.
-    if(active&&!active.offline){
-      const result=await catalogVendorLibraries.install({catalogRoot:active.checkout||active.root,storageRoot,commit:active.sha});
+    // Imported ZIP scripts may run in a webview only when EVERY file matches
+    // the trusted, extension-pinned vendor manifest and SHA-256 checksums.
+    if(active){
+      const result=active.offline
+        ? await catalogVendorLibraries.installOffline({catalogRoot:activeRoot,storageRoot,archiveHash:active.archiveHash})
+        : await catalogVendorLibraries.install({catalogRoot:activeRoot,storageRoot,commit:active.sha});
       installedVendorAssets=result;vendorLibraryLastError='';
     }
   }catch(error){vendorLibraryLastError=error.message;report('Verified webview library download deferred: '+error.message);}
@@ -3742,6 +3745,19 @@ async function handleDashboardMessage(msg){
           await dashboard?.webview.postMessage({type:'offlineLibraryZipResult',success:true,
             message:'Offline SDLC Library v'+imported.version+(imported.unchanged?' already loaded':' loaded')+' ('+imported.roleCount+' roles, '+imported.stackCount+' stacks). All catalog references now use the ZIP until verified GitHub sync.'});
           await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});
+          // A successful ZIP import is also the source of trusted browser editor
+          // assets. Update localResourceRoots and rebuild this webview so the
+          // CodeMirror scripts execute; otherwise the old plain textarea remains.
+          await prepareVendorAssets({syncIfMissing:false});
+          if(installedVendorAssets&&dashboard){
+            vendorBootRecoveryCount=0;vendorWebviewReady=false;
+            dashboard.webview.options={...dashboard.webview.options,localResourceRoots:[vscode.Uri.joinPath(context.extensionUri,'media'),vscode.Uri.file(installedVendorAssets.dir)]};
+            dashboard.webview.html=html(dashboard.webview,{resumeLibrary:true});
+            webviewVendorDir=installedVendorAssets.dir;
+          }else if(vendorLibraryLastError){
+            report('Offline Library CodeMirror activation: '+vendorLibraryLastError);
+            await dashboard?.webview.postMessage({type:'libraryEditorHealth',ready:false,reason:vendorLibraryLastError});
+          }
           await refreshDashboard();
         }catch(error){
           report('Offline SDLC Library ZIP import: '+error.message);
