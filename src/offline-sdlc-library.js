@@ -6,6 +6,26 @@ const crypto=require('node:crypto');
 const zlib=require('node:zlib');
 const MAX_ZIP=80*1024*1024,MAX_TOTAL=24*1024*1024,MAX_FILE=1024*1024,MAX_ENTRIES=3000,MAX_ASSETS=600;
 const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
+// Compare complete semantic versions numerically (including prerelease precedence).
+// ZIP and GitHub versions must never be compared lexicographically.
+function compareVersions(left,right){
+ const parse=value=>{
+  const match=String(value||'').match(/^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-([0-9A-Za-z.-]+))?(?:\\+[0-9A-Za-z.-]+)?$/);
+  if(!match)throw Error('Invalid SDLC Library semantic version: '+String(value).slice(0,60));
+  return {parts:match.slice(1,4).map(BigInt),pre:match[4]?match[4].split('.'):[]};
+ };
+ const a=parse(left),b=parse(right);
+ for(let i=0;i<3;i++){if(a.parts[i]!==b.parts[i])return a.parts[i]>b.parts[i]?1:-1;}
+ if(!a.pre.length||!b.pre.length)return a.pre.length===b.pre.length?0:a.pre.length?-1:1;
+ for(let i=0;i<Math.min(a.pre.length,b.pre.length);i++){
+  const x=a.pre[i],y=b.pre[i],xn=/^\\d+$/.test(x),yn=/^\\d+$/.test(y);
+  if(x===y)continue;
+  if(xn&&yn)return BigInt(x)>BigInt(y)?1:-1;
+  if(xn!==yn)return xn?-1:1;
+  return x>y?1:-1;
+ }
+ return Math.sign(a.pre.length-b.pre.length);
+}
 const base=workspace=>path.join(workspace,'.atgv','offline-sdlc-library');
 const allowed=p=>['catalog.json','catalog.yaml','VERSION','README.md'].includes(p)||/^(roles|shared|tech-stacks|ai-harness|docs)\//.test(p);
 function safeName(p){
@@ -71,6 +91,9 @@ function readArchive(bytes){
  const catalog=require('./github-sdlc-catalog');
  const manifest=files.get('catalog.json');if(!manifest)throw Error('SDLC Library ZIP must contain catalog.json.');
  const info=catalog.inspectManifest(manifest,new Set(files.keys()),'json');
+ const declared=files.get('VERSION')?.toString('utf8').trim();
+ if(!declared||declared!==info.version)throw Error('SDLC Library ZIP VERSION and catalog.json version must match.');
+ compareVersions(declared,declared);
  return {files,info};
 }
 async function imported(workspace,repositoryUrl){
@@ -100,6 +123,12 @@ async function imported(workspace,repositoryUrl){
  return {...state,root,checkout:root,version:state.version,roles:state.roles,techStacks:state.techStacks,
   roleCount:state.roles.length,stackCount:state.techStacks.length,sha:'',ref:'offline',offline:true};
 }
+async function inspectZip(file){
+ if(path.extname(file).toLowerCase()!=='.zip')throw Error('Choose a .zip SDLC Library archive.');
+ const stat=await fs.lstat(file);
+ if(!stat.isFile()||stat.isSymbolicLink()||stat.size>MAX_ZIP)throw Error('Invalid or oversized SDLC Library ZIP.');
+ return readArchive(await fs.readFile(file)).info;
+}
 async function importZip({file,workspace,repositoryUrl}){
  const catalog=require('./github-sdlc-catalog'),p=catalog.parseRepository(repositoryUrl||'');
  if(!p)throw Error('Enter the SDLC Library GitHub repository URL before importing ZIP.');
@@ -109,7 +138,17 @@ async function importZip({file,workspace,repositoryUrl}){
  if(!stat.isFile()||stat.isSymbolicLink()||stat.size>MAX_ZIP)throw Error('Invalid or oversized SDLC Library ZIP.');
  const existing=await imported(workspace,repositoryUrl);
  const data=await fs.readFile(file),archive=readArchive(data),parent=path.join(workspace,'.atgv');
- if(existing?.archiveHash===hash(data))return {...existing,unchanged:true};
+ // Keep the newest verified local source even when an older ZIP is uploaded.
+ // In an equal-version tie, the authenticated Git checkout wins over ZIP data.
+ const installed=await catalog.gitInstalled(workspace,{repositoryUrl});
+ const gitWins=installed?.version&&compareVersions(installed.version,archive.info.version)>=0&&
+  (!existing||compareVersions(installed.version,existing.version)>=0);
+ if(gitWins){
+  if(existing)await removeAfterVerifiedGit(workspace,repositoryUrl);
+  return {...installed,root:installed.checkout,offline:false,selectedSource:'github',unchanged:true};
+ }
+ if(existing&&compareVersions(existing.version,archive.info.version)>=0)
+  return {...existing,selectedSource:'zip',unchanged:true};
  // Refuse to replace an offline ZIP bound to a different repository.
  const priorState=await fs.readFile(path.join(base(workspace),'state.json'),'utf8').catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
  if(priorState&&!existing)throw Error('An offline Library ZIP for a different GitHub repository is installed. Preserve or export it before changing libraries.');
@@ -137,7 +176,7 @@ async function importZip({file,workspace,repositoryUrl}){
    // Backup is only an unchanged, verified import. Failure to remove never corrupts the new one.
    await fs.rm(backup,{recursive:true,force:true}).catch(()=>{});
   }else await fs.rename(staging,target);
-  return {...state,root:path.join(target,'files'),roleCount:state.roles.length,stackCount:state.techStacks.length};
+  return {...state,root:path.join(target,'files'),roleCount:state.roles.length,stackCount:state.techStacks.length,offline:true,selectedSource:'zip'};
  }finally{await fs.rm(staging,{recursive:true,force:true}).catch(()=>{});}
 }
 async function removeAfterVerifiedGit(workspace,repositoryUrl){
@@ -145,9 +184,10 @@ async function removeAfterVerifiedGit(workspace,repositoryUrl){
  if(!existing)return false;
  const catalog=require('./github-sdlc-catalog');
  const live=await catalog.gitInstalled(workspace,{repositoryUrl});
- if(!live?.checkout||!/^[a-f0-9]{40}$/.test(live.sha))return false;
+ if(!live?.checkout||!/^[a-f0-9]{40}$/.test(live.sha)||!live.version)return false;
+ if(compareVersions(existing.version,live.version)>0)return false; // Never downgrade a newer ZIP.
  const root=base(workspace),names=(await fs.readdir(root)).sort();
  if(names.join(',')!=='files,state.json')throw Error('Offline Library contains unexpected files; preserved for manual review.');
  await fs.rm(root,{recursive:true,force:false});return true;
 }
-module.exports={readArchive,importZip,imported,removeAfterVerifiedGit,location:base};
+module.exports={readArchive,inspectZip,compareVersions,importZip,imported,removeAfterVerifiedGit,location:base};
