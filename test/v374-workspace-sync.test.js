@@ -100,26 +100,28 @@ test('sync copies real tracked files, skips release workflows and creates a revi
  git(['add','--all'],target);git(['commit','-m','Initial Repo B'],target);
  const originalTargetSha=git(['rev-parse','HEAD'],target);
  git(['remote','add','origin',targetBare],target);git(['push','-u','origin','main'],target);
- let prBody='',prOptions=[];
- const runner=async(bin,args,{cwd}={})=>{
-  if(bin==='gh'){
-   if(args[0]==='repo')return JSON.stringify({nameWithOwner:'Acme/repo-b',defaultBranchRef:{name:'main'}});
-   if(args[0]==='pr'&&args[1]==='list')return '[]';
-   if(args[0]==='pr'&&args[1]==='create'){
-    prOptions=args;prBody=fs.readFileSync(args[args.indexOf('--body-file')+1],'utf8');
-    return 'https://github.com/Acme/repo-b/pull/17';
-   }
-   return '';
+ let prBody='',prOptions={};
+ const githubApi={
+  getRepository:async()=>({nameWithOwner:'Acme/repo-b',defaultBranch:'main'}),
+  findOpenPr:async()=>'', 
+  createPr:async(repo,token,options)=>{
+   assert.equal(repo.name,'Acme/repo-b');
+   assert.equal(token,'ghp_'+'d'.repeat(40));
+   prOptions=options;prBody=options.body;
+   return 'https://github.com/Acme/repo-b/pull/17';
   }
+ };
+ const runner=async(bin,args,{cwd}={})=>{
+  if(bin==='gh')throw Error('GitHub CLI must not be invoked by Repo Sync.');
   if(bin==='git'&&args[0]==='clone'){
    git(['clone','--quiet','--branch','main',source,args[args.length-1]],temp);return '';
   }
   if(bin==='git'&&args[0]==='remote'&&args[1]==='get-url')return 'https://github.com/Acme/repo-b.git';
   return git(args,cwd||temp);
  };
- const result=await sync.sync({sourceUrl:'https://github.com/Acme/repo-a',destinationUrl:'https://github.com/Acme/repo-b',destinationFolder:target,sourcePat:'ghp_'+'s'.repeat(40),destPat:'ghp_'+'d'.repeat(40),runner});
+ const result=await sync.sync({sourceUrl:'https://github.com/Acme/repo-a',destinationUrl:'https://github.com/Acme/repo-b',destinationFolder:target,sourcePat:'ghp_'+'s'.repeat(40),destPat:'ghp_'+'d'.repeat(40),runner,githubApi});
  assert.equal(result.prUrl,'https://github.com/Acme/repo-b/pull/17');
- await assert.rejects(()=>sync.sync({sourceUrl:'https://github.com/Acme/repo-a',destinationUrl:'https://github.com/Acme/wrong',destinationFolder:target,sourcePat:'ghp_'+'s'.repeat(40),destPat:'ghp_'+'d'.repeat(40),runner}),/Repo B URL differs/);
+ await assert.rejects(()=>sync.sync({sourceUrl:'https://github.com/Acme/repo-a',destinationUrl:'https://github.com/Acme/wrong',destinationFolder:target,sourcePat:'ghp_'+'s'.repeat(40),destPat:'ghp_'+'d'.repeat(40),runner,githubApi}),/Repo B URL differs/);
  assert.equal(result.sourceSha,sourceSha);
  assert.equal(result.base,'main');
  assert.equal(result.fileCount,2);
@@ -129,7 +131,7 @@ test('sync copies real tracked files, skips release workflows and creates a revi
  assert.equal(fs.readFileSync(path.join(target,'existing.txt'),'utf8'),'destination-only\n');
  assert.equal(fs.readFileSync(path.join(target,'.github','workflows','release.yml'),'utf8'),'Repo B release workflow\n');
  assert.equal(fs.existsSync(path.join(target,'.env')),false);
- assert.ok(prOptions.includes('--base')&&prOptions.includes('--head'));
+ assert.equal(prOptions.base,'main');assert.equal(prOptions.branch,result.branch);
  for(const field of [sourceSha,'Acme/repo-a','Acme/repo-b','src/main.js','README.md','Files changed: 2'])
   assert.ok(prBody.includes(field),field);
 });
@@ -137,8 +139,9 @@ test('sync copies real tracked files, skips release workflows and creates a revi
 test('Repo Sync protects PATs in subprocess environment variables',async()=>{
  assert.throws(()=>sync.patEnvironment('short'),/Personal Access Token/);
  assert.throws(()=>sync.patEnvironment('x'.repeat(30)+String.fromCharCode(10)),/Personal Access Token/);
- const env=sync.patEnvironment('ghp_'+'s'.repeat(40),{githubCli:true});
+ const env=sync.patEnvironment('ghp_'+'s'.repeat(40));
  assert.ok(env.GIT_CONFIG_VALUE_0.startsWith('AUTHORIZATION: basic '));
- assert.ok(env.GH_TOKEN.startsWith('ghp_'));
+ assert.equal('GH_TOKEN' in env,false);
+ assert.equal('GITHUB_TOKEN' in env,false);
  assert.equal('ghp_'+'s'.repeat(40) in env,false);
 });
