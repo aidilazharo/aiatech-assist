@@ -7,6 +7,7 @@ const os=require('node:os');
 const crypto=require('node:crypto');
 const {execFile}=require('node:child_process');
 const {promisify}=require('node:util');
+const githubApiDefault=require('./repo-sync-github-api');
 const exec=promisify(execFile);
 const MAX_FILES=6000,MAX_BYTES=100*1024*1024,MAX_SINGLE_FILE=20*1024*1024;
 const OWNER=/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
@@ -163,9 +164,9 @@ async function readSourceFacts({cloned,source,chosenBranch,sha,sourceMessage,fil
   sourceCommitMessage:sourceMessage.slice(0,700),project,
   destinationRepo:destination.name,baseBranch:base,files:files.slice(0,80),fileCount:files.length};
 }
-async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.',sourceBranch='main',baseBranch='',sourcePat,destPat,workspaceRoot='',onProgress=()=>{},runner=run,describePr=async()=>'',planSync=async()=>null}){
+async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.',sourceBranch='main',baseBranch='',sourcePat,destPat,workspaceRoot='',onProgress=()=>{},runner=run,githubApi=githubApiDefault,describePr=async()=>'',planSync=async()=>null}){
  const source=githubUrl(sourceUrl),scope=scopeName(copyScope),chosenBranch=baseName(sourceBranch||'main');
- const sourceEnv=patEnvironment(sourcePat),destinationEnv=patEnvironment(destPat,{githubCli:true});
+ const sourceEnv=patEnvironment(sourcePat),destinationEnv=patEnvironment(destPat);
  const destRoot=await fs.realpath(String(destinationFolder||''));
  const stat=await fs.lstat(destRoot);
  if(!stat.isDirectory()||stat.isSymbolicLink())throw Error('Choose a regular Repo B folder.');
@@ -177,7 +178,6 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
  }
  const notify=(stage,message)=>Promise.resolve(onProgress({stage,message}));
  await runner('git',['--version']);
- await runner('gh',['--version']);
  const top=await runner('git',['rev-parse','--show-toplevel'],{cwd:destRoot});
  const canonical=await fs.realpath(top);
  if(canonical!==destRoot)throw Error('Select the Repo B Git root, not a nested folder.');
@@ -190,9 +190,11 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
  if(destinationUrl&&githubUrl(destinationUrl).name.toLowerCase()!==destination.name.toLowerCase())throw Error('Repo B URL differs from selected folder origin; refusing to push.');
  if(!/^https:\/\/github\.com\//i.test(origin))throw Error('Repo B origin must be an HTTPS GitHub URL to authenticate securely with the destination PAT.');
  if(source.name.toLowerCase()===destination.name.toLowerCase())throw Error('Repo A and Repo B must be different repositories.');
- const remote=JSON.parse(await runner('gh',['repo','view',destination.name,'--json','nameWithOwner,defaultBranchRef'],{env:destinationEnv}));
+ // Read remote identity/default branch directly from GitHub HTTPS API.
+ // This works with only Git + independent PATs; no GitHub CLI installation.
+ const remote=await githubApi.getRepository(destination,destPat);
  if(remote.nameWithOwner?.toLowerCase()!==destination.name.toLowerCase())throw Error('Repo B GitHub identity differs from local origin.');
- const base=baseName(baseBranch||remote.defaultBranchRef?.name);
+ const base=baseName(baseBranch||remote.defaultBranch);
  // AI selects the review branch only after Repo A is cloned to temporary storage.
  let branch=baseName('sync/'+source.repo.toLowerCase().replace(/[^a-z0-9_-]/g,'-').slice(0,28)+'/'+chosenBranch);
  let aiPlan={};
@@ -267,14 +269,11 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   let summary=aiPlan.prDescription||'';
   if(!summary)try{summary=String(await describePr({sourceRepo:source.name,sourceBranch:chosenBranch,sourceSha:sha,destinationRepo:destination.name,base,branch,sourceMessage,changedFiles:changedFiles.slice(0,80)})||'').trim().slice(0,1300);}
   catch{await notify('pr','AI PR details unavailable; using verified change metadata.');}
-  const body=path.join(temp,'pull-request.md');
-  await fs.writeFile(body,(summary?summary+'\n\n': '')+details.body,'utf8');
-  await notify('pr','Creating or reusing the review PR for '+branch+'…');
-  const openPrs=JSON.parse(await runner('gh',['pr','list','--repo',destination.name,'--head',branch,'--state','open','--json','url'],{cwd:destRoot,env:destinationEnv}));
-  let prUrl='';
-  if(Array.isArray(openPrs)&&openPrs.length===1)prUrl=String(openPrs[0].url||'');
-  else prUrl=await runner('gh',['pr','create','--repo',destination.name,'--base',base,'--head',branch,'--title',aiPlan.prTitle||details.title,'--body-file',body],{cwd:destRoot,timeout:180000,env:destinationEnv});
-  if(!/^https:\/\/github\.com\/[^ \r\n]+\/pull\/\d+$/.test(prUrl))throw Error('GitHub CLI did not return a valid pull request URL.');
+  const body=(summary?summary+'\n\n':'')+details.body;
+  await notify('pr','Creating or reusing the review PR via GitHub HTTPS API for '+branch+'…');
+  // The Destination PAT is sent only in the API Authorization header.
+  const prUrl=await githubApi.findOpenPr(destination,destPat,{branch,base})||
+   await githubApi.createPr(destination,destPat,{branch,base,title:aiPlan.prTitle||details.title,body});
   return {prUrl,branch,sourceBranch:chosenBranch,sourceSha:sha,sourceRepo:source.name,destinationRepo:destination.name,base,fileCount:changedFiles.length,commitMessage};
  }catch(e){
   const suffix=switched?' Repo B remains on branch '+branch+(pushed?' (already pushed)':'')+' for review.':'';

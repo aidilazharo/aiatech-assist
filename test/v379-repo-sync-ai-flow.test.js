@@ -28,24 +28,25 @@ test('Repo Sync: temp clone -> AI reads source info -> AI branch -> stage -> AI 
  git(['remote','add','origin',bBare],b);git(['push','-u','origin','main'],b);
  const proposed='sync/repo-a/source-portal-'+sha.slice(0,8);
  let seenFacts=null,createdTitle='',createdBody='';
- const runner=async(bin,args,{cwd}={})=>{
-  if(bin==='gh'){
-   if(args[0]==='repo')return JSON.stringify({nameWithOwner:'Org/repo-b',defaultBranchRef:{name:'main'}});
-   if(args[0]==='pr'&&args[1]==='list')return '[]';
-   if(args[0]==='pr'&&args[1]==='create'){
-    createdTitle=args[args.indexOf('--title')+1];
-    createdBody=fs.readFileSync(args[args.indexOf('--body-file')+1],'utf8');
-    return 'https://github.com/Org/repo-b/pull/123';
-   }
-   return '';
+ const githubApi={
+  getRepository:async()=>({nameWithOwner:'Org/repo-b',defaultBranch:'main'}),
+  findOpenPr:async()=>'', 
+  createPr:async(repo,token,info)=>{
+   assert.equal(repo.name,'Org/repo-b');
+   assert.equal(token,'ghp_'+'b'.repeat(40));
+   createdTitle=info.title;createdBody=info.body;
+   return 'https://github.com/Org/repo-b/pull/123';
   }
+ };
+ const runner=async(bin,args,{cwd}={})=>{
+  if(bin==='gh')throw Error('GitHub CLI must not be invoked.');
   if(bin==='git'&&args[0]==='clone'){git(['clone','--quiet','--branch','main',a,args[args.length-1]],temp);return '';}
   if(bin==='git'&&args[0]==='remote'&&args[1]==='get-url')return 'https://github.com/Org/repo-b.git';
   return git(args,cwd||temp);
  };
  const result=await sync.sync({
   sourceUrl:'https://github.com/Org/repo-a',destinationUrl:'https://github.com/Org/repo-b',
-  destinationFolder:b,sourcePat:'ghp_'+'a'.repeat(40),destPat:'ghp_'+'b'.repeat(40),runner,
+  destinationFolder:b,sourcePat:'ghp_'+'a'.repeat(40),destPat:'ghp_'+'b'.repeat(40),runner,githubApi,
   planSync:async facts=>{
    seenFacts=facts;
    assert.equal(facts.sourceSha,sha);
