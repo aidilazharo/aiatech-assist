@@ -8,13 +8,14 @@ function validVersion(value){
 function compareInstalledRemote(installedVersion,remoteVersion){
  const local=validVersion(installedVersion),remote=validVersion(remoteVersion);
  if(!remote)return {available:false,reason:'remote-unverified',installed:local,remote};
- if(!local)return {available:false,reason:'installed-unverified',installed:local,remote};
+ if(!local)return {available:true,reason:'not-installed',installed:local,remote};
  const difference=compareVersions(remote,local);
  return {available:difference>0,reason:difference>0?'newer':difference===0?'same':'older',installed:local,remote};
 }
 function displayLibraryUpdate(installedVersion,remoteVersion){
  const result=compareInstalledRemote(installedVersion,remoteVersion);
  if(result.reason==='remote-unverified')return {installed:result.installed?'v'+result.installed:'Not installed',remote:'Unavailable',message:'GitHub library version has not been verified.'};
+ if(result.reason==='not-installed')return {installed:'Not installed',remote:'v'+result.remote,message:'A verified SDLC Library is available for installation.'};
  return {installed:result.installed?'v'+result.installed:'Not installed',remote:'v'+result.remote,message:result.available?'A newer verified SDLC Library version is available.':'No newer library version is available.'};
 }
 // After any Pull Library action, verify the active checkout really matches
