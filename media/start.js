@@ -751,7 +751,7 @@ function updateExtensionSettingBadges(){
 function collapseExtensionSettings(){for(const details of document.querySelectorAll('#settingsView details.ext-settings-accordion'))details.open=false;}
 function collapseProjectSettings(){const panel=$('projectSettingsPanel');if(panel)panel.open=false;for(const details of document.querySelectorAll('#projectView details.ext-settings-accordion'))details.open=false;}
 function updateState(msg){
-  if(activeId!==msg.activeId){brDeletionBusy=false;hideBRDeletionProgress();roleJiraRequest++;baResumeCardReady=baHasRecoverableBR(msg.brState);baViewedStep=null;baPreflightInfo=null;mappingFailurePhase='';if(pmJiraTableInstance){pmJiraTableInstance.destroy?.();pmJiraTableInstance=null;} jiraInventoryRequest++;jiraInventoryRunning=false;jiraInventoryLoaded=false;jiraInventoryError="";jiraInventoryItems=[];jiraInventoryProject="";jiraInventoryKey="";jiraInventoryViewerId="";aiChangeResolutionView.receive({type:'aiChangeResolution/state',cases:[]});baShowChangeProposal=false;restoredMappingEpoch=null;discoveryImportProposal=null;discoveryImportQueue=[];brState=msg.brState||null;reviewStageState=null;reviewApplyRetry=null;reviewApplyRetryAvailable=false;deliveryInfo=null;deliveryDraftDirty=false;deliveryState={items:[]};sourceSelectedDigests=new Set(Array.isArray(msg.baSelectedSources)?msg.baSelectedSources:[]);opsOwnerDocs=[];opsOwnerLoaded=false;opsOwnerMe=null;opsOwnerBusy=false;handoffOwnerBusy=null;baOwnerState=null;selectedHandoffBrId=null;handoffOwnership={me:null,documents:[],scope:null};}
+  if(activeId!==msg.activeId){brDeletionBusy=false;hideBRDeletionProgress();roleJiraRequest++;baResumeCardReady=baHasRecoverableBR(msg.brState);baViewedStep=null;baPreflightInfo=null;mappingFailurePhase='';if(pmJiraTableInstance){pmJiraTableInstance.destroy?.();pmJiraTableInstance=null;} jiraInventoryRequest++;jiraInventoryLastChecked=0;jiraInventoryRunning=false;jiraInventoryLoaded=false;jiraInventoryError="";jiraInventoryItems=[];jiraInventoryProject="";jiraInventoryKey="";jiraInventoryViewerId="";aiChangeResolutionView.receive({type:'aiChangeResolution/state',cases:[]});baShowChangeProposal=false;restoredMappingEpoch=null;discoveryImportProposal=null;discoveryImportQueue=[];brState=msg.brState||null;reviewStageState=null;reviewApplyRetry=null;reviewApplyRetryAvailable=false;deliveryInfo=null;deliveryDraftDirty=false;deliveryState={items:[]};sourceSelectedDigests=new Set(Array.isArray(msg.baSelectedSources)?msg.baSelectedSources:[]);opsOwnerDocs=[];opsOwnerLoaded=false;opsOwnerMe=null;opsOwnerBusy=false;handoffOwnerBusy=null;baOwnerState=null;selectedHandoffBrId=null;handoffOwnership={me:null,documents:[],scope:null};}
   workspaceFolderAvailable=!!msg.workspace;
   $('gateFolderAlert').classList.toggle('hidden',workspaceFolderAvailable);
   $('gateManual').disabled=!workspaceFolderAvailable;
@@ -818,7 +818,7 @@ function updateState(msg){
   $('jiraCredentialState').textContent=msg.jiraTokenSaved?'Token securely saved':'Token not configured';
   $('githubCredentialState').textContent=msg.githubTokenSaved?'Token securely saved':'Token not configured (optional)';
   settingsTokenState={jira:!!msg.jiraTokenSaved,github:!!msg.githubTokenSaved};settingsModelReady=msg.modelStatus?.state==='ready';updateExtensionSettingBadges();
-  renderRoleWork();renderDocumentGroups();renderOperationDocuments();renderKnowledgeState(msg.summary||{});renderOverviewConnections(msg.projectConnections);renderOverviewRoles(msg.summary||{});ensureBAJiraInventory();ensurePMJiraInventory();
+  renderRoleWork();renderDocumentGroups();renderOperationDocuments();renderKnowledgeState(msg.summary||{});renderLiveRemoteState(msg.liveRemote);renderOverviewConnections(msg.projectConnections);renderOverviewRoles(msg.summary||{});ensureBAJiraInventory();ensurePMJiraInventory();
 
   if(editingId&&!projects.some(p=>p.id===editingId)){editingId=null;navigate('overview');}
   if(view==='project'&&editingId&&document.activeElement?.closest('form')!==$('projectForm')&&!document.activeElement?.closest('#projectScopedOptions'))openProject(editingId);
@@ -865,7 +865,7 @@ function navigate(destination){
   if(destination==='settings'){$('settingsBack').textContent=workspaceOpened?'← Back to Workspace':'← Back to Projects';collapseExtensionSettings();setView('settings');updateExtensionSettingBadges();if(workspaceOpened)send('devRepositoryStatus');return;}
   if(destination==='library'){setView('library');window.atgvLibraryStudio?.refresh();return;}
   if(destination==='documents'){setView('documents');renderDocumentGroups();return;}
-  if(destination==='knowledge'){setView('knowledge');return;}
+  if(destination==='knowledge'){setView('knowledge');send('refreshConnectedSources');return;}
   if(destination==='planning'){setView('planning');send('loadPlanning');renderDesignCards();return;}
   if(destination==='discovery'){
     selectedRole='business-analyst';renderSidebarRole();
@@ -998,7 +998,7 @@ $('overviewJiraMappingStatus').addEventListener('click',()=>openProjectConnectio
 $('overviewConfluenceMappingStatus').addEventListener('click',()=>openProjectConnectionModal('confluence'));
 // A single project-scoped Jira scan powers Overview and Business Analyst My Work.
 // Both views share the same effective Jira project mapping and nextPageToken pagination.
-let jiraInventoryRequest=0,jiraInventoryProject='',jiraInventoryItems=[],jiraInventoryPage=0,jiraInventoryRunning=false,jiraInventoryLoaded=false,jiraInventoryKey='',jiraInventoryError='',jiraInventoryTruncated=false,jiraInventoryViewerId='';
+let jiraInventoryRequest=0,jiraInventoryProject='',jiraInventoryItems=[],jiraInventoryPage=0,jiraInventoryRunning=false,jiraInventoryLoaded=false,jiraInventoryKey='',jiraInventoryError='',jiraInventoryTruncated=false,jiraInventoryViewerId='',jiraInventoryLastChecked=0;
 let baJiraView='list';
 // An explicit BA Refresh requests review of stale saved Jira links after inventory completes.
 // Automatic initial scans never reconcile references.
@@ -1311,7 +1311,7 @@ function ensurePMJiraInventory(){
  if(view!=='work'||selectedRole!=='project-manager')return;
  renderPMDashboard();
  const key=projectConnectionsSnapshot.jira?.key||'';
- if(activeId&&key&&(jiraInventoryProject!==activeId||jiraInventoryKey!==key||!jiraInventoryRunning&&!jiraInventoryLoaded&&!jiraInventoryError))searchJiraInventory();
+ if(activeId&&key&&(jiraInventoryProject!==activeId||jiraInventoryKey!==key||!jiraInventoryRunning&&Date.now()-jiraInventoryLastChecked>=300000))searchJiraInventory();
 }
 $('pmRefreshJira').addEventListener('click',searchJiraInventory);
 $('pmApproveEstimates').addEventListener('click',()=>send('pmApproveEffortBaseline',{projectId:activeId,overrides:pmEffortEdits}));
@@ -1324,6 +1324,7 @@ function searchJiraInventory(){
  pmForecast=null;
  const key=projectConnectionsSnapshot.jira?.key||'';
  if(!activeId||!key){renderBAJiraInventory();return;}
+ jiraInventoryLastChecked=Date.now();
  jiraInventoryProject=activeId;jiraInventoryRequest++;jiraInventoryItems=[];jiraInventoryPage=0;jiraInventoryRunning=true;jiraInventoryLoaded=false;jiraInventoryError='';jiraInventoryTruncated=false;jiraInventoryViewerId='';
  jiraInventoryKey=key;
  $('jiraInventoryModalTitle').textContent='Jira project '+jiraInventoryKey+' · All items';
@@ -1336,12 +1337,12 @@ function ensureBAJiraInventory(){
  renderBAJiraInventory();
  const key=projectConnectionsSnapshot.jira?.key||'';
  if(!activeId||!key)return;
- if(jiraInventoryProject!==activeId||jiraInventoryKey!==key||!jiraInventoryRunning&&!jiraInventoryLoaded&&!jiraInventoryError)searchJiraInventory();
+ if(jiraInventoryProject!==activeId||jiraInventoryKey!==key||!jiraInventoryRunning&&Date.now()-jiraInventoryLastChecked>=300000)searchJiraInventory();
 }
 function openJiraInventory(){
  if(!activeId||!projectConnectionsSnapshot.jira?.key){status('Configure a Jira Project Key in Project Connections first.',true);return;}
  $('jiraInventoryModal').classList.remove('hidden');$('jiraInventoryModal').setAttribute('aria-hidden','false');$('jiraInventoryClose').focus();
- if(jiraInventoryProject!==activeId||jiraInventoryKey!==projectConnectionsSnapshot.jira.key||!jiraInventoryRunning&&!jiraInventoryLoaded)searchJiraInventory();
+ if(jiraInventoryProject!==activeId||jiraInventoryKey!==projectConnectionsSnapshot.jira.key||!jiraInventoryRunning&&Date.now()-jiraInventoryLastChecked>=300000)searchJiraInventory();
  else {renderJiraInventory();$('jiraInventoryStatus').textContent=jiraInventoryRunning?'Scanning Jira '+jiraInventoryKey+'…':jiraInventoryItems.length+' Jira issues loaded.';}
 }
 function closeJiraInventory(){
@@ -1386,7 +1387,7 @@ window.addEventListener('message',event=>{
   jiraInventoryRequest++; // Reject any pre-deletion in-flight Jira batches.
   jiraLinkReconcileAfterRefreshRequest=0;
   jiraInventoryItems=[];jiraInventoryPage=0;jiraInventoryRunning=false;
-  jiraInventoryLoaded=false;jiraInventoryError='';jiraInventoryTruncated=false;jiraInventoryViewerId='';
+  jiraInventoryLoaded=false;jiraInventoryLastChecked=0;jiraInventoryError='';jiraInventoryTruncated=false;jiraInventoryViewerId='';
   if(baJiraTableInstance)baJiraTableInstance.setRows([]);
   if(pmJiraTableInstance)pmJiraTableInstance.setRows([]);
   // Also clear the previous Jira publication preview/progress cache; it can
@@ -1425,7 +1426,7 @@ window.addEventListener('message',event=>{
  if(msg.type==='jiraInventoryCompleted'){
     const reviewStaleLinks=jiraLinkReconcileAfterRefreshRequest===msg.requestId;
     if(reviewStaleLinks)jiraLinkReconcileAfterRefreshRequest=0;
-    jiraInventoryRunning=false;jiraInventoryLoaded=true;jiraInventoryTruncated=!!msg.truncated;
+    jiraInventoryRunning=false;jiraInventoryLoaded=true;jiraInventoryLastChecked=Date.now();jiraInventoryTruncated=!!msg.truncated;
     $('jiraInventoryRefresh').disabled=false;
     $('jiraInventoryStatus').textContent=msg.count+' Jira items loaded'+(msg.truncated?' · 20,000-item safety cap reached; additional Jira records may exist.':' · search complete.');
     renderJiraInventory();renderBAJiraInventory();renderPMDashboard();
@@ -3529,6 +3530,16 @@ function renderDocumentGroups(){
   }
 }
 function renderKnowledgeState(summary){$('knowledgeDocs').textContent=String(summary.documents||0);$('knowledgeChunks').textContent=String(summary.chunks||0);$('knowledgeSync').disabled=!activeId;}
+function renderLiveRemoteState(value){
+ if(!value||value.projectId!==activeId)return;
+ const node=$('knowledgeSyncStatus');if(!node)return;
+ if(value.phase==='running'){node.textContent='Fetching current Jira and Confluence data automatically…';return;}
+ if(value.phase==='offline'){node.textContent='Offline mode · cached data retained; live refresh is paused.';return;}
+ const results=Object.entries(value.results||{}).map(([name,count])=>name+': '+count+' fetched');
+ const errors=Object.entries(value.errors||{}).map(([name,message])=>name+': unavailable ('+String(message).slice(0,130)+')');
+ node.textContent=[...results,...errors].join(' · ')||'Automatic Jira and Confluence refresh enabled; no connected sources found.';
+ if(value.lastAttempt)node.textContent+=' · Checked '+new Date(value.lastAttempt).toLocaleString();
+}
 function roleUnsaved(){roleSettingsDirty=true;updateExtensionSettingBadges();$('saveRoleSettings').disabled=false;$('roleSettingsStatus').textContent='Unsaved changes';}
 function renderRoleSettings(){
   const list=$('roleSettingsList');list.replaceChildren();
@@ -4220,6 +4231,17 @@ $('overviewKnowledgeSearch').addEventListener('click',()=>projectKnowledgeSubmit
 $('overviewKnowledgeAsk').addEventListener('click',()=>projectKnowledgeSubmit('ragAsk'));
 $('overviewRagQuery').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();projectKnowledgeSubmit('ragSearch');}});
 $('overviewKnowledgeSync').addEventListener('click',()=>{if(!activeId){$('overviewKnowledgeStatus').textContent='Open a project first.';return;}$('overviewKnowledgeSync').disabled=true;$('overviewKnowledgeStatus').textContent='Refreshing indexed project knowledge…';send('sync',{id:activeId});});
+window.addEventListener('message',event=>{
+ const data=event.data||{};
+ if(data.type!=='liveRemoteState'||data.value?.projectId!==activeId)return;
+ renderLiveRemoteState(data.value);
+ // Full Jira inventory is refreshed only after the 5-minute freshness window.
+ if(data.value.phase!=='ready'&&data.value.phase!=='partial')return;
+ if(!Object.prototype.hasOwnProperty.call(data.value.results||{},'Jira'))return;
+ if(!jiraInventoryRunning&&jiraInventoryLoaded&&Date.now()-jiraInventoryLastChecked>=300000
+  &&view==='work'&&['business-analyst','project-manager'].includes(selectedRole))
+  searchJiraInventory();
+});
 $('knowledgeSync').addEventListener('click',()=>{if(!activeId)return;$('knowledgeSync').disabled=true;$('knowledgeSyncStatus').textContent='Syncing local project documents and available connected sources…';send('sync',{id:activeId});});
 $('knowledgeSearch').addEventListener('click',()=>send('ragSearch',{query:read('ragQuery')}));
 $('knowledgeAsk').addEventListener('click',()=>send('ragAsk',{query:read('ragQuery')}));

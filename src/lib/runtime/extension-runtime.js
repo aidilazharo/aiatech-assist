@@ -14,6 +14,7 @@ const {listStacks,ensureWorkspaceLibrary,scaffoldProject,removeManagedWorkspaceL
 const {initializeWorkspaceFolders,installationSignature,lifecycleAction}=require('../../bootstrap');
 const catalogVendorLibraries=require('../../catalog-vendor-libraries');
 const libraryUpdateVersion=require('../../library-update-version');
+const liveRemoteRefresh=require('../../live-remote-refresh');
 const repoSyncWorkspace=require('../../repo-sync-workspace');
 const {workState,toggleTask,openTaskDocument}=require('../../sdlc-work');
 const roleStepEngine=require('../../role-step-engine');
@@ -185,6 +186,7 @@ let developerBrRun=null,developerBrLast=null;
 let workspaceOverridePath=null,startupScan={status:'idle',percent:0,message:''},startupSequence=0;
 let ownershipRetryTimer=null,ownershipOfflineUntil=0,aiServiceTimer=null,aiServiceBusy=false,autoSyncTimer=null,jiraMonitorTimer=null,jiraMonitorBusy=false,autoSyncBusy=false,context,output,tree,registry,activeProject,store,dashboard,ready=Promise.resolve(),activationEpoch=0,extensionSettings={},pendingTests={jira:null,github:null},openingFlow=new OpeningFlow(),discoveredSpaces=[],discoveredJiraProjects=[],openingLocked=false,openingGeneration=0,openingOffline=false,verifiedConnections=new Map(),approvedJiraPreviewRevision=null,approvedJiraPreviewBinding=null,jiraSyncBusy=false,jiraPreviewValidation=null,roleRepairPreviewContext=null,roleRepairBusy=false;
 const cfg=()=>vscode.workspace.getConfiguration('atgvAssist');
+let liveRemoteTimer=null,liveRemoteBusy=false,liveRemoteState={projectId:'',phase:'idle',lastAttempt:'',lastSuccess:'',results:{},errors:{}};
 let catalogRemote=null,catalogLastCheck='',catalogLastError='',catalogBusy=false,catalogWatch=null,installedVendorAssets=null,webviewVendorDir=null,vendorLibraryLastError='',vendorBootRecoveryCount=0,vendorWebviewReady=false;
 // External webview libraries must come from a validated GitHub catalog commit.
 // The last verified install works offline; unverified updates never execute.
@@ -684,6 +686,7 @@ const withProgress=(title,fn)=>dashboard?fn():vscode.window.withProgress({locati
 async function initialize(){
   if(ownershipRetryTimer){clearInterval(ownershipRetryTimer);ownershipRetryTimer=null;}ownershipOfflineUntil=0;
   if(aiServiceTimer){clearInterval(aiServiceTimer);aiServiceTimer=null;}if(autoSyncTimer){clearInterval(autoSyncTimer);autoSyncTimer=null;}if(jiraMonitorTimer){clearInterval(jiraMonitorTimer);jiraMonitorTimer=null;}
+  if(liveRemoteTimer){clearInterval(liveRemoteTimer);liveRemoteTimer=null;}
   approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;++activationEpoch;activeProject=undefined;store=undefined;pendingTests={jira:null,github:null};verifiedConnections.clear();extensionSettings=normalizeExtensionSettings(context.globalState.get('atgvAssist.extensionSettings',{}));
   workspaceOverridePath=null;
   const actualFolder=vscode.workspace.workspaceFolders?.[0];
@@ -706,6 +709,7 @@ async function activateProject(id){
   approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;
   if(ownershipRetryTimer){clearInterval(ownershipRetryTimer);ownershipRetryTimer=null;}ownershipOfflineUntil=0;
   if(aiServiceTimer){clearInterval(aiServiceTimer);aiServiceTimer=null;}if(autoSyncTimer){clearInterval(autoSyncTimer);autoSyncTimer=null;}if(jiraMonitorTimer){clearInterval(jiraMonitorTimer);jiraMonitorTimer=null;}
+  if(liveRemoteTimer){clearInterval(liveRemoteTimer);liveRemoteTimer=null;}
   if(!registry)throw new Error('Open a workspace folder in VS Code before creating projects.');
   const epoch=++activationEpoch;
   const project=await registry.read(id);
@@ -714,6 +718,7 @@ async function activateProject(id){
   try{const mem=new aiMemory.ProjectMemory(path.dirname(registry.fileFor(project.id)));mem.close();}catch(e){report('AI SQLite memory unavailable: '+e.message);}
   if(epoch!==activationEpoch)return project;
   activeProject=project;store=nextStore;
+  liveRemoteState={projectId:project.id,phase:openingOffline?'offline':'idle',lastAttempt:'',lastSuccess:'',results:{},errors:{}};
   await context.workspaceState.update('atgvAssist.activeProject',project.id);
   tree?.refresh();await aiSchedule();await refreshDashboard();
   ownershipRetryTimer=setInterval(()=>{
@@ -728,6 +733,16 @@ async function activateProject(id){
   report(`Active project: ${project.id} (${store.docs.length} indexed documents)`);
   if(!openingOffline&&context.workspaceState.get('atgvAssist.monitorJira.'+project.id,false))jiraMonitorTimer=setInterval(()=>{if(!jiraMonitorBusy&&activeProject?.id===project.id)scanExternalJira({quiet:true}).catch(e=>report('Background Jira monitor: '+e.message));},120000);
   if(!openingOffline&&context.workspaceState.get('atgvAssist.autoSync.'+project.id,false)){autoSyncTimer=setInterval(()=>{if(!autoSyncBusy&&activeProject?.id===project.id)syncManagedDocuments().catch(e=>report('Auto document sync: '+e.message));},60000);}
+  // Always fetch current remote Jira and Confluence data on a verified project open,
+  // and every five minutes while the same project stays open. This is read-only
+  // against Atlassian; publishing and approval are never triggered here.
+  if(!openingOffline){
+   liveRemoteTimer=setInterval(()=>{
+    if(activeProject?.id===project.id)void refreshLiveRemoteData({reason:'scheduled'}).catch(e=>report('Live Jira/Confluence refresh: '+e.message));
+   },liveRemoteRefresh.INTERVAL_MS);
+   liveRemoteTimer.unref?.();
+   void refreshLiveRemoteData({reason:'project-open',force:true}).catch(e=>report('Live Jira/Confluence opening fetch: '+e.message));
+  }
   return project;
 }
 
@@ -1129,7 +1144,7 @@ async function dashboardState(){
   }
   const roleSteps=activeProject&&openingFlow.phase==='open'?await roleStepEngine.overview(registry,activeProject.id,currentWork.roles):{scopeId:'project',roles:[]};
   const consolidatedSdlc=activeProject&&openingFlow.phase==='open'?await roleStepEngine.consolidated(registry,activeProject.id,currentWork.roles):{roles:[],scopes:0,verifiedEvidence:0,outputs:0};
-  return {architectErrorLogCount:activeProject?.id?architectErrorLogs.count(activeProject.id):0,projectConnections,emptyWorkspace:emptyWorkspace&&!unmanagedFolders.length,guideAutoShown,baSelectedSources,delivery,unifiedRepository,usedRoles,designState,approvedDesignHash,blueprintRegister,blueprintAssessment,health,aiService,unmanagedFolders,brState,exportRecoveryFailures:exportRecovery?.failures||[],jiraBrowseBaseUrl,roleSettings,timeline,modelStatus,recentProjects,projectReadiness,openingOffline,startupScan,startupSetup:await startupStatus(),serviceConfigured,serviceUrl,coordinationProvider:coordinationProvider(),remoteLinks:links,autoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.autoSync.'+activeProject.id,false)),jiraAutoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.jiraAutoSync.'+activeProject.id,false)),discovery:discoveryState,flow:flowState,type:'state',projects,techStacks,activeId:openingFlow.phase==='open'?activeProject?.id||null:null,opening:openingFlow.snapshot(),summary:openingFlow.phase==='open'?store?.summary()||{documents:0,chunks:0}:{documents:0,chunks:0},workspace:getWorkspace()?.uri.fsPath||null,extensionSettings,jiraTokenSaved,githubTokenSaved,catalog:await catalogUiState(),updates:updateStatus(),work:currentWork,roleSteps,consolidatedSdlc};
+  return {architectErrorLogCount:activeProject?.id?architectErrorLogs.count(activeProject.id):0,projectConnections,emptyWorkspace:emptyWorkspace&&!unmanagedFolders.length,guideAutoShown,baSelectedSources,delivery,unifiedRepository,usedRoles,designState,approvedDesignHash,blueprintRegister,blueprintAssessment,health,aiService,unmanagedFolders,brState,exportRecoveryFailures:exportRecovery?.failures||[],jiraBrowseBaseUrl,roleSettings,timeline,modelStatus,recentProjects,projectReadiness,openingOffline,startupScan,startupSetup:await startupStatus(),serviceConfigured,serviceUrl,coordinationProvider:coordinationProvider(),remoteLinks:links,liveRemote:activeProject?.id===liveRemoteState.projectId?liveRemoteState:null,autoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.autoSync.'+activeProject.id,false)),jiraAutoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.jiraAutoSync.'+activeProject.id,false)),discovery:discoveryState,flow:flowState,type:'state',projects,techStacks,activeId:openingFlow.phase==='open'?activeProject?.id||null:null,opening:openingFlow.snapshot(),summary:openingFlow.phase==='open'?store?.summary()||{documents:0,chunks:0}:{documents:0,chunks:0},workspace:getWorkspace()?.uri.fsPath||null,extensionSettings,jiraTokenSaved,githubTokenSaved,catalog:await catalogUiState(),updates:updateStatus(),work:currentWork,roleSteps,consolidatedSdlc};
 }
 async function publishBlueprintState(){
   if(!dashboard||!activeProject)return;
@@ -3848,7 +3863,12 @@ async function handleDashboardMessage(msg){
         catch(error){await dashboard?.webview.postMessage({type:'localBackupAction',action:'restore',success:false,message:error.message});throw error;}
         break;
       }
-      case 'refresh':await refreshDashboard();break;
+      case 'refresh':await refreshLiveRemoteData({reason:'manual-refresh',force:true});await refreshDashboard();break;
+      case 'refreshConnectedSources':{
+        requireOpened();
+        await refreshLiveRemoteData({reason:'view-open'});
+        break;
+      }
       case 'devCopilotTasks':{
         requireOpened();requireOnline();
         const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
@@ -7348,22 +7368,75 @@ async function testConnections(){
   uiInformation(`ATGV: Connection checks completed for ${project.name}. See output.`);
   return messages;
 }
-async function syncConfluence(target=current()){
+function liveRefreshStillCurrent(target){
+ return !!target&&activeProject?.id===target.project.id&&store===target.store;
+}
+async function syncConfluence(target=current(),{background=false}={}){
   const {project,config,store:local}=target;
   const docs=await listConfluence(config,await getAtlassianToken(project),maxItems());
+  if(!liveRefreshStillCurrent(target))throw Error('Project changed during Confluence refresh; stale result discarded.');
   const mapping=await new DocumentSync({folder:path.dirname(registry.fileFor(project.id)),config,token:''}).read();
   const syncedPages=new Set(Object.values(mapping.entries||{}).map(e=>String(e.pageId)));
   const filtered=docs.filter(d=>!syncedPages.has(String(d.remoteId)));
-  let conflicts=0;for(const d of filtered){if((await local.mirrorConfluence(d)).locallyEdited)conflicts++;}
-  await local.saveMirrors();await local.replace('Confluence',filtered);tree?.refresh();await refreshDashboard();
+  let conflicts=0;for(const d of filtered){if(!liveRefreshStillCurrent(target))throw Error('Project changed during Confluence mirror refresh.');if((await local.mirrorConfluence(d)).locallyEdited)conflicts++;}
+  if(!liveRefreshStillCurrent(target))throw Error('Project changed during Confluence refresh.');
+  await local.saveMirrors();await local.replace('Confluence',filtered);tree?.refresh();if(!background)await refreshDashboard();
   report(`[${project.id}] Confluence: ${filtered.length} independent pages, ${docs.length-filtered.length} already represented in the canonical repository (${conflicts} locally edited mirrors preserved)`);
-  if(conflicts)uiWarning(`${conflicts} locally edited Confluence mirrors preserved. Resolve and publish manually.`);
+  if(conflicts&&!background)uiWarning(`${conflicts} locally edited Confluence mirrors preserved. Resolve and publish manually.`);
   return docs.length;
 }
-async function syncJira(target=current()){
+async function syncJira(target=current(),{background=false}={}){
   const {project,config,store:local}=target;
-  const docs=await listJira(config,await getAtlassianToken(project),maxItems());
-  await local.replace('Jira',docs);tree?.refresh();await refreshDashboard();report(`[${project.id}] Jira: ${docs.length} issues`);return docs.length;
+  // A mapped project is sufficient for a safe default Jira query; a user-defined
+  // scoped JQL still takes precedence when configured.
+  const docs=await listJira(liveRemoteRefresh.jiraConfig(config),await getAtlassianToken(project),maxItems());
+  if(!liveRefreshStillCurrent(target))throw Error('Project changed during Jira refresh; stale result discarded.');
+  await local.replace('Jira',docs);tree?.refresh();if(!background)await refreshDashboard();report(`[${project.id}] Jira: ${docs.length} issues`);return docs.length;
+}
+async function refreshLiveRemoteData({reason='scheduled',force=false}={}){
+ if(!activeProject||!store||openingFlow.phase!=='open')return {skipped:'no-open-project'};
+ const projectId=activeProject.id;
+ if(openingOffline){
+  liveRemoteState={...liveRemoteState,projectId,phase:'offline'};
+  await dashboard?.webview.postMessage({type:'liveRemoteState',value:liveRemoteState});
+  return {skipped:'offline'};
+ }
+ const last=liveRemoteState.projectId===projectId?Date.parse(liveRemoteState.lastAttempt||0)||0:0;
+ if(!liveRemoteRefresh.canRefresh({lastAttempt:last,busy:liveRemoteBusy,force,offline:openingOffline}))
+  return {skipped:liveRemoteBusy?'busy':'recent'};
+ const target=current(),sources=liveRemoteRefresh.configState(target.config);
+ if(!sources.jira&&!sources.confluence){
+  liveRemoteState={projectId,phase:'ready',lastAttempt:new Date().toISOString(),lastSuccess:'',results:{},errors:{}};
+  await dashboard?.webview.postMessage({type:'liveRemoteState',value:liveRemoteState});
+  return {skipped:'unconfigured'};
+ }
+ liveRemoteBusy=true;
+ const started=new Date().toISOString(),results={},errors={};
+ liveRemoteState={...liveRemoteState,projectId,phase:'running',lastAttempt:started};
+ await dashboard?.webview.postMessage({type:'liveRemoteState',value:liveRemoteState});
+ try{
+  // Independently handle source failures; never clear the successfully indexed
+  // local Jira or Confluence data just because the network is unavailable.
+  for(const [name,enabled,read] of [
+   ['Jira',sources.jira,()=>syncJira(target,{background:true})],
+   ['Confluence',sources.confluence,()=>syncConfluence(target,{background:true})]
+  ]){
+   if(!enabled)continue;
+   if(!liveRefreshStillCurrent(target))return {skipped:'project-changed'};
+   try{results[name]=await read();}
+   catch(error){errors[name]=String(error.message||error).slice(0,240);report('Live '+name+' refresh ('+reason+'): '+errors[name]);}
+  }
+  if(!liveRefreshStillCurrent(target))return {skipped:'project-changed'};
+  liveRemoteState={projectId,phase:Object.keys(errors).length?'partial':'ready',lastAttempt:started,
+   lastSuccess:Object.keys(results).length?new Date().toISOString():liveRemoteState.lastSuccess||'',results,errors};
+  await dashboard?.webview.postMessage({type:'liveRemoteState',value:liveRemoteState});
+  if(Object.keys(results).length)await refreshDashboard();
+  return {results,errors};
+ }finally{
+  liveRemoteBusy=false;
+  if(activeProject?.id&&activeProject.id!==projectId&&!openingOffline)
+   void refreshLiveRemoteData({reason:'project-switch',force:true}).catch(e=>report('Live project-switch refresh: '+e.message));
+ }
 }
 async function syncGithub(target=current()){
   const {project,config,store:local}=target;
@@ -7600,6 +7673,7 @@ async function reset(){
     }
     approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;
     openingGeneration++;openingFlow.reset();openingOffline=false;discoveredSpaces=[];discoveredJiraProjects=[];
+   if(liveRemoteTimer){clearInterval(liveRemoteTimer);liveRemoteTimer=null;}
     installedVendorAssets=null;catalogLastCheck='';catalogLastError='';uxCatalogAutoRefreshAt.clear();
     await initialize();
     // Refresh verified downloaded UI assets; no remote deletion is performed.
@@ -7682,5 +7756,5 @@ function activate(ctx){
   void installationStartup().catch(e=>{report('Install/start workflow: '+e.message);uiError('ATGV startup: '+e.message);});
   report('ATGV extension activated. Run ATGV: Start to manage workspace projects.');
 }
-function deactivate(){if(catalogWatch){clearInterval(catalogWatch);catalogWatch=null;}if(softwareUpdateTimer)clearInterval(softwareUpdateTimer);if(softwareStartupTimer)clearTimeout(softwareStartupTimer);void developerGit.stopLocal().catch(()=>{});}
+function deactivate(){if(liveRemoteTimer){clearInterval(liveRemoteTimer);liveRemoteTimer=null;}if(catalogWatch){clearInterval(catalogWatch);catalogWatch=null;}if(softwareUpdateTimer)clearInterval(softwareUpdateTimer);if(softwareStartupTimer)clearTimeout(softwareStartupTimer);void developerGit.stopLocal().catch(()=>{});}
 module.exports={activate,deactivate};

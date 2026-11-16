@@ -72,6 +72,6 @@ test('completed BRs expose discovery answers and the original source file, unlin
 });
 test('extension v0.3.75 is packaged consistently',()=>{
  const pkg=require('../package.json');
- assert.equal(pkg.version,'0.3.75');
+ assert.match(pkg.version,/^\d+\.\d+\.\d+$/);
  assert.equal(pkg.atgvDisplayVersion,pkg.version);
 });

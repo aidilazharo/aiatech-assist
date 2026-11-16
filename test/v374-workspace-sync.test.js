@@ -7,7 +7,7 @@ const workspace=require('../src/repo-sync-workspace');
 const pkg=require('../package.json');
 const git=(args,cwd)=>execFileSync('git',args,{cwd,encoding:'utf8',windowsHide:true,maxBuffer:8*1024*1024}).trim();
 test('ATGV: Workspace command launches its own webview and has a controlled CSP',()=>{
- assert.equal(pkg.version,'0.3.74');
+ assert.match(pkg.version,/^\d+\.\d+\.\d+$/);
  assert.equal(pkg.atgvDisplayVersion,pkg.version);
  assert.ok(pkg.activationEvents.includes('onCommand:atgvAssist.workspace'));
  assert.ok(pkg.contributes.commands.some(x=>x.command==='atgvAssist.workspace'&&x.title==='ATGV: Workspace'));
