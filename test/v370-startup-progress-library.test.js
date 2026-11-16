@@ -64,9 +64,9 @@ test('ZIP importer does not downgrade a newer previously installed ZIP',async t=
  const workspace=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-v372-no-downgrade-'));
  t.after(()=>fs.rm(workspace,{recursive:true,force:true}));
  const file=path.join(workspace,'source.zip');
- await fs.writeFile(file,zip(files('1.1.16','# New Developer\\n')));
+ await fs.writeFile(file,zip(files('1.1.16','# New Developer\n')));
  await offline.importZip({file,workspace,repositoryUrl:repo});
- await fs.writeFile(file,zip(files('1.1.9','# Older Developer\\n')));
+ await fs.writeFile(file,zip(files('1.1.9','# Older Developer\n')));
  const result=await offline.importZip({file,workspace,repositoryUrl:repo});
  assert.equal(result.version,'1.1.16');
  assert.equal(result.unchanged,true);
@@ -76,7 +76,7 @@ test('ZIP importer prefers a verified Git checkout for equal or higher versions'
  const workspace=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-v372-git-preferred-'));
  t.after(()=>fs.rm(workspace,{recursive:true,force:true}));
  const file=path.join(workspace,'source.zip');
- await fs.writeFile(file,zip(files('1.1.15','# ZIP Developer\\n')));
+ await fs.writeFile(file,zip(files('1.1.15','# ZIP Developer\n')));
  const original=catalog.gitInstalled;
  try{
   catalog.gitInstalled=async()=>({sha:'a'.repeat(40),version:'1.1.16',checkout:path.join(workspace,'verified-git'),repository:'aiamalaysia/test-sdlc-library',roleCount:1,stackCount:1});
@@ -90,7 +90,7 @@ test('newer ZIP survives a verified older Git checkout',async t=>{
  const workspace=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-v372-zip-preserved-'));
  t.after(()=>fs.rm(workspace,{recursive:true,force:true}));
  const file=path.join(workspace,'source.zip');
- await fs.writeFile(file,zip(files('1.1.16','# Newer ZIP\\n')));
+ await fs.writeFile(file,zip(files('1.1.16','# Newer ZIP\n')));
  await offline.importZip({file,workspace,repositoryUrl:repo});
  const original=catalog.gitInstalled;
  try{
@@ -100,8 +100,8 @@ test('newer ZIP survives a verified older Git checkout',async t=>{
  }finally{catalog.gitInstalled=original;}
 });
 test('ZIP VERSION and catalog.json must be consistent before activation',()=>{
- const fixtureFiles=files('1.1.16','# Contract\\n');
- fixtureFiles['tech-stacks-skills-source/VERSION']='1.1.15\\n';
+ const fixtureFiles=files('1.1.16','# Contract\n');
+ fixtureFiles['tech-stacks-skills-source/VERSION']='1.1.15\n';
  assert.throws(()=>offline.readArchive(zip(fixtureFiles)),/VERSION and catalog.json version must match/);
 });
 test('prerequisite progress events reflect checked tools and all five stacks',async()=>{
