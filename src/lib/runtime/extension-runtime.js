@@ -1023,7 +1023,8 @@ async function testAndSaveStartupConnections(message){
   library=await sdlcCatalog.remoteInfo(libraryConf,github);
   if(!library?.sha)throw Error('SDLC Library main branch was not accessible.');
  }catch(error){
-  const workspace=getWorkspace()?.uri.fsPath;
+  // Preflight test harnesses may run without a VS Code workspace.
+  const workspace=typeof getWorkspace==='function'?getWorkspace()?.uri.fsPath:null;
   if(workspace)offlineFallback=await offlineLibrary.imported(workspace,data.libraryRepoUrl);
   if(!offlineFallback)throw error;
   library={offline:true};
