@@ -700,7 +700,7 @@ function renderCatalog(state,{forceFields=false}={}){
  $('catalogToken').placeholder=state.credentialSaved?'Token saved securely; leave blank to retain':'Read-only token with Contents: Read';
  const installed=state.installed;settingsCatalogInstalled=installed||null;updateExtensionSettingBadges();
  $('catalogInstalled').textContent=installed?(installed.offline?
-  `Offline SDLC Library ZIP v${installed.version} · ${installed.filename||'validated archive'} · Temporary until verified GitHub sync`:
+  `Offline SDLC Library ZIP v${installed.version} · ${installed.filename||'validated archive'} · Preserved until an equal or newer verified GitHub version`:
   `Installed SDLC Catalogue v${installed.version} · Git SHA ${installed.sha.slice(0,12)} · ${installed.repository} · ${new Date(installed.installedAt).toLocaleString()}`):'No downloaded catalogue yet.';
  const counts=$('catalogContents');counts.replaceChildren();
  for(const [label,value] of [['Role skills',installed?.roleCount],['Tech stacks',installed?.stackCount],['Workflows',installed?.workflows],['Templates',installed?.templates]]){
@@ -6997,7 +6997,7 @@ function renderStartupConfig(config){
   startupFormInitialized=true;
  }
  const offline=config.offlineLibrary;
- if(offline)$('startupLibraryZipStatus').textContent=`Offline ZIP v${offline.version} (${offline.filename}) active; will be removed after verified GitHub sync.`;
+ if(offline)$('startupLibraryZipStatus').textContent=`Offline ZIP v${offline.version} (${offline.filename}) active; retained while newer than GitHub main.`;
  showStartupStep(required||startupReturnToConnections);
  if(required&&!startupPrereqRequested){startupPrereqRequested=true;startupScanPercent(0,'Starting prerequisite scan…');renderStartupScanPlaceholders();send('startupReadiness');}
 }
