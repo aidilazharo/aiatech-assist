@@ -60,7 +60,7 @@ test('ATGV Workspace handles separate panel, local folder selection, review and 
  const original=sync.sync;
  try{
   sync.sync=async args=>{assert.equal(args.destinationFolder,'/chosen/repo-b');assert.equal(args.copyScope,'src');assert.equal(args.sourceBranch,'main');assert.ok(args.sourcePat.startsWith('ghp_'));assert.ok(args.destPat.startsWith('ghp_'));return {prUrl:'https://github.com/Acme/repo-b/pull/12',sourceRepo:'Acme/repo-a',sourceSha:'b'.repeat(40),destinationRepo:'Acme/repo-b',base:'main',branch:'sync/test',fileCount:1};};
-  const first=workspace.open(fake,{version:'0.3.78',secrets,workspaceRoot:'/another/atgv'});
+  const first=workspace.open(fake,{version:pkg.version,secrets,workspaceRoot:'/another/atgv',testConnection:async(repo,pat,kind)=>({repo:repo.name,permission:kind==='Source'?'pull':'push'})});
   assert.equal(first,panel);
   assert.equal(workspace.open(fake),panel);
   assert.equal(revealed,1);assert.equal(created,1);
