@@ -36,7 +36,9 @@ test('ATGV start never automatically opens a saved or sole project',async()=>{
  const source=read('src/lib/runtime/extension-runtime.js');
  assert.doesNotMatch(source,/autoLoadWorkspaceProject/);
  assert.doesNotMatch(source,/chooseProject\(projects/);
- assert.match(source,/if\(startupIsComplete\(\)\)await finishManualProjectDiscovery\(sequence\)/);
+ assert.match(source,/startupSessionProceedApproved=false/);
+ assert.match(source,/required:!startupSessionProceedApproved/);
+ assert.doesNotMatch(source,/if\(startupIsComplete\(\)\)await finishManualProjectDiscovery\(sequence\)/);
  const begin=source.indexOf('async function finishManualProjectDiscovery(sequence){');
  const end=source.indexOf('\nasync function restart(){',begin);
  assert.ok(begin>=0&&end>begin);

@@ -72,7 +72,8 @@ test('rejects ZIP path traversal, bad manifest and mismatched repository, withou
  const file=path.join(workspace,'library.zip');await fs.writeFile(file,zip(fixture()));
  await offline.importZip({file,workspace,repositoryUrl:repo});
  assert.equal(await offline.imported(workspace,'https://github.com/aia/different-library'),null);
- await assert.rejects(()=>offline.importZip({file,workspace,repositoryUrl:repo}),/already installed/);
+ const repeat=await offline.importZip({file,workspace,repositoryUrl:repo});
+ assert.equal(repeat.unchanged,true,'repeat ZIP should report the loaded version without overwriting files');
 });
 test('removes only unchanged offline copy after authenticated Git checkout is verified',async(t)=>{
  const workspace=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-offline-clean-'));t.after(()=>fs.rm(workspace,{recursive:true,force:true}));
