@@ -9,7 +9,7 @@ const a=ui.indexOf('function updateBrandLibraryVersion(state){');
 const b=ui.indexOf("window.addEventListener('resize',fitBrandVersionLines);",a);
 const fnSource=ui.slice(a,b);
 function display(state){
- const nodes={headerLibraryVersion:{},gateLibraryVersion:{},headerLibraryPull:{},gateLibraryPull:{}};
+ const nodes={headerLibraryVersion:{},gateLibraryVersion:{}};
  const update=new Function('$','fitBrandVersionLines','catalogBusyUI',fnSource+'return updateBrandLibraryVersion;')(
   key=>nodes[key],()=>{},false);
  update(state);return nodes;
@@ -20,7 +20,6 @@ test('both headers show ONLY the active installed Library version',()=>{
   assert.equal(nodes[id].textContent,' · Library v1.1.12');
   assert.ok(!nodes[id].textContent.includes('1.1.15'));
  }
- for(const id of ['headerLibraryPull','gateLibraryPull'])assert.equal(nodes[id].disabled,false);
 });
 test('verified activation updates exactly one version; remote only cannot pretend installed',()=>{
  const active=display({installed:{version:'1.1.15'},remote:{version:'1.1.15'},config:{repositoryUrl:'https://github.com/test/library'}});
@@ -28,15 +27,16 @@ test('verified activation updates exactly one version; remote only cannot preten
  assert.equal(active.headerLibraryVersion.textContent,' · Library v1.1.15');
  assert.equal(missing.gateLibraryVersion.textContent,' · Library not installed');
 });
-test('Pull Latest Library delegates to existing verified host pull, not an unsafe Git operation',()=>{
- for(const id of ['headerLibraryPull','gateLibraryPull'])assert.match(html,new RegExp('id="'+id+'"'));
- assert.match(ui,/for\(const id of \['headerLibraryPull','gateLibraryPull'\]\)/);
- assert.match(ui,/send\('catalogPull'\)/);
- assert.match(ui,/if\(!catalogState\?\.config\?\.repositoryUrl\|\|catalogState\?\.busy\|\|catalogBusyUI\)return/);
- const disconnected=display({installed:{version:'1.1.12'},config:{}});
- assert.equal(disconnected.headerLibraryPull.disabled,true);
- const busy=display({installed:{version:'1.1.12'},config:{repositoryUrl:'https://github.com/test/lib'},busy:true});
- assert.equal(busy.gateLibraryPull.disabled,true);
+test('no Library Pull buttons appear beside either header logo',()=>{
+ for(const id of ['headerLibraryPull','gateLibraryPull']){
+  assert.doesNotMatch(html,new RegExp('id="'+id+'"'));
+  assert.ok(!ui.includes("'"+id+"'"),id);
+ }
+ assert.doesNotMatch(css,/\\.header-library-pull/);
+ // Updates remain in Settings and still reach the pinned GitHub verification path.
+ assert.match(html,/id="catalogPull"/);
+ assert.match(ui,/\\$\\('catalogPull'\\)\\.addEventListener\\('click'/);
+ assert.match(ui,/send\\('catalogPull'\\)/);
 });
 test('compact logo and header styles move brand closer to left',()=>{
  assert.match(css,/v0\.3\.80: keep the mark/);

@@ -728,18 +728,6 @@ function updateBrandLibraryVersion(state){
   const element=$(id);
   if(element){element.textContent=label;element.title=title;}
  }
- // Pull is always available when a catalog is configured, even before version checking.
- // It reuses the extension-host verified Pull Catalog implementation.
- const enabled=!!state?.config?.repositoryUrl&&!state?.busy&&!catalogBusyUI;
- for(const id of ['headerLibraryPull','gateLibraryPull']){
-  const button=$(id);
-  if(!button)continue;
-  button.disabled=!enabled;
-  button.title=!state?.config?.repositoryUrl?'Configure SDLC Catalog in Settings first':
-    state?.busy?'Library operation in progress':
-    state?.updateAvailable?'Pull and activate a newer verified GitHub Library':
-    'Fetch and verify the latest SDLC Library from GitHub';
- }
  fitBrandVersionLines();
 }
 window.addEventListener('resize',fitBrandVersionLines);
@@ -4440,14 +4428,6 @@ $('catalogAuth').addEventListener('change',()=>$('catalogTokenField').classList.
 $('catalogForm').addEventListener('submit',event=>{event.preventDefault();$('catalogStatus').textContent='Saving catalog settings…';send('catalogSave',{config:catalogFormConfig(),token:read('catalogToken')});});
 $('catalogTest').addEventListener('click',()=>{$('catalogStatus').textContent='Testing GitHub connection…';send('catalogTest',{config:catalogFormConfig(),token:read('catalogToken')});});
 $('catalogPull').addEventListener('click',()=>{$('catalogStatus').textContent='Pulling and validating the GitHub catalog…';send('catalogPull');});
-for(const id of ['headerLibraryPull','gateLibraryPull']){
- $(id).addEventListener('click',()=>{
-  if(!catalogState?.config?.repositoryUrl||catalogState?.busy||catalogBusyUI)return;
-  $('catalogStatus').textContent='Pulling and verifying the latest SDLC Library…';
-  for(const buttonId of ['headerLibraryPull','gateLibraryPull'])$(buttonId).disabled=true;
-  send('catalogPull');
- });
-}
 $('catalogCheck').addEventListener('click',()=>{$('catalogStatus').textContent='Checking approved catalog version…';send('catalogCheck');});
 $('clearTechStack').addEventListener('click',()=>{selectedTechStackId='';renderTechStacks();});
 $('back').addEventListener('click',()=>{if(roleSettingsDirty){status('Save project role settings before leaving Project Settings.',true);return;}if(workspaceOpened)navigate('overview');else showGate();});
