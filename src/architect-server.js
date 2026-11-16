@@ -145,22 +145,23 @@ async function stopProjectManaged({root,driver=developer}={}){
  const resolved=path.resolve(root);
  const own=(cwd,parent)=>cwd===parent||cwd.startsWith(parent+path.sep);
  const previewParent=path.dirname(preview.previewLocation(resolved,'a'.repeat(40)));
- let stopped=0;
+ let stopped=0,otherProjectRunning=false;
  for(let attempt=0;attempt<4;attempt++){
   const entry=driver.localLogs();
   if(!entry.running)break;
   const cwd=path.resolve(entry.cwd||'');
-  if(!own(cwd,resolved)&&!own(cwd,previewParent))
-   break; // Another project's managed server must stay untouched.
+  if(!own(cwd,resolved)&&!own(cwd,previewParent)){
+   otherProjectRunning=true;break; // Never stop another project's process.
+  }
   await driver.stopLocal();
   stopped++;
   if(driver.localLogs().running)
    throw Error('ATGV-managed server is still running. Reset was cancelled before changing Git files.');
  }
- if(driver.localLogs().running)throw Error('ATGV-managed server did not stop. Reset was cancelled before changing Git files.');
+ if(!otherProjectRunning&&driver.localLogs().running)throw Error('ATGV-managed server did not stop. Reset was cancelled before changing Git files.');
  for(const key of [...previewRoots.keys()])if(key.startsWith(resolved+'|')){
   previewRoots.delete(key);previewUrls.delete(key);previewRevisions.delete(key);
  }
- return {stopped,running:false,message:stopped?'Stopped '+stopped+' ATGV-managed application process group(s) before reset.':'No ATGV-managed application server was running.'};
+ return {stopped,running:false,otherProjectRunning,message:stopped?'Stopped '+stopped+' ATGV-managed application process group(s) before reset.':otherProjectRunning?'Another project\'s ATGV-managed server was left running; no servers for this project needed stopping.':'No ATGV-managed application server was running.'};
 }
 module.exports={targetFor,status,verify,start,stop,stopProjectManaged};
