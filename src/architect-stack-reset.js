@@ -52,8 +52,19 @@ async function plan({root,project,baseBranch='main',force=false,allowFeatureReco
  const generation=project.techStackGeneration||0;
  if(!Number.isSafeInteger(generation)||generation<0||generation>=9999)throw Error('Technology stack generation limit reached; review branches manually.');
  const expected=project.techStackPrepared?.branch||branchFor(project.techStackId,generation);
- if(!/^bootstrap\/[a-z0-9-]{1,80}$/.test(expected)||!expected.startsWith('bootstrap/'+project.techStackId+'-'))
-  throw Error('The recorded bootstrap branch does not match the saved technology stack. Reset is blocked.');
+ // A verified catalog upgrade can move a saved stack from bootstrap/* to
+ // migration/<stack>-catalog-*. Reset must honor that recorded branch without
+ // broadening the set of repositories or permitting arbitrary feature refs.
+ const {recognizedBranch}=require('./architect-stack-branch-recovery');
+ if(!recognizedBranch(expected,project.techStackId))
+  throw Error('The saved technology stack branch is not a recognized ATGV bootstrap or migration branch. Reset is blocked.');
+ if(expected.startsWith('migration/')){
+  const prepared=project.techStackPrepared;
+  if(!prepared||prepared.remotePushed!==true||!/^[a-f0-9]{40}$/.test(String(prepared.sha||'')))
+   throw Error('Cannot reset a migration stack without a saved, pushed Git revision. No changes were made.');
+  const recorded=await git(real,'rev-parse','--verify','refs/heads/'+expected).catch(()=>null);
+  if(recorded!==prepared.sha)throw Error('Saved migration branch no longer matches its recorded Git revision. Reset is blocked to preserve local changes.');
+ }
  if(project.techStackPrepared?.root){
   const recorded=await fs.realpath(project.techStackPrepared.root).catch(()=>null);
   if(recorded!==real)throw Error('The configured repository is not the checkout that prepared this stack. Reset is blocked.');
