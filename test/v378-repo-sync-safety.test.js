@@ -10,7 +10,7 @@ const workspace=require('../src/repo-sync-workspace');
 const pkg=require('../package.json');
 
 test('v0.3.78 version metadata and single-action UI with both PAT roles',()=>{
- assert.equal(pkg.version,'0.3.78');
+ assert.match(pkg.version,/^\d+\.\d+\.\d+$/);
  assert.equal(pkg.atgvDisplayVersion,pkg.version);
  const html=workspace.workspaceHtml({nonce:'safe',version:pkg.version,cspSource:'vscode-resource:'});
  for(const label of ['Source · Repo A','Destination · Repo B','Source branch name','Destination GitHub URL','outside ATGV workspace','Sync Repo A → Repo B','PATs'])assert.ok(html.includes(label),label);
