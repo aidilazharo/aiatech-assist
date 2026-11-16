@@ -4414,7 +4414,8 @@ async function handleDashboardMessage(msg){
         // Recheck the remote before confirmation so a stale badge cannot trigger an unintended pull.
         const token=await catalogToken(config,{interactive:true});
         const remote=await sdlcCatalog.remoteInfo(config,token);
-        catalogRemote={sha:remote.sha,repository:remote.repository,private:remote.private};catalogLastCheck=new Date().toISOString();
+        const pinned=await sdlcCatalog.remoteVersion(config,token);
+        catalogRemote={sha:pinned.sha,repository:pinned.repository,private:pinned.private,version:pinned.version};catalogLastCheck=new Date().toISOString();
         if(installed?.sha===remote.sha){await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});await dashboard?.webview.postMessage({type:'architectCatalogAction',success:true,message:'Technology stack catalog is already up to date.'});break;}
         const confirmation=await uiWarning(`Install the latest verified SDLC Catalog from ${remote.repository} (main)?\n\nCurrent: ${installed?.sha?.slice(0,12)||'not installed'}\nLatest: ${remote.sha.slice(0,12)}\n\nThe stable .atgv/sdlc-catalog Git checkout will fast-forward from origin/main, preserving your generated application code, Git branches and approved documents. Local catalog modifications will block the pull rather than be overwritten.`,{modal:true},'Pull & Update');
         if(confirmation!=='Pull & Update'){await dashboard?.webview.postMessage({type:'architectCatalogAction',success:false,message:'Catalog update cancelled; nothing downloaded.'});break;}
@@ -4423,8 +4424,10 @@ async function handleDashboardMessage(msg){
           if(!getWorkspace())throw Error('Open a workspace before pulling the SDLC Catalog.');
           await ensureWorkspaceLibrary(getWorkspace().uri.fsPath);
           const snapshot=await sdlcCatalog.syncGitWorkspace(config,token,getWorkspace().uri.fsPath,context.globalStorageUri.fsPath);
-          catalogRemote={sha:snapshot.sha,repository:snapshot.repository};catalogLastError='';catalogLastCheck=new Date().toISOString();
-          await dashboard?.webview.postMessage({type:'architectCatalogAction',success:true,message:`Catalog ${snapshot.version} installed (${snapshot.sha.slice(0,12)}). Existing applications unchanged.`});
+          const selected=await sdlcCatalog.activeRoot(getWorkspace().uri.fsPath);
+          libraryUpdateVersion.verifyActivatedPull(pinned,selected);
+          catalogRemote={sha:pinned.sha,repository:pinned.repository,version:pinned.version};catalogLastError='';catalogLastCheck=new Date().toISOString();
+          await dashboard?.webview.postMessage({type:'architectCatalogAction',success:true,message:`Catalog v${selected.version} verified and installed (${selected.sha?.slice(0,12)||'offline'}). Existing applications unchanged.`});
           await refreshDashboard();
         }finally{catalogBusy=false;await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});}
         await refreshDashboard();break;
@@ -6002,12 +6005,17 @@ async function handleDashboardMessage(msg){
           const token=await catalogToken(config,{interactive:true});
           if(!getWorkspace())throw Error('Open a workspace before pulling the SDLC Catalog.');
           await ensureWorkspaceLibrary(getWorkspace().uri.fsPath);
+          const pinned=await sdlcCatalog.remoteVersion(config,token);
           const snapshot=await sdlcCatalog.syncGitWorkspace(config,token,getWorkspace().uri.fsPath,context.globalStorageUri.fsPath);
           const selected=await sdlcCatalog.activeRoot(getWorkspace().uri.fsPath);
-          catalogRemote={sha:snapshot.sha,repository:snapshot.repository,version:snapshot.version};catalogLastError='';catalogLastCheck=new Date().toISOString();
+          // Do not say "Updated" until the selected workspace matches its
+          // expected GitHub main commit and validated manifest version.
+          libraryUpdateVersion.verifyActivatedPull(pinned,selected);
+          if(!selected.offline&&snapshot.sha!==selected.sha)throw Error('Library checkout changed after pulling GitHub main; refresh and retry.');
+          catalogRemote={sha:pinned.sha,repository:pinned.repository,version:pinned.version};catalogLastError='';catalogLastCheck=new Date().toISOString();
           const message=selected.offline?
-            'GitHub main v'+snapshot.version+' was verified, but newer ZIP v'+selected.version+' remains active.':
-            'Updated .atgv/sdlc-catalog from GitHub main ('+snapshot.sha.slice(0,12)+'): '+snapshot.roleCount+' roles and '+snapshot.stackCount+' tech stacks.';
+            'GitHub main v'+pinned.version+' was verified, but newer ZIP v'+selected.version+' remains active.':
+            'Installed Library v'+selected.version+' from GitHub main ('+selected.sha.slice(0,12)+'): '+snapshot.roleCount+' roles and '+snapshot.stackCount+' tech stacks.';
           await dashboard?.webview.postMessage({type:'catalogAction',action:'pull',success:true,message});
           if(activeProject&&getWorkspace()){
             const available=await sdlcCatalog.designFrameworkAvailability(getWorkspace().uri.fsPath);
