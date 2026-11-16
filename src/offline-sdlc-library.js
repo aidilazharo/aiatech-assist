@@ -107,8 +107,12 @@ async function importZip({file,workspace,repositoryUrl}){
  if(path.extname(file).toLowerCase()!=='.zip')throw Error('Choose a .zip SDLC Library archive.');
  const stat=await fs.lstat(file);
  if(!stat.isFile()||stat.isSymbolicLink()||stat.size>MAX_ZIP)throw Error('Invalid or oversized SDLC Library ZIP.');
- if(await imported(workspace,repositoryUrl))throw Error('A verified offline Library ZIP is already installed. It will be removed automatically after GitHub recovery.');
+ const existing=await imported(workspace,repositoryUrl);
  const data=await fs.readFile(file),archive=readArchive(data),parent=path.join(workspace,'.atgv');
+ if(existing?.archiveHash===hash(data))return {...existing,unchanged:true};
+ // Refuse to replace an offline ZIP bound to a different repository.
+ const priorState=await fs.readFile(path.join(base(workspace),'state.json'),'utf8').catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
+ if(priorState&&!existing)throw Error('An offline Library ZIP for a different GitHub repository is installed. Preserve or export it before changing libraries.');
  const dirStat=await fs.lstat(parent).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
  if(dirStat&&(!dirStat.isDirectory()||dirStat.isSymbolicLink()))throw Error('Unsafe ATGV workspace directory.');
  await fs.mkdir(parent,{recursive:true});
@@ -124,7 +128,16 @@ async function importZip({file,workspace,repositoryUrl}){
    version:archive.info.version,roles:archive.info.roles,techStacks:archive.info.techStacks,
    workflows:archive.info.workflows,templates:archive.info.templates,assets,installedAt:new Date().toISOString()};
   await fs.writeFile(path.join(staging,'state.json'),JSON.stringify(state,null,2)+'\n',{flag:'wx',mode:0o600});
-  await fs.rename(staging,target);return {...state,root:path.join(target,'files'),roleCount:state.roles.length,stackCount:state.techStacks.length};
+  if(existing){
+   // Preserve the old, validated installation until the replacement has been staged.
+   const backup=path.join(parent,'.offline-sdlc-backup-'+crypto.randomUUID());
+   await fs.rename(target,backup);
+   try{await fs.rename(staging,target);}
+   catch(error){await fs.rename(backup,target);throw error;}
+   // Backup is only an unchanged, verified import. Failure to remove never corrupts the new one.
+   await fs.rm(backup,{recursive:true,force:true}).catch(()=>{});
+  }else await fs.rename(staging,target);
+  return {...state,root:path.join(target,'files'),roleCount:state.roles.length,stackCount:state.techStacks.length};
  }finally{await fs.rm(staging,{recursive:true,force:true}).catch(()=>{});}
 }
 async function removeAfterVerifiedGit(workspace,repositoryUrl){

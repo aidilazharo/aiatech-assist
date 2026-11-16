@@ -25,7 +25,7 @@ test('each ATGV Start internal reopen reloads webview HTML, not just reveals the
   tree:{refresh:()=>{}},startupSequence:0,startupScan:null,
   html:()=>`<html>ATGV fresh ${++serial}</html>`,
   refreshDashboard:async()=>events.push(['refresh']),
-  finishManualProjectDiscovery:async seq=>events.push(['manual-list',seq]),
+  finishManualProjectDiscovery:async seq=>{events.push(['manual-list',seq]);events.push(['refresh']);},
   startupIsComplete:()=>true,startupSessionVerified:false,startupVerifiedSignature:'',
   report:()=>{}
  };

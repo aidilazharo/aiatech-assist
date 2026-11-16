@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.3.68';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.3.70';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -107,6 +107,8 @@ function html(webview,{resumeLibrary=false}={}){
       <div id="startupComputerCard" class="atgv-startup-card">
        <div class="atgv-startup-section-title"><h3>Technology stack prerequisites</h3><button id="startupRefresh" type="button" class="secondary" aria-label="Refresh computer prerequisites" title="Refresh computer prerequisites">↻ Refresh</button></div>
        <p id="startupToolMessage" class="muted" role="status" aria-live="polite">Checking installed runtimes and command-line tools…</p>
+       <div class="atgv-tool-scan-status" role="status" aria-live="polite"><span id="startupScanToolName">Scanning prerequisites…</span><strong id="startupScanToolPercent">0%</strong></div>
+       <div id="startupScanToolTrack" class="workspace-search-track" role="progressbar" aria-label="Technology stack prerequisites scan" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="startupScanToolFill" class="workspace-search-fill"></div></div>
        <div id="startupStackGrid" class="atgv-startup-stack-grid"></div>
        <p class="muted">Select a stack to inspect its components. Install missing tools individually, then Refresh to check them. These checks confirm host prerequisites, not a completed application build.</p>
        <p id="startupInstallFeedback" class="atgv-startup-install-feedback muted" role="status" aria-live="polite"></p>
@@ -131,7 +133,7 @@ function html(webview,{resumeLibrary=false}={}){
       <div class="gate-search-bar"><input id="gateQuery" type="search" aria-label="Search projects" placeholder="Search Confluence spaces or local projects…"><button type="button" id="gateSearch">Search</button><button id="gateManual" class="secondary" type="button">+ New Project</button></div>
       <p id="gateSearchMessage" class="muted" role="status" aria-live="polite"></p>
       <div id="workspaceSearch" class="workspace-search" role="status" aria-live="polite"><div class="workspace-search-row"><span class="gate-spinner" aria-hidden="true"></span><strong id="workspaceSearchTitle">Searching the current workspace…</strong><span id="workspaceSearchPercent">0%</span></div><div id="workspaceSearchMessage" class="workspace-search-message">Looking for existing project information.</div><div class="workspace-search-track" role="progressbar" aria-label="Project search and load progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="workspaceSearchTrack"><div id="workspaceSearchFill" class="workspace-search-fill"></div></div></div>
-      <div id="gateProgress" class="gate-progress hidden" role="status" aria-live="polite"><span class="gate-spinner" aria-hidden="true"></span><span id="gateProgressText">Checking connections…</span></div>
+      <div id="gateProgress" class="gate-progress hidden" role="status" aria-live="polite"><div class="gate-project-progress-content"><div class="gate-project-progress-heading"><span class="gate-spinner" aria-hidden="true"></span><span id="gateProgressText">Checking connections…</span><strong id="gateOpenPercent">0%</strong></div><div id="gateOpenTrack" class="workspace-search-track" role="progressbar" aria-label="Opening selected ATGV project" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="gateOpenFill" class="workspace-search-fill"></div></div></div></div>
        <p id="gateOpeningError" class="error hidden" role="alert" aria-live="assertive"></p><div id="gateRecovery" class="gate-actions hidden"><button id="gateOffline" type="button" class="secondary">Open Local Workspace</button></div>
       <div id="gateRecentSection" class="hidden"><div class="gate-local-header"><h2>Recent Projects</h2></div><div id="gateRecent" class="gate-list"></div></div>
       <div id="gateRemoteSection" class="hidden"><div class="gate-local-header"><h2>Confluence Spaces</h2><span id="gateResultsCount" class="muted"></span></div><div id="gateRemote" class="gate-list"></div></div>
