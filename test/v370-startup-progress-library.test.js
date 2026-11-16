@@ -54,7 +54,7 @@ test('second ZIP load is idempotent; a newer archive replaces only verified prev
 });
 test('semantic library versions compare numerically and prereleases are ordered',()=>{
  assert.ok(offline.compareVersions('1.1.15','1.1.9')>0);
- assert.ok(offline.compareVersions('1.2.0','1.11.99')>0);
+ assert.ok(offline.compareVersions('1.12.0','1.11.99')>0);
  assert.ok(offline.compareVersions('1.1.15','1.1.15-rc.2')>0);
  assert.ok(offline.compareVersions('1.1.15-rc.10','1.1.15-rc.2')>0);
  assert.equal(offline.compareVersions('1.1.15+build.1','1.1.15+build.2'),0);
