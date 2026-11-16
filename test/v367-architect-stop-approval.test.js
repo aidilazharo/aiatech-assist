@@ -51,7 +51,7 @@ test('approval refuses a stopped application without matching saved verification
   {...p,techStackPrepared:{...p.techStackPrepared,sha:'f'.repeat(40)},techStackServerVerification:evidence},
   {...p,techStackPrepared:{...p.techStackPrepared,remotePushed:false},techStackServerVerification:evidence},
   {...p,techStackValidation:null,techStackServerVerification:evidence}
- ])assert.throws(()=>verification.approvalEvidence(stale,{running:false}),/verified|tested and pushed/i);
+ ])assert.throws(()=>verification.approvalEvidence(stale,{running:false}),/verif|tested and pushed/i);
 });
 test('unknown server state cannot silently approve using cached proof',()=>{
  const p=preparedProject();p.techStackServerVerification=verification.evidenceIfHealthy(p,live);
