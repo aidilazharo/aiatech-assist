@@ -52,6 +52,58 @@ test('second ZIP load is idempotent; a newer archive replaces only verified prev
  const backups=(await fs.readdir(path.join(workspace,'.atgv'))).filter(x=>x.startsWith('.offline-sdlc-backup-'));
  assert.equal(backups.length,0);
 });
+test('semantic library versions compare numerically and prereleases are ordered',()=>{
+ assert.ok(offline.compareVersions('1.1.15','1.1.9')>0);
+ assert.ok(offline.compareVersions('1.2.0','1.11.99')>0);
+ assert.ok(offline.compareVersions('1.1.15','1.1.15-rc.2')>0);
+ assert.ok(offline.compareVersions('1.1.15-rc.10','1.1.15-rc.2')>0);
+ assert.equal(offline.compareVersions('1.1.15+build.1','1.1.15+build.2'),0);
+ assert.throws(()=>offline.compareVersions('latest','1.1.15'),/Invalid SDLC Library/);
+});
+test('ZIP importer does not downgrade a newer previously installed ZIP',async t=>{
+ const workspace=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-v372-no-downgrade-'));
+ t.after(()=>fs.rm(workspace,{recursive:true,force:true}));
+ const file=path.join(workspace,'source.zip');
+ await fs.writeFile(file,zip(files('1.1.16','# New Developer\\n')));
+ await offline.importZip({file,workspace,repositoryUrl:repo});
+ await fs.writeFile(file,zip(files('1.1.9','# Older Developer\\n')));
+ const result=await offline.importZip({file,workspace,repositoryUrl:repo});
+ assert.equal(result.version,'1.1.16');
+ assert.equal(result.unchanged,true);
+ assert.match(await catalog.activeFile(workspace,'roles/software-developer/SKILL.md'),/New Developer/);
+});
+test('ZIP importer prefers a verified Git checkout for equal or higher versions',async t=>{
+ const workspace=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-v372-git-preferred-'));
+ t.after(()=>fs.rm(workspace,{recursive:true,force:true}));
+ const file=path.join(workspace,'source.zip');
+ await fs.writeFile(file,zip(files('1.1.15','# ZIP Developer\\n')));
+ const original=catalog.gitInstalled;
+ try{
+  catalog.gitInstalled=async()=>({sha:'a'.repeat(40),version:'1.1.16',checkout:path.join(workspace,'verified-git'),repository:'aiamalaysia/test-sdlc-library',roleCount:1,stackCount:1});
+  const selected=await offline.importZip({file,workspace,repositoryUrl:repo});
+  assert.equal(selected.version,'1.1.16');
+  assert.equal(selected.selectedSource,'github');
+  assert.equal(await offline.imported(workspace,repo),null);
+ }finally{catalog.gitInstalled=original;}
+});
+test('newer ZIP survives a verified older Git checkout',async t=>{
+ const workspace=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-v372-zip-preserved-'));
+ t.after(()=>fs.rm(workspace,{recursive:true,force:true}));
+ const file=path.join(workspace,'source.zip');
+ await fs.writeFile(file,zip(files('1.1.16','# Newer ZIP\\n')));
+ await offline.importZip({file,workspace,repositoryUrl:repo});
+ const original=catalog.gitInstalled;
+ try{
+  catalog.gitInstalled=async()=>({sha:'a'.repeat(40),version:'1.1.15',checkout:'/verified-git'});
+  assert.equal(await offline.removeAfterVerifiedGit(workspace,repo),false);
+  assert.equal((await catalog.activeRoot(workspace)).version,'1.1.16');
+ }finally{catalog.gitInstalled=original;}
+});
+test('ZIP VERSION and catalog.json must be consistent before activation',()=>{
+ const fixtureFiles=files('1.1.16','# Contract\\n');
+ fixtureFiles['tech-stacks-skills-source/VERSION']='1.1.15\\n';
+ assert.throws(()=>offline.readArchive(zip(fixtureFiles)),/VERSION and catalog.json version must match/);
+});
 test('prerequisite progress events reflect checked tools and all five stacks',async()=>{
  const events=[];
  const r=await readiness.check({onProgress:p=>events.push(p),runner:async()=>({stdout:'v30.0.0',stderr:''})});
