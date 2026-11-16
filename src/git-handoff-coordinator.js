@@ -15,10 +15,24 @@ async function publishApprovedStack({root,stackId,generation=1,sha}){
  checkSha(sha);if(!/^[a-z][a-z0-9-]{0,48}$/.test(stackId)||!Number.isInteger(generation)||generation<0||generation>9999)throw Error('Invalid approved technology stack.');
  const repo=await assertRepo(root),ref=`tech-stack/${stackId}-v${generation}`;
  if(await git(repo,'cat-file','-t',sha)!=='commit')throw Error('Approved stack SHA is not a local commit.');
- const existing=await remoteSha(repo,ref);if(existing&&existing!==sha)throw Error('Approved stack branch changed remotely. Do not overwrite it.');
- if(!existing)await git(repo,'push','origin',sha+':refs/heads/'+ref);
- if(await remoteSha(repo,ref)!==sha)throw Error('Remote approved stack SHA could not be verified.');
- return {branch:ref,sha,remoteVerified:true,reused:!!existing};
+ const existing=await remoteSha(repo,ref);
+ // A previous stack generation may already own the conventional branch.
+ // Never update or force-push it. Bind this approved commit to a unique,
+ // deterministic revision-pinned alias instead so retries are idempotent.
+ const resolved=existing&&existing!==sha?ref+'-'+sha.slice(0,12):ref;
+ const remoteBefore=resolved===ref?existing:await remoteSha(repo,resolved);
+ if(remoteBefore&&remoteBefore!==sha)
+  throw Error('The revision-pinned approved stack branch '+resolved+' exists at another commit. No remote branches were overwritten.');
+ if(!remoteBefore){
+  try{await git(repo,'push','origin',sha+':refs/heads/'+resolved);}
+  catch(error){
+   // A racing publisher may have created the exact same branch. Adopt it
+   // only after verifying the remote SHA, otherwise preserve both branches.
+   if(await remoteSha(repo,resolved)!==sha)throw error;
+  }
+ }
+ if(await remoteSha(repo,resolved)!==sha)throw Error('Remote approved stack SHA could not be verified.');
+ return {branch:resolved,sha,remoteVerified:true,reused:!!remoteBefore,renamed:resolved!==ref,previousBranch:resolved!==ref?ref:null};
 }
 async function approvedBase(root,sha){
  checkSha(sha);const repo=await assertRepo(root);
