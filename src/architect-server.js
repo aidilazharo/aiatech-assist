@@ -151,7 +151,7 @@ async function stopProjectManaged({root,driver=developer}={}){
   if(!entry.running)break;
   const cwd=path.resolve(entry.cwd||'');
   if(!own(cwd,resolved)&&!own(cwd,previewParent))
-   throw Error('An ATGV-managed server for a different project is running. Reset will not stop or modify another project.');
+   break; // Another project's managed server must stay untouched.
   await driver.stopLocal();
   stopped++;
   if(driver.localLogs().running)
