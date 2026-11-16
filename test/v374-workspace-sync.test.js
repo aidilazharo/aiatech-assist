@@ -119,6 +119,7 @@ test('sync copies real tracked files, skips release workflows and creates a revi
  };
  const result=await sync.sync({sourceUrl:'https://github.com/Acme/repo-a',destinationUrl:'https://github.com/Acme/repo-b',destinationFolder:target,sourcePat:'ghp_'+'s'.repeat(40),destPat:'ghp_'+'d'.repeat(40),runner});
  assert.equal(result.prUrl,'https://github.com/Acme/repo-b/pull/17');
+ await assert.rejects(()=>sync.sync({sourceUrl:'https://github.com/Acme/repo-a',destinationUrl:'https://github.com/Acme/wrong',destinationFolder:target,sourcePat:'ghp_'+'s'.repeat(40),destPat:'ghp_'+'d'.repeat(40),runner}),/Repo B URL differs/);
  assert.equal(result.sourceSha,sourceSha);
  assert.equal(result.base,'main');
  assert.equal(result.fileCount,2);
@@ -133,9 +134,9 @@ test('sync copies real tracked files, skips release workflows and creates a revi
   assert.ok(prBody.includes(field),field);
 });
 
-test('Repo Sync rejects insufficient PATs and destination URL mismatches before any remote write',async()=>{
+test('Repo Sync protects PATs in subprocess environment variables',async()=>{
  assert.throws(()=>sync.patEnvironment('short'),/Personal Access Token/);
- assert.throws(()=>sync.patEnvironment('x'.repeat(30)+'\\n'),/Personal Access Token/);
+ assert.throws(()=>sync.patEnvironment('x'.repeat(30)+String.fromCharCode(10)),/Personal Access Token/);
  const env=sync.patEnvironment('ghp_'+'s'.repeat(40),{githubCli:true});
  assert.ok(env.GIT_CONFIG_VALUE_0.startsWith('AUTHORIZATION: basic '));
  assert.ok(env.GH_TOKEN.startsWith('ghp_'));
