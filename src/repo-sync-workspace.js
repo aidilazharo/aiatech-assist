@@ -47,7 +47,7 @@ ol{line-height:1.85;padding-left:20px}
 </section>
 <section class="card"><h2>2. Destination · Repo B</h2>
 <p class="muted">Use a Destination PAT with repository write permission. Select a clean Repo B Git folder outside your current ATGV project/workspace. Both PATs are stored in VS Code SecretStorage, not this form.</p>
-<label for="destinationRepo">Destination GitHub URL (optional; verifies local origin)</label><input id="destinationRepo" type="url" placeholder="https://github.com/OWNER/repo-b" autocomplete="off" spellcheck="false">
+<label for="destinationRepo">Destination GitHub URL (optional; verifies local origin)</label><input id="destinationRepo" type="url" required placeholder="https://github.com/OWNER/repo-b" autocomplete="off" spellcheck="false">
 <label>Local Repo B Git root (must be outside ATGV workspace)</label><div class="folder"><button id="selectRepoB" type="button" class="secondary">Choose Repo B folder</button><strong id="destinationLabel">No folder selected</strong></div>
 <label for="baseBranch">PR base branch</label><input id="baseBranch" type="text" maxlength="110" placeholder="GitHub default branch (auto)">
 <p class="muted note">ATGV verifies Repo B origin, fetches its base, then creates or safely reuses sync/&lt;source-repo&gt;/&lt;source-branch&gt;. The original source commit message is reused with provenance trailers.</p>
@@ -143,16 +143,12 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,workspaceRoot=''
      return;
     }
     const sourceCredentials=await readPat('Source',source);
-    // Repo B PAT is keyed by the verified local origin, not a user supplied
-    // untrusted arbitrary destination label.
-    const {execFileSync}=require('node:child_process');
-    const localOrigin=execFileSync('git',['remote','get-url','origin'],{cwd:selectedFolder,encoding:'utf8',windowsHide:true,timeout:15000}).trim();
-    const localRepo=repoSync.githubUrl(localOrigin,{origin:true});
-    if(expectedDestination&&expectedDestination.name.toLowerCase()!==localRepo.name.toLowerCase())throw Error('Destination GitHub URL must match the selected local repository origin.');
-    const destinationCredentials=await readPat('Destination',localRepo);
+    if(!expectedDestination)throw Error('Enter the destination GitHub repository URL before syncing.');
+    const destinationCredentials=await readPat('Destination',expectedDestination);
     const outcome=await repoSync.sync({
      sourceUrl:source.url,sourceBranch,destinationFolder:selectedFolder,copyScope:scope,baseBranch:base,
      sourcePat:sourceCredentials.token,destPat:destinationCredentials.token,workspaceRoot,
+     destinationUrl:expectedDestination.url,
      describePr,onProgress:event=>post({type:'repoSyncProgress',stage:event.stage,message:event.message})
     });
     createdPr=outcome.prUrl||'';
