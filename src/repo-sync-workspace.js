@@ -3,6 +3,7 @@
 const crypto=require('node:crypto');
 const repoSync=require('./repo-sync-pr');
 const repoCredentials=require('./repo-sync-credentials');
+const SAVED_URL_KEYS=Object.freeze({Source:'atgvAssist.repoSync.lastSourceUrl',Destination:'atgvAssist.repoSync.lastDestinationUrl'});
 let panel=null;
 function escapeHtml(value){return String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));}
 function workspaceHtml({nonce,version,cspSource}){
@@ -52,17 +53,17 @@ ol{line-height:1.85;padding-left:20px}
 <p class="muted note">A dot copies all eligible tracked files. Secrets, Git internals, generated dependencies and release workflows are excluded.</p>
 </section>
 <section class="card"><h2>2. Destination · Repo B</h2>
-<p class="muted">Paste a GitHub HTTPS URL with username:PAT (write access). Credentials are removed from the form after testing. Choose a clean Repo B Git folder outside your current ATGV workspace.</p>
+<p class="muted">Paste a GitHub HTTPS URL with username:PAT (write access). Credentials are removed from the form after testing. Choose an existing Repo B Git checkout or an empty folder outside ATGV. ATGV clones Repo B into an empty folder.</p>
 <label for="destinationRepo">Destination GitHub URL with PAT</label><input id="destinationRepo" type="password" required placeholder="https://USERNAME:TOKEN@github.com/OWNER/repo-b" autocomplete="off" spellcheck="false">
 <div class="connection-action"><button id="testDestination" type="button" class="secondary">Test Connection</button><span id="destinationConnection" class="connection-status" role="status" aria-live="polite">Not tested</span></div>
-<label>Local Repo B Git root (must be outside ATGV workspace)</label><div class="folder"><button id="selectRepoB" type="button" class="secondary">Choose Repo B folder</button><strong id="destinationLabel">No folder selected</strong></div>
+<label>Local Repo B Git root or empty folder (outside ATGV workspace)</label><div class="folder"><button id="selectRepoB" type="button" class="secondary">Choose Repo B folder</button><strong id="destinationLabel">No folder selected</strong></div>
 <label for="baseBranch">PR base branch</label><input id="baseBranch" type="text" maxlength="110" placeholder="GitHub default branch (auto)">
 <p class="muted note">ATGV clones Repo A to a temporary folder. AI reads verified source metadata and suggests a safe Repo B sync branch, commit message and PR details. The copy is staged with Git, committed and published only after validation.</p>
 </section>
 <section class="card full"><h2>3. Publish pull request</h2>
 <ol class="muted"><li>Test Repo A read access and Repo B write access with independent PATs</li><li>Clone Repo A to a temporary folder and read safe source metadata for AI planning</li><li>Create/reuse an AI-named review branch in Repo B, copy eligible files and run git add</li><li>Commit with AI-generated message, push and create PR with AI-written details</li></ol>
 <div class="actions"><button id="createPr" type="submit">Sync Repo A → Repo B · Push & Create PR</button><button id="openPr" type="button" class="secondary" hidden disabled>Open Created PR</button></div>
-<div id="syncStatus" class="status" role="status" aria-live="polite" data-state="ready">Paste username:PAT URLs, test both connections and select an external Repo B Git folder. Git is required; pull requests use GitHub HTTPS API with the Destination PAT. GitHub CLI (gh) is not needed.</div>
+<div id="syncStatus" class="status" role="status" aria-live="polite" data-state="ready">Paste username:PAT URLs, test both connections and select an existing Repo B checkout or an empty external folder. Git is required; pull requests use GitHub HTTPS API with the Destination PAT. GitHub CLI (gh) is not needed.</div>
 </section></div></form>
 <p class="muted note">Repo B-only files and release workflows are preserved. The tool never merges the PR automatically. Review and test the changes before merging.</p>
 </main>
@@ -111,6 +112,16 @@ get('repoSyncForm').addEventListener('submit',e=>{
 get('openPr').addEventListener('click',()=>{if(createdPr)vscode.postMessage({command:'openCreatedPr'});});
 window.addEventListener('message',e=>{
  const data=e.data||{};
+ if(data.type==='repoSyncSaved'){
+  const id=data.kind==='Source'?'sourceUrl':'destinationRepo';
+  if(data.safeUrl)get(id).value=String(data.safeUrl);
+  const node=connectionNode(data.kind);
+  node.textContent=data.credentialSaved
+   ?'Saved · '+String(data.repo||'repository')+' · PAT available in VS Code SecretStorage'
+   :'Saved · '+String(data.repo||'repository')+' · PAT required';
+  // A saved credential is not proof of a currently live connection.
+  node.dataset.state='ready';
+ }
  if(data.type==='repoBSelected'){folder=String(data.folder||'');get('destinationLabel').textContent=folder||'No folder selected';buttons();}
  if(data.type==='repoSyncProgress')show(data.message||'Synchronising…');
  if(data.type==='repoConnectionResult'){
@@ -122,15 +133,31 @@ window.addEventListener('message',e=>{
  if(data.type==='repoSyncResult'){busy=false;createdPr=data.success?String(data.prUrl||''):'';buttons();show(data.message||'Sync finished.',data.success?'success':'error');}
 });
 buttons();
+vscode.postMessage({command:'getRepoSyncSaved'});
 </script></body></html>`;
  return html.replaceAll('__CSP__',escapeHtml(csp).replaceAll('&#39;',"'")).replaceAll('__NONCE__',escapeHtml(nonce)).replaceAll('__VERSION__',escapeHtml(version));
 }
-function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,workspaceRoot='',describePr=async()=>'',planSync=async()=>null,testConnection=repoCredentials.verifyConnection}={}){
+function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null,workspaceRoot='',describePr=async()=>'',planSync=async()=>null,testConnection=repoCredentials.verifyConnection}={}){
  if(panel){panel.reveal();return panel;}
  const current=vscode.window.createWebviewPanel('atgvAssist.workspace','ATGV: Workspace',vscode.ViewColumn.One,{enableScripts:true,retainContextWhenHidden:true});
  panel=current;
  let selectedFolder='',busy=false,createdPr='';
  const patKey=(kind,repo)=>'atgvAssist.repoSync.'+kind+'.'+crypto.createHash('sha256').update(repo.name.toLowerCase()).digest('hex');
+ async function rememberRepo(kind,repo){
+  // Never persist embedded username:PAT URLs. Only credential-free GitHub URLs
+  // are written to VS Code global state; PATs remain in SecretStorage.
+  if(SAVED_URL_KEYS[kind]&&preferences?.update)await preferences.update(SAVED_URL_KEYS[kind],repo.webUrl);
+ }
+ async function restoreRepos(){
+  for(const kind of ['Source','Destination']){
+   const stored=preferences?.get?.(SAVED_URL_KEYS[kind],'');
+   if(!stored)continue;
+   let repo;
+   try{repo=repoCredentials.parseCredentialUrl(String(stored));}catch{continue;}
+   const credentialSaved=!!(await secrets?.get?.(patKey(kind,repo)));
+   await post({type:'repoSyncSaved',kind,safeUrl:repo.webUrl,repo:repo.name,credentialSaved});
+  }
+ }
  async function readPat(kind,repo){
   if(!secrets?.get||!secrets?.store)throw Error('VS Code SecretStorage is required to protect GitHub PATs.');
   const key=patKey(kind,repo),saved=repo.token?null:await secrets.get(key);
@@ -156,10 +183,14 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,workspaceRoot=''
  current.onDidDispose(()=>{if(panel===current)panel=null;});
  current.webview.onDidReceiveMessage(async message=>{
   if(!message||typeof message.command!=='string')return;
+  if(message.command==='getRepoSyncSaved'){
+   try{await restoreRepos();}catch(error){onLog('Repo Sync saved URL restore: '+sanitize(error));}
+   return;
+  }
   if(message.command==='selectRepoB'){
    if(busy)return;
    try{
-    const picked=await vscode.window.showOpenDialog({canSelectFolders:true,canSelectFiles:false,canSelectMany:false,openLabel:'Select Repo B Git root',title:'ATGV Workspace: Select existing local Repo B repository'});
+    const picked=await vscode.window.showOpenDialog({canSelectFolders:true,canSelectFiles:false,canSelectMany:false,openLabel:'Select Repo B Git root',title:'ATGV Workspace: Choose Repo B Git root or an empty folder'});
     if(picked?.[0]){selectedFolder=picked[0].fsPath;await post({type:'repoBSelected',folder:selectedFolder});}
    }catch(error){await post({type:'repoSyncResult',success:false,message:sanitize(error)});}
    return;
@@ -173,6 +204,7 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,workspaceRoot=''
     if(!['Source','Destination'].includes(kind))throw Error('Select Source or Destination.');
     parsed=repoCredentials.parseCredentialUrl(message.url);
     const credentials=await verifiedPat(kind,parsed);token=credentials.token;
+    await rememberRepo(kind,parsed);
     await post({type:'repoConnectionResult',kind,success:true,safeUrl:parsed.webUrl,message:'Connected · '+parsed.name+' · '+(kind==='Source'?'read':'write')+' access verified'});
    }catch(error){
     const reason=sanitize(error,[token,parsed?.token]);onLog('Repo '+String(kind||'')+' connection test: '+reason);
@@ -199,8 +231,10 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,workspaceRoot=''
    if(response!=='Create Sync PR'){await post({type:'repoSyncResult',success:false,message:'Cancelled. No files were changed.'});return;}
    await post({type:'repoSyncProgress',message:'Testing both GitHub PAT permissions…'});
    const sourceCredentials=await verifiedPat('Source',source);sourcePat=sourceCredentials.token;
+   await rememberRepo('Source',source);
    await post({type:'repoConnectionResult',kind:'Source',duringSync:true,success:true,safeUrl:source.webUrl,message:'Connected · '+source.name+' · read access verified'});
    const destinationCredentials=await verifiedPat('Destination',destination);destPat=destinationCredentials.token;
+   await rememberRepo('Destination',destination);
    await post({type:'repoConnectionResult',kind:'Destination',duringSync:true,success:true,safeUrl:destination.webUrl,message:'Connected · '+destination.name+' · write access verified'});
    const outcome=await repoSync.sync({
     sourceUrl:source.url,sourceBranch,destinationFolder:selectedFolder,copyScope:scope,baseBranch:base,
