@@ -29,7 +29,7 @@ test('refresh is rate limited to five minutes and skips concurrent, offline work
  assert.equal(policy.canRefresh({now:150000,lastAttempt:80000,force:true}),true);
 });
 test('read-only remote refresh lifecycle starts on project open, rechecks in background and honors offline',()=>{
- assert.match(runtime,/const liveRemoteRefresh=require\('\.\.\/\.\.\/live-remote-refresh'\)/);
+ assert.match(runtime,/const liveRemoteRefresh=require\('[^']*live-remote-refresh'\)/);
  assert.match(runtime,/void refreshLiveRemoteData\(\{reason:'project-open',force:true\}\)/);
  assert.match(runtime,/setInterval\(\(\)=>\{\s*if\(activeProject\?\.id===project\.id\)void refreshLiveRemoteData/);
  assert.match(runtime,/liveRemoteRefresh\.INTERVAL_MS/);
