@@ -44,6 +44,30 @@ function network({mutate=tree=>tree,treeTruncated=false}={}){
 }
 const configuration={repositoryUrl:'https://github.com/aia/atgv-sdlc-catalog',ref:'v1.2.3',authentication:'token',autoCheck:true};
 
+test('compares pinned GitHub VERSION and catalog.json before choosing a library',async()=>{
+ const route='https://api.github.com/repos/aia/atgv-sdlc-catalog';
+ const read=async(url,options={})=>{
+  assert.ok(url.startsWith(route));assert.ok(!options.method||options.method==='GET');
+  if(url===route)return {full_name:'aia/atgv-sdlc-catalog',private:true};
+  if(url===route+'/commits/main')return {sha:commitSha,commit:{tree:{sha:treeSha}}};
+  const file=url.split('/contents/')[1];
+  const content=file==='VERSION?ref='+commitSha?'1.1.15\n':
+    file==='catalog.json?ref='+commitSha?JSON.stringify({schema:1,version:'1.1.15'}):null;
+  if(content===null)throw Error('Unexpected request '+url);
+  return {type:'file',encoding:'base64',content:Buffer.from(content).toString('base64')};
+ };
+ const config={...configuration,ref:'main'};
+ const current=await catalog.remoteVersion(config,'token',read);
+ assert.equal(current.version,'1.1.15');
+ assert.equal(current.sha,commitSha);
+ const inconsistent=async(url,options)=>{
+  const result=await read(url,options);
+  if(url.includes('/contents/VERSION?'))return {...result,content:Buffer.from('1.1.14\n').toString('base64')};
+  return result;
+ };
+ await assert.rejects(()=>catalog.remoteVersion(config,'token',inconsistent),/VERSION and catalog.json version do not match/);
+});
+
 test('validates central repository and rejects unsafe addresses and refs',()=>{
  assert.deepEqual(catalog.parseRepository('https://github.com/aia/atgv-sdlc-catalog.git'),{owner:'aia',repo:'atgv-sdlc-catalog'});
  for(const value of ['http://github.com/aia/test','https://evil.example/aia/test','https://github.com/aia/test?token=abc','https://github.com/aia/../../evil','https://github.com/aia/.git','https://someone@github.com/aia/test'])assert.throws(()=>catalog.parseRepository(value));
