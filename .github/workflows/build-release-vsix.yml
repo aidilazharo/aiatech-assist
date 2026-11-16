@@ -13,7 +13,7 @@ concurrency:
 jobs:
   build:
     name: Test and package VSIX
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.ATGV_LINUX_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 35
     permissions:
       contents: read
@@ -129,7 +129,7 @@ jobs:
     name: Publish GitHub prerelease
     needs: build
     if: needs.build.outputs.source_ready == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.ATGV_LINUX_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 10
     permissions:
       contents: write
