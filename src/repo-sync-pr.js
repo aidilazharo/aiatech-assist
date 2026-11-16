@@ -138,7 +138,32 @@ async function trackedFiles(source,scope){
  if(!valid.length)throw Error('No regular eligible files in selected scope.');
  return valid;
 }
-async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.',sourceBranch='main',baseBranch='',sourcePat,destPat,workspaceRoot='',onProgress=()=>{},runner=run,describePr=async()=>''}){
+function cleanAiField(input,limit=220){
+ const str=String(input||'').trim().replace(/[\x00-\x1f\x7f]/g,' ');
+ return str.length<=limit?str:str.slice(0,limit).trim();
+}
+function aiSyncPlan(raw,source){
+ if(!raw||typeof raw!=='object'||Array.isArray(raw))return {};
+ const prefix='sync/'+source.repo.toLowerCase().replace(/[^a-z0-9_-]/g,'-').slice(0,28)+'/';
+ let branch=cleanAiField(raw.branch,115);
+ // Enforce deterministic Repo A namespace regardless of model output.
+ if(!branch.startsWith(prefix)||!/^[a-z0-9/_-]+$/.test(branch)||branch.includes('..')||branch.includes('//')||branch.endsWith('/'))branch='';
+ if(branch)try{baseName(branch);}catch{branch='';}
+ return {branch,commitMessage:cleanAiField(raw.commitMessage,160),
+  prTitle:cleanAiField(raw.prTitle,140),prDescription:String(raw.prDescription||'').trim().slice(0,1200)};
+}
+async function readSourceFacts({cloned,source,chosenBranch,sha,sourceMessage,files,destination,base}){
+ let project={};
+ if(files.includes('package.json'))try{
+  const pkg=JSON.parse(await fs.readFile(path.join(cloned,'package.json'),'utf8'));
+  project={name:cleanAiField(pkg.name,80),version:cleanAiField(pkg.version,35),description:cleanAiField(pkg.description,180)};
+ }catch{}
+ // Source info: safe metadata only, never PATs, raw code, README text or secrets.
+ return {sourceRepo:source.name,sourceBranch:chosenBranch,sourceSha:sha,
+  sourceCommitMessage:sourceMessage.slice(0,700),project,
+  destinationRepo:destination.name,baseBranch:base,files:files.slice(0,80),fileCount:files.length};
+}
+async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.',sourceBranch='main',baseBranch='',sourcePat,destPat,workspaceRoot='',onProgress=()=>{},runner=run,describePr=async()=>'',planSync=async()=>null}){
  const source=githubUrl(sourceUrl),scope=scopeName(copyScope),chosenBranch=baseName(sourceBranch||'main');
  const sourceEnv=patEnvironment(sourcePat),destinationEnv=patEnvironment(destPat,{githubCli:true});
  const destRoot=await fs.realpath(String(destinationFolder||''));
@@ -168,10 +193,10 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
  const remote=JSON.parse(await runner('gh',['repo','view',destination.name,'--json','nameWithOwner,defaultBranchRef'],{env:destinationEnv}));
  if(remote.nameWithOwner?.toLowerCase()!==destination.name.toLowerCase())throw Error('Repo B GitHub identity differs from local origin.');
  const base=baseName(baseBranch||remote.defaultBranchRef?.name);
- // Never use the original protected branch directly: retain its name under a review namespace.
- const branch=baseName('sync/'+source.repo.toLowerCase().replace(/[^a-z0-9_-]/g,'-').slice(0,28)+'/'+chosenBranch);
- await runner('git',['check-ref-format','--branch',branch],{cwd:destRoot});
- await notify('clone','Reading '+source.name+' / '+chosenBranch+' with source PAT…');
+ // AI selects the review branch only after Repo A is cloned to temporary storage.
+ let branch=baseName('sync/'+source.repo.toLowerCase().replace(/[^a-z0-9_-]/g,'-').slice(0,28)+'/'+chosenBranch);
+ let aiPlan={};
+ await notify('clone','Cloning '+source.name+' / '+chosenBranch+' into a temporary folder…');
  const temp=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-repo-sync-'));
  let files=[],switched=false,pushed=false;
  try{
@@ -182,6 +207,13 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   const sourceMessage=(await runner('git',['log','-1','--pretty=%B'],{cwd:cloned})).trim();
   if(!sourceMessage||sourceMessage.length>12000)throw Error('Repo A commit message is missing or too large.');
   files=await trackedFiles(cloned,scope);
+  const facts=await readSourceFacts({cloned,source,chosenBranch,sha,sourceMessage,files,destination,base});
+  await notify('ai','AI reading verified source repository metadata from the temporary clone…');
+  try{
+   aiPlan=aiSyncPlan(await planSync(facts),source);
+   if(aiPlan.branch)branch=aiPlan.branch;
+  }catch{await notify('ai','AI plan unavailable; using a deterministic review branch and source commit message.');}
+  await runner('git',['check-ref-format','--branch',branch],{cwd:destRoot});
   await notify('preflight',files.length+' tracked files; checking '+destination.name+' / '+base+'…');
   await runner('git',['fetch','origin','+refs/heads/'+base+':refs/remotes/origin/'+base],{cwd:destRoot,timeout:180000,env:destinationEnv});
   const remoteBranch=(await runner('git',['ls-remote','--heads','origin','refs/heads/'+branch],{cwd:destRoot,env:destinationEnv})).trim();
@@ -209,9 +241,13 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
    await fs.mkdir(path.dirname(dest),{recursive:true});
    await fs.copyFile(path.join(cloned,...rel.split('/')),dest);
   }
-  for(let i=0;i<files.length;i+=100)await runner('git',['add','--',...files.slice(i,i+100)],{cwd:destRoot});
+  // Stage as git add . would, then prevent any unexpected file from being committed.
+  await runner('git',['add','-A','--','.'],{cwd:destRoot});
   const staged=await runner('git',['diff','--cached','--name-only','-z'],{cwd:destRoot});
   const changedFiles=staged.split('\0').filter(Boolean);
+  const allowed=new Set(files);
+  if(changedFiles.some(file=>!allowed.has(file)))
+   throw Error('Unexpected files staged outside the approved copy scope. No commit or push was made.');
   if(!changedFiles.length){
    if(!remoteBranch){
     await runner('git',['switch',oldBranch],{cwd:destRoot});
@@ -221,23 +257,23 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
    return {unchanged:true,message:'Repo B already has the same eligible files from Repo A '+chosenBranch+'.',sourceSha:sha,sourceBranch:chosenBranch,fileCount:files.length};
   }
   const details=prDetails({source,destination,sha,scope,base,branch,count:changedFiles.length,changedFiles,sourceBranch:chosenBranch});
-  const commitMessage=sourceMessage+'\n\nATGV-Sync-Source: '+source.name+'\nATGV-Sync-SHA: '+sha;
-  await notify('commit','Committing with Repo A source message: '+sourceMessage.split('\n')[0].slice(0,120));
+  const commitMessage=(aiPlan.commitMessage||sourceMessage)+'\n\nATGV-Sync-Source: '+source.name+'\nATGV-Sync-SHA: '+sha;
+  await notify('commit','Committing staged changes with '+(aiPlan.commitMessage?'AI-generated':'source')+' message…');
   await runner('git',['commit','-m',commitMessage],{cwd:destRoot,timeout:180000});
   await notify('push','Pushing '+branch+' using the destination PAT…');
   await runner('git',['push','--set-upstream','origin',branch],{cwd:destRoot,timeout:180000,env:destinationEnv});
   pushed=true;
   await notify('pr','Preparing a short AI-written PR description…');
-  let summary='';
-  try{summary=String(await describePr({sourceRepo:source.name,sourceBranch:chosenBranch,sourceSha:sha,destinationRepo:destination.name,base,branch,sourceMessage,changedFiles:changedFiles.slice(0,80)})||'').trim().slice(0,1300);}
-  catch(error){await notify('pr','AI summary unavailable; using the verified change details.');}
+  let summary=aiPlan.prDescription||'';
+  if(!summary)try{summary=String(await describePr({sourceRepo:source.name,sourceBranch:chosenBranch,sourceSha:sha,destinationRepo:destination.name,base,branch,sourceMessage,changedFiles:changedFiles.slice(0,80)})||'').trim().slice(0,1300);}
+  catch{await notify('pr','AI PR details unavailable; using verified change metadata.');}
   const body=path.join(temp,'pull-request.md');
   await fs.writeFile(body,(summary?summary+'\n\n': '')+details.body,'utf8');
   await notify('pr','Creating or reusing the review PR for '+branch+'…');
   const openPrs=JSON.parse(await runner('gh',['pr','list','--repo',destination.name,'--head',branch,'--state','open','--json','url'],{cwd:destRoot,env:destinationEnv}));
   let prUrl='';
   if(Array.isArray(openPrs)&&openPrs.length===1)prUrl=String(openPrs[0].url||'');
-  else prUrl=await runner('gh',['pr','create','--repo',destination.name,'--base',base,'--head',branch,'--title',details.title,'--body-file',body],{cwd:destRoot,timeout:180000,env:destinationEnv});
+  else prUrl=await runner('gh',['pr','create','--repo',destination.name,'--base',base,'--head',branch,'--title',aiPlan.prTitle||details.title,'--body-file',body],{cwd:destRoot,timeout:180000,env:destinationEnv});
   if(!/^https:\/\/github\.com\/[^ \r\n]+\/pull\/\d+$/.test(prUrl))throw Error('GitHub CLI did not return a valid pull request URL.');
   return {prUrl,branch,sourceBranch:chosenBranch,sourceSha:sha,sourceRepo:source.name,destinationRepo:destination.name,base,fileCount:changedFiles.length,commitMessage};
  }catch(e){
@@ -245,4 +281,4 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   throw Error(e.message+suffix);
  }finally{await fs.rm(temp,{recursive:true,force:true}).catch(()=>{});}
 }
-module.exports={githubUrl,baseName,scopeName,isAllowedPath,branchName,prDetails,patEnvironment,sync};
+module.exports={githubUrl,baseName,scopeName,isAllowedPath,branchName,prDetails,patEnvironment,aiSyncPlan,readSourceFacts,sync};
