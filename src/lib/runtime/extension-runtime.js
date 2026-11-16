@@ -4420,14 +4420,11 @@ async function handleDashboardMessage(msg){
         if(approved!=='Force Reset Tech Stack'){
           await dashboard?.webview.postMessage({type:'architectStackCancelled',projectId:activeProject.id,message:'Reset cancelled; no changes made.'});break;
         }
-        const logs=developerGit.localLogs();
-        if(logs.running){
-          const cwd=path.resolve(logs.cwd||'');
-          if(cwd===root||cwd.startsWith(root+path.sep)){
-            // Only stop an ATGV-managed preview for the same stack and checkout.
-            await require('../../architect-server').stop({root,stackId:current.techStackId});
-          }
-        }
+        // Stop all ATGV-owned frontend/API processes and preview worktrees for
+        // this project BEFORE any stash, checkout switch or hard reset.
+        architectServerOperationSerial++;
+        const stopped=await require('../../architect-server').stopProjectManaged({root});
+        architectErrorLogs.append(activeProject.id,'reset','Server cleanup: '+stopped.message);
         const result=await service.reset({root,project:current,baseBranch:plan.baseBranch,expectedPlan:plan,force:true,allowFeatureRecovery:true});
         // Preserve old project-level stack snapshots and architecture notes.
         // scaffoldProject will generate fresh snapshots for the next selection.
@@ -4436,7 +4433,8 @@ async function handleDashboardMessage(msg){
         activeProject=updated;
         architectErrorLogs.clear(updated.id,'reset');
         await refreshDashboard();
-        await dashboard?.webview.postMessage({type:'architectStackState',value:{message:'Technology stack force-reset. Checkout is on '+result.baseBranch+'; previous bootstrap branch is preserved. '+(result.preservedWorkBranch?'Development branch '+result.preservedWorkBranch+' and its commits are preserved. ':'')+(result.recoveryStash?'Local changes are recoverable in Git stash '+result.recoveryStash.slice(0,12)+'. ':'')+(result.recovery?'Recovered older bootstrap branch ('+result.recovery+'). ':'')+(archive.archived.length?archive.archived.length+' previous stack record(s) archived. ':'')+'Choose a stack and click Save Stack to generate fresh catalog files on a new branch.'}});
+        await dashboard?.webview.postMessage({type:'architectServerState',projectId:activeProject.id,value:{running:false,message:stopped.message}});
+        await dashboard?.webview.postMessage({type:'architectStackState',value:{message:stopped.message+' Technology stack force-reset. Checkout is on '+result.baseBranch+'; previous bootstrap branch is preserved. '+(result.preservedWorkBranch?'Development branch '+result.preservedWorkBranch+' and its commits are preserved. ':'')+(result.recoveryStash?'Local changes are recoverable in Git stash '+result.recoveryStash.slice(0,12)+'. ':'')+(result.recovery?'Recovered older bootstrap branch ('+result.recovery+'). ':'')+(archive.archived.length?archive.archived.length+' previous stack record(s) archived. ':'')+'Choose a stack and click Save Stack to generate fresh catalog files on a new branch.'}});
         break;
       }
       case 'architectSaveStack':{
@@ -4466,14 +4464,11 @@ async function handleDashboardMessage(msg){
             'The checkout must be clean. ATGV will stop its own app server if running, return to '+plan.baseBranch+', preserve all previous local and remote branches, archive old stack metadata, copy the new skeleton from the GitHub catalog, install dependencies, run tests and the app, and push a new bootstrap branch only after validation succeeds.\n\n'+
             'No existing GitHub branch will be deleted, force-pushed or overwritten. This will execute third-party packages and application code locally. Continue?',{modal:true},action);
           if(proceed!==action){await dashboard?.webview.postMessage({type:'architectStackCancelled',projectId:activeProject.id,message:'Stack switch cancelled. Existing stack, approval and Git branch are unchanged.'});break;}
-          const logs=developerGit.localLogs();
-          if(logs.running){
-            const cwd=path.resolve(logs.cwd||'');
-            if(cwd===root||cwd.startsWith(root+path.sep)){
-              // Never stop a different project's process or an unmanaged port.
-              await require('../../architect-server').stop({root,stackId:oldId});
-            }
-          }
+          // Stack switch is also a reset of the old project revision. Stop
+          // the entire ATGV-managed frontend/API group, including previews.
+          architectServerOperationSerial++;
+          const stopped=await require('../../architect-server').stopProjectManaged({root});
+          architectErrorLogs.append(activeProject.id,'save','Server cleanup: '+stopped.message);
           const result=await resetService.reset({root,project:priorPrepared,baseBranch,expectedPlan:plan});
           const archive=await resetService.archiveProjectStackDocuments(path.join(getWorkspace().uri.fsPath,'projects',current.id),oldId);
           preparedProject=await registry.update(activeProject.id,{...current,techStackId:'',techStackCompanionId:'',techStackPrepared:null,techStackValidation:null,techStackServerVerification:null,techStackApproval:null,techStackGeneration:result.nextGeneration});
@@ -4734,6 +4729,7 @@ async function handleDashboardMessage(msg){
         const confirmation=await uiWarning(`Approve ${proof.stackId}${proof.companionId?' + '+proof.companionId:''} for Developers?\n\nTests, build and HTTP smoke check passed for Git revision ${proof.sha}. Server verification: ${verificationSource==='saved'?'previously verified; application now stopped':'currently running and healthy'}. Approval will publish the exact approved SHA to a GitHub tech-stack branch (no force-push). It does NOT approve a GitHub merge.`,{modal:true},action);
         if(confirmation!==action)break;
         const published=await require('../../git-handoff-coordinator').publishApprovedStack({root,stackId:proof.stackId,generation:Number(project.techStackGeneration||1),sha:proof.sha});
+        if(published.renamed)architectErrorLogs.append(activeProject.id,'approval','Existing remote '+published.previousBranch+' was preserved. Verified SHA-pinned approval branch: '+published.branch);
         const remoteProof={...proof,remoteBranch:published.branch,remoteSha:published.sha,remoteVerified:true};
         const updated=await registry.update(activeProject.id,{...verifiedProject,techStackApproval:remoteProof});activeProject=updated;
         architectErrorLogs.clear(updated.id,'approval');
