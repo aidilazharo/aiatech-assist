@@ -178,23 +178,47 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
  }
  const notify=(stage,message)=>Promise.resolve(onProgress({stage,message}));
  await runner('git',['--version']);
+ // Repo B may be a clean checkout, or an EMPTY folder selected for first-run cloning.
+ let alreadyCloned=true;
+ try {
+  const top=await runner('git',['rev-parse','--show-toplevel'],{cwd:destRoot});
+  if(await fs.realpath(top)!==destRoot)throw Error('Select Repo B Git root, not a nested folder inside a different repository.');
+ } catch(error) {
+  if(!/not a git repository/i.test(String(error?.message||error)))throw error;
+  alreadyCloned=false;
+ }
+ if(!alreadyCloned){
+  if((await fs.readdir(destRoot)).length)throw Error('Selected Repo B folder is not a Git repository and is not empty. Choose an empty folder or an existing Repo B Git root; files will not be overwritten.');
+  if(!destinationUrl)throw Error('Enter and test the Destination GitHub URL before selecting an empty Repo B folder.');
+ }
+ let destination;
+ if(alreadyCloned){
+  const currentOrigin=await runner('git',['remote','get-url','origin'],{cwd:destRoot});
+  if(!/^https:\/\/github\.com\//i.test(currentOrigin))throw Error('Repo B origin must be an HTTPS GitHub URL to authenticate with the Destination PAT.');
+  destination=githubUrl(currentOrigin,{origin:true});
+ }else destination=githubUrl(destinationUrl);
+ if(destinationUrl&&githubUrl(destinationUrl).name.toLowerCase()!==destination.name.toLowerCase())throw Error('Repo B URL differs from selected folder origin; refusing to push.');
+ if(source.name.toLowerCase()===destination.name.toLowerCase())throw Error('Repo A and Repo B must be different repositories.');
+ const remote=await githubApi.getRepository(destination,destPat);
+ if(remote.nameWithOwner?.toLowerCase()!==destination.name.toLowerCase())throw Error('Repo B GitHub identity differs from local origin.');
+ const base=baseName(baseBranch||remote.defaultBranch);
+ if(!alreadyCloned){
+  await notify('destination','Cloning '+destination.name+' / '+base+' into the selected empty Repo B folder…');
+  // Git refuses to clone into a nonempty directory. Do not delete or reset user files.
+  await runner('git',['clone','--quiet','--single-branch','--branch',base,'--',destination.url,'.'],{
+   cwd:destRoot,timeout:180000,env:destinationEnv
+  });
+  await notify('destination','Repo B checkout prepared. Creating the review branch next.');
+ }
  const top=await runner('git',['rev-parse','--show-toplevel'],{cwd:destRoot});
- const canonical=await fs.realpath(top);
- if(canonical!==destRoot)throw Error('Select the Repo B Git root, not a nested folder.');
+ if(await fs.realpath(top)!==destRoot)throw Error('Repo B checkout root changed during verification.');
+ const origin=await runner('git',['remote','get-url','origin'],{cwd:destRoot});
+ if(!/^https:\/\/github\.com\//i.test(origin)||githubUrl(origin,{origin:true}).name.toLowerCase()!==destination.name.toLowerCase())
+  throw Error('Repo B origin does not match the selected Destination GitHub URL.');
  const dirty=await runner('git',['status','--porcelain','--untracked-files=all'],{cwd:destRoot});
  if(dirty)throw Error('Repo B has uncommitted or untracked changes. Commit or stash them first.');
  const oldBranch=await runner('git',['symbolic-ref','--quiet','--short','HEAD'],{cwd:destRoot});
  if(!oldBranch)throw Error('Repo B cannot be in detached HEAD.');
- const origin=await runner('git',['remote','get-url','origin'],{cwd:destRoot});
- const destination=githubUrl(origin,{origin:true});
- if(destinationUrl&&githubUrl(destinationUrl).name.toLowerCase()!==destination.name.toLowerCase())throw Error('Repo B URL differs from selected folder origin; refusing to push.');
- if(!/^https:\/\/github\.com\//i.test(origin))throw Error('Repo B origin must be an HTTPS GitHub URL to authenticate securely with the destination PAT.');
- if(source.name.toLowerCase()===destination.name.toLowerCase())throw Error('Repo A and Repo B must be different repositories.');
- // Read remote identity/default branch directly from GitHub HTTPS API.
- // This works with only Git + independent PATs; no GitHub CLI installation.
- const remote=await githubApi.getRepository(destination,destPat);
- if(remote.nameWithOwner?.toLowerCase()!==destination.name.toLowerCase())throw Error('Repo B GitHub identity differs from local origin.');
- const base=baseName(baseBranch||remote.defaultBranch);
  // AI selects the review branch only after Repo A is cloned to temporary storage.
  let branch=baseName('sync/'+source.repo.toLowerCase().replace(/[^a-z0-9_-]/g,'-').slice(0,28)+'/'+chosenBranch);
  let aiPlan={};
