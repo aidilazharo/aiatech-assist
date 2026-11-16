@@ -196,11 +196,13 @@ async function prepareVendorAssets({syncIfMissing=false}={}){
     try{active=await sdlcCatalog.activeRoot(workspace);}catch{}
     // A fresh install must pull the approved bundle from GitHub rather than
     // depend on previously bundled assets. Once cached, it can work offline.
-    const activeRoot=active?.checkout||active?.root;
+    let activeRoot=active?.checkout||active?.root;
     const hasBundle=activeRoot&&fsSync.existsSync(path.join(activeRoot,...catalogVendorLibraries.MANIFEST.split('/')));
     if(syncIfMissing&&!installedVendorAssets&&!hasBundle&&!active?.offline&&catalogConfig().repositoryUrl){
       const config=catalogConfig(),token=await catalogToken(config,{interactive:false});
-      active=await sdlcCatalog.syncGitWorkspace(config,token,workspace,storageRoot);
+      await sdlcCatalog.syncGitWorkspace(config,token,workspace,storageRoot);
+      active=await sdlcCatalog.activeRoot(workspace);
+      activeRoot=active?.checkout||active?.root;
     }
     // Imported ZIP scripts may run in a webview only when EVERY file matches
     // the trusted, extension-pinned vendor manifest and SHA-256 checksums.
@@ -985,7 +987,7 @@ async function startupStatus(){
  const saved=extensionSettings||{},catalog=catalogConfig();
  const workspace=getWorkspace()?.uri.fsPath;
  let offline=null;
- try{if(workspace)offline=await offlineLibrary.imported(workspace);}catch(e){report('Offline Library startup status: '+e.message);}
+ try{if(workspace){const installed=await sdlcCatalog.activeRoot(workspace);offline=installed.offline?installed:null;}}catch(e){if(!/not activated/.test(e.message))report('Offline Library startup status: '+e.message);}
  return {required:!startupSessionProceedApproved,defaults:startupSetup.DEFAULTS,
   offlineLibrary:offline?{version:offline.version,filename:offline.filename,repository:offline.repository}:null,
   saved:{jiraUrl:saved.jira?.baseUrl||'',confluenceUrl:saved.confluence?.baseUrl||'',email:saved.jira?.email||'',
@@ -5629,21 +5631,24 @@ async function handleDashboardMessage(msg){
           // by the existing trusted catalog adapter. Local user/project overrides
           // are outside this Git checkout and are never overwritten.
           const snapshot=await sdlcCatalog.syncGitWorkspace(config,token,workspace,context.globalStorageUri.fsPath);
+          const selected=await sdlcCatalog.activeRoot(workspace);
           let libraryNotice='', activateEditorAssets=false;
           try{
-            const installed=await catalogVendorLibraries.install({catalogRoot:snapshot.checkout,storageRoot:context.globalStorageUri.fsPath,commit:snapshot.sha});
+            const installed=selected.offline
+              ? await catalogVendorLibraries.installOffline({catalogRoot:selected.root,storageRoot:context.globalStorageUri.fsPath,archiveHash:selected.archiveHash})
+              : await catalogVendorLibraries.install({catalogRoot:selected.checkout||selected.root,storageRoot:context.globalStorageUri.fsPath,commit:selected.sha});
             const changed=webviewVendorDir!==installed.dir||!vendorWebviewReady;
             installedVendorAssets=installed;
             if(changed){activateEditorAssets=true;libraryNotice=' Verified UI libraries installed. Reloading editor.';}vendorLibraryLastError='';
           }catch(e){vendorLibraryLastError=e.message;libraryNotice=' Editor library install failed: '+e.message;report('Library asset sync: '+e.message);}
-          catalogRemote={sha:snapshot.sha,repository:snapshot.repository};catalogLastCheck=new Date().toISOString();
+          catalogRemote={sha:snapshot.sha,repository:snapshot.repository,version:snapshot.version};catalogLastCheck=new Date().toISOString();
           const updated=!before||before.sha!==snapshot.sha;
-          const items=await libraryStudio.listing({root:snapshot.checkout,storage:context.globalStorageUri.fsPath,workspace,repositoryUrl:config.repositoryUrl,query:msg.query,type:msg.category,includeSupporting:false,limit:600});
-          await dashboard?.webview.postMessage({type:'libraryList',...items,catalog:{version:snapshot.version,sha:snapshot.sha,repository:snapshot.repository}});
+          const items=await libraryStudio.listing({root:selected.root||selected.checkout,storage:context.globalStorageUri.fsPath,workspace,repositoryUrl:config.repositoryUrl,query:msg.query,type:msg.category,includeSupporting:false,limit:600});
+          await dashboard?.webview.postMessage({type:'libraryList',...items,catalog:{version:selected.version,sha:selected.sha,repository:selected.repository}});
           let clearSelection=false;
           if(msg.selectedPath){
             try{
-              const item=await libraryStudio.resource({root:snapshot.checkout,storage:context.globalStorageUri.fsPath,workspace,repositoryUrl:config.repositoryUrl,relative:msg.selectedPath,scope:msg.scope});
+              const item=await libraryStudio.resource({root:selected.root||selected.checkout,storage:context.globalStorageUri.fsPath,workspace,repositoryUrl:config.repositoryUrl,relative:msg.selectedPath,scope:msg.scope});
               await dashboard?.webview.postMessage({type:'libraryResource',value:item,notice:'Resource refreshed from the latest verified catalog. Local overrides were preserved.'});
             }catch(e){if(/Resource not found in the verified catalog/.test(e.message))clearSelection=true;else throw e;}
           }
@@ -5651,7 +5656,10 @@ async function handleDashboardMessage(msg){
             const available=await sdlcCatalog.designFrameworkAvailability(workspace);
             await dashboard?.webview.postMessage({type:'uxFrameworkCatalogChanged',projectId:activeProject.id,...available});
           }
-          await dashboard?.webview.postMessage({type:'librarySyncResult',success:true,clearSelection,message:(updated?'Catalog updated to ':'Catalog already current: ')+snapshot.version+' ('+snapshot.sha.slice(0,12)+'). Library refreshed; local overrides preserved.'+libraryNotice});
+          const syncMessage=selected.offline
+            ? 'Kept newer offline ZIP v'+selected.version+'; GitHub main v'+snapshot.version+' is older.'
+            : (updated?'Catalog updated to ':'Catalog already current: ')+snapshot.version+' ('+snapshot.sha.slice(0,12)+').';
+          await dashboard?.webview.postMessage({type:'librarySyncResult',success:true,clearSelection,message:syncMessage+' Library refreshed; local overrides preserved.'+libraryNotice});
           if(activateEditorAssets&&dashboard){vendorBootRecoveryCount=0;vendorWebviewReady=false;
             // Rebuild the existing webview only AFTER the local cache is verified.
             // Its original HTML/CSP and localResourceRoots do not update when the
@@ -5965,8 +5973,12 @@ async function handleDashboardMessage(msg){
           if(!getWorkspace())throw Error('Open a workspace before pulling the SDLC Catalog.');
           await ensureWorkspaceLibrary(getWorkspace().uri.fsPath);
           const snapshot=await sdlcCatalog.syncGitWorkspace(config,token,getWorkspace().uri.fsPath,context.globalStorageUri.fsPath);
-          catalogRemote={sha:snapshot.sha,repository:snapshot.repository};catalogLastError='';catalogLastCheck=new Date().toISOString();
-          await dashboard?.webview.postMessage({type:'catalogAction',action:'pull',success:true,message:`Updated .atgv/sdlc-catalog from GitHub main (${snapshot.sha.slice(0,12)}): ${snapshot.roleCount} roles and ${snapshot.stackCount} tech stacks.`});
+          const selected=await sdlcCatalog.activeRoot(getWorkspace().uri.fsPath);
+          catalogRemote={sha:snapshot.sha,repository:snapshot.repository,version:snapshot.version};catalogLastError='';catalogLastCheck=new Date().toISOString();
+          const message=selected.offline?
+            'GitHub main v'+snapshot.version+' was verified, but newer ZIP v'+selected.version+' remains active.':
+            'Updated .atgv/sdlc-catalog from GitHub main ('+snapshot.sha.slice(0,12)+'): '+snapshot.roleCount+' roles and '+snapshot.stackCount+' tech stacks.';
+          await dashboard?.webview.postMessage({type:'catalogAction',action:'pull',success:true,message});
           if(activeProject&&getWorkspace()){
             const available=await sdlcCatalog.designFrameworkAvailability(getWorkspace().uri.fsPath);
             await dashboard?.webview.postMessage({type:'uxFrameworkCatalogChanged',projectId:activeProject.id,...available});
