@@ -95,6 +95,7 @@ const uxFrameworkKey=(projectId,key)=>'atgvAssist.uxDesignFramework.'+projectId+
 const uxDesignReferences=require('../../ux-design-references');
 const developerCompletion=require('../../developer-delivery-completion');
 const sdlcCatalog=require('../../github-sdlc-catalog');
+const offlineLibrary=require('../../offline-sdlc-library');
 const libraryStudio=require('../../sdlc-library-studio');
 const imageBenchmark=require('../../agent-image-test');
 const agentVisionTest=require('../../agent-vision-test');
@@ -200,7 +201,8 @@ async function prepareVendorAssets({syncIfMissing=false}={}){
       const config=catalogConfig(),token=await catalogToken(config,{interactive:false});
       active=await sdlcCatalog.syncGitWorkspace(config,token,workspace,storageRoot);
     }
-    if(active){
+    // Imported ZIP assets are reference data. Never activate unverified webview JS bundles from ZIP.
+    if(active&&!active.offline){
       const result=await catalogVendorLibraries.install({catalogRoot:active.checkout||active.root,storageRoot,commit:active.sha});
       installedVendorAssets=result;vendorLibraryLastError='';
     }
@@ -318,7 +320,8 @@ async function roleSkillPrompt(roleId) {
 async function catalogUiState(){
  const config=catalogConfig();let installed=null,roleSkillDescriptions={},roleSkillIdentifiers={},roleSkillOptions={},roleSkillSelections={};
  try{installed=(getWorkspace()?await sdlcCatalog.gitInstalled(getWorkspace().uri.fsPath,config):await sdlcCatalog.cached(config,context.globalStorageUri.fsPath));}catch(e){report('SDLC Catalog checkout: '+e.message);}
- if(installed?.sha&&/^[a-f0-9]{40}$/.test(installed.sha)&&Array.isArray(installed.roles)&&getWorkspace()){
+ if(!installed&&getWorkspace())try{installed=await offlineLibrary.imported(getWorkspace().uri.fsPath,config.repositoryUrl);}catch(e){report('Offline SDLC Catalog: '+e.message);}
+ if((installed?.offline||installed?.sha&&/^[a-f0-9]{40}$/.test(installed.sha))&&Array.isArray(installed.roles)&&getWorkspace()){
    for(const id of installed.roles.slice(0,100)){
      if(!/^[a-z][a-z0-9-]{0,79}$/.test(id))continue;
      try {
@@ -344,6 +347,14 @@ async function catalogCheck({interactive=false}={}){
     const token=await catalogToken(config,{interactive});
     const info=await sdlcCatalog.remoteInfo(config,token);
     catalogRemote={sha:info.sha,repository:info.repository,private:info.private};catalogLastCheck=new Date().toISOString();
+    const workspace=getWorkspace()?.uri.fsPath;
+    // Only a successful, verified Git checkout replaces and removes an offline import.
+    if(workspace&&await offlineLibrary.imported(workspace,config.repositoryUrl)){
+      await ensureWorkspaceLibrary(workspace);
+      const synced=await sdlcCatalog.syncGitWorkspace(config,token,workspace,context.globalStorageUri.fsPath);
+      if(synced.offlineCleanupError)report('Offline Library cleanup: '+synced.offlineCleanupError);
+      else report('Offline Library replaced by verified GitHub main ('+synced.sha.slice(0,12)+').');
+    }
   }catch(error){catalogLastError=error.message;report('SDLC Catalog check: '+error.message);if(interactive)throw error;}
   finally{catalogBusy=false;await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});}
 }
@@ -965,7 +976,11 @@ async function aiDrafts(){
 function startupIsComplete(){return context.globalState.get('atgvAssist.startupSetup.completed',false)===true;}
 async function startupStatus(){
  const saved=extensionSettings||{},catalog=catalogConfig();
+ const workspace=getWorkspace()?.uri.fsPath;
+ let offline=null;
+ try{if(workspace)offline=await offlineLibrary.imported(workspace);}catch(e){report('Offline Library startup status: '+e.message);}
  return {required:!startupIsComplete(),defaults:startupSetup.DEFAULTS,
+  offlineLibrary:offline?{version:offline.version,filename:offline.filename,repository:offline.repository}:null,
   saved:{jiraUrl:saved.jira?.baseUrl||'',confluenceUrl:saved.confluence?.baseUrl||'',email:saved.jira?.email||'',
    githubUrl:saved.github?.owner?'https://github.com/'+saved.github.owner:'',
    projectRepoUrl:saved.github?.owner&&saved.github?.repo?'https://github.com/'+saved.github.owner+'/'+saved.github.repo:'',
@@ -995,14 +1010,24 @@ async function testAndSaveStartupConnections(message){
  if(!Array.isArray(spaces?.results))throw Error('Confluence did not return an accessible spaces list. Check the URL and token scopes.');
  await requestJson('https://api.github.com/user',{token:github});
  const gitHeaders={Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'};
- for(const repo of [data.project,data.library]){
+ for(const repo of [data.project]){
   const resource=`https://api.github.com/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.repo)}`;
   const detail=await requestJson(resource,{token:github,headers:gitHeaders});
-  if(String(detail.full_name||'').toLowerCase()!==(repo.owner+'/'+repo.repo).toLowerCase())throw Error('GitHub returned an unexpected repository identity.');
+  if(String(detail.full_name||'').toLowerCase()!==(repo.owner+'/'+repo.repo).toLowerCase())throw Error('GitHub returned an unexpected project repository identity.');
  }
  const libraryConf=sdlcCatalog.normalizeConfig({repositoryUrl:data.libraryRepoUrl,ref:'main',authentication:'token',autoCheck:true,offlineCache:true});
- const library=await sdlcCatalog.remoteInfo(libraryConf,github);
- if(!library?.sha)throw Error('SDLC Library main branch was not accessible.');
+ let library,offlineFallback=null;
+ try{
+  const detail=await requestJson(`https://api.github.com/repos/${encodeURIComponent(data.library.owner)}/${encodeURIComponent(data.library.repo)}`,{token:github,headers:gitHeaders});
+  if(String(detail.full_name||'').toLowerCase()!==(data.library.owner+'/'+data.library.repo).toLowerCase())throw Error('Unexpected SDLC Library repository identity.');
+  library=await sdlcCatalog.remoteInfo(libraryConf,github);
+  if(!library?.sha)throw Error('SDLC Library main branch was not accessible.');
+ }catch(error){
+  const workspace=getWorkspace()?.uri.fsPath;
+  if(workspace)offlineFallback=await offlineLibrary.imported(workspace,data.libraryRepoUrl);
+  if(!offlineFallback)throw error;
+  library={offline:true};
+ }
  // Do not store raw tokens in extension settings or send them to the webview.
  await context.globalState.update('atgvAssist.extensionSettings',settings);
  if(enteredAtlassian)await storeToken(globalSecretKey('atlassian'),atlIdentity,atlassian);
@@ -1012,7 +1037,8 @@ async function testAndSaveStartupConnections(message){
  extensionSettings=settings;pendingTests={jira:null,github:null};
  catalogRemote=null;catalogLastCheck='';catalogLastError='';scheduleCatalogChecks();
  startupSessionVerified=true;startupVerifiedSignature=sha(JSON.stringify(data));
- return {success:true,librarySha:library.sha.slice(0,12),message:'Jira and Confluence authenticated; GitHub account and both repositories verified. Settings saved securely. Proceed to project search.'};
+ return {success:true,librarySha:library.sha?.slice(0,12)||'offline',
+  message:offlineFallback?'Jira, Confluence, GitHub account and project repository verified. Library GitHub access is unavailable; using temporary validated ZIP v'+offlineFallback.version+'. Settings saved.':'Jira and Confluence authenticated; GitHub account and both repositories verified. Settings saved securely. Proceed to project search.'};
 }
 async function dashboardState(){
   const projects=registry?await registry.list():[];
@@ -3686,6 +3712,26 @@ async function handleDashboardMessage(msg){
       case 'startupPrerequisiteDecision':{
         const entry=pendingPrerequisiteInstallOffers.get(msg.requestId);
         if(entry&&entry.toolId===msg.id)entry.resolve(msg.action==='Install'?'Install':undefined);
+        break;
+      }
+      case 'importLibraryZip':{
+        try{
+          const workspace=getWorkspace()?.uri.fsPath;
+          if(!workspace)throw Error('Open a VS Code workspace folder before importing the SDLC Library ZIP.');
+          const repositoryUrl=String(msg.repositoryUrl||'').trim();
+          if(!sdlcCatalog.parseRepository(repositoryUrl))throw Error('Enter a valid SDLC Library repository URL first.');
+          const chosen=await vscode.window.showOpenDialog({canSelectFiles:true,canSelectFolders:false,canSelectMany:false,
+            openLabel:'Import SDLC Library ZIP',filters:{'ZIP archives':['zip']}});
+          if(!chosen?.length)break;
+          const imported=await offlineLibrary.importZip({file:chosen[0].fsPath,workspace,repositoryUrl});
+          await dashboard?.webview.postMessage({type:'offlineLibraryZipResult',success:true,
+            message:'Offline SDLC Library v'+imported.version+' imported ('+imported.roleCount+' roles, '+imported.stackCount+' stacks). The temporary copy will be removed after GitHub main is successfully verified.'});
+          await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});
+          await refreshDashboard();
+        }catch(error){
+          report('Offline SDLC Library ZIP import: '+error.message);
+          await dashboard?.webview.postMessage({type:'offlineLibraryZipResult',success:false,message:error.message});
+        }
         break;
       }
       case 'startupTestConnections':{
