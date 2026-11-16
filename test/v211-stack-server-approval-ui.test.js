@@ -48,12 +48,12 @@ test('Solution Architect markup uses compact four-step tracker and one set of co
 test('server approval is enforced in host and re-evaluated after server status changes',()=>{
  const host=read('test/generated/extension-source.txt'),ui=read('media/start.js');
  const block=host.slice(host.indexOf("case 'architectApproveStack':{"),host.indexOf("case 'devCopilotArtifacts':{"));
- assert.match(block,/serverState\.running/);
+ assert.match(block,/approvalEvidence\(project,serverState\)/);
  assert.match(block,/gate\.requireServerVerification\(verifiedProject\)/);
  assert.match(host,/techStackServerVerification:verification/);
  assert.match(host,/techStackServerVerification:null/);
  assert.match(ui,/const canRequestApproval=!!\(saved&&tested&&prepared\?\.remotePushed===true\)/);
  assert.match(ui,/architectApproveStack'\)\.disabled=architectActionBusy\|\|!canRequestApproval\|\|approved/);
- assert.match(block,/if\(!serverState\.running\|\|!serverState\.healthy\)throw Error/);
+ assert.doesNotMatch(block,/if\(!serverState\.running\|\|!serverState\.healthy\)throw Error/);
  assert.match(ui,/architectServerSnapshotProjectId===activeId/);
 });
