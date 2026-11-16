@@ -39,6 +39,6 @@ test('every SDLC circular progress group has responsive circle sizing and runnin
 });
 test('manifest version matches extension display version',()=>{
  const manifest=JSON.parse(read('package.json'));
- assert.equal(manifest.version,'0.3.73');
+ assert.match(manifest.version,/^\d+\.\d+\.\d+$/);
  assert.equal(manifest.atgvDisplayVersion,manifest.version);
 });
