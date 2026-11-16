@@ -176,6 +176,28 @@ async function remoteInfo(config, token, request = requestJson) {
         throw Error('GitHub returned an invalid catalog commit.');
     return { route, sha, treeSha, private: !!repo.private, repository: repo.full_name };
 }
+// Read both version declarations from the same immutable GitHub commit.
+// Do not trust the branch name alone when comparing an uploaded ZIP.
+async function remoteVersion(config,token,request=requestJson){
+    const remote=await remoteInfo(config,token,request);
+    const options={token,headers:API_HEADERS};
+    async function read(name,limit){
+        const item=await request(remote.route+'/contents/'+name+'?ref='+remote.sha,options);
+        if(item?.type!=='file'||item.encoding!=='base64'||typeof item.content!=='string')
+            throw Error('GitHub catalog '+name+' is unavailable or invalid.');
+        const raw=Buffer.from(item.content.replace(/\\s/g,''),'base64');
+        if(raw.length>limit)throw Error('GitHub catalog '+name+' exceeds its size limit.');
+        return raw.toString('utf8').trim();
+    }
+    const version=await read('VERSION',128);
+    let manifest;
+    try{manifest=JSON.parse(await read('catalog.json',32768));}
+    catch{throw Error('GitHub catalog.json is not valid JSON.');}
+    offlineLibrary.compareVersions(version,version);
+    if(manifest.schema!==1||manifest.version!==version)
+        throw Error('GitHub VERSION and catalog.json version do not match.');
+    return {...remote,version};
+}
 async function getTree(config, token, request = requestJson) {
     const remote = await remoteInfo(config, token, request);
     const tree = await request(`${remote.route}/git/trees/${remote.treeSha}?recursive=1`, { token, headers: API_HEADERS });
@@ -798,7 +820,8 @@ async function activeFile(workspace, relative, { maxBytes = 65536 } = {}) {
     validPath(relative);
     // Offline ZIP is a temporary user-supplied data snapshot, never represented as a Git commit.
     const offline=await offlineLibrary.imported(workspace);
-    if(offline){
+    const installed=offline?await gitInstalled(workspace,{repositoryUrl:'https://github.com/'+offline.repository}):null;
+    if(offline&&(!installed||offlineLibrary.compareVersions(offline.version,installed.version)>0)){
         const file=path.join(offline.root,...relative.split('/'));
         const stat=await fs.lstat(file).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
         if(!stat)return null;
@@ -840,7 +863,8 @@ async function activeRoot(workspace) {
     if (!workspace) throw Error('Open an ATGV workspace and pull the SDLC Catalog from GitHub main.');
     // An explicitly imported, checksum-verified ZIP remains active until a verified Git pull replaces it.
     const offline=await offlineLibrary.imported(workspace);
-    if(offline)return offline;
+    const installed=offline?await gitInstalled(workspace,{repositoryUrl:'https://github.com/'+offline.repository}):null;
+    if(offline&&(!installed||offlineLibrary.compareVersions(offline.version,installed.version)>0))return offline;
     const gitState = await fs.readFile(gitCatalogState(workspace), 'utf8').catch(e => e.code === 'ENOENT' ? null : Promise.reject(e));
     if (gitState) {
         const active = JSON.parse(gitState);
@@ -1050,4 +1074,4 @@ async function stackAsset(workspace, id) {
         throw Error('Invalid technology stack ID.');
     return activeFile(workspace, `tech-stacks/${id}/stack.json`, { maxBytes: 16000 });
 }
-module.exports = { runCatalogGit, catalogGitExecutables, promoteStagedGitCatalog, retireLegacyCatalogAssets, gitCatalogFolder, gitCatalogState, syncGitCatalogCheckout, syncGitWorkspace, gitInstalled, activeRoot, activeManifest, activeTree, designFrameworks, designFrameworkAvailability, designColorPalette, designTemplate, designReference, designComponentCatalog, designComponentsReference, CANONICAL_REPO, activateWorkspace, pruneInactiveWorkspaceRevisions, activeFile, roleSkill, roleSkillChoices, designGuidance, stackAsset, DEFAULT_CONFIG, normalizeConfig, parseRepository, apiRoute, validPath, relevantPath, blobSha, parseSimpleYaml, inspectManifest, remoteInfo, getTree, download, cached };
+module.exports = { runCatalogGit, catalogGitExecutables, promoteStagedGitCatalog, retireLegacyCatalogAssets, gitCatalogFolder, gitCatalogState, syncGitCatalogCheckout, syncGitWorkspace, gitInstalled, activeRoot, activeManifest, activeTree, designFrameworks, designFrameworkAvailability, designColorPalette, designTemplate, designReference, designComponentCatalog, designComponentsReference, CANONICAL_REPO, activateWorkspace, pruneInactiveWorkspaceRevisions, activeFile, roleSkill, roleSkillChoices, designGuidance, stackAsset, DEFAULT_CONFIG, normalizeConfig, parseRepository, apiRoute, validPath, relevantPath, blobSha, parseSimpleYaml, inspectManifest, remoteInfo, remoteVersion, getTree, download, cached };
