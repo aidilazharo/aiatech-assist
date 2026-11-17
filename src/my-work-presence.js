@@ -35,7 +35,7 @@ function renderRows(rows){
 }
 async function locate(config,token,projectKey){
  const space=await getConfluenceSpace(config,token),name=title(projectKey);
- const url=baseConfluence(config)+'/api/v2/spaces/'+encodeURIComponent(space.id)+'/pages?limit=100&title='+encodeURIComponent(name);
+ const url=baseConfluence(config)+'/api/v2/pages?space-id='+encodeURIComponent(space.id)+'&title='+encodeURIComponent(name)+'&status=current&limit=100';
  const found=await requestJson(url,{token,basicEmail:config.get('jira.email')});
  const matches=(found.results||[]).filter(x=>x.title===name&&x.status==='current');
  if(matches.length>1)throw Error('Multiple Confluence registers have the same title. Resolve duplicates before updating.');
