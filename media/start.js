@@ -1442,7 +1442,7 @@ function searchJiraInventory(){
  send('searchProjectJiraInventory',{projectId:activeId,requestId:jiraInventoryRequest});
 }
 function ensureBAJiraInventory(force=false){
- if(view!=='work'||selectedRole!=='business-analyst')return;
+ if(!['work','discovery'].includes(view)||selectedRole!=='business-analyst')return;
  renderBAJiraInventory();
  const key=projectConnectionsSnapshot.jira?.key||'';
  if(!activeId||!key)return;
