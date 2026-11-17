@@ -1,5 +1,5 @@
 'use strict';
-// Independent ATGV: Workspace webview for Repo A main -> Repo B pull request.
+// Independent ATGV: Workspace webview for Source main -> Destination pull request.
 const crypto=require('node:crypto');
 const repoSync=require('./repo-sync-pr');
 const repoCredentials=require('./repo-sync-credentials');
@@ -55,47 +55,47 @@ ol{line-height:1.85;padding-left:20px}
 @media(max-width:680px){.grid{grid-template-columns:1fr}.card.full{grid-column:auto}}
 </style></head>
 <body>
-<header><div><h1>ATGV: Workspace</h1><div class="muted">Pull Repo A → Study source → Review suggestions → Publish Repo B PR</div></div><div class="muted">AIATECH ASSIST v__VERSION__</div></header>
-<main><p class="muted">Copy eligible tracked files from the selected Repo A branch into a matching, review-only branch of Repo B. Separate GitHub PATs authenticate each repository; Repo B main is never changed directly.</p>
+<header><div><h1>ATGV: Workspace</h1></div><div class="muted">AIATECH ASSIST v__VERSION__</div></header>
+<main>
 <form id="repoSyncForm"><div class="grid">
-<section class="card"><h2>1. Source · Repo A</h2>
-<p class="muted">Select a saved read-access connection or add another. PATs are stored in VS Code SecretStorage.</p>
+<section class="card"><h2>1. Source</h2>
+
 <label for="sourceSavedRepos">Saved Source connections</label><select id="sourceSavedRepos" aria-label="Saved Source GitHub repositories"><option value="">+ Add another repository...</option></select>
 <div class="connection-action"><button id="forgetSource" type="button" class="secondary" disabled>Forget selected</button></div>
 <label for="sourceUrl">GitHub repository URL with PAT</label><input id="sourceUrl" type="password" required placeholder="https://USERNAME:TOKEN@github.com/OWNER/repo-a" autocomplete="off" spellcheck="false">
 <div class="connection-action"><button id="testSource" type="button" class="secondary">Test Connection</button><span id="sourceConnection" class="connection-status" role="status" aria-live="polite">Not tested</span></div>
 <label for="sourceBranch">Source branch (optional)</label><input id="sourceBranch" type="text" maxlength="110" placeholder="Auto: GitHub default branch, or choose another branch">
 <label for="sourcePrNumber">Source PR number (optional)</label><input id="sourcePrNumber" type="number" min="1" step="1" placeholder="e.g. 2 · use original PR metadata as the initial suggestion">
-<p class="muted note">The source PR branch must exist. Its original title, commit and description are prefilled for review, and can be edited before publishing.</p>
+
 <label for="copyScope">Copy scope</label><input id="copyScope" type="text" maxlength="280" value="." placeholder="src/components or .">
-<p class="muted note">A dot copies all eligible tracked files. Tracked .github/workflows files are always included, even with a narrower scope. Secrets, Git internals and generated dependencies are excluded.</p>
+
 </section>
-<section class="card"><h2>2. Destination · Repo B</h2>
-<p class="muted">Select a saved write-access connection or add another. Choose a clean Repo B checkout or an empty external folder.</p>
+<section class="card"><h2>2. Destination</h2>
+
 <label for="destinationSavedRepos">Saved Destination connections</label><select id="destinationSavedRepos" aria-label="Saved Destination GitHub repositories"><option value="">+ Add another repository...</option></select>
 <div class="connection-action"><button id="forgetDestination" type="button" class="secondary" disabled>Forget selected</button></div>
 <label for="destinationRepo">Destination GitHub URL with PAT</label><input id="destinationRepo" type="password" required placeholder="https://USERNAME:TOKEN@github.com/OWNER/repo-b" autocomplete="off" spellcheck="false">
 <div class="connection-action"><button id="testDestination" type="button" class="secondary">Test Connection</button><span id="destinationConnection" class="connection-status" role="status" aria-live="polite">Not tested</span></div>
-<label>Local Repo B Git root or empty folder (outside ATGV workspace)</label><div class="folder"><button id="selectRepoB" type="button" class="secondary">Choose Repo B folder</button><strong id="destinationLabel">No folder selected</strong></div>
+<label>Local Destination Git root or empty folder (outside ATGV workspace)</label><div class="folder"><button id="selectRepoB" type="button" class="secondary">Choose Destination folder</button><strong id="destinationLabel">No folder selected</strong></div>
 <label for="baseBranch">PR base branch</label><input id="baseBranch" type="text" maxlength="110" placeholder="GitHub default branch (auto)">
-<p class="muted note">The first stage only reads Repo A and inspects source code structure; Repo B remains unchanged. Review the suggested branch, commit and PR text before the second stage.</p>
+
 </section>
-<section class="card full"><h2>3. Pull & Study Repo A</h2>
-<ol class="muted"><li>Verify both GitHub connections and destination base</li><li>Pull the selected Repo A branch into a temporary folder</li><li>Inspect actual tracked source files, code symbols, dependencies, tests and latest commit</li><li>Suggest a descriptive branch, commit message, PR title and simple PR description</li></ol>
+<section class="card full"><h2>3. Pull & Study Source</h2>
+
 <div class="actions"><button id="createPr" type="submit">Pull & Study Source Code</button><button id="openPr" type="button" class="secondary" hidden disabled>Open Created PR</button></div>
-<div id="syncStatus" class="status" role="status" aria-live="polite" data-state="ready">Paste username:PAT URLs, test both connections and select an existing Repo B checkout or an empty external folder. Git is required; pull requests use GitHub HTTPS API with the Destination PAT. GitHub CLI (gh) is not needed.</div>
+<div id="syncStatus" class="status" role="status" aria-live="polite" data-state="ready">Paste username:PAT URLs, test both connections and select an existing Destination checkout or an empty external folder. Git is required; pull requests use GitHub HTTPS API with the Destination PAT. GitHub CLI (gh) is not needed.</div>
 </section>
 <section class="card full" id="reviewPanel" hidden aria-label="Review proposed source sync">
 <h2>4. Review suggested Git and PR details</h2>
-<p class="muted review-help">Based on the pulled source. Edit any field, then approve and run the full Repo B operation. Source and destination are checked again before publishing.</p>
+
 <div id="sourceAnalysis" class="status" role="status"></div>
 <label for="reviewBranch">Destination branch name</label><input id="reviewBranch" type="text" maxlength="110">
 <label for="reviewCommit">Commit message</label><textarea id="reviewCommit" rows="3" maxlength="12000"></textarea>
 <label for="reviewTitle">PR title</label><input id="reviewTitle" type="text" maxlength="110">
-<label for="reviewDescription">Simple PR details</label><textarea id="reviewDescription" rows="4" maxlength="4000"></textarea><p class="muted">Use bullet points, up to 10 points.</p>
+<label for="reviewDescription">Simple PR details</label><textarea id="reviewDescription" rows="4" maxlength="4000"></textarea>
 <div class="actions"><button id="publishReviewed" type="button">Approve & Run Full Sync · Push & Create PR</button><button id="redoReview" type="button" class="secondary">Pull & Study Again</button></div>
 </section></div></form>
-<p class="muted note">Repo B-only files are preserved. Matching source workflows replace their Repo B versions on the review branch; GitHub may require workflow write permission on the destination PAT. Source analysis does not alter Repo B.</p>
+
 </main>
 <script nonce="__NONCE__">
 'use strict';
@@ -105,7 +105,7 @@ let folder='',busy=false,createdPr='',reviewReady=false;
 function invalidateReview(){
  if(!reviewReady)return;
  reviewReady=false;get('reviewPanel').hidden=true;buttons();
- show('Inputs changed. Pull & Study Repo A again to refresh the review. No Repo B files were changed.');
+ show('Inputs changed. Pull & Study Source again to refresh the review. No Destination files were changed.');
 }
 function show(message,state){get('syncStatus').textContent=String(message||'');get('syncStatus').dataset.state=state||'ready';}
 function buttons(){
@@ -188,7 +188,7 @@ get('selectRepoB').addEventListener('click',()=>{invalidateReview();vscode.postM
 get('repoSyncForm').addEventListener('submit',e=>{
  e.preventDefault();
  if(busy||!folder||!get('repoSyncForm').reportValidity())return;
- busy=true;createdPr='';reviewReady=false;get('reviewPanel').hidden=true;buttons();show('Cloning and studying Repo A; Repo B stays untouched.');
+ busy=true;createdPr='';reviewReady=false;get('reviewPanel').hidden=true;buttons();show('Cloning and studying Source; Destination stays untouched.');
  vscode.postMessage({command:'prepareSyncReview',sourceUrl:consumeUrl('sourceUrl'),sourceBranch:get('sourceBranch').value.trim(),sourcePrNumber:get('sourcePrNumber').value.trim(),destinationUrl:consumeUrl('destinationRepo'),copyScope:get('copyScope').value.trim()||'.',baseBranch:get('baseBranch').value.trim()});
 });
 get('publishReviewed').addEventListener('click',()=>{
@@ -239,7 +239,7 @@ window.addEventListener('message',e=>{
    '\\nWorkflows included: '+(review.workflowFiles||[]).join(', ')+
    '\\nExcluded commit paths: '+(review.excludedSourceCommitFiles||[]).slice(0,8).join(', ')+
    '\\nDestination base: '+String(review.base||'');
-  buttons();show('Source study completed. Review or edit the four suggestions, then approve the full operation. Repo B is unchanged.','success');
+  buttons();show('Source study completed. Review or edit the four suggestions, then approve the full operation. Destination is unchanged.','success');
  }
  if(data.type==='repoConnectionResult'){
   const id=data.kind==='Source'?'sourceUrl':'destinationRepo',node=connectionNode(data.kind);
@@ -377,7 +377,7 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
   if(message.command==='selectRepoB'){
    if(busy)return;
    try{
-    const picked=await vscode.window.showOpenDialog({canSelectFolders:true,canSelectFiles:false,canSelectMany:false,openLabel:'Select Repo B Git root',title:'ATGV Workspace: Choose Repo B Git root or an empty folder'});
+    const picked=await vscode.window.showOpenDialog({canSelectFolders:true,canSelectFiles:false,canSelectMany:false,openLabel:'Select Destination Git root',title:'ATGV Workspace: Choose Destination Git root or an empty folder'});
     if(picked?.[0]){selectedFolder=picked[0].fsPath;pendingReview=null;await post({type:'repoBSelected',folder:selectedFolder});}
    }catch(error){await post({type:'repoSyncResult',success:false,message:sanitize(error)});}
    return;
@@ -408,9 +408,9 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
   if(isPrepare)pendingReview=null;
   let sourcePat='',destPat='',source=null,destination=null;
   try{
-   if(!selectedFolder)throw Error('Choose a Repo B Git folder outside ATGV workspace first.');
+   if(!selectedFolder)throw Error('Choose a Destination Git folder outside ATGV workspace first.');
    if(isPublish&&(!pendingReview||pendingReview.folder!==selectedFolder))
-    throw Error('Pull & Study Repo A before publishing. The destination folder or source review changed.');
+    throw Error('Pull & Study Source before publishing. The destination folder or source review changed.');
    const input=isPublish?pendingReview.input:message;
    source=repoCredentials.parseCredentialUrl(input.sourceUrl);
    destination=repoCredentials.parseCredentialUrl(input.destinationUrl);
@@ -425,7 +425,7 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
     prDescription:message.prDescription}:null;
    if(reviewed)repoSync.validateReviewPresentation(reviewed,reviewed.sourceSha);
    const response=isPrepare?'Prepare Source Review':await vscode.window.showWarningMessage(
-    'Repo A: '+source.name+' ('+(sourcePrNumber?'PR #'+sourcePrNumber:sourceBranch||'GitHub default branch (auto)')+')\nRepo B: '+destination.name+' in '+selectedFolder+
+    'Source: '+source.name+' ('+(sourcePrNumber?'PR #'+sourcePrNumber:sourceBranch||'GitHub default branch (auto)')+')\nDestination: '+destination.name+' in '+selectedFolder+
     '\nScope: '+scope+'\nPR base: '+(base||'GitHub default branch')+
     (isPublish?'\n\nPublish the reviewed branch, commit message, PR title and description?':'\n\nVerify both PATs, clone to temp and create the PR?'),
     {modal:true},isPublish?'Publish Reviewed PR':'Create Sync PR');

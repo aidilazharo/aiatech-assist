@@ -23,7 +23,7 @@ async function main() {
         assert.equal(fs.readFileSync(path.join(root, 'README.md'), 'utf8').trim(), `**Version: ${manifest.atgvDisplayVersion}**\n\n**Author:** [Muhamad Aidil Azhar Salim](mailto:muhamadaidilazhar.salim@aia.com)`);
         assert.ok(!fs.existsSync(path.join(root, 'CHANGELOG.md')));
         assert.equal(manifest.atgvDisplayVersion, manifest.version.split('.').map((n, i) => i === 2 ? String(Number(n)).padStart(2, '0') : n).join('.'));
-        const expected = ['atgvAssist.refreshUnifiedArtifacts', 'atgvAssist.reportIssue', 'atgvAssist.reset', 'atgvAssist.restart', 'atgvAssist.start', 'atgvAssist.workspace'];
+        const expected = ['atgvAssist.ai', 'atgvAssist.refreshUnifiedArtifacts', 'atgvAssist.reportIssue', 'atgvAssist.reset', 'atgvAssist.restart', 'atgvAssist.start', 'atgvAssist.workspace'];
         assert.deepEqual(manifest.contributes.commands.map(c => c.command).sort(), expected);
         const commands = new Map(), registered = [];
         const noop = () => ({ dispose() { } });

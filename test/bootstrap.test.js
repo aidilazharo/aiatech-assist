@@ -110,7 +110,7 @@ test('install notification reloads on approval then opens ATGV: Start after relo
     assert.equal(state.has('atgvAssist.pendingStartAfterReload'),false);
     assert.equal(await exists(path.join(root,'.atgv','templates','tech-stacks','react.json')),false,'Start must not initialize files before connection test');
     assert.equal(await exists(path.join(root,'projects')),false,'Start must not create the projects folder');
-    assert.deepEqual([...registered.keys()].sort(),['atgvAssist.refreshUnifiedArtifacts','atgvAssist.reportIssue','atgvAssist.reset','atgvAssist.restart','atgvAssist.start','atgvAssist.workspace']);
+    assert.deepEqual([...registered.keys()].sort(),['atgvAssist.ai','atgvAssist.refreshUnifiedArtifacts','atgvAssist.reportIssue','atgvAssist.reset','atgvAssist.restart','atgvAssist.start','atgvAssist.workspace']);
   }finally{
     Module._load=original;
     await fs.rm(root,{recursive:true,force:true});

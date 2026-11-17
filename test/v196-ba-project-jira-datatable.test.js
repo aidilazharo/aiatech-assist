@@ -43,11 +43,11 @@ test('DataTable supports incremental refresh without replacing search, sort or p
  assert.equal(result.filtered,2);
 });
 
-test('BA Jira request respects project scope and only loads on BA work view',()=>{
- assert.match(ui,/if\(view!=='work'\|\|selectedRole!=='business-analyst'\)return;/);
+test('BA Jira request respects project scope and loads on BA My Work and discovery',()=>{
+ assert.match(ui,/\['work','discovery'\]\.includes\(view\)/);
  assert.match(ui,/jiraInventoryProject!==activeId\|\|jiraInventoryKey!==key/);
  assert.match(ui,/function updateBAJiraFilterOptions\(/);
  assert.match(ui,/jiraInventoryError/);
- assert.match(ui,/ensureBAJiraInventory\(\);send\('roleHandoffOwners'\)/);
+ assert.match(ui,/ensureBAJiraInventory\(true\);send\('roleHandoffOwners'\)/);
  assert.match(host,/validProjectKey\(config\.get\('jira\.projectKey'\)\)/);
 });

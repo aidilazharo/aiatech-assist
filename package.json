@@ -2,8 +2,8 @@
   "name": "atgv-aiatech-assist",
   "displayName": "ATGV AIATECH Assist",
   "description": "Webview-based SDLC work with ownership handoffs, Jira/GitHub actions, Confluence document sync and approved AI draft orchestration.",
-  "version": "0.3.98",
-  "atgvDisplayVersion": "0.3.98",
+  "version": "0.3.99",
+  "atgvDisplayVersion": "0.3.99",
   "publisher": "aia-my",
   "private": true,
   "license": "UNLICENSED",
@@ -32,7 +32,8 @@
     "onCommand:atgvAssist.reset",
     "onCommand:atgvAssist.restart",
     "onStartupFinished",
-    "onCommand:atgvAssist.reportIssue"
+    "onCommand:atgvAssist.reportIssue",
+    "onCommand:atgvAssist.ai"
   ],
   "icon": "assets/icon.png",
   "contributes": {
@@ -46,6 +47,11 @@
         "command": "atgvAssist.workspace",
         "title": "ATGV: Workspace",
         "icon": "$(git-pull-request)"
+      },
+      {
+        "command": "atgvAssist.ai",
+        "title": "ATGV: AI",
+        "icon": "$(comment-discussion)"
       },
       {
         "command": "atgvAssist.refreshUnifiedArtifacts",

@@ -10,7 +10,7 @@ async function until(fn){for(let i=0;i<500;i++){if(await fn())return;await new P
 function makeProject(id,key){return {id,name:id,settings:{jira:{projectKey:key},confluence:{spaceKey:key}}};}
 
 test('ATGV lifecycle commands and project dashboard save defaults and overrides',async()=>{
-  assert.deepEqual(manifest.contributes.commands.map(c=>c.title),['ATGV: Start','ATGV: Workspace','ATGV: Refresh Shared Project Artifacts','ATGV: Restart','ATGV: Reset','ATGV: Report an Issue']);
+  assert.deepEqual(manifest.contributes.commands.map(c=>c.title),['ATGV: Start','ATGV: Workspace','ATGV: AI','ATGV: Refresh Shared Project Artifacts','ATGV: Restart','ATGV: Reset','ATGV: Report an Issue']);
   assert.equal(manifest.contributes.viewsContainers,undefined,'No Explorer sidebar or Activity Bar view is contributed');
   assert.equal(manifest.contributes.views,undefined);
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-vscode-host-'));
@@ -24,7 +24,7 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
     workspace:{workspaceFolders:[{uri:uri(root)}],getConfiguration(){return {get:(key,fallback)=>fallback};},onDidChangeWorkspaceFolders(){return {dispose(){}};}},
     commands:{registerCommand(name,fn){commands.set(name,fn);return {dispose(){}};},async executeCommand(){return true;}},
     window:{registerTreeDataProvider(){return {dispose(){}};},createOutputChannel(){return {appendLine(){},show(){},dispose(){}};},
-      createWebviewPanel(viewType,title,viewColumn,options){panel={viewType,title,options,reveal(){},onDidDispose(){return {dispose(){}};},webview:{cspSource:'vscode-resource:',asWebviewUri:u=>u.fsPath,postMessage:async m=>{messages.push(m);if(m.type==='hostDialogRequest')queueMicrotask(()=>handler?.({command:'hostDialogResponse',requestId:m.requestId,accepted:confirmation!==undefined,value:m.dialogType==='input'?answer:confirmation}));return true;},onDidReceiveMessage:fn=>{handler=fn;return {dispose(){}};}}};return panel;},
+      createWebviewPanel(viewType,title,viewColumn,options){panel={viewType,title,options,reveal(){},onDidDispose(){return {dispose(){}};},webview:{set html(value){this._html=value;queueMicrotask(()=>handler?.({command:'webviewReady',coreStylesLoaded:true}));},get html(){return this._html;},cspSource:'vscode-resource:',asWebviewUri:u=>u.fsPath,postMessage:async m=>{messages.push(m);if(m.type==='hostDialogRequest')queueMicrotask(()=>handler?.({command:'hostDialogResponse',requestId:m.requestId,accepted:confirmation!==undefined,value:m.dialogType==='input'?answer:confirmation}));return true;},onDidReceiveMessage:fn=>{handler=fn;return {dispose(){}};}}};return panel;},
       async showInputBox(){return answer;},async showWarningMessage(){return confirmation;},async showInformationMessage(){return null;},async showErrorMessage(e){throw Error(e);},
       async withProgress(_,fn){return fn();}},
     authentication:{async getSession(){return undefined;}}
@@ -57,7 +57,7 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
       workspaceState:{get:k=>workspaceState.get(k),update:async(k,v)=>{if(v===undefined)workspaceState.delete(k);else workspaceState.set(k,v);}},
       secrets:{get:async k=>secrets.get(k),store:async(k,v)=>secrets.set(k,v),delete:async k=>secrets.delete(k)},subscriptions:[]};
     ext.activate(ctx);
-    assert.deepEqual([...commands.keys()].sort(),['atgvAssist.refreshUnifiedArtifacts','atgvAssist.reportIssue','atgvAssist.reset','atgvAssist.restart','atgvAssist.start','atgvAssist.workspace']);
+    assert.deepEqual([...commands.keys()].sort(),['atgvAssist.ai','atgvAssist.refreshUnifiedArtifacts','atgvAssist.reportIssue','atgvAssist.reset','atgvAssist.restart','atgvAssist.start','atgvAssist.workspace']);
     await commands.get('atgvAssist.start')({skipReload:true});
     assert.match(panel.webview.html,/Extension Settings/);
     assert.match(panel.webview.html,/Search Confluence spaces/);
@@ -151,6 +151,7 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
                                                                               
     await commands.get('atgvAssist.start')({skipReload:true});
     assert.match(panel.webview.html, /<html lang="en">/);
+    await until(()=>messages.at(-1)?.opening?.phase==='search');
     assert.equal(messages.at(-1)?.opening?.phase,'search','Restart must require explicit project selection');
     assert.equal(messages.at(-1)?.activeId,null,'Previously opened project must not re-open automatically');
     assert.ok(messages.some(m=>m.type==='startupScan'&&/Choose a project/.test(m.message)));

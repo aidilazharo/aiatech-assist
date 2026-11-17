@@ -44,12 +44,15 @@ test('ATGV start never automatically opens a saved or sole project',async()=>{
  const end=source.indexOf('\nasync function restart(){',begin);
  assert.ok(begin>=0&&end>begin);
  const messages=[];
- const env={startupSequence:11,startupScan:null,activeProject:null,
+ const env={startupSequence:11,startupScan:null,activeProject:null,webviewCoreReady:false,
   dashboard:{webview:{postMessage:async msg=>messages.push(msg)}},
   refreshDashboard:async()=>messages.push({type:'refresh'})};
  vm.createContext(env);vm.runInContext(source.slice(begin,end),env);
  await env.finishManualProjectDiscovery(10);
  assert.equal(messages.length,0,'ignore stale startup sequences');
+ await env.finishManualProjectDiscovery(11);
+ assert.equal(messages.length,0,'wait for stylesheet and controller readiness');
+ env.webviewCoreReady=true;
  await env.finishManualProjectDiscovery(11);
  assert.equal(env.startupScan.status,'complete');
  assert.match(env.startupScan.message,/Choose a project/);

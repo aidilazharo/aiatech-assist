@@ -865,6 +865,7 @@ function updateState(msg){
   else if(!workspaceOpened)document.body.classList.add('gate-mode');
   renderGate();
 }
+$('openAtgvAi').addEventListener('click',()=>send('openAtgvAi'));
 function navigate(destination){
   if(roleSettingsDirty&&view==='project'&&destination!=='project-settings'&&destination!=='tech'){status('Save project role settings before leaving Project Settings.',true);return;}
   if(view==='discovery'&&discoveryDirty){status('Save your discovery answers before leaving this screen.',true);return;}
@@ -894,9 +895,9 @@ function navigate(destination){
     const baWorkspace=selectedRole==='business-analyst';
     setView(baWorkspace?'discovery':'work');renderSidebarRole();renderRoleWork();
     if(baWorkspace){renderDiscovery();refreshAIChangeResolution();}
-    renderRoleTimeline();ensurePMJiraInventory();ensureBAJiraInventory();send('roleHandoffOwners');return;
+    renderRoleTimeline();ensurePMJiraInventory(true);ensureBAJiraInventory(true);send('roleHandoffOwners');return;
   }
-  if(destination==='overview'){setView('landing');$('overviewGanttDetails').open=false;send('loadPlanning');return;}
+  if(destination==='overview'){setView('landing');$('overviewGanttDetails').open=false;send('loadPlanning');send('myWorkRosterRefresh',{projectId:activeId});return;}
   if(destination==='settings'){$('settingsBack').textContent=workspaceOpened?'← Back to Workspace':'← Back to Projects';collapseExtensionSettings();setView('settings');updateExtensionSettingBadges();if(workspaceOpened)send('devRepositoryStatus');return;}
   if(destination==='library'){setView('library');window.atgvLibraryStudio?.refresh();return;}
   if(destination==='documents'){setView('documents');renderDocumentGroups();return;}
@@ -904,7 +905,7 @@ function navigate(destination){
   if(destination==='planning'){setView('planning');send('loadPlanning');renderDesignCards();return;}
   if(destination==='discovery'){
     selectedRole='business-analyst';renderSidebarRole();
-    setView('discovery');renderRoleWork();ensureBAJiraInventory();
+    setView('discovery');renderRoleWork();ensureBAJiraInventory(true);
     send('baOwnersRefresh');renderDiscovery();refreshAIChangeResolution();return;
   }
   if(destination==='flow'){setView('flow');renderFlow();return;}
@@ -1276,13 +1277,22 @@ function renderBAJiraInventory(){
  };
  baJiraTableInstance=ATGVDataTables.mount(root,rows,[
   {key:'brLabel',label:'Business Requirement',render:brCell},{key:'key',label:'Jira key',render:keyLink},{key:'type',label:'Type'},
-  {key:'summary',label:'Summary'},{key:'status',label:'Status'},
+  {key:'summary',label:'Summary'},{key:'status',label:'Status',render:item=>{
+    const el=document.createElement('span');el.textContent=item.status||'Unknown';
+    if(String(item.type||'').toLowerCase()==='epic'){
+      const children=jiraInventoryItems.filter(child=>child.parentKey===item.key);
+      const active=children.filter(child=>/in progress|review|doing/i.test(child.status));
+      if(active.length){const detail=document.createElement('small');detail.style.display='block';detail.className='muted';detail.textContent=active.length+' child issue(s) in progress (Epic status unchanged)';el.append(detail);}
+    }
+    return el;
+   }},
   {key:'creator',label:'Created by',render:item=>{const name=document.createElement('span');name.textContent=item.creator||'Unavailable';if(item.creatorId)name.title='Atlassian account ID: '+item.creatorId;return name;}},{key:'created',label:'Created',render:item=>{const stamp=document.createElement('time');const raw=String(item.created||'');const parsed=new Date(raw.replace(/([+-]\d{2})(\d{2})$/,'$1:$2'));stamp.title=raw;stamp.dateTime=Number.isNaN(parsed.getTime())?'':parsed.toISOString();stamp.textContent=Number.isNaN(parsed.getTime())?raw:(new Intl.DateTimeFormat(undefined,{day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'})).format(parsed);return stamp;}}
  ],{label:'All Jira items and Business Requirements for '+(key||'project'),pageSize:5,sortKey:'',onRowClick:item=>{if(item._isJiraIssue===false)openBARequirementModal(item._brRoots[0]);else openJiraIssueModal(item.key);}});
 }
 // Project Manager My Work shares the exact paginated, project-scoped Jira scan with BA and Overview.
 // Calculations are based on Jira's real assignee, priority, status, and due date fields.
 let pmJiraTableInstance=null;
+let pmKanbanPending=false;
 let pmForecast=null;
 let pmEffortEdits={};
 function pmOptionList(id,values,defaultText){
@@ -1303,6 +1313,20 @@ function renderPMDashboard(){
  const items=scoped?jiraInventoryItems:[];
  const today=pmToday(),summary=ATGVPMDelivery.analyze(items,today);
  const statusNode=$('pmDataStatus');$('pmRefreshJira').disabled=!activeId||!key||jiraInventoryRunning;
+  const kanbanRoot=$('pmKanbanBoard');
+  if(kanbanRoot&&window.ATGVKanban){
+    window.ATGVKanban.render(kanbanRoot,items,{
+      busy:pmKanbanPending||jiraInventoryRunning,
+      onOpen:item=>openJiraIssueModal(item.key),
+      onMove:(item,target)=>{
+        if(pmKanbanPending)return;
+        pmKanbanPending=true;
+        $('pmKanbanStatus').textContent='Checking Jira transitions for '+item.key+' → '+target+'…';
+        send('pmJiraTransition',{projectId:activeId,key:item.key,status:target,expectedUpdated:item.updated});
+      }
+    });
+    if(!pmKanbanPending)$('pmKanbanStatus').textContent=jiraInventoryRunning?'Loading Jira issues…':'Drag a card or choose a status. Jira permission and confirmation are required.';
+  }
  if(!activeId||!key)statusNode.textContent='Set and test the Jira Project Key using the Jira card on Overview to load PM delivery data.';
  else if(jiraInventoryError&&scoped)statusNode.textContent='Jira '+key+' retrieval failed: '+jiraInventoryError+'. Partial data may be displayed; do not treat it as complete.';
  else if(jiraInventoryRunning&&scoped)statusNode.textContent='Loading Jira '+key+' · '+items.length+' issues received… Metrics are provisional until the search completes.';
@@ -1401,11 +1425,11 @@ function renderPMDashboard(){
   {key:'updated',label:'Updated'}
  ],{label:'Project Manager Jira work items',pageSize:5,sortKey:'',onRowClick:item=>openJiraIssueModal(item.key)});
 }
-function ensurePMJiraInventory(){
+function ensurePMJiraInventory(force=false){
  if(view!=='work'||selectedRole!=='project-manager')return;
  renderPMDashboard();
  const key=projectConnectionsSnapshot.jira?.key||'';
- if(activeId&&key&&(jiraInventoryProject!==activeId||jiraInventoryKey!==key||!jiraInventoryRunning&&Date.now()-jiraInventoryLastChecked>=300000))searchJiraInventory();
+ if(activeId&&key&&!jiraInventoryRunning&&(force||jiraInventoryProject!==activeId||jiraInventoryKey!==key||Date.now()-jiraInventoryLastChecked>=300000))searchJiraInventory();
 }
 $('pmRefreshJira').addEventListener('click',searchJiraInventory);
 $('pmApproveEstimates').addEventListener('click',()=>send('pmApproveEffortBaseline',{projectId:activeId,overrides:pmEffortEdits}));
@@ -1426,12 +1450,12 @@ function searchJiraInventory(){
  $('jiraInventoryRefresh').disabled=true;renderJiraInventory();renderBAJiraInventory();renderPMDashboard();
  send('searchProjectJiraInventory',{projectId:activeId,requestId:jiraInventoryRequest});
 }
-function ensureBAJiraInventory(){
- if(view!=='work'||selectedRole!=='business-analyst')return;
+function ensureBAJiraInventory(force=false){
+ if(!['work','discovery'].includes(view)||selectedRole!=='business-analyst')return;
  renderBAJiraInventory();
  const key=projectConnectionsSnapshot.jira?.key||'';
  if(!activeId||!key)return;
- if(jiraInventoryProject!==activeId||jiraInventoryKey!==key||!jiraInventoryRunning&&Date.now()-jiraInventoryLastChecked>=300000)searchJiraInventory();
+ if(!jiraInventoryRunning&&(force||jiraInventoryProject!==activeId||jiraInventoryKey!==key||Date.now()-jiraInventoryLastChecked>=300000))searchJiraInventory();
 }
 function openJiraInventory(){
  if(!activeId||!projectConnectionsSnapshot.jira?.key){status('Configure a Jira Project Key in Project Connections first.',true);return;}
@@ -1521,7 +1545,13 @@ window.addEventListener('message',event=>{
  if(msg.type==='orphanJiraCleanupCompleted'){status('Verified historical Jira cleanup completed. Refreshing project items.');searchJiraInventory();return;}
  if(msg.type==='orphanJiraCleanupProgress'){status('Deleting verified historical Jira issues: '+msg.deleted+' of '+msg.total);return;}
  if(msg.projectId!==jiraInventoryProject||msg.requestId!==jiraInventoryRequest)return;
- if(msg.type==='jiraInventoryViewer'){
+ if(msg.type==='pmJiraTransitionResult'&&msg.projectId===activeId){
+    pmKanbanPending=false;
+    $('pmKanbanStatus').textContent=msg.success?'Jira transition saved. Refreshing statuses…':'Jira transition not applied: '+(msg.message||'Transition unavailable.');
+    if(msg.success)searchJiraInventory();else renderPMDashboard();
+    return;
+  }
+  if(msg.type==='jiraInventoryViewer'){
     jiraInventoryViewerId=String(msg.accountId||'');
     renderBAJiraInventory();renderPMDashboard();
  }
@@ -1569,7 +1599,10 @@ $('projectConnectionForm').addEventListener('submit',event=>{
  mappingModalStatus('Saving verified project mapping…');
  send('saveProjectConnectionMapping',{kind:mappingModalKind,key,projectId:mappingModalProjectId,requestId:mappingRequestSerial});
 });
+let lastRosterProject='';
 function renderOverviewConnections(data){
+ if(activeId&&lastRosterProject!==activeId){lastRosterProject=activeId;send('myWorkRosterRefresh',{projectId:activeId});}
+ if(!activeId)lastRosterProject='';
  projectConnectionsSnapshot=data||{jira:{},confluence:{}};
  const jira=data?.jira||{},space=data?.confluence||{};
  const configured=record=>record.source==='project'||record.source==='extension';
@@ -6964,7 +6997,36 @@ window.addEventListener('message',e=>{
   status('Operation finished.');
  }
 });
-send('refresh');
+// Initial state arrives after webview-asset-boot.js confirms CSS and controllers.
+function renderMyWorkRoster(rows){
+ const target=$('overviewUserRows');if(!target)return;
+ target.replaceChildren();
+ const entries=Array.isArray(rows)?rows:[];
+ if(!entries.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=3;td.textContent='No verified My Work visits recorded in Confluence.';tr.append(td);target.append(tr);return;}
+ for(const item of entries){
+  const tr=document.createElement('tr'),name=document.createElement('td'),roles=document.createElement('td'),tasks=document.createElement('td');
+  const strong=document.createElement('strong');strong.textContent=String(item.name||'Unknown');
+  const email=document.createElement('small');email.textContent=String(item.email||'');
+  name.append(strong,email);
+  roles.textContent=(Array.isArray(item.roles)?item.roles:[]).join(', ')||'—';
+  tasks.textContent=String(item.tasks||'No assigned task');
+  tr.append(name,roles,tasks);target.append(tr);
+ }
+}
+$('overviewUserRefresh').addEventListener('click',()=>{
+ $('overviewUserStatus').textContent='Loading verified My Work users from Confluence…';
+ send('myWorkRosterRefresh',{projectId:activeId});
+});
+window.addEventListener('message',event=>{
+ const m=event.data||{};
+ if(!activeId||m.projectId!==activeId)return;
+ if(m.type==='myWorkRoster'){
+  renderMyWorkRoster(m.rows);
+  $('overviewUserStatus').textContent=(m.rows?.length||0)+' users · Confluence space '+(m.spaceKey||'')+(m.updatedAt?' · '+new Date(m.updatedAt).toLocaleString():'');
+ }else if(m.type==='myWorkRosterError'){
+  $('overviewUserStatus').textContent='Confluence roster unavailable: '+(m.message||'Check space configuration and permissions.');
+ }
+});
 
 function developerStatus(message){const target=$('devExecutionStatus');if(target)target.textContent=String(message||'');}
 function devSetStep(id,message){const element=$(id);if(element)element.textContent=message;}

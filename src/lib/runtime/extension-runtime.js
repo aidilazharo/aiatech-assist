@@ -16,6 +16,7 @@ const catalogVendorLibraries=require('../../catalog-vendor-libraries');
 const libraryUpdateVersion=require('../../library-update-version');
 const liveRemoteRefresh=require('../../live-remote-refresh');
 const repoSyncWorkspace=require('../../repo-sync-workspace');
+const atgvAiChat=require('../../atgv-ai-chat');
 const repoSyncNaming=require('../../repo-sync-pr');
 const {workState,toggleTask,openTaskDocument}=require('../../sdlc-work');
 const roleStepEngine=require('../../role-step-engine');
@@ -51,6 +52,7 @@ const startupSetup=require('../startup-setup');
 const startupInstall=require('../startup-install');
 const installCache=require('../../library-install-cache');
 const startupDiagnostics=require('../startup-diagnostics');
+const myWorkPresence=require('../../my-work-presence');
 const {SelfImprovement}=require('../../self-improvement');
 const selfImprovementView=require('../../self-improvement-view');
 const copilotRepairSdk=require('../../copilot-repair-sdk');
@@ -195,7 +197,7 @@ let workspaceOverridePath=null,startupScan={status:'idle',percent:0,message:''},
 let ownershipRetryTimer=null,ownershipOfflineUntil=0,aiServiceTimer=null,aiServiceBusy=false,autoSyncTimer=null,jiraMonitorTimer=null,jiraMonitorBusy=false,autoSyncBusy=false,context,output,tree,registry,activeProject,store,dashboard,ready=Promise.resolve(),activationEpoch=0,extensionSettings={},pendingTests={jira:null,github:null},openingFlow=new OpeningFlow(),discoveredSpaces=[],discoveredJiraProjects=[],openingLocked=false,openingGeneration=0,openingOffline=false,verifiedConnections=new Map(),approvedJiraPreviewRevision=null,approvedJiraPreviewBinding=null,jiraSyncBusy=false,jiraPreviewValidation=null,roleRepairPreviewContext=null,roleRepairBusy=false;
 const cfg=()=>vscode.workspace.getConfiguration('atgvAssist');
 let liveRemoteTimer=null,liveRemoteBusy=false,liveRemoteState={projectId:'',phase:'idle',lastAttempt:'',lastSuccess:'',results:{},errors:{}};
-let catalogRemote=null,catalogLastCheck='',catalogLastError='',catalogBusy=false,catalogWatch=null,installedVendorAssets=null,webviewVendorDir=null,vendorLibraryLastError='',vendorBootRecoveryCount=0,vendorWebviewReady=false;
+let catalogRemote=null,catalogLastCheck='',catalogLastError='',catalogBusy=false,catalogWatch=null,installedVendorAssets=null,webviewVendorDir=null,vendorLibraryLastError='',vendorBootRecoveryCount=0,vendorWebviewReady=false,webviewCoreReady=false,webviewCssRetry=0;
 // External webview libraries must come from a validated GitHub catalog commit.
 // The last verified install works offline; unverified updates never execute.
 async function prepareVendorAssets({syncIfMissing=false}={}){
@@ -1291,6 +1293,24 @@ async function publishBlueprintState(){
   ]);
   await dashboard.webview.postMessage({type:'blueprintState',register:blueprints,assessment:deliveryBlueprint.assess(brs,designs,blueprints)});
 }
+let presenceQueue=Promise.resolve();
+function queueMyWorkPresence(roleId){
+ const projectId=activeProject?.id;
+ if(!projectId)return;
+ // Serialize versioned Confluence edits across role switches. Never overwrite a
+ // concurrent writer; the presence adapter re-fetches after version conflicts.
+ presenceQueue=presenceQueue.catch(()=>{}).then(async()=>{
+  if(activeProject?.id!==projectId)return;
+  const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
+  const key=validProjectKey(config.get('jira.projectKey'));
+  const result=await myWorkPresence.visit(config,token,{projectKey:key,roleId});
+  if(activeProject?.id===projectId)
+   await dashboard?.webview.postMessage({type:'myWorkRoster',projectId,...result});
+ }).catch(async error=>{
+  report('My Work Confluence user register: '+error.message);
+  if(activeProject?.id===projectId)await dashboard?.webview.postMessage({type:'myWorkRosterError',projectId,message:String(error.message||error).slice(0,280)});
+ });
+}
 async function refreshDashboard(){if(dashboard){if(activeProject)await dashboard.webview.postMessage({type:'jiraMonitorState',enabled:context.workspaceState.get('atgvAssist.monitorJira.'+activeProject.id,false)});await dashboard.webview.postMessage(await dashboardState());}}
 async function focusAtgvWorkspace(){
                                                                            
@@ -1299,7 +1319,7 @@ async function focusAtgvWorkspace(){
   }
 }
 async function finishManualProjectDiscovery(sequence){
- if(sequence!==startupSequence)return;
+ if(sequence!==startupSequence||!webviewCoreReady)return;
  startupScan={status:'complete',percent:100,message:'Review technology stack prerequisites and test Jira, Confluence and GitHub connections first. Choose a project only after setup is verified.'};
  await dashboard?.webview.postMessage({type:'startupScan',...startupScan});
  await refreshDashboard();
@@ -1325,7 +1345,7 @@ async function start(options={}){
     return;
   }
   await focusAtgvWorkspace();
-  vendorBootRecoveryCount=0;
+  vendorBootRecoveryCount=0;webviewCssRetry=0;webviewCoreReady=false;
   await prepareVendorAssets({syncIfMissing:true});
                                                                              
                                                                    
@@ -3984,7 +4004,7 @@ async function handleDashboardMessage(msg){
           if(installedVendorAssets&&dashboard){
             vendorBootRecoveryCount=0;vendorWebviewReady=false;
             dashboard.webview.options={...dashboard.webview.options,localResourceRoots:[vscode.Uri.joinPath(context.extensionUri,'media'),vscode.Uri.file(installedVendorAssets.dir)]};
-            dashboard.webview.html=html(dashboard.webview,{resumeLibrary:true});
+            webviewCoreReady=false;dashboard.webview.html=html(dashboard.webview,{resumeLibrary:true});
             webviewVendorDir=installedVendorAssets.dir;
           }else if(vendorLibraryLastError){
             report('Offline Library CodeMirror activation: '+vendorLibraryLastError);
@@ -4115,7 +4135,24 @@ async function handleDashboardMessage(msg){
         catch(error){await dashboard?.webview.postMessage({type:'localBackupAction',action:'restore',success:false,message:error.message});throw error;}
         break;
       }
-      case 'refresh':await refreshLiveRemoteData({reason:'manual-refresh',force:true});await refreshDashboard();break;
+      case 'webviewReady':{
+         // Do not push project state before the final controller and core CSS load.
+         if(!msg.coreStylesLoaded&&webviewCssRetry<1&&dashboard){
+           webviewCssRetry++;
+           report('ATGV stylesheet load failed; rebuilding webview once: '+(msg.loadErrors||[]).slice(0,8).join('; '));
+           webviewCoreReady=false;dashboard.webview.html=html(dashboard.webview);
+           break;
+         }
+         webviewCoreReady=true;
+         if(!msg.coreStylesLoaded){
+           const detail=(Array.isArray(msg.loadErrors)?msg.loadErrors:[]).slice(0,12).join('; ');
+           report('ATGV core CSS unavailable: '+detail);
+           await recordStartupDiagnostic({stage:'webview-assets',status:'failed',detail});
+         }
+         await finishManualProjectDiscovery(startupSequence);
+         break;
+       }
+       case 'refresh':if(!webviewCoreReady)break;await refreshLiveRemoteData({reason:'manual-refresh',force:true});await refreshDashboard();break;
       case 'refreshConnectedSources':{
         requireOpened();
         await refreshLiveRemoteData({reason:'view-open'});
@@ -5532,7 +5569,7 @@ async function handleDashboardMessage(msg){
         await dashboard?.webview.postMessage({type:'guideSaved',guideId:id,value:normalized});
         break;
       }
-      case 'markRoleUsed':{requireOpened();const roles=await getRoleSettings(registry,activeProject.id);const allowed=new Set(roles.roles.map(r=>r.id));if(!allowed.has(msg.roleId))throw Error('Role is not enabled for this project.');const key='atgvAssist.usedRoles.'+activeProject.id;const before=context.workspaceState.get(key,[]);const after=[...new Set([...before.filter(x=>allowed.has(x)),msg.roleId])].slice(0,40);await context.workspaceState.update(key,after);await dashboard?.webview.postMessage({type:'roleMembership',roles:after});break;}
+      case 'markRoleUsed':{requireOpened();const roles=await getRoleSettings(registry,activeProject.id);const allowed=new Set(roles.roles.map(r=>r.id));if(!allowed.has(msg.roleId))throw Error('Role is not enabled for this project.');const key='atgvAssist.usedRoles.'+activeProject.id;const before=context.workspaceState.get(key,[]);const after=[...new Set([...before.filter(x=>allowed.has(x)),msg.roleId])].slice(0,40);await context.workspaceState.update(key,after);await dashboard?.webview.postMessage({type:'roleMembership',roles:after});queueMyWorkPresence(msg.roleId);break;}
       case 'designOpenTab':{
         // Backward-compatible command from older webviews: keep preview inside ATGV.
         await openSolutionDesignInline(String(msg.kind||''),String(msg.proposalId||''));break;
@@ -5778,7 +5815,45 @@ async function handleDashboardMessage(msg){
         }
         break;
       }
-      case 'pmApproveEffortBaseline':{
+      case 'openAtgvAi':{await atgvAiChat.open(vscode,{runtimeRoot:aiRuntimeRoot(),onLog:report});break;}
+       case 'myWorkRosterRefresh':{
+         try{
+           requireOpened();requireOnline();
+           if(msg.projectId&&msg.projectId!==activeProject.id)throw Error('Project changed.');
+           const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
+           const key=validProjectKey(config.get('jira.projectKey'));
+           const snapshot=await myWorkPresence.snapshot(config,token,key);
+           await dashboard?.webview.postMessage({type:'myWorkRoster',projectId:activeProject.id,...snapshot});
+         }catch(error){await dashboard?.webview.postMessage({type:'myWorkRosterError',projectId:activeProject?.id,message:String(error.message||error).slice(0,280)});}
+         break;
+       }
+       case 'pmJiraTransition':{
+         const projectId=activeProject?.id||'';
+         try{
+           requireOpened();requireOnline();
+           if(msg.projectId!==projectId)throw Error('Project changed. Reopen the PM board.');
+           const key=developerGit.jiraKey(msg.key);
+           const target=String(msg.status||'').trim().slice(0,80);
+           if(!target||!msg.expectedUpdated)throw Error('Refresh Jira before moving the issue.');
+           const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
+           const issue=await jiraReadIssue(config,token,key);
+           if(String(issue.fields?.project?.key||'').toUpperCase()!==validProjectKey(config.get('jira.projectKey')))
+             throw Error('Jira issue belongs to another project.');
+           if(String(issue.fields?.updated||'')!==String(msg.expectedUpdated))
+             throw Error('The Jira issue changed since the Kanban loaded. Refresh before moving.');
+           const transitions=await jiraAvailableTransitions(config,token,key);
+           const selected=transitions.find(t=>String(t.to).toLowerCase()===target.toLowerCase());
+           if(!selected)throw Error('No permitted Jira transition to '+target+'. Available: '+(transitions.map(t=>t.to).join(', ')||'none'));
+           const accepted=await uiWarning('Move '+key+' from '+String(issue.fields?.status?.name||'current status')+' to '+selected.to+' in Jira?',{modal:true},'Move Jira Issue');
+           if(accepted!=='Move Jira Issue')throw Error('Cancelled; no Jira changes made.');
+           const result=await jiraMove(config,token,key,selected.id,String(msg.expectedUpdated));
+           await dashboard?.webview.postMessage({type:'pmJiraTransitionResult',projectId,success:true,...result});
+         }catch(error){
+           await dashboard?.webview.postMessage({type:'pmJiraTransitionResult',projectId,success:false,message:String(error.message||error).slice(0,350)});
+         }
+         break;
+       }
+       case 'pmApproveEffortBaseline':{
         requireOpened();requireOnline();const snapshot=pmLatestSnapshot;
         if(!snapshot||snapshot.projectId!==activeProject.id||Date.now()-snapshot.at>600000)throw Error('Refresh the complete Jira inventory before approving estimates.');
         const project=await registry.read(activeProject.id),existing=await projectEffortRegister.load(registry,activeProject.id);
@@ -8119,7 +8194,8 @@ function activate(ctx){
    }
   });
   const reportIssue=()=>openIssueReport();
-  const actions={start,workspace,restart,reset,refreshUnifiedArtifacts,reportIssue};
+  const ai=()=>atgvAiChat.open(vscode,{runtimeRoot:aiRuntimeRoot(),onLog:report});
+  const actions={start,workspace,ai,restart,reset,refreshUnifiedArtifacts,reportIssue};
   for(const [name,fn] of Object.entries(actions))ctx.subscriptions.push(vscode.commands.registerCommand('atgvAssist.'+name,async(...args)=>{await ready;return guarded(()=>fn(...args));}));
   ctx.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(()=>{++startupSequence;ready=initialize().then(()=>dashboard?start({skipReload:true}):undefined).catch(e=>report('Workspace change: '+e.message));}));
   if(vscode.workspace.onDidChangeConfiguration)ctx.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e=>{if(e.affectsConfiguration('atgvAssist.rag')||e.affectsConfiguration('atgvAssist.ai')){invalidateModelStatus();refreshDashboard().catch(err=>report('Model settings: '+err.message));}}));
