@@ -32,8 +32,8 @@ main{max-width:980px;margin:auto;padding:25px clamp(16px,4vw,40px) 45px}
 .card{min-width:0;padding:18px 20px;border:1px solid var(--vscode-panel-border,#50535b);border-radius:10px;background:var(--vscode-editorWidget-background,var(--vscode-editor-background,#25282d))}
 .card.full{grid-column:1/-1}
 label{font-weight:650;font-size:12px;display:block;margin:14px 0 6px}
-input,select{width:100%;min-width:0;padding:10px;color:var(--vscode-input-foreground,var(--vscode-foreground));background:var(--vscode-input-background,#30343b);border:1px solid var(--vscode-input-border,var(--vscode-panel-border,#555));border-radius:5px;font:inherit}
-input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--vscode-focusBorder,#6ab5ff);outline-offset:2px}
+input,select,textarea{width:100%;min-width:0;padding:10px;color:var(--vscode-input-foreground,var(--vscode-foreground));background:var(--vscode-input-background,#30343b);border:1px solid var(--vscode-input-border,var(--vscode-panel-border,#555));border-radius:5px;font:inherit}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--vscode-focusBorder,#6ab5ff);outline-offset:2px}
 button{background:var(--vscode-button-background,#096db5);color:var(--vscode-button-foreground,#fff);border:0;border-radius:5px;min-height:37px;padding:10px 14px;font:inherit;cursor:pointer}
 button.secondary{background:var(--vscode-button-secondaryBackground,#454c58);color:var(--vscode-button-secondaryForeground,#fff)}
 button:hover:not(:disabled){filter:brightness(1.1)}button:disabled{opacity:.52;cursor:not-allowed}
@@ -48,10 +48,14 @@ ol{line-height:1.85;padding-left:20px}
 .status{min-height:49px;border:1px solid var(--vscode-panel-border,#50535b);border-radius:6px;padding:13px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55}
 .status[data-state=success]{border-color:var(--vscode-testing-iconPassed,#3aaf80)}
 .status[data-state=error]{border-color:var(--vscode-errorForeground,#e4787d)}
+#reviewPanel[hidden]{display:none}
+#reviewPanel textarea{resize:vertical;min-height:82px}
+#sourceAnalysis{white-space:pre-wrap;font-size:12px}
+.review-help{margin:8px 0 15px}
 @media(max-width:680px){.grid{grid-template-columns:1fr}.card.full{grid-column:auto}}
 </style></head>
 <body>
-<header><div><h1>ATGV: Workspace</h1><div class="muted">Repo A branch → Repo B copy, push & AI-assisted pull request</div></div><div class="muted">AIATECH ASSIST v__VERSION__</div></header>
+<header><div><h1>ATGV: Workspace</h1><div class="muted">Pull Repo A → Study source → Review suggestions → Publish Repo B PR</div></div><div class="muted">AIATECH ASSIST v__VERSION__</div></header>
 <main><p class="muted">Copy eligible tracked files from the selected Repo A branch into a matching, review-only branch of Repo B. Separate GitHub PATs authenticate each repository; Repo B main is never changed directly.</p>
 <form id="repoSyncForm"><div class="grid">
 <section class="card"><h2>1. Source · Repo A</h2>
@@ -61,8 +65,8 @@ ol{line-height:1.85;padding-left:20px}
 <label for="sourceUrl">GitHub repository URL with PAT</label><input id="sourceUrl" type="password" required placeholder="https://USERNAME:TOKEN@github.com/OWNER/repo-a" autocomplete="off" spellcheck="false">
 <div class="connection-action"><button id="testSource" type="button" class="secondary">Test Connection</button><span id="sourceConnection" class="connection-status" role="status" aria-live="polite">Not tested</span></div>
 <label for="sourceBranch">Source branch (optional)</label><input id="sourceBranch" type="text" maxlength="110" placeholder="Auto: GitHub default branch, or choose another branch">
-<label for="sourcePrNumber">Source PR number (optional)</label><input id="sourcePrNumber" type="number" min="1" step="1" placeholder="e.g. 2 · copy original PR branch and details">
-<p class="muted note">If selected, the source PR's head branch, commit message, title and description are preserved. The source PR branch must still exist.</p>
+<label for="sourcePrNumber">Source PR number (optional)</label><input id="sourcePrNumber" type="number" min="1" step="1" placeholder="e.g. 2 · use original PR metadata as the initial suggestion">
+<p class="muted note">The source PR branch must exist. Its original title, commit and description are prefilled for review, and can be edited before publishing.</p>
 <label for="copyScope">Copy scope</label><input id="copyScope" type="text" maxlength="280" value="." placeholder="src/components or .">
 <p class="muted note">A dot copies all eligible tracked files. Secrets, Git internals, generated dependencies and release workflows are excluded.</p>
 </section>
@@ -74,23 +78,40 @@ ol{line-height:1.85;padding-left:20px}
 <div class="connection-action"><button id="testDestination" type="button" class="secondary">Test Connection</button><span id="destinationConnection" class="connection-status" role="status" aria-live="polite">Not tested</span></div>
 <label>Local Repo B Git root or empty folder (outside ATGV workspace)</label><div class="folder"><button id="selectRepoB" type="button" class="secondary">Choose Repo B folder</button><strong id="destinationLabel">No folder selected</strong></div>
 <label for="baseBranch">PR base branch</label><input id="baseBranch" type="text" maxlength="110" placeholder="GitHub default branch (auto)">
-<p class="muted note">ATGV clones Repo A to a temporary folder. AI reads verified source metadata and suggests a safe Repo B sync branch, commit message and PR details. The copy is staged with Git, committed and published only after validation.</p>
+<p class="muted note">The first stage only reads Repo A and inspects source code structure; Repo B remains unchanged. Review the suggested branch, commit and PR text before the second stage.</p>
 </section>
-<section class="card full"><h2>3. Publish pull request</h2>
-<ol class="muted"><li>Test Repo A read access and Repo B write access with independent PATs</li><li>Clone Repo A to a temporary folder and read safe source metadata for AI planning</li><li>Create/reuse an AI-named review branch in Repo B, copy eligible files and run git add</li><li>Commit with AI-generated message, push and create PR with AI-written details</li></ol>
-<div class="actions"><button id="createPr" type="submit">Sync Repo A → Repo B · Push & Create PR</button><button id="openPr" type="button" class="secondary" hidden disabled>Open Created PR</button></div>
+<section class="card full"><h2>3. Pull & Study Repo A</h2>
+<ol class="muted"><li>Verify both GitHub connections and destination base</li><li>Pull the selected Repo A branch into a temporary folder</li><li>Inspect actual tracked source files, code symbols, dependencies, tests and latest commit</li><li>Suggest a descriptive branch, commit message, PR title and simple PR description</li></ol>
+<div class="actions"><button id="createPr" type="submit">Pull & Study Source Code</button><button id="openPr" type="button" class="secondary" hidden disabled>Open Created PR</button></div>
 <div id="syncStatus" class="status" role="status" aria-live="polite" data-state="ready">Paste username:PAT URLs, test both connections and select an existing Repo B checkout or an empty external folder. Git is required; pull requests use GitHub HTTPS API with the Destination PAT. GitHub CLI (gh) is not needed.</div>
+</section>
+<section class="card full" id="reviewPanel" hidden aria-label="Review proposed source sync">
+<h2>4. Review suggested Git and PR details</h2>
+<p class="muted review-help">Based on the pulled source. Edit any field, then approve and run the full Repo B operation. Source and destination are checked again before publishing.</p>
+<div id="sourceAnalysis" class="status" role="status"></div>
+<label for="reviewBranch">Destination branch name</label><input id="reviewBranch" type="text" maxlength="110" required>
+<label for="reviewCommit">Commit message</label><textarea id="reviewCommit" rows="3" maxlength="12000" required></textarea>
+<label for="reviewTitle">PR title</label><input id="reviewTitle" type="text" maxlength="110" required>
+<label for="reviewDescription">Simple PR details</label><textarea id="reviewDescription" rows="4" maxlength="4000" required></textarea>
+<div class="actions"><button id="publishReviewed" type="button">Approve & Run Full Sync · Push & Create PR</button><button id="redoReview" type="button" class="secondary">Pull & Study Again</button></div>
 </section></div></form>
-<p class="muted note">Repo B-only files and release workflows are preserved. The tool never merges the PR automatically. Review and test the changes before merging.</p>
+<p class="muted note">Repo B-only files and release workflows are preserved. GitHub PR merge is a separate action; source analysis does not alter Repo B.</p>
 </main>
 <script nonce="__NONCE__">
 'use strict';
 const vscode=acquireVsCodeApi();
 const get=id=>document.getElementById(id);
-let folder='',busy=false,createdPr='';
+let folder='',busy=false,createdPr='',reviewReady=false;
+function invalidateReview(){
+ if(!reviewReady)return;
+ reviewReady=false;get('reviewPanel').hidden=true;buttons();
+ show('Inputs changed. Pull & Study Repo A again to refresh the review. No Repo B files were changed.');
+}
 function show(message,state){get('syncStatus').textContent=String(message||'');get('syncStatus').dataset.state=state||'ready';}
 function buttons(){
  get('createPr').disabled=busy||!folder;
+ get('publishReviewed').disabled=busy||!reviewReady;
+ get('redoReview').disabled=busy;
  get('selectRepoB').disabled=busy;
  get('testSource').disabled=busy;get('testDestination').disabled=busy;
  for(const kind of ['Source','Destination']){
@@ -129,6 +150,7 @@ function showSavedRepos(kind,entries){
  buttons();
 }
 function selectSavedRepo(kind){
+ invalidateReview();
  const selection=savedSelect(kind).value;
  repoField(kind).value=selection;
  const node=connectionNode(kind);
@@ -146,6 +168,7 @@ for(const kind of ['Source','Destination']){
 }
 function testRepository(kind){
  if(busy)return;
+ invalidateReview();
  const raw=consumeUrl(kind==='Source'?'sourceUrl':'destinationRepo');
  busy=true;buttons();
  const node=connectionNode(kind);node.textContent='Testing GitHub permissions…';node.dataset.state='ready';
@@ -153,19 +176,31 @@ function testRepository(kind){
 }
 get('testSource').addEventListener('click',()=>testRepository('Source'));
 get('testDestination').addEventListener('click',()=>testRepository('Destination'));
+for(const id of ['sourceUrl','sourceBranch','sourcePrNumber','destinationRepo','copyScope','baseBranch'])
+ get(id).addEventListener('input',invalidateReview);
 for(const id of ['sourceUrl','destinationRepo'])get(id).addEventListener('input',()=>{
  const kind=id==='sourceUrl'?'Source':'Destination';
  const node=connectionNode(kind);node.textContent='Not tested';node.dataset.state='ready';
  const select=savedSelect(kind);const value=get(id).value.trim();
  select.value=[...select.options].some(item=>item.value===value)?value:'';buttons();
 });
-get('selectRepoB').addEventListener('click',()=>vscode.postMessage({command:'selectRepoB'}));
+get('selectRepoB').addEventListener('click',()=>{invalidateReview();vscode.postMessage({command:'selectRepoB'});});
 get('repoSyncForm').addEventListener('submit',e=>{
  e.preventDefault();
  if(busy||!folder||!get('repoSyncForm').reportValidity())return;
- busy=true;createdPr='';buttons();show('Confirm the operation in VS Code. No files have changed yet.');
- vscode.postMessage({command:'createSyncPr',sourceUrl:consumeUrl('sourceUrl'),sourceBranch:get('sourceBranch').value.trim(),sourcePrNumber:get('sourcePrNumber').value.trim(),destinationUrl:consumeUrl('destinationRepo'),copyScope:get('copyScope').value.trim()||'.',baseBranch:get('baseBranch').value.trim()});
+ busy=true;createdPr='';reviewReady=false;get('reviewPanel').hidden=true;buttons();show('Cloning and studying Repo A; Repo B stays untouched.');
+ vscode.postMessage({command:'prepareSyncReview',sourceUrl:consumeUrl('sourceUrl'),sourceBranch:get('sourceBranch').value.trim(),sourcePrNumber:get('sourcePrNumber').value.trim(),destinationUrl:consumeUrl('destinationRepo'),copyScope:get('copyScope').value.trim()||'.',baseBranch:get('baseBranch').value.trim()});
 });
+get('publishReviewed').addEventListener('click',()=>{
+ if(busy||!reviewReady)return;
+ const fields=['reviewBranch','reviewCommit','reviewTitle','reviewDescription'];
+ if(!fields.every(id=>get(id).reportValidity()))return;
+ busy=true;buttons();show('Confirm final publication in VS Code. Source SHA is pinned to your review.');
+ vscode.postMessage({command:'publishReviewedSync',branch:get('reviewBranch').value.trim(),
+  commitMessage:get('reviewCommit').value.trim(),prTitle:get('reviewTitle').value.trim(),
+  prDescription:get('reviewDescription').value.trim()});
+});
+get('redoReview').addEventListener('click',()=>get('repoSyncForm').requestSubmit());
 get('openPr').addEventListener('click',()=>{if(createdPr)vscode.postMessage({command:'openCreatedPr'});});
 window.addEventListener('message',e=>{
  const data=e.data||{};
@@ -186,6 +221,23 @@ window.addEventListener('message',e=>{
  }
  if(data.type==='repoBSelected'){folder=String(data.folder||'');get('destinationLabel').textContent=folder||'No folder selected';buttons();}
  if(data.type==='repoSyncProgress')show(data.message||'Synchronising…');
+ if(data.type==='sourceReviewReady'){
+  busy=false;reviewReady=true;createdPr='';get('reviewPanel').hidden=false;
+  const review=data.review||{};
+  get('reviewBranch').value=review.branch||'';
+  get('reviewCommit').value=review.commitMessage||'';
+  get('reviewTitle').value=review.prTitle||'';
+  get('reviewDescription').value=review.prDescription||'';
+  const analysis=review.sourceCode||{};
+  get('sourceAnalysis').textContent='Source: '+String(review.sourceRepo||'')+' / '+String(review.sourceBranch||'')+
+   ' @ '+String(review.sourceSha||'').slice(0,12)+'\nFiles inspected: '+String(review.fileCount||0)+
+   '\nSource files: '+(analysis.keyFiles||[]).slice(0,8).join(', ')+
+   '\nSymbols inspected: '+(analysis.symbols||[]).slice(0,8).map(x=>x.name).join(', ')+
+   '\nDependencies: '+(analysis.dependencies||[]).slice(0,12).join(', ')+
+   '\nExcluded commit paths: '+(review.excludedSourceCommitFiles||[]).slice(0,8).join(', ')+
+   '\nDestination base: '+String(review.base||'');
+  buttons();show('Source study completed. Review or edit the four suggestions, then approve the full operation. Repo B is unchanged.','success');
+ }
  if(data.type==='repoConnectionResult'){
   const id=data.kind==='Source'?'sourceUrl':'destinationRepo',node=connectionNode(data.kind);
   if(data.safeUrl){
@@ -204,7 +256,7 @@ window.addEventListener('message',e=>{
  if(data.type==='repoSyncForgetResult'){
   busy=false;buttons();show(data.message||'Saved connection action finished.',data.success?'success':'ready');
  }
- if(data.type==='repoSyncResult'){busy=false;createdPr=data.success?String(data.prUrl||''):'';buttons();show(data.message||'Sync finished.',data.success?'success':'error');}
+ if(data.type==='repoSyncResult'){busy=false;createdPr=data.success?String(data.prUrl||''):'';if(data.success){reviewReady=false;get('reviewPanel').hidden=true;}buttons();show(data.message||'Sync finished.',data.success?'success':'error');}
 });
 buttons();
 vscode.postMessage({command:'getRepoSyncSaved'});
@@ -215,7 +267,7 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
  if(panel){panel.reveal();return panel;}
  const current=vscode.window.createWebviewPanel('atgvAssist.workspace','ATGV: Workspace',vscode.ViewColumn.One,{enableScripts:true,retainContextWhenHidden:true});
  panel=current;
- let selectedFolder='',busy=false,createdPr='';
+ let selectedFolder='',busy=false,createdPr='',pendingReview=null;
  const patKey=(kind,repo)=>'atgvAssist.repoSync.'+kind+'.'+crypto.createHash('sha256').update(repo.name.toLowerCase()).digest('hex');
  function knownRepos(kind){
   const previous=preferences?.get?.(SAVED_URL_KEYS[kind],'');
@@ -323,7 +375,7 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
    if(busy)return;
    try{
     const picked=await vscode.window.showOpenDialog({canSelectFolders:true,canSelectFiles:false,canSelectMany:false,openLabel:'Select Repo B Git root',title:'ATGV Workspace: Choose Repo B Git root or an empty folder'});
-    if(picked?.[0]){selectedFolder=picked[0].fsPath;await post({type:'repoBSelected',folder:selectedFolder});}
+    if(picked?.[0]){selectedFolder=picked[0].fsPath;pendingReview=null;await post({type:'repoBSelected',folder:selectedFolder});}
    }catch(error){await post({type:'repoSyncResult',success:false,message:sanitize(error)});}
    return;
   }
@@ -335,6 +387,7 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
    try{
     if(!['Source','Destination'].includes(kind))throw Error('Select Source or Destination.');
     parsed=repoCredentials.parseCredentialUrl(message.url);
+    pendingReview=null;
     const credentials=await verifiedPat(kind,parsed);token=credentials.token;
     await rememberRepo(kind,parsed);
     await post({type:'repoConnectionResult',kind,success:true,safeUrl:parsed.webUrl,message:'Connected · '+parsed.name+' · '+(kind==='Source'?'read':'write')+' access verified'});
@@ -344,26 +397,37 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
    }finally{busy=false;}
    return;
   }
-  if(message.command!=='createSyncPr')return;
+  const isPrepare=message.command==='prepareSyncReview';
+  const isPublish=message.command==='publishReviewedSync';
+  if(!isPrepare&&!isPublish&&message.command!=='createSyncPr')return;
   if(busy){await post({type:'repoSyncResult',success:false,message:'A repository operation is already running.'});return;}
   busy=true;createdPr='';
+  if(isPrepare)pendingReview=null;
   let sourcePat='',destPat='',source=null,destination=null;
   try{
    if(!selectedFolder)throw Error('Choose a Repo B Git folder outside ATGV workspace first.');
-   source=repoCredentials.parseCredentialUrl(message.sourceUrl);
-   destination=repoCredentials.parseCredentialUrl(message.destinationUrl);
-   const scope=repoSync.scopeName(message.copyScope||'.');
-   const sourceBranch=message.sourceBranch?repoSync.baseName(message.sourceBranch):'';
-   const sourcePrNumber=message.sourcePrNumber?String(message.sourcePrNumber).trim():'';
+   if(isPublish&&(!pendingReview||pendingReview.folder!==selectedFolder))
+    throw Error('Pull & Study Repo A before publishing. The destination folder or source review changed.');
+   const input=isPublish?pendingReview.input:message;
+   source=repoCredentials.parseCredentialUrl(input.sourceUrl);
+   destination=repoCredentials.parseCredentialUrl(input.destinationUrl);
+   const scope=repoSync.scopeName(input.copyScope||'.');
+   const sourceBranch=input.sourceBranch?repoSync.baseName(input.sourceBranch):'';
+   const sourcePrNumber=input.sourcePrNumber?String(input.sourcePrNumber).trim():'';
    if(sourcePrNumber&&(!/^[1-9][0-9]*$/.test(sourcePrNumber)||Number(sourcePrNumber)>1000000000))
     throw Error('Enter a valid positive source PR number.');
-   const base=message.baseBranch?repoSync.baseName(message.baseBranch):'';
-   const response=await vscode.window.showWarningMessage(
+   const base=input.baseBranch?repoSync.baseName(input.baseBranch):'';
+   const reviewed=isPublish?{...pendingReview.review,branch:message.branch,
+    commitMessage:message.commitMessage,prTitle:message.prTitle,
+    prDescription:message.prDescription}:null;
+   const response=isPrepare?'Prepare Source Review':await vscode.window.showWarningMessage(
     'Repo A: '+source.name+' ('+(sourcePrNumber?'PR #'+sourcePrNumber:sourceBranch||'GitHub default branch (auto)')+')\nRepo B: '+destination.name+' in '+selectedFolder+
     '\nScope: '+scope+'\nPR base: '+(base||'GitHub default branch')+
-    '\n\nVerify both PATs, clone to temp, preserve original source metadata, commit, push and open PR?',
-    {modal:true},'Create Sync PR');
-   if(response!=='Create Sync PR'){await post({type:'repoSyncResult',success:false,message:'Cancelled. No files were changed.'});return;}
+    isPublish?'\n\nPublish the reviewed branch, commit message, PR title and description?':'\n\nVerify both PATs, clone to temp and create the PR?',
+    {modal:true},isPublish?'Publish Reviewed PR':'Create Sync PR');
+   if(response!==(isPrepare?'Prepare Source Review':isPublish?'Publish Reviewed PR':'Create Sync PR')){
+    await post({type:'repoSyncResult',success:false,message:'Cancelled. No files were changed.'});return;
+   }
    await post({type:'repoSyncProgress',message:'Testing both GitHub PAT permissions…'});
    const sourceCredentials=await verifiedPat('Source',source);sourcePat=sourceCredentials.token;
    await rememberRepo('Source',source);
@@ -374,8 +438,19 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
    const outcome=await repoSync.sync({
     sourceUrl:source.url,sourceBranch,sourcePrNumber,destinationFolder:selectedFolder,copyScope:scope,baseBranch:base,
     sourcePat,destPat,workspaceRoot,destinationUrl:destination.url,
-    planSync,describePr,onProgress:event=>post({type:'repoSyncProgress',stage:event.stage,message:event.message})
+    planSync,describePr,previewOnly:isPrepare,approvedReview:reviewed,
+    onProgress:event=>post({type:'repoSyncProgress',stage:event.stage,message:event.message})
    });
+   if(isPrepare){
+    if(!outcome.preview||!outcome.review)throw Error('No source review generated.');
+    pendingReview={folder:selectedFolder,input:{
+     sourceUrl:source.webUrl,destinationUrl:destination.webUrl,sourceBranch,sourcePrNumber,
+     copyScope:scope,baseBranch:base
+    },review:outcome.review};
+    await post({type:'sourceReviewReady',review:outcome.review});
+    return;
+   }
+   pendingReview=null;
    createdPr=outcome.prUrl||'';
    const summary=outcome.unchanged?outcome.message:
     'PR created: '+outcome.prUrl+'\nSource: '+outcome.sourceRepo+' / '+outcome.sourceBranch+' @ '+outcome.sourceSha+
