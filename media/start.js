@@ -1599,7 +1599,10 @@ $('projectConnectionForm').addEventListener('submit',event=>{
  mappingModalStatus('Saving verified project mapping…');
  send('saveProjectConnectionMapping',{kind:mappingModalKind,key,projectId:mappingModalProjectId,requestId:mappingRequestSerial});
 });
+let lastRosterProject='';
 function renderOverviewConnections(data){
+ if(activeId&&lastRosterProject!==activeId){lastRosterProject=activeId;send('myWorkRosterRefresh',{projectId:activeId});}
+ if(!activeId)lastRosterProject='';
  projectConnectionsSnapshot=data||{jira:{},confluence:{}};
  const jira=data?.jira||{},space=data?.confluence||{};
  const configured=record=>record.source==='project'||record.source==='extension';
