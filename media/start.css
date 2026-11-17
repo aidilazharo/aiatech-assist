@@ -1973,3 +1973,22 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 #discoveryView .ba-completed-flat .ba-jira-only-br-section .ba-completed-br-body{padding:13px 16px}
 #discoveryView .ba-completed-flat .ba-jira-only-br-section .ba-jira-recovery-info{width:100%;max-width:100%}
 #discoveryView .ba-completed-flat .ba-jira-only-br-section .ba-jira-answers-unavailable{opacity:.55;cursor:not-allowed}
+
+/* v0.3.88: keep the verified-extension upgrade dialog visible for the full install. */
+.atgv-upgrade-progress{margin:16px 0 0;padding:13px 15px;border:1px solid var(--vscode-panel-border);border-radius:9px;background:var(--vscode-editor-background);}
+.atgv-upgrade-progress strong{display:block;margin:8px 0 3px;font-size:13px;color:var(--vscode-foreground);}
+.atgv-upgrade-progress p{margin:0;font-size:12px;color:var(--vscode-descriptionForeground);overflow-wrap:anywhere;}
+.atgv-upgrade-progress-track{height:5px;overflow:hidden;border-radius:5px;background:var(--vscode-progressBar-background,#235e99);opacity:.6;}
+.atgv-upgrade-progress-indicator{display:block;width:34%;height:100%;background:var(--vscode-focusBorder,#4ba8f8);animation:atgv-extension-upgrade-loading 1.35s ease-in-out infinite;}
+@keyframes atgv-extension-upgrade-loading{0%{transform:translateX(-110%)}100%{transform:translateX(320%)}}
+.atgv-upgrade-progress[data-state="failed"]{border-color:var(--vscode-inputValidation-errorBorder,#d75b61);}
+.atgv-upgrade-progress[data-state="failed"] .atgv-upgrade-progress-track{display:none;}
+.atgv-upgrade-progress[data-state="failed"] strong{color:var(--vscode-errorForeground,#ec7676);}
+.atgv-upgrade-progress[data-state="completed"] .atgv-upgrade-progress-indicator{width:100%;transform:none;animation:none;}
+@media(prefers-reduced-motion:reduce){.atgv-upgrade-progress-indicator{animation:none;width:100%;opacity:.65;}}
+
+/* Pin the unified log download alone to the bottom-left of prerequisite readiness. */
+#startupComputerCard{display:flex;flex-direction:column;row-gap:12px;}
+#startupComputerCard>.atgv-startup-section-title{margin-bottom:4px;}
+#startupComputerCard>.atgv-startup-stack-grid{margin-top:8px;margin-bottom:4px;}
+#startupComputerCard .atgv-startup-diagnostics-footer{margin-top:auto;align-self:stretch;justify-content:flex-start;}

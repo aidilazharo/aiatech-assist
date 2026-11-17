@@ -66,5 +66,9 @@ test('successful Test & Save hides and disables action, changes restore it, and 
  page.setVerified(true);
  page.renderStartupPage();
  assert.equal(node('startupTestConnections').hiddenClasses.has('hidden'),true);
- assert.equal(node('startupAtlassianToken').disabled,false);
+ assert.equal(node('startupAtlassianToken').disabled,true);
+ assert.equal(node('startupGithubToken').disabled,true);
+ assert.equal(node('startupJiraUrl').disabled,true);
+ assert.equal(node('startupProjectRepo').disabled,true);
+ assert.equal(node('startupLibraryZipUpload').disabled,true);
 });

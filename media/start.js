@@ -7074,11 +7074,12 @@ function renderStartupScanPlaceholders(){
 function startupPayload(){return Object.fromEntries(Object.entries(startupFieldMap).map(([key,id])=>[key,$(id).value.trim()]));}
 function renderStartupPage(){
  if(!startupSetupRequired)return;
- // A verified and saved connection needs no repeated Test & Save action.
- // Any credential or URL edit invalidates verification and restores the button.
+ // A saved, verified connection is read-only across page navigation and VS Code restarts.
+ // Reconfiguration is managed in Settings; an unverified saved state must be tested.
  $('startupTestConnections').disabled=startupVerifying||startupConnectionVerified;
  $('startupTestConnections').classList.toggle('hidden',startupConnectionVerified);
- for(const id of [...Object.values(startupFieldMap),'startupAtlassianToken','startupGithubToken'])$(id).disabled=startupVerifying;
+ for(const id of [...Object.values(startupFieldMap),'startupAtlassianToken','startupGithubToken','startupLibraryZipUpload'])
+  $(id).disabled=startupVerifying||startupConnectionVerified;
  $('startupComputerCard').classList.toggle('hidden',startupPage!==0);
  $('startupConnectionForm').classList.toggle('hidden',startupPage!==1);
  $('startupPrevious').classList.toggle('hidden',startupPage===0);
@@ -7101,7 +7102,17 @@ function renderStartupConfig(config){
   const saved=config.saved||{},defaults=config.defaults||{};
   updateHeaderUserName(saved.email||extensionSettings.jira?.email);
   for(const [key,id] of Object.entries(startupFieldMap))$(id).value=saved[key]||defaults[key]||'';
+  // Restore verified state before rendering the wizard so "Next: Search Project"
+  // is enabled immediately after restarting the extension or VS Code.
+  startupConnectionVerified=config.verified===true;
+  if(startupConnectionVerified)startupPage=1;
   startupFormInitialized=true;
+ }else if(config.verified===true){
+  startupConnectionVerified=true;
+ }
+ if(startupConnectionVerified){
+  $('startupConnectionMessage').textContent='Jira, Confluence and GitHub connections already verified and saved.';
+  $('startupConnectionMessage').className='test-status success';
  }
  const offline=config.offlineLibrary;
  if(offline)$('startupLibraryZipStatus').textContent=`Offline ZIP v${offline.version} (${offline.filename}) active; retained while newer than GitHub main.`;
@@ -7325,32 +7336,84 @@ window.addEventListener('message',event=>{
 });
 
 let displayedExtensionUpgrade=null;
-function closeExtensionUpgrade(action='Later'){
- if(!displayedExtensionUpgrade)return;
- const requestId=displayedExtensionUpgrade;displayedExtensionUpgrade=null;
+let extensionUpgradeInstallState='ready';
+function renderExtensionUpgradeInstallState(state,title='',description=''){
+ extensionUpgradeInstallState=state;
+ const busy=state==='installing',failed=state==='failed';
+ const progress=$('extensionUpgradeProgress'),modal=$('extensionUpgradeModal');
+ modal.setAttribute('aria-busy',String(busy));
+ progress.classList.toggle('hidden',state==='ready');
+ progress.dataset.state=state;
+ if(title)$('extensionUpgradeProgressTitle').textContent=String(title).slice(0,180);
+ if(description)$('extensionUpgradeProgressMessage').textContent=String(description).slice(0,700);
+ $('extensionUpgradeLater').disabled=busy;
+ $('extensionUpgradeView').disabled=busy;
+ const install=$('extensionUpgradeInstall');
+ install.disabled=busy;
+ install.textContent=busy?'Installing…':failed?'Retry Install':'Install Upgrade';
+ if(busy)progress.focus();
+}
+function closeExtensionUpgrade(action='Later',notify=true){
+ if(!displayedExtensionUpgrade||extensionUpgradeInstallState==='installing')return;
+ const requestId=displayedExtensionUpgrade;
+ displayedExtensionUpgrade=null;
+ renderExtensionUpgradeInstallState('ready');
  const modal=$('extensionUpgradeModal');modal.classList.add('hidden');modal.setAttribute('aria-hidden','true');
- send('extensionUpgradeDecision',{requestId,action});
+ if(notify)send('extensionUpgradeDecision',{requestId,action});
+}
+function startExtensionUpgradeInstall(){
+ if(!displayedExtensionUpgrade||extensionUpgradeInstallState==='installing')return;
+ const requestId=displayedExtensionUpgrade,retry=extensionUpgradeInstallState==='failed';
+ renderExtensionUpgradeInstallState('installing','Preparing upgrade…','Starting verified extension installation.');
+ if(retry)send('extensionUpgradeRetry',{requestId});
+ else send('extensionUpgradeDecision',{requestId,action:'Install Upgrade'});
 }
 $('extensionUpgradeLater').addEventListener('click',()=>closeExtensionUpgrade('Later'));
 $('extensionUpgradeView').addEventListener('click',()=>closeExtensionUpgrade('View Release'));
-$('extensionUpgradeInstall').addEventListener('click',()=>closeExtensionUpgrade('Install Upgrade'));
+$('extensionUpgradeInstall').addEventListener('click',startExtensionUpgradeInstall);
 $('extensionUpgradeModal').addEventListener('keydown',event=>{
+ if(extensionUpgradeInstallState==='installing'){
+  if(event.key==='Escape'||event.key==='Tab'){
+   event.preventDefault();$('extensionUpgradeProgress').focus();
+  }
+  return;
+ }
  if(event.key==='Escape'){event.preventDefault();closeExtensionUpgrade('Later');return;}
  if(event.key==='Tab'){
-  const controls=['extensionUpgradeLater','extensionUpgradeView','extensionUpgradeInstall'].map($);
+  const controls=['extensionUpgradeLater','extensionUpgradeView','extensionUpgradeInstall'].map($).filter(node=>!node.disabled);
   const first=controls[0],last=controls.at(-1);
+  if(!first||!last)return;
   if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
   else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
  }
 });
 window.addEventListener('message',event=>{
  const message=event.data||{};
+ if(message.type==='extensionUpgradeProgress'){
+  if(!displayedExtensionUpgrade||message.requestId!==displayedExtensionUpgrade)return;
+  const stage=String(message.stage||'');
+  if(stage==='completed'){
+   // Only the host's install command completion unlocks and closes this dialog.
+   renderExtensionUpgradeInstallState('completed',message.title||'Upgrade installed successfully',message.message||'VS Code has finished installing the verified package.');
+   closeExtensionUpgrade('Installed',false);
+   return;
+  }
+  if(stage==='failed'){
+   renderExtensionUpgradeInstallState('failed','Installation failed',message.message||'Unable to install the verified release. Select Retry Install or Later.');
+   $('extensionUpgradeInstall').focus();return;
+  }
+  renderExtensionUpgradeInstallState('installing',message.title||'Installing verified extension…',message.message||'Keep this window open until installation finishes.');
+  return;
+ }
  if(message.type!=='extensionUpgradeOffer'||!message.requestId)return;
+ // An active install must not be replaced by another offer.
+ if(displayedExtensionUpgrade&&extensionUpgradeInstallState==='installing')return;
  if(displayedExtensionUpgrade)closeExtensionUpgrade('Later');
  displayedExtensionUpgrade=message.requestId;
+ renderExtensionUpgradeInstallState('ready');
  $('extensionUpgradeCurrent').textContent='v'+String(message.currentVersion||'?');
  $('extensionUpgradeNext').textContent='v'+String(message.version||'?');
- $('extensionUpgradeDescription').textContent=`ATGV v${message.version||'?'} is available. Review and install the verified extension release when ready.`;
+ $('extensionUpgradeDescription').textContent='ATGV v'+String(message.version||'?')+' is available. Review and install the verified extension release when ready.';
  $('extensionUpgradeSource').textContent='GitHub: '+String(message.repository||'')+' · '+String(message.tag||'');
  const modal=$('extensionUpgradeModal');modal.classList.remove('hidden');modal.setAttribute('aria-hidden','false');
  $('extensionUpgradeInstall').focus();

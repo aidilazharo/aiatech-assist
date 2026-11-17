@@ -414,18 +414,74 @@ async function releaseAccessToken({interactive=false}={}){
  try{return (await vscode.authentication.getSession('github',['repo'],interactive?{createIfNone:true}:{silent:true}))?.accessToken||'';}
  catch{return '';}
 }
+// Only the host can confirm that VSIX download, checksum and VS Code install succeeded.
+// Keep the upgrade prompt open until that confirmation, including on retryable failures.
+let activeExtensionUpgradeInstall=null;
+async function postExtensionInstallProgress(operation,stage,title,message){
+ if(!operation?.requestId||!dashboard)return;
+ try{
+  await dashboard.webview.postMessage({
+   type:'extensionUpgradeProgress',requestId:operation.requestId,
+   stage,title:String(title||'').slice(0,180),message:String(message||'').slice(0,700)
+  });
+ }catch(error){report('Upgrade progress could not be displayed: '+error.message);}
+}
+async function performVerifiedExtensionInstall(operation){
+ if(!operation||operation.running)return;
+ operation.running=true;
+ let installed=false;
+ try{
+  const phases={
+   downloading:['Downloading verified extension…','Fetching the VSIX and published SHA-256 checksum from GitHub.'],
+   verifying:['Verifying release integrity…','Checking the downloaded file size and SHA-256 checksum.'],
+   staging:['Preparing VSIX installation…','Saving the verified extension package locally.']
+  };
+  await postExtensionInstallProgress(operation,'downloading',...phases.downloading);
+  const folder=path.join(context.globalStorageUri.fsPath,'updates');
+  const vsix=await releaseUpdater.downloadVerified(operation.release,{
+   token:operation.token,directory:folder,
+   onProgress:async stage=>{
+    if(phases[stage])await postExtensionInstallProgress(operation,stage,...phases[stage]);
+   }
+  });
+  await postExtensionInstallProgress(operation,'installing','Installing extension…','VS Code is installing the verified package. Keep this dialog open.');
+  await vscode.commands.executeCommand('workbench.extensions.installExtension',vscode.Uri.file(vsix));
+  installed=true;
+  await postExtensionInstallProgress(operation,'completed','Upgrade installed successfully','Installation finished. ATGV is reloading.');
+  activeExtensionUpgradeInstall=null;
+ }catch(error){
+  report('Verified ATGV upgrade failed: '+error.message);
+  const safeMessage=String(error.message||'Unknown error').slice(0,400);
+  await postExtensionInstallProgress(operation,'failed','Installation failed',safeMessage+' You can retry without closing this dialog.');
+  if(!operation.requestId||!dashboard){
+   activeExtensionUpgradeInstall=null;
+   const answer=await vscode.window.showErrorMessage('Automatic ATGV upgrade failed: '+safeMessage,'View Release');
+   if(answer==='View Release')await vscode.env.openExternal(vscode.Uri.parse(operation.release.url));
+  }
+ }finally{
+  operation.running=false;
+ }
+ if(installed){
+  // Let the webview render completion and close its modal before VS Code reloads.
+  if(operation.requestId)await new Promise(resolve=>setTimeout(resolve,250));
+  try{await restart();}
+  catch(error){report('ATGV upgrade installed but reload failed: '+error.message);}
+ }
+}
 async function offerBrandedExtensionUpgrade(release){
- if(!dashboard)return vscode.window.showInformationMessage(`ATGV v${release.version} is available. Install the verified GitHub release?`,{modal:true},'Install Upgrade','View Release','Later');
+ if(!dashboard)return vscode.window.showInformationMessage('ATGV v'+release.version+' is available. Install the verified GitHub release?',{modal:true},'Install Upgrade','View Release','Later');
  const requestId=crypto.randomUUID();
  return new Promise(resolve=>{
-  const timer=setTimeout(()=>{pendingExtensionUpgradeOffers.delete(requestId);resolve('Later');},120000);
-  timer.unref?.();
+  // Do not time out a still-visible offer: otherwise Install can become inert
+  // if the user reviews release details for more than two minutes.
+  // Dashboard disposal resolves outstanding offers and clears the entry.
+  const timer=null;
   pendingExtensionUpgradeOffers.set(requestId,{resolve,timer});
   Promise.resolve(dashboard.webview.postMessage({type:'extensionUpgradeOffer',requestId,
     currentVersion:require('../../../package.json').version,version:release.version,
     repository:release.repository||releaseUpdater.REPO,tag:release.tag,url:release.url})).then(success=>{
-      if(!success){const entry=pendingExtensionUpgradeOffers.get(requestId);if(entry){clearTimeout(entry.timer);pendingExtensionUpgradeOffers.delete(requestId);resolve('Later');}}
-    }).catch(()=>{clearTimeout(timer);pendingExtensionUpgradeOffers.delete(requestId);resolve('Later');});
+      if(!success){const entry=pendingExtensionUpgradeOffers.get(requestId);if(entry){clearTimeout(entry.timer);pendingExtensionUpgradeOffers.delete(requestId);resolve({action:'Later',requestId});}}
+    }).catch(()=>{clearTimeout(timer);pendingExtensionUpgradeOffers.delete(requestId);resolve({action:'Later',requestId});});
  });
 }
 async function promptExtensionRelease(release,token){
@@ -434,17 +490,14 @@ async function promptExtensionRelease(release,token){
  const promptId=(release.repository||releaseUpdater.REPO)+'|'+(release.tag||'');
  if(context.globalState.get(key)===promptId)return;
  await context.globalState.update(key,promptId);
- const answer=await offerBrandedExtensionUpgrade(release);
- if(answer==='View Release')await vscode.env.openExternal(vscode.Uri.parse(release.url));
- if(answer==='Install Upgrade'){
-  try{
-   const folder=path.join(context.globalStorageUri.fsPath,'updates');
-   const vsix=await releaseUpdater.downloadVerified(release,{token,directory:folder});
-   await vscode.commands.executeCommand('workbench.extensions.installExtension',vscode.Uri.file(vsix));
-   // Only a successfully installed, checksum-verified VSIX triggers restart.
-   // The existing restart flag recreates ATGV Start with a fresh webview.
-   await restart();
-  }catch(error){report('Verified ATGV upgrade failed: '+error.message);await vscode.window.showErrorMessage(`Automatic upgrade failed: ${error.message} Use the GitHub release page for manual installation.`,'View Release').then(choice=>choice==='View Release'?vscode.env.openExternal(vscode.Uri.parse(release.url)):undefined);}
+ const selected=await offerBrandedExtensionUpgrade(release);
+ const action=typeof selected==='string'?selected:selected?.action;
+ const requestId=typeof selected==='object'&&selected?selected.requestId:null;
+ if(action==='View Release')await vscode.env.openExternal(vscode.Uri.parse(release.url));
+ if(action==='Install Upgrade'&&!activeExtensionUpgradeInstall){
+  const operation={requestId,release,token,running:false};
+  activeExtensionUpgradeInstall=operation;
+  await performVerifiedExtensionInstall(operation);
  }
 }
 async function checkExtensionRelease({prompt=false,interactive=false}={}){
@@ -1025,17 +1078,43 @@ async function aiDrafts(){
  return generated;
 }
 function startupIsComplete(){return context.globalState.get('atgvAssist.startupSetup.completed',false)===true;}
-async function startupStatus(){
+const STARTUP_VERIFIED_SECRET='atgvAssist.startupConnections.verified';
+// Keep the verification proof inside VS Code SecretStorage, never in the webview
+// or plain extension settings. It binds the precise saved endpoints to both PATs.
+function startupSavedConnectionFields(){
  const saved=extensionSettings||{},catalog=catalogConfig();
+ return {jiraUrl:saved.jira?.baseUrl||'',confluenceUrl:saved.confluence?.baseUrl||'',email:saved.jira?.email||'',
+  githubUrl:saved.github?.owner?'https://github.com/'+saved.github.owner:'',
+  projectRepoUrl:saved.github?.owner&&saved.github?.repo?'https://github.com/'+saved.github.owner+'/'+saved.github.repo:'',
+  libraryRepoUrl:catalog.repositoryUrl||''};
+}
+async function storedStartupVerification(){
+ try{
+  const raw=await context.secrets.get(STARTUP_VERIFIED_SECRET);
+  if(!raw)return null;
+  const proof=JSON.parse(raw);
+  const fields=startupSavedConnectionFields();
+  const signature=sha(JSON.stringify(startupSetup.validate(fields)));
+  if(!proof||proof.signature!==signature||typeof proof.tokenDigest!=='string')return null;
+  const [atlassian,github]=await Promise.all([
+   readToken(globalSecretKey('atlassian'),globalCredentialEndpoint('atlassian')),
+   readToken(globalSecretKey('github'),globalCredentialEndpoint('github'))
+  ]);
+  const libraryToken=await context.secrets.get('atgvAssist.sdlcCatalogToken');
+  if(!atlassian||!github||github!==libraryToken||proof.tokenDigest!==sha(atlassian+'\\0'+github))return null;
+  return {signature};
+ }catch{return null;}
+}
+async function startupStatus(){
+ const verified=await storedStartupVerification();
+ startupSessionVerified=!!verified;
+ startupVerifiedSignature=verified?.signature||'';
  const workspace=getWorkspace()?.uri.fsPath;
  let offline=null;
  try{if(workspace){const installed=await sdlcCatalog.activeRoot(workspace);offline=installed.offline?installed:null;}}catch(e){if(!/not activated/.test(e.message))report('Offline Library startup status: '+e.message);}
  return {required:!startupSessionProceedApproved,defaults:startupSetup.DEFAULTS,
-  offlineLibrary:offline?{version:offline.version,filename:offline.filename,repository:offline.repository}:null,
-  saved:{jiraUrl:saved.jira?.baseUrl||'',confluenceUrl:saved.confluence?.baseUrl||'',email:saved.jira?.email||'',
-   githubUrl:saved.github?.owner?'https://github.com/'+saved.github.owner:'',
-   projectRepoUrl:saved.github?.owner&&saved.github?.repo?'https://github.com/'+saved.github.owner+'/'+saved.github.repo:'',
-   libraryRepoUrl:catalog.repositoryUrl||''}};
+  verified:!!verified,offlineLibrary:offline?{version:offline.version,filename:offline.filename,repository:offline.repository}:null,
+  saved:startupSavedConnectionFields()};
 }
 async function testAndSaveStartupConnections(message){
  startupSessionVerified=false;startupVerifiedSignature='';
@@ -1089,6 +1168,12 @@ async function testAndSaveStartupConnections(message){
  extensionSettings=settings;pendingTests={jira:null,github:null};
  catalogRemote=null;catalogLastCheck='';catalogLastError='';scheduleCatalogChecks();
  startupSessionVerified=true;startupVerifiedSignature=sha(JSON.stringify(data));
+ // Re-read the canonical saved configuration so restarts can recognize it even
+ // when the user originally entered trailing slashes or a GitHub .git suffix.
+ const persistedSignature=sha(JSON.stringify(startupSetup.validate(startupSavedConnectionFields())));
+ await context.secrets.store(STARTUP_VERIFIED_SECRET,JSON.stringify({
+  signature:persistedSignature,tokenDigest:sha(atlassian+'\\0'+github)
+ }));
  return {success:true,librarySha:library.sha?.slice(0,12)||'offline',
   message:offlineFallback?'Jira, Confluence, GitHub account and project repository verified. Library GitHub access is unavailable; using temporary validated ZIP v'+offlineFallback.version+'. Settings saved.':'Jira and Confluence authenticated; GitHub account and both repositories verified. Settings saved securely. Proceed to project search.'};
 }
@@ -3845,17 +3930,32 @@ async function handleDashboardMessage(msg){
         break;
       }
       case 'startupProceed':{
-        if(!startupSessionVerified||startupVerifiedSignature!==sha(JSON.stringify(startupSetup.validate(msg.settings))))throw Error('Test Jira, Confluence and GitHub connections with the current fields before proceeding.');
+        const verified=await storedStartupVerification();
+        if(!verified||verified.signature!==sha(JSON.stringify(startupSetup.validate(msg.settings))))throw Error('Test Jira, Confluence and GitHub connections with the current fields before proceeding.');
         await context.globalState.update('atgvAssist.startupSetup.completed',true);
         startupSessionProceedApproved=true;
-        startupSessionVerified=false;startupVerifiedSignature='';
+        startupSessionVerified=true;startupVerifiedSignature=verified.signature;
         await dashboard?.webview.postMessage({type:'startupProceedResult',success:true});
         await refreshDashboard();break;
       }
       case 'extensionUpgradeDecision':{
         const entry=pendingExtensionUpgradeOffers.get(msg.requestId);
-        if(entry){pendingExtensionUpgradeOffers.delete(msg.requestId);clearTimeout(entry.timer);
-          entry.resolve(['Install Upgrade','View Release','Later'].includes(msg.action)?msg.action:'Later');}
+        const action=['Install Upgrade','View Release','Later'].includes(msg.action)?msg.action:'Later';
+        if(entry){
+          pendingExtensionUpgradeOffers.delete(msg.requestId);clearTimeout(entry.timer);
+          entry.resolve({action,requestId:msg.requestId});
+        }else if(activeExtensionUpgradeInstall?.requestId===msg.requestId&&!activeExtensionUpgradeInstall.running){
+          // A failed installation stays open until the user retries or explicitly leaves.
+          const release=activeExtensionUpgradeInstall.release;
+          activeExtensionUpgradeInstall=null;
+          if(action==='View Release')await vscode.env.openExternal(vscode.Uri.parse(release.url));
+        }
+        break;
+      }
+      case 'extensionUpgradeRetry':{
+        const operation=activeExtensionUpgradeInstall;
+        if(!operation||!operation.requestId||operation.requestId!==msg.requestId||operation.running)break;
+        await performVerifiedExtensionInstall(operation);
         break;
       }
       case 'libraryUpdateDecision':{
@@ -3873,12 +3973,20 @@ async function handleDashboardMessage(msg){
       }
       case 'installExtensionRelease':{
         if(!extensionRelease)throw Error('No verified newer release is available.');
-        // The user explicitly clicked Upgrade, so bypass the once-per-release prompt suppression.
+        // Manual installs use the same visible upgrade modal and verified progress
+        // rather than silently downloading/installing and closing the UI.
+        if(activeExtensionUpgradeInstall?.running)break;
         const release=extensionRelease,token=await releaseAccessToken({interactive:true});
-        const file=await releaseUpdater.downloadVerified(release,{token,directory:path.join(context.globalStorageUri.fsPath,'updates')});
-        await vscode.commands.executeCommand('workbench.extensions.installExtension',vscode.Uri.file(file));
-        // Direct installation uses the same seamless reload and fresh webview as the branded upgrade modal.
-        await restart();break;
+        const selected=await offerBrandedExtensionUpgrade(release);
+        const action=typeof selected==='string'?selected:selected?.action;
+        const requestId=typeof selected==='object'&&selected?selected.requestId:null;
+        if(action==='View Release')await vscode.env.openExternal(vscode.Uri.parse(release.url));
+        if(action==='Install Upgrade'&&!activeExtensionUpgradeInstall){
+          const operation={requestId,release,token,running:false};
+          activeExtensionUpgradeInstall=operation;
+          await performVerifiedExtensionInstall(operation);
+        }
+        break;
       }
       case 'backupLocalContent':{
         try{const result=await backupLocalContent();if(result?.cancelled)await dashboard?.webview.postMessage({type:'localBackupAction',action:'backup',success:true,message:'Backup cancelled. No files changed.'});}

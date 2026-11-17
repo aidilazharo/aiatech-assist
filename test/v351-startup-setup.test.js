@@ -64,7 +64,8 @@ test('host requires live Jira, Confluence, GitHub and library checks before savi
  assert.match(host,/\/api\/v2\/spaces\?limit=1/);
  assert.match(host,/await sdlcCatalog\.remoteInfo\(libraryConf,github\)/);
  assert.match(host,/atgvAssist\.startupSetup\.completed/);
- assert.match(host,/startupVerifiedSignature!==sha/);
+ assert.match(host,/storedStartupVerification\(\)/);
+ assert.match(host,/verified\.signature!==sha/);
  assert.match(host,/offerBrandedExtensionUpgrade\(release\)/);
  assert.doesNotMatch(host,/showInformationMessage\(`ATGV v\$\{release\.version\} is available \(installed:/);
 });
@@ -80,7 +81,7 @@ test('setup host saves no credentials before all five remote access checks succe
  const crypto=require('node:crypto');
  const normalized=require('../src/projects').normalizeExtensionSettings;
  const setupText=read('src/lib/runtime/extension-runtime.js');
- const start=setupText.indexOf('async function testAndSaveStartupConnections(message){');
+ const start=setupText.indexOf("const STARTUP_VERIFIED_SECRET='atgvAssist.startupConnections.verified';");
  const end=setupText.indexOf('\nasync function dashboardState()',start);
  assert.ok(start>=0&&end>start);
  const events=[],state=new Map(),secrets=new Map();
@@ -88,6 +89,7 @@ test('setup host saves no credentials before all five remote access checks succe
  const testContext={
   startupSessionVerified:false,startupVerifiedSignature:'',startupSetup:defaults,
   extensionSettings:{},cfg:()=>({get:()=>undefined}),
+  catalogConfig:()=>state.get('atgvAssist.sdlcCatalog')||{repositoryUrl:''},
   normalizeExtensionSettings:normalized,
   projectConfig:(_p,settings)=>({get:key=>key==='github.apiUrl'?'https://api.github.com':settings[key.split('.')[0]]?.[key.split('.')[1]]||''}),
   validateUrl:s=>s,

@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.3.87';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.3.88';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -54,6 +54,11 @@ function html(webview,{resumeLibrary=false}={}){
     <p id="extensionUpgradeDescription">Upgrade ATGV using the verified GitHub release.</p>
     <div class="atgv-upgrade-versions"><div><small>INSTALLED</small><strong id="extensionUpgradeCurrent">—</strong></div><span aria-hidden="true">→</span><div><small>AVAILABLE</small><strong id="extensionUpgradeNext">—</strong></div></div>
     <p id="extensionUpgradeSource" class="muted"></p><p class="atgv-upgrade-assurance">Verified release asset and SHA-256 checksum. Installation requires your confirmation.</p>
+    <div id="extensionUpgradeProgress" class="atgv-upgrade-progress hidden" role="status" aria-live="polite" aria-atomic="true" tabindex="-1">
+      <div class="atgv-upgrade-progress-track" aria-hidden="true"><span class="atgv-upgrade-progress-indicator"></span></div>
+      <strong id="extensionUpgradeProgressTitle">Preparing verified extension update…</strong>
+      <p id="extensionUpgradeProgressMessage">Installation status will appear here.</p>
+    </div>
     <div class="atgv-upgrade-actions"><button type="button" id="extensionUpgradeLater" class="secondary">Later</button><button type="button" id="extensionUpgradeView" class="secondary">View Release</button><button type="button" id="extensionUpgradeInstall">Install Upgrade</button></div>
   </div></div>
   <div id="startupPrerequisiteModal" class="modal-overlay hidden" aria-hidden="true"><div class="modal-card atgv-upgrade-modal atgv-prerequisite-modal" role="dialog" aria-modal="true" aria-labelledby="startupPrerequisiteTitle" aria-describedby="startupPrerequisiteDescription startupPrerequisiteAssurance">
@@ -113,7 +118,7 @@ function html(webview,{resumeLibrary=false}={}){
        <div id="startupStackGrid" class="atgv-startup-stack-grid"></div>
        <p class="muted">Select a stack to inspect its components. Install missing tools individually, then Refresh to check them. These checks confirm host prerequisites, not a completed application build.</p>
        <p id="startupInstallFeedback" class="atgv-startup-install-feedback muted" role="status" aria-live="polite"></p>
-       <div class="atgv-startup-diagnostics-footer"><button type="button" id="startupUnifiedLog" class="secondary" title="Download persistent installation results, detection checks and project-opening errors">Download Unified Error Log</button><span class="muted">Includes installer status, verification and troubleshooting details.</span></div>
+       <div class="atgv-startup-diagnostics-footer"><button type="button" id="startupUnifiedLog" class="secondary" title="Download persistent installation results, detection checks and project-opening errors">Download Unified Error Log</button></div>
       </div>
       <form id="startupConnectionForm" class="atgv-startup-card hidden"><h3>Jira, Confluence &amp; GitHub connections</h3><div class="form-grid atgv-startup-connection-grid">
        <div class="field"><label for="startupJiraUrl">Jira URL</label><input type="url" id="startupJiraUrl" placeholder="https://aiamy-jira-azure.atlassian.net" required></div>
