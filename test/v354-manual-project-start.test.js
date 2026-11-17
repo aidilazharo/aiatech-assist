@@ -13,7 +13,8 @@ test('first step hides Previous and Search Project alone offers Previous back to
  assert.match(js,/startupPrevious'\)\.classList\.toggle\('hidden',startupPage===0\)/);
  assert.match(html,/id="gateSearchPrevious"/);
  assert.match(js,/gateSearchPrevious'\)\.addEventListener\('click'/);
- assert.match(js,/startupReturnToConnections=true;startupPage=1;startupConnectionVerified=false/);
+ assert.match(js,/startupReturnToConnections=true;startupPage=1;/);
+ assert.doesNotMatch(js,/startupReturnToConnections=true;startupPage=1;startupConnectionVerified=false/);
  assert.match(js,/showStartupStep\(required\|\|startupReturnToConnections\)/);
  assert.match(js,/startupReturnToConnections=false;showStartupStep\(false\)/);
 });
