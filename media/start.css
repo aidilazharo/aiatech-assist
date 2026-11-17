@@ -1950,3 +1950,9 @@ body:not(.gate-mode) .app-header .brand-identity{gap:1px}
  .gate-identity .gate-logo-stack{width:38px;min-width:38px;flex-basis:38px}
  .gate-identity .gate-logo{width:38px!important;height:38px!important}
 }
+
+/* v0.3.86: keep version labels immediately below their title on welcome and workspace headers. */
+.gate-top .gate-product-title{gap:1px;line-height:1.1}
+.gate-top .gate-product-title h1{margin:0;line-height:1.1}
+.gate-top .gate-product-title .gate-brand-versions{margin:0;line-height:1.15}
+.app-header .brand-identity{gap:0}
