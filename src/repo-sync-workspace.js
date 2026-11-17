@@ -230,12 +230,12 @@ window.addEventListener('message',e=>{
   get('reviewDescription').value=review.prDescription||'';
   const analysis=review.sourceCode||{};
   get('sourceAnalysis').textContent='Source: '+String(review.sourceRepo||'')+' / '+String(review.sourceBranch||'')+
-   ' @ '+String(review.sourceSha||'').slice(0,12)+'\nFiles inspected: '+String(review.fileCount||0)+
-   '\nSource files: '+(analysis.keyFiles||[]).slice(0,8).join(', ')+
-   '\nSymbols inspected: '+(analysis.symbols||[]).slice(0,8).map(x=>x.name).join(', ')+
-   '\nDependencies: '+(analysis.dependencies||[]).slice(0,12).join(', ')+
-   '\nExcluded commit paths: '+(review.excludedSourceCommitFiles||[]).slice(0,8).join(', ')+
-   '\nDestination base: '+String(review.base||'');
+   ' @ '+String(review.sourceSha||'').slice(0,12)+'\\nFiles inspected: '+String(review.fileCount||0)+
+   '\\nSource files: '+(analysis.keyFiles||[]).slice(0,8).join(', ')+
+   '\\nSymbols inspected: '+(analysis.symbols||[]).slice(0,8).map(x=>x.name).join(', ')+
+   '\\nDependencies: '+(analysis.dependencies||[]).slice(0,12).join(', ')+
+   '\\nExcluded commit paths: '+(review.excludedSourceCommitFiles||[]).slice(0,8).join(', ')+
+   '\\nDestination base: '+String(review.base||'');
   buttons();show('Source study completed. Review or edit the four suggestions, then approve the full operation. Repo B is unchanged.','success');
  }
  if(data.type==='repoConnectionResult'){
