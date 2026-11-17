@@ -13,7 +13,7 @@
     const filename=url.split(/[/?#]/).filter(Boolean).at(-1)||'resource';
     if(/(?:codemirror|quill|frappe-gantt)/i.test(url)&&failures.length<20)
       failures.push('Unable to load '+filename);
-    if(/(?:start\.css|atgv-ui-theme\.css|library-studio\.css|ai-change-resolution\.css|start\.js)/i.test(url)&&window.atgvCoreAssetFailures.length<20)
+    if(/(?:start\.css|atgv-ui-theme\.css|library-studio\.css|ai-change-resolution\.css|start\.js|sortablejs-1\.15\.7\.min\.js|atgv-kanban\.js)/i.test(url)&&window.atgvCoreAssetFailures.length<20)
       window.atgvCoreAssetFailures.push('Unable to load '+filename);
   },true);
 })();
