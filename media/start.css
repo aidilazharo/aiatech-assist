@@ -1986,3 +1986,7 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 .atgv-upgrade-progress[data-state="failed"] strong{color:var(--vscode-errorForeground,#ec7676);}
 .atgv-upgrade-progress[data-state="completed"] .atgv-upgrade-progress-indicator{width:100%;transform:none;animation:none;}
 @media(prefers-reduced-motion:reduce){.atgv-upgrade-progress-indicator{animation:none;width:100%;opacity:.65;}}
+
+/* Pin the unified log download alone to the bottom-left of prerequisite readiness. */
+#startupComputerCard{display:flex;flex-direction:column;}
+#startupComputerCard .atgv-startup-diagnostics-footer{margin-top:auto;align-self:stretch;justify-content:flex-start;}
