@@ -1,0 +1,9 @@
+#overviewMyWorkUsers{margin:18px 0;padding:14px 16px;border:1px solid var(--vscode-panel-border,#555);border-radius:8px;background:var(--vscode-editor-background)}
+.overview-roster-heading{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.overview-roster-heading h2{margin:0;font-size:16px}
+.overview-roster-scroll{width:100%;overflow-x:auto}
+.overview-roster-scroll table{width:100%;border-collapse:collapse;min-width:450px}
+.overview-roster-scroll th,.overview-roster-scroll td{padding:10px 12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--vscode-panel-border,#555);overflow-wrap:anywhere}
+.overview-roster-scroll th{font-size:11px;text-transform:uppercase}
+.overview-roster-scroll td{font-size:12px}
+.overview-roster-scroll small{display:block;font-size:10px;color:var(--vscode-descriptionForeground)}
