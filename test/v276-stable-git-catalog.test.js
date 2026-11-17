@@ -41,14 +41,28 @@ test('Git catalog uses one stable checkout, updates tracked files and never crea
   assert.equal((await catalog.syncGitCatalogCheckout(x.workspace,x.bare,'example/skills')).action,'already-current');
  }finally{await fs.rm(x.tmp,{force:true,recursive:true});}
 });
-test('Git pull refuses dirty catalog files without overwriting local edits',async()=>{
+test('Git catalog pull preserves all dirty tracked and untracked files in a separate backup',async()=>{
  const x=await harness();try{
-  await catalog.syncGitCatalogCheckout(x.workspace,x.bare,'example/skills');
+  const original=await catalog.syncGitCatalogCheckout(x.workspace,x.bare,'example/skills');
   const asset=path.join(catalog.gitCatalogFolder(x.workspace),'roles','developer','SKILL.md');
   await fs.writeFile(asset,'private local edits');
+  await fs.writeFile(path.join(catalog.gitCatalogFolder(x.workspace),'local-note.txt'),'important untracked data');
   await x.publish('1.2.0');
-  await assert.rejects(catalog.syncGitCatalogCheckout(x.workspace,x.bare,'example/skills'),/local edits or untracked/);
-  assert.equal(await fs.readFile(asset,'utf8'),'private local edits');
+  const progress=[];
+  const result=await catalog.syncGitCatalogCheckout(x.workspace,x.bare,'example/skills','',{
+   onProgress:event=>progress.push(event)
+  });
+  assert.equal(result.action,'preserved-and-updated');
+  assert.notEqual(result.sha,original.sha);
+  assert.match(await fs.readFile(asset,'utf8'),/1\.2\.0/);
+  assert.equal(await fs.readFile(path.join(result.backupPath,'roles','developer','SKILL.md'),'utf8'),'private local edits');
+  assert.equal(await fs.readFile(path.join(result.backupPath,'local-note.txt'),'utf8'),'important untracked data');
+  assert.equal(git(result.backupPath,'rev-parse','HEAD'),original.sha);
+  assert.ok(result.backupPath.startsWith(path.join(x.workspace,'.atgv','catalog-local-backups')+path.sep));
+  assert.ok(progress.some(event=>event.percent===60&&/Preserving/.test(event.title)));
+  const installed=await catalog.gitInstalled(x.workspace,{repositoryUrl:'https://github.com/example/skills'});
+  assert.equal(installed.sha,result.sha);
+  assert.equal((await catalog.syncGitCatalogCheckout(x.workspace,x.bare,'example/skills')).action,'already-current');
  }finally{await fs.rm(x.tmp,{force:true,recursive:true});}
 });
 test('Failed manifest validation rolls back fast-forward without corrupting current catalog',async()=>{
