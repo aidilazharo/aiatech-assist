@@ -20,3 +20,14 @@
 .atgv-kanban-ghost{opacity:.45;border:1px dashed var(--vscode-focusBorder,#4796e4);background:var(--vscode-list-hoverBackground,var(--vscode-editor-background))}
 .atgv-kanban-chosen{box-shadow:0 2px 8px rgba(0,0,0,.2)}
 .atgv-kanban-drag{cursor:grabbing}
+
+/* Shared Jira work-items switcher: the compact DataTable is the default view. */
+#pmJiraWorkspace{min-width:0}
+#pmJiraWorkspace .pm-jira-switch-heading{align-items:center;flex-wrap:wrap;gap:10px}
+.pm-jira-view-switch{display:inline-flex;gap:3px;align-items:center;padding:3px;border:1px solid var(--vscode-panel-border,#555);border-radius:7px;background:var(--vscode-sideBar-background,var(--vscode-editor-background))}
+.pm-jira-view-switch button{border-radius:5px;padding:5px 12px;min-height:28px;font-size:12px}
+.pm-jira-view-switch button[aria-pressed="true"]{background:var(--vscode-button-background)!important;color:var(--vscode-button-foreground)!important}
+#pmJiraTableView,#pmJiraKanbanView{min-width:0}
+#pmJiraTableView.hidden,#pmJiraKanbanView.hidden{display:none!important}
+#pmJiraTableView .pm-filters{margin:10px 0}
+#pmJiraTableView .atgv-datatable-scroll{max-width:100%;overflow-x:auto}
