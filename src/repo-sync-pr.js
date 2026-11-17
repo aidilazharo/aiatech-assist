@@ -209,7 +209,7 @@ async function readSourceFacts({cloned,source,chosenBranch,sha,sourceMessage,fil
   sourceCommitMessage:sourceMessage.slice(0,700),sourceCommitFiles:sourceCommitFiles.slice(0,30),project,
   destinationRepo:destination.name,baseBranch:base,files:files.slice(0,80),fileCount:files.length};
 }
-async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.',sourceBranch='',baseBranch='',sourcePat,destPat,workspaceRoot='',onProgress=()=>{},runner=run,githubApi=githubApiDefault,describePr=async()=>'',planSync=async()=>null}){
+async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.',sourceBranch='',sourcePrNumber='',baseBranch='',sourcePat,destPat,workspaceRoot='',onProgress=()=>{},runner=run,githubApi=githubApiDefault,describePr=async()=>'',planSync=async()=>null}){
  const source=githubUrl(sourceUrl),scope=scopeName(copyScope);
  let chosenBranch=sourceBranch?baseName(sourceBranch):'';
  const sourceEnv=patEnvironment(sourcePat),destinationEnv=patEnvironment(destPat);
@@ -248,8 +248,17 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
  const remote=await githubApi.getRepository(destination,destPat);
  if(remote.nameWithOwner?.toLowerCase()!==destination.name.toLowerCase())throw Error('Repo B GitHub identity differs from local origin.');
  const base=baseName(baseBranch||remote.defaultBranch);
- // Only an explicitly selected Source branch is forced. Otherwise use the
- // verified GitHub default (which may be master, develop, etc.).
+ // An explicit PR number selects its actual head branch and original PR metadata.
+ let sourcePr=null;
+ if(sourcePrNumber!==''&&sourcePrNumber!==null&&sourcePrNumber!==undefined){
+  const number=Number(sourcePrNumber);
+  if(!Number.isSafeInteger(number)||number<1)throw Error('Source PR number must be a positive integer.');
+  if(typeof githubApi.getSourcePullRequest!=='function')throw Error('Source PR lookup is unavailable.');
+  sourcePr=await githubApi.getSourcePullRequest(source,sourcePat,number);
+  if(chosenBranch&&chosenBranch!==sourcePr.branch)throw Error('Selected source branch does not match source PR #'+number+'.');
+  chosenBranch=baseName(sourcePr.branch);
+ }
+ // Otherwise prefer the selected source branch, then its GitHub default.
  if(!chosenBranch){
   const sourceInfo=await githubApi.getSourceRepository(source,sourcePat);
   if(sourceInfo.nameWithOwner?.toLowerCase()!==source.name.toLowerCase())throw Error('Repo A source identity differs from GitHub; refusing to clone.');
@@ -301,17 +310,28 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   files=await trackedFiles(cloned,scope);
   const commitPaths=await runner('git',['show','--format=','--name-only','HEAD'],{cwd:cloned}).catch(()=> '');
   const eligible=new Set(files);
-  const sourceCommitFiles=[...new Set(String(commitPaths||'').split(/\r?\n/).map(x=>x.trim()).filter(x=>eligible.has(x)))];
-  branch=branchName(source.repo,sha,sourceMessage,sourceCommitFiles.length?sourceCommitFiles:files);
+  const sourceCommitPaths=[...new Set(String(commitPaths||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean))];
+  const sourceCommitFiles=sourceCommitPaths.filter(x=>eligible.has(x));
+  const excludedSourceCommitFiles=sourceCommitPaths.filter(x=>!eligible.has(x));
+  if(sourcePr&&sourcePr.sha!==sha)throw Error('Repo A PR head changed since GitHub inspection. Retry to avoid publishing the wrong source revision.');
+  if(!sourcePr&&typeof githubApi.getSourcePrForCommit==='function'){
+   try{sourcePr=await githubApi.getSourcePrForCommit(source,sourcePat,{sha,branch:chosenBranch});}
+   catch(error){await notify('source','Source PR lookup unavailable: '+String(error?.message||error).slice(0,160));}
+  }
+  // GitHub cannot create a pull request where the review branch equals the base.
+  // Reuse the actual source branch in every other case.
+  branch=chosenBranch===base
+   ?baseName('sync/'+slugify(source.repo).slice(0,28)+'/'+slugify(chosenBranch).slice(0,40)+'-'+sha.slice(0,8))
+   :baseName(chosenBranch);
   const facts=await readSourceFacts({cloned,source,chosenBranch,sha,sourceMessage,files,destination,base,sourceCommitFiles});
-  await notify('ai','AI reading verified source repository metadata from the temporary clone…');
-  try{
-   aiPlan=aiSyncPlan(await planSync(facts),source);
-   if(aiPlan.branch){
-    const suffix='-'+sha.slice(0,8);
-    branch=baseName(aiPlan.branch.endsWith(suffix)?aiPlan.branch:aiPlan.branch.slice(0,110-suffix.length)+suffix);
-   }
-  }catch{await notify('ai','AI plan unavailable; using a deterministic review branch and source commit message.');}
+  if(!sourcePr){
+   await notify('ai','No matching source PR; optional AI description cannot change source branch, commit or PR title…');
+   try{aiPlan=aiSyncPlan(await planSync(facts),source);}
+   catch{await notify('ai','AI summary unavailable; using verified source metadata.');}
+  }
+  if(excludedSourceCommitFiles.length)
+   await notify('source','Source commit has '+excludedSourceCommitFiles.length+' excluded or deleted path(s): '+excludedSourceCommitFiles.slice(0,3).join(', '));
+  await notify('source','Using original source branch '+chosenBranch+', commit message and '+(sourcePr?'PR #'+sourcePr.number:'commit-based PR title')+'.');
   await runner('git',['check-ref-format','--branch',branch],{cwd:destRoot});
   await notify('preflight',files.length+' tracked files; checking '+destination.name+' / '+base+'…');
   await runner('git',['fetch','origin','+refs/heads/'+base+':refs/remotes/origin/'+base],{cwd:destRoot,timeout:180000,env:destinationEnv});
@@ -319,7 +339,8 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   if(remoteBranch){
    await runner('git',['fetch','origin','+refs/heads/'+branch+':refs/remotes/origin/'+branch],{cwd:destRoot,timeout:180000,env:destinationEnv});
    const previous=await runner('git',['log','-1','--pretty=%B','refs/remotes/origin/'+branch],{cwd:destRoot});
-   if(!previous.includes('ATGV-Sync-Source: '+source.name))throw Error('Repo B branch '+branch+' already exists but was not created by ATGV for this source. Refusing to overwrite it.');
+   if(previous.trim()!==sourceMessage&&!previous.includes('ATGV-Sync-Source: '+source.name))
+    throw Error('Repo B branch '+branch+' already exists with a different commit message. Refusing to overwrite it.');
    const local=await runner('git',['branch','--list',branch],{cwd:destRoot});
    if(local){
     await runner('git',['switch',branch],{cwd:destRoot});
@@ -353,30 +374,37 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
     await runner('git',['branch','-D',branch],{cwd:destRoot});
    }
    switched=false;
-   return {unchanged:true,message:'Repo B already has the same eligible files from Repo A '+chosenBranch+'.',sourceSha:sha,sourceBranch:chosenBranch,fileCount:files.length};
+   const existingPr=remoteBranch?await githubApi.findOpenPr(destination,destPat,{branch,base}):'';
+   return {unchanged:true,prUrl:existingPr,message:'Repo B already has the same eligible files from Repo A '+chosenBranch+'.'+(existingPr?' Existing PR: '+existingPr:''),sourceSha:sha,sourceBranch:chosenBranch,branch,fileCount:files.length};
   }
   const details=prDetails({source,destination,sha,scope,base,branch,count:changedFiles.length,changedFiles,sourceBranch:chosenBranch,sourceMessage,sourceCommitFiles});
-  const sourceSubject=meaningfulSubject(sourceMessage,sourceCommitFiles.length?sourceCommitFiles:changedFiles);
-  const commitTitle=genericMessage(sourceMessage)&&aiPlan.commitMessage?aiPlan.commitMessage:sourceSubject;
-  const commitMessage=commitTitle+'\n\nATGV-Sync-Source: '+source.name+'\nATGV-Sync-SHA: '+sha;
-  await notify('commit','Committing with a message derived from the source commit and changed files…');
+  // Preserve the complete original source commit message, without AI rewriting.
+  const commitMessage=sourceMessage;
+  await notify('commit','Committing with the exact Repo A commit message…');
   await runner('git',['commit','-m',commitMessage],{cwd:destRoot,timeout:180000});
   await notify('push','Pushing '+branch+' using the destination PAT…');
   await runner('git',['push','--set-upstream','origin',branch],{cwd:destRoot,timeout:180000,env:destinationEnv});
   pushed=true;
-  await notify('pr','Preparing a short AI-written PR description…');
-  let summary='';
-  try{summary=String(await describePr({sourceRepo:source.name,sourceBranch:chosenBranch,sourceSha:sha,destinationRepo:destination.name,base,branch,sourceMessage,sourceCommitFiles,changedFiles:changedFiles.slice(0,80)})||'').trim().slice(0,550);}
-  catch{await notify('pr','AI PR summary unavailable; using the verified source commit and changed files.');}
-  if(!summary)summary=String(aiPlan.prDescription||'').trim().slice(0,550);
-  summary=summary.replace(/^#{1,3}\s*(?:summary|description)\s*/i,'').trim();
-  const body=summary?details.body.replace('## Summary\n- '+details.title,'## Summary\n'+summary):details.body;
+  let body=details.body;
+  if(sourcePr){
+   // Replicate the source PR title and body exactly, even if AI suggests otherwise.
+   body=sourcePr.body;
+   await notify('pr','Copying exact source PR #'+sourcePr.number+' title and description…');
+  }else{
+   await notify('pr','No matching source PR; preparing a factual destination description…');
+   let summary='';
+   try{summary=String(await describePr({sourceRepo:source.name,sourceBranch:chosenBranch,sourceSha:sha,destinationRepo:destination.name,base,branch,sourceMessage,sourceCommitFiles,changedFiles:changedFiles.slice(0,80)})||'').trim().slice(0,550);}
+   catch{await notify('pr','AI PR summary unavailable; using verified source metadata.');}
+   if(!summary)summary=String(aiPlan.prDescription||'').trim().slice(0,550);
+   summary=summary.replace(/^#{1,3}\s*(?:summary|description)\s*/i,'').trim();
+   if(summary)body=details.body.replace('## Summary\n- '+details.title,'## Summary\n'+summary);
+   if(excludedSourceCommitFiles.length)body+='\n\nExcluded source-commit paths (not copied): '+excludedSourceCommitFiles.slice(0,12).map(x=>'\x60'+x+'\x60').join(', ');
+  }
   await notify('pr','Creating or reusing the review PR via GitHub HTTPS API for '+branch+'…');
-  // The Destination PAT is sent only in the API Authorization header.
-  const prTitle=genericMessage(sourceMessage)&&aiPlan.prTitle?aiPlan.prTitle:details.title;
+  const prTitle=sourcePr?sourcePr.title:commitSubject(sourceMessage);
   const prUrl=await githubApi.findOpenPr(destination,destPat,{branch,base})||
    await githubApi.createPr(destination,destPat,{branch,base,title:prTitle,body});
-  return {prUrl,branch,sourceBranch:chosenBranch,sourceSha:sha,sourceRepo:source.name,destinationRepo:destination.name,base,fileCount:changedFiles.length,commitMessage};
+  return {prUrl,branch,sourceBranch:chosenBranch,sourceSha:sha,sourceRepo:source.name,destinationRepo:destination.name,base,fileCount:changedFiles.length,commitMessage,sourcePrUrl:sourcePr?.url||'',excludedSourceCommitFiles};
  }catch(e){
   const suffix=switched?' Repo B remains on branch '+branch+(pushed?' (already pushed)':'')+' for review.':'';
   throw Error(e.message+suffix);
