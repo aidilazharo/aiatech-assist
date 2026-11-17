@@ -16,6 +16,7 @@ const catalogVendorLibraries=require('../../catalog-vendor-libraries');
 const libraryUpdateVersion=require('../../library-update-version');
 const liveRemoteRefresh=require('../../live-remote-refresh');
 const repoSyncWorkspace=require('../../repo-sync-workspace');
+const atgvAiChat=require('../../atgv-ai-chat');
 const repoSyncNaming=require('../../repo-sync-pr');
 const {workState,toggleTask,openTaskDocument}=require('../../sdlc-work');
 const roleStepEngine=require('../../role-step-engine');
@@ -8192,7 +8193,8 @@ function activate(ctx){
    }
   });
   const reportIssue=()=>openIssueReport();
-  const actions={start,workspace,restart,reset,refreshUnifiedArtifacts,reportIssue};
+  const ai=()=>atgvAiChat.open(vscode,{runtimeRoot:aiRuntimeRoot(),onLog:report});
+  const actions={start,workspace,ai,restart,reset,refreshUnifiedArtifacts,reportIssue};
   for(const [name,fn] of Object.entries(actions))ctx.subscriptions.push(vscode.commands.registerCommand('atgvAssist.'+name,async(...args)=>{await ready;return guarded(()=>fn(...args));}));
   ctx.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(()=>{++startupSequence;ready=initialize().then(()=>dashboard?start({skipReload:true}):undefined).catch(e=>report('Workspace change: '+e.message));}));
   if(vscode.workspace.onDidChangeConfiguration)ctx.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e=>{if(e.affectsConfiguration('atgvAssist.rag')||e.affectsConfiguration('atgvAssist.ai')){invalidateModelStatus();refreshDashboard().catch(err=>report('Model settings: '+err.message));}}));
