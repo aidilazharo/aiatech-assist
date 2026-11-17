@@ -1551,7 +1551,11 @@ window.addEventListener('message',event=>{
  if(msg.type==='pmJiraTransitionResult'&&msg.projectId===activeId){
     pmKanbanPending=false;
     $('pmKanbanStatus').textContent=msg.success?'Jira transition saved. Refreshing statuses…':'Jira transition not applied: '+(msg.message||'Transition unavailable.');
-    if(msg.success)searchJiraInventory();else renderPMDashboard();
+    if(msg.success)searchJiraInventory();
+    else{
+      renderPMDashboard();
+      $('pmKanbanStatus').textContent='Jira transition not applied: '+(msg.message||'Transition unavailable.');
+    }
     return;
   }
   if(msg.type==='jiraInventoryViewer'){
