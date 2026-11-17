@@ -66,7 +66,9 @@ test('completed BRs expose discovery answers and the original source file, unlin
  assert.match(ui,/details\.querySelector\('\.ba-completed-tabs \[data-tab="answers"\]'\)/);
  assert.match(ui,/downloadBRSourceDocument/);
  assert.match(ui,/Original 12 discovery answers and uploaded file are not stored in this project/);
- assert.match(ui,/Switch Project/);
+ const unlinked=ui.slice(ui.indexOf('function renderBAJiraBackedEpics('),ui.indexOf('function renderBACompletedRecords('));
+ assert.doesNotMatch(unlinked,/Switch Project/);
+ assert.match(unlinked,/View Jira/);
  assert.match(source,/case 'downloadBRSourceDocument'/);
  assert.match(ui,/label:'Discovery Answers'/);
 });
