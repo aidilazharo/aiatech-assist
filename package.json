@@ -32,7 +32,8 @@
     "onCommand:atgvAssist.reset",
     "onCommand:atgvAssist.restart",
     "onStartupFinished",
-    "onCommand:atgvAssist.reportIssue"
+    "onCommand:atgvAssist.reportIssue",
+    "onCommand:atgvAssist.ai"
   ],
   "icon": "assets/icon.png",
   "contributes": {
@@ -46,6 +47,11 @@
         "command": "atgvAssist.workspace",
         "title": "ATGV: Workspace",
         "icon": "$(git-pull-request)"
+      },
+      {
+        "command": "atgvAssist.ai",
+        "title": "ATGV: AI",
+        "icon": "$(comment-discussion)"
       },
       {
         "command": "atgvAssist.refreshUnifiedArtifacts",
