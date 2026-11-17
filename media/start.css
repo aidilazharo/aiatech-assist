@@ -2020,3 +2020,9 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 .jira-preview-detail-form textarea{width:100%;resize:vertical;box-sizing:border-box;}
 .jira-preview-details-close{margin-left:8px;}
 @media(max-width:620px){.jira-preview-detail{grid-template-columns:1fr;gap:4px;}.jira-preview-details-close{margin:8px 0 0;}}
+
+.startup-stack-section-title{margin:14px 0 6px;font-size:12px;}
+.startup-stack-package-note{margin:4px 0 8px;font-size:11px;line-height:1.45;}
+.startup-stack-packages{list-style:none;margin:0;padding:0;display:grid;gap:5px;}
+.startup-stack-package{display:flex;flex-direction:column;gap:2px;padding:6px 8px;border:1px solid var(--vscode-panel-border,#45454a);border-radius:5px;overflow-wrap:anywhere;}
+.startup-stack-package small{color:var(--vscode-descriptionForeground);font-size:10px;}

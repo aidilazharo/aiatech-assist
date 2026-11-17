@@ -23,7 +23,7 @@ test('Source PR GitHub metadata is verified and its title/body are not modified'
  await assert.rejects(()=>api.getSourcePullRequest(repo,'source-pat',3,async()=>({status:404})),/Could not read source PR/);
 });
 
-test('Repo Sync preserves source PR branch, full commit message and exact PR details',async t=>{
+test('Repo Sync preserves source PR branch and commit body while formatting its presentation',async t=>{
  try{git(['--version'],process.cwd());}catch{t.skip('Git unavailable');return;}
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'atgv-pr-metadata-'));
  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
@@ -69,12 +69,12 @@ test('Repo Sync preserves source PR branch, full commit message and exact PR det
   describePr:async()=>{aiCalled=true;return 'rewritten body';}
  });
  assert.equal(outcome.branch,'fix/original-branch');
- assert.equal(outcome.commitMessage,originalMessage);
+ assert.equal(outcome.commitMessage,'fix(catalog): Exact source message\n\nPreserve body and title.');
  assert.equal(outcome.sourcePrUrl,originalPr.url);
  assert.equal(observed.branch,'fix/original-branch');
  assert.equal(observed.title,originalPr.title);
- assert.equal(observed.body,originalPr.body);
- assert.equal(git(['log','-1','--pretty=%B'],dest),originalMessage);
+ assert.equal(observed.body,'- Source PR body\n- Preserve *this* exact text.');
+ assert.equal(git(['log','-1','--pretty=%B'],dest),outcome.commitMessage);
  assert.equal(aiCalled,false);
  assert.equal(fs.readFileSync(path.join(dest,'destination.txt'),'utf8'),'Retain\n');
  assert.equal(fs.readFileSync(path.join(dest,'feature.txt'),'utf8'),'Feature\n');

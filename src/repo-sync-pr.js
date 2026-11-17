@@ -33,7 +33,7 @@ function scopeName(input){
  if(value.length>280||value.startsWith('/')||/^[A-Za-z]:/.test(value)||value.includes('\0'))throw Error('Copy scope must be a short relative path.');
  const segments=value.split('/');
  if(segments.some(s=>!s||s==='.'||s==='..'||s.includes(':')))throw Error('Copy scope cannot contain parent traversal or unsafe segments.');
- if(!isAllowedPath(value))throw Error('Copy scope includes protected Git, release workflow, credential or generated paths.');
+ if(!isAllowedPath(value))throw Error('Copy scope includes protected Git, credential or generated paths.');
  return value;
 }
 const BLOCKED_DIRS=new Set(['.git','node_modules','dist','build','coverage','.atgv','.venv','venv','.next','.cache','tmp','temp']);
@@ -42,7 +42,6 @@ function isAllowedPath(relative){
  const segments=String(relative||'').replace(/\\/g,'/').split('/');
  if(segments.some(s=>!s||s==='.'||s==='..'||BLOCKED_DIRS.has(s.toLowerCase())))return false;
  const lower=segments.map(s=>s.toLowerCase()),name=lower[lower.length-1];
- if(lower[0]==='.github'&&lower[1]==='workflows')return false;
  if(BLOCKED_FILES.has(name)||name.startsWith('.env.')||/\.(?:pem|key|p12|pfx|jks|keystore)$/i.test(name))return false;
  return true;
 }
@@ -75,7 +74,7 @@ function meaningfulSubject(sourceMessage,files=[]){
 }
 function readableTitle(sourceMessage,files=[]){
  const text=actionText(meaningfulSubject(sourceMessage,files));
- return text?text.charAt(0).toUpperCase()+text.slice(1):'Update source files';
+ return text?formatSubject(text):'Update source files';
 }
 function slugify(value){
  return String(value||'').normalize('NFKD').toLowerCase().replace(/[\u0300-\u036f]/g,'')
@@ -97,8 +96,55 @@ function branchName(repo,sha,sourceMessage='',files=[]){
  if(!/^[a-f0-9]{8}$/.test(short))throw Error('Source commit SHA is required for Repo Sync naming.');
  const prefix=branchType(sourceMessage)+'/';
  const slug=slugify(actionText(meaningfulSubject(sourceMessage,files)))||'source-update';
- const room=110-prefix.length-short.length-1;
- return baseName(prefix+slug.slice(0,room).replace(/-$/,'')+'-'+short);
+ const room=110-prefix.length;
+ const name=stripCommitHashSuffix(prefix+slug.slice(0,room).replace(/-$/,''),sha);
+ return baseName(name===prefix?prefix+'source-update':name);
+}
+// Strip a hash only from the final branch component; preserve meaningful numbers.
+function stripCommitHashSuffix(value,sha=''){
+ const branch=String(value||'').trim();
+ const match=/-([a-f0-9]{7,40})$/i.exec(branch);
+ if(!match)return branch;
+ const part=match[1].toLowerCase(),revision=String(sha||'').toLowerCase();
+ if((revision.length===40&&revision.startsWith(part))||
+    (part.length>=7&&/[a-f]/.test(part)))return branch.slice(0,-match[0].length);
+ return branch;
+}
+// Format prose without changing identifiers, paths, URLs, or the commit body.
+function formatSubject(value){
+ const raw=String(value||'').trim();
+ const words={jira:'Jira',github:'GitHub',confluence:'Confluence',api:'API',sdlc:'SDLC',tdd:'TDD',ui:'UI',ux:'UX','ui/ux':'UI/UX',pr:'PR',vite:'Vite',react:'React',typescript:'TypeScript',javascript:'JavaScript','node.js':'Node.js',npm:'npm',vsix:'VSIX'};
+ const parts=raw.split(/(`[^`]*`|https?:\/\/\S+)/g).map((part,i)=>i%2?part:
+  part.replace(/(?<![\w./-])(ui\/ux|node\.js|jira|github|confluence|api|sdlc|tdd|ui|ux|pr|vite|react|typescript|javascript|npm|vsix)(?![\w./-])/gi,w=>words[w.toLowerCase()]));
+ let text=parts.join('');
+ const conventional=/^(feat|fix|docs|chore|ci|refactor|test|perf|build|style|revert)(\([^)]+\))?(!)?:\s*/i.exec(text);
+ const prefix=conventional?conventional[1].toLowerCase()+(conventional[2]||'')+(conventional[3]||'')+': ':'';
+ text=conventional?text.slice(conventional[0].length):text;
+ if(text&&!/^(?:npm)\b/.test(text))text=text.charAt(0).toUpperCase()+text.slice(1);
+ return prefix+text;
+}
+function formatCommitMessage(value){
+ const [subject,...body]=String(value||'').trim().split(/\r?\n/);
+ return [formatSubject(subject),...body].join('\n');
+}
+function formatPrDetails(value,fallback=''){
+ const lines=String(value||'').split(/\r?\n/).map(line=>line.trim()).filter(Boolean);
+ const bullets=[];
+ for(let line of lines){
+  if(/^#{1,6}\s*(?:summary|description|changes|details|source)\s*:?\s*$/i.test(line))continue;
+  line=line.replace(/^#{1,6}\s*/, '').replace(/^(?:[-*+]\s+|\d+[.)]\s+)/,'').trim();
+  if(line)bullets.push('- '+line);
+  if(bullets.length===10)break;
+ }
+ if(!bullets.length&&fallback)bullets.push('- '+String(fallback).trim());
+ return bullets.join('\n').slice(0,4000).trim();
+}
+function validateReviewPresentation(review,sha){
+ if(stripCommitHashSuffix(review.branch,sha)!==String(review.branch||'').trim())
+  throw Error('Remove the trailing commit hash from the destination branch name.');
+ const lines=String(review.prDescription||'').trim().split(/\r?\n/).filter(line=>line.trim());
+ if(!lines.length||lines.length>10||lines.some(line=>!/^\s*[-*+]\s+\S/.test(line)))
+  throw Error('Enter PR details as bullet points, with a maximum of 10 points.');
 }
 function prDetails({source,destination,sha,scope,base,branch,count,changedFiles=[],sourceBranch='',sourceMessage='',sourceCommitFiles=[]}){
  const short=sha.slice(0,8);
@@ -109,25 +155,18 @@ function prDetails({source,destination,sha,scope,base,branch,count,changedFiles=
  return {
   title:label.slice(0,110),
   commit:action.slice(0,110),
-  body:[
-   '## Summary',
+  body:formatPrDetails([
    '- '+label,
-   '',
-   '## Changes',
    '- Files changed: '+count,
    ...displayed,
    ...(changedFiles.length>8?['- And '+(changedFiles.length-8)+' other files']:[]),
-   '',
-   '## Source',
    '- '+source.name+' ('+(sourceBranch||'default')+' @ '+short+')',
    '- Commit: '+sha,
    '- Target: '+destination.name+' / '+base,
    '- PR base: '+base,
    '- Review branch: '+branch,
-   '- Copy scope: '+(scope==='.'?'eligible tracked files':scope),
-   '',
-   'Review the diff and run applicable tests before merging.'
-  ].join('\n')
+   '- Copy scope: '+(scope==='.'?'eligible tracked files':scope)
+  ].join('\n'))
  };
 }
 function patEnvironment(pat,{githubCli=false}={}){
@@ -172,8 +211,11 @@ async function destinationFileSafe(root,rel){
 async function trackedFiles(source,scope){
  const raw=await run('git',['ls-files','-z'],{cwd:source});
  const candidates=raw.split('\0').filter(Boolean).map(p=>p.replace(/\\/g,'/'));
- const paths=candidates.filter(p=>isAllowedPath(p)&&(scope==='.'||p===scope||p.startsWith(scope+'/')));
- if(!paths.length)throw Error('Repo A has no eligible tracked files in '+scope+'.');
+ const eligible=candidates.filter(isAllowedPath);
+ const scoped=eligible.filter(p=>scope==='.'||p===scope||p.startsWith(scope+'/'));
+ if(!scoped.length)throw Error('Repo A has no eligible tracked files in '+scope+'.');
+ // Source workflows are always part of the review, even for a narrow scope.
+ const paths=[...new Set([...scoped,...eligible.filter(p=>p.startsWith('.github/workflows/'))])];
  if(paths.length>MAX_FILES)throw Error('Copy exceeds '+MAX_FILES+' tracked files. Select a smaller scope.');
  let bytes=0;
  const valid=[];
@@ -197,18 +239,18 @@ function cleanAiField(input,limit=220){
 function aiSyncPlan(raw,source,sourceMessage='',sourceSha=''){
  if(!raw||typeof raw!=='object'||Array.isArray(raw))return {};
  const prefix=branchType(sourceMessage)+'/';
- let branch=cleanAiField(raw.branch,115);
+ let branch=stripCommitHashSuffix(cleanAiField(raw.branch,115),sourceSha);
  // AI can improve a change slug but cannot override the verified commit type.
- // Permit one conventional type segment and an 8-hex revision suffix only.
- if(!branch.startsWith(prefix)||!/^[a-z]+\/[a-z0-9]+(?:-[a-z0-9]+)*-[a-f0-9]{8}$/.test(branch))branch='';
- if(branch&&sourceSha&&(!/^[a-f0-9]{40}$/i.test(sourceSha)||!branch.endsWith('-'+sourceSha.slice(0,8).toLowerCase())))branch='';
+ // Permit one conventional type segment and a descriptive slug without a hash.
+ if(!branch.startsWith(prefix)||!/^[a-z]+\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(branch))branch='';
+ if(branch&&sourceSha&&!/^[a-f0-9]{40}$/i.test(sourceSha))branch='';
  if(branch)try{baseName(branch);}catch{branch='';}
- const suffix=branch.slice(prefix.length).replace(/-[a-f0-9]{8}$/i,'').replace(/[-_/]+/g,' ');
+ const suffix=branch.slice(prefix.length).replace(/[-_/]+/g,' ');
  if(branch&&(genericMessage(suffix)||/^(?:main|master|develop|dev|source|latest|sync|updates|changes)$/.test(suffix)))branch='';
  const commitMessage=cleanAiField(raw.commitMessage,110);
  const prTitle=cleanAiField(raw.prTitle,110);
- return {branch,commitMessage:genericMessage(commitMessage)?'':commitMessage,
-  prTitle:genericMessage(prTitle)?'':prTitle,prDescription:String(raw.prDescription||'').trim().slice(0,550)};
+ return {branch,commitMessage:genericMessage(commitMessage)?'':formatCommitMessage(commitMessage),
+  prTitle:genericMessage(prTitle)?'':formatSubject(prTitle),prDescription:formatPrDetails(raw.prDescription)};
 }
 async function inspectSourceCode(cloned,files){
  // Inspect source syntax and package scripts locally; never send raw source bodies,
@@ -366,9 +408,10 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   }
   // GitHub cannot create a pull request where the review branch equals the base.
   // Reuse the actual source branch in every other case.
-  branch=chosenBranch===base
-   ?branchName(source.repo,sha,sourceMessage,sourceCommitFiles.length?sourceCommitFiles:files)
-   :baseName(chosenBranch);
+  const fallbackBranch=branchName(source.repo,sha,sourceMessage,sourceCommitFiles.length?sourceCommitFiles:files);
+  const cleanedSourceBranch=stripCommitHashSuffix(chosenBranch,sha);
+  branch=chosenBranch===base||!cleanedSourceBranch||cleanedSourceBranch===base||cleanedSourceBranch.endsWith('/')
+   ?fallbackBranch:baseName(cleanedSourceBranch);
   const facts=await readSourceFacts({cloned,source,chosenBranch,sha,sourceMessage,files,destination,base,sourceCommitFiles});
   if(!sourcePr||previewOnly){
    await notify('ai','Studying verified source-code structure and commit history for the proposed branch, commit and PR details…');
@@ -384,21 +427,33 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
    const baseLine=String(baseRefs||'').split(/\r?\n/).find(x=>x.endsWith('\trefs/heads/'+base));
    const baseSha=baseLine?.split('\t')[0]||'';
    if(!/^[a-f0-9]{40}$/.test(baseSha))throw Error('Destination PR base branch is missing or inaccessible.');
-   const proposedBranch=chosenBranch!==base?chosenBranch:(aiPlan.branch||branch);
+   const proposedBranch=chosenBranch!==base?branch:(aiPlan.branch||branch);
+   const initialBranch=baseName(proposedBranch===base?fallbackBranch:proposedBranch);
+   let availableBranch='';
+   for(let index=1;index<=100;index++){
+    const suffix=index===1?'':'-'+index;
+    const candidate=baseName(initialBranch.slice(0,110-suffix.length).replace(/-$/,'')+suffix);
+    const refs=await runner('git',['ls-remote','--heads','--',destination.url,'refs/heads/'+candidate],{
+     cwd:destRoot,timeout:120000,env:destinationEnv});
+    const existsRemote=String(refs||'').split(/\r?\n/).some(line=>line.endsWith('\trefs/heads/'+candidate));
+    const existsLocal=alreadyCloned?!!(await runner('git',['branch','--list',candidate],{cwd:destRoot})):false;
+    if(!existsRemote&&!existsLocal){availableBranch=candidate;break;}
+   }
+   if(!availableBranch)throw Error('Could not find an unused destination branch name. Choose a different source branch.');
    const proposedCommit=sourcePr?sourceMessage:(aiPlan.commitMessage||sourceMessage);
    const proposedTitle=sourcePr?sourcePr.title:(aiPlan.prTitle||commitSubject(sourceMessage));
    const proposedBody=sourcePr?sourcePr.body:(aiPlan.prDescription||'- '+readableTitle(sourceMessage,sourceCommitFiles||files));
    const proposed={
-    branch:baseName(proposedBranch===base?branch:proposedBranch),
-    commitMessage:String(proposedCommit||'').slice(0,12000),
-    prTitle:String(proposedTitle||'').slice(0,110),
-    prDescription:String(proposedBody||'').slice(0,4000)
+    branch:availableBranch,
+    commitMessage:formatCommitMessage(proposedCommit).slice(0,12000),
+    prTitle:formatSubject(proposedTitle).slice(0,110),
+    prDescription:formatPrDetails(proposedBody,readableTitle(sourceMessage,sourceCommitFiles.length?sourceCommitFiles:files))
    };
    return {preview:true,review:{
     ...proposed,sourceSha:sha,baseSha,sourceBranch:chosenBranch,sourceRepo:source.name,
     destinationRepo:destination.name,base,copyScope:scope,
     sourcePrUrl:sourcePr?.url||'',fileCount:files.length,sourceCode:facts.codeOverview,
-    sourceCommitFiles,excludedSourceCommitFiles,
+    sourceCommitFiles,excludedSourceCommitFiles,workflowFiles:files.filter(file=>file.startsWith('.github/workflows/')),
     notice:'Suggestions use verified source code structure and latest source commit. No Repo B files were changed.'
    }};
   }
@@ -415,6 +470,7 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
    if(!String(approvedReview.commitMessage||'').trim()||String(approvedReview.commitMessage).length>12000)throw Error('Enter a commit message up to 12000 characters.');
    if(!String(approvedReview.prTitle||'').trim()||String(approvedReview.prTitle).length>110)throw Error('Enter a PR title up to 110 characters.');
    if(!String(approvedReview.prDescription||'').trim()||String(approvedReview.prDescription).length>4000)throw Error('Enter a short PR description (up to 4000 characters).');
+   validateReviewPresentation(approvedReview,sha);
   }
   await notify('source','Source HEAD verified. '+(approvedReview?'Applying reviewed PR metadata.':'Using source commit and PR metadata.'));
   await runner('git',['check-ref-format','--branch',branch],{cwd:destRoot});
@@ -426,18 +482,7 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   }
   const remoteBranch=(await runner('git',['ls-remote','--heads','origin','refs/heads/'+branch],{cwd:destRoot,env:destinationEnv})).trim();
   if(remoteBranch){
-   await runner('git',['fetch','origin','+refs/heads/'+branch+':refs/remotes/origin/'+branch],{cwd:destRoot,timeout:180000,env:destinationEnv});
-   const previous=await runner('git',['log','-1','--pretty=%B','refs/remotes/origin/'+branch],{cwd:destRoot});
-   if(previous.trim()!==String(approvedReview?.commitMessage||sourceMessage).trim()&&!previous.includes('ATGV-Sync-Source: '+source.name))
-    throw Error('Repo B branch '+branch+' already exists with a different commit message. Refusing to overwrite it.');
-   const local=await runner('git',['branch','--list',branch],{cwd:destRoot});
-   if(local){
-    await runner('git',['switch',branch],{cwd:destRoot});
-    const localSha=await runner('git',['rev-parse','HEAD'],{cwd:destRoot});
-    const remoteSha=await runner('git',['rev-parse','refs/remotes/origin/'+branch],{cwd:destRoot});
-    if(localSha!==remoteSha)throw Error('Existing Repo B sync branch differs from origin; reconcile manually before reusing.');
-   }else await runner('git',['switch','-c',branch,'refs/remotes/origin/'+branch],{cwd:destRoot});
-   switched=true;
+   throw Error('Repo B branch '+branch+' already exists. Pull & Study Again to select an unused branch; no branch was overwritten.');
   }else{
    const local=await runner('git',['branch','--list',branch],{cwd:destRoot});
    if(local)throw Error('Repo B has an unpublished branch '+branch+'. Resolve or publish it before reusing the name.');
@@ -467,33 +512,39 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
    return {unchanged:true,prUrl:existingPr,message:'Repo B already has the same eligible files from Repo A '+chosenBranch+'.'+(existingPr?' Existing PR: '+existingPr:''),sourceSha:sha,sourceBranch:chosenBranch,branch,fileCount:files.length};
   }
   const details=prDetails({source,destination,sha,scope,base,branch,count:changedFiles.length,changedFiles,sourceBranch:chosenBranch,sourceMessage,sourceCommitFiles});
-  // Preserve the complete original source commit message, without AI rewriting.
-  const commitMessage=approvedReview?String(approvedReview.commitMessage).trim():sourceMessage;
-  await notify('commit','Committing with the exact Repo A commit message…');
+  const commitMessage=approvedReview?String(approvedReview.commitMessage).trim():formatCommitMessage(sourceMessage);
+  await notify('commit','Committing the reviewed change…');
   await runner('git',['commit','-m',commitMessage],{cwd:destRoot,timeout:180000});
   await notify('push','Pushing '+branch+' using the destination PAT…');
-  await runner('git',['push','--set-upstream','origin',branch],{cwd:destRoot,timeout:180000,env:destinationEnv});
+  // An empty expected ref means the remote branch must still not exist at push
+  // time, even if another actor creates it after the earlier preflight check.
+  try{
+   await runner('git',['push','--force-with-lease=refs/heads/'+branch+':','--set-upstream','origin',branch],{cwd:destRoot,timeout:180000,env:destinationEnv});
+  }catch(error){
+   if(files.some(file=>file.startsWith('.github/workflows/'))&&/workflow/i.test(String(error?.message||error)))
+    throw Error('GitHub rejected the workflow update. Grant the destination PAT Workflows: Read and write (fine-grained) or workflow scope (classic), then retry. '+String(error?.message||error));
+   throw error;
+  }
   pushed=true;
   let body=details.body;
   if(approvedReview){
    body=String(approvedReview.prDescription).trim();
    await notify('pr','Using the approved PR title and description…');
   }else if(sourcePr){
-   // Replicate the source PR title and body exactly, even if AI suggests otherwise.
-   body=sourcePr.body;
-   await notify('pr','Copying exact source PR #'+sourcePr.number+' title and description…');
+   body=formatPrDetails(sourcePr.body,readableTitle(sourceMessage,sourceCommitFiles));
+   await notify('pr','Preparing source PR #'+sourcePr.number+' details as bullet points…');
   }else{
    await notify('pr','No matching source PR; preparing a factual destination description…');
    let summary='';
    try{summary=String(await describePr({sourceRepo:source.name,sourceBranch:chosenBranch,sourceSha:sha,destinationRepo:destination.name,base,branch,sourceMessage,sourceCommitFiles,changedFiles:changedFiles.slice(0,80)})||'').trim().slice(0,550);}
    catch{await notify('pr','AI PR summary unavailable; using verified source metadata.');}
    if(!summary)summary=String(aiPlan.prDescription||'').trim().slice(0,550);
-   summary=summary.replace(/^#{1,3}\s*(?:summary|description)\s*/i,'').trim();
-   if(summary)body=details.body.replace('## Summary\n- '+details.title,'## Summary\n'+summary);
-   if(excludedSourceCommitFiles.length)body+='\n\nExcluded source-commit paths (not copied): '+excludedSourceCommitFiles.slice(0,12).map(x=>'\x60'+x+'\x60').join(', ');
+   if(summary)body=summary+'\n'+details.body;
+   if(excludedSourceCommitFiles.length)body+='\n- Excluded source-commit paths (not copied): '+excludedSourceCommitFiles.slice(0,12).map(x=>'\x60'+x+'\x60').join(', ');
+   body=formatPrDetails(body,details.title);
   }
   await notify('pr','Creating or reusing the review PR via GitHub HTTPS API for '+branch+'…');
-  const prTitle=approvedReview?String(approvedReview.prTitle).trim():(sourcePr?sourcePr.title:commitSubject(sourceMessage));
+  const prTitle=approvedReview?String(approvedReview.prTitle).trim():formatSubject(sourcePr?sourcePr.title:commitSubject(sourceMessage));
   const prUrl=await githubApi.findOpenPr(destination,destPat,{branch,base})||
    await githubApi.createPr(destination,destPat,{branch,base,title:prTitle,body});
   return {prUrl,branch,sourceBranch:chosenBranch,sourceSha:sha,sourceRepo:source.name,destinationRepo:destination.name,base,fileCount:changedFiles.length,commitMessage,sourcePrUrl:sourcePr?.url||'',excludedSourceCommitFiles};
@@ -502,4 +553,4 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   throw Error(e.message+suffix);
  }finally{await fs.rm(temp,{recursive:true,force:true}).catch(()=>{});}
 }
-module.exports={githubUrl,baseName,scopeName,isAllowedPath,commitSubject,genericMessage,meaningfulSubject,readableTitle,branchType,branchName,prDetails,patEnvironment,aiSyncPlan,readSourceFacts,inspectSourceCode,sync};
+module.exports={githubUrl,baseName,scopeName,isAllowedPath,commitSubject,genericMessage,meaningfulSubject,readableTitle,branchType,branchName,stripCommitHashSuffix,formatSubject,formatCommitMessage,formatPrDetails,validateReviewPresentation,prDetails,patEnvironment,aiSyncPlan,readSourceFacts,inspectSourceCode,sync};

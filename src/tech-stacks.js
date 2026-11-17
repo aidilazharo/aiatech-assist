@@ -44,36 +44,60 @@ async function loadStack(id, workspace) {
 // native package managers remain authoritative when restoring dependencies.
 function catalogDependencyPackages(files={}) {
     const result=[];const seen=new Set();
-    const add=(name,version,manager,scope='runtime')=>{
+    const add=(name,version,manager,scope='runtime',source='')=>{
         name=String(name||'').trim();version=String(version||'').trim();
-        if(!name||name.length>130||!/^[@a-zA-Z0-9_.:/-]+$/.test(name)||result.length>=80)return;
-        const key=manager+':'+name;
+        if(!name||name.length>130||!/^[@a-zA-Z0-9_.:/-]+$/.test(name))throw Error('Invalid dependency name in '+source+'.');
+        const key=[manager,name,version,scope].join('|');
         if(seen.has(key))return;
-        seen.add(key);result.push({name,version:version.slice(0,80),manager,scope});
+        if(result.length>=5000)throw Error('Catalog declares too many project dependencies to display safely.');
+        seen.add(key);result.push({name,version:version.slice(0,80),manager,scope,source:String(source).slice(0,220)});
     };
     for(const [file,content] of Object.entries(files)) {
-        if((file==='package.json'||/^(?:apps\/web|services\/api)\/package\.json$/.test(file))&&content.length<128000){
-            let pkg;try{pkg=JSON.parse(content.toString('utf8'));}catch{continue;}
-            for(const [name,version] of Object.entries(pkg.dependencies||{}))add(name,version,'npm');
-            for(const [name,version] of Object.entries(pkg.devDependencies||{}))add(name,version,'npm','development');
-        } else if(/(?:^|\/)[^/]+\.csproj$/.test(file)&&content.length<128000){
-            const raw=content.toString('utf8');const tags=raw.match(/<PackageReference\b[^>]*>/g)||[];
-            for(const tag of tags){
-                const name=tag.match(/\bInclude=["']([^"']+)["']/i)?.[1];
-                const version=tag.match(/\bVersion=["']([^"']+)["']/i)?.[1];
-                if(name)add(name,version||'', 'nuget');
+        if(/(?:^|\/)(?:node_modules|\.git)\//i.test(file))continue;
+        if(/(?:^|\/)(?:package\.json|pom\.xml|[^/]+\.csproj)$/.test(file)&&content.length>=128000)throw Error('Project dependency manifest is too large: '+file);
+        if(/(?:^|\/)package\.json$/.test(file)&&content.length<128000){
+            let pkg;try{pkg=JSON.parse(content.toString('utf8'));}catch{throw Error('Invalid npm package manifest: '+file);}
+            for(const [field,scope] of [['dependencies','runtime'],['devDependencies','development'],['optionalDependencies','optional'],['peerDependencies','peer']]){
+                const group=pkg[field];if(group===undefined)continue;
+                if(!group||typeof group!=='object'||Array.isArray(group))throw Error('Invalid '+field+' in '+file+'.');
+                for(const [name,version] of Object.entries(group)){
+                    if(typeof version!=='string')throw Error('Invalid dependency version for '+name+' in '+file+'.');
+                    add(name,version,'npm',field==='peerDependencies'&&pkg.peerDependenciesMeta?.[name]?.optional?'optional peer':scope,file);
+                }
             }
-        } else if((file==='pom.xml'||/^[a-zA-Z0-9_-]+\/pom\.xml$/.test(file))&&content.length<128000){
+        } else if(/(?:^|\/)[^/]+\.csproj$/.test(file)&&content.length<128000){
+            const raw=content.toString('utf8');
+            for(const match of raw.matchAll(/<PackageReference\b([^>]*?)(?:\/\s*>|>([\s\S]*?)<\/PackageReference\s*>)/gi)){
+                const attrs=match[1],body=match[2]||'';
+                const name=attrs.match(/\bInclude\s*=\s*["']([^"']+)["']/i)?.[1];
+                const version=attrs.match(/\bVersion\s*=\s*["']([^"']+)["']/i)?.[1]||body.match(/<Version\s*>([^<]+)<\/Version\s*>/i)?.[1];
+                if(name)add(name,version||'', 'nuget',/(?:^|\/)tests?\/|\.tests\.csproj$/i.test(file)?'test':'runtime',file);
+            }
+        } else if(/(?:^|\/)pom\.xml$/.test(file)&&content.length<128000){
             const xml=content.toString('utf8');
             const deps=xml.match(/<dependencies>([\s\S]*?)<\/dependencies>/g)||[];
             for(const group of deps){for(const match of group.matchAll(/<dependency>([\s\S]*?)<\/dependency>/g)){
                 const body=match[1],g=body.match(/<groupId>([^<]+)<\/groupId>/)?.[1],a=body.match(/<artifactId>([^<]+)<\/artifactId>/)?.[1];
                 const version=body.match(/<version>([^<]+)<\/version>/)?.[1]||'';
-                if(g&&a)add(g+':'+a,version,'maven',body.includes('<scope>test</scope>')?'test':'runtime');
+                const scope=body.match(/<scope>([^<]+)<\/scope>/)?.[1]||'runtime';
+                if(g&&a)add(g+':'+a,version,'maven',scope,file);
             }}
+            for(const group of xml.match(/<plugins>([\s\S]*?)<\/plugins>/g)||[])for(const match of group.matchAll(/<plugin>([\s\S]*?)<\/plugin>/g)){
+                const body=match[1],g=body.match(/<groupId>([^<]+)<\/groupId>/)?.[1],a=body.match(/<artifactId>([^<]+)<\/artifactId>/)?.[1];
+                const version=body.match(/<version>([^<]+)<\/version>/)?.[1]||'';
+                if(a)add(g?g+':'+a:a,version,'maven','build',file);
+            }
         }
     }
     return result;
+}
+function catalogNodeEngines(files={}){
+    const engines=[];
+    for(const [file,content] of Object.entries(files)){
+        if(!/(?:^|\/)package\.json$/.test(file)||/(?:^|\/)(?:node_modules|\.git)\//i.test(file)||content.length>=128000)continue;
+        try{const range=JSON.parse(content.toString('utf8'))?.engines?.node;if(typeof range==='string'&&range.trim())engines.push({source:file,range:range.trim().slice(0,200)});}catch{}
+    }
+    return engines;
 }
 async function listStacks(workspace) {
     if (!workspace) return [];
@@ -84,7 +108,7 @@ async function listStacks(workspace) {
             let files={};
             try{files=await catalogAssets.activeTree(workspace,'tech-stacks/'+id+'/scaffold');}
             catch(e){if(!/Missing catalog directory/i.test(e.message))throw e;}
-            return {...stack,dependencyPackages:catalogDependencyPackages(files)};
+            return {...stack,dependencyPackages:catalogDependencyPackages(files),nodeEngines:catalogNodeEngines(files)};
         }));
     } catch(e) {
         if (/not activated|active GitHub catalog.json is missing|Pull the catalog/i.test(e.message)) return [];
@@ -253,4 +277,4 @@ async function removeManagedWorkspaceLibrary(workspace) {
     await fs.rm(base, { recursive: true, force: true });
     return true;
 }
-module.exports = { normalizeStack, loadStack, listStacks, catalogDependencyPackages, ensureWorkspaceLibrary, scaffoldProject, removeManagedWorkspaceLibrary, stackMarkdown };
+module.exports = { normalizeStack, loadStack, listStacks, catalogDependencyPackages, catalogNodeEngines, ensureWorkspaceLibrary, scaffoldProject, removeManagedWorkspaceLibrary, stackMarkdown };

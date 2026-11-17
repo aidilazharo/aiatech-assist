@@ -58,15 +58,15 @@ test('Repo Sync: temp clone -> AI reads source info -> AI branch -> stage -> AI 
   }
  });
  assert.equal(seenFacts.sourceRepo,'Org/repo-a');
- assert.equal(result.branch,'feat/create-source-portal-'+sha.slice(0,8));
- assert.equal(result.commitMessage,'feat: create source portal');
- assert.equal(createdTitle,'feat: create source portal');
+ assert.equal(result.branch,'feat/create-source-portal');
+ assert.equal(result.commitMessage,'feat: Create source portal');
+ assert.equal(createdTitle,'feat: Create source portal');
  assert.match(createdBody,/AI summary: copy approved source portal files/);
- assert.match(createdBody,/## Source/);
+ assert.ok(createdBody.split('\n').every(line=>line.startsWith('- ')));
  assert.equal(result.prUrl,'https://github.com/Org/repo-b/pull/123');
  assert.equal(git(['rev-parse','refs/remotes/origin/main'],b),baseSha);
  assert.equal(fs.readFileSync(path.join(b,'destination-only.txt'),'utf8'),'preserved\n');
  assert.equal(fs.existsSync(path.join(b,'.env')),false);
- assert.equal(git(['log','-1','--pretty=%s'],b),'feat: create source portal');
+ assert.equal(git(['log','-1','--pretty=%s'],b),'feat: Create source portal');
  assert.ok(fs.existsSync(path.join(b,'package.json')));
 });

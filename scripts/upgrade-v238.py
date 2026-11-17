@@ -143,7 +143,7 @@ text=text.replace("if(m.type==='catalogState')renderCatalog(m.catalog);","if(m.t
 p.write_text(text)
 # version
 p=root/'package.json';meta=json.loads(p.read_text());meta['version']='0.2.38';meta['atgvDisplayVersion']='0.2.38';p.write_text(json.dumps(meta,indent=2)+'\n')
-(root/'RELEASE_0.2.38.md').write_text('''# ATGV AIATECH Assist v0.2.38 — Design frameworks and healthy server approval
+(root/'RELEASE.md').write_text('''# ATGV AIATECH Assist v0.2.38 — Design frameworks and healthy server approval
 
 - UI/UX framework dropdown now lists available activated GitHub catalogue designs dynamically. Both AIA Qi and Bootstrap v5.3 use the same offline read-only component showcase.
 - AI generation uses only the chosen framework guidance, token file, and component catalogue from the verified GitHub SHA. Selecting Bootstrap no longer relies on generic hardcoded instructions or external documentation.

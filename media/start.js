@@ -7206,21 +7206,22 @@ function renderStartupStackReadiness(result){
  startupScanComplete=true;
  startupScanPercent(100,'Completed prerequisite checks for all '+result.stacks.length+' technology stacks.');
  const ready=result.stacks.filter(s=>s.ready).length;
- $('startupToolMessage').textContent=`${ready} of ${result.stacks.length} technology stacks have their required host tools available. Select a stack to inspect components.`;
+ $('startupToolMessage').textContent=`${ready} of ${result.stacks.length} technology stacks have their required host tools available. `+(result.catalog?.available?`Project modules loaded from ${result.catalog.source}${result.catalog.version?' v'+result.catalog.version:''}.`:'Project module lists are unavailable until the SDLC Library is connected.');
  for(const stack of result.stacks){
   const details=document.createElement('details');details.className='atgv-startup-stack '+(stack.ready?'is-ready':'is-missing');details.dataset.stackId=stack.id;details.open=expanded.has(stack.id)||stack.components.some(c=>c.id===startupLastInstalledTool);
   const summary=document.createElement('summary');
   const title=document.createElement('span');title.textContent=stack.name;
-  const badge=document.createElement('span');badge.className='atgv-stack-ready';badge.textContent=stack.ready?'Ready':'Needs tools';
+  const badge=document.createElement('span');badge.className='atgv-stack-ready';badge.textContent=stack.hostRequirementsUnknown?'Host check unavailable':stack.ready?'Host tools available':'Needs tools';
   summary.append(title,badge);details.append(summary);
   const required=(stack.components||[]).filter(c=>c.required);
   const compatible=required.filter(c=>c.compatible).length;
   const readiness=document.createElement('div');readiness.className='atgv-stack-prerequisite-progress';
-  const count=document.createElement('small');count.textContent=compatible+'/'+required.length+' required tools available';
+  const count=document.createElement('small');count.textContent=stack.hostRequirementsUnknown?'Host requirements are not defined for this stack.':compatible+'/'+required.length+' required host tools available';
   const track=document.createElement('div');track.className='workspace-search-track';track.setAttribute('role','progressbar');
   track.setAttribute('aria-label',stack.name+' prerequisite readiness');track.setAttribute('aria-valuemin','0');track.setAttribute('aria-valuemax','100');
-  const value=required.length?Math.round(100*compatible/required.length):100;track.setAttribute('aria-valuenow',String(value));
+  const value=required.length?Math.round(100*compatible/required.length):0;track.setAttribute('aria-valuenow',String(value));
   const fill=document.createElement('div');fill.className='workspace-search-fill';fill.style.width=value+'%';track.append(fill);readiness.append(count,track);details.append(readiness);
+  const hostTitle=document.createElement('h4');hostTitle.className='startup-stack-section-title';hostTitle.textContent='Host tools';details.append(hostTitle);
   const list=document.createElement('ul');
   for(const component of stack.components||[]){
    const item=document.createElement('li');item.className='atgv-module-row';
@@ -7247,7 +7248,27 @@ function renderStartupStackReadiness(result){
    }
    list.append(item);
   }
-  details.append(list);grid.append(details);
+  details.append(list);
+  const packages=Array.isArray(stack.dependencyPackages)?stack.dependencyPackages:[];
+  const packagesTitle=document.createElement('h4');packagesTitle.className='startup-stack-section-title';packagesTitle.textContent='Project modules'+(stack.catalogStatus==='available'?' · '+packages.length:'');details.append(packagesTitle);
+  const note=document.createElement('p');note.className='muted startup-stack-package-note';
+  if(stack.catalogStatus==='not-listed')note.textContent='This stack is not listed in the active SDLC Library.';
+  else if(stack.catalogStatus!=='available')note.textContent='Connect the SDLC Library, then return here and select Refresh to load its project modules.';
+  else if(!packages.length)note.textContent='No direct project packages are declared in the library scaffold.';
+  else note.textContent='Direct dependencies from the SDLC Library. They are installed or restored in the project when the Solution Architect saves the stack; transitive packages are resolved by the package manager.';
+  details.append(note);
+  for(const engine of stack.nodeEngines||[]){const line=document.createElement('p');line.className='muted startup-stack-package-note';line.textContent='Node.js requirement: '+engine.range+' · '+engine.source;details.append(line);}
+  if(packages.length){
+   const packageList=document.createElement('ul');packageList.className='startup-stack-packages';packageList.setAttribute('aria-label',stack.name+' project modules');
+   for(const component of packages){
+    const item=document.createElement('li');item.className='startup-stack-package';
+    const title=document.createElement('span');title.textContent=component.name;
+    const meta=document.createElement('small');meta.textContent=[component.manager,component.scope,component.version||'version managed by project',component.source].filter(Boolean).join(' · ');
+    item.append(title,meta);packageList.append(item);
+   }
+   details.append(packageList);
+  }
+  grid.append(details);
  }
  renderStartupPage();
 }
@@ -7330,7 +7351,7 @@ window.addEventListener('message',event=>{
   startupConnectionVerified=message.success===true;
   $('startupConnectionMessage').textContent=message.message||'Connection test did not complete.';
   $('startupConnectionMessage').className=startupConnectionVerified?'test-status success':'test-status error';
-  if(startupConnectionVerified){$('startupAtlassianToken').value='';$('startupGithubToken').value='';}
+  if(startupConnectionVerified){$('startupAtlassianToken').value='';$('startupGithubToken').value='';send('startupReadiness');}
   renderStartupPage();
  }
  if(message.type==='startupProceedResult'&&message.success){startupReturnToConnections=false;showStartupStep(false);$('gateQuery').focus();}
