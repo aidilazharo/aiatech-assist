@@ -1,9 +1,10 @@
-<!-- Replace this file with the latest release notes for each release. -->
+# ATGV AIATECH Assist v0.3.99
 
-# ATGV AIATECH Assist v0.3.98
+- Load webview CSS in deterministic order, monitor core asset failures, and delay startup until the webview signals readiness.
+- Refresh Business Analyst and Project Manager Jira items on entering My Work. Show linked Story activity separately from actual Epic status.
+- Add a native, dependency-free Project Manager Kanban with verified Jira status transitions and user confirmation.
+- Record My Work role visits and assigned Jira issues in a version-controlled Confluence page table, and show the register in Overview.
+- Simplify ATGV: Workspace labels and remove requested explanatory paragraphs.
+- Add ATGV: AI with official Codex login using eligible ChatGPT accounts, read-only chat execution, and opt-in image attachments. ChatGPT web history and memories are not imported.
 
-- Show GitHub Copilot SDK as a startup card matching the five technology stacks, with setup and status in its own dialog.
-- Move Download Unified Error Log to the left side of the startup navigation row and remove the requested explanatory text.
-- Allow Reset Tech Stack to use a selected workspace alias and Windows path casing while continuing to reject linked project and document folders.
-- Validate and archive stack records before resetting Git, and restore them if the reset fails. Previous Git changes remain recoverable through the existing stash.
-- Apply the same archive protection when switching technology stacks.
+Validation: GitHub pull request must pass Linux regression, Windows reset/startup checks, and VSIX package verification before release.
