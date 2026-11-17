@@ -1988,5 +1988,7 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 @media(prefers-reduced-motion:reduce){.atgv-upgrade-progress-indicator{animation:none;width:100%;opacity:.65;}}
 
 /* Pin the unified log download alone to the bottom-left of prerequisite readiness. */
-#startupComputerCard{display:flex;flex-direction:column;}
+#startupComputerCard{display:flex;flex-direction:column;row-gap:12px;}
+#startupComputerCard>.atgv-startup-section-title{margin-bottom:4px;}
+#startupComputerCard>.atgv-startup-stack-grid{margin-top:8px;margin-bottom:4px;}
 #startupComputerCard .atgv-startup-diagnostics-footer{margin-top:auto;align-self:stretch;justify-content:flex-start;}
