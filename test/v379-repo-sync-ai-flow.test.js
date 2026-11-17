@@ -59,14 +59,14 @@ test('Repo Sync: temp clone -> AI reads source info -> AI branch -> stage -> AI 
  });
  assert.equal(seenFacts.sourceRepo,'Org/repo-a');
  assert.equal(result.branch,proposed);
- assert.match(result.commitMessage,/^feat: sync portal via AI review/);
- assert.equal(createdTitle,'Sync source portal improvements');
+ assert.match(result.commitMessage,/^feat: create source portal/);
+ assert.equal(createdTitle,'Create source portal');
  assert.match(createdBody,/AI summary: copy approved source portal files/);
- assert.match(createdBody,/ATGV AIATECH Assist Repo Sync/);
+ assert.match(createdBody,/## Source/);
  assert.equal(result.prUrl,'https://github.com/Org/repo-b/pull/123');
  assert.equal(git(['rev-parse','refs/remotes/origin/main'],b),baseSha);
  assert.equal(fs.readFileSync(path.join(b,'destination-only.txt'),'utf8'),'preserved\n');
  assert.equal(fs.existsSync(path.join(b,'.env')),false);
- assert.equal(git(['log','-1','--pretty=%s'],b),'feat: sync portal via AI review');
+ assert.equal(git(['log','-1','--pretty=%s'],b),'feat: create source portal');
  assert.ok(fs.existsSync(path.join(b,'package.json')));
 });
