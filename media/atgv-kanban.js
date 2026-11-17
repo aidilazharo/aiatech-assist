@@ -11,7 +11,8 @@
   function render(container,items,{onOpen=()=>{},onMove=()=>{},busy=false}={}){
     if(!container)return;
     container.replaceChildren();
-    const rows=Array.isArray(items)?items.filter(item=>item&&/^[A-Z][A-Z0-9_]+-\d+$/.test(item.key)):[]; 
+    const all=Array.isArray(items)?items.filter(item=>item&&/^[A-Z][A-Z0-9_]+-\d+$/.test(item.key)):[];
+    const rows=all.slice(0,500); // Bounded DOM for projects with thousands of Jira issues. 
     const defaults=['To Do','In Progress','In Review','Done'];
     const names=[...defaults,...new Set(rows.map(item=>String(item.status||'Unknown')))]
       .filter((name,index,array)=>array.findIndex(v=>v.toLowerCase()===name.toLowerCase())===index);
@@ -47,6 +48,7 @@
       }
       column.append(head,list);board.append(column);
     }
+    if(all.length>rows.length)container.append(element('p','atgv-kanban-meta','Showing '+rows.length+' of '+all.length+' issues. Use the Jira table to find other items.'));
     container.append(board);
   }
   const api=Object.freeze({render});if(typeof module!=='undefined'&&module.exports)module.exports=api;
