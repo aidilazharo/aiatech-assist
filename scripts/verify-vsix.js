@@ -1,6 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const crypto = require('node:crypto');
 const os = require('node:os');
 const path = require('node:path');
 const Module = require('node:module');
@@ -16,6 +17,25 @@ async function main() {
         assert.equal(extract.status, 0, extract.stderr || 'Failed to extract VSIX');
         const root = path.join(temp, 'extension');
         const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+        // The official SortableJS release is shipped inside the VSIX; no user npm
+        // install, CDN request, or external runtime download is permitted.
+        const sortablePath = path.join(root, 'media', 'vendor', 'sortablejs-1.15.7.min.js');
+        const sortableBytes = fs.readFileSync(sortablePath);
+        assert.equal(sortableBytes.length, 45478, 'Bundled SortableJS must exactly match the pinned release');
+        assert.match(sortableBytes.toString('utf8', 0, 110), /Sortable 1\.15\.7 - MIT/);
+        const gitBlobSha = crypto.createHash('sha1')
+            .update('blob ' + sortableBytes.length + '\\0')
+            .update(sortableBytes)
+            .digest('hex');
+        assert.equal(gitBlobSha, '8148b9dda22424c300191fcd3fcff1648de41e2e', 'SortableJS must be the original tagged GitHub distribution');
+        assert.match(fs.readFileSync(path.join(root, 'media', 'vendor', 'sortablejs-LICENSE.txt'), 'utf8'), /MIT License/);
+        assert.ok(fs.existsSync(path.join(root, 'media', 'vendor', 'SORTABLEJS-NOTICE.md')));
+        const dashboardHtml = fs.readFileSync(path.join(root, 'src', 'lib', 'webview', 'dashboard-html.js'), 'utf8');
+        const vendorLoader = '<script src="${sortableJs}"></script>';
+        const boardLoader = '<script src="${pmKanbanJs}"></script>';
+        assert.ok(dashboardHtml.includes('sortablejs-1.15.7.min.js'), 'Local SortableJS URI is required');
+        assert.ok(dashboardHtml.indexOf(vendorLoader) >= 0 && dashboardHtml.indexOf(vendorLoader) < dashboardHtml.indexOf(boardLoader), 'SortableJS must load before Kanban');
+
         const packageXml = fs.readFileSync(path.join(temp, 'extension.vsixmanifest'), 'utf8');
         assert.ok(packageXml.includes('Version="' + manifest.version + '"'));
         assert.ok(packageXml.includes('Microsoft.VisualStudio.Code.Details'));
