@@ -26,7 +26,7 @@ test('Repo Sync: temp clone -> AI reads source info -> AI branch -> stage -> AI 
  git(['add','--all'],b);git(['commit','-m','init destination'],b);
  const baseSha=git(['rev-parse','HEAD'],b);
  git(['remote','add','origin',bBare],b);git(['push','-u','origin','main'],b);
- const proposed='sync/repo-a/source-portal-'+sha.slice(0,8);
+ const proposed='feat/source-portal-'+sha.slice(0,8);
  let seenFacts=null,createdTitle='',createdBody='';
  const githubApi={
   getRepository:async()=>({nameWithOwner:'Org/repo-b',defaultBranch:'main'}),
@@ -58,7 +58,7 @@ test('Repo Sync: temp clone -> AI reads source info -> AI branch -> stage -> AI 
   }
  });
  assert.equal(seenFacts.sourceRepo,'Org/repo-a');
- assert.equal(result.branch,'sync/repo-a/main-'+sha.slice(0,8));
+ assert.equal(result.branch,'feat/create-source-portal-'+sha.slice(0,8));
  assert.equal(result.commitMessage,'feat: create source portal');
  assert.equal(createdTitle,'feat: create source portal');
  assert.match(createdBody,/AI summary: copy approved source portal files/);

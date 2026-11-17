@@ -41,16 +41,60 @@ test('Git catalog uses one stable checkout, updates tracked files and never crea
   assert.equal((await catalog.syncGitCatalogCheckout(x.workspace,x.bare,'example/skills')).action,'already-current');
  }finally{await fs.rm(x.tmp,{force:true,recursive:true});}
 });
-test('Git pull refuses dirty catalog files without overwriting local edits',async()=>{
+test('Git catalog pull preserves all dirty tracked and untracked files in a separate backup',async()=>{
  const x=await harness();try{
-  await catalog.syncGitCatalogCheckout(x.workspace,x.bare,'example/skills');
+  const original=await catalog.syncGitCatalogCheckout(x.workspace,x.bare,'example/skills');
   const asset=path.join(catalog.gitCatalogFolder(x.workspace),'roles','developer','SKILL.md');
   await fs.writeFile(asset,'private local edits');
+  await fs.writeFile(path.join(catalog.gitCatalogFolder(x.workspace),'local-note.txt'),'important untracked data');
   await x.publish('1.2.0');
-  await assert.rejects(catalog.syncGitCatalogCheckout(x.workspace,x.bare,'example/skills'),/local edits or untracked/);
-  assert.equal(await fs.readFile(asset,'utf8'),'private local edits');
+  const progress=[];
+  const result=await catalog.syncGitCatalogCheckout(x.workspace,x.bare,'example/skills','',{
+   onProgress:event=>progress.push(event)
+  });
+  assert.equal(result.action,'preserved-and-updated');
+  assert.notEqual(result.sha,original.sha);
+  assert.match(await fs.readFile(asset,'utf8'),/1\.2\.0/);
+  assert.equal(await fs.readFile(path.join(result.backupPath,'roles','developer','SKILL.md'),'utf8'),'private local edits');
+  assert.equal(await fs.readFile(path.join(result.backupPath,'local-note.txt'),'utf8'),'important untracked data');
+  assert.equal(git(result.backupPath,'rev-parse','HEAD'),original.sha);
+  assert.ok(result.backupPath.startsWith(path.join(x.workspace,'.atgv','catalog-local-backups')+path.sep));
+  assert.ok(progress.some(event=>event.percent===60&&/Preserving/.test(event.title)));
+  const installed=await catalog.gitInstalled(x.workspace,{repositoryUrl:'https://github.com/example/skills'});
+  assert.equal(installed.sha,result.sha);
+  assert.equal((await catalog.syncGitCatalogCheckout(x.workspace,x.bare,'example/skills')).action,'already-current');
  }finally{await fs.rm(x.tmp,{force:true,recursive:true});}
 });
+test('Dirty catalog activation failure restores original folder and leaves a recoverable clone',async()=>{
+ const x=await harness();try{
+  const before=await catalog.syncGitCatalogCheckout(x.workspace,x.bare,'example/skills');
+  const originalRoot=catalog.gitCatalogFolder(x.workspace);
+  const localFile=path.join(originalRoot,'notes.txt');
+  await fs.writeFile(localFile,'keep my draft');
+  await x.publish('1.2.0');
+  const rejectRename=async()=>{const error=new Error('simulated activation error');error.code='EIO';throw error;};
+  await assert.rejects(catalog.syncGitCatalogCheckout(x.workspace,x.bare,'example/skills','',{rename:rejectRename}),/original modified checkout was restored/);
+  assert.equal(await fs.readFile(localFile,'utf8'),'keep my draft');
+  assert.equal(git(originalRoot,'rev-parse','HEAD'),before.sha);
+  assert.equal((await catalog.activeRoot(x.workspace)).sha,before.sha);
+  assert.equal((await fs.readdir(path.join(x.workspace,'.atgv'))).filter(n=>n.startsWith('.sdlc-catalog-clone-')).length,1);
+ }finally{await fs.rm(x.tmp,{force:true,recursive:true});}
+});
+test('Invalid upstream catalog never archives or replaces a dirty local checkout',async()=>{
+ const x=await harness();try{
+  const installed=await catalog.syncGitCatalogCheckout(x.workspace,x.bare,'example/skills');
+  const localRoot=catalog.gitCatalogFolder(x.workspace);
+  await fs.writeFile(path.join(localRoot,'local-notes.txt'),'retain notes');
+  await fs.writeFile(path.join(x.writer,'catalog.json'),'{invalid upstream manifest');
+  git(x.writer,'add','.');git(x.writer,'commit','-m','invalid');git(x.writer,'push','origin','main');
+  await assert.rejects(catalog.syncGitCatalogCheckout(x.workspace,x.bare,'example/skills'),/catalog|manifest|JSON/i);
+  assert.equal(await fs.readFile(path.join(localRoot,'local-notes.txt'),'utf8'),'retain notes');
+  assert.equal(git(localRoot,'rev-parse','HEAD'),installed.sha);
+  const backupRoot=path.join(x.workspace,'.atgv','catalog-local-backups');
+  await assert.rejects(fs.lstat(backupRoot),{code:'ENOENT'});
+ }finally{await fs.rm(x.tmp,{force:true,recursive:true});}
+});
+
 test('Failed manifest validation rolls back fast-forward without corrupting current catalog',async()=>{
  const x=await harness();try{
   const before=await catalog.syncGitCatalogCheckout(x.workspace,x.bare,'example/skills');

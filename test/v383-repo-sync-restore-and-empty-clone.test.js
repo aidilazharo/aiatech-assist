@@ -91,7 +91,7 @@ test('sync clones Repo B into an empty external folder before creating review br
  assert.equal(fs.readFileSync(path.join(empty,'destination-only.txt'),'utf8'),'keep me\n');
  assert.equal(fs.readFileSync(path.join(empty,'README.md'),'utf8'),'Repo A document\n');
  assert.ok(commands.some(v=>v.args[0]==='clone'&&v.cwd===empty&&v.args.at(-1)==='.'));
- assert.ok(result.branch.startsWith('sync/repo-a/'));
+ assert.ok(result.branch.startsWith('feat/'));
 });
 test('populated non-Git Repo B folder is rejected without deleting files or cloning',async()=>{
  const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'atgv-unsafe-nongit-'));

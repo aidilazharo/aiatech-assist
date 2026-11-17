@@ -548,6 +548,90 @@ async function recoverStagedGitCatalog(root, remoteUrl, repository, git) {
     }
     return null;
 }
+// When a user has edited or added files inside the workspace's stable catalog,
+// preserve the WHOLE checkout (including its .git history and untracked files)
+// before activating a clean verified main. No stash, reset --hard or deletion of
+// the user's checkout is performed. Backups are outside the active catalog.
+async function preserveDirtyGitCatalog({workspace,root,target,remoteUrl,repository,git,token,originalSha,options={}}) {
+    const report=async(percent,title,message)=>{
+        if(typeof options.onProgress==='function'){
+            // A disposed webview must never make an otherwise verified library
+            // activation fail after its state has already been committed.
+            try{await options.onProgress({percent,title,message});}catch{/* UI transport is best-effort. */}
+        }
+    };
+    const backupRoot=path.join(root,'catalog-local-backups');
+    const existingBackupRoot=await fs.lstat(backupRoot).catch(error=>error.code==='ENOENT'?null:Promise.reject(error));
+    if(existingBackupRoot&&(!existingBackupRoot.isDirectory()||existingBackupRoot.isSymbolicLink()))
+        throw Error('Unsafe catalog-local-backups path. No library changes were made.');
+    const reusedStage=await recoverStagedGitCatalog(root,remoteUrl,repository,git);
+    const stage=reusedStage||path.join(root,'.sdlc-catalog-clone-'+crypto.randomUUID());
+    let validated=false,movedOriginal=false,activated=false,backupPath='';
+    try{
+        await report(54,'Preparing clean library checkout','Downloading and inspecting GitHub main without touching the existing catalog.');
+        if(!reusedStage)await git(root,['clone','--single-branch','--branch','main','--',remoteUrl,stage]);
+        const snapshot=await inspectGitCheckout(stage,repository);
+        if(options.expectedSha&&snapshot.sha!==options.expectedSha)
+            throw Error('GitHub main changed after version verification. No local catalog was moved; check updates again.');
+        const origin=await git(stage,['remote','get-url','origin']);
+        const branch=await git(stage,['branch','--show-current']);
+        const dirty=await git(stage,['status','--porcelain','--untracked-files=all']);
+        if(!sameGitRemote(origin,remoteUrl)||branch!=='main'||dirty)
+            throw Error('The new SDLC Catalog checkout did not pass Git origin, main branch or cleanliness checks.');
+        validated=true;
+        // Recheck the original after the network operation. Never silently
+        // preserve a different repository or replace an unexpected checkout.
+        const current=await fs.lstat(target);
+        if(!current.isDirectory()||current.isSymbolicLink())
+            throw Error('The original SDLC Catalog folder changed while the new catalog was prepared.');
+        if(!sameGitRemote(await git(target,['remote','get-url','origin']),remoteUrl)||
+           await git(target,['branch','--show-current'])!=='main'||
+           await git(target,['rev-parse','HEAD'])!==originalSha)
+            throw Error('The original catalog revision or branch changed during download. Retry the update.');
+        const status=await git(target,['status','--porcelain','--untracked-files=all']);
+        if(!status)throw Error('The original catalog no longer has local changes. Retry the normal fast-forward pull.');
+        await report(60,'Preserving local catalog changes','Moving the entire modified checkout to a private, separate backup folder.');
+        if(!existingBackupRoot)await fs.mkdir(backupRoot,{mode:0o700});
+        const backupStat=await fs.lstat(backupRoot);
+        if(!backupStat.isDirectory()||backupStat.isSymbolicLink())
+            throw Error('Unsafe catalog backup destination. No library changes were made.');
+        backupPath=path.join(backupRoot,'sdlc-catalog-preserved-'+new Date().toISOString().replace(/[:.]/g,'-')+'-'+crypto.randomUUID());
+        await fs.rename(target,backupPath);
+        movedOriginal=true;
+        await report(68,'Activating verified library','Installing the clean GitHub main checkout. The original remains in its backup folder.');
+        await promoteStagedGitCatalog(stage,target,remoteUrl,repository,snapshot,git,options);
+        activated=true;
+        const installed=await verifiedExistingCatalog(target,remoteUrl,repository,snapshot.sha,git);
+        if(!installed||installed.version!==snapshot.version)
+            throw Error('The new SDLC Catalog checkout failed final verification.');
+        await writeGitCatalogState(workspace,installed);
+        await report(73,'Original changes safely preserved','Verified main installed. Local edits and untracked files are preserved at '+backupPath);
+        return {...installed,checkout:target,action:'preserved-and-updated',backupPath};
+    }catch(error){
+        if(movedOriginal){
+            try{
+                // Preserve any partially activated target too, rather than
+                // risk deleting user files during rollback.
+                const current=await fs.lstat(target).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
+                if(current){
+                    const failedPath=path.join(backupRoot,'incomplete-activation-'+crypto.randomUUID());
+                    await fs.rename(target,failedPath);
+                }
+                await fs.rename(backupPath,target);
+                throw Error('SDLC Catalog update failed; the original modified checkout was restored. '+error.message);
+            }catch(rollbackError){
+                if(String(rollbackError.message||'').startsWith('SDLC Catalog update failed;'))throw rollbackError;
+                throw Error('SDLC Catalog activation failed and automatic restore was blocked. Your original catalog is preserved at '+backupPath+'. Restore it manually when filesystem locks are cleared. Original error: '+error.message+'. Restore error: '+rollbackError.message);
+            }
+        }
+        throw error;
+    }finally{
+        // Only remove a temporary clone after a complete, verified activation.
+        // Preserve it on failure for diagnosis or recovery.
+        if(activated)await fs.rm(stage,{recursive:true,force:true}).catch(()=>{});
+        else if(!validated&&!reusedStage)await fs.rm(stage,{recursive:true,force:true}).catch(()=>{});
+    }
+}
 async function syncGitCatalogCheckout(workspace, remoteUrl, repository, token='', options={}) {
     const root = path.join(workspace, '.atgv');
     const dirStat = await fs.lstat(root);
@@ -596,13 +680,15 @@ async function syncGitCatalogCheckout(workspace, remoteUrl, repository, token=''
         const branch = await git(target, ['branch', '--show-current']);
         if (branch !== 'main') throw Error('SDLC Catalog must remain on the main branch. No files changed.');
         const dirty = await git(target, ['status', '--porcelain', '--untracked-files=all']);
-        if (dirty) throw Error('SDLC Catalog has local edits or untracked files. Commit, move, or discard them before Pull Catalog; ATGV will not overwrite your changes.');
         const before = await git(target, ['rev-parse', 'HEAD']);
+        if (dirty) return preserveDirtyGitCatalog({workspace,root,target,remoteUrl,repository,git,token,originalSha:before,options});
         let pulled = false;
         try {
             await git(target, ['pull', '--ff-only', 'origin', 'main']);
             pulled = true;
             const snapshot = await inspectGitCheckout(target, repository);
+            if(options.expectedSha&&snapshot.sha!==options.expectedSha)
+                throw Error('GitHub main changed after version verification. Retry with the latest pinned commit.');
             await writeGitCatalogState(workspace, snapshot);
             return { ...snapshot, action: snapshot.sha === before ? 'already-current' : 'pulled' };
         } catch (error) {
@@ -670,7 +756,7 @@ async function retireLegacyCatalogAssets(workspace, storeRoot, repository) {
     return { ...outcome, archived, preserved: [...new Set([...outcome.preserved, ...archived])] };
 }
 
-async function syncGitWorkspace(config, token, workspace, storeRoot=null) {
+async function syncGitWorkspace(config, token, workspace, storeRoot=null, options={}) {
     const normalized = normalizeConfig(config);
     const parsed = parseRepository(normalized.repositoryUrl);
     if (!parsed) throw Error('Configure the GitHub SDLC Catalog before pulling.');
@@ -679,7 +765,7 @@ async function syncGitWorkspace(config, token, workspace, storeRoot=null) {
     const key = path.resolve(workspace);
     if (gitCatalogUpdates.has(key)) return gitCatalogUpdates.get(key);
     const action = (async () => {
-        const snapshot = await syncGitCatalogCheckout(workspace, normalized.repositoryUrl, repository, token);
+        const snapshot = await syncGitCatalogCheckout(workspace, normalized.repositoryUrl, repository, token, options);
         const cleanup = await retireLegacyCatalogAssets(workspace, storeRoot, repository);
         // Delete only the temporary ZIP snapshot after verified Git main is active.
         // A modified offline snapshot remains untouched and is reported for inspection.

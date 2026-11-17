@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.3.92';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.3.93';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -250,12 +250,18 @@ function html(webview,{resumeLibrary=false}={}){
       <p class="muted">ATGV detects the extension Releases source from its GitHub repository and the SDLC Library source from the configured catalog repository. Update checks never modify local projects or remote repositories.</p>
       <div class="software-update-toolbar" role="group" aria-label="Software update actions">
         <button type="button" id="checkSoftwareUpdates" class="secondary">Check Updates</button>
+        <button type="button" id="pullLibraryFiles" class="secondary">Pull Library Files</button>
         <button type="button" id="installExtensionRelease" class="secondary" disabled>Install Verified VSIX</button>
         <button type="button" id="viewExtensionRelease" class="secondary" disabled>View GitHub Release</button>
       </div>
       <p class="muted">Extension and SDLC Library checks run automatically, including at startup; update notifications always require confirmation. Release sources are detected automatically and cannot be edited.</p>
       <p id="softwareExtensionStatus" class="test-status muted" role="status" aria-live="polite">Extension: not checked.</p>
       <p id="softwareLibraryStatus" class="test-status muted" role="status" aria-live="polite">Library: check the SDLC Catalog section for its installed version.</p>
+      <div id="softwareLibraryPullProgress" class="atgv-catalog-pull-progress hidden" role="status" aria-live="polite" aria-atomic="true">
+        <div class="atgv-library-update-heading"><strong id="softwareLibraryPullTitle">Preparing library pull…</strong><span id="softwareLibraryPullPercent">0%</span></div>
+        <div id="softwareLibraryPullBar" class="atgv-library-update-track" role="progressbar" aria-label="SDLC Library pull stages completed" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="softwareLibraryPullIndicator" class="atgv-library-update-indicator"></span></div>
+        <p id="softwareLibraryPullMessage" class="muted">The GitHub pull and verification stages will appear here.</p>
+      </div>
       <p class="muted">Installation is optional, validates GitHub's published SHA-256 checksum, and requires a VS Code reload. Private releases require a saved GitHub token or VS Code GitHub sign-in. Catalog downloads use the existing pinned and verified Pull Catalog process.</p>
     </section></div></details>
   </main>
