@@ -310,6 +310,7 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
    await notify('destination','Repo B checkout prepared. Creating the review branch next.');
   }
  }
+ let oldBranch='';
  if(!previewOnly||alreadyCloned){
  const top=await runner('git',['rev-parse','--show-toplevel'],{cwd:destRoot});
  if(await fs.realpath(top)!==destRoot)throw Error('Repo B checkout root changed during verification.');
@@ -318,7 +319,7 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   throw Error('Repo B origin does not match the selected Destination GitHub URL.');
  const dirty=await runner('git',['status','--porcelain','--untracked-files=all'],{cwd:destRoot});
  if(dirty)throw Error('Repo B has uncommitted or untracked changes. Commit or stash them first.');
- const oldBranch=await runner('git',['symbolic-ref','--quiet','--short','HEAD'],{cwd:destRoot});
+ oldBranch=await runner('git',['symbolic-ref','--quiet','--short','HEAD'],{cwd:destRoot});
  if(!oldBranch)throw Error('Repo B cannot be in detached HEAD.');
  }
  // Derive the review branch only after inspecting Repo A's actual HEAD commit.
