@@ -472,8 +472,10 @@ async function offerBrandedExtensionUpgrade(release){
  if(!dashboard)return vscode.window.showInformationMessage('ATGV v'+release.version+' is available. Install the verified GitHub release?',{modal:true},'Install Upgrade','View Release','Later');
  const requestId=crypto.randomUUID();
  return new Promise(resolve=>{
-  const timer=setTimeout(()=>{pendingExtensionUpgradeOffers.delete(requestId);resolve({action:'Later',requestId});},120000);
-  timer.unref?.();
+  // Do not time out a still-visible offer: otherwise Install can become inert
+  // if the user reviews release details for more than two minutes.
+  // Dashboard disposal resolves outstanding offers and clears the entry.
+  const timer=null;
   pendingExtensionUpgradeOffers.set(requestId,{resolve,timer});
   Promise.resolve(dashboard.webview.postMessage({type:'extensionUpgradeOffer',requestId,
     currentVersion:require('../../../package.json').version,version:release.version,
