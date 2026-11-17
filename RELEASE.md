@@ -1,4 +1,4 @@
-# ATGV AIATECH Assist v0.4.00
+# ATGV AIATECH Assist v0.4.10
 
 - Bundle upstream **SortableJS 1.15.7** with the extension, including its MIT license. No user npm installation, external CDN, or internet access is required to drag Jira cards.
 - Project Manager → My Work: one Jira Work Items panel opens as a compact **searchable, sortable and paginated DataTable** with an optional **Kanban** switch. Kanban cards drag between Jira status columns using the touch-friendly handle; the keyboard status selector remains available.
