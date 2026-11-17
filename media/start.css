@@ -1346,12 +1346,9 @@ button:focus-visible{outline:2px solid var(--vscode-focusBorder,#649ed2);outline
 @media(max-width:620px){#workView > .work-head .atgv-work-skill{max-width:100%}#workView .atgv-work-skill-select{max-width:min(45vw,220px);min-width:90px}}
 
 /* v0.2.84 — BR register stays visible even when the local register is empty. */
-#discoveryView .ba-jira-recovery{margin:14px 0 0}
-#discoveryView .ba-jira-recovery-item{display:flex;align-items:center;justify-content:space-between;gap:14px;background:var(--atgv-surface,#292b30);border:1px solid var(--atgv-line,#444);border-radius:7px;padding:13px 15px;margin:9px 0}
+#discoveryView .ba-jira-recovery{margin:0}
 #discoveryView .ba-jira-recovery-info{display:flex;flex-direction:column;gap:6px;min-width:0;overflow-wrap:anywhere}
 #discoveryView .ba-jira-recovery-info small{font-size:11px}
-#discoveryView .ba-jira-recovery-item button{flex-shrink:0}
-@media(max-width:600px){#discoveryView .ba-jira-recovery-item{align-items:flex-start;flex-direction:column}}
 
 /* Jira BA inventory: stable, readable columns and a contained horizontal scroll on narrow windows. */
 #workView .ba-jira-project-table .atgv-datatable-table{table-layout:fixed;min-width:1040px}
@@ -1970,3 +1967,9 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
   line-height:1.14;
  }
 }
+
+/* v0.3.87: Jira-only Epics use the SAME completed BR accordion layout. */
+#discoveryView .ba-completed-flat .ba-jira-only-br-section{margin:0 0 9px}
+#discoveryView .ba-completed-flat .ba-jira-only-br-section .ba-completed-br-body{padding:13px 16px}
+#discoveryView .ba-completed-flat .ba-jira-only-br-section .ba-jira-recovery-info{width:100%;max-width:100%}
+#discoveryView .ba-completed-flat .ba-jira-only-br-section .ba-jira-answers-unavailable{opacity:.55;cursor:not-allowed}
