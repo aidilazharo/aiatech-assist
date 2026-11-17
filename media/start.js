@@ -7382,7 +7382,8 @@ window.addEventListener('message',event=>{
   if(!displayedExtensionUpgrade||message.requestId!==displayedExtensionUpgrade)return;
   const stage=String(message.stage||'');
   if(stage==='completed'){
-   // Host confirms the VSIX install command resolved before the modal closes.
+   // Only the host's install command completion unlocks and closes this dialog.
+   renderExtensionUpgradeInstallState('completed',message.title||'Upgrade installed successfully',message.message||'VS Code has finished installing the verified package.');
    closeExtensionUpgrade('Installed',false);
    return;
   }
