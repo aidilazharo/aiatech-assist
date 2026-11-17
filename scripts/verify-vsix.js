@@ -24,7 +24,7 @@ async function main() {
         assert.equal(sortableBytes.length, 45478, 'Bundled SortableJS must exactly match the pinned release');
         assert.match(sortableBytes.toString('utf8', 0, 110), /Sortable 1\.15\.7 - MIT/);
         const gitBlobSha = crypto.createHash('sha1')
-            .update('blob ' + sortableBytes.length + '\\0')
+            .update('blob ' + sortableBytes.length).update(Buffer.from([0]))
             .update(sortableBytes)
             .digest('hex');
         assert.equal(gitBlobSha, '8148b9dda22424c300191fcd3fcff1648de41e2e', 'SortableJS must be the original tagged GitHub distribution');
