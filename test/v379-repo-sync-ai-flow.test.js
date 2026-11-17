@@ -45,7 +45,7 @@ test('Repo Sync: temp clone -> AI reads source info -> AI branch -> stage -> AI 
   return git(args,cwd||temp);
  };
  const result=await sync.sync({
-  sourceUrl:'https://github.com/Org/repo-a',destinationUrl:'https://github.com/Org/repo-b',
+  sourceUrl:'https://github.com/Org/repo-a',sourceBranch:'main',destinationUrl:'https://github.com/Org/repo-b',
   destinationFolder:b,sourcePat:'ghp_'+'a'.repeat(40),destPat:'ghp_'+'b'.repeat(40),runner,githubApi,
   planSync:async facts=>{
    seenFacts=facts;
