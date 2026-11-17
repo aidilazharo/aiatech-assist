@@ -115,6 +115,7 @@ const pendingAiConsents=new Map();
 const pendingHostDialogs=new Map();
 const pendingExtensionUpgradeOffers=new Map();
 const pendingLibraryUpdateOffers=new Map();
+let activeLibraryUpdatePullRequestId=null;
 const pendingPrerequisiteInstallOffers=new Map();
 let startupModuleInstalling=false;
 let startupSessionVerified=false;
@@ -1318,7 +1319,7 @@ async function start(options={}){
   // handshake as soon as its scripts execute. Do not lose that first message.
   dashboard.webview.onDidReceiveMessage(message=>{guarded(()=>handleDashboardMessage(message));});
   dashboard.webview.html=html(dashboard.webview);webviewVendorDir=installedVendorAssets?.dir||null;
-  dashboard.onDidDispose(()=>{for(const [key,item] of pendingHostDialogs){clearTimeout(item.timer);item.resolve(undefined);pendingHostDialogs.delete(key);}for(const [key,item] of pendingExtensionUpgradeOffers){clearTimeout(item.timer);item.resolve('Later');pendingExtensionUpgradeOffers.delete(key);}for(const [key,item] of pendingLibraryUpdateOffers){clearTimeout(item.timer);item.resolve('Later');pendingLibraryUpdateOffers.delete(key);}for(const [key,item] of pendingPrerequisiteInstallOffers){item.resolve(undefined);}dashboard=undefined;pendingTests={jira:null,github:null};if(modelStatusPoll){clearInterval(modelStatusPoll);modelStatusPoll=null;}});
+  dashboard.onDidDispose(()=>{for(const [key,item] of pendingHostDialogs){clearTimeout(item.timer);item.resolve(undefined);pendingHostDialogs.delete(key);}for(const [key,item] of pendingExtensionUpgradeOffers){clearTimeout(item.timer);item.resolve('Later');pendingExtensionUpgradeOffers.delete(key);}for(const [key,item] of pendingLibraryUpdateOffers){clearTimeout(item.timer);item.resolve('Later');pendingLibraryUpdateOffers.delete(key);}for(const [key,item] of pendingPrerequisiteInstallOffers){item.resolve(undefined);}activeLibraryUpdatePullRequestId=null;dashboard=undefined;pendingTests={jira:null,github:null};if(modelStatusPoll){clearInterval(modelStatusPoll);modelStatusPoll=null;}});
   if(modelStatusPoll)clearInterval(modelStatusPoll);
   modelStatusPoll=setInterval(()=>{invalidateModelStatus();if(dashboard)refreshDashboard().catch(e=>report('Model badge refresh: '+e.message));},60000);
   modelStatusPoll.unref?.();
@@ -3960,8 +3961,19 @@ async function handleDashboardMessage(msg){
       }
       case 'libraryUpdateDecision':{
         const entry=pendingLibraryUpdateOffers.get(msg.requestId);
-        if(entry){pendingLibraryUpdateOffers.delete(msg.requestId);clearTimeout(entry.timer);
-          entry.resolve(msg.action==='Pull Library'?'Pull Library':'Later');}
+        if(entry){
+          pendingLibraryUpdateOffers.delete(msg.requestId);clearTimeout(entry.timer);
+          if(msg.action==='Pull Library')activeLibraryUpdatePullRequestId=msg.requestId;
+          entry.resolve(msg.action==='Pull Library'?'Pull Library':'Later');
+        }else if(activeLibraryUpdatePullRequestId===msg.requestId&&msg.action==='Later'&&!catalogBusy){
+          // Allow dismissal after a failed update, but never during an active pull.
+          activeLibraryUpdatePullRequestId=null;
+        }
+        break;
+      }
+      case 'libraryUpdateRetry':{
+        if(!activeLibraryUpdatePullRequestId||msg.requestId!==activeLibraryUpdatePullRequestId||catalogBusy)break;
+        await handleDashboardMessage({type:'catalogPull'});
         break;
       }
       case 'checkSoftwareUpdates':{
@@ -6128,22 +6140,43 @@ async function handleDashboardMessage(msg){
         await dashboard?.webview.postMessage({type:'catalogAction',action:'check',success:true,message:'Catalog update check completed.'});break;
       }
       case 'catalogPull':{
-        if(catalogBusy)throw Error('Catalog operation already running.');
+        // A stage percentage represents completed verification milestones, not
+        // downloaded bytes. Keep the branded update modal visible until success
+        // is verified, or leave it available to Retry after an error.
+        let completedStage=0;
+        const progress=async(stage,percent,title,message)=>{
+          if(Number.isFinite(percent))completedStage=Math.max(completedStage,Math.min(100,Math.round(percent)));
+          const payload={stage,percent:completedStage,title,message};
+          await dashboard?.webview.postMessage({type:'catalogPullProgress',...payload});
+          if(activeLibraryUpdatePullRequestId)
+            await dashboard?.webview.postMessage({type:'libraryUpdateProgress',requestId:activeLibraryUpdatePullRequestId,...payload});
+        };
+        if(catalogBusy){
+          await progress('failed',0,'Library update cannot start','Another catalog operation is already running. Retry after it finishes.');
+          throw Error('Catalog operation already running.');
+        }
         const config=catalogConfig();
-        if(!config.repositoryUrl)throw Error('Save the SDLC Catalog configuration first.');
+        if(!config.repositoryUrl){
+          await progress('failed',0,'Library repository missing','Save the SDLC Catalog configuration before pulling.');
+          throw Error('Save the SDLC Catalog configuration first.');
+        }
         catalogBusy=true;
+        await progress('running',5,'Preparing SDLC Library update…','Checking the configured GitHub repository and workspace.');
         await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});
         try{
           const token=await catalogToken(config,{interactive:true});
+          await progress('running',20,'GitHub access verified','Checking the local workspace catalog and available main-branch revision.');
           if(!getWorkspace())throw Error('Open a workspace before pulling the SDLC Catalog.');
           await ensureWorkspaceLibrary(getWorkspace().uri.fsPath);
+          await progress('running',35,'Checking library revision','Reading the pinned GitHub main snapshot and validated catalog version.');
           const pinned=await sdlcCatalog.remoteVersion(config,token);
+          await progress('running',50,'Pulling library files…','Fetching GitHub main into the workspace SDLC Catalog checkout. This stage can take longer for large libraries.');
           const snapshot=await sdlcCatalog.syncGitWorkspace(config,token,getWorkspace().uri.fsPath,context.globalStorageUri.fsPath);
+          await progress('running',75,'Library files downloaded','Checking the active checkout, manifest version, and expected commit.');
           const selected=await sdlcCatalog.activeRoot(getWorkspace().uri.fsPath);
-          // Do not say "Updated" until the selected workspace matches its
-          // expected GitHub main commit and validated manifest version.
           libraryUpdateVersion.verifyActivatedPull(pinned,selected);
           if(!selected.offline&&snapshot.sha!==selected.sha)throw Error('Library checkout changed after pulling GitHub main; refresh and retry.');
+          await progress('running',88,'Library verification passed','Refreshing catalog roles, technology stacks and active library information.');
           catalogRemote={sha:pinned.sha,repository:pinned.repository,version:pinned.version};catalogLastError='';catalogLastCheck=new Date().toISOString();
           const message=selected.offline?
             'GitHub main v'+pinned.version+' was verified, but newer ZIP v'+selected.version+' remains active.':
@@ -6153,12 +6186,19 @@ async function handleDashboardMessage(msg){
             const available=await sdlcCatalog.designFrameworkAvailability(getWorkspace().uri.fsPath);
             await dashboard?.webview.postMessage({type:'uxFrameworkCatalogChanged',projectId:activeProject.id,...available});
           }
+          await progress('running',96,'Refreshing workspace…','Finalizing the verified Library update and refreshing the interface.');
           await refreshDashboard();
-         }catch(error){
+          await progress('completed',100,'SDLC Library update complete',message);
+          activeLibraryUpdatePullRequestId=null;
+        }catch(error){
           catalogLastError=String(error?.message||error).slice(0,600);
           await dashboard?.webview.postMessage({type:'catalogAction',action:'pull',success:false,message:'Library update failed: '+catalogLastError});
+          await progress('failed',completedStage,'SDLC Library update failed',catalogLastError+' Select Retry Pull or Later.');
           throw error;
-         }finally{catalogBusy=false;await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});}
+        }finally{
+          catalogBusy=false;
+          await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});
+        }
         break;
       }
       case 'openingSelect':{
