@@ -4,6 +4,16 @@ const crypto=require('node:crypto');
 const repoSync=require('./repo-sync-pr');
 const repoCredentials=require('./repo-sync-credentials');
 const SAVED_URL_KEYS=Object.freeze({Source:'atgvAssist.repoSync.lastSourceUrl',Destination:'atgvAssist.repoSync.lastDestinationUrl'});
+const SAVED_LIST_KEYS=Object.freeze({Source:'atgvAssist.repoSync.savedSourceUrls',Destination:'atgvAssist.repoSync.savedDestinationUrls'});
+const MAX_SAVED_REPOS=30;
+function safeStoredRepo(input){
+ if(typeof input!=='string')return null;
+ try{
+  const repo=repoCredentials.parseCredentialUrl(input);
+  // No credential-bearing values are ever adopted from non-secret storage.
+  return repo.token?null:repo;
+ }catch{return null;}
+}
 let panel=null;
 function escapeHtml(value){return String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));}
 function workspaceHtml({nonce,version,cspSource}){
@@ -22,8 +32,8 @@ main{max-width:980px;margin:auto;padding:25px clamp(16px,4vw,40px) 45px}
 .card{min-width:0;padding:18px 20px;border:1px solid var(--vscode-panel-border,#50535b);border-radius:10px;background:var(--vscode-editorWidget-background,var(--vscode-editor-background,#25282d))}
 .card.full{grid-column:1/-1}
 label{font-weight:650;font-size:12px;display:block;margin:14px 0 6px}
-input{width:100%;min-width:0;padding:10px;color:var(--vscode-input-foreground,var(--vscode-foreground));background:var(--vscode-input-background,#30343b);border:1px solid var(--vscode-input-border,var(--vscode-panel-border,#555));border-radius:5px;font:inherit}
-input:focus-visible,button:focus-visible{outline:2px solid var(--vscode-focusBorder,#6ab5ff);outline-offset:2px}
+input,select{width:100%;min-width:0;padding:10px;color:var(--vscode-input-foreground,var(--vscode-foreground));background:var(--vscode-input-background,#30343b);border:1px solid var(--vscode-input-border,var(--vscode-panel-border,#555));border-radius:5px;font:inherit}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--vscode-focusBorder,#6ab5ff);outline-offset:2px}
 button{background:var(--vscode-button-background,#096db5);color:var(--vscode-button-foreground,#fff);border:0;border-radius:5px;min-height:37px;padding:10px 14px;font:inherit;cursor:pointer}
 button.secondary{background:var(--vscode-button-secondaryBackground,#454c58);color:var(--vscode-button-secondaryForeground,#fff)}
 button:hover:not(:disabled){filter:brightness(1.1)}button:disabled{opacity:.52;cursor:not-allowed}
@@ -45,7 +55,9 @@ ol{line-height:1.85;padding-left:20px}
 <main><p class="muted">Copy eligible tracked files from the selected Repo A branch into a matching, review-only branch of Repo B. Separate GitHub PATs authenticate each repository; Repo B main is never changed directly.</p>
 <form id="repoSyncForm"><div class="grid">
 <section class="card"><h2>1. Source · Repo A</h2>
-<p class="muted">Paste a GitHub HTTPS URL with username:PAT (read access). The URL is masked. Once tested, only the PAT is stored in VS Code SecretStorage.</p>
+<p class="muted">Select a saved read-access connection or add another. PATs are stored in VS Code SecretStorage.</p>
+<label for="sourceSavedRepos">Saved Source connections</label><select id="sourceSavedRepos" aria-label="Saved Source GitHub repositories"><option value="">+ Add another repository...</option></select>
+<div class="connection-action"><button id="forgetSource" type="button" class="secondary" disabled>Forget selected</button></div>
 <label for="sourceUrl">GitHub repository URL with PAT</label><input id="sourceUrl" type="password" required placeholder="https://USERNAME:TOKEN@github.com/OWNER/repo-a" autocomplete="off" spellcheck="false">
 <div class="connection-action"><button id="testSource" type="button" class="secondary">Test Connection</button><span id="sourceConnection" class="connection-status" role="status" aria-live="polite">Not tested</span></div>
 <label for="sourceBranch">Source branch (optional)</label><input id="sourceBranch" type="text" maxlength="110" placeholder="Auto: GitHub default branch, or choose another branch">
@@ -53,7 +65,9 @@ ol{line-height:1.85;padding-left:20px}
 <p class="muted note">A dot copies all eligible tracked files. Secrets, Git internals, generated dependencies and release workflows are excluded.</p>
 </section>
 <section class="card"><h2>2. Destination · Repo B</h2>
-<p class="muted">Paste a GitHub HTTPS URL with username:PAT (write access). Credentials are removed from the form after testing. Choose an existing Repo B Git checkout or an empty folder outside ATGV. ATGV clones Repo B into an empty folder.</p>
+<p class="muted">Select a saved write-access connection or add another. Choose a clean Repo B checkout or an empty external folder.</p>
+<label for="destinationSavedRepos">Saved Destination connections</label><select id="destinationSavedRepos" aria-label="Saved Destination GitHub repositories"><option value="">+ Add another repository...</option></select>
+<div class="connection-action"><button id="forgetDestination" type="button" class="secondary" disabled>Forget selected</button></div>
 <label for="destinationRepo">Destination GitHub URL with PAT</label><input id="destinationRepo" type="password" required placeholder="https://USERNAME:TOKEN@github.com/OWNER/repo-b" autocomplete="off" spellcheck="false">
 <div class="connection-action"><button id="testDestination" type="button" class="secondary">Test Connection</button><span id="destinationConnection" class="connection-status" role="status" aria-live="polite">Not tested</span></div>
 <label>Local Repo B Git root or empty folder (outside ATGV workspace)</label><div class="folder"><button id="selectRepoB" type="button" class="secondary">Choose Repo B folder</button><strong id="destinationLabel">No folder selected</strong></div>
@@ -77,6 +91,11 @@ function buttons(){
  get('createPr').disabled=busy||!folder;
  get('selectRepoB').disabled=busy;
  get('testSource').disabled=busy;get('testDestination').disabled=busy;
+ for(const kind of ['Source','Destination']){
+  const select=get(kind==='Source'?'sourceSavedRepos':'destinationSavedRepos');
+  select.disabled=busy;
+  get(kind==='Source'?'forgetSource':'forgetDestination').disabled=busy||!select.value;
+ }
  get('openPr').disabled=busy||!createdPr;get('openPr').hidden=!createdPr;
  get('repoSyncForm').setAttribute('aria-busy',String(busy));
 }
