@@ -4889,10 +4889,7 @@ function renderBAJiraBackedEpics(){
   info.append(brElement('small','muted ba-jira-evidence-help','Original 12 discovery answers and uploaded file are not stored in this project. Open the ATGV project folder that published this BR to access its evidence; Jira alone cannot reconstruct it.'));
   const open=brElement('button','secondary','View Jira');open.type='button';
   open.addEventListener('click',()=>openJiraIssueModal(item.key));
-  const switchProject=brElement('button','secondary','Switch Project');switchProject.type='button';
-  switchProject.title='Find the original ATGV project and its saved BR evidence';
-  switchProject.addEventListener('click',()=>navigate('projects'));
-  card.append(info,open,switchProject);root.append(card);
+  card.append(info,open);root.append(card);
  }
  if(rows.length>50)root.append(brElement('p','muted',String(rows.length-50)+' additional unlinked Epics: use the Jira inventory below.'));
  if(jiraInventoryRunning)root.append(brElement('p','muted','Jira search is still running; counts may increase.'));
