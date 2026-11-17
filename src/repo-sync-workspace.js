@@ -116,7 +116,9 @@ function showSavedRepos(kind,entries){
  select.replaceChildren();
  const add=document.createElement('option');add.value='';add.textContent='+ Add another repository...';select.append(add);
  for(const row of Array.isArray(entries)?entries:[]){
-  if(!/^https:\/\/github\.com\/[A-Za-z0-9-]+\/[A-Za-z0-9_.-]+$/.test(row?.safeUrl||''))continue;
+  let uri=null;
+  try{uri=new URL(String(row?.safeUrl||''));}catch{continue;}
+  if(uri.protocol!=='https:'||uri.hostname!=='github.com'||uri.username||uri.password||uri.port||uri.search||uri.hash||uri.pathname.split('/').filter(Boolean).length!==2)continue;
   const option=document.createElement('option');option.value=row.safeUrl;
   option.textContent=String(row.repo||row.safeUrl)+(row.credentialSaved?' · PAT saved':' · PAT required');
   select.append(option);
