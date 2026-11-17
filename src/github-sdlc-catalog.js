@@ -554,7 +554,11 @@ async function recoverStagedGitCatalog(root, remoteUrl, repository, git) {
 // the user's checkout is performed. Backups are outside the active catalog.
 async function preserveDirtyGitCatalog({workspace,root,target,remoteUrl,repository,git,token,originalSha,options={}}) {
     const report=async(percent,title,message)=>{
-        if(typeof options.onProgress==='function')await options.onProgress({percent,title,message});
+        if(typeof options.onProgress==='function'){
+            // A disposed webview must never make an otherwise verified library
+            // activation fail after its state has already been committed.
+            try{await options.onProgress({percent,title,message});}catch{/* UI transport is best-effort. */}
+        }
     };
     const backupRoot=path.join(root,'catalog-local-backups');
     const existingBackupRoot=await fs.lstat(backupRoot).catch(error=>error.code==='ENOENT'?null:Promise.reject(error));
@@ -567,6 +571,8 @@ async function preserveDirtyGitCatalog({workspace,root,target,remoteUrl,reposito
         await report(54,'Preparing clean library checkout','Downloading and inspecting GitHub main without touching the existing catalog.');
         if(!reusedStage)await git(root,['clone','--single-branch','--branch','main','--',remoteUrl,stage]);
         const snapshot=await inspectGitCheckout(stage,repository);
+        if(options.expectedSha&&snapshot.sha!==options.expectedSha)
+            throw Error('GitHub main changed after version verification. No local catalog was moved; check updates again.');
         const origin=await git(stage,['remote','get-url','origin']);
         const branch=await git(stage,['branch','--show-current']);
         const dirty=await git(stage,['status','--porcelain','--untracked-files=all']);
@@ -681,6 +687,8 @@ async function syncGitCatalogCheckout(workspace, remoteUrl, repository, token=''
             await git(target, ['pull', '--ff-only', 'origin', 'main']);
             pulled = true;
             const snapshot = await inspectGitCheckout(target, repository);
+            if(options.expectedSha&&snapshot.sha!==options.expectedSha)
+                throw Error('GitHub main changed after version verification. Retry with the latest pinned commit.');
             await writeGitCatalogState(workspace, snapshot);
             return { ...snapshot, action: snapshot.sha === before ? 'already-current' : 'pulled' };
         } catch (error) {
