@@ -55,7 +55,7 @@ async function visit(config,token,{projectKey,roleId}){
  if(!me?.accountId)throw Error('Jira did not verify the current user.');
  const email=clean(me.emailAddress||config.get('jira.email'),250).toLowerCase();
  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw Error('User email is unavailable. The Confluence register was not changed.');
- const name=displayName(email,me.displayName);
+ const name=displayName(email)||clean(me.displayName)||'Unknown';
  const project=validProjectKey(projectKey);
  let tasks='No assigned task';
  try{
