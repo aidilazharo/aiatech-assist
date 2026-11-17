@@ -70,6 +70,22 @@ async function getRepository(repo,token,request=githubRequest){
   throw Error('GitHub did not report a default branch for Repo B.');
  return {nameWithOwner:value.full_name,defaultBranch:value.default_branch};
 }
+// Resolve the source default branch with read-only permissions. Do not assume "main".
+async function getSourceRepository(repo,token,request=githubRequest){
+ const result=await request(repo,token,'GET','');
+ const status=Number(result?.status)||0;
+ if(status===401)throw Error('Repo A Source PAT authentication failed (HTTP 401).');
+ if(status===403)throw Error('GitHub denied Repo A source lookup (HTTP 403). Check Source PAT read access and organization restrictions.');
+ if(status===404)throw Error('Repo A source repository not found or inaccessible with this PAT (HTTP 404).');
+ if(status!==200)throw Error('GitHub Repo A source lookup failed (HTTP '+status+').');
+ const value=result?.body;
+ if(!value||String(value.full_name||'').toLowerCase()!==repo.name.toLowerCase())
+  throw Error('GitHub API Source repository identity does not match Repo A.');
+ if(value.permissions?.pull!==true)throw Error('Source PAT does not have read access to Repo A.');
+ const branch=String(value.default_branch||'').trim();
+ if(!branch)throw Error('Repo A has no default branch. Create an initial commit and default branch in GitHub before syncing.');
+ return {nameWithOwner:value.full_name,defaultBranch:branch};
+}
 async function findOpenPr(repo,token,{branch,base},request=githubRequest){
  const filter='?state=open&head='+encodeURIComponent(repo.owner+':'+branch)+'&per_page=100';
  const value=requireOk(await request(repo,token,'GET','/pulls'+filter),200,'open PR lookup');
@@ -90,4 +106,4 @@ async function createPr(repo,token,{branch,base,title,body},request=githubReques
  const value=requireOk(result,201,'pull request creation');
  return safePrUrl(repo,value?.html_url);
 }
-module.exports={githubRequest,getRepository,findOpenPr,createPr,safePrUrl};
+module.exports={githubRequest,getRepository,getSourceRepository,findOpenPr,createPr,safePrUrl};
