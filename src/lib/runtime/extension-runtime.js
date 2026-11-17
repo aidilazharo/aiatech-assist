@@ -123,7 +123,7 @@ const pendingExtensionUpgradeOffers=new Map();
 const pendingLibraryUpdateOffers=new Map();
 let activeLibraryUpdatePullRequestId=null;
 const pendingPrerequisiteInstallOffers=new Map();
-let startupModuleInstalling=false;
+let startupModuleInstalling=false,startupCopilotSetupRunning=false;
 let startupSessionVerified=false;
 let startupSessionProceedApproved=false;
 let startupVerifiedSignature='';
@@ -3860,6 +3860,7 @@ async function handleDashboardMessage(msg){
         try{
           await dashboard?.webview.postMessage({type:'startupReadinessProgress',percent:0,completed:0,total:Object.keys(startupReadiness.TOOLS).length+1,message:'Checking technology stack prerequisites and project modules…'});
           const result=await startupReadiness.check({onProgress:progress=>dashboard?.webview.postMessage({type:'startupReadinessProgress',...progress}),loadCatalog:startupStackCatalog});
+          result.copilotSdk={installed:await copilotRepairSdk.installed(context.globalStorageUri.fsPath),compatible:copilotRepairSdk.compatibleNode(),version:copilotRepairSdk.VERSION};
           const tools=Object.entries(result.tools||{}).map(([name,item])=>name+': '+(item.installed?'detected '+item.version+' via '+(item.source||'PATH'):'not detected'+(item.error?' ('+item.error+')':''))).join(' | ');
           await recordStartupDiagnostic({stage:'readiness-scan',status:'complete',detail:tools+' | SDLC Library: '+(result.catalog?.available?(result.catalog.source+' '+result.catalog.version):'unavailable')});
           await dashboard?.webview.postMessage({type:'startupReadinessResult',value:result});
@@ -3868,6 +3869,22 @@ async function handleDashboardMessage(msg){
           await recordStartupDiagnostic({stage:'readiness-scan',status:'failed',detail:error.message});
           await dashboard?.webview.postMessage({type:'startupReadinessResult',error:error.message});
         }
+        break;
+      }
+      case 'startupSetupCopilot':{
+        if(startupCopilotSetupRunning)break;
+        startupCopilotSetupRunning=true;
+        const sendStatus=(status,message)=>dashboard?.webview.postMessage({type:'startupCopilotSetup',status,message});
+        try{
+          if(!await copilotRepairSdk.installed(context.globalStorageUri.fsPath)){
+            if(vscode.workspace.isTrusted===false)throw Error('Copilot SDK setup requires a trusted VS Code workspace.');
+            await sendStatus('working','Installing the Copilot SDK and its platform runtime…');
+            await copilotRepairSdk.install(context.globalStorageUri.fsPath,{onProgress:message=>{report('Copilot SDK setup: '+message);return sendStatus('working',message);}});
+          }
+          invalidateModelStatus();
+          await sendStatus('ready','Copilot SDK installed. Sign in to Copilot CLI; select Microsoft Copilot SDK in Settings to use it for AI.');
+        }catch(error){await sendStatus('error',String(error.message||error));}
+        finally{startupCopilotSetupRunning=false;}
         break;
       }
       case 'startupExportUnifiedLog':{

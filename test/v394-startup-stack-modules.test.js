@@ -79,15 +79,47 @@ test('first-run GitHub inventory reads only verified manifest blobs from one com
  await assert.rejects(inventory.remote({config:{},api,request:async()=>({encoding:'base64',content:Buffer.from('tampered').toString('base64')})}),/integrity check failed/);
 });
 
-test('startup UI lists catalog modules separately from computer tools',async()=>{
+test('each startup stack opens its modules and tools in a modal that survives a refresh',async()=>{
  const source=await fs.readFile(path.join(__dirname,'../media/start.js'),'utf8');
  const from=source.indexOf('function renderStartupStackReadiness('),to=source.indexOf('function invalidateStartupConnection(',from);
  assert.ok(from>=0&&to>from);
- function node(tag){const classes=new Set();return {tag,children:[],dataset:{},style:{},classList:{add:v=>classes.add(v),remove:v=>classes.delete(v)},append(...v){this.children.push(...v);},replaceChildren(){this.children=[];},setAttribute(){},addEventListener(){},querySelectorAll(){return [];}};}
- const nodes={startupStackGrid:node('div'),startupToolMessage:node('p')};
- const render=new Function('document','$','startupScanComplete','startupScanPercent','startupLastInstalledTool','startupInstallingModule','renderStartupPage','send',source.slice(from,to)+';return renderStartupStackReadiness;')({createElement:node},id=>nodes[id],false,()=>{},'',null,()=>{},()=>{});
- render({catalog:{available:true,source:'Active SDLC Library',version:'1.1.15'},stacks:[{id:'react',name:'React',ready:true,catalogStatus:'available',components:[{id:'node',required:true,installed:true,compatible:true,version:'v22'}],nodeEngines:[{range:'>=22',source:'package.json'}],dependencyPackages:[{name:'vite',version:'^7',manager:'npm',scope:'development',source:'package.json'},{name:'react',version:'^19',manager:'npm',scope:'runtime',source:'package.json'}]}]});
- const all=root=>[root,...root.children.flatMap(all)],items=all(nodes.startupStackGrid),text=items.map(item=>item.textContent||'').join(' ');
- assert.match(text,/Project modules · 2/);assert.match(text,/vite/);assert.match(text,/react/);assert.match(text,/Node.js requirement: >=22/);assert.match(text,/installed or restored in the project/);
- assert.equal(items.filter(item=>item.tag==='button').length,0,'project dependencies are not presented as global installers');
+ const document={activeElement:null,createElement:tag=>node(tag)};
+ function node(tag){
+  const classes=new Set(),listeners={};
+  return {tag,children:[],dataset:{},style:{},attributes:{},textContent:'',className:'',scrollTop:0,isConnected:true,
+   classList:{add:v=>classes.add(v),remove:v=>classes.delete(v),contains:v=>classes.has(v)},
+   append(...v){this.children.push(...v);},replaceChildren(){this.children=[];},setAttribute(k,v){this.attributes[k]=v;},
+   addEventListener(type,fn){listeners[type]=fn;},click(){listeners.click?.({target:this});},focus(){document.activeElement=this;},
+   querySelectorAll(selector){const name=selector.slice(1);return this.children.flatMap(child=>[child,...child.querySelectorAll(selector)]).filter(item=>item.className.split(/\s+/).includes(name));}
+  };
+ }
+ const nodes=Object.fromEntries(['startupStackGrid','startupToolMessage','startupStackModal','startupStackModalTitle','startupStackModalContent','startupStackModalFeedback','startupStackModalClose','startupInstallFeedback'].map(id=>[id,node('div')]));
+ nodes.startupStackModal.classList.add('hidden');const sent=[];
+ const create=new Function('document','$','startupScanPercent','renderStartupPage','send',[
+  "let startupScanComplete=false,startupStackData=null,startupOpenStackId='',startupStackPriorFocus=null,startupLastInstalledTool='',startupInstallingModule='';",
+  source.slice(from,to),
+  'return {render:renderStartupStackReadiness,close:closeStartupStackModal,finishInstall:()=>startupInstallingModule=""};'
+ ].join('\n'));
+ const client=create(document,id=>nodes[id],()=>{},()=>{},(command,payload)=>sent.push({command,...payload}));
+ const stacks=[['react','React','vite','npm'],['angular','Angular','@angular/core','npm'],['nestjs','NestJS','@nestjs/core','npm'],['dotnet','.NET','Microsoft.AspNetCore','dotnet'],['spring','Spring Boot','org.springframework:boot','maven']].map(([id,name,dependency,manager])=>({
+  id,name,ready:id!=='react',catalogStatus:'available',components:[{id:'node',required:true,installed:true,compatible:true,version:'v22'},...(id==='react'?[{id:'npm',required:true,installed:false,compatible:false}]:[])],
+  nodeEngines:id==='react'?[{range:'>=22',source:'package.json'}]:[],dependencyPackages:[{name:dependency,version:'^7',manager,scope:'development',source:'manifest'}]
+ }));
+ const result={catalog:{available:true,source:'Active SDLC Library',version:'1.1.15'},stacks};client.render(result);
+ assert.equal(nodes.startupStackGrid.children.length,5);
+ const all=root=>[root,...root.children.flatMap(all)],text=root=>all(root).map(item=>item.textContent||'').join(' ');
+ for(let i=0;i<stacks.length;i++){
+  const card=nodes.startupStackGrid.children[i];assert.equal(card.tag,'button');assert.equal(card.attributes['aria-haspopup'],'dialog');
+  assert.doesNotMatch(text(card),/Project modules/);card.click();
+  assert.equal(nodes.startupStackModal.attributes['aria-hidden'],'false');assert.match(nodes.startupStackModalTitle.textContent,new RegExp(stacks[i].name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  assert.ok(text(nodes.startupStackModalContent).includes(stacks[i].dependencyPackages[0].name));assert.match(text(nodes.startupStackModalContent),/Project modules · 1/);
+  if(i===0){
+   assert.match(text(nodes.startupStackModalContent),/Node.js requirement: >=22/);assert.match(text(nodes.startupStackModalContent),/installed or restored in the project/);
+   const install=all(nodes.startupStackModalContent).find(item=>item.className.includes('atgv-module-install'));install.click();
+   assert.deepEqual(sent,[{command:'startupInstallModule',id:'npm'}]);assert.match(nodes.startupStackModalFeedback.textContent,/Preparing npm/);
+   client.finishInstall();stacks[0].components[1]={id:'npm',required:true,installed:true,compatible:true,version:'11'};client.render(result);
+   assert.equal(nodes.startupStackModal.attributes['aria-hidden'],'false');assert.match(text(nodes.startupStackModalContent),/Installed · 11/);
+  }
+  client.close();assert.equal(nodes.startupStackModal.attributes['aria-hidden'],'true');assert.equal(document.activeElement,nodes.startupStackGrid.children[i]);
+ }
 });

@@ -184,7 +184,7 @@ let deliveryState={items:[]},deliveryInfo=null,deliveryDraftDirty=false,delivery
 let spaceSearchSequence=0,gateSearchId=null,settingsSearchId=null,gateSearched=false,modelPickerChoice='',modelPickerCurrent='',modelPickerData=null,modelPickerSaving=false;
 let activeDoc=null,quill=null,docDirty=false,docMode='quill',docComplex=false,docSaving=false,docBackTo='work',documentOwner=null,documentOwnerScope='local',documentOwnerMe=null,documentOwnerCached=false,activeDiagram=null,diagramCanvas=null,diagramDirty=false,diagramSaving=false;
 const send=(command,extra={})=>vscode.postMessage({command,...extra});
-$('reportIssue')?.addEventListener('click',()=>send('openIssueReport',{screen:typeof view==='string'?view:''}));
+for(const id of ['reportIssue','gateReportIssue'])$(id)?.addEventListener('click',()=>send('openIssueReport',{screen:id==='gateReportIssue'?'start':typeof view==='string'?view:''}));
 let aiChangeResolutionView=window.ATGVAIChangeResolution.createChangeResolutionView(
  document.getElementById('atgv-ai-change-resolution'),
  {send:message=>send('aiChangeResolution',{action:message.action,issueId:message.issueId,instructions:message.instructions})}
@@ -7135,7 +7135,22 @@ const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluence
 let startupFormInitialized=false,startupPrereqRequested=false,startupConnectionVerified=false,startupSetupRequired=true,startupReturnToConnections=false;
 let startupVerifying=false,startupScanComplete=false,startupPage=0,startupInstallingModule='';
 let startupLastInstalledTool='';
+let startupStackData=null,startupOpenStackId='',startupStackPriorFocus=null;
+let startupCopilotBusy=false;
 const STARTUP_STACK_NAMES=['ReactJS','Angular','NestJS','.NET','Spring Boot'];
+function setStartupCopilotStatus(state,message){
+ startupCopilotBusy=state==='working';
+ const button=$('startupCopilotSetup');button.disabled=startupCopilotBusy||state==='ready'||state==='unsupported';
+ button.textContent=startupCopilotBusy?'Setting up…':state==='ready'?'Installed':state==='error'?'Retry Setup':'Set up Copilot SDK';
+ $('startupCopilotStatus').textContent=message;
+ $('startupCopilotStatus').className='startup-copilot-status '+(state==='ready'?'success':state==='error'||state==='unsupported'?'error':'muted');
+}
+function renderStartupCopilotReadiness(info){
+ if(startupCopilotBusy)return;
+ if(info?.compatible===false){setStartupCopilotStatus('unsupported','Update VS Code to use a supported Node.js runtime for the Copilot SDK.');return;}
+ if(info?.installed){setStartupCopilotStatus('ready','Copilot SDK '+(info.version||'')+' installed. Sign in to Copilot CLI; select Microsoft Copilot SDK in Settings to use it for AI.');return;}
+ setStartupCopilotStatus('available',info?.unknown?'Status unavailable. Select Set up Copilot SDK to check and install.':'SDK not installed. Setup downloads it into ATGV extension storage.');
+}
 function startupScanPercent(percent,message){
  const value=Math.max(0,Math.min(100,Number(percent)||0));
  $('startupScanToolFill').style.width=value+'%';
@@ -7157,6 +7172,7 @@ function renderStartupScanPlaceholders(){
 function startupPayload(){return Object.fromEntries(Object.entries(startupFieldMap).map(([key,id])=>[key,$(id).value.trim()]));}
 function renderStartupPage(){
  if(!startupSetupRequired)return;
+ if(startupPage!==0&&startupOpenStackId)closeStartupStackModal();
  // A saved, verified connection is read-only across page navigation and VS Code restarts.
  // Reconfiguration is managed in Settings; an unverified saved state must be tested.
  $('startupTestConnections').disabled=startupVerifying||startupConnectionVerified;
@@ -7173,6 +7189,7 @@ function renderStartupPage(){
   startupConnectionVerified?'Connections verified. Select Next to search projects.':'Test & Save Connections to enable Next.';
 }
 function showStartupStep(required){
+ if(!required&&startupOpenStackId)closeStartupStackModal();
  startupSetupRequired=required;
  $('startupSetup').classList.toggle('hidden',!required);
  $('gateFinder').classList.toggle('hidden',required);
@@ -7203,79 +7220,110 @@ function renderStartupConfig(config){
  if(required&&!startupPrereqRequested){startupPrereqRequested=true;startupScanPercent(0,'Starting prerequisite scan…');renderStartupScanPlaceholders();send('startupReadiness');}
 }
 function renderStartupStackReadiness(result){
- const grid=$('startupStackGrid');const expanded=new Set([...grid.querySelectorAll('details[open]')].map(x=>x.dataset.stackId));grid.replaceChildren();
+ const grid=$('startupStackGrid');grid.replaceChildren();
  if(!result||!Array.isArray(result.stacks)){
+  startupStackData=null;if(startupOpenStackId)closeStartupStackModal();
   startupScanComplete=false;$('startupToolMessage').textContent='Unable to scan computer prerequisites. Select Refresh to retry.';
   renderStartupPage();return;
  }
- startupScanComplete=true;
+ startupStackData=result;startupScanComplete=true;
+ if(result.copilotSdk)renderStartupCopilotReadiness(result.copilotSdk);
  startupScanPercent(100,'Completed prerequisite checks for all '+result.stacks.length+' technology stacks.');
  const ready=result.stacks.filter(s=>s.ready).length;
  $('startupToolMessage').textContent=`${ready} of ${result.stacks.length} technology stacks have their required host tools available. `+(result.catalog?.available?`Project modules loaded from ${result.catalog.source}${result.catalog.version?' v'+result.catalog.version:''}.`:'Project module lists are unavailable until the SDLC Library is connected.');
  for(const stack of result.stacks){
-  const details=document.createElement('details');details.className='atgv-startup-stack '+(stack.ready?'is-ready':'is-missing');details.dataset.stackId=stack.id;details.open=expanded.has(stack.id)||stack.components.some(c=>c.id===startupLastInstalledTool);
-  const summary=document.createElement('summary');
+  const card=document.createElement('button');card.type='button';card.className='atgv-startup-stack atgv-startup-stack-button '+(stack.ready?'is-ready':'is-missing');card.dataset.stackId=stack.id;
+  card.setAttribute('aria-haspopup','dialog');card.setAttribute('aria-controls','startupStackModal');
   const title=document.createElement('span');title.textContent=stack.name;
   const badge=document.createElement('span');badge.className='atgv-stack-ready';badge.textContent=stack.hostRequirementsUnknown?'Host check unavailable':stack.ready?'Host tools available':'Needs tools';
-  summary.append(title,badge);details.append(summary);
-  const required=(stack.components||[]).filter(c=>c.required);
-  const compatible=required.filter(c=>c.compatible).length;
-  const readiness=document.createElement('div');readiness.className='atgv-stack-prerequisite-progress';
-  const count=document.createElement('small');count.textContent=stack.hostRequirementsUnknown?'Host requirements are not defined for this stack.':compatible+'/'+required.length+' required host tools available';
-  const track=document.createElement('div');track.className='workspace-search-track';track.setAttribute('role','progressbar');
-  track.setAttribute('aria-label',stack.name+' prerequisite readiness');track.setAttribute('aria-valuemin','0');track.setAttribute('aria-valuemax','100');
-  const value=required.length?Math.round(100*compatible/required.length):0;track.setAttribute('aria-valuenow',String(value));
-  const fill=document.createElement('div');fill.className='workspace-search-fill';fill.style.width=value+'%';track.append(fill);readiness.append(count,track);details.append(readiness);
-  const hostTitle=document.createElement('h4');hostTitle.className='startup-stack-section-title';hostTitle.textContent='Host tools';details.append(hostTitle);
-  const list=document.createElement('ul');
-  for(const component of stack.components||[]){
-   const item=document.createElement('li');item.className='atgv-module-row';
-   const description=document.createElement('div');description.className='atgv-module-description';
-   const label=document.createElement('span');label.textContent=component.id+(component.required?'':' (optional)');
-   const indicator=document.createElement('small');indicator.textContent=component.installed?(component.compatible?'Installed · ':'Version too old · ')+(component.version||'Detected'):'Not installed'+(component.minimum?' · requires '+component.minimum:'');
-   description.append(label,indicator);item.append(description);
-   if(!component.compatible){
-    const button=document.createElement('button');button.type='button';button.className='secondary atgv-module-install';button.textContent='Install';
-    button.disabled=!!startupInstallingModule;
-    button.setAttribute('aria-label',`Install ${component.id} prerequisite`);
-    button.addEventListener('click',()=>{
-     if(startupInstallingModule)return;
-     startupInstallingModule=component.id;startupLastInstalledTool=component.id;button.disabled=true;button.textContent='Installing…';
-     for(const control of grid.querySelectorAll('.atgv-module-install'))control.disabled=true;
-     $('startupInstallFeedback').textContent='Preparing '+component.id+' installer. Confirmation is required before modifying the computer.';
-     $('startupInstallFeedback').className='atgv-startup-install-feedback muted';
-     const progress=document.createElement('progress');progress.className='atgv-module-progress';progress.setAttribute('aria-label',`${component.id} installation in progress`);progress.max=100;
-     description.append(progress);renderStartupPage();
-     $('startupToolMessage').textContent=`Preparing ${component.id} installation…`;
-     send('startupInstallModule',{id:component.id});
-    });
-    item.append(button);
-   }
-   list.append(item);
-  }
-  details.append(list);
-  const packages=Array.isArray(stack.dependencyPackages)?stack.dependencyPackages:[];
-  const packagesTitle=document.createElement('h4');packagesTitle.className='startup-stack-section-title';packagesTitle.textContent='Project modules'+(stack.catalogStatus==='available'?' · '+packages.length:'');details.append(packagesTitle);
-  const note=document.createElement('p');note.className='muted startup-stack-package-note';
-  if(stack.catalogStatus==='not-listed')note.textContent='This stack is not listed in the active SDLC Library.';
-  else if(stack.catalogStatus!=='available')note.textContent='Connect the SDLC Library, then return here and select Refresh to load its project modules.';
-  else if(!packages.length)note.textContent='No direct project packages are declared in the library scaffold.';
-  else note.textContent='Direct dependencies from the SDLC Library. They are installed or restored in the project when the Solution Architect saves the stack; transitive packages are resolved by the package manager.';
-  details.append(note);
-  for(const engine of stack.nodeEngines||[]){const line=document.createElement('p');line.className='muted startup-stack-package-note';line.textContent='Node.js requirement: '+engine.range+' · '+engine.source;details.append(line);}
-  if(packages.length){
-   const packageList=document.createElement('ul');packageList.className='startup-stack-packages';packageList.setAttribute('aria-label',stack.name+' project modules');
-   for(const component of packages){
-    const item=document.createElement('li');item.className='startup-stack-package';
-    const title=document.createElement('span');title.textContent=component.name;
-    const meta=document.createElement('small');meta.textContent=[component.manager,component.scope,component.version||'version managed by project',component.source].filter(Boolean).join(' · ');
-    item.append(title,meta);packageList.append(item);
-   }
-   details.append(packageList);
-  }
-  grid.append(details);
+  card.setAttribute('aria-label',stack.name+': '+badge.textContent+'. View host tools and project modules');
+  card.append(title,badge);card.addEventListener('click',()=>openStartupStackModal(stack.id,card));grid.append(card);
+ }
+ if(startupOpenStackId){
+  const stack=result.stacks.find(item=>item.id===startupOpenStackId);
+  if(stack){const content=$('startupStackModalContent'),scrollTop=content.scrollTop;renderStartupStackDetails(stack);content.scrollTop=scrollTop;}
+  else closeStartupStackModal();
  }
  renderStartupPage();
+}
+function setStartupInstallFeedback(message,state='muted'){
+ for(const id of ['startupInstallFeedback','startupStackModalFeedback']){
+  $(id).textContent=message;$(id).className='atgv-startup-install-feedback '+state;
+ }
+}
+function openStartupStackModal(id,origin){
+ const stack=startupStackData?.stacks.find(item=>item.id===id);if(!stack)return;
+ startupOpenStackId=id;startupStackPriorFocus=origin||document.activeElement;
+ $('startupStackModalTitle').textContent=stack.name+' requirements';
+ $('startupStackModalContent').scrollTop=0;renderStartupStackDetails(stack);
+ $('startupStackModalFeedback').textContent=$('startupInstallFeedback').textContent;
+ $('startupStackModalFeedback').className=$('startupInstallFeedback').className;
+ $('startupStackModal').classList.remove('hidden');$('startupStackModal').setAttribute('aria-hidden','false');
+ $('startupStackModalClose').focus();
+}
+function closeStartupStackModal(){
+ const id=startupOpenStackId;if(!id)return;startupOpenStackId='';
+ $('startupStackModal').classList.add('hidden');$('startupStackModal').setAttribute('aria-hidden','true');
+ const card=[...$('startupStackGrid').querySelectorAll('.atgv-startup-stack-button')].find(item=>item.dataset.stackId===id);
+ const previous=startupStackPriorFocus;startupStackPriorFocus=null;
+ if(card)card.focus();else if(previous?.isConnected)previous.focus();
+}
+function renderStartupStackDetails(stack){
+ const content=$('startupStackModalContent');content.replaceChildren();
+ $('startupStackModalTitle').textContent=stack.name+' requirements';
+ const required=(stack.components||[]).filter(c=>c.required),compatible=required.filter(c=>c.compatible).length;
+ const readiness=document.createElement('div');readiness.className='atgv-stack-prerequisite-progress';
+ const count=document.createElement('small');count.textContent=stack.hostRequirementsUnknown?'Host requirements are not defined for this stack.':compatible+'/'+required.length+' required host tools available';
+ const track=document.createElement('div');track.className='workspace-search-track';track.setAttribute('role','progressbar');
+ track.setAttribute('aria-label',stack.name+' prerequisite readiness');track.setAttribute('aria-valuemin','0');track.setAttribute('aria-valuemax','100');
+ const value=required.length?Math.round(100*compatible/required.length):0;track.setAttribute('aria-valuenow',String(value));
+ const fill=document.createElement('div');fill.className='workspace-search-fill';fill.style.width=value+'%';track.append(fill);readiness.append(count,track);content.append(readiness);
+ const hostTitle=document.createElement('h4');hostTitle.className='startup-stack-section-title';hostTitle.textContent='Host tools';content.append(hostTitle);
+ const list=document.createElement('ul');list.className='startup-stack-host-tools';
+ for(const component of stack.components||[]){
+  const item=document.createElement('li');item.className='atgv-module-row';
+  const description=document.createElement('div');description.className='atgv-module-description';
+  const label=document.createElement('span');label.textContent=component.id+(component.required?'':' (optional)');
+  const indicator=document.createElement('small');indicator.textContent=component.installed?(component.compatible?'Installed · ':'Version too old · ')+(component.version||'Detected'):'Not installed'+(component.minimum?' · requires '+component.minimum:'');
+  description.append(label,indicator);item.append(description);
+  if(!component.compatible){
+   const button=document.createElement('button');button.type='button';button.className='secondary atgv-module-install';button.textContent=startupInstallingModule===component.id?'Installing…':'Install';
+   button.disabled=!!startupInstallingModule;
+   button.setAttribute('aria-label',`Install ${component.id} prerequisite`);
+   button.addEventListener('click',()=>{
+    if(startupInstallingModule)return;
+    startupInstallingModule=component.id;startupLastInstalledTool=component.id;button.disabled=true;button.textContent='Installing…';
+    for(const control of content.querySelectorAll('.atgv-module-install'))control.disabled=true;
+    setStartupInstallFeedback('Preparing '+component.id+' installer. Confirmation is required before modifying the computer.');
+    const progress=document.createElement('progress');progress.className='atgv-module-progress';progress.setAttribute('aria-label',`${component.id} installation in progress`);progress.max=100;
+    description.append(progress);renderStartupPage();
+    $('startupToolMessage').textContent=`Preparing ${component.id} installation…`;
+    send('startupInstallModule',{id:component.id});
+   });
+   item.append(button);
+  }
+  list.append(item);
+ }
+ content.append(list);
+ const packages=Array.isArray(stack.dependencyPackages)?stack.dependencyPackages:[];
+ const packagesTitle=document.createElement('h4');packagesTitle.className='startup-stack-section-title';packagesTitle.textContent='Project modules'+(stack.catalogStatus==='available'?' · '+packages.length:'');content.append(packagesTitle);
+ const note=document.createElement('p');note.className='muted startup-stack-package-note';
+ if(stack.catalogStatus==='not-listed')note.textContent='This stack is not listed in the active SDLC Library.';
+ else if(stack.catalogStatus!=='available')note.textContent='Connect the SDLC Library, then return here and select Refresh to load its project modules.';
+ else if(!packages.length)note.textContent='No direct project packages are declared in the library scaffold.';
+ else note.textContent='Direct dependencies from the SDLC Library. They are installed or restored in the project when the Solution Architect saves the stack; transitive packages are resolved by the package manager.';
+ content.append(note);
+ for(const engine of stack.nodeEngines||[]){const line=document.createElement('p');line.className='muted startup-stack-package-note';line.textContent='Node.js requirement: '+engine.range+' · '+engine.source;content.append(line);}
+ if(packages.length){
+  const packageList=document.createElement('ul');packageList.className='startup-stack-packages';packageList.setAttribute('aria-label',stack.name+' project modules');
+  for(const component of packages){
+   const item=document.createElement('li');item.className='startup-stack-package';
+   const title=document.createElement('span');title.textContent=component.name;
+   const meta=document.createElement('small');meta.textContent=[component.manager,component.scope,component.version||'version managed by project',component.source].filter(Boolean).join(' · ');
+   item.append(title,meta);packageList.append(item);
+  }
+  content.append(packageList);
+ }
 }
 function invalidateStartupConnection(){
  if(!startupSetupRequired)return;
@@ -7285,6 +7333,23 @@ function invalidateStartupConnection(){
 }
 for(const id of Object.values(startupFieldMap))$(id).addEventListener('input',invalidateStartupConnection);
 for(const id of ['startupAtlassianToken','startupGithubToken'])$(id).addEventListener('input',invalidateStartupConnection);
+$('startupStackModalClose').addEventListener('click',closeStartupStackModal);
+$('startupStackModalDone').addEventListener('click',closeStartupStackModal);
+$('startupStackModal').addEventListener('click',event=>{if(event.target===$('startupStackModal'))closeStartupStackModal();});
+$('startupStackModal').addEventListener('keydown',event=>{
+ if(event.key==='Escape'){event.preventDefault();closeStartupStackModal();return;}
+ if(event.key==='Tab'){
+  const controls=[...$('startupStackModal').querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled])')];
+  if(!controls.length){event.preventDefault();return;}
+  const first=controls[0],last=controls[controls.length-1];
+  if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+  else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+ }
+});
+$('startupCopilotSetup').addEventListener('click',()=>{
+ if(startupCopilotBusy)return;
+ setStartupCopilotStatus('working','Preparing Copilot SDK setup…');send('startupSetupCopilot');
+});
 for(const id of ['startupUnifiedLog','gateUnifiedLog'])$(id).addEventListener('click',()=>send('startupExportUnifiedLog'));
 $('startupRefresh').addEventListener('click',()=>{
  if(startupInstallingModule)return;
@@ -7332,24 +7397,24 @@ window.addEventListener('message',event=>{
  }
  if(message.type==='startupReadinessResult'){
   $('startupRefresh').disabled=false;
-  if(message.error){startupScanPercent(0,'Prerequisite scan failed.');startupScanComplete=false;$('startupToolMessage').textContent=message.error;$('startupInstallFeedback').textContent='Prerequisite scan failed. Download Unified Error Log for details.';$('startupInstallFeedback').className='atgv-startup-install-feedback error';renderStartupPage();}
+  if(message.error){startupScanPercent(0,'Prerequisite scan failed.');startupScanComplete=false;$('startupToolMessage').textContent=message.error;renderStartupCopilotReadiness({unknown:true});setStartupInstallFeedback('Prerequisite scan failed. Download Unified Error Log for details.','error');renderStartupPage();}
   else renderStartupStackReadiness(message.value);
  }
+ if(message.type==='startupCopilotSetup')setStartupCopilotStatus(message.status,message.message||'Copilot SDK setup finished.');
  if(message.type==='startupModuleProgress'){
   if(message.id!==startupInstallingModule)return;
   const status=String(message.status||'');
   $('startupToolMessage').textContent=message.detail||`Installing ${message.id}…`;
+  setStartupInstallFeedback(message.detail||`Installing ${message.id}…`);
   if(['verified','unverified','complete','error','manual'].includes(status)){
-   $('startupInstallFeedback').textContent=message.detail||'Installer finished. Download Unified Error Log for verification details.';
-   $('startupInstallFeedback').className='atgv-startup-install-feedback '+(status==='verified'?'success':status==='manual'?'muted':'error');
+   setStartupInstallFeedback(message.detail||'Installer finished. Download Unified Error Log for verification details.',status==='verified'?'success':status==='manual'?'muted':'error');
    startupInstallingModule='';
    $('startupRefresh').disabled=true;startupScanComplete=false;renderStartupPage();
    send('startupReadiness');
   }
  }
  if(message.type==='startupDiagnosticSaved'){
-  $('startupInstallFeedback').textContent=message.message||'Unified startup diagnostics saved.';
-  $('startupInstallFeedback').className='atgv-startup-install-feedback success';
+  setStartupInstallFeedback(message.message||'Unified startup diagnostics saved.','success');
  }
  if(message.type==='startupConnectionsResult'){
   startupVerifying=false;
