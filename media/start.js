@@ -591,9 +591,9 @@ $('gateQuery').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefau
 $('gateManual').addEventListener('click',()=>openProject());
 $('gateSearchPrevious').addEventListener('click',()=>{
  if(gateBusy)return;
- startupReturnToConnections=true;startupPage=1;startupConnectionVerified=false;
+ startupReturnToConnections=true;startupPage=1;
  if(!startupPrereqRequested){startupPrereqRequested=true;send('startupReadiness');}
- $('startupConnectionMessage').textContent='Test & Save Connections to continue to Search Project.';
+ $('startupConnectionMessage').textContent=startupConnectionVerified?'Connections already verified and saved.':'Test & Save Connections to continue to Search Project.';
  showStartupStep(true);$('startupJiraUrl').focus();
 });
 $('gateOffline').addEventListener('click',()=>{
@@ -7055,6 +7055,11 @@ function renderStartupScanPlaceholders(){
 function startupPayload(){return Object.fromEntries(Object.entries(startupFieldMap).map(([key,id])=>[key,$(id).value.trim()]));}
 function renderStartupPage(){
  if(!startupSetupRequired)return;
+ // A verified and saved connection needs no repeated Test & Save action.
+ // Any credential or URL edit invalidates verification and restores the button.
+ $('startupTestConnections').disabled=startupVerifying||startupConnectionVerified;
+ $('startupTestConnections').classList.toggle('hidden',startupConnectionVerified);
+ for(const id of [...Object.values(startupFieldMap),'startupAtlassianToken','startupGithubToken'])$(id).disabled=startupVerifying;
  $('startupComputerCard').classList.toggle('hidden',startupPage!==0);
  $('startupConnectionForm').classList.toggle('hidden',startupPage!==1);
  $('startupPrevious').classList.toggle('hidden',startupPage===0);
@@ -7168,9 +7173,9 @@ $('startupLibraryZipUpload').addEventListener('click',()=>{
  send('importLibraryZip',{repositoryUrl});
 });
 $('startupConnectionForm').addEventListener('submit',event=>{
- event.preventDefault();if(startupVerifying)return;
+ event.preventDefault();if(startupVerifying||startupConnectionVerified)return;
  startupConnectionVerified=false;startupVerifying=true;
- $('startupTestConnections').disabled=true;renderStartupPage();
+ renderStartupPage();
  $('startupConnectionMessage').textContent='Testing Jira, Confluence, GitHub account, project repository and library main branch…';
  send('startupTestConnections',{settings:startupPayload(),atlassianToken:read('startupAtlassianToken'),githubToken:read('startupGithubToken')});
 });
@@ -7213,7 +7218,7 @@ window.addEventListener('message',event=>{
   $('startupInstallFeedback').className='atgv-startup-install-feedback success';
  }
  if(message.type==='startupConnectionsResult'){
-  startupVerifying=false;$('startupTestConnections').disabled=false;
+  startupVerifying=false;
   startupConnectionVerified=message.success===true;
   $('startupConnectionMessage').textContent=message.message||'Connection test did not complete.';
   $('startupConnectionMessage').className=startupConnectionVerified?'test-status success':'test-status error';
