@@ -162,20 +162,59 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
  panel=current;
  let selectedFolder='',busy=false,createdPr='';
  const patKey=(kind,repo)=>'atgvAssist.repoSync.'+kind+'.'+crypto.createHash('sha256').update(repo.name.toLowerCase()).digest('hex');
+ function knownRepos(kind){
+  const previous=preferences?.get?.(SAVED_URL_KEYS[kind],'');
+  const raw=preferences?.get?.(SAVED_LIST_KEYS[kind],[]);
+  const values=[...(Array.isArray(raw)?raw:[]),previous];
+  const unique=[],seen=new Set();
+  for(const value of values){
+   const repo=safeStoredRepo(value);
+   if(!repo||seen.has(repo.name.toLowerCase()))continue;
+   unique.push(repo);seen.add(repo.name.toLowerCase());
+   if(unique.length>=MAX_SAVED_REPOS)break;
+  }
+  return unique;
+ }
+ async function postSavedRepos(kind){
+  const entries=[];
+  for(const repo of knownRepos(kind)){
+   entries.push({safeUrl:repo.webUrl,repo:repo.name,credentialSaved:!!(await secrets?.get?.(patKey(kind,repo)))});
+  }
+  await post({type:'repoSyncSavedList',kind,entries});
+ }
  async function rememberRepo(kind,repo){
-  // Never persist embedded username:PAT URLs. Only credential-free GitHub URLs
-  // are written to VS Code global state; PATs remain in SecretStorage.
-  if(SAVED_URL_KEYS[kind]&&preferences?.update)await preferences.update(SAVED_URL_KEYS[kind],repo.webUrl);
+  // GlobalState stores URL metadata only; tokens remain independently in SecretStorage.
+  if(!preferences?.update)return;
+  const list=[repo,...knownRepos(kind).filter(item=>item.name.toLowerCase()!==repo.name.toLowerCase())].slice(0,MAX_SAVED_REPOS);
+  await preferences.update(SAVED_LIST_KEYS[kind],list.map(item=>item.webUrl));
+  await preferences.update(SAVED_URL_KEYS[kind],repo.webUrl);
+  await postSavedRepos(kind);
  }
  async function restoreRepos(){
   for(const kind of ['Source','Destination']){
-   const stored=preferences?.get?.(SAVED_URL_KEYS[kind],'');
-   if(!stored)continue;
-   let repo;
-   try{repo=repoCredentials.parseCredentialUrl(String(stored));}catch{continue;}
+   await postSavedRepos(kind);
+   const repo=safeStoredRepo(preferences?.get?.(SAVED_URL_KEYS[kind],''));
+   if(!repo)continue;
    const credentialSaved=!!(await secrets?.get?.(patKey(kind,repo)));
    await post({type:'repoSyncSaved',kind,safeUrl:repo.webUrl,repo:repo.name,credentialSaved});
   }
+ }
+ async function forgetRepo(kind,input){
+  if(!['Source','Destination'].includes(kind))throw Error('Unknown saved connection type.');
+  const repo=safeStoredRepo(input);
+  if(!repo||!knownRepos(kind).some(item=>item.name.toLowerCase()===repo.name.toLowerCase()))
+   throw Error('Saved repository was not found.');
+  if(!secrets?.delete||!preferences?.update)
+   throw Error('SecretStorage deletion and VS Code globalState are required to forget a repository.');
+  // Fail closed on secret deletion; never pretend a saved credential was forgotten.
+  await secrets.delete(patKey(kind,repo));
+  const remaining=knownRepos(kind).filter(item=>item.name.toLowerCase()!==repo.name.toLowerCase());
+  await preferences.update(SAVED_LIST_KEYS[kind],remaining.map(item=>item.webUrl));
+  const last=preferences?.get?.(SAVED_URL_KEYS[kind],'');
+  if(safeStoredRepo(last)?.name.toLowerCase()===repo.name.toLowerCase())
+   await preferences.update(SAVED_URL_KEYS[kind],remaining[0]?.webUrl||'');
+  await postSavedRepos(kind);
+  await post({type:'repoSyncForgot',kind,safeUrl:repo.webUrl});
  }
  async function readPat(kind,repo){
   if(!secrets?.get||!secrets?.store)throw Error('VS Code SecretStorage is required to protect GitHub PATs.');
@@ -204,6 +243,25 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
   if(!message||typeof message.command!=='string')return;
   if(message.command==='getRepoSyncSaved'){
    try{await restoreRepos();}catch(error){onLog('Repo Sync saved URL restore: '+sanitize(error));}
+   return;
+  }
+  if(message.command==='forgetRepoConnection'){
+   const kind=message.kind;let repo=null;
+   try{
+    if(busy)throw Error('A repository operation is already running.');
+    busy=true;
+    repo=safeStoredRepo(message.url);
+    if(!repo)throw Error('Select a saved repository to forget.');
+    const confirmed=await vscode.window.showWarningMessage('Forget the saved '+kind+' connection for '+repo.name+'? The stored PAT for this role will be deleted.',{modal:true},'Forget Connection');
+    if(confirmed!=='Forget Connection'){
+     await post({type:'repoSyncForgetResult',kind,success:false,message:'Cancelled. Saved connection unchanged.'});
+     return;
+    }
+    await forgetRepo(kind,repo.webUrl);
+    await post({type:'repoSyncForgetResult',kind,success:true,message:'Saved '+kind+' connection forgotten.'});
+   }catch(error){
+    await post({type:'repoSyncForgetResult',kind,success:false,message:sanitize(error,[repo?.token])});
+   }finally{busy=false;}
    return;
   }
   if(message.command==='selectRepoB'){
