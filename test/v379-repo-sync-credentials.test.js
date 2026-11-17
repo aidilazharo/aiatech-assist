@@ -51,7 +51,7 @@ test('source PAT is stored only after successful connection test',async()=>{
 });
 test('AI branch plan rejects unsafe branch names and accepts a scoped descriptive branch',()=>{
  const src={owner:'Acme',repo:'repo-a',name:'Acme/repo-a'};
- assert.equal(sync.aiSyncPlan({branch:'feat/add-tdd-1234abcd',commitMessage:'feat: improve tests',prTitle:'Add tests',prDescription:'Review scope.'},src,'feat: add TDD coverage','1234abcd'.repeat(5)).branch,'feat/add-tdd-1234abcd');
+ assert.equal(sync.aiSyncPlan({branch:'feat/add-tdd-1234abcd',commitMessage:'feat: improve tests',prTitle:'Add tests',prDescription:'Review scope.'},src,'feat: add TDD coverage','1234abcd'.repeat(5)).branch,'feat/add-tdd');
  for(const bad of ['main','release', 'sync/repo-b/not-owned','sync/repo-a/../../oops','sync/repo-a/not valid','sync/repo-a/a;exit','sync/repo-a/a\nnext'])
   assert.equal(sync.aiSyncPlan({branch:bad},src).branch,'',bad);
 });

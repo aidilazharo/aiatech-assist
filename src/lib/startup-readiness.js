@@ -34,6 +34,18 @@ function assessStack(stack,tools){
  return {id:stack.id,name:stack.name,ready:components.every(c=>!c.required||c.compatible),components,
   note:'Host prerequisites only. Project packages and the application build are verified after installing the selected scaffold.'};
 }
+function attachCatalog(stacks,catalog){
+ const remote=Array.isArray(catalog?.stacks)?catalog.stacks:[];
+ const byId=new Map(remote.map(stack=>[stack.id,stack]));
+ const result=stacks.map(stack=>{
+  const item=byId.get(stack.id);
+  if(!item)return {...stack,catalogStatus:catalog?.available?'not-listed':'unavailable',dependencyPackages:[],nodeEngines:[]};
+  byId.delete(stack.id);
+  return {...stack,name:item.name||stack.name,catalogStatus:'available',dependencyPackages:item.dependencyPackages||[],nodeEngines:item.nodeEngines||[]};
+ });
+ for(const item of byId.values())result.push({id:item.id,name:item.name,ready:false,hostRequirementsUnknown:true,components:[],catalogStatus:'available',dependencyPackages:item.dependencyPackages||[],nodeEngines:item.nodeEngines||[]});
+ return result;
+}
 // Windows installers update the OS environment rather than the active VS Code
 // process. Verify executable versions only from known vendor installation folders
 // and make their bin directory available to this extension-host session.
@@ -73,14 +85,20 @@ async function findTrustedWindowsTool(name,{runner=run,env=process.env,fsApi=fs}
  }
  return null;
 }
-async function check({runner=run,platform=process.platform,env=process.env,fsApi=fs,onProgress=()=>{}}={}){
+async function check({runner=run,platform=process.platform,env=process.env,fsApi=fs,onProgress=()=>{},loadCatalog=null}={}){
  const names=[...new Set(STACKS.flatMap(s=>[...s.required,...s.optional]))];
+ const total=names.length+(typeof loadCatalog==='function'?1:0);
  let completed=0;
  const resultWithProgress=async(name,item)=>{
   completed++;
-  try{await onProgress({name,completed,total:names.length,percent:Math.round(100*completed/names.length),message:'Checked '+name+' ('+completed+'/'+names.length+')'});}catch{}
+  try{await onProgress({name,completed,total,percent:Math.round(100*completed/total),message:'Checked '+name+' ('+completed+'/'+total+')'});}catch{}
   return [name,item];
  };
+ const catalogPromise=typeof loadCatalog==='function'?(async()=>{
+  try{const found=await loadCatalog();if(!found||!Array.isArray(found.stacks))throw Error('Library stack inventory unavailable.');
+   await resultWithProgress('SDLC Library',null);return {available:true,source:String(found.source||'SDLC Library'),version:String(found.version||''),stacks:found.stacks};
+  }catch(error){await resultWithProgress('SDLC Library',null);return {available:false,error:String(error?.message||error).slice(0,300),stacks:[]};}
+ })():null;
  const results=await Promise.all(names.map(async name=>{
   const item=TOOLS[name];try{
    const result=await runner(item.command,item.args,{timeout:3500,maxBuffer:32768,windowsHide:true,shell:platform==='win32'});
@@ -93,7 +111,9 @@ async function check({runner=run,platform=process.platform,env=process.env,fsApi
   }
  }));
  const tools=Object.fromEntries(results);
- return {checkedAt:new Date().toISOString(),platform,tools,stacks:STACKS.map(s=>assessStack(s,tools)),
+ const base=STACKS.map(s=>assessStack(s,tools));
+ const library=catalogPromise?await catalogPromise:null;
+ return {checkedAt:new Date().toISOString(),platform,tools,stacks:library?attachCatalog(base,library):base,...(library?{catalog:{available:library.available,source:library.source||'',version:library.version||'',error:library.error||''}}:{}),
   explanation:'Missing host tools can be installed separately. The check never installs software or executes downloaded catalog code.'};
 }
-module.exports={TOOLS,STACKS,check,assessStack,version,findTrustedWindowsTool};
+module.exports={TOOLS,STACKS,check,assessStack,attachCatalog,version,findTrustedWindowsTool};

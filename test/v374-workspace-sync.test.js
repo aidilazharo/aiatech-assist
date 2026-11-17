@@ -33,16 +33,16 @@ test('GitHub repo URLs, base branches, copy scopes and exclusions are validated'
  assert.throws(()=>sync.githubUrl('https://github.com/Acme/repo/other'),/GitHub repository URL/);
  assert.equal(sync.scopeName('src\\components'),'src/components');
  assert.equal(sync.scopeName('.'),'.');
- for(const invalid of ['../escape','C:\\Windows','/etc','.git','node_modules','.github/workflows','.env','src/../../etc'])
+ for(const invalid of ['../escape','C:\\Windows','/etc','.git','node_modules','.env','src/../../etc'])
   assert.throws(()=>sync.scopeName(invalid));
- for(const file of ['.github/workflows/release.yml','.git/config','.env','.env.production','src/private.pem','node_modules/package.json'])
+ for(const file of ['.git/config','.env','.env.production','src/private.pem','node_modules/package.json'])
   assert.equal(sync.isAllowedPath(file),false,file);
- for(const file of ['src/index.js','README.md','docs/guide.md'])assert.equal(sync.isAllowedPath(file),true,file);
+ for(const file of ['src/index.js','README.md','docs/guide.md','.github/workflows/release.yml'])assert.equal(sync.isAllowedPath(file),true,file);
 });
 test('PR title, commit and branch describe the source change rather than the branch name',()=>{
  const sha='a'.repeat(40),sourceMessage='fix: validate repository setup scripts';
  const branch=sync.branchName('repo-a',sha,sourceMessage,['src/main.js']);
- assert.equal(branch,'fix/validate-repository-setup-scripts-aaaaaaaa');
+ assert.equal(branch,'fix/validate-repository-setup-scripts');
  const details=sync.prDetails({source:{name:'Org/repo-a'},destination:{name:'Org/repo-b'},sha,scope:'src',base:'main',branch,count:1,changedFiles:['src/main.js'],sourceBranch:'main',sourceMessage,sourceCommitFiles:['src/main.js']});
  for(const text of [sha,'Org/repo-a','Org/repo-b','PR base: main','Files changed: 1','src/main.js'])
   assert.ok(details.body.includes(text),text);
@@ -74,7 +74,7 @@ test('ATGV Workspace handles separate panel, local folder selection, review and 
   assert.equal(opened,'https://github.com/Acme/repo-b/pull/12');
  }finally{sync.sync=original;disposed?.();}
 });
-test('sync copies real tracked files, skips release workflows and creates a review branch without modifying main',async t=>{
+test('sync copies tracked workflows and creates a review branch without modifying main',async t=>{
  try{git(['--version'],process.cwd());}catch{t.skip('Git is unavailable');return;}
  const temp=fs.mkdtempSync(path.join(os.tmpdir(),'atgv-workspace-test-'));
  t.after(()=>fs.rmSync(temp,{recursive:true,force:true}));
@@ -99,6 +99,7 @@ test('sync copies real tracked files, skips release workflows and creates a revi
  fs.writeFileSync(path.join(target,'existing.txt'),'destination-only\n');
  fs.mkdirSync(path.join(target,'.github','workflows'),{recursive:true});
  fs.writeFileSync(path.join(target,'.github','workflows','release.yml'),'Repo B release workflow\n');
+ fs.writeFileSync(path.join(target,'.github','workflows','destination-only.yml'),'Retained workflow\n');
  git(['add','--all'],target);git(['commit','-m','Initial Repo B'],target);
  const originalTargetSha=git(['rev-parse','HEAD'],target);
  git(['remote','add','origin',targetBare],target);git(['push','-u','origin','main'],target);
@@ -126,15 +127,18 @@ test('sync copies real tracked files, skips release workflows and creates a revi
  await assert.rejects(()=>sync.sync({sourceUrl:'https://github.com/Acme/repo-a',destinationUrl:'https://github.com/Acme/wrong',destinationFolder:target,sourcePat:'ghp_'+'s'.repeat(40),destPat:'ghp_'+'d'.repeat(40),runner,githubApi}),/Repo B URL differs/);
  assert.equal(result.sourceSha,sourceSha);
  assert.equal(result.base,'main');
- assert.equal(result.fileCount,2);
- assert.match(result.branch,/^chore\/.+-[a-f0-9]{8}$/);
+ assert.equal(result.fileCount,3);
+ assert.match(result.branch,/^chore\/.+/);
+ assert.doesNotMatch(result.branch,/-[a-f0-9]{8}$/);
  assert.equal(git(['rev-parse','refs/remotes/origin/main'],target),originalTargetSha);
  assert.equal(fs.readFileSync(path.join(target,'src','main.js'),'utf8'),'module.exports=42;\n');
  assert.equal(fs.readFileSync(path.join(target,'existing.txt'),'utf8'),'destination-only\n');
- assert.equal(fs.readFileSync(path.join(target,'.github','workflows','release.yml'),'utf8'),'Repo B release workflow\n');
+ assert.equal(fs.readFileSync(path.join(target,'.github','workflows','release.yml'),'utf8'),'source workflow\n');
+ assert.equal(fs.readFileSync(path.join(target,'.github','workflows','destination-only.yml'),'utf8'),'Retained workflow\n');
+ assert.equal(git(['show','refs/remotes/origin/main:.github/workflows/release.yml'],target),'Repo B release workflow');
  assert.equal(fs.existsSync(path.join(target,'.env')),false);
  assert.equal(prOptions.base,'main');assert.equal(prOptions.branch,result.branch);
- for(const field of [sourceSha,'Acme/repo-a','Acme/repo-b','src/main.js','README.md','Files changed: 2'])
+ for(const field of [sourceSha,'Acme/repo-a','Acme/repo-b','src/main.js','README.md','.github/workflows/release.yml','Files changed: 3'])
   assert.ok(prBody.includes(field),field);
 });
 

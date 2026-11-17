@@ -68,7 +68,7 @@ ol{line-height:1.85;padding-left:20px}
 <label for="sourcePrNumber">Source PR number (optional)</label><input id="sourcePrNumber" type="number" min="1" step="1" placeholder="e.g. 2 · use original PR metadata as the initial suggestion">
 <p class="muted note">The source PR branch must exist. Its original title, commit and description are prefilled for review, and can be edited before publishing.</p>
 <label for="copyScope">Copy scope</label><input id="copyScope" type="text" maxlength="280" value="." placeholder="src/components or .">
-<p class="muted note">A dot copies all eligible tracked files. Secrets, Git internals, generated dependencies and release workflows are excluded.</p>
+<p class="muted note">A dot copies all eligible tracked files. Tracked .github/workflows files are always included, even with a narrower scope. Secrets, Git internals and generated dependencies are excluded.</p>
 </section>
 <section class="card"><h2>2. Destination · Repo B</h2>
 <p class="muted">Select a saved write-access connection or add another. Choose a clean Repo B checkout or an empty external folder.</p>
@@ -92,10 +92,10 @@ ol{line-height:1.85;padding-left:20px}
 <label for="reviewBranch">Destination branch name</label><input id="reviewBranch" type="text" maxlength="110">
 <label for="reviewCommit">Commit message</label><textarea id="reviewCommit" rows="3" maxlength="12000"></textarea>
 <label for="reviewTitle">PR title</label><input id="reviewTitle" type="text" maxlength="110">
-<label for="reviewDescription">Simple PR details</label><textarea id="reviewDescription" rows="4" maxlength="4000"></textarea>
+<label for="reviewDescription">Simple PR details</label><textarea id="reviewDescription" rows="4" maxlength="4000"></textarea><p class="muted">Use bullet points, up to 10 points.</p>
 <div class="actions"><button id="publishReviewed" type="button">Approve & Run Full Sync · Push & Create PR</button><button id="redoReview" type="button" class="secondary">Pull & Study Again</button></div>
 </section></div></form>
-<p class="muted note">Repo B-only files and release workflows are preserved. GitHub PR merge is a separate action; source analysis does not alter Repo B.</p>
+<p class="muted note">Repo B-only files are preserved. Matching source workflows replace their Repo B versions on the review branch; GitHub may require workflow write permission on the destination PAT. Source analysis does not alter Repo B.</p>
 </main>
 <script nonce="__NONCE__">
 'use strict';
@@ -236,6 +236,7 @@ window.addEventListener('message',e=>{
    '\\nSource files: '+(analysis.keyFiles||[]).slice(0,8).join(', ')+
    '\\nSymbols inspected: '+(analysis.symbols||[]).slice(0,8).map(x=>x.name).join(', ')+
    '\\nDependencies: '+(analysis.dependencies||[]).slice(0,12).join(', ')+
+   '\\nWorkflows included: '+(review.workflowFiles||[]).join(', ')+
    '\\nExcluded commit paths: '+(review.excludedSourceCommitFiles||[]).slice(0,8).join(', ')+
    '\\nDestination base: '+String(review.base||'');
   buttons();show('Source study completed. Review or edit the four suggestions, then approve the full operation. Repo B is unchanged.','success');
@@ -422,6 +423,7 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
    const reviewed=isPublish?{...pendingReview.review,branch:message.branch,
     commitMessage:message.commitMessage,prTitle:message.prTitle,
     prDescription:message.prDescription}:null;
+   if(reviewed)repoSync.validateReviewPresentation(reviewed,reviewed.sourceSha);
    const response=isPrepare?'Prepare Source Review':await vscode.window.showWarningMessage(
     'Repo A: '+source.name+' ('+(sourcePrNumber?'PR #'+sourcePrNumber:sourceBranch||'GitHub default branch (auto)')+')\nRepo B: '+destination.name+' in '+selectedFolder+
     '\nScope: '+scope+'\nPR base: '+(base||'GitHub default branch')+

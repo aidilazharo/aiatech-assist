@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.3.93';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.3.94';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -121,7 +121,7 @@ function html(webview,{resumeLibrary=false}={}){
        <div class="atgv-tool-scan-status" role="status" aria-live="polite"><span id="startupScanToolName">Scanning prerequisites…</span><strong id="startupScanToolPercent">0%</strong></div>
        <div id="startupScanToolTrack" class="workspace-search-track" role="progressbar" aria-label="Technology stack prerequisites scan" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="startupScanToolFill" class="workspace-search-fill"></div></div>
        <div id="startupStackGrid" class="atgv-startup-stack-grid"></div>
-       <p class="muted">Select a stack to inspect its components. Install missing tools individually, then Refresh to check them. These checks confirm host prerequisites, not a completed application build.</p>
+       <p class="muted">Select a stack to review its host tools and project modules. Project modules are installed in the project when the Solution Architect saves the stack.</p>
        <p id="startupInstallFeedback" class="atgv-startup-install-feedback muted" role="status" aria-live="polite"></p>
        <div class="atgv-startup-diagnostics-footer"><button type="button" id="startupUnifiedLog" class="secondary" title="Download persistent installation results, detection checks and project-opening errors">Download Unified Error Log</button></div>
       </div>
