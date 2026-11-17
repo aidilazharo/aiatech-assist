@@ -48,7 +48,7 @@ ol{line-height:1.85;padding-left:20px}
 <p class="muted">Paste a GitHub HTTPS URL with username:PAT (read access). The URL is masked. Once tested, only the PAT is stored in VS Code SecretStorage.</p>
 <label for="sourceUrl">GitHub repository URL with PAT</label><input id="sourceUrl" type="password" required placeholder="https://USERNAME:TOKEN@github.com/OWNER/repo-a" autocomplete="off" spellcheck="false">
 <div class="connection-action"><button id="testSource" type="button" class="secondary">Test Connection</button><span id="sourceConnection" class="connection-status" role="status" aria-live="polite">Not tested</span></div>
-<label for="sourceBranch">Source branch name</label><input id="sourceBranch" type="text" required maxlength="110" value="main" placeholder="main or feature/my-branch">
+<label for="sourceBranch">Source branch (optional)</label><input id="sourceBranch" type="text" maxlength="110" placeholder="Auto: GitHub default branch, or choose another branch">
 <label for="copyScope">Copy scope</label><input id="copyScope" type="text" maxlength="280" value="." placeholder="src/components or .">
 <p class="muted note">A dot copies all eligible tracked files. Secrets, Git internals, generated dependencies and release workflows are excluded.</p>
 </section>
@@ -107,7 +107,7 @@ get('repoSyncForm').addEventListener('submit',e=>{
  e.preventDefault();
  if(busy||!folder||!get('repoSyncForm').reportValidity())return;
  busy=true;createdPr='';buttons();show('Confirm the operation in VS Code. No files have changed yet.');
- vscode.postMessage({command:'createSyncPr',sourceUrl:consumeUrl('sourceUrl'),sourceBranch:get('sourceBranch').value.trim()||'main',destinationUrl:consumeUrl('destinationRepo'),copyScope:get('copyScope').value.trim()||'.',baseBranch:get('baseBranch').value.trim()});
+ vscode.postMessage({command:'createSyncPr',sourceUrl:consumeUrl('sourceUrl'),sourceBranch:get('sourceBranch').value.trim(),destinationUrl:consumeUrl('destinationRepo'),copyScope:get('copyScope').value.trim()||'.',baseBranch:get('baseBranch').value.trim()});
 });
 get('openPr').addEventListener('click',()=>{if(createdPr)vscode.postMessage({command:'openCreatedPr'});});
 window.addEventListener('message',e=>{
@@ -221,10 +221,10 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
    source=repoCredentials.parseCredentialUrl(message.sourceUrl);
    destination=repoCredentials.parseCredentialUrl(message.destinationUrl);
    const scope=repoSync.scopeName(message.copyScope||'.');
-   const sourceBranch=repoSync.baseName(message.sourceBranch||'main');
+   const sourceBranch=message.sourceBranch?repoSync.baseName(message.sourceBranch):'';
    const base=message.baseBranch?repoSync.baseName(message.baseBranch):'';
    const response=await vscode.window.showWarningMessage(
-    'Repo A: '+source.name+' ('+sourceBranch+')\nRepo B: '+destination.name+' in '+selectedFolder+
+    'Repo A: '+source.name+' ('+(sourceBranch||'GitHub default branch (auto)')+')\nRepo B: '+destination.name+' in '+selectedFolder+
     '\nScope: '+scope+'\nPR base: '+(base||'GitHub default branch')+
     '\n\nVerify both PATs, clone to temp, create an AI-planned review branch, commit, push and open PR?',
     {modal:true},'Create Sync PR');
