@@ -1,10 +1,8 @@
 <!-- Replace this file with the latest release notes for each release. -->
 
-# ATGV AIATECH Assist v0.3.96
+# ATGV AIATECH Assist v0.3.97
 
-- Select any startup technology stack to open its host tools and complete direct project module list in a larger, scrollable modal.
-- View dependency versions, package managers, scopes and manifest sources, alongside host-tool readiness and install actions.
-- Keep the selected modal open when prerequisite checks refresh, and use the close button or Escape to return to the stack list.
-- Project modules continue to install or restore when the Solution Architect saves a stack.
-- Set up the GitHub Copilot SDK directly from the startup page and see whether it is installed or needs attention.
-- Open issue reporting from an icon beside the interactive user guide on startup and in the main header.
+- Show completed Business Requirements and Jira-only Epics in the All Jira Project Items table, with linked items grouped by exact Jira keys and parent relationships.
+- Open approved BR evidence, discovery answers and existing BR actions from the table. View linked Jira issues using the BR filter.
+- Keep local BRs visible when their Jira Epic is unavailable, and label Jira-only Epics without implying that local approval evidence exists.
+- Preserve the Jira list, hierarchy, search, sorting and issue details alongside the combined BR view.

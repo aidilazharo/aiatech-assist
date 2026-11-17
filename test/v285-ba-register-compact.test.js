@@ -16,7 +16,7 @@ test('BA Start preserves the existing BR and Jira Epic card containers without t
 });
 test('Jira-backed Epic renderer shows only cards and actions, not reconciliation explanation or empty-register guidance',()=>{
  assert.doesNotMatch(recovery,/Jira Epics requiring BR reconciliation|These Epics exist in Jira|No approved BR is stored/);
- assert.match(recovery,/if\(!rows\.length\)return;/);
+ assert.match(recovery,/if\(!rows\.length\)\{[^\n]*return;\}/);
  assert.match(recovery,/root\.append\(card\)/);
  assert.match(recovery,/openJiraIssueModal\(item\.key\)/);
  assert.match(recovery,/Unlinked to local BR/);
