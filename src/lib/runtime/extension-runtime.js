@@ -5815,7 +5815,8 @@ async function handleDashboardMessage(msg){
         }
         break;
       }
-      case 'myWorkRosterRefresh':{
+      case 'openAtgvAi':{await atgvAiChat.open(vscode,{runtimeRoot:aiRuntimeRoot(),onLog:report});break;}
+       case 'myWorkRosterRefresh':{
          try{
            requireOpened();requireOnline();
            if(msg.projectId&&msg.projectId!==activeProject.id)throw Error('Project changed.');
