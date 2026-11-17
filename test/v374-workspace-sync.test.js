@@ -42,7 +42,7 @@ test('GitHub repo URLs, base branches, copy scopes and exclusions are validated'
 test('PR title, commit and branch describe the source change rather than the branch name',()=>{
  const sha='a'.repeat(40),sourceMessage='fix: validate repository setup scripts';
  const branch=sync.branchName('repo-a',sha,sourceMessage,['src/main.js']);
- assert.equal(branch,'sync/repo-a/validate-repository-setup-scripts-aaaaaaaa');
+ assert.equal(branch,'fix/validate-repository-setup-scripts-aaaaaaaa');
  const details=sync.prDetails({source:{name:'Org/repo-a'},destination:{name:'Org/repo-b'},sha,scope:'src',base:'main',branch,count:1,changedFiles:['src/main.js'],sourceBranch:'main',sourceMessage,sourceCommitFiles:['src/main.js']});
  for(const text of [sha,'Org/repo-a','Org/repo-b','PR base: main','Files changed: 1','src/main.js'])
   assert.ok(details.body.includes(text),text);
@@ -127,7 +127,7 @@ test('sync copies real tracked files, skips release workflows and creates a revi
  assert.equal(result.sourceSha,sourceSha);
  assert.equal(result.base,'main');
  assert.equal(result.fileCount,2);
- assert.match(result.branch,/^sync\/repo-a\/.+-[a-f0-9]{8}$/);
+ assert.match(result.branch,/^chore\/.+-[a-f0-9]{8}$/);
  assert.equal(git(['rev-parse','refs/remotes/origin/main'],target),originalTargetSha);
  assert.equal(fs.readFileSync(path.join(target,'src','main.js'),'utf8'),'module.exports=42;\n');
  assert.equal(fs.readFileSync(path.join(target,'existing.txt'),'utf8'),'destination-only\n');
