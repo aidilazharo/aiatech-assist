@@ -757,6 +757,7 @@ function renderCatalog(state,{forceFields=false}={}){
   remote?.version?(!installed?`Library v${remote.version} available on GitHub main. Open an ATGV workspace, then Pull Catalog to install.`:state.updateAvailable?`Library v${remote.version} available (installed v${installed.version}). Pull Catalog to download; project files will not be overwritten.`:`Library v${installed.version} is up to date.`):(state.lastCheck?`Last check: ${new Date(state.lastCheck).toLocaleString()}`:'No verified remote version yet.');
  if(state.error)$('catalogStatus').textContent=state.error;
  for(const id of ['catalogSave','catalogTest','catalogPull','catalogCheck'])$(id).disabled=!!state.busy||catalogBusyUI;
+ $('pullLibraryFiles').disabled=!!state.busy||catalogBusyUI||softwareLibraryPulling;
 }
 // Extension Settings: Ready reflects a saved configuration, not an untested live service.
 let settingsTokenState={jira:false,github:false},settingsCatalogInstalled=null,settingsModelReady=false,settingsAiTested=false,settingsServiceReady=false;
@@ -4297,7 +4298,22 @@ window.addEventListener('message',event=>{
 });
 
 
-let latestSoftwareUpdateState=null;
+let latestSoftwareUpdateState=null,softwareLibraryPulling=false;
+function renderSoftwareLibraryPullProgress(event){
+ const box=$('softwareLibraryPullProgress');
+ const stage=event.stage==='completed'?'completed':event.stage==='failed'?'failed':'running';
+ const percent=Math.max(0,Math.min(100,Math.round(Number(event.percent)||0)));
+ softwareLibraryPulling=stage==='running';
+ box.classList.remove('hidden');
+ box.dataset.state=stage;
+ $('softwareLibraryPullBar').setAttribute('aria-valuenow',String(percent));
+ $('softwareLibraryPullIndicator').style.width=percent+'%';
+ $('softwareLibraryPullPercent').textContent=percent+'%';
+ $('softwareLibraryPullTitle').textContent=String(event.title||'Pulling SDLC Library files…').slice(0,150);
+ $('softwareLibraryPullMessage').textContent=String(event.message||'Checking GitHub main and verifying library files.').slice(0,700);
+ $('pullLibraryFiles').disabled=softwareLibraryPulling||!!catalogBusyUI||!!catalogState?.busy;
+ $('pullLibraryFiles').textContent=softwareLibraryPulling?'Pulling Library…':stage==='failed'?'Retry Pull Library Files':'Pull Library Files';
+}
 function renderSoftwareUpdates(data,force=false){
  if(!data)return;
  latestSoftwareUpdateState=data;
@@ -4307,6 +4323,7 @@ function renderSoftwareUpdates(data,force=false){
  $('viewExtensionRelease').disabled=!data.latest;
  $('installExtensionRelease').disabled=!data.latest;
  $('checkSoftwareUpdates').disabled=!!data.busy;
+ $('pullLibraryFiles').disabled=softwareLibraryPulling||!!catalogBusyUI||!!catalogState?.busy;
 }
 window.addEventListener('message',event=>{
  const m=event.data||{};
@@ -4317,6 +4334,13 @@ $('checkSoftwareUpdates').addEventListener('click',()=>{
  $('softwareExtensionStatus').textContent='Checking extension releases…';
  $('softwareLibraryStatus').textContent='Checking SDLC Library main…';
  send('checkSoftwareUpdates');
+});
+$('pullLibraryFiles').addEventListener('click',()=>{
+ if(softwareLibraryPulling||!!catalogBusyUI||!!catalogState?.busy)return;
+ renderSoftwareLibraryPullProgress({stage:'running',percent:0,
+  title:'Starting verified library pull…',
+  message:'Requesting the configured SDLC Library GitHub main branch. Local catalog edits will be preserved before activation.'});
+ send('catalogPull');
 });
 $('viewExtensionRelease').addEventListener('click',()=>send('viewExtensionRelease'));
 $('installExtensionRelease').addEventListener('click',()=>send('installExtensionRelease'));
@@ -6651,6 +6675,7 @@ window.addEventListener('message',event=>{
   }
   if(m.type==='catalogState'){const previous=catalogState?.installed?.sha;renderCatalog(m.catalog);if(m.catalog?.installed?.sha!==previous&&activeId)send('uxFrameworkRead',{key:uxSelectedKey||''});}
   if(m.type==='catalogPullProgress'){
+    renderSoftwareLibraryPullProgress(m);
     const progress=$('catalogPullProgress'),value=Math.max(0,Math.min(100,Number(m.percent)||0));
     progress.classList.remove('hidden');
     progress.dataset.state=m.stage==='failed'?'failed':m.stage==='completed'?'completed':'running';
@@ -6662,6 +6687,10 @@ window.addEventListener('message',event=>{
   }
   if(m.type==='catalogAction'){
     $('catalogStatus').textContent=m.message||'';$('catalogStatus').className='test-status'+(m.success?' success':' error');
+    if(m.action==='pull'){
+      $('softwareLibraryStatus').textContent=String(m.message||'Library update finished.').slice(0,700);
+      $('softwareLibraryStatus').className='test-status'+(m.success?' success':' error');
+    }
     if(m.success&&['pull','save'].includes(m.action))field('catalogToken','');
   }
   if(m.type==='connectionTestResult'){
