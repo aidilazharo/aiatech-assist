@@ -26,7 +26,7 @@ function fixture(){
  }
  let listener;
  const win={addEventListener(type,handler){if(type==='message')listener=handler;}};
- const start=ui.indexOf('let displayedLibraryUpdate=null,libraryUpdatePriorFocus=null;');
+ const start=ui.indexOf('let displayedLibraryUpdate=null,libraryUpdatePriorFocus=null');
  const end=ui.indexOf('let displayedExtensionUpgrade=null;',start);
  assert.ok(start>=0&&end>start);
  const run=new Function('$','send','window','document',ui.slice(start,end));
