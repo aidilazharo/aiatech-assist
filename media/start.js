@@ -7074,11 +7074,12 @@ function renderStartupScanPlaceholders(){
 function startupPayload(){return Object.fromEntries(Object.entries(startupFieldMap).map(([key,id])=>[key,$(id).value.trim()]));}
 function renderStartupPage(){
  if(!startupSetupRequired)return;
- // A verified and saved connection needs no repeated Test & Save action.
- // Any credential or URL edit invalidates verification and restores the button.
+ // A saved, verified connection is read-only across page navigation and VS Code restarts.
+ // Reconfiguration is managed in Settings; an unverified saved state must be tested.
  $('startupTestConnections').disabled=startupVerifying||startupConnectionVerified;
  $('startupTestConnections').classList.toggle('hidden',startupConnectionVerified);
- for(const id of [...Object.values(startupFieldMap),'startupAtlassianToken','startupGithubToken'])$(id).disabled=startupVerifying;
+ for(const id of [...Object.values(startupFieldMap),'startupAtlassianToken','startupGithubToken'])
+  $(id).disabled=startupVerifying||startupConnectionVerified;
  $('startupComputerCard').classList.toggle('hidden',startupPage!==0);
  $('startupConnectionForm').classList.toggle('hidden',startupPage!==1);
  $('startupPrevious').classList.toggle('hidden',startupPage===0);
@@ -7101,7 +7102,17 @@ function renderStartupConfig(config){
   const saved=config.saved||{},defaults=config.defaults||{};
   updateHeaderUserName(saved.email||extensionSettings.jira?.email);
   for(const [key,id] of Object.entries(startupFieldMap))$(id).value=saved[key]||defaults[key]||'';
+  // Restore verified state before rendering the wizard so "Next: Search Project"
+  // is enabled immediately after restarting the extension or VS Code.
+  startupConnectionVerified=config.verified===true;
+  if(startupConnectionVerified)startupPage=1;
   startupFormInitialized=true;
+ }else if(config.verified===true){
+  startupConnectionVerified=true;
+ }
+ if(startupConnectionVerified){
+  $('startupConnectionMessage').textContent='Jira, Confluence and GitHub connections already verified and saved.';
+  $('startupConnectionMessage').className='test-status success';
  }
  const offline=config.offlineLibrary;
  if(offline)$('startupLibraryZipStatus').textContent=`Offline ZIP v${offline.version} (${offline.filename}) active; retained while newer than GitHub main.`;
