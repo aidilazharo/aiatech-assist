@@ -4004,7 +4004,7 @@ async function handleDashboardMessage(msg){
           if(installedVendorAssets&&dashboard){
             vendorBootRecoveryCount=0;vendorWebviewReady=false;
             dashboard.webview.options={...dashboard.webview.options,localResourceRoots:[vscode.Uri.joinPath(context.extensionUri,'media'),vscode.Uri.file(installedVendorAssets.dir)]};
-            dashboard.webview.html=html(dashboard.webview,{resumeLibrary:true});
+            webviewCoreReady=false;dashboard.webview.html=html(dashboard.webview,{resumeLibrary:true});
             webviewVendorDir=installedVendorAssets.dir;
           }else if(vendorLibraryLastError){
             report('Offline Library CodeMirror activation: '+vendorLibraryLastError);
@@ -4140,7 +4140,7 @@ async function handleDashboardMessage(msg){
          if(!msg.coreStylesLoaded&&webviewCssRetry<1&&dashboard){
            webviewCssRetry++;
            report('ATGV stylesheet load failed; rebuilding webview once: '+(msg.loadErrors||[]).slice(0,8).join('; '));
-           dashboard.webview.html=html(dashboard.webview);
+           webviewCoreReady=false;dashboard.webview.html=html(dashboard.webview);
            break;
          }
          webviewCoreReady=true;
