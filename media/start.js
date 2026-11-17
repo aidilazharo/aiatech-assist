@@ -4638,9 +4638,9 @@ function jiraKeyNode(key){
 }
 function renderJiraApprovalTable(){
  const root=$('brJiraApprovalTable');if(!root)return;
- const rows=jiraPlanForCR.map(entry=>({action:String(entry.action||'').toUpperCase(),type:entry.kind||'Issue',path:entry.path||'',title:entry.title||'',key:entry.key||'—',approval:entry.requiresApproval?'Approval required':'Standard',entry}));
+ const rows=jiraPlanForCR.map(entry=>({action:String(entry.action||'').toUpperCase(),kind:entry.kind||'Issue',type:jiraPreviewIssueTypes[entry.path]||'Not verified',path:entry.path||'',title:entry.title||'',key:entry.key||'—',approval:entry.requiresApproval?'Approval required':'Standard',entry}));
  ATGVDataTables.mount(root,rows,[
-  {key:'action',label:'Action'},{key:'type',label:'Issue type'},{key:'path',label:'BR path'},{key:'title',label:'Summary'},{key:'key',label:'Existing Jira key',render:row=>jiraKeyNode(row.key)},{key:'approval',label:'Approval'},
+  {key:'action',label:'Action'},{key:'kind',label:'ATGV type'},{key:'type',label:'Jira type'},{key:'path',label:'BR path'},{key:'title',label:'Summary'},{key:'key',label:'Existing Jira key',render:row=>jiraKeyNode(row.key)},{key:'approval',label:'Approval'},
   {key:'details',label:'Details',sortable:false,render:row=>jiraDetailsButton(row.entry,true)}
  ],{label:'Jira preview items awaiting approval',pageSize:5});
 }
@@ -6463,8 +6463,8 @@ window.addEventListener('message',event=>{
     const box=$('brJiraChanges');box.replaceChildren();box.classList.remove('hidden');
     const count=(m.changes||[]).length;
     box.append(brElement('h3','',count+' Jira changes'));
-    ATGVDataTables.mount(box,(m.changes||[]).map(entry=>({action:String(entry.action||'').toUpperCase(),type:entry.kind||'Issue',path:entry.path||'',title:entry.title||'',key:entry.key||'—',approval:entry.requiresApproval?'Approval required':'Standard',entry})),[
-     {key:'action',label:'Action'},{key:'type',label:'Issue type'},{key:'path',label:'BR path'},{key:'title',label:'Summary'},{key:'key',label:'Existing Jira key',render:row=>jiraKeyNode(row.key)},{key:'approval',label:'Approval'},
+    ATGVDataTables.mount(box,(m.changes||[]).map(entry=>({action:String(entry.action||'').toUpperCase(),kind:entry.kind||'Issue',type:jiraPreviewIssueTypes[entry.path]||'Not verified',path:entry.path||'',title:entry.title||'',key:entry.key||'—',approval:entry.requiresApproval?'Approval required':'Standard',entry})),[
+     {key:'action',label:'Action'},{key:'kind',label:'ATGV type'},{key:'type',label:'Jira type'},{key:'path',label:'BR path'},{key:'title',label:'Summary'},{key:'key',label:'Existing Jira key',render:row=>jiraKeyNode(row.key)},{key:'approval',label:'Approval'},
      {key:'details',label:'Details',sortable:false,render:row=>jiraDetailsButton(row.entry)}
     ],{label:'Jira change preview',pageSize:5});
     const conflicts=$('brJiraConflicts');conflicts.replaceChildren();conflicts.classList.toggle('hidden',!(m.conflicts||[]).length);
