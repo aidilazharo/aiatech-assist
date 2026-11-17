@@ -114,6 +114,7 @@ function html(webview,{resumeLibrary=false}={}){
       <div class="nav-label">WORKSPACE</div>
       <button type="button" class="nav-item current" data-nav="overview"><span class="nav-icon">▦</span>Overview</button>
       <button type="button" class="nav-item" data-nav="sdlc-roles"><span class="nav-icon">◉</span>My Work</button>
+       <button type="button" class="nav-item" id="openAtgvAi"><span class="nav-icon">✦</span>ATGV: AI</button>
       <button type="button" class="nav-item" data-nav="flow"><span class="nav-icon">↻</span>SDLC</button>
       <button type="button" class="nav-item" data-nav="documents"><span class="nav-icon">▤</span>Documents</button>
       <button type="button" class="nav-item" data-nav="planning"><span class="nav-icon">▥</span>Solution Designs</button>
@@ -428,7 +429,7 @@ function html(webview,{resumeLibrary=false}={}){
       <p class="ba-jira-inventory-note muted">BRs appear first. Other Jira issues created by your connected account follow, then remaining issues. Local BRs without a visible Jira Epic are labelled separately.</p>
     </section>
     <section id="pmDailyCockpit" class="pm-daily-cockpit hidden" aria-label="Project Manager daily delivery cockpit">
-      <div class="pm-dashboard-head"><div><h2>Daily Delivery Cockpit</h2><p class="muted">Project-wide Jira delivery activity, team workload and saved role schedules. Read-only: issue changes are made in Jira.</p></div><button id="pmRefreshJira" type="button" class="secondary">Refresh Jira</button></div>
+      <div class="pm-dashboard-head"><div><h2>Daily Delivery Cockpit</h2><p class="muted">Project-wide Jira delivery activity, team workload and saved role schedules. Jira transitions require confirmation.</p></div><button id="pmRefreshJira" type="button" class="secondary">Refresh Jira</button></div>
       <p id="pmDataStatus" class="muted pm-data-status" role="status" aria-live="polite">Connect Jira to load current delivery data.</p>
       <div id="pmMetricCards" class="pm-metrics" aria-label="Project delivery metrics"></div>
        <section class="pm-panel" aria-label="Jira Kanban board">
