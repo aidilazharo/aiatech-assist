@@ -66,8 +66,8 @@ test('UI removes obsolete settings hints, standardizes card headers and uses sin
 });
 test('the verified VSIX install restarts automatically and regenerates the webview',async()=>{
  const host=await fs.readFile(path.join(__dirname,'../src/lib/runtime/extension-runtime.js'),'utf8');
- assert.match(host,/case 'installExtensionRelease':\{[\s\S]*?await restart\(\);break;/);
- assert.match(host,/await restart\(\);\n  \}catch\(error\)/);
+ assert.match(host,/case 'installExtensionRelease':\{[\s\S]*?await performVerifiedExtensionInstall\(operation\);/);
+ assert.match(host,/if\(installed\)\{[\s\S]*?await restart\(\);/);
  assert.match(host,/async function installationStartup\(\)/);
  assert.match(host,/atgvAssist\.restartAfterWindowReload/);
 });
