@@ -109,6 +109,37 @@ function consumeUrl(id){
  return raw;
 }
 const connectionNode=kind=>get(kind==='Source'?'sourceConnection':'destinationConnection');
+const repoField=kind=>get(kind==='Source'?'sourceUrl':'destinationRepo');
+const savedSelect=kind=>get(kind==='Source'?'sourceSavedRepos':'destinationSavedRepos');
+function showSavedRepos(kind,entries){
+ const select=savedSelect(kind),preferred=repoField(kind).value.trim()||select.value;
+ select.replaceChildren();
+ const add=document.createElement('option');add.value='';add.textContent='+ Add another repository...';select.append(add);
+ for(const row of Array.isArray(entries)?entries:[]){
+  if(!/^https:\/\/github\.com\/[A-Za-z0-9-]+\/[A-Za-z0-9_.-]+$/.test(row?.safeUrl||''))continue;
+  const option=document.createElement('option');option.value=row.safeUrl;
+  option.textContent=String(row.repo||row.safeUrl)+(row.credentialSaved?' · PAT saved':' · PAT required');
+  select.append(option);
+ }
+ select.value=[...select.options].some(item=>item.value===preferred)?preferred:'';
+ buttons();
+}
+function selectSavedRepo(kind){
+ const selection=savedSelect(kind).value;
+ repoField(kind).value=selection;
+ const node=connectionNode(kind);
+ node.textContent=selection?'Saved repository selected · Test to verify permissions':'New connection · Enter GitHub URL and PAT';
+ node.dataset.state='ready';
+ buttons();
+}
+for(const kind of ['Source','Destination']){
+ savedSelect(kind).addEventListener('change',()=>selectSavedRepo(kind));
+ get(kind==='Source'?'forgetSource':'forgetDestination').addEventListener('click',()=>{
+  if(busy||!savedSelect(kind).value)return;
+  busy=true;buttons();
+  vscode.postMessage({command:'forgetRepoConnection',kind,url:savedSelect(kind).value});
+ });
+}
 function testRepository(kind){
  if(busy)return;
  const raw=consumeUrl(kind==='Source'?'sourceUrl':'destinationRepo');
@@ -119,7 +150,10 @@ function testRepository(kind){
 get('testSource').addEventListener('click',()=>testRepository('Source'));
 get('testDestination').addEventListener('click',()=>testRepository('Destination'));
 for(const id of ['sourceUrl','destinationRepo'])get(id).addEventListener('input',()=>{
- const node=connectionNode(id==='sourceUrl'?'Source':'Destination');node.textContent='Not tested';node.dataset.state='ready';
+ const kind=id==='sourceUrl'?'Source':'Destination';
+ const node=connectionNode(kind);node.textContent='Not tested';node.dataset.state='ready';
+ const select=savedSelect(kind);const value=get(id).value.trim();
+ select.value=[...select.options].some(item=>item.value===value)?value:'';buttons();
 });
 get('selectRepoB').addEventListener('click',()=>vscode.postMessage({command:'selectRepoB'}));
 get('repoSyncForm').addEventListener('submit',e=>{
@@ -131,9 +165,14 @@ get('repoSyncForm').addEventListener('submit',e=>{
 get('openPr').addEventListener('click',()=>{if(createdPr)vscode.postMessage({command:'openCreatedPr'});});
 window.addEventListener('message',e=>{
  const data=e.data||{};
+ if(data.type==='repoSyncSavedList')showSavedRepos(data.kind,data.entries);
  if(data.type==='repoSyncSaved'){
   const id=data.kind==='Source'?'sourceUrl':'destinationRepo';
-  if(data.safeUrl)get(id).value=String(data.safeUrl);
+  if(data.safeUrl){
+   get(id).value=String(data.safeUrl);
+   const select=savedSelect(data.kind);
+   if([...select.options].some(item=>item.value===data.safeUrl))select.value=data.safeUrl;
+  }
   const node=connectionNode(data.kind);
   node.textContent=data.credentialSaved
    ?'Saved · '+String(data.repo||'repository')+' · PAT available in VS Code SecretStorage'
@@ -145,9 +184,21 @@ window.addEventListener('message',e=>{
  if(data.type==='repoSyncProgress')show(data.message||'Synchronising…');
  if(data.type==='repoConnectionResult'){
   const id=data.kind==='Source'?'sourceUrl':'destinationRepo',node=connectionNode(data.kind);
-  if(data.safeUrl)get(id).value=String(data.safeUrl);
+  if(data.safeUrl){
+   get(id).value=String(data.safeUrl);
+   const select=savedSelect(data.kind);
+   if([...select.options].some(item=>item.value===data.safeUrl))select.value=data.safeUrl;
+  }
   node.textContent=String(data.message||'Connection test finished.');node.dataset.state=data.success?'success':'error';
   if(!data.duringSync){busy=false;buttons();}
+ }
+ if(data.type==='repoSyncForgot'){
+  const kind=data.kind,field=repoField(kind);
+  if(field.value===data.safeUrl){field.value='';savedSelect(kind).value='';}
+  const node=connectionNode(kind);node.textContent='Saved connection forgotten';node.dataset.state='ready';
+ }
+ if(data.type==='repoSyncForgetResult'){
+  busy=false;buttons();show(data.message||'Saved connection action finished.',data.success?'success':'ready');
  }
  if(data.type==='repoSyncResult'){busy=false;createdPr=data.success?String(data.prUrl||''):'';buttons();show(data.message||'Sync finished.',data.success?'success':'error');}
 });
