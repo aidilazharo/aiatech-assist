@@ -1322,6 +1322,9 @@ function renderPMDashboard(){
         if(pmKanbanPending)return;
         pmKanbanPending=true;
         $('pmKanbanStatus').textContent='Checking Jira transitions for '+item.key+' → '+target+'…';
+        // Restore the server-authoritative column while Jira checks permissions
+        // and asks for confirmation; a successful transition triggers a fresh scan.
+        queueMicrotask(()=>{if(pmKanbanPending)renderPMDashboard();});
         send('pmJiraTransition',{projectId:activeId,key:item.key,status:target,expectedUpdated:item.updated});
       }
     });
