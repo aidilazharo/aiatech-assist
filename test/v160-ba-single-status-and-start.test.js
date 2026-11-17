@@ -37,5 +37,5 @@ test('Published confirmation does not reintroduce the Step 8 summary message',()
  assert.doesNotMatch(done,/Successfully published and recorded.*textContent/);
 });
 test('Release metadata retains valid post-v0.1.60 numbering',()=>{
- const pkg=require('../package.json');assert.match(pkg.version,/^0\.(?:1\.(?:6[0-9]|[7-9][0-9])|2\.(?:[0-9]|[1-9][0-9])|3\.[0-9]+)$/);assert.equal(pkg.atgvDisplayVersion,pkg.version);
+ const pkg=require('../package.json');assert.match(pkg.version,/^0\.(?:1\.(?:6[0-9]|[7-9][0-9])|2\.(?:[0-9]|[1-9][0-9])|3\.[0-9]+|4\.[1-9][0-9])$/);assert.equal(pkg.atgvDisplayVersion,pkg.version);
 });

@@ -80,7 +80,7 @@ test('v399: ATGV AI uses official Codex auth and limits uploaded screenshot type
 });
 
 test('v399: workspace UI avoids Repo A and Repo B explanatory labels',()=>{
- const html=require('../src/repo-sync-workspace').workspaceHtml({nonce:'mock',version:'0.3.99',cspSource:'vscode-resource:'});
+ const html=require('../src/repo-sync-workspace').workspaceHtml({nonce:'mock',version:require('../package.json').atgvDisplayVersion,cspSource:'vscode-resource:'});
  assert.ok(html.includes('<h2>1. Source</h2>'));
  assert.ok(html.includes('<h2>2. Destination</h2>'));
  assert.ok(!html.includes('Repo A'));

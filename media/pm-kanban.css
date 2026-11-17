@@ -1,13 +1,33 @@
-/* Minimal native Kanban, no framework or CDN. */
+/* Lightweight offline Kanban using bundled SortableJS (MIT). */
 #pmKanbanBoard{width:100%;overflow-x:auto}
 .atgv-kanban-board{display:grid;grid-auto-columns:minmax(220px,1fr);grid-auto-flow:column;gap:12px;overflow-x:auto;padding:7px 0}
 .atgv-kanban-column{min-width:220px;max-width:390px;background:var(--vscode-sideBar-background,var(--vscode-editor-background));border:1px solid var(--vscode-panel-border,#555);border-radius:9px;display:flex;flex-direction:column;min-height:180px}
 .atgv-kanban-heading{padding:12px;margin:0;border-bottom:1px solid var(--vscode-panel-border,#555);font-size:13px!important}
 .atgv-kanban-cards{min-height:130px;max-height:530px;overflow-y:auto;display:flex;flex-direction:column;gap:9px;padding:10px;flex:1}
-.atgv-kanban-card{min-width:0;padding:10px 12px;border:1px solid var(--vscode-panel-border,#555);border-radius:7px;background:var(--vscode-editor-background);cursor:grab}
+.atgv-kanban-card{min-width:0;padding:10px 12px;border:1px solid var(--vscode-panel-border,#555);border-radius:7px;background:var(--vscode-editor-background)}
 .atgv-kanban-card:focus-within{outline:1px solid var(--vscode-focusBorder)}
 .atgv-kanban-key{font-weight:700;font-size:12px;padding:0!important;min-height:0!important;background:transparent!important;color:var(--vscode-textLink-foreground)!important}
 .atgv-kanban-summary{margin:7px 0;overflow-wrap:anywhere;font-size:12px}
 .atgv-kanban-meta{display:block;color:var(--vscode-descriptionForeground);font-size:11px}
 .atgv-kanban-move{width:100%;max-width:100%;min-height:29px;margin-top:9px;font-size:11px;background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--vscode-input-border,var(--vscode-panel-border));border-radius:5px}
 @media(max-width:740px){.atgv-kanban-board{grid-auto-columns:minmax(210px,75vw)}}
+
+/* Drag is restricted to this grip so Open Issue and keyboard status controls work. */
+.atgv-kanban-card-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.atgv-kanban-grip{display:inline-flex;align-items:center;justify-content:center;min-width:27px;min-height:29px;font-size:18px;line-height:1;cursor:grab;user-select:none;touch-action:none;color:var(--vscode-descriptionForeground,#999);border-radius:5px}
+.atgv-kanban-grip:hover{color:var(--vscode-foreground,#fff);background:var(--vscode-list-hoverBackground,transparent)}
+.atgv-kanban-grip:active{cursor:grabbing}
+.atgv-kanban-ghost{opacity:.45;border:1px dashed var(--vscode-focusBorder,#4796e4);background:var(--vscode-list-hoverBackground,var(--vscode-editor-background))}
+.atgv-kanban-chosen{box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.atgv-kanban-drag{cursor:grabbing}
+
+/* Shared Jira work-items switcher: the compact DataTable is the default view. */
+#pmJiraWorkspace{min-width:0}
+#pmJiraWorkspace .pm-jira-switch-heading{align-items:center;flex-wrap:wrap;gap:10px}
+.pm-jira-view-switch{display:inline-flex;gap:3px;align-items:center;padding:3px;border:1px solid var(--vscode-panel-border,#555);border-radius:7px;background:var(--vscode-sideBar-background,var(--vscode-editor-background))}
+.pm-jira-view-switch button{border-radius:5px;padding:5px 12px;min-height:28px;font-size:12px}
+.pm-jira-view-switch button[aria-pressed="true"]{background:var(--vscode-button-background)!important;color:var(--vscode-button-foreground)!important}
+#pmJiraTableView,#pmJiraKanbanView{min-width:0}
+#pmJiraTableView.hidden,#pmJiraKanbanView.hidden{display:none!important}
+#pmJiraTableView .pm-filters{margin:10px 0}
+#pmJiraTableView .atgv-datatable-scroll{max-width:100%;overflow-x:auto}
