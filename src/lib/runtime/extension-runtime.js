@@ -1078,17 +1078,43 @@ async function aiDrafts(){
  return generated;
 }
 function startupIsComplete(){return context.globalState.get('atgvAssist.startupSetup.completed',false)===true;}
-async function startupStatus(){
+const STARTUP_VERIFIED_SECRET='atgvAssist.startupConnections.verified';
+// Keep the verification proof inside VS Code SecretStorage, never in the webview
+// or plain extension settings. It binds the precise saved endpoints to both PATs.
+function startupSavedConnectionFields(){
  const saved=extensionSettings||{},catalog=catalogConfig();
+ return {jiraUrl:saved.jira?.baseUrl||'',confluenceUrl:saved.confluence?.baseUrl||'',email:saved.jira?.email||'',
+  githubUrl:saved.github?.owner?'https://github.com/'+saved.github.owner:'',
+  projectRepoUrl:saved.github?.owner&&saved.github?.repo?'https://github.com/'+saved.github.owner+'/'+saved.github.repo:'',
+  libraryRepoUrl:catalog.repositoryUrl||''};
+}
+async function storedStartupVerification(){
+ try{
+  const raw=await context.secrets.get(STARTUP_VERIFIED_SECRET);
+  if(!raw)return null;
+  const proof=JSON.parse(raw);
+  const fields=startupSavedConnectionFields();
+  const signature=sha(JSON.stringify(startupSetup.validate(fields)));
+  if(!proof||proof.signature!==signature||typeof proof.tokenDigest!=='string')return null;
+  const [atlassian,github]=await Promise.all([
+   readToken(globalSecretKey('atlassian'),globalCredentialEndpoint('atlassian')),
+   readToken(globalSecretKey('github'),globalCredentialEndpoint('github'))
+  ]);
+  const libraryToken=await context.secrets.get('atgvAssist.sdlcCatalogToken');
+  if(!atlassian||!github||github!==libraryToken||proof.tokenDigest!==sha(atlassian+'\\0'+github))return null;
+  return {signature};
+ }catch{return null;}
+}
+async function startupStatus(){
+ const verified=await storedStartupVerification();
+ startupSessionVerified=!!verified;
+ startupVerifiedSignature=verified?.signature||'';
  const workspace=getWorkspace()?.uri.fsPath;
  let offline=null;
  try{if(workspace){const installed=await sdlcCatalog.activeRoot(workspace);offline=installed.offline?installed:null;}}catch(e){if(!/not activated/.test(e.message))report('Offline Library startup status: '+e.message);}
  return {required:!startupSessionProceedApproved,defaults:startupSetup.DEFAULTS,
-  offlineLibrary:offline?{version:offline.version,filename:offline.filename,repository:offline.repository}:null,
-  saved:{jiraUrl:saved.jira?.baseUrl||'',confluenceUrl:saved.confluence?.baseUrl||'',email:saved.jira?.email||'',
-   githubUrl:saved.github?.owner?'https://github.com/'+saved.github.owner:'',
-   projectRepoUrl:saved.github?.owner&&saved.github?.repo?'https://github.com/'+saved.github.owner+'/'+saved.github.repo:'',
-   libraryRepoUrl:catalog.repositoryUrl||''}};
+  verified:!!verified,offlineLibrary:offline?{version:offline.version,filename:offline.filename,repository:offline.repository}:null,
+  saved:startupSavedConnectionFields()};
 }
 async function testAndSaveStartupConnections(message){
  startupSessionVerified=false;startupVerifiedSignature='';
@@ -1142,6 +1168,12 @@ async function testAndSaveStartupConnections(message){
  extensionSettings=settings;pendingTests={jira:null,github:null};
  catalogRemote=null;catalogLastCheck='';catalogLastError='';scheduleCatalogChecks();
  startupSessionVerified=true;startupVerifiedSignature=sha(JSON.stringify(data));
+ // Re-read the canonical saved configuration so restarts can recognize it even
+ // when the user originally entered trailing slashes or a GitHub .git suffix.
+ const persistedSignature=sha(JSON.stringify(startupSetup.validate(startupSavedConnectionFields())));
+ await context.secrets.store(STARTUP_VERIFIED_SECRET,JSON.stringify({
+  signature:persistedSignature,tokenDigest:sha(atlassian+'\\0'+github)
+ }));
  return {success:true,librarySha:library.sha?.slice(0,12)||'offline',
   message:offlineFallback?'Jira, Confluence, GitHub account and project repository verified. Library GitHub access is unavailable; using temporary validated ZIP v'+offlineFallback.version+'. Settings saved.':'Jira and Confluence authenticated; GitHub account and both repositories verified. Settings saved securely. Proceed to project search.'};
 }
@@ -3898,10 +3930,11 @@ async function handleDashboardMessage(msg){
         break;
       }
       case 'startupProceed':{
-        if(!startupSessionVerified||startupVerifiedSignature!==sha(JSON.stringify(startupSetup.validate(msg.settings))))throw Error('Test Jira, Confluence and GitHub connections with the current fields before proceeding.');
+        const verified=await storedStartupVerification();
+        if(!verified||verified.signature!==sha(JSON.stringify(startupSetup.validate(msg.settings))))throw Error('Test Jira, Confluence and GitHub connections with the current fields before proceeding.');
         await context.globalState.update('atgvAssist.startupSetup.completed',true);
         startupSessionProceedApproved=true;
-        startupSessionVerified=false;startupVerifiedSignature='';
+        startupSessionVerified=true;startupVerifiedSignature=verified.signature;
         await dashboard?.webview.postMessage({type:'startupProceedResult',success:true});
         await refreshDashboard();break;
       }
