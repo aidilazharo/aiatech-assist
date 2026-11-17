@@ -15,7 +15,11 @@ test('BR-panel Jira-only Epic cards keep View Jira but no Switch Project action'
  const section=ui.slice(begin,end);
  assert.match(section,/Unlinked to local BR/);
  assert.match(section,/openJiraIssueModal\(item\.key\)/);
- assert.match(section,/card\.append\(info,open\);root\.append\(card\);/);
+ assert.match(section,/card\.append\(heading\)/);
+ assert.match(section,/body\.append\(info\);card\.append\(body\);root\.append\(card\);/);
+ assert.match(section,/className='ba-completed-br-section ba-jira-only-br-section'/);
+ assert.match(section,/answers\.disabled=true/);
+ assert.match(section,/View Jira · /);
  assert.doesNotMatch(section,/Switch Project|switchProject|navigate\('projects'\)/);
 });
 
