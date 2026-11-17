@@ -20,7 +20,8 @@ test('SDLC Library update offers use the same ATGV branded modal as extension up
  assert.match(runtime,/pendingLibraryUpdateOffers/);
  assert.ok(!runtime.includes('const answer=await vscode.window.showInformationMessage('));
  assert.match(js,/message\.type!=='libraryUpdateOffer'/);
- assert.match(js,/closeLibraryUpdate\('Pull Library'\)/);
+ assert.match(js,/startLibraryUpdatePull/);
+ assert.match(js,/type==='libraryUpdateProgress'/);
  assert.match(js,/event\.key==='Escape'/);
  assert.match(js,/libraryUpdatePriorFocus/);
 });

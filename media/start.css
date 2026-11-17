@@ -1987,6 +1987,23 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 .atgv-upgrade-progress[data-state="completed"] .atgv-upgrade-progress-indicator{width:100%;transform:none;animation:none;}
 @media(prefers-reduced-motion:reduce){.atgv-upgrade-progress-indicator{animation:none;width:100%;opacity:.65;}}
 
+/* Stage-based progress for verified SDLC Library pulls. Percentages mark completed
+   verification milestones, not network download bytes. */
+.atgv-library-update-heading{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:8px}
+.atgv-library-update-heading strong{font-size:13px;margin:0;color:var(--vscode-foreground)}
+.atgv-library-update-heading span{font-size:12px;font-variant-numeric:tabular-nums;color:var(--vscode-descriptionForeground);font-weight:650}
+.atgv-library-update-track{width:100%;height:9px;overflow:hidden;border:1px solid var(--vscode-panel-border,#555);border-radius:99px;background:var(--vscode-editorWidget-background,#34363d)}
+.atgv-library-update-indicator{display:block;height:100%;width:0%;border-radius:99px;background:var(--vscode-progressBar-background,#2178bc);transition:width .2s ease}
+.atgv-library-update-progress p,.atgv-catalog-pull-progress p{margin:7px 0 0;font-size:12px;color:var(--vscode-descriptionForeground);overflow-wrap:anywhere}
+.atgv-library-update-progress[data-state="running"] .atgv-library-update-indicator,
+.atgv-catalog-pull-progress[data-state="running"] .atgv-library-update-indicator{background-image:repeating-linear-gradient(115deg,transparent 0,transparent 12px,rgba(255,255,255,.18) 12px,rgba(255,255,255,.18) 24px);background-size:48px 100%;animation:atgv-library-progress 1.2s linear infinite}
+@keyframes atgv-library-progress{from{background-position:0 0}to{background-position:48px 0}}
+.atgv-library-update-progress[data-state="failed"],.atgv-catalog-pull-progress[data-state="failed"]{border-color:var(--vscode-inputValidation-errorBorder,#d75b61)}
+.atgv-library-update-progress[data-state="failed"] .atgv-library-update-heading strong,
+.atgv-catalog-pull-progress[data-state="failed"] .atgv-library-update-heading strong{color:var(--vscode-errorForeground,#e4787d)}
+.atgv-catalog-pull-progress{padding:12px;margin:8px 0 14px;border:1px solid var(--vscode-panel-border);border-radius:8px}
+@media(prefers-reduced-motion:reduce){.atgv-library-update-indicator{transition:none!important;animation:none!important}}
+
 /* Pin the unified log download alone to the bottom-left of prerequisite readiness. */
 #startupComputerCard{display:flex;flex-direction:column;row-gap:12px;}
 #startupComputerCard>.atgv-startup-section-title{margin-bottom:4px;}

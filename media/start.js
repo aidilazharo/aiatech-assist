@@ -6650,6 +6650,16 @@ window.addEventListener('message',event=>{
     if(m.warning)status(m.warning,true);
   }
   if(m.type==='catalogState'){const previous=catalogState?.installed?.sha;renderCatalog(m.catalog);if(m.catalog?.installed?.sha!==previous&&activeId)send('uxFrameworkRead',{key:uxSelectedKey||''});}
+  if(m.type==='catalogPullProgress'){
+    const progress=$('catalogPullProgress'),value=Math.max(0,Math.min(100,Number(m.percent)||0));
+    progress.classList.remove('hidden');
+    progress.dataset.state=m.stage==='failed'?'failed':m.stage==='completed'?'completed':'running';
+    $('catalogPullProgressBar').setAttribute('aria-valuenow',String(value));
+    $('catalogPullProgressIndicator').style.width=value+'%';
+    $('catalogPullProgressPercent').textContent=value+'%';
+    $('catalogPullProgressTitle').textContent=String(m.title||'Updating SDLC Library…').slice(0,150);
+    $('catalogPullProgressMessage').textContent=String(m.message||'').slice(0,700);
+  }
   if(m.type==='catalogAction'){
     $('catalogStatus').textContent=m.message||'';$('catalogStatus').className='test-status'+(m.success?' success':' error');
     if(m.success&&['pull','save'].includes(m.action))field('catalogToken','');
@@ -7300,31 +7310,79 @@ window.addEventListener('message',event=>{
  $('startupPrerequisiteInstall').focus();
 });
 
-let displayedLibraryUpdate=null,libraryUpdatePriorFocus=null;
-function closeLibraryUpdate(action='Later'){
- if(!displayedLibraryUpdate)return;
+let displayedLibraryUpdate=null,libraryUpdatePriorFocus=null,libraryUpdateState='ready';
+function renderLibraryUpdateProgress(state,title='',detail='',percent=0){
+ libraryUpdateState=state;
+ const progress=$('libraryUpdateProgress'),modal=$('libraryUpdateModal');
+ const busy=state==='running';
+ const value=Number.isFinite(Number(percent))?Math.max(0,Math.min(100,Math.round(Number(percent)))):0;
+ modal.setAttribute('aria-busy',String(busy));
+ progress.classList.toggle('hidden',state==='ready');
+ progress.dataset.state=state;
+ $('libraryUpdateProgressBar').setAttribute('aria-valuenow',String(value));
+ $('libraryUpdateProgressIndicator').style.width=value+'%';
+ $('libraryUpdateProgressPercent').textContent=value+'%';
+ if(title)$('libraryUpdateProgressTitle').textContent=String(title).slice(0,150);
+ if(detail)$('libraryUpdateProgressMessage').textContent=String(detail).slice(0,700);
+ $('libraryUpdateLater').disabled=busy;
+ $('libraryUpdatePull').disabled=busy;
+ $('libraryUpdatePull').textContent=busy?'Updating…':state==='failed'?'Retry Pull':'Pull Library';
+ if(busy)progress.focus();
+}
+function closeLibraryUpdate(action='Later',notify=true){
+ if(!displayedLibraryUpdate||libraryUpdateState==='running')return;
  const requestId=displayedLibraryUpdate;displayedLibraryUpdate=null;
  const modal=$('libraryUpdateModal');modal.classList.add('hidden');modal.setAttribute('aria-hidden','true');
+ renderLibraryUpdateProgress('ready');
  const focus=libraryUpdatePriorFocus;libraryUpdatePriorFocus=null;
  if(focus&&focus.isConnected)focus.focus();
- send('libraryUpdateDecision',{requestId,action});
+ if(notify)send('libraryUpdateDecision',{requestId,action});
+}
+function startLibraryUpdatePull(){
+ if(!displayedLibraryUpdate||libraryUpdateState==='running')return;
+ const requestId=displayedLibraryUpdate,retry=libraryUpdateState==='failed';
+ renderLibraryUpdateProgress('running','Preparing library update…','Validating the configured repository and saved GitHub permissions.',0);
+ if(retry)send('libraryUpdateRetry',{requestId});
+ else send('libraryUpdateDecision',{requestId,action:'Pull Library'});
 }
 $('libraryUpdateLater').addEventListener('click',()=>closeLibraryUpdate('Later'));
-$('libraryUpdatePull').addEventListener('click',()=>closeLibraryUpdate('Pull Library'));
+$('libraryUpdatePull').addEventListener('click',startLibraryUpdatePull);
 $('libraryUpdateModal').addEventListener('keydown',event=>{
+ if(libraryUpdateState==='running'){
+  if(event.key==='Escape'||event.key==='Tab'){event.preventDefault();$('libraryUpdateProgress').focus();}
+  return;
+ }
  if(event.key==='Escape'){event.preventDefault();closeLibraryUpdate('Later');return;}
  if(event.key==='Tab'){
-  const first=$('libraryUpdateLater'),last=$('libraryUpdatePull');
+  const controls=['libraryUpdateLater','libraryUpdatePull'].map($).filter(node=>!node.disabled);
+  const first=controls[0],last=controls.at(-1);
+  if(!first||!last)return;
   if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
   else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
  }
 });
 window.addEventListener('message',event=>{
  const message=event.data||{};
+ if(message.type==='libraryUpdateProgress'){
+  if(!displayedLibraryUpdate||message.requestId!==displayedLibraryUpdate)return;
+  if(message.stage==='completed'){
+   // Keep the modal open until the host confirms the activated checkout.
+   renderLibraryUpdateProgress('completed',message.title||'Library updated',message.message||'The verified SDLC Library is installed.',100);
+   closeLibraryUpdate('Installed',false);
+  }else if(message.stage==='failed'){
+   renderLibraryUpdateProgress('failed',message.title||'Library update failed',message.message||'The library was not activated. Retry or select Later.',message.percent);
+   $('libraryUpdatePull').focus();
+  }else{
+   renderLibraryUpdateProgress('running',message.title||'Updating SDLC Library…',message.message||'Pull and verification in progress.',message.percent);
+  }
+  return;
+ }
  if(message.type!=='libraryUpdateOffer'||!message.requestId)return;
+ if(displayedLibraryUpdate&&libraryUpdateState==='running')return;
  if(displayedLibraryUpdate)closeLibraryUpdate('Later');
  displayedLibraryUpdate=message.requestId;
  libraryUpdatePriorFocus=document.activeElement;
+ renderLibraryUpdateProgress('ready');
  const installed=String(message.installedVersion||'');
  $('libraryUpdateCurrent').textContent=installed?'v'+installed:'Not installed';
  const latest=String(message.remoteVersion||'');

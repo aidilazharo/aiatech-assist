@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.3.90';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.3.91';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -76,6 +76,11 @@ function html(webview,{resumeLibrary=false}={}){
     <p id="libraryUpdateDescription">Download the latest verified catalog from GitHub main.</p>
     <div class="atgv-upgrade-versions"><div><small>INSTALLED CATALOG</small><strong id="libraryUpdateCurrent">—</strong></div><span aria-hidden="true">→</span><div><small>AVAILABLE ON MAIN</small><strong id="libraryUpdateNext">—</strong></div></div>
     <p id="libraryUpdateSource" class="muted"></p><p class="atgv-upgrade-assurance">The catalog will be downloaded and verified. Active project files stay unchanged; installation requires your confirmation.</p>
+    <div id="libraryUpdateProgress" class="atgv-upgrade-progress atgv-library-update-progress hidden" role="status" aria-live="polite" aria-atomic="true" tabindex="-1">
+      <div class="atgv-library-update-heading"><strong id="libraryUpdateProgressTitle">Preparing the SDLC Library update…</strong><span id="libraryUpdateProgressPercent">0%</span></div>
+      <div id="libraryUpdateProgressBar" class="atgv-library-update-track" role="progressbar" aria-label="Library update steps completed" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="libraryUpdateProgressIndicator" class="atgv-library-update-indicator"></span></div>
+      <p id="libraryUpdateProgressMessage">The current GitHub pull and verification stage will appear here.</p>
+    </div>
     <div class="atgv-upgrade-actions"><button type="button" id="libraryUpdateLater" class="secondary">Later</button><button type="button" id="libraryUpdatePull">Pull Library</button></div>
   </div></div>
   <div id="projectConnectionModal" class="modal-overlay hidden" aria-hidden="true"><div class="modal-card project-connection-modal-card" role="dialog" aria-modal="true" aria-labelledby="projectConnectionModalTitle"><div class="section-title"><div><h2 id="projectConnectionModalTitle">Project connection</h2><p id="projectConnectionModalDescription" class="muted">Test access before saving the project mapping.</p></div><button type="button" id="projectConnectionModalClose" class="secondary">Close</button></div><form id="projectConnectionForm"><label for="projectConnectionKey" id="projectConnectionKeyLabel">Project key</label><input id="projectConnectionKey" type="text" maxlength="40" autocomplete="off" spellcheck="false" required placeholder="Key" aria-describedby="projectConnectionTestStatus"><p id="projectConnectionTestStatus" role="status" aria-live="polite" class="test-status muted">Enter a key and test permissions before saving.</p><div class="stack actions"><button type="button" id="projectConnectionTest" class="secondary">Test Permissions</button><button type="submit" id="projectConnectionSave" disabled>Save Mapping</button><button type="button" id="projectConnectionCancel" class="secondary">Cancel</button></div></form></div></div>
@@ -209,6 +214,7 @@ function html(webview,{resumeLibrary=false}={}){
       <p class="muted">Updates are reviewed before applying; offline cache is retained.</p>
       <div class="stack actions"><button type="submit" id="catalogSave">Save Catalog Settings</button><button type="button" id="catalogTest" class="secondary">Test Connection</button><button type="button" id="catalogPull" class="secondary">Pull Catalog</button><button type="button" id="catalogCheck" class="secondary">View Updates</button></div>
       <p id="catalogStatus" class="test-status muted" role="status" aria-live="polite">Configure a repository to begin.</p>
+      <div id="catalogPullProgress" class="atgv-catalog-pull-progress hidden" role="status" aria-live="polite"><div class="atgv-library-update-heading"><strong id="catalogPullProgressTitle">Preparing catalog pull…</strong><span id="catalogPullProgressPercent">0%</span></div><div id="catalogPullProgressBar" class="atgv-library-update-track" role="progressbar" aria-label="SDLC Catalog pull stages completed" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="catalogPullProgressIndicator" class="atgv-library-update-indicator"></span></div><p id="catalogPullProgressMessage" class="muted">Installation stages will appear here.</p></div>
       <div id="catalogInstalled" class="catalog-snapshot" aria-live="polite">No downloaded catalog yet.</div>
       <div id="catalogContents" class="catalog-counts" aria-label="Installed SDLC Catalog contents"><span>Role skills: —</span><span>Tech stacks: —</span><span>Workflows: —</span><span>Templates: —</span></div>
       <p id="catalogUpdates" class="muted" role="status"></p>
