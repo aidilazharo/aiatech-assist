@@ -68,6 +68,12 @@ async function generatedCommitPlan(folder,stackIds){
  const files=await skeleton.skeletonFiles(stackIds,info.root);
  const meta=JSON.parse(await fs.readFile(path.join(info.root,'atgv.bootstrap.json'),'utf8'));
  const generated=require('./architect-scaffold-repair').checkInventory(meta,files);
+ const resolutions=meta.dependencyResolutions||[];
+ if(!Array.isArray(resolutions)||resolutions.length>50)throw Error('Invalid dependency recovery provenance. Review the starter manually.');
+ for(const item of resolutions){
+  if(!item||!generated.includes(item.path)||!['dotnet','maven'].includes(item.manager)||typeof item.package!=='string'||typeof item.from!=='string'||typeof item.to!=='string'||!files[item.path])throw Error('Invalid dependency recovery entry. Review the starter manually.');
+  files[item.path]=Buffer.from(require('./dependency-recovery').rewriteManifest(item.manager,files[item.path].toString('utf8'),item.package,item.from,item.to));
+ }
  const allowed=new Set(generated);
  const branch=await git(info.root,'branch','--show-current');
  const migration=meta.migration;

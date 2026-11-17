@@ -36,4 +36,12 @@ function codexCommand(binary, args = [], { platform = process.platform, exists =
     }
     return { bin: binary, args: [...args] };
 }
-module.exports = { npmCommand, codexCommand };
+function mavenCommand(args = [], { platform = process.platform, env = process.env } = {}) {
+    if (platform !== 'win32') return { bin: 'mvn', args: [...args] };
+    // Maven distributes mvn.cmd on Windows. Only accept literal arguments;
+    // quoting protects spaces and parentheses without allowing cmd expansion.
+    if (args.some(arg => /["% !&|<>^\r\n]/.test(String(arg))))
+        throw Error('Unsafe argument for the Windows Maven launcher.');
+    return { bin: env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', 'mvn.cmd ' + args.map(arg => '"' + arg + '"').join(' ')] };
+}
+module.exports = { npmCommand, codexCommand, mavenCommand };

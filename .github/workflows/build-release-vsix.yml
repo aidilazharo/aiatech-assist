@@ -71,6 +71,10 @@ jobs:
             'source_filename=ATGV-AIATECH-Assist-v' + pkg.version + '-Source.zip\n');
           NODE
 
+      - name: Verify the Copilot SDK runtime
+        if: steps.source.outputs.ready == 'true'
+        run: node scripts/verify-copilot-sdk.js
+
       - name: Run regression suite
         if: steps.source.outputs.ready == 'true'
         run: npm test

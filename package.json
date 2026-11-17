@@ -2,8 +2,8 @@
   "name": "atgv-aiatech-assist",
   "displayName": "ATGV AIATECH Assist",
   "description": "Webview-based SDLC work with ownership handoffs, Jira/GitHub actions, Confluence document sync and approved AI draft orchestration.",
-  "version": "0.3.94",
-  "atgvDisplayVersion": "0.3.94",
+  "version": "0.3.95",
+  "atgvDisplayVersion": "0.3.95",
   "publisher": "aia-my",
   "private": true,
   "license": "UNLICENSED",
@@ -31,7 +31,8 @@
     "onCommand:atgvAssist.refreshUnifiedArtifacts",
     "onCommand:atgvAssist.reset",
     "onCommand:atgvAssist.restart",
-    "onStartupFinished"
+    "onStartupFinished",
+    "onCommand:atgvAssist.reportIssue"
   ],
   "icon": "assets/icon.png",
   "contributes": {
@@ -60,6 +61,11 @@
         "command": "atgvAssist.reset",
         "title": "ATGV: Reset",
         "icon": "$(trash)"
+      },
+      {
+        "command": "atgvAssist.reportIssue",
+        "title": "ATGV: Report an Issue",
+        "icon": "$(report)"
       }
     ],
     "configuration": {
@@ -85,6 +91,7 @@
             "auto",
             "none",
             "ollama",
+            "copilot-sdk",
             "openai-compatible",
             "codex",
             "openai",
@@ -149,6 +156,16 @@
           "type": "boolean",
           "default": true,
           "description": "Check for updates after VS Code starts. Saved across ATGV resets."
+        },
+        "atgvAssist.selfImprovement.captureErrors": {
+          "type": "boolean",
+          "default": true,
+          "description": "Record sanitized ATGV errors locally for the issue-reporting workflow. Reports are never sent automatically."
+        },
+        "atgvAssist.selfImprovement.captureSlowOperations": {
+          "type": "boolean",
+          "default": true,
+          "description": "Record slow startup prerequisite scans locally for performance investigation."
         }
       }
     }

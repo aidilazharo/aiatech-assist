@@ -184,6 +184,7 @@ let deliveryState={items:[]},deliveryInfo=null,deliveryDraftDirty=false,delivery
 let spaceSearchSequence=0,gateSearchId=null,settingsSearchId=null,gateSearched=false,modelPickerChoice='',modelPickerCurrent='',modelPickerData=null,modelPickerSaving=false;
 let activeDoc=null,quill=null,docDirty=false,docMode='quill',docComplex=false,docSaving=false,docBackTo='work',documentOwner=null,documentOwnerScope='local',documentOwnerMe=null,documentOwnerCached=false,activeDiagram=null,diagramCanvas=null,diagramDirty=false,diagramSaving=false;
 const send=(command,extra={})=>vscode.postMessage({command,...extra});
+$('reportIssue')?.addEventListener('click',()=>send('openIssueReport',{screen:typeof view==='string'?view:''}));
 let aiChangeResolutionView=window.ATGVAIChangeResolution.createChangeResolutionView(
  document.getElementById('atgv-ai-change-resolution'),
  {send:message=>send('aiChangeResolution',{action:message.action,issueId:message.issueId,instructions:message.instructions})}
@@ -4432,20 +4433,21 @@ function renderAIProviderState(data){
  const chosen=read('aiProviderChoice');
  $('aiProviderState').textContent=chosen==='codex'?(data.codexInstalled?`Codex runtime: ${data.codexVersion||'installed'}. Connection: ${data.codexTransport==='default'?'Codex default (WebSocket possible)':'HTTPS only'}. Run Test AI Connection to verify sign-in.`:'Codex runtime not detected. Use Install Codex Automatically.'):['openai','anthropic','azure-openai','openai-compatible'].includes(chosen)?`API key: ${data.tokenSaved?'saved':'not saved'}. Run Test AI Connection.`:'Use Test AI Connection to confirm availability.';
  updateExtensionSettingBadges();
- $('aiCodexInstall').classList.toggle('hidden',!!data.codexInstalled||read('aiProviderChoice')!=='codex');
+ $('aiCodexInstall').classList.toggle('hidden',!!data.codexInstalled||read('aiProviderChoice')!=='codex');$('aiCopilotSdkInstall').classList.toggle('hidden',!!data.copilotSdkInstalled||read('aiProviderChoice')!=='copilot-sdk');
  $('aiProviderToken').closest('.field').classList.toggle('hidden',!['openai','anthropic','azure-openai','openai-compatible'].includes(read('aiProviderChoice')));syncAIProviderFields();
 }
 function syncAIProviderFields(){
  const provider=read('aiProviderChoice');
  $('aiCodexTransportField').classList.toggle('hidden',provider!=='codex');
  $('aiProviderEndpointField').classList.toggle('hidden',!['azure-openai','ollama','openai-compatible'].includes(provider));
- $('aiProviderModel').placeholder=provider==='codex'?'Optional: use default Codex model':'Enter approved model ID';
+ $('aiProviderModel').placeholder=provider==='codex'||provider==='copilot-sdk'?'Optional: use the provider default model':'Enter approved model ID';
 }
-$('aiProviderChoice').addEventListener('change',()=>{aiProviderEditing=true;const p=read('aiProviderChoice');$('aiCodexInstall').classList.toggle('hidden',p!=='codex');$('aiProviderToken').closest('.field').classList.toggle('hidden',!['openai','anthropic','azure-openai','openai-compatible'].includes(p));syncAIProviderFields();});
+$('aiProviderChoice').addEventListener('change',()=>{aiProviderEditing=true;const p=read('aiProviderChoice');$('aiCodexInstall').classList.toggle('hidden',p!=='codex');$('aiCopilotSdkInstall').classList.toggle('hidden',p!=='copilot-sdk');$('aiProviderToken').closest('.field').classList.toggle('hidden',!['openai','anthropic','azure-openai','openai-compatible'].includes(p));syncAIProviderFields();});
 for(const id of ['aiProviderModel','aiProviderEndpoint','aiCodexTransport'])$(id).addEventListener('input',()=>{aiProviderEditing=true;});
 $('aiProviderSave').addEventListener('click',()=>{aiProviderEditing=false;send('saveAiProvider',{provider:read('aiProviderChoice'),model:read('aiProviderModel'),endpoint:read('aiProviderEndpoint'),token:read('aiProviderToken'),codexTransport:read('aiCodexTransport')});$('aiProviderState').textContent='Saving provider…';});
 $('aiProviderTest').addEventListener('click',()=>{$('aiProviderState').textContent='Testing selected saved provider…';send('testAiProvider');});
 $('aiCodexInstall').addEventListener('click',()=>{$('aiProviderState').textContent='Preparing installation request…';send('installCodexRuntime');});
+$('aiCopilotSdkInstall').addEventListener('click',()=>{$('aiProviderState').textContent='Installing Copilot SDK…';send('installCopilotSdk');});
 $('aiProviderRefresh').addEventListener('click',()=>send('getAiProviderState'));
 window.addEventListener('message',event=>{const msg=event.data||{};if(msg.type==='aiProviderState')renderAIProviderState(msg.state);if(msg.type==='aiProviderAction'){$('aiProviderState').textContent=msg.message||'';$('aiProviderState').className=msg.success?'test-status success':'test-status error';if(msg.success){$('aiProviderToken').value='';settingsAiTested=true;}else settingsAiTested=false;updateExtensionSettingBadges();}});
 $('catalogAuth').addEventListener('change',()=>$('catalogTokenField').classList.toggle('hidden',read('catalogAuth')!=='token'));
@@ -6957,6 +6959,7 @@ function architectBegin(action,message){
  renderArchitectRequirements(projects.find(p=>p.id===activeId));
  $('architectBootstrapStatus').textContent=message;
  for(const id of ['architectSaveStack','architectResetStack','architectTestStack','architectApproveStack'])$(id).disabled=true;
+ $('architectStopInstall').disabled=action!=='architectSaveStack';
  send(action,{stackId:$('architectStackSelect').value});return true;
 }
 $('architectStackSelect').addEventListener('change',event=>{
@@ -6975,6 +6978,8 @@ $('architectSaveStack').addEventListener('click',()=>{
  if(!$('architectStackSelect').value){architectLastMessage='Choose a technology stack before saving.';$('architectBootstrapStatus').textContent=architectLastMessage;return;}
  architectBegin('architectSaveStack','Checking main, preparing the skeleton, installing, testing, launching and pushing…');
 });
+$('architectStopInstall').addEventListener('click',()=>{if(architectActionBusy&&architectPendingAction==='architectSaveStack'){$('architectStopInstall').disabled=true;send('architectStopInstall');}});
+$('architectDownloadDependencyHistory').addEventListener('click',()=>send('architectDownloadDependencyHistory'));
 $('architectTestStack').addEventListener('click',()=>architectBegin('architectTestStack','Testing, building and checking the selected stack…'));
 $('architectApproveStack').addEventListener('click',()=>architectBegin('architectApproveStack','Approving the tested stack for Developers…'));
 
@@ -7099,21 +7104,21 @@ window.addEventListener('message',event=>{
      $('architectStackSelect').value='';
    }
    live.active='';live.failed='';architectPendingAction='';
-   architectActionBusy=false;renderRoleWork();
+   $('architectStopInstall').disabled=true;architectActionBusy=false;renderRoleWork();
  }
  if(msg.type==='architectStackCancelled'||msg.type==='architectStackError'){
    if(msg.type==='architectStackError'&&msg.logAvailable)architectRecordErrorLog(msg);
    const live=architectChecklistSession($('architectStackSelect').value);
    if(msg.type==='architectStackError')live.failed=msg.failedStep||live.active||'dependencies';
-   live.active='';architectPendingAction='';architectActionBusy=false;
-   architectLastMessage=(msg.type==='architectStackCancelled'?'No changes made. ':'Stack action failed: ')+(msg.message||'');
+   live.active='';architectPendingAction='';architectActionBusy=false;$('architectStopInstall').disabled=true;
+   architectLastMessage=(msg.type==='architectStackCancelled'?'':'Stack action failed: ')+(msg.message||'');
    renderArchitectRequirements(projects.find(p=>p.id===activeId));
    $('architectBootstrapStatus').textContent=architectLastMessage;
    syncArchitectStackButtons(projects.find(p=>p.id===activeId));renderArchitectRequirements(projects.find(p=>p.id===activeId));
  }
  if(msg.type==='architectureRecommendation'&&$('architectBootstrapStatus'))$('architectBootstrapStatus').textContent=msg.value;
  if(msg.type==='architectureBootstrapResult'){
-  architectActionBusy=false;architectPendingAction='';
+  architectActionBusy=false;architectPendingAction='';$('architectStopInstall').disabled=true;
   architectChecklistSession($('architectStackSelect').value).active='';
   architectLastMessage=msg.value?.message||'Saved technology stack.';
   $('architectBootstrapStatus').textContent=architectLastMessage;

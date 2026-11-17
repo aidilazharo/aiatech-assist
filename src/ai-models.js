@@ -1,4 +1,5 @@
 'use strict';
+const path = require('node:path');
 const { validateUrl } = require('./utils');
 const { requestJson } = require('./clients');
 const { executeCodex } = require('./ai-provider-runtime');
@@ -58,6 +59,8 @@ async function resolveAiTarget({ vscodeApi, config = {}, secret = '', request = 
     }
     if (provider === 'codex')
         return { kind: 'codex', name: 'Codex agent', vendor: 'OpenAI', runtimeRoot, projectDirectory, transport: config.codexTransport || 'https', modelId: String(config.model || '').trim(), label: 'OpenAI Codex (local agent)' };
+    if (provider === 'copilot-sdk')
+        return { kind: 'copilot-sdk', name: 'Copilot SDK', vendor: 'GitHub', runtimeRoot, projectDirectory, modelId: String(config.model || '').trim(), label: 'Microsoft Copilot SDK' };
     if (['openai', 'anthropic', 'azure-openai'].includes(provider)) {
         if (!secret)
             throw Error(`${provider} credentials are missing. Open Settings → AI Providers and save your API key.`);
@@ -129,7 +132,12 @@ async function sendAiText({ vscodeApi, target, prompt, system = '', maxChars = 6
     }
     else {
         const messages = [...(system ? [{ role: 'system', content: system }] : []), { role: 'user', content: prompt }];
-        if (target.kind === 'codex') {
+        if (target.kind === 'copilot-sdk') {
+            const copilot = require('./copilot-repair-sdk');
+            text = await copilot.analyze(path.dirname(target.runtimeRoot), {cwd: target.projectDirectory || target.runtimeRoot, prompt: system ? `${system}\n\nUSER REQUEST:\n${prompt}` : prompt, signal, model: target.modelId});
+            if (text.length > maxChars) throw Error('AI response exceeds the allowed size.');
+        }
+        else if (target.kind === 'codex') {
             text = await executeCodex({ runtimeRoot: target.runtimeRoot, cwd: target.projectDirectory, prompt, system, signal, maxChars, transport: target.transport, model: target.modelId });
         }
         else if (target.kind === 'openai') {
