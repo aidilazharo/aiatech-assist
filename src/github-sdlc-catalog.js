@@ -561,8 +561,14 @@ async function syncGitCatalogCheckout(workspace, remoteUrl, repository, token=''
             const stage = reusedStage || path.join(root, '.sdlc-catalog-clone-' + crypto.randomUUID());
             let validated = false, promoted = false;
             try {
-                if (!reusedStage)
-                    await git(root, ['clone', '--single-branch', '--branch', 'main', '--', remoteUrl, stage]);
+                if (!reusedStage) {
+                    try { await git(root, ['clone', '--single-branch', '--branch', 'main', '--', remoteUrl, stage]); }
+                    catch (error) {
+                        if (/Remote branch main not found in upstream origin/i.test(String(error?.message || error)))
+                            throw Error('SDLC Catalog GitHub repository has no main branch. The SDLC Library requires main; verify the configured library URL and initialize or publish main before pulling. No existing library files were replaced.');
+                        throw error;
+                    }
+                }
                 const snapshot = await inspectGitCheckout(stage, repository);
                 const stagedOrigin = await git(stage, ['remote', 'get-url', 'origin']);
                 if (!sameGitRemote(stagedOrigin, remoteUrl)) throw Error('Cloned SDLC Catalog origin does not match the configured repository.');
