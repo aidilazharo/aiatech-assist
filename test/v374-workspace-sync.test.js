@@ -120,7 +120,7 @@ test('sync copies real tracked files, skips release workflows and creates a revi
   if(bin==='git'&&args[0]==='remote'&&args[1]==='get-url')return 'https://github.com/Acme/repo-b.git';
   return git(args,cwd||temp);
  };
- const result=await sync.sync({sourceUrl:'https://github.com/Acme/repo-a',destinationUrl:'https://github.com/Acme/repo-b',destinationFolder:target,sourcePat:'ghp_'+'s'.repeat(40),destPat:'ghp_'+'d'.repeat(40),runner,githubApi});
+ const result=await sync.sync({sourceUrl:'https://github.com/Acme/repo-a',sourceBranch:'main',destinationUrl:'https://github.com/Acme/repo-b',destinationFolder:target,sourcePat:'ghp_'+'s'.repeat(40),destPat:'ghp_'+'d'.repeat(40),runner,githubApi});
  assert.equal(result.prUrl,'https://github.com/Acme/repo-b/pull/17');
  await assert.rejects(()=>sync.sync({sourceUrl:'https://github.com/Acme/repo-a',destinationUrl:'https://github.com/Acme/wrong',destinationFolder:target,sourcePat:'ghp_'+'s'.repeat(40),destPat:'ghp_'+'d'.repeat(40),runner,githubApi}),/Repo B URL differs/);
  assert.equal(result.sourceSha,sourceSha);
