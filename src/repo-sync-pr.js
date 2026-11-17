@@ -164,8 +164,9 @@ async function readSourceFacts({cloned,source,chosenBranch,sha,sourceMessage,fil
   sourceCommitMessage:sourceMessage.slice(0,700),project,
   destinationRepo:destination.name,baseBranch:base,files:files.slice(0,80),fileCount:files.length};
 }
-async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.',sourceBranch='main',baseBranch='',sourcePat,destPat,workspaceRoot='',onProgress=()=>{},runner=run,githubApi=githubApiDefault,describePr=async()=>'',planSync=async()=>null}){
- const source=githubUrl(sourceUrl),scope=scopeName(copyScope),chosenBranch=baseName(sourceBranch||'main');
+async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.',sourceBranch='',baseBranch='',sourcePat,destPat,workspaceRoot='',onProgress=()=>{},runner=run,githubApi=githubApiDefault,describePr=async()=>'',planSync=async()=>null}){
+ const source=githubUrl(sourceUrl),scope=scopeName(copyScope);
+ let chosenBranch=sourceBranch?baseName(sourceBranch):'';
  const sourceEnv=patEnvironment(sourcePat),destinationEnv=patEnvironment(destPat);
  const destRoot=await fs.realpath(String(destinationFolder||''));
  const stat=await fs.lstat(destRoot);
@@ -202,7 +203,21 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
  const remote=await githubApi.getRepository(destination,destPat);
  if(remote.nameWithOwner?.toLowerCase()!==destination.name.toLowerCase())throw Error('Repo B GitHub identity differs from local origin.');
  const base=baseName(baseBranch||remote.defaultBranch);
+ // Only an explicitly selected Source branch is forced. Otherwise use the
+ // verified GitHub default (which may be master, develop, etc.).
+ if(!chosenBranch){
+  const sourceInfo=await githubApi.getSourceRepository(source,sourcePat);
+  if(sourceInfo.nameWithOwner?.toLowerCase()!==source.name.toLowerCase())throw Error('Repo A source identity differs from GitHub; refusing to clone.');
+  chosenBranch=baseName(sourceInfo.defaultBranch);
+ }
  if(!alreadyCloned){
+  // A new/empty GitHub repo can advertise 'main' without having any commits.
+  // A PR requires a real destination base: never initialize or push main here.
+  const baseRefs=await runner('git',['ls-remote','--heads','--',destination.url,'refs/heads/'+base],{
+   cwd:destRoot,timeout:120000,env:destinationEnv
+  });
+  if(!String(baseRefs||'').split(/\r?\n/).some(line=>line.endsWith('\trefs/heads/'+base)))
+   throw Error('Repo B has no branch "'+base+'". If this GitHub repository is empty, create its first commit on the intended default branch before running Repo Sync. No files were changed.');
   await notify('destination','Cloning '+destination.name+' / '+base+' into the selected empty Repo B folder…');
   // Git refuses to clone into a nonempty directory. Do not delete or reset user files.
   await runner('git',['clone','--quiet','--single-branch','--branch',base,'--',destination.url,'.'],{
@@ -227,7 +242,13 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
  let files=[],switched=false,pushed=false;
  try{
   const cloned=path.join(temp,'repo-a');
-  await runner('git',['clone','--quiet','--depth','1','--single-branch','--branch',chosenBranch,source.url,cloned],{timeout:180000,env:sourceEnv});
+  try{
+   await runner('git',['clone','--quiet','--depth','1','--single-branch','--branch',chosenBranch,source.url,cloned],{timeout:180000,env:sourceEnv});
+  }catch(error){
+   if(/Remote branch .* not found in upstream origin/i.test(String(error?.message||error)))
+    throw Error('Repo A has no source branch "'+chosenBranch+'". Select an existing branch or leave Source branch blank to use the GitHub default. No Repo B changes were published.');
+   throw error;
+  }
   const sha=await runner('git',['rev-parse','HEAD'],{cwd:cloned});
   if(!/^[a-f0-9]{40}$/.test(sha))throw Error('Could not verify Repo A source commit.');
   const sourceMessage=(await runner('git',['log','-1','--pretty=%B'],{cwd:cloned})).trim();
