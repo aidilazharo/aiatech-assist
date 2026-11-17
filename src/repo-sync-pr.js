@@ -61,7 +61,9 @@ function genericMessage(message){
   /^(?:sync|copy|import|pull|merge)(?:\s+.+)?\s+from\s+(?:main|master|develop|dev|[a-z0-9./-]+)$/.test(value)||
   /^(?:sync|update|copy|import|pull|refresh)(?:\s+(?:the\s+)?(?:latest\s+)?(?:repo|repository|files|source|code|changes|updates|library|catalog|content|project|improvements))?$/.test(value)||
   /^(?:merge|rebase)\s+(?:branch|pull request)\b/.test(value)||
-  /^(?:initial commit|minor changes|misc changes|various updates)$/.test(value);
+  /^(?:sync|copy|import)\b.*\b(?:via|using)\s+(?:ai|automation|repo sync)\b/.test(value)||
+  /^(?:sync|copy|import)\b.*\b(?:improvements|updates|changes)$/.test(value)||
+  /^(?:initial (?:commit|repo|repository)(?: .*)?|minor changes|misc changes|various updates)$/.test(value);
 }
 function pathsSummary(files=[]){
  const paths=[...new Set((Array.isArray(files)?files:[]).map(x=>String(x||'').trim()).filter(x=>x&&isAllowedPath(x)))].slice(0,2);
@@ -108,7 +110,9 @@ function prDetails({source,destination,sha,scope,base,branch,count,changedFiles=
    '',
    '## Source',
    '- '+source.name+' ('+(sourceBranch||'default')+' @ '+short+')',
+   '- Commit: '+sha,
    '- Target: '+destination.name+' / '+base,
+   '- PR base: '+base,
    '- Review branch: '+branch,
    '- Copy scope: '+(scope==='.'?'eligible tracked files':scope),
    '',
@@ -187,7 +191,7 @@ function aiSyncPlan(raw,source){
  // Enforce Repo A namespace and reject generic branch names.
  if(!branch.startsWith(prefix)||!/^[a-z0-9/_-]+$/.test(branch)||branch.includes('..')||branch.includes('//')||branch.endsWith('/'))branch='';
  if(branch)try{baseName(branch);}catch{branch='';}
- const suffix=branch.slice(prefix.length).replace(/[-_/]+/g,' ');
+ const suffix=branch.slice(prefix.length).replace(/-[a-f0-9]{8,10}$/i,'').replace(/[-_/]+/g,' ');
  if(branch&&(genericMessage(suffix)||/^(?:main|master|develop|dev|source|latest|sync|updates|changes)$/.test(suffix)))branch='';
  const commitMessage=cleanAiField(raw.commitMessage,110);
  const prTitle=cleanAiField(raw.prTitle,110);
