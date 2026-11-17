@@ -195,7 +195,7 @@ let workspaceOverridePath=null,startupScan={status:'idle',percent:0,message:''},
 let ownershipRetryTimer=null,ownershipOfflineUntil=0,aiServiceTimer=null,aiServiceBusy=false,autoSyncTimer=null,jiraMonitorTimer=null,jiraMonitorBusy=false,autoSyncBusy=false,context,output,tree,registry,activeProject,store,dashboard,ready=Promise.resolve(),activationEpoch=0,extensionSettings={},pendingTests={jira:null,github:null},openingFlow=new OpeningFlow(),discoveredSpaces=[],discoveredJiraProjects=[],openingLocked=false,openingGeneration=0,openingOffline=false,verifiedConnections=new Map(),approvedJiraPreviewRevision=null,approvedJiraPreviewBinding=null,jiraSyncBusy=false,jiraPreviewValidation=null,roleRepairPreviewContext=null,roleRepairBusy=false;
 const cfg=()=>vscode.workspace.getConfiguration('atgvAssist');
 let liveRemoteTimer=null,liveRemoteBusy=false,liveRemoteState={projectId:'',phase:'idle',lastAttempt:'',lastSuccess:'',results:{},errors:{}};
-let catalogRemote=null,catalogLastCheck='',catalogLastError='',catalogBusy=false,catalogWatch=null,installedVendorAssets=null,webviewVendorDir=null,vendorLibraryLastError='',vendorBootRecoveryCount=0,vendorWebviewReady=false;
+let catalogRemote=null,catalogLastCheck='',catalogLastError='',catalogBusy=false,catalogWatch=null,installedVendorAssets=null,webviewVendorDir=null,vendorLibraryLastError='',vendorBootRecoveryCount=0,vendorWebviewReady=false,webviewCoreReady=false,webviewCssRetry=0;
 // External webview libraries must come from a validated GitHub catalog commit.
 // The last verified install works offline; unverified updates never execute.
 async function prepareVendorAssets({syncIfMissing=false}={}){
@@ -1299,7 +1299,7 @@ async function focusAtgvWorkspace(){
   }
 }
 async function finishManualProjectDiscovery(sequence){
- if(sequence!==startupSequence)return;
+ if(sequence!==startupSequence||!webviewCoreReady)return;
  startupScan={status:'complete',percent:100,message:'Review technology stack prerequisites and test Jira, Confluence and GitHub connections first. Choose a project only after setup is verified.'};
  await dashboard?.webview.postMessage({type:'startupScan',...startupScan});
  await refreshDashboard();
@@ -1325,7 +1325,7 @@ async function start(options={}){
     return;
   }
   await focusAtgvWorkspace();
-  vendorBootRecoveryCount=0;
+  vendorBootRecoveryCount=0;webviewCssRetry=0;webviewCoreReady=false;
   await prepareVendorAssets({syncIfMissing:true});
                                                                              
                                                                    
@@ -4115,7 +4115,24 @@ async function handleDashboardMessage(msg){
         catch(error){await dashboard?.webview.postMessage({type:'localBackupAction',action:'restore',success:false,message:error.message});throw error;}
         break;
       }
-      case 'refresh':await refreshLiveRemoteData({reason:'manual-refresh',force:true});await refreshDashboard();break;
+      case 'webviewReady':{
+         // Do not push project state before the final controller and core CSS load.
+         if(!msg.coreStylesLoaded&&webviewCssRetry<1&&dashboard){
+           webviewCssRetry++;
+           report('ATGV stylesheet load failed; rebuilding webview once: '+(msg.loadErrors||[]).slice(0,8).join('; '));
+           dashboard.webview.html=html(dashboard.webview);
+           break;
+         }
+         webviewCoreReady=true;
+         if(!msg.coreStylesLoaded){
+           const detail=(Array.isArray(msg.loadErrors)?msg.loadErrors:[]).slice(0,12).join('; ');
+           report('ATGV core CSS unavailable: '+detail);
+           await recordStartupDiagnostic({stage:'webview-assets',status:'failed',detail});
+         }
+         await finishManualProjectDiscovery(startupSequence);
+         break;
+       }
+       case 'refresh':if(!webviewCoreReady)break;await refreshLiveRemoteData({reason:'manual-refresh',force:true});await refreshDashboard();break;
       case 'refreshConnectedSources':{
         requireOpened();
         await refreshLiveRemoteData({reason:'view-open'});
