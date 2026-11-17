@@ -6210,7 +6210,9 @@ async function handleDashboardMessage(msg){
           await progress('running',35,'Checking library revision','Reading the pinned GitHub main snapshot and validated catalog version.');
           const pinned=await sdlcCatalog.remoteVersion(config,token);
           await progress('running',50,'Pulling library files…','Fetching GitHub main into the workspace SDLC Catalog checkout. This stage can take longer for large libraries.');
-          const snapshot=await sdlcCatalog.syncGitWorkspace(config,token,getWorkspace().uri.fsPath,context.globalStorageUri.fsPath);
+          const snapshot=await sdlcCatalog.syncGitWorkspace(config,token,getWorkspace().uri.fsPath,context.globalStorageUri.fsPath,{
+            onProgress:async event=>progress('running',event.percent,event.title,event.message)
+          });
           await progress('running',75,'Library files downloaded','Checking the active checkout, manifest version, and expected commit.');
           const selected=await sdlcCatalog.activeRoot(getWorkspace().uri.fsPath);
           libraryUpdateVersion.verifyActivatedPull(pinned,selected);
@@ -6219,7 +6221,8 @@ async function handleDashboardMessage(msg){
           catalogRemote={sha:pinned.sha,repository:pinned.repository,version:pinned.version};catalogLastError='';catalogLastCheck=new Date().toISOString();
           const message=selected.offline?
             'GitHub main v'+pinned.version+' was verified, but newer ZIP v'+selected.version+' remains active.':
-            'Installed Library v'+selected.version+' from GitHub main ('+selected.sha.slice(0,12)+'): '+snapshot.roleCount+' roles and '+snapshot.stackCount+' tech stacks.';
+            'Installed Library v'+selected.version+' from GitHub main ('+selected.sha.slice(0,12)+'): '+snapshot.roleCount+' roles and '+snapshot.stackCount+' tech stacks.'+
+            (snapshot.backupPath?' Original modified catalog preserved at '+snapshot.backupPath+'.':'');
           await dashboard?.webview.postMessage({type:'catalogAction',action:'pull',success:true,message});
           if(activeProject&&getWorkspace()){
             const available=await sdlcCatalog.designFrameworkAvailability(getWorkspace().uri.fsPath);
