@@ -70,4 +70,5 @@ test('successful Test & Save hides and disables action, changes restore it, and 
  assert.equal(node('startupGithubToken').disabled,true);
  assert.equal(node('startupJiraUrl').disabled,true);
  assert.equal(node('startupProjectRepo').disabled,true);
+ assert.equal(node('startupLibraryZipUpload').disabled,true);
 });
