@@ -433,6 +433,18 @@ function extractGreenFailureDetails(logs,maxLength=6500){
   if(failures.length>=4)break;
  }
  if(failures.length)return failures.join('\n').slice(0,maxLength);
+ // Node 24's default spec reporter lists detailed failures under this heading
+ // instead of TAP "not ok" lines. Preserve the test title and assertion values.
+ const specStart=lines.findIndex(line=>/^\s*✖\s+failing tests:\s*$/.test(line));
+ if(specStart>=0){
+  for(let i=specStart+1;i<lines.length&&failures.length<4;i++){
+   const match=lines[i].match(/^\s*✖\s+(.+?)\s+\([\d.]+(?:ms|s)\)\s*$/);if(!match)continue;
+   const section=[];for(let j=i+1;j<lines.length&&section.length<100;j++){if(/^\s*✖\s+.+?\s+\([\d.]+(?:ms|s)\)\s*$/.test(lines[j]))break;section.push(lines[j]);}
+   const body=section.join('\n'),field=name=>{const found=body.match(new RegExp('^\\s*'+name+':\\s*(.+?)[,]?\\s*$','m'));return found?found[1].trim().replace(/,$/,'').replace(/^(?:'([^']*)'|"([^"]*)")$/,(all,a,b)=>a||b).slice(0,200):'';};
+   failures.push([match[1].trim(),field('expected')?'expected='+field('expected'):'',field('actual')?'actual='+field('actual'):'',field('operator')?'operator='+field('operator'):''].filter(Boolean).join(' | '));
+  }
+ }
+ if(failures.length)return failures.join('\n').slice(0,maxLength);
  const extracted=lines.map(x=>x.trim()).filter(x=>/(?:not ok\s*-|AssertionError|TypeError|ReferenceError|SyntaxError|ERR_[A-Z_]+|Error:|expected[:=]|actual[:=]|operator[:=])/i.test(x)).slice(0,10);
  return (extracted.join(' | ')||lines.map(x=>x.trim()).filter(Boolean).at(-1)||'Test runner returned a nonzero exit code without details').slice(0,maxLength);
 }

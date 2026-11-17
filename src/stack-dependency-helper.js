@@ -9,11 +9,12 @@ const os=require('node:os');
 const {execFile}=require('node:child_process');
 const {promisify}=require('node:util');
 const diagnostic=require('./stack-process-diagnostics');
-const {npmCommand}=require('./platform-process');
+const {npmCommand,mavenCommand}=require('./platform-process');
+const recovery=require('./dependency-recovery');
 const execute=promisify(execFile);
 const ALLOWED=new Set(['','apps/web','services/api']);
 const LIMIT=8*1024*1024;
-function commandFor(name,args){return name==='npm'?npmCommand(args):{bin:name,args};}
+function commandFor(name,args){return name==='npm'?npmCommand(args):name==='mvn'?mavenCommand(args):{bin:name,args};}
 async function isFile(file){const st=await fs.lstat(file).catch(()=>null);return Boolean(st?.isFile()&&!st.isSymbolicLink());}
 async function directory(root,relative){
  if(!ALLOWED.has(relative)||relative.includes('..'))throw Error('Unsupported application directory.');
@@ -51,9 +52,9 @@ async function nativePlatformMismatch(cwd,{platform=process.platform,arch=proces
  return false;
 }
 const RUN_TIMEOUT=6*60*1000;
-async function run({stage,bin,args,cwd,runner=execute,onDiagnostic=async()=>{},env={}}){
+async function run({stage,bin,args,cwd,runner=execute,onDiagnostic=async()=>{},env={},signal}){
  const command=commandFor(bin,args),cmd=command.bin,commandArgs=command.args,options={cwd,timeout:RUN_TIMEOUT,maxBuffer:LIMIT,windowsHide:true,shell:false,
-  env:{...process.env,CI:'1',GIT_TERMINAL_PROMPT:'0',...env}};
+  signal,env:{...process.env,CI:'1',GIT_TERMINAL_PROMPT:'0',...env}};
  try{
   const {stdout='',stderr=''}=await runner(cmd,commandArgs,options);
   await onDiagnostic(diagnostic.capture({stage,bin:cmd,args:commandArgs,cwd,stdout,stderr,exitCode:0}));
@@ -64,6 +65,8 @@ async function run({stage,bin,args,cwd,runner=execute,onDiagnostic=async()=>{},e
   let message=stage+' failed. Download the error log for command output.';
   if(error.code==='ENOENT')message=cmd+' was not found. Install its official runtime/SDK, restart VS Code, and retry. No system software was installed automatically.';
   const failure=Error(message);failure.diagnosticLogs=record;
+  failure.cancelled=error.name==='AbortError'||error.code==='ABORT_ERR'||signal?.aborted===true;
+  if(failure.cancelled)failure.message='Dependency installation stopped. Recorded failed versions will be avoided when you retry.';
   // npm's global cache can contain root-owned files on macOS. Restrict
   // fallback to that exact error; never bypass general filesystem permissions.
   const output=String(error.stderr||'')+'\n'+String(error.message||'');
@@ -111,7 +114,77 @@ async function installNpmWithCacheRecovery(options,onProgress){
  // private content-addressed cache across fresh worktrees on this machine.
  // Explicitly setting both forms prevents npm inheriting a stale global cache.
  const env={...(options.env||{}),npm_config_cache:cache,NPM_CONFIG_CACHE:cache};
- return run({...options,stage,bin:'npm',args,env});
+ const manifest=JSON.parse(await fs.readFile(path.join(options.cwd,'package.json'),'utf8'));
+ const declared={...(manifest.dependencies||{}),...(manifest.devDependencies||{}),...(manifest.optionalDependencies||{})};
+ const selected={};
+ const choose=async name=>{
+  const failed=await recovery.failedVersions('npm',name,{file:options.historyFile});
+  const list=await recovery.npmCandidates(name,declared[name],{cwd:options.cwd,runner:options.runner,env,signal:options.signal});
+  const candidate=list.find(v=>!failed.has(v));
+  if(!candidate)throw Error('No unfailed version of '+name+' matches the approved package range '+declared[name]+'. Review the dependency or registry; no incompatible version was selected.');
+  selected[name]=candidate;await onProgress('Trying '+name+'@'+candidate+' (latest compatible version not recorded as failed).');
+ };
+ // Consult persisted failures before the first install, including after restart.
+ for(const name of Object.keys(declared))if((await recovery.failedVersions('npm',name,{file:options.historyFile})).size)await choose(name);
+ for(let attempt=0;attempt<12;attempt++){
+  const override=Object.entries(selected).map(([name,version])=>name+'@'+version);
+  const plan=override.length?['install','--no-save','--package-lock=false','--ignore-scripts','--include=optional','--include=dev','--no-audit','--no-fund',...override]:args;
+  try{return await run({...options,stage:override.length?'npm install (compatible recovery)':stage,bin:'npm',args:plan,env});}
+  catch(error){
+   if(error.cancelled||options.signal?.aborted)throw error;
+   const details=String(error.diagnosticLogs||error.message||error),failure=recovery.parseFailure('npm',details);
+   await recovery.record({manager:'npm',package:failure?.package||'',version:failure?.version||'',kind:failure?'version':'failure',error:details},{file:options.historyFile});
+   if(!failure||!Object.prototype.hasOwnProperty.call(declared,failure.package))throw error;
+   await onProgress('Recorded npm failure '+failure.package+'@'+failure.version+'; looking for another compatible version.');
+   await choose(failure.package);
+  }
+ }
+ throw Error('Dependency recovery stopped after 12 attempts. Review the recorded errors and approved dependency ranges.');
+}
+async function restoreNativeWithRecovery(root,target,options,{onProgress,allowManifestRecovery=false}={}){
+ const manager=target.kind;
+ const choose=async item=>{
+  if(!allowManifestRecovery)throw Error('A failed '+manager+' dependency version is recorded. Automatic manifest changes require a verified ATGV starter; review '+item.name+' manually.');
+  const failed=await recovery.failedVersions(manager,item.name,{file:options.historyFile});
+  const major=item.version.split('.')[0];
+  const available=manager==='dotnet'
+   ?await recovery.nugetCandidates(item.name,{cwd:options.cwd,runner:options.runner,signal:options.signal})
+   :await recovery.mavenCandidates(item.name,major,{cwd:options.cwd,runner:options.runner,signal:options.signal});
+  const candidate=available.find(v=>v.split('.')[0]===major&&!failed.has(v));
+  if(!candidate)throw Error('No unfailed '+manager+' version in major '+major+' is available for '+item.name+'. Review the dependency and configured registry.');
+  await recovery.applyNativeResolution(root,item,candidate,manager);
+  await onProgress('Trying '+item.name+' '+candidate+' (latest available in the approved major version).');
+ };
+ // Resume from persistent history before invoking a known-bad version again.
+ for(const item of await recovery.nativeManifests(options.cwd,manager)){
+  const failed=await recovery.failedVersions(manager,item.name,{file:options.historyFile});
+  if(failed.has(item.version))await choose(item);
+ }
+ for(let attempt=0;attempt<12;attempt++){
+  try{
+   if(manager==='dotnet'){
+    await run({stage:'dotnet restore',bin:'dotnet',args:['restore'],...options});
+    const manifests=await recovery.nativeManifests(options.cwd,manager);
+    const projects=[...new Set(manifests.map(x=>x.file).filter(file=>/(?:^|[\\/])tests?[\\/]/i.test(file)))];
+    for(const file of projects)await run({stage:'dotnet test project restore',bin:'dotnet',args:['restore',file],...options});
+   }else await run({stage:'Maven dependency resolution',bin:'mvn',args:['-B','-ntp','dependency:go-offline'],...options});
+   return;
+  }catch(error){
+   if(error.cancelled||options.signal?.aborted)throw error;
+   const details=String(error.diagnosticLogs||error.message||error),failure=recovery.parseFailure(manager,details);
+   await recovery.record({manager,package:failure?.package||'',version:failure?.version||'',kind:failure?'version':'failure',error:details},{file:options.historyFile});
+   if(!failure)throw error;
+   const manifests=await recovery.nativeManifests(options.cwd,manager);
+   const item=manifests.find(x=>x.name.toLowerCase()===failure.package.toLowerCase()&&x.version===failure.version);
+   if(!item)throw Error('Recorded '+failure.package+' '+failure.version+' failure. The failed package is not an explicit version in a managed starter; review the dependency manually.');
+   await onProgress('Recorded '+failure.package+' '+failure.version+' failure; checking another version.');await choose(item);
+  }
+ }
+ throw Error('Dependency recovery stopped after 12 attempts. Review the recorded failures.');
+}
+async function nativeToolCheck(manager,stage,bin,args,options){
+ try{return await run({stage,bin,args,...options});}
+ catch(error){if(!error.cancelled&&!options.signal?.aborted)await recovery.record({manager,kind:'failure',error:String(error.diagnosticLogs||error.message||error)},{file:options.historyFile});throw error;}
 }
 // Validation is independent of npm ls: it catches package trees copied from
 // a different OS (notably libsql) and launch shims copied from macOS (Vite).
@@ -163,18 +236,25 @@ async function verifyPlatformPackages(cwd,{platform=process.platform,arch=proces
  return result;
 }
 
-async function ensureForTarget(root,target,{runner=execute,onDiagnostic=async()=>{},onProgress=async()=>{},installMode='auto'}={}){
+async function ensureForTarget(root,target,{runner=execute,onDiagnostic=async()=>{},onProgress=async()=>{},installMode='auto',signal,historyFile,allowManifestRecovery=false}={}){
  if(!target||!['npm','dotnet','maven'].includes(target.kind))throw Error('Unsupported project dependency manager.');
  const cwd=await directory(root,target.relative||'');
- const options={cwd,runner,onDiagnostic};
+ const options={cwd,runner,onDiagnostic,signal,historyFile};
  if(target.kind==='npm'){
   if(!['auto','fresh'].includes(installMode))throw Error('Unsupported npm dependency installation mode.');
   const nodeModulesPath=path.join(cwd,'node_modules');
   const nodeModules=await fs.lstat(nodeModulesPath).catch(()=>null);
   const missing=await missingNpmPackages(cwd);
   const wrongPlatform=nodeModules?.isDirectory()?await nativePlatformMismatch(cwd):false;
+  const previouslyFailed=[];
+  if(nodeModules?.isDirectory())for(const name of await npmManifest(cwd)){
+   const manifest=path.join(nodeModulesPath,...name.split('/'),'package.json');
+   if(!await isFile(manifest))continue;
+   let installed;try{installed=JSON.parse(await fs.readFile(manifest,'utf8'));}catch{previouslyFailed.push(name+' (invalid installed manifest)');continue;}
+   if(installed.version&&(await recovery.failedVersions('npm',name,{file:historyFile})).has(installed.version))previouslyFailed.push(name+'@'+installed.version);
+  }
   let invalidNativeOrCli=false;
-  let needsInstall=installMode==='fresh'||!nodeModules?.isDirectory()||missing.length>0||wrongPlatform;
+  let needsInstall=installMode==='fresh'||!nodeModules?.isDirectory()||missing.length>0||wrongPlatform||previouslyFailed.length>0;
   if(!needsInstall){
    try{await verifyPlatformPackages(cwd,{runner,onDiagnostic});}
    catch{invalidNativeOrCli=true;needsInstall=true;}
@@ -190,7 +270,7 @@ async function ensureForTarget(root,target,{runner=execute,onDiagnostic=async()=
    if(nodeModules&&(installMode==='fresh'||wrongPlatform||invalidNativeOrCli)){
     await fs.rm(nodeModulesPath,{recursive:true,force:true});
    }
-   await onProgress('Installing dependencies for '+process.platform+'/'+process.arch+' with npm'+(missing.length?' (missing: '+missing.join(', ')+')':'')+'…');
+   await onProgress('Installing dependencies for '+process.platform+'/'+process.arch+' with npm'+(missing.length?' (missing: '+missing.join(', ')+')':'')+(previouslyFailed.length?' (replacing recorded failures: '+previouslyFailed.join(', ')+')':'')+'…');
    await installNpmWithCacheRecovery(options,onProgress);
    const remaining=await missingNpmPackages(cwd);
    if(remaining.length){
@@ -205,14 +285,14 @@ async function ensureForTarget(root,target,{runner=execute,onDiagnostic=async()=
  }
  if(target.kind==='dotnet'){
   await onProgress('Restoring NuGet packages for .NET…');
-  await run({stage:'.NET SDK check',bin:'dotnet',args:['--version'],...options});
-  await run({stage:'dotnet restore',bin:'dotnet',args:['restore'],...options});
+  await nativeToolCheck('dotnet','.NET SDK check','dotnet',['--version'],options);
+  await restoreNativeWithRecovery(root,target,options,{onProgress,allowManifestRecovery});
   return {kind:'dotnet',cwd,installed:true,verified:true};
  }
  await onProgress('Resolving Maven dependencies for Spring Boot…');
- await run({stage:'Java runtime check',bin:'java',args:['-version'],...options});
- await run({stage:'Maven runtime check',bin:'mvn',args:['--version'],...options});
- await run({stage:'Maven dependency resolution',bin:'mvn',args:['-B','-ntp','dependency:go-offline'],...options});
+ await nativeToolCheck('maven','Java runtime check','java',['-version'],options);
+ await nativeToolCheck('maven','Maven runtime check','mvn',['--version'],options);
+ await restoreNativeWithRecovery(root,target,options,{onProgress,allowManifestRecovery});
  return {kind:'maven',cwd,installed:true,verified:true};
 }
 async function ensureAll(root,targets,{onProgress=async()=>{},...options}={}){
@@ -224,4 +304,4 @@ async function ensureAll(root,targets,{onProgress=async()=>{},...options}={}){
  }
  return output;
 }
-module.exports={ensureForTarget,ensureAll,missingNpmPackages,npmManifest,directory,isolatedNpmCache,installNpmWithCacheRecovery,npmInstallPlan,nativePlatformMismatch,nativeTriple,verifyPlatformPackages};
+module.exports={ensureForTarget,ensureAll,missingNpmPackages,npmManifest,directory,isolatedNpmCache,installNpmWithCacheRecovery,restoreNativeWithRecovery,npmInstallPlan,nativePlatformMismatch,nativeTriple,verifyPlatformPackages};

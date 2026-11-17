@@ -51,6 +51,9 @@ const startupSetup=require('../startup-setup');
 const startupInstall=require('../startup-install');
 const installCache=require('../../library-install-cache');
 const startupDiagnostics=require('../startup-diagnostics');
+const {SelfImprovement}=require('../../self-improvement');
+const selfImprovementView=require('../../self-improvement-view');
+const copilotRepairSdk=require('../../copilot-repair-sdk');
 const jiraControl=require('../../jira-change-control');
 const jiraDuplicates=require('../../jira-duplicate-cleanup');
 const jiraProjectInventory=require('../../jira-project-inventory');
@@ -623,7 +626,7 @@ async function aiProviderState(){
  const conf=cfg(),provider=conf.get('rag.provider','auto');
  const key=await context.secrets.get(aiSecretKey(provider));
  const codex=await checkCodex(aiRuntimeRoot());
- return {provider,model:conf.get('rag.model',''),endpoint:conf.get('rag.endpoint',''),codexTransport:conf.get('ai.codexTransport','https'),tokenSaved:!!key,codexInstalled:codex.installed,codexVersion:codex.version||'',codexReason:codex.reason||''};
+ return {provider,model:conf.get('rag.model',''),endpoint:conf.get('rag.endpoint',''),codexTransport:conf.get('ai.codexTransport','https'),tokenSaved:!!key,codexInstalled:codex.installed,codexVersion:codex.version||'',codexReason:codex.reason||'',copilotSdkInstalled:await copilotRepairSdk.installed(context.globalStorageUri.fsPath)};
 }
 async function activeAiTarget(){
  const conf=cfg(),provider=conf.get('rag.provider','auto');
@@ -749,7 +752,25 @@ async function setLlmToken(){
   invalidateModelStatus();await refreshDashboard();
   uiInformation('Model provider API key saved securely.');
 }
-async function guarded(fn){try{return await fn();}catch(e){report('ERROR '+e.message);uiError('ATGV AIATECH Assist: '+e.message);return undefined;}}
+let selfImprovementManager=null;
+let architectInstallAbort=null;
+function captureLocalIssue(command,error,category='error'){
+ if(!selfImprovementManager||!context?.globalStorageUri?.fsPath)return;
+ const setting=category==='performance'?'selfImprovement.captureSlowOperations':'selfImprovement.captureErrors';
+ if(!cfg().get(setting,true))return;
+ const screen=String(command||'ATGV').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,80)||'ATGV';
+ const title=category==='performance'?'Slow '+screen:'Error in '+screen;
+ void selfImprovementManager.store.add({category,target:'extension',title,screen,observed:String(error?.message||error||'Unknown failure')},{origin:'automatic'}).catch(e=>report('Issue recorder: '+e.message));
+}
+function openIssueReport(screen=''){
+ if(!selfImprovementManager)throw Error('Issue reporting is not ready yet.');
+ return selfImprovementView.open(vscode,{manager:selfImprovementManager,storage:context.globalStorageUri.fsPath,version:require('../../../package.json').version,screen,
+  getRepository:async target=>{if(target==='extension')return extensionSourceRepository;const url=catalogConfig().repositoryUrl;if(!url)throw Error('Configure the GitHub SDLC Library in Settings first.');return url;},
+  getToken:async(target,write)=>{if(write){const token=await releaseAccessToken({interactive:true});if(token)return token;if(target==='library')return catalogToken(catalogConfig(),{interactive:true});return '';}return target==='library'?catalogToken(catalogConfig(),{interactive:true}):releaseAccessToken({interactive:true});},
+  onSdkInstalled:()=>invalidateModelStatus()
+ });
+}
+async function guarded(fn){try{return await fn();}catch(e){captureLocalIssue('ATGV',e);report('ERROR '+e.message);uiError('ATGV AIATECH Assist: '+e.message);return undefined;}}
 const withProgress=(title,fn)=>dashboard?fn():vscode.window.withProgress({location:vscode.ProgressLocation.Notification,title,cancellable:false},fn);
 async function initialize(){
   if(ownershipRetryTimer){clearInterval(ownershipRetryTimer);ownershipRetryTimer=null;}ownershipOfflineUntil=0;
@@ -1328,7 +1349,7 @@ async function start(options={}){
   dashboard=vscode.window.createWebviewPanel('atgvAssist.start','ATGV: Start',vscode.ViewColumn.One,{enableScripts:true,retainContextWhenHidden:true,localResourceRoots:[vscode.Uri.joinPath(context.extensionUri,'media'),...(installedVendorAssets?[vscode.Uri.file(installedVendorAssets.dir)]:[])]});
   // Register before setting HTML: a fast webview can send its asset-readiness
   // handshake as soon as its scripts execute. Do not lose that first message.
-  dashboard.webview.onDidReceiveMessage(message=>{guarded(()=>handleDashboardMessage(message));});
+  dashboard.webview.onDidReceiveMessage(message=>{const started=Date.now();void guarded(()=>handleDashboardMessage(message)).finally(()=>{if(message?.command==='startupReadiness'&&Date.now()-started>=15000)captureLocalIssue('startupReadiness','Startup prerequisite scan took '+Math.round((Date.now()-started)/1000)+' seconds.','performance');});});
   dashboard.webview.html=html(dashboard.webview);webviewVendorDir=installedVendorAssets?.dir||null;
   dashboard.onDidDispose(()=>{for(const [key,item] of pendingHostDialogs){clearTimeout(item.timer);item.resolve(undefined);pendingHostDialogs.delete(key);}for(const [key,item] of pendingExtensionUpgradeOffers){clearTimeout(item.timer);item.resolve('Later');pendingExtensionUpgradeOffers.delete(key);}for(const [key,item] of pendingLibraryUpdateOffers){clearTimeout(item.timer);item.resolve('Later');pendingLibraryUpdateOffers.delete(key);}for(const [key,item] of pendingPrerequisiteInstallOffers){item.resolve(undefined);}activeLibraryUpdatePullRequestId=null;dashboard=undefined;pendingTests={jira:null,github:null};if(modelStatusPoll){clearInterval(modelStatusPoll);modelStatusPoll=null;}});
   if(modelStatusPoll)clearInterval(modelStatusPoll);
@@ -3824,6 +3845,17 @@ async function handleDashboardMessage(msg){
   try{
     await ready;
     switch(msg.command){
+      case 'openIssueReport':openIssueReport(String(msg.screen||''));break;
+      case 'architectStopInstall':{
+        if(architectInstallAbort){architectInstallAbort.abort();await dashboard?.webview.postMessage({type:'architectStackProgress',projectId:activeProject?.id,message:'Stopping the current dependency installation. Previous failed versions remain recorded.'});}
+        break;
+      }
+      case 'architectDownloadDependencyHistory':{
+        const history=await require('../../dependency-recovery').read();
+        const target=await vscode.window.showSaveDialog({title:'Save Dependency Installation History',defaultUri:vscode.Uri.file(path.join(require('node:os').homedir(),'atgv-dependency-history.json')),filters:{'JSON files':['json']}});
+        if(target){await vscode.workspace.fs.writeFile(target,Buffer.from(JSON.stringify(history,null,2)+'\n'));await notice('Dependency installation history saved.');}
+        break;
+      }
       case 'startupReadiness':{
         try{
           await dashboard?.webview.postMessage({type:'startupReadinessProgress',percent:0,completed:0,total:Object.keys(startupReadiness.TOOLS).length+1,message:'Checking technology stack prerequisites and project modules…'});
@@ -4771,7 +4803,10 @@ async function handleDashboardMessage(msg){
         }
         const orchestrator=require('../../architect-stack-bootstrap');
         const progress=async stage=>{architectErrorLogs.append(activeProject.id,'save','Stage: '+stage);return dashboard?.webview.postMessage({type:'architectStackProgress',projectId:activeProject.id,message:stage});};
-        const result=await orchestrator.bootstrap({root,stackId:id,generation:preparedProject.techStackGeneration||0,baseBranch,token:await getGithubToken(activeProject),onProgress:progress,openBrowser:async()=>true});
+        const controller=new AbortController();architectInstallAbort=controller;let result;
+        try{result=await orchestrator.bootstrap({root,stackId:id,generation:preparedProject.techStackGeneration||0,baseBranch,token:await getGithubToken(activeProject),onProgress:progress,openBrowser:async()=>true,signal:controller.signal});}
+        catch(error){if(controller.signal.aborted){await dashboard?.webview.postMessage({type:'architectStackCancelled',projectId:activeProject.id,message:'Installation stopped. Prepared starter files and recorded dependency failures are preserved; select Save Stack to resume.'});break;}throw error;}
+        finally{if(architectInstallAbort===controller)architectInstallAbort=null;}
         const savedProject={...preparedProject,techStackId:id,techStackCompanionId:'',techStackValidation:result.validation,techStackServerVerification:null,techStackApproval:null,techStackPrepared:{stackId:id,companionId:'',root:result.repo.root,branch:result.branch,baseBranch,sha:result.repo.sha,remotePushed:true,previewUrl:result.previewUrl,at:new Date().toISOString()}};
         // Bootstrap launches before commit/push, so a pre-commit server observation
         // may not correspond to the final SHA. Persist the finished revision first.
@@ -7302,7 +7337,7 @@ async function handleDashboardMessage(msg){
       case 'getAiProviderState':await dashboard?.webview.postMessage({type:'aiProviderState',state:await aiProviderState()});break;
       case 'saveAiProvider':{
         const provider=String(msg.provider||'auto');
-        if(!['auto','none','codex','openai','anthropic','azure-openai','ollama','openai-compatible'].includes(provider))throw Error('Unsupported AI provider.');
+        if(!['auto','none','codex','copilot-sdk','openai','anthropic','azure-openai','ollama','openai-compatible'].includes(provider))throw Error('Unsupported AI provider.');
         const model=String(msg.model||'').trim(),endpoint=String(msg.endpoint||'').trim(),token=String(msg.token||'').trim(),codexTransport=String(msg.codexTransport||'https');
         if(!['https','default'].includes(codexTransport))throw Error('Invalid Codex connection mode.');
         if(model.length>180||endpoint.length>800||token.length>1000)throw Error('AI provider settings exceed the permitted size.');
@@ -7334,6 +7369,13 @@ async function handleDashboardMessage(msg){
         const result=await installCodex(aiRuntimeRoot(),{onLog:message=>report('Codex setup: '+message)});
         invalidateModelStatus();
         await dashboard?.webview.postMessage({type:'aiProviderAction',success:true,message:`Installed ${result.version}. Sign in to Codex or configure approved credentials, then run Test AI Connection.`});
+        await dashboard?.webview.postMessage({type:'aiProviderState',state:await aiProviderState()});break;
+      }
+      case 'installCopilotSdk':{
+        if(vscode.workspace.isTrusted===false)throw Error('Copilot SDK installation requires a trusted VS Code workspace.');
+        await dashboard?.webview.postMessage({type:'aiProviderAction',success:true,message:'Installing the Copilot SDK into extension storage…'});
+        await copilotRepairSdk.install(context.globalStorageUri.fsPath,{onProgress:message=>report('Copilot SDK setup: '+message)});
+        invalidateModelStatus();await dashboard?.webview.postMessage({type:'aiProviderAction',success:true,message:'Copilot SDK installed. Sign in to Copilot CLI, then run Test AI Connection.'});
         await dashboard?.webview.postMessage({type:'aiProviderState',state:await aiProviderState()});break;
       }
       case 'listAiModels':await postModelChoices();break;
@@ -7548,6 +7590,7 @@ async function handleDashboardMessage(msg){
       default:throw new Error('Unsupported webview action.');
     }
   }catch(e){
+    captureLocalIssue(msg.command,e);
     if(msg._fromDesignTab)throw e;
     if(String(msg.command||'').startsWith('brRoleTaskRepair')){roleRepairBusy=false;await dashboard?.webview.postMessage({type:'brRoleTaskRepairError',brId:String(msg.brId||''),message:e.message});}
     const section=msg.command==='testExtensionJira'?'jira':msg.command==='testExtensionGithub'?'github':null;
@@ -7563,7 +7606,7 @@ async function handleDashboardMessage(msg){
       return;
     }
     if(String(msg.command||'').startsWith('catalog'))await dashboard?.webview.postMessage({type:'catalogAction',action:msg.command,success:false,message:e.message});
-    if(['getAiProviderState','saveAiProvider','testAiProvider','installCodexRuntime'].includes(msg.command))await dashboard?.webview.postMessage({type:'aiProviderAction',success:false,message:e.message});
+    if(['getAiProviderState','saveAiProvider','testAiProvider','installCodexRuntime','installCopilotSdk'].includes(msg.command))await dashboard?.webview.postMessage({type:'aiProviderAction',success:false,message:e.message});
     if(msg.command==='saveDiagram')await dashboard?.webview.postMessage({type:'diagramSaveError',message:e.message});
     if(['designDelete','designOpenMockupBrowser'].includes(msg.command))await dashboard?.webview.postMessage({type:'designActionError',message:e.message});
     if(msg.command.startsWith('delivery'))await dashboard?.webview.postMessage({type:'deliveryOperationError',message:e.message});
@@ -8003,6 +8046,7 @@ async function installationStartup(){
 }
 function activate(ctx){
   context=ctx;output=vscode.window.createOutputChannel('ATGV AIATECH Assist');
+  selfImprovementManager=new SelfImprovement({root:ctx.globalStorageUri.fsPath,askCopilot:options=>copilotRepairSdk.analyze(ctx.globalStorageUri.fsPath,options)});
   ctx.subscriptions.push(output);
   ready=(async()=>{
    const signature=await installationSignature(ctx.extensionUri.fsPath,require('../../../package.json').version);
@@ -8014,7 +8058,7 @@ function activate(ctx){
     await recordStartupDiagnostic({stage:'extension-cache-cleanup',status:'error',detail:error.message});
    }
    await initialize();
-  })().catch(e=>{report('Initialization error: '+e.message);uiError('ATGV projects could not load: '+e.message);});
+  })().catch(e=>{captureLocalIssue('initialization',e);report('Initialization error: '+e.message);uiError('ATGV projects could not load: '+e.message);});
                                                                                            
   const refreshUnifiedArtifacts=async()=>{
    requireOpened();const id=activeProject.id;
@@ -8052,13 +8096,14 @@ function activate(ctx){
     return aiAnswer(target,prompt,1800);
    }
   });
-  const actions={start,workspace,restart,reset,refreshUnifiedArtifacts};
+  const reportIssue=()=>openIssueReport();
+  const actions={start,workspace,restart,reset,refreshUnifiedArtifacts,reportIssue};
   for(const [name,fn] of Object.entries(actions))ctx.subscriptions.push(vscode.commands.registerCommand('atgvAssist.'+name,async(...args)=>{await ready;return guarded(()=>fn(...args));}));
   ctx.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(()=>{++startupSequence;ready=initialize().then(()=>dashboard?start({skipReload:true}):undefined).catch(e=>report('Workspace change: '+e.message));}));
   if(vscode.workspace.onDidChangeConfiguration)ctx.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e=>{if(e.affectsConfiguration('atgvAssist.rag')||e.affectsConfiguration('atgvAssist.ai')){invalidateModelStatus();refreshDashboard().catch(err=>report('Model settings: '+err.message));}}));
   if(vscode.lm?.onDidChangeChatModels)ctx.subscriptions.push(vscode.lm.onDidChangeChatModels(()=>{invalidateModelStatus();refreshDashboard().catch(err=>report('Model availability: '+err.message));}));
   ready.then(()=>{scheduleCatalogChecks();scheduleSoftwareUpdates();}).catch(e=>report('Catalog/update monitor: '+e.message));
-  void installationStartup().catch(e=>{report('Install/start workflow: '+e.message);uiError('ATGV startup: '+e.message);});
+  void installationStartup().catch(e=>{captureLocalIssue('installationStartup',e);report('Install/start workflow: '+e.message);uiError('ATGV startup: '+e.message);});
   report('ATGV extension activated. Run ATGV: Start to manage workspace projects.');
 }
 function deactivate(){if(liveRemoteTimer){clearInterval(liveRemoteTimer);liveRemoteTimer=null;}if(catalogWatch){clearInterval(catalogWatch);catalogWatch=null;}if(softwareUpdateTimer)clearInterval(softwareUpdateTimer);if(softwareStartupTimer)clearTimeout(softwareStartupTimer);void developerGit.stopLocal().catch(()=>{});}

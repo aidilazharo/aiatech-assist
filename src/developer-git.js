@@ -5,7 +5,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const diagnostic = require('./stack-process-diagnostics');
-const {npmCommand} = require('./platform-process');
+const {npmCommand,mavenCommand} = require('./platform-process');
 const run = promisify(execFile);
 const KEY = /^[A-Z][A-Z0-9]{1,19}-[1-9][0-9]*$/;
 const BRANCH = /^[a-z0-9][a-z0-9/_-]{0,110}$/;
@@ -246,7 +246,7 @@ function approvedCommand(target, operation) {
     if (target.kind === 'dotnet')
         return { bin: 'dotnet', args: operation === 'test' ? ['test', 'tests/Atgv.Tests/Atgv.Tests.csproj'] : [operation === 'run' ? 'run' : 'build'] };
     if (target.kind === 'maven')
-        return { bin: 'mvn', args: operation === 'test' ? ['test'] : operation === 'build' ? ['package'] : ['spring-boot:run'] };
+        return mavenCommand(operation === 'test' ? ['test'] : operation === 'build' ? ['package'] : ['spring-boot:run']);
     throw Error('Unsupported project runtime.');
 }
 async function executeLocal(root, { relative = '', operation = 'test', onDiagnostic = async()=>{} } = {}) {

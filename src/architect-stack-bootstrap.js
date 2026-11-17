@@ -230,13 +230,13 @@ async function publish(root,branch,baseSha,auth,baseBranch='main'){
  if(remoteHash(after,branch)!==repo.sha)throw Error('Git push returned without the expected remote branch revision. Verify GitHub manually.');
  return {repo,pushed:true};
 }
-async function bootstrap({root,stackId,generation=0,baseBranch='main',token='',openBrowser=async()=>false,onProgress=async()=>{},effects={}}={}){
+async function bootstrap({root,stackId,generation=0,baseBranch='main',token='',openBrowser=async()=>false,onProgress=async()=>{},effects={},signal}={}){
  if(!root)throw Error('Select the configured local Git checkout.');
  gate.selection(stackId,'');
  const trace=[];
  const remember=line=>{trace.push(String(line));if(trace.length>60)trace.shift();};
  try{return await withAuthentication(token,async auth=>{
-  const progress=async stage=>{remember('Stage: '+stage);await onProgress(stage);};
+  const progress=async stage=>{if(signal?.aborted)throw Error('Stack installation stopped. Select Save Stack to resume.');remember('Stage: '+stage);await onProgress(stage);};
   await progress('Checking GitHub base branch '+baseBranch+' and existing application files…');
   const base=await preflight(root,stackId,auth,generation,baseBranch);
   await progress('Preparing '+base.branch+' and copying the '+stackId+' skeleton…');
@@ -258,12 +258,12 @@ async function bootstrap({root,stackId,generation=0,baseBranch='main',token='',o
   if(!['test','build'].every(s=>target.scripts.includes(s))||!['dev','start','run'].some(s=>target.scripts.includes(s)))throw Error('Stack must define test, build and run commands.');
   // Prove generated files are precisely the allowed untracked scaffold before
   // executing any external install, build or start script.
-  await architect.generatedCommitPlan(root,[stackId]);
+  const starterPlan=await architect.generatedCommitPlan(root,[stackId]);
   await progress('Checking and preparing application dependencies…');
   if(effects.install){
    // Existing bootstrap test adapters may supply a simulated npm installer.
    if(target.kind==='npm')await effects.install(root,target.relative,{onDiagnostic:remember});
-  }else await dependencies.ensureAll(root,[target],{onProgress:progress,onDiagnostic:remember});
+  }else await dependencies.ensureAll(root,[target],{onProgress:progress,onDiagnostic:remember,signal,allowManifestRecovery:starterPlan.needsCommit===true});
   const results=[];
   for(const operation of ['test','build']){
    await progress('Running '+operation+' checks…');

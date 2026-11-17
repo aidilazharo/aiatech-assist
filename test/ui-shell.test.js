@@ -30,7 +30,7 @@ test('roles are consolidated to one left navigation item and moved into the cont
   assert.match(script,/textContent='Open Business Requirement'/);
   const ids=new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]));
   for(const found of script.matchAll(/\$\('([^']+)'\)/g)){const removed=new Set(['devSecondaryWorkspace','developerWorkbench','workGithub','devAssignedJiraStatus','devAssignedJiraList','devJiraKey','devRepoStatus','devTarget','devJiraInfo','devTransitionSelect','opsBranch','devExecutionStatus','processActivityRows','roleProcessRows']);assert.ok(ids.has(found[1])||removed.has(found[1]),'Missing webview element '+found[1]);}
-  assert.deepEqual(require('../package.json').contributes.commands.map(c=>c.title),['ATGV: Start','ATGV: Workspace','ATGV: Refresh Shared Project Artifacts','ATGV: Restart','ATGV: Reset']);
+  assert.deepEqual(require('../package.json').contributes.commands.map(c=>c.title),['ATGV: Start','ATGV: Workspace','ATGV: Refresh Shared Project Artifacts','ATGV: Restart','ATGV: Reset','ATGV: Report an Issue']);
 });
 
 test('ATGV Start is a search gate; full SDLC shell is only visible after verified open',()=>{
