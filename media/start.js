@@ -896,7 +896,7 @@ function navigate(destination){
     if(baWorkspace){renderDiscovery();refreshAIChangeResolution();}
     renderRoleTimeline();ensurePMJiraInventory(true);ensureBAJiraInventory(true);send('roleHandoffOwners');return;
   }
-  if(destination==='overview'){setView('landing');$('overviewGanttDetails').open=false;send('loadPlanning');return;}
+  if(destination==='overview'){setView('landing');$('overviewGanttDetails').open=false;send('loadPlanning');send('myWorkRosterRefresh',{projectId:activeId});return;}
   if(destination==='settings'){$('settingsBack').textContent=workspaceOpened?'← Back to Workspace':'← Back to Projects';collapseExtensionSettings();setView('settings');updateExtensionSettingBadges();if(workspaceOpened)send('devRepositoryStatus');return;}
   if(destination==='library'){setView('library');window.atgvLibraryStudio?.refresh();return;}
   if(destination==='documents'){setView('documents');renderDocumentGroups();return;}
@@ -6986,6 +6986,35 @@ window.addEventListener('message',e=>{
  }
 });
 // Initial state arrives after webview-asset-boot.js confirms CSS and controllers.
+function renderMyWorkRoster(rows){
+ const target=$('overviewUserRows');if(!target)return;
+ target.replaceChildren();
+ const entries=Array.isArray(rows)?rows:[];
+ if(!entries.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=3;td.textContent='No verified My Work visits recorded in Confluence.';tr.append(td);target.append(tr);return;}
+ for(const item of entries){
+  const tr=document.createElement('tr'),name=document.createElement('td'),roles=document.createElement('td'),tasks=document.createElement('td');
+  const strong=document.createElement('strong');strong.textContent=String(item.name||'Unknown');
+  const email=document.createElement('small');email.textContent=String(item.email||'');
+  name.append(strong,email);
+  roles.textContent=(Array.isArray(item.roles)?item.roles:[]).join(', ')||'—';
+  tasks.textContent=String(item.tasks||'No assigned task');
+  tr.append(name,roles,tasks);target.append(tr);
+ }
+}
+$('overviewUserRefresh').addEventListener('click',()=>{
+ $('overviewUserStatus').textContent='Loading verified My Work users from Confluence…';
+ send('myWorkRosterRefresh',{projectId:activeId});
+});
+window.addEventListener('message',event=>{
+ const m=event.data||{};
+ if(!activeId||m.projectId!==activeId)return;
+ if(m.type==='myWorkRoster'){
+  renderMyWorkRoster(m.rows);
+  $('overviewUserStatus').textContent=(m.rows?.length||0)+' users · Confluence space '+(m.spaceKey||'')+(m.updatedAt?' · '+new Date(m.updatedAt).toLocaleString():'');
+ }else if(m.type==='myWorkRosterError'){
+  $('overviewUserStatus').textContent='Confluence roster unavailable: '+(m.message||'Check space configuration and permissions.');
+ }
+});
 
 function developerStatus(message){const target=$('devExecutionStatus');if(target)target.textContent=String(message||'');}
 function devSetStep(id,message){const element=$(id);if(element)element.textContent=message;}
