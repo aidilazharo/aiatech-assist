@@ -138,7 +138,8 @@ test('Readiness diagnostic download sits at bottom left with no redundant explan
  const markup=html.slice(start,end);
  assert.ok(markup.indexOf('id="startupUnifiedLog"')>markup.indexOf('id="startupInstallFeedback"'));
  assert.doesNotMatch(markup,/Includes installer status, verification and troubleshooting details\./);
- assert.match(css,/#startupComputerCard\{display:flex;flex-direction:column;\}/);
+ assert.match(css,/#startupComputerCard\{display:flex;flex-direction:column;row-gap:12px;\}/);
+ assert.match(css,/#startupComputerCard>\.atgv-startup-section-title\{margin-bottom:4px;\}/);
  assert.match(css,/#startupComputerCard \.atgv-startup-diagnostics-footer\{margin-top:auto;align-self:stretch;justify-content:flex-start;\}/);
  assert.match(ui,/for\(const id of \['startupUnifiedLog','gateUnifiedLog'\]\)/);
  assert.match(host,/case 'startupExportUnifiedLog':/);
