@@ -31,6 +31,7 @@ const discoveryImport=require('../../discovery-import');
 const baDocumentPreflight=require('../../ba-document-preflight');
 const discoveryReview=require('../../discovery-review');
 const brWorkflow=require('../../br-workflow');
+const jiraPreviewDetails=require('../../jira-preview-details');
 const jiraRoleRepair=require('../../jira-role-task-repair');
 const brArtifactCleanup=require('../../br-artifact-cleanup');
 const projectDeliveryPlanning=require('../../project-delivery-planning');
@@ -2595,6 +2596,7 @@ async function syncApprovedBRs(expectedRevision){
   if(state.revision!==expectedRevision)throw Error('BR register changed after preview. Refresh Jira changes.');
   if(state.brs.some(x=>x.externalReviewRequired))throw Error('External JIRA changes require reconciliation before publishing.');
   const items=brWorkflow.plan(state);
+  if(items.some(item=>item.staleJiraDetails))throw Error('Review Jira issue details again after the approved Business Requirement changed.');
   const actor=await verifiedBAActor();
   const binding=JSON.stringify({atgvProjectId:activeProject.id,site:baseAtlassian(config),project:config.get('jira.projectKey'),actor,items});
   if(sha(binding)!==approvedJiraPreviewBinding)throw Error('Jira target, identity or change plan changed since approval. Preview again.');
@@ -6974,6 +6976,21 @@ async function handleDashboardMessage(msg){
         }finally{roleRepairBusy=false;}
         break;
       }
+      case 'brJiraSaveDetails':{
+        requireOpened();
+        if(jiraSyncBusy)throw Error('Wait for Jira publication to finish before editing issue details.');
+        const register=await brWorkflow.load(registry,activeProject.id);
+        const changes=brWorkflow.plan(register);
+        if(msg.revision!==register.revision)throw Error('Jira preview changed. Generate it again before editing issue details.');
+        const item=changes.find(row=>row.path===msg.path&&row.action!=='retire');
+        if(!item||item.hash!==msg.hash)throw Error('Jira issue changed. Generate the preview again.');
+        const owner=await requireBAOwner('ba-br-'+item.path.split('/')[0]);
+        const updated=await brWorkflow.saveJiraIssueDetails(registry,activeProject.id,register.revision,{path:item.path,hash:item.hash,acceptanceCriteria:msg.acceptanceCriteria,definitionOfDone:msg.definitionOfDone,actor:owner.actor});
+        approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;jiraPreviewValidation=null;
+        await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
+        await handleDashboardMessage({command:'brJiraPreview'});
+        break;
+      }
       case 'brJiraPreview':{
         requireOpened();let register=await brWorkflow.load(registry,activeProject.id);approvedJiraPreviewRevision=null;jiraPreviewValidation=null;
         const currentRequirements=register.brs.filter(item=>!item.archivedFromRestart&&item.status!=='retired'&&item.status!=='retire-proposed');
@@ -6981,13 +6998,13 @@ async function handleDashboardMessage(msg){
         if((!currentRequirements.length&&!activeRetirements)||currentRequirements.some(item=>item.status!=='approved'||item.needsRefresh||item.externalReviewRequired||item.roleReviewRequired||item.dependencyReviewRequired))throw Error('Save and approve all current-cycle Business Requirements and complete outstanding reviews before creating a Jira preview. Archived approved requirements remain historical.');
         const changes=brWorkflow.plan(register);
         await dashboard?.webview.postMessage({type:'baProgress',task:'jiraPreview',message:'Checking JIRA project and changes…',percent:30});
-        let conflicts=[];
+        let conflicts=[],previewTypes=[];
         if(changes.length){const target=await ensureJiraPreviewTarget(register);
           if(changes.some(item=>item.action==='create')){
             const targetKey=validProjectKey(target.config.get('jira.projectKey'));
             const source=activeProject?.settings?.jira?.projectKey?'Project Settings':'Extension Settings default';
             await dashboard?.webview.postMessage({type:'baProgress',task:'jiraPreview',message:`Checking Jira ${targetKey} (${source}) Create Issues permission and issue types…`,percent:10});
-            try { await jiraIssueTypes(target.config,target.token); }
+            try { previewTypes=await jiraIssueTypes(target.config,target.token); }
             catch(error){
               if(/permission|HTTP (401|403|404)|authorization/i.test(String(error.message||error))){
                 const extensionDefault=String(extensionSettings?.jira?.projectKey||'').toUpperCase();
@@ -7006,14 +7023,18 @@ async function handleDashboardMessage(msg){
             await dashboard?.webview.postMessage({type:'brUpdated',register});
           }
         }
+        for(const item of changes.filter(row=>row.staleJiraDetails))conflicts.push('Review saved Jira acceptance criteria and definition of done for '+item.path+' because its approved BR changed.');
         jiraPreviewValidation=conflicts.length?null:{projectId:activeProject.id,revision:register.revision,planHash:sha(JSON.stringify(changes)),verifiedAt:Date.now(),site:baseAtlassian(effectiveConfig(activeProject)),jiraProject:effectiveConfig(activeProject).get('jira.projectKey')};
-        await dashboard?.webview.postMessage({type:'baProgress',task:'jiraPreview',message:'JIRA changes checked.',percent:100});await dashboard?.webview.postMessage({type:'brJiraPlan',changes,conflicts,protection:conflicts.assessment?.protection||[],revision:register.revision});break;
+        const issueTypes=Object.fromEntries(changes.map(item=>[item.path,jiraPreviewDetails.issueType(item,previewTypes,register.synced?.[item.path])]));
+        const jiraProject=changes.length?validProjectKey(effectiveConfig(activeProject).get('jira.projectKey')):'';
+        await dashboard?.webview.postMessage({type:'baProgress',task:'jiraPreview',message:'JIRA changes checked.',percent:100});await dashboard?.webview.postMessage({type:'brJiraPlan',changes,issueTypes,jiraProject,conflicts,protection:conflicts.assessment?.protection||[],revision:register.revision});break;
       }
       case 'brJiraApprove':{
         requireOpened();const register=await brWorkflow.load(registry,activeProject.id);
         if(register.revision!==msg.revision)throw Error('BR register changed after Jira preview. Generate the preview again.');
         if(register.brs.some(x=>!x.archivedFromRestart&&x.externalReviewRequired))throw Error('Resolve external JIRA changes and reconcile the trusted baseline before publishing.');
         const changes=brWorkflow.plan(register);if(!changes.length)throw Error('No Jira changes are awaiting approval.');
+        if(changes.some(item=>item.staleJiraDetails))throw Error('Review Jira issue details again after the approved Business Requirement changed.');
         if(changes.some(item=>item.requiresApproval))throw Error('Approve Jira retirements separately before approving the Jira preview.');
         requireOnline();const config=effectiveConfig(activeProject);
         const valid=jiraPreviewValidation&&jiraPreviewValidation.projectId===activeProject.id&&jiraPreviewValidation.revision===register.revision&&jiraPreviewValidation.planHash===sha(JSON.stringify(changes))&&jiraPreviewValidation.site===baseAtlassian(config)&&jiraPreviewValidation.jiraProject===config.get('jira.projectKey')&&Date.now()-jiraPreviewValidation.verifiedAt<300000;

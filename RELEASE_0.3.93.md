@@ -1,5 +1,12 @@
 # ATGV AIATECH Assist v0.3.93 — Preserve edited catalog during verified pull
 
+## Jira preview build
+
+- Review the Jira project, actual issue type, summary, parent, existing key and exact planned description for every proposed Jira operation.
+- Add issue-specific acceptance criteria and definition of done from the Jira Preview step. They are saved as sections in the Jira description so no project-specific custom field ID is assumed.
+- Saving a section regenerates the preview and requires its existing approval before publication. The approved BR is not modified. If the approved BR later changes, the saved sections must be reviewed again.
+- This build keeps version **0.3.93** as requested. Install it manually over an earlier 0.3.93 build: version-only update checks cannot distinguish the builds.
+
 ## Root cause
 
 The protected `.atgv/sdlc-catalog` checkout contained tracked modifications or untracked files. The previous pull correctly stopped rather than overwrite user data, but offered no non-destructive update workflow.

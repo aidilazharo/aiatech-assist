@@ -10,6 +10,7 @@ const jiraLinkReconciliation=require('./jira-link-reconciliation');
 const changeControl=require('./jira-change-control');
 const {evidenceFor}=require('./evidence-link');
 const {detectCrossSourceConflicts}=require('./conflict-engine');
+const jiraPreviewDetails=require('./jira-preview-details');
 const MAX_BRS=25,MAX_FEATURES=16,MAX_STORIES=16,MAX_TASKS=16;
 const plain=(v,max)=>{if(typeof v!=='string')throw Error('Expected plain text.');const s=v.trim();if(!s||s.length>max)throw Error('Required text is empty or too long.');return s;};
 const slugTitle=text=>String(text||'').toLowerCase().replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim();
@@ -347,6 +348,7 @@ function deleteBRRecords(next,ids,{actor='Business Analyst',sourceDigest='',reas
  }
  for(const nodePath of Object.keys(next.roleTaskPending||{}))if(wanted.has(nodePath.split('/')[0]))delete next.roleTaskPending[nodePath];
  for(const nodePath of Object.keys(next.pending||{}))if(wanted.has(nodePath.split('/')[0]))delete next.pending[nodePath];
+ for(const nodePath of Object.keys(next.jiraIssueDetails||{}))if(wanted.has(nodePath.split('/')[0]))delete next.jiraIssueDetails[nodePath];
  for(const nodePath of Object.keys(next.retirementApprovals||{}))if(wanted.has(nodePath.split('/')[0]))delete next.retirementApprovals[nodePath];
  for(const key of Object.keys(next.exportJobs||{}))if(wanted.has(key.split(':')[0]))delete next.exportJobs[key];
  next.completedIndex=(next.completedIndex||[]).filter(row=>!wanted.has(row.id));
@@ -1192,7 +1194,13 @@ function flattenApproved(brs,{ignoreExternalBlocks=false}={}){
  return items;
 }
 function plan(reg){
- const target=flattenApproved(reg.brs),wanted=new Map(target.map(x=>[x.path,x])),changes=[];
+ const approvedById=new Map((reg.brs||[]).map(br=>[br.id,br]));
+ const target=flattenApproved(reg.brs).map(item=>{
+  const saved=reg.jiraIssueDetails?.[item.path],br=approvedById.get(item.path.split('/')[0]);
+  if(!saved||!br?.approvedContent)return item;
+  if(saved.approvedHash!==digest(br.approvedContent))return {...item,staleJiraDetails:jiraPreviewDetails.normalizeDetails(saved)};
+  return jiraPreviewDetails.applyDetails(item,saved);
+ }),wanted=new Map(target.map(x=>[x.path,x])),changes=[];
  const archived=new Set((reg.brs||[]).filter(br=>br.archivedFromRestart).map(br=>br.id));
  const reconciled=jiraLinkReconciliation.suppressedPaths(reg);
  const blocked=new Set((reg.brs||[]).filter(b=>b.status!=='retired'&&(b.status!=='approved'||b.needsRefresh||b.externalReviewRequired||b.roleReviewRequired||b.dependencyReviewRequired)).map(b=>b.id));
@@ -1212,6 +1220,19 @@ function plan(reg){
  }
  obsolete.sort((a,b)=>b.path.split('/').length-a.path.split('/').length);
  return [...changes,...obsolete];
+}
+async function saveJiraIssueDetails(registry,id,revision,{path:issuePath,hash,acceptanceCriteria,definitionOfDone,actor='Business Analyst'}={}){
+ const details=jiraPreviewDetails.normalizeDetails({acceptanceCriteria,definitionOfDone});
+ return write(registry,id,revision,next=>{
+  const item=plan(next).find(row=>row.path===issuePath&&row.action!=='retire');
+  if(!item||item.hash!==hash)throw Error('Jira preview changed. Generate the preview again before editing issue details.');
+  const br=next.brs.find(row=>row.id===item.path.split('/')[0]);
+  if(!br||br.status!=='approved'||!br.approvedContent)throw Error('An approved Business Requirement is required.');
+  if(!next.jiraIssueDetails||typeof next.jiraIssueDetails!=='object'||Array.isArray(next.jiraIssueDetails))next.jiraIssueDetails={};
+  if(details.acceptanceCriteria||details.definitionOfDone)next.jiraIssueDetails[item.path]={...details,approvedHash:digest(br.approvedContent)};
+  else delete next.jiraIssueDetails[item.path];
+  event(next,'jira-preview-details-saved',{path:item.path,actor:String(actor).slice(0,120)});
+ });
 }
 async function approveRetirements(registry,id,revision,decisions,actor='Local confirmation'){
  if(!Array.isArray(decisions)||!decisions.length)throw Error('No Jira retirement decisions supplied.');
@@ -1473,4 +1494,4 @@ async function finishChangeRequest(registry,id,revision,{paths,actor}){
   }
  });
 }
-module.exports={discoveryTargetScope,reconcileDiscoveryTargets,startOrRestart,repairRestart,linkJiraChangeRequest,recordAIChangeImpact,recordJiraWorkHistory,createChangeRequest,decideChangeRequest,finishChangeRequest,write,sourceLifecycle,archiveSource,restoreSource,forceDeleteArchivedSource,forceDeleteActiveSource,forceDeleteBusinessRequirement,exclusiveBRSourceEntries,discardEmptyIncompleteCycle,sourceDeletionImpact,activeSourceDeletionImpact,removeBRExports,sourceRemovalImpact,reviewSourceConflict,resolveDiscoveryProposal,recordRoleDocumentImpact,decideRoleDocumentImpact,endorse,clearDependencyImpact,changeEngine,propose,decideProposal,rejectConflictingProposals,proposalConflicts,recordLinkedJiraStatus,recordInboundJira,reviewInboundJira,reconcileRevertedJira,reconcileApprovedJira,load,imported,addSources,removeSource,selectSources,completeSourceMapping,commitSourceMapping,repairPendingExports,discoverySaved,reviewed,skipReview,confirmReview,generated,beginRevision,edit,approve,retire,keep,plan,approveRetirements,beginOperation,markAttempt,recorded,parseGenerated,promptForGeneration,validateProposal,flattenApproved,asMarkdown,normalizedContent,matchScore};
+module.exports={discoveryTargetScope,reconcileDiscoveryTargets,startOrRestart,repairRestart,linkJiraChangeRequest,recordAIChangeImpact,recordJiraWorkHistory,createChangeRequest,decideChangeRequest,finishChangeRequest,write,sourceLifecycle,archiveSource,restoreSource,forceDeleteArchivedSource,forceDeleteActiveSource,forceDeleteBusinessRequirement,exclusiveBRSourceEntries,discardEmptyIncompleteCycle,sourceDeletionImpact,activeSourceDeletionImpact,removeBRExports,sourceRemovalImpact,reviewSourceConflict,resolveDiscoveryProposal,recordRoleDocumentImpact,decideRoleDocumentImpact,endorse,clearDependencyImpact,changeEngine,propose,decideProposal,rejectConflictingProposals,proposalConflicts,recordLinkedJiraStatus,recordInboundJira,reviewInboundJira,reconcileRevertedJira,reconcileApprovedJira,load,imported,addSources,removeSource,selectSources,completeSourceMapping,commitSourceMapping,repairPendingExports,discoverySaved,reviewed,skipReview,confirmReview,generated,beginRevision,edit,approve,retire,keep,plan,saveJiraIssueDetails,approveRetirements,beginOperation,markAttempt,recorded,parseGenerated,promptForGeneration,validateProposal,flattenApproved,asMarkdown,normalizedContent,matchScore};

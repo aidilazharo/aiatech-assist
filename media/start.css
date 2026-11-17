@@ -2009,3 +2009,14 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 #startupComputerCard>.atgv-startup-section-title{margin-bottom:4px;}
 #startupComputerCard>.atgv-startup-stack-grid{margin-top:8px;margin-bottom:4px;}
 #startupComputerCard .atgv-startup-diagnostics-footer{margin-top:auto;align-self:stretch;justify-content:flex-start;}
+
+/* Jira preview shows the same issue text that will be submitted to Jira. */
+.jira-preview-details{margin-top:14px;padding:16px;border:1px solid var(--vscode-panel-border,#45454a);border-radius:8px;background:var(--vscode-editor-background);}
+.jira-preview-details h3{margin:0 0 12px;}
+.jira-preview-detail{display:grid;grid-template-columns:minmax(150px,220px) minmax(0,1fr);gap:10px;padding:7px 0;border-bottom:1px solid var(--vscode-panel-border,#45454a);}
+.jira-preview-detail-value{white-space:pre-wrap;overflow-wrap:anywhere;}
+.jira-preview-detail-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:12px;margin:12px 0;}
+.jira-preview-detail-form label{display:grid;gap:6px;font-weight:600;}
+.jira-preview-detail-form textarea{width:100%;resize:vertical;box-sizing:border-box;}
+.jira-preview-details-close{margin-left:8px;}
+@media(max-width:620px){.jira-preview-detail{grid-template-columns:1fr;gap:4px;}.jira-preview-details-close{margin:8px 0 0;}}

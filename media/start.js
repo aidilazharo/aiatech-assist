@@ -176,7 +176,7 @@ function baHasRecoverableBR(state){
 
 let jiraPublishState={phase:'idle',confirmed:0,total:0,message:'No Jira publication is running.',currentKey:'',error:''};
 let jiraPublicationPlan=[],jiraPublicationConfirmed=new Map();
-let jiraPlanForCR=[],jiraProtectionForCR=[],discoveryAutoSaveTimer=null,discoveryAutosaving=false,discoveryAutosaveSnapshot=null;
+let jiraPlanForCR=[],jiraProtectionForCR=[],jiraPreviewIssueTypes={},jiraPreviewProject='',discoveryAutoSaveTimer=null,discoveryAutosaving=false,discoveryAutosaveSnapshot=null;
 let brRoleRepairPreview=null,brRoleRepairBusy=false;
 let mappingRunPhase='',mappingRetryAvailable=false,mappingFailureMessage='',mappingFailurePhase='',baPreflightInfo=null,reviewStopReason='',restoredMappingEpoch=null,sourceSelectedDigests=new Set(),jiraBrowseBaseUrl='',discoveryData=null,discoveryDirty=false,discoveryImportProposal=null,discoveryImportQueue=[],discoveryImportBusy=false,sourceRemoving=false,discoveryReviewProposal=null,preserveReviewOnSave=false,applyingAiReview=false,flowData=null,brState=null,brEditing=null,brPlanRevision=null,brJiraPreviewApproved=false,brQuill=null,brReadOnly=false,baOwnerState=null,baBusyTask='',brEditorDirty=false,brEditorSaving=false,brApprovePending=false,brJiraPlanChanges=0,brJiraPlanConflicts=0,pendingUploadAfterClaim=false,reviewApplyRetry=null,reviewApplyPhase='',reviewApplyRetryAvailable=false,reviewStageState=null;
 let aiProposalSelected=null,aiServiceLastProject=null;
@@ -4638,10 +4638,46 @@ function jiraKeyNode(key){
 }
 function renderJiraApprovalTable(){
  const root=$('brJiraApprovalTable');if(!root)return;
- const rows=jiraPlanForCR.map(entry=>({action:String(entry.action||'').toUpperCase(),type:entry.kind||'Issue',path:entry.path||'',title:entry.title||'',key:entry.key||'—',approval:entry.requiresApproval?'Approval required':'Standard'}));
+ const rows=jiraPlanForCR.map(entry=>({action:String(entry.action||'').toUpperCase(),kind:entry.kind||'Issue',type:jiraPreviewIssueTypes[entry.path]||'Not verified',path:entry.path||'',title:entry.title||'',key:entry.key||'—',approval:entry.requiresApproval?'Approval required':'Standard',entry}));
  ATGVDataTables.mount(root,rows,[
-  {key:'action',label:'Action'},{key:'type',label:'Issue type'},{key:'path',label:'BR path'},{key:'title',label:'Summary'},{key:'key',label:'Existing Jira key',render:row=>jiraKeyNode(row.key)},{key:'approval',label:'Approval'}
+  {key:'action',label:'Action'},{key:'kind',label:'ATGV type'},{key:'type',label:'Jira type'},{key:'path',label:'BR path'},{key:'title',label:'Summary'},{key:'key',label:'Existing Jira key',render:row=>jiraKeyNode(row.key)},{key:'approval',label:'Approval'},
+  {key:'details',label:'Details',sortable:false,render:row=>jiraDetailsButton(row.entry,true)}
  ],{label:'Jira preview items awaiting approval',pageSize:5});
+}
+function jiraDetailsButton(entry,readOnly=false){
+ const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='View details';
+ button.setAttribute('aria-label','View Jira details for '+String(entry.title||entry.path));
+ button.addEventListener('click',()=>renderJiraIssueDetails(entry,readOnly));return button;
+}
+function renderJiraIssueDetails(entry,readOnly=false){
+ const root=$(readOnly?'brJiraApprovalDetails':'brJiraDetailsPanel');if(!root)return;
+ root.replaceChildren();root.classList.remove('hidden');
+ const heading=document.createElement('h3');heading.textContent='Jira issue details';root.append(heading);
+ const addValue=(label,value)=>{const group=document.createElement('div');group.className='jira-preview-detail';const title=document.createElement('strong');title.textContent=label;const text=document.createElement('div');text.className='jira-preview-detail-value';text.textContent=String(value||'Not specified');group.append(title,text);root.append(group);};
+ addValue('Summary',entry.title);addValue('Action',String(entry.action||'').toUpperCase());addValue('Jira project',jiraPreviewProject||'Not verified');
+ addValue('Jira issue type',jiraPreviewIssueTypes[entry.path]||'Not verified');
+ addValue('ATGV issue type and path',(entry.kind||'Issue')+' · '+entry.path);
+ const parentKey=entry.parent?brState?.synced?.[entry.parent]?.key:'';
+ addValue('Parent',entry.parent?(entry.parent+(parentKey?' · '+parentKey:' · key assigned during publication')):'None');addValue('Existing Jira key',entry.key||'Not created yet');
+ if(entry.action!=='retire'){
+  addValue('Jira description to publish',entry.description||'Not specified');
+  const approved=brState?.brs?.find(br=>br.id===String(entry.path||'').split('/')[0])?.approvedContent;
+  addValue('Approved BR acceptance criteria (reference)',approved?.acceptanceCriteria||'Not specified');
+  const hint=document.createElement('p');hint.className='muted';hint.textContent=entry.staleJiraDetails?'The approved BR changed. Review these saved details and save them again before approving the Jira preview.':'Issue-specific acceptance criteria and definition of done are added to the Jira description. They do not change the approved Business Requirement.';root.append(hint);
+  const form=document.createElement('div');form.className='jira-preview-detail-form';
+  const inputs={};
+  for(const [field,label] of [['acceptanceCriteria','Issue-specific acceptance criteria'],['definitionOfDone','Definition of done']]){
+   const wrap=document.createElement('label');wrap.textContent=label;const input=document.createElement('textarea');input.rows=4;input.maxLength=5000;input.value=entry.jiraDetails?.[field]||entry.staleJiraDetails?.[field]||'';input.placeholder='Not specified';input.readOnly=readOnly;wrap.append(input);form.append(wrap);inputs[field]=input;
+  }
+  root.append(form);
+  if(!readOnly){const save=document.createElement('button');save.type='button';save.textContent='Save Jira details & refresh preview';save.addEventListener('click',()=>{
+   if(!brPlanRevision||baBusyTask)return;
+   baBusy('jiraDetails','Saving Jira details and refreshing the preview…');
+   send('brJiraSaveDetails',{revision:brPlanRevision,path:entry.path,hash:entry.hash,acceptanceCriteria:inputs.acceptanceCriteria.value,definitionOfDone:inputs.definitionOfDone.value});
+  });root.append(save);}
+ }else addValue('Retirement','The existing issue will be marked obsolete; no description is replaced.');
+ const close=document.createElement('button');close.type='button';close.className='secondary jira-preview-details-close';close.textContent='Close';close.addEventListener('click',()=>{root.classList.add('hidden');root.replaceChildren();});root.append(close);
+ root.scrollIntoView?.({block:'nearest',behavior:'smooth'});
 }
 function renderJiraPublishedItems(){
  const root=$('brJiraPublishedTable');if(!root||!brState)return;
@@ -6397,6 +6433,7 @@ window.addEventListener('message',event=>{
       $('baUncompletedPanel').classList.add('hidden');
     }
     brPlanRevision=null;brJiraPreviewApproved=false;brJiraPlanChanges=0;brJiraPlanConflicts=0;jiraPlanForCR=[];jiraProtectionForCR=[];
+    for(const id of ['brJiraDetailsPanel','brJiraApprovalDetails']){$(id).classList.add('hidden');$(id).replaceChildren();}
     if(task==='jiraSync'||jiraPublishState.phase==='completed')renderJiraPublishedItems();
     $('brJiraChanges').classList.add('hidden');$('brJiraConflicts').classList.add('hidden');
     if(brState?.reviewText){try{discoveryReviewProposal=JSON.parse(brState.reviewText);}catch{discoveryReviewProposal=null;}}else discoveryReviewProposal=null;
@@ -6420,13 +6457,15 @@ window.addEventListener('message',event=>{
     if(task==='skipReview'&&view==='discovery')requestAnimationFrame(()=>$('brGenerate').scrollIntoView({block:'nearest',behavior:'smooth'}));
   }
   if(m.type==='brJiraPlan'){baFailedProcess='';baFailedMessage='';
-    stageProgress('jiraPreview','JIRA preview generated.',100);baBusy('',null);brPlanRevision=m.revision;jiraPlanForCR=m.changes||[];jiraProtectionForCR=m.protection||[];brJiraPreviewApproved=false;brJiraPlanChanges=(m.changes||[]).length;brJiraPlanConflicts=(m.conflicts||[]).length;
+    stageProgress('jiraPreview','JIRA preview generated.',100);baBusy('',null);brPlanRevision=m.revision;jiraPlanForCR=m.changes||[];jiraPreviewIssueTypes=m.issueTypes||{};jiraPreviewProject=m.jiraProject||'';jiraProtectionForCR=m.protection||[];brJiraPreviewApproved=false;brJiraPlanChanges=(m.changes||[]).length;brJiraPlanConflicts=(m.conflicts||[]).length;
     jiraPublicationPlan=[];jiraPublicationConfirmed.clear();renderJiraApprovalTable();
+    for(const id of ['brJiraDetailsPanel','brJiraApprovalDetails']){$(id).classList.add('hidden');$(id).replaceChildren();}
     const box=$('brJiraChanges');box.replaceChildren();box.classList.remove('hidden');
     const count=(m.changes||[]).length;
     box.append(brElement('h3','',count+' Jira changes'));
-    ATGVDataTables.mount(box,(m.changes||[]).map(entry=>({action:String(entry.action||'').toUpperCase(),type:entry.kind||'Issue',path:entry.path||'',title:entry.title||'',key:entry.key||'—',approval:entry.requiresApproval?'Approval required':'Standard'})),[
-     {key:'action',label:'Action'},{key:'type',label:'Issue type'},{key:'path',label:'BR path'},{key:'title',label:'Summary'},{key:'key',label:'Existing Jira key',render:row=>jiraKeyNode(row.key)},{key:'approval',label:'Approval'}
+    ATGVDataTables.mount(box,(m.changes||[]).map(entry=>({action:String(entry.action||'').toUpperCase(),kind:entry.kind||'Issue',type:jiraPreviewIssueTypes[entry.path]||'Not verified',path:entry.path||'',title:entry.title||'',key:entry.key||'—',approval:entry.requiresApproval?'Approval required':'Standard',entry})),[
+     {key:'action',label:'Action'},{key:'kind',label:'ATGV type'},{key:'type',label:'Jira type'},{key:'path',label:'BR path'},{key:'title',label:'Summary'},{key:'key',label:'Existing Jira key',render:row=>jiraKeyNode(row.key)},{key:'approval',label:'Approval'},
+     {key:'details',label:'Details',sortable:false,render:row=>jiraDetailsButton(row.entry)}
     ],{label:'Jira change preview',pageSize:5});
     const conflicts=$('brJiraConflicts');conflicts.replaceChildren();conflicts.classList.toggle('hidden',!(m.conflicts||[]).length);
     for(const message of m.conflicts||[])conflicts.append(brElement('p','',message));
