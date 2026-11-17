@@ -6650,6 +6650,16 @@ window.addEventListener('message',event=>{
     if(m.warning)status(m.warning,true);
   }
   if(m.type==='catalogState'){const previous=catalogState?.installed?.sha;renderCatalog(m.catalog);if(m.catalog?.installed?.sha!==previous&&activeId)send('uxFrameworkRead',{key:uxSelectedKey||''});}
+  if(m.type==='catalogPullProgress'){
+    const progress=$('catalogPullProgress'),value=Math.max(0,Math.min(100,Number(m.percent)||0));
+    progress.classList.remove('hidden');
+    progress.dataset.state=m.stage==='failed'?'failed':m.stage==='completed'?'completed':'running';
+    $('catalogPullProgressBar').setAttribute('aria-valuenow',String(value));
+    $('catalogPullProgressIndicator').style.width=value+'%';
+    $('catalogPullProgressPercent').textContent=value+'%';
+    $('catalogPullProgressTitle').textContent=String(m.title||'Updating SDLC Library…').slice(0,150);
+    $('catalogPullProgressMessage').textContent=String(m.message||'').slice(0,700);
+  }
   if(m.type==='catalogAction'){
     $('catalogStatus').textContent=m.message||'';$('catalogStatus').className='test-status'+(m.success?' success':' error');
     if(m.success&&['pull','save'].includes(m.action))field('catalogToken','');
