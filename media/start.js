@@ -865,6 +865,7 @@ function updateState(msg){
   else if(!workspaceOpened)document.body.classList.add('gate-mode');
   renderGate();
 }
+$('openAtgvAi').addEventListener('click',()=>send('openAtgvAi'));
 function navigate(destination){
   if(roleSettingsDirty&&view==='project'&&destination!=='project-settings'&&destination!=='tech'){status('Save project role settings before leaving Project Settings.',true);return;}
   if(view==='discovery'&&discoveryDirty){status('Save your discovery answers before leaving this screen.',true);return;}
@@ -1276,7 +1277,15 @@ function renderBAJiraInventory(){
  };
  baJiraTableInstance=ATGVDataTables.mount(root,rows,[
   {key:'brLabel',label:'Business Requirement',render:brCell},{key:'key',label:'Jira key',render:keyLink},{key:'type',label:'Type'},
-  {key:'summary',label:'Summary'},{key:'status',label:'Status'},
+  {key:'summary',label:'Summary'},{key:'status',label:'Status',render:item=>{
+    const el=document.createElement('span');el.textContent=item.status||'Unknown';
+    if(String(item.type||'').toLowerCase()==='epic'){
+      const children=jiraInventoryItems.filter(child=>child.parentKey===item.key);
+      const active=children.filter(child=>/in progress|review|doing/i.test(child.status));
+      if(active.length){const detail=document.createElement('small');detail.style.display='block';detail.className='muted';detail.textContent=active.length+' child issue(s) in progress (Epic status unchanged)';el.append(detail);}
+    }
+    return el;
+   }},
   {key:'creator',label:'Created by',render:item=>{const name=document.createElement('span');name.textContent=item.creator||'Unavailable';if(item.creatorId)name.title='Atlassian account ID: '+item.creatorId;return name;}},{key:'created',label:'Created',render:item=>{const stamp=document.createElement('time');const raw=String(item.created||'');const parsed=new Date(raw.replace(/([+-]\d{2})(\d{2})$/,'$1:$2'));stamp.title=raw;stamp.dateTime=Number.isNaN(parsed.getTime())?'':parsed.toISOString();stamp.textContent=Number.isNaN(parsed.getTime())?raw:(new Intl.DateTimeFormat(undefined,{day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'})).format(parsed);return stamp;}}
  ],{label:'All Jira items and Business Requirements for '+(key||'project'),pageSize:5,sortKey:'',onRowClick:item=>{if(item._isJiraIssue===false)openBARequirementModal(item._brRoots[0]);else openJiraIssueModal(item.key);}});
 }
