@@ -544,8 +544,14 @@ async function offerBrandedLibraryUpdate({repository,installedVersion,remoteVers
  return new Promise(resolve=>{
   const timer=setTimeout(()=>{
    const entry=pendingLibraryUpdateOffers.get(requestId);
-   if(entry){pendingLibraryUpdateOffers.delete(requestId);resolve('Later');}
-  },120000);
+   if(entry){
+    pendingLibraryUpdateOffers.delete(requestId);resolve('Later');
+    // Never leave an expired branded offer in an unresponsive 0% state.
+    void dashboard?.webview.postMessage({type:'libraryUpdateProgress',requestId,
+     stage:'failed',percent:0,title:'Library update request expired',
+     message:'The approval request expired before the pull started. Close this dialog and check for updates again.'}).catch(()=>{});
+   }
+  },15*60*1000);
   timer.unref?.();
   pendingLibraryUpdateOffers.set(requestId,{resolve,timer});
   Promise.resolve(dashboard.webview.postMessage({type:'libraryUpdateOffer',requestId,
@@ -577,9 +583,11 @@ async function checkLibraryRelease({prompt=false,interactive=false}={}){
      repository:catalogRemote?.repository||'tech-stacks-skills',
      installedVersion:comparison.installed,remoteVersion:comparison.remote
     });
-    if(answer==='Pull Library'){
-     if(!getWorkspace()){await uiInformation('Open an ATGV workspace to update the SDLC Library.');}
-     else await handleDashboardMessage({type:'catalogPull'});
+    if(answer==='Pull Library'&&!dashboard){
+     // Native prompt fallback: the webview's branded Pull action is started
+     // directly by libraryUpdateDecision, not by this background checker.
+     if(!getWorkspace())await uiInformation('Open an ATGV workspace to update the SDLC Library.');
+     else await handleDashboardMessage({command:'catalogPull'});
     }
    }
   }
@@ -3961,19 +3969,50 @@ async function handleDashboardMessage(msg){
       }
       case 'libraryUpdateDecision':{
         const entry=pendingLibraryUpdateOffers.get(msg.requestId);
-        if(entry){
+        if(msg.action==='Pull Library'){
+          if(!entry){
+            // A stale dialog must not spin forever without any host progress.
+            await dashboard?.webview.postMessage({type:'libraryUpdateProgress',requestId:msg.requestId,
+             stage:'failed',percent:0,title:'Library pull could not start',
+             message:'This library update request is no longer active. Close the dialog and check for updates again.'});
+            break;
+          }
           pendingLibraryUpdateOffers.delete(msg.requestId);clearTimeout(entry.timer);
-          if(msg.action==='Pull Library')activeLibraryUpdatePullRequestId=msg.requestId;
-          entry.resolve(msg.action==='Pull Library'?'Pull Library':'Later');
-        }else if(activeLibraryUpdatePullRequestId===msg.requestId&&msg.action==='Later'&&!catalogBusy){
-          // Allow dismissal after a failed update, but never during an active pull.
-          activeLibraryUpdatePullRequestId=null;
+          activeLibraryUpdatePullRequestId=msg.requestId;
+          entry.resolve('Pull Library');
+          await dashboard?.webview.postMessage({type:'libraryUpdateProgress',requestId:msg.requestId,
+           stage:'running',percent:1,title:'Starting Library pull…',
+           message:'The VS Code extension host received your request. Starting GitHub verification.'});
+          // Start directly from the button action. Do not depend on the
+          // background update checker resuming its pending offer promise.
+          await handleDashboardMessage({command:'catalogPull'});
+        }else{
+          if(entry){
+            pendingLibraryUpdateOffers.delete(msg.requestId);clearTimeout(entry.timer);
+            entry.resolve('Later');
+          }
+          if(activeLibraryUpdatePullRequestId===msg.requestId&&!catalogBusy)
+            activeLibraryUpdatePullRequestId=null;
         }
         break;
       }
       case 'libraryUpdateRetry':{
-        if(!activeLibraryUpdatePullRequestId||msg.requestId!==activeLibraryUpdatePullRequestId||catalogBusy)break;
-        await handleDashboardMessage({type:'catalogPull'});
+        if(!activeLibraryUpdatePullRequestId||msg.requestId!==activeLibraryUpdatePullRequestId){
+          await dashboard?.webview.postMessage({type:'libraryUpdateProgress',requestId:msg.requestId,
+           stage:'failed',percent:0,title:'Library update request expired',
+           message:'Close this dialog and check for SDLC Library updates again.'});
+          break;
+        }
+        if(catalogBusy){
+          await dashboard?.webview.postMessage({type:'libraryUpdateProgress',requestId:msg.requestId,
+           stage:'running',percent:1,title:'Library update already running',
+           message:'Another catalog operation is still running. Wait until verification completes.'});
+          break;
+        }
+        await dashboard?.webview.postMessage({type:'libraryUpdateProgress',requestId:msg.requestId,
+         stage:'running',percent:1,title:'Retrying Library pull…',
+         message:'Starting the verified GitHub pull again.'});
+        await handleDashboardMessage({command:'catalogPull'});
         break;
       }
       case 'checkSoftwareUpdates':{
