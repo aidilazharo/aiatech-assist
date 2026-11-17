@@ -61,6 +61,8 @@ ol{line-height:1.85;padding-left:20px}
 <label for="sourceUrl">GitHub repository URL with PAT</label><input id="sourceUrl" type="password" required placeholder="https://USERNAME:TOKEN@github.com/OWNER/repo-a" autocomplete="off" spellcheck="false">
 <div class="connection-action"><button id="testSource" type="button" class="secondary">Test Connection</button><span id="sourceConnection" class="connection-status" role="status" aria-live="polite">Not tested</span></div>
 <label for="sourceBranch">Source branch (optional)</label><input id="sourceBranch" type="text" maxlength="110" placeholder="Auto: GitHub default branch, or choose another branch">
+<label for="sourcePrNumber">Source PR number (optional)</label><input id="sourcePrNumber" type="number" min="1" step="1" placeholder="e.g. 2 · copy original PR branch and details">
+<p class="muted note">If selected, the source PR's head branch, commit message, title and description are preserved. The source PR branch must still exist.</p>
 <label for="copyScope">Copy scope</label><input id="copyScope" type="text" maxlength="280" value="." placeholder="src/components or .">
 <p class="muted note">A dot copies all eligible tracked files. Secrets, Git internals, generated dependencies and release workflows are excluded.</p>
 </section>
@@ -162,7 +164,7 @@ get('repoSyncForm').addEventListener('submit',e=>{
  e.preventDefault();
  if(busy||!folder||!get('repoSyncForm').reportValidity())return;
  busy=true;createdPr='';buttons();show('Confirm the operation in VS Code. No files have changed yet.');
- vscode.postMessage({command:'createSyncPr',sourceUrl:consumeUrl('sourceUrl'),sourceBranch:get('sourceBranch').value.trim(),destinationUrl:consumeUrl('destinationRepo'),copyScope:get('copyScope').value.trim()||'.',baseBranch:get('baseBranch').value.trim()});
+ vscode.postMessage({command:'createSyncPr',sourceUrl:consumeUrl('sourceUrl'),sourceBranch:get('sourceBranch').value.trim(),sourcePrNumber:get('sourcePrNumber').value.trim(),destinationUrl:consumeUrl('destinationRepo'),copyScope:get('copyScope').value.trim()||'.',baseBranch:get('baseBranch').value.trim()});
 });
 get('openPr').addEventListener('click',()=>{if(createdPr)vscode.postMessage({command:'openCreatedPr'});});
 window.addEventListener('message',e=>{
@@ -352,11 +354,14 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
    destination=repoCredentials.parseCredentialUrl(message.destinationUrl);
    const scope=repoSync.scopeName(message.copyScope||'.');
    const sourceBranch=message.sourceBranch?repoSync.baseName(message.sourceBranch):'';
+   const sourcePrNumber=message.sourcePrNumber?String(message.sourcePrNumber).trim():'';
+   if(sourcePrNumber&&(!/^[1-9][0-9]*$/.test(sourcePrNumber)||Number(sourcePrNumber)>1000000000))
+    throw Error('Enter a valid positive source PR number.');
    const base=message.baseBranch?repoSync.baseName(message.baseBranch):'';
    const response=await vscode.window.showWarningMessage(
-    'Repo A: '+source.name+' ('+(sourceBranch||'GitHub default branch (auto)')+')\nRepo B: '+destination.name+' in '+selectedFolder+
+    'Repo A: '+source.name+' ('+(sourcePrNumber?'PR #'+sourcePrNumber:sourceBranch||'GitHub default branch (auto)')+')\nRepo B: '+destination.name+' in '+selectedFolder+
     '\nScope: '+scope+'\nPR base: '+(base||'GitHub default branch')+
-    '\n\nVerify both PATs, clone to temp, create an AI-planned review branch, commit, push and open PR?',
+    '\n\nVerify both PATs, clone to temp, preserve original source metadata, commit, push and open PR?',
     {modal:true},'Create Sync PR');
    if(response!=='Create Sync PR'){await post({type:'repoSyncResult',success:false,message:'Cancelled. No files were changed.'});return;}
    await post({type:'repoSyncProgress',message:'Testing both GitHub PAT permissions…'});
@@ -367,7 +372,7 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
    await rememberRepo('Destination',destination);
    await post({type:'repoConnectionResult',kind:'Destination',duringSync:true,success:true,safeUrl:destination.webUrl,message:'Connected · '+destination.name+' · write access verified'});
    const outcome=await repoSync.sync({
-    sourceUrl:source.url,sourceBranch,destinationFolder:selectedFolder,copyScope:scope,baseBranch:base,
+    sourceUrl:source.url,sourceBranch,sourcePrNumber,destinationFolder:selectedFolder,copyScope:scope,baseBranch:base,
     sourcePat,destPat,workspaceRoot,destinationUrl:destination.url,
     planSync,describePr,onProgress:event=>post({type:'repoSyncProgress',stage:event.stage,message:event.message})
    });

@@ -18,6 +18,7 @@ test('ATGV: Workspace command launches its own webview and has a controlled CSP'
  assert.match(content,/id="selectRepoB"/);
  assert.match(content,/id="baseBranch"/);
  assert.match(content,/id="sourceBranch"/);
+ assert.match(content,/id="sourcePrNumber"/);
  assert.match(content,/id="destinationRepo"/);
  assert.match(content,/form-action 'none'; connect-src 'none'/);
  assert.doesNotMatch(content,/https:\/\/github\.com\/[^\s"'<>]+\/pull\/\d+/);

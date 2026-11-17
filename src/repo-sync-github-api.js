@@ -106,4 +106,29 @@ async function createPr(repo,token,{branch,base,title,body},request=githubReques
  const value=requireOk(result,201,'pull request creation');
  return safePrUrl(repo,value?.html_url);
 }
-module.exports={githubRequest,getRepository,getSourceRepository,findOpenPr,createPr,safePrUrl};
+// Never infer original PR details from a commit message or an AI suggestion.
+function verifiedSourcePr(value,repo){
+ if(!value||!Number.isSafeInteger(value.number)||!value.head||!value.base||
+  String(value.head.repo?.full_name||'').toLowerCase()!==repo.name.toLowerCase())
+  throw Error('Source PR must belong to Repo A and have an existing source branch.');
+ const branch=String(value.head.ref||''),sha=String(value.head.sha||'');
+ if(!/^[a-f0-9]{40}$/.test(sha)||!branch)throw Error('Source PR has no valid head commit and branch.');
+ return {number:value.number,branch,sha,title:String(value.title||''),body:String(value.body||''),url:String(value.html_url||'')};
+}
+async function getSourcePullRequest(repo,token,prNumber,request=githubRequest){
+ if(!Number.isSafeInteger(prNumber)||prNumber<1||prNumber>1000000000)throw Error('Enter a valid Repo A pull request number.');
+ const response=await request(repo,token,'GET','/pulls/'+prNumber);
+ if(response.status!==200)throw Error('Could not read source PR #'+prNumber+' (HTTP '+response.status+'). Check its number and Source PAT permissions.');
+ return verifiedSourcePr(response.body,repo);
+}
+async function getSourcePrForCommit(repo,token,{sha,branch},request=githubRequest){
+ if(!/^[a-f0-9]{40}$/.test(String(sha||'')))throw Error('Invalid source commit SHA.');
+ const response=await request(repo,token,'GET','/commits/'+sha+'/pulls?per_page=100');
+ if(response.status!==200)throw Error('Could not inspect source commit PR history (HTTP '+response.status+').');
+ if(!Array.isArray(response.body))throw Error('GitHub returned invalid source commit PR metadata.');
+ const exact=response.body.filter(pr=>pr?.head?.ref===branch&&pr?.head?.sha===sha&&
+  String(pr?.head?.repo?.full_name||'').toLowerCase()===repo.name.toLowerCase());
+ exact.sort((a,b)=>String(b.updated_at||'').localeCompare(String(a.updated_at||'')));
+ return exact.length?verifiedSourcePr(exact[0],repo):null;
+}
+module.exports={githubRequest,getRepository,getSourceRepository,getSourcePullRequest,getSourcePrForCommit,findOpenPr,createPr,safePrUrl};
