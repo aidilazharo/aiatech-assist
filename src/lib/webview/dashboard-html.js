@@ -118,7 +118,7 @@ function html(webview,{resumeLibrary=false}={}){
        <div id="startupStackGrid" class="atgv-startup-stack-grid"></div>
        <p class="muted">Select a stack to inspect its components. Install missing tools individually, then Refresh to check them. These checks confirm host prerequisites, not a completed application build.</p>
        <p id="startupInstallFeedback" class="atgv-startup-install-feedback muted" role="status" aria-live="polite"></p>
-       <div class="atgv-startup-diagnostics-footer"><button type="button" id="startupUnifiedLog" class="secondary" title="Download persistent installation results, detection checks and project-opening errors">Download Unified Error Log</button><span class="muted">Includes installer status, verification and troubleshooting details.</span></div>
+       <div class="atgv-startup-diagnostics-footer"><button type="button" id="startupUnifiedLog" class="secondary" title="Download persistent installation results, detection checks and project-opening errors">Download Unified Error Log</button></div>
       </div>
       <form id="startupConnectionForm" class="atgv-startup-card hidden"><h3>Jira, Confluence &amp; GitHub connections</h3><div class="form-grid atgv-startup-connection-grid">
        <div class="field"><label for="startupJiraUrl">Jira URL</label><input type="url" id="startupJiraUrl" placeholder="https://aiamy-jira-azure.atlassian.net" required></div>
