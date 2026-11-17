@@ -24,7 +24,7 @@ test('Repo Sync UI uses automatic GitHub Source branch, not hard-coded main',()=
  assert.doesNotMatch(html,/id="sourceBranch"[^>]*value="main"/);
  assert.match(html,/sourceBranch:get\('sourceBranch'\)\.value\.trim\(\)/);
  const implementation=fs.readFileSync(path.join(__dirname,'../src/repo-sync-workspace.js'),'utf8');
- assert.match(implementation,/sourceBranch=message\.sourceBranch\?repoSync\.baseName\(message\.sourceBranch\):''/);
+ assert.match(implementation,/sourceBranch=input\.sourceBranch\?repoSync\.baseName\(input\.sourceBranch\):''/);
 });
 
 test('blank Source branch resolves master; existing destination main remains intact',async t=>{

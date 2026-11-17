@@ -14,7 +14,7 @@ test('ATGV: Workspace command launches its own webview and has a controlled CSP'
  const content=workspace.workspaceHtml({nonce:'safe-abc',version:'0.3.74',cspSource:'vscode-resource:'});
  assert.match(content,/<h1>ATGV: Workspace<\/h1>/);
  assert.match(content,/nonce-safe-abc/);
- assert.match(content,/Sync Repo A → Repo B · Push & Create PR/);
+ assert.match(content,/Pull & Study Source Code/);
  assert.match(content,/id="selectRepoB"/);
  assert.match(content,/id="baseBranch"/);
  assert.match(content,/id="sourceBranch"/);
