@@ -69,6 +69,8 @@ async function visit(config,token,{projectKey,roleId}){
   const {space,page,name:pageName}=await locate(config,token,project);
   const rows=extractRows(page?.body?.storage?.value||'');
   const current=rows.find(x=>x.id===me.accountId||x.email.toLowerCase()===email);
+  const unchanged=!!current&&current.id===me.accountId&&current.email===email&&current.name===name&&current.tasks===tasks&&current.roles.includes(role);
+  if(unchanged)return {rows,pageId:String(page?.id||''),spaceKey:space.key,updatedAt:page?.version?.createdAt||''};
   if(current){current.id=me.accountId;current.email=email;current.name=name;current.tasks=tasks;current.roles=[...new Set([...current.roles,role])];}
   else rows.push({id:me.accountId,email,name,roles:[role],tasks});
   rows.sort((a,b)=>a.name.localeCompare(b.name));
