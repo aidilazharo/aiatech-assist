@@ -454,6 +454,7 @@ async function performVerifiedExtensionInstall(operation){
   const safeMessage=String(error.message||'Unknown error').slice(0,400);
   await postExtensionInstallProgress(operation,'failed','Installation failed',safeMessage+' You can retry without closing this dialog.');
   if(!operation.requestId||!dashboard){
+   activeExtensionUpgradeInstall=null;
    const answer=await vscode.window.showErrorMessage('Automatic ATGV upgrade failed: '+safeMessage,'View Release');
    if(answer==='View Release')await vscode.env.openExternal(vscode.Uri.parse(operation.release.url));
   }
@@ -3904,8 +3905,22 @@ async function handleDashboardMessage(msg){
       }
       case 'extensionUpgradeDecision':{
         const entry=pendingExtensionUpgradeOffers.get(msg.requestId);
-        if(entry){pendingExtensionUpgradeOffers.delete(msg.requestId);clearTimeout(entry.timer);
-          entry.resolve(['Install Upgrade','View Release','Later'].includes(msg.action)?msg.action:'Later');}
+        const action=['Install Upgrade','View Release','Later'].includes(msg.action)?msg.action:'Later';
+        if(entry){
+          pendingExtensionUpgradeOffers.delete(msg.requestId);clearTimeout(entry.timer);
+          entry.resolve({action,requestId:msg.requestId});
+        }else if(activeExtensionUpgradeInstall?.requestId===msg.requestId&&!activeExtensionUpgradeInstall.running){
+          // A failed installation stays open until the user retries or explicitly leaves.
+          const release=activeExtensionUpgradeInstall.release;
+          activeExtensionUpgradeInstall=null;
+          if(action==='View Release')await vscode.env.openExternal(vscode.Uri.parse(release.url));
+        }
+        break;
+      }
+      case 'extensionUpgradeRetry':{
+        const operation=activeExtensionUpgradeInstall;
+        if(!operation||!operation.requestId||operation.requestId!==msg.requestId||operation.running)break;
+        await performVerifiedExtensionInstall(operation);
         break;
       }
       case 'libraryUpdateDecision':{
@@ -3923,12 +3938,20 @@ async function handleDashboardMessage(msg){
       }
       case 'installExtensionRelease':{
         if(!extensionRelease)throw Error('No verified newer release is available.');
-        // The user explicitly clicked Upgrade, so bypass the once-per-release prompt suppression.
+        // Manual installs use the same visible upgrade modal and verified progress
+        // rather than silently downloading/installing and closing the UI.
+        if(activeExtensionUpgradeInstall?.running)break;
         const release=extensionRelease,token=await releaseAccessToken({interactive:true});
-        const file=await releaseUpdater.downloadVerified(release,{token,directory:path.join(context.globalStorageUri.fsPath,'updates')});
-        await vscode.commands.executeCommand('workbench.extensions.installExtension',vscode.Uri.file(file));
-        // Direct installation uses the same seamless reload and fresh webview as the branded upgrade modal.
-        await restart();break;
+        const selected=await offerBrandedExtensionUpgrade(release);
+        const action=typeof selected==='string'?selected:selected?.action;
+        const requestId=typeof selected==='object'&&selected?selected.requestId:null;
+        if(action==='View Release')await vscode.env.openExternal(vscode.Uri.parse(release.url));
+        if(action==='Install Upgrade'&&!activeExtensionUpgradeInstall){
+          const operation={requestId,release,token,running:false};
+          activeExtensionUpgradeInstall=operation;
+          await performVerifiedExtensionInstall(operation);
+        }
+        break;
       }
       case 'backupLocalContent':{
         try{const result=await backupLocalContent();if(result?.cancelled)await dashboard?.webview.postMessage({type:'localBackupAction',action:'backup',success:true,message:'Backup cancelled. No files changed.'});}
