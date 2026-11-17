@@ -7220,7 +7220,7 @@ let startupFormInitialized=false,startupPrereqRequested=false,startupConnectionV
 let startupVerifying=false,startupScanComplete=false,startupPage=0,startupInstallingModule='';
 let startupLastInstalledTool='';
 let startupStackData=null,startupOpenStackId='',startupStackPriorFocus=null;
-let startupCopilotBusy=false;
+let startupCopilotBusy=false,startupCopilotModalOpen=false,startupCopilotPriorFocus=null;
 const STARTUP_STACK_NAMES=['ReactJS','Angular','NestJS','.NET','Spring Boot'];
 function setStartupCopilotStatus(state,message){
  startupCopilotBusy=state==='working';
@@ -7228,6 +7228,19 @@ function setStartupCopilotStatus(state,message){
  button.textContent=startupCopilotBusy?'Setting up…':state==='ready'?'Installed':state==='error'?'Retry Setup':'Set up Copilot SDK';
  $('startupCopilotStatus').textContent=message;
  $('startupCopilotStatus').className='startup-copilot-status '+(state==='ready'?'success':state==='error'||state==='unsupported'?'error':'muted');
+ const card=$('startupCopilotCard'),badge=$('startupCopilotBadge');
+ badge.textContent=startupCopilotBusy?'Setting up…':state==='ready'?'Installed':state==='unsupported'?'Update required':state==='error'?'Setup failed':'Needs setup';
+ card.classList.toggle('is-ready',state==='ready');card.classList.toggle('is-missing',state==='error'||state==='unsupported'||state==='available');
+ card.setAttribute('aria-label','GitHub Copilot SDK: '+badge.textContent);
+}
+function openStartupCopilotModal(){
+ startupCopilotPriorFocus=document.activeElement;startupCopilotModalOpen=true;
+ $('startupCopilotModal').classList.remove('hidden');$('startupCopilotModal').setAttribute('aria-hidden','false');$('startupCopilotClose').focus();
+}
+function closeStartupCopilotModal(){
+ if(!startupCopilotModalOpen)return;startupCopilotModalOpen=false;
+ $('startupCopilotModal').classList.add('hidden');$('startupCopilotModal').setAttribute('aria-hidden','true');
+ const previous=startupCopilotPriorFocus;startupCopilotPriorFocus=null;if(previous?.isConnected)previous.focus();
 }
 function renderStartupCopilotReadiness(info){
  if(startupCopilotBusy)return;
@@ -7257,6 +7270,7 @@ function startupPayload(){return Object.fromEntries(Object.entries(startupFieldM
 function renderStartupPage(){
  if(!startupSetupRequired)return;
  if(startupPage!==0&&startupOpenStackId)closeStartupStackModal();
+ if(startupPage!==0&&startupCopilotModalOpen)closeStartupCopilotModal();
  // A saved, verified connection is read-only across page navigation and VS Code restarts.
  // Reconfiguration is managed in Settings; an unverified saved state must be tested.
  $('startupTestConnections').disabled=startupVerifying||startupConnectionVerified;
@@ -7266,6 +7280,7 @@ function renderStartupPage(){
  $('startupComputerCard').classList.toggle('hidden',startupPage!==0);
  $('startupConnectionForm').classList.toggle('hidden',startupPage!==1);
  $('startupPrevious').classList.toggle('hidden',startupPage===0);
+ $('startupUnifiedLog').classList.toggle('hidden',startupPage!==0);
  $('startupPrevious').disabled=startupPage===0||startupVerifying||!!startupInstallingModule;
  $('startupProceed').disabled=startupVerifying||!!startupInstallingModule||(startupPage===0?!startupScanComplete:!startupConnectionVerified);
  $('startupProceed').textContent=startupPage===0?'Next →':'Next: Search Project →';
@@ -7274,6 +7289,7 @@ function renderStartupPage(){
 }
 function showStartupStep(required){
  if(!required&&startupOpenStackId)closeStartupStackModal();
+ if(!required&&startupCopilotModalOpen)closeStartupCopilotModal();
  startupSetupRequired=required;
  $('startupSetup').classList.toggle('hidden',!required);
  $('gateFinder').classList.toggle('hidden',required);
@@ -7425,6 +7441,18 @@ $('startupStackModal').addEventListener('keydown',event=>{
  if(event.key==='Tab'){
   const controls=[...$('startupStackModal').querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled])')];
   if(!controls.length){event.preventDefault();return;}
+  const first=controls[0],last=controls[controls.length-1];
+  if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+  else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+ }
+});
+$('startupCopilotCard').addEventListener('click',openStartupCopilotModal);
+$('startupCopilotClose').addEventListener('click',closeStartupCopilotModal);
+$('startupCopilotModal').addEventListener('click',event=>{if(event.target===$('startupCopilotModal'))closeStartupCopilotModal();});
+$('startupCopilotModal').addEventListener('keydown',event=>{
+ if(event.key==='Escape'){event.preventDefault();closeStartupCopilotModal();return;}
+ if(event.key==='Tab'){
+  const controls=[...$('startupCopilotModal').querySelectorAll('button:not([disabled])')];if(!controls.length){event.preventDefault();return;}
   const first=controls[0],last=controls[controls.length-1];
   if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
   else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}

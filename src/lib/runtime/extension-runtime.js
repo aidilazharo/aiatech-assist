@@ -4746,10 +4746,12 @@ async function handleDashboardMessage(msg){
         const service=require('../../architect-stack-reset');
         // Inspect before requesting consent; never run a destructive Git command on an unexpected branch.
         const plan=await service.plan({root,project:current,baseBranch:effectiveConfig(activeProject).get('github.branch')||'main',force:true,allowFeatureRecovery:true});
+        const workspaceRoot=getWorkspace().uri.fsPath,projectFolder=path.join(workspaceRoot,'projects',current.id);
+        const archivePlan=await service.planProjectStackArchive(projectFolder,current.techStackId,{workspaceRoot,projectId:current.id});
         const approved=await uiWarning('Reset technology stack '+current.techStackId+'?\n\n'+
           'This is a FORCE RESET of the verified project technology-stack checkout. ATGV will first save all tracked and ordinary untracked changes in a recoverable Git stash ('+plan.dirtyCount+' changed path(s)), then run git reset --hard on the local base branch '+plan.baseBranch+'. Ignored files stay intact.\n\n'+
           'Your previous local edits will no longer be in the active checkout; recover them using Git stash if needed. The next Save Stack will install dependencies automatically, validate and push a fresh bootstrap branch.\n\n'+
-          'The previous bootstrap branch and GitHub commits remain available; the base branch and unrelated work are never deleted. Technology stack approval and validation will be cleared.\n\n'+
+          'The previous bootstrap branch and GitHub commits remain available; the base branch and unrelated work are never deleted. Previous stack documents will be archived, and technology stack approval and validation will be cleared.\n\n'+
           (plan.recovery?'Legacy stack recovery: '+plan.recovery+'. The previous branch and its commits will remain intact.\n\n':'')+
           (plan.preservedWorkBranch?'The active development branch '+plan.preservedWorkBranch+' will be PRESERVED, not deleted or reset. Its committed work remains on that branch.\n\n':'')+
           'Repository: '+plan.root+'\nCurrent branch: '+plan.currentBranch+'\nNext generation: '+(plan.nextGeneration),{modal:true},'Force Reset Tech Stack');
@@ -4761,11 +4763,11 @@ async function handleDashboardMessage(msg){
         architectServerOperationSerial++;
         const stopped=await require('../../architect-server').stopProjectManaged({root});
         architectErrorLogs.append(activeProject.id,'reset','Server cleanup: '+stopped.message);
-        const result=await service.reset({root,project:current,baseBranch:plan.baseBranch,expectedPlan:plan,force:true,allowFeatureRecovery:true});
-        // Preserve old project-level stack snapshots and architecture notes.
-        // scaffoldProject will generate fresh snapshots for the next selection.
-        const archive=await service.archiveProjectStackDocuments(path.join(getWorkspace().uri.fsPath,'projects',current.id),current.techStackId);
-        const updated=await registry.update(activeProject.id,{...current,techStackId:'',techStackCompanionId:'',techStackPrepared:null,techStackValidation:null,techStackServerVerification:null,techStackApproval:null,techStackGeneration:result.nextGeneration});
+        const {result,archive}=await service.resetWithProjectArchive({root,project:current,baseBranch:plan.baseBranch,expectedPlan:plan,force:true,allowFeatureRecovery:true,
+          projectFolder,workspaceRoot,projectId:current.id,stackId:current.techStackId,expectedArchivePlan:archivePlan});
+        let updated;
+        try{updated=await registry.update(activeProject.id,{...current,techStackId:'',techStackCompanionId:'',techStackPrepared:null,techStackValidation:null,techStackServerVerification:null,techStackApproval:null,techStackGeneration:result.nextGeneration});}
+        catch(error){error.message+=' Git is already on '+result.baseBranch+'. '+(archive.folder?'Previous stack records are in '+archive.folder+'. ':'')+'Retry Reset Tech Stack to finish updating project settings.';throw error;}
         activeProject=updated;
         architectErrorLogs.clear(updated.id,'reset');
         await refreshDashboard();
@@ -4793,6 +4795,8 @@ async function handleDashboardMessage(msg){
           // HEAD before consent. No branch/file changes occur on a rejected plan.
           const resetService=require('../../architect-stack-reset');
           const plan=await resetService.plan({root,project:priorPrepared,baseBranch});
+          const workspaceRoot=getWorkspace().uri.fsPath,projectFolder=path.join(workspaceRoot,'projects',current.id);
+          const archivePlan=await resetService.planProjectStackArchive(projectFolder,oldId,{workspaceRoot,projectId:current.id});
           const action='Switch & Save Stack';
           const oldName=oldId;
           const proceed=await uiWarning('Switch technology stack from '+oldName+' to '+id+'?\n\n'+
@@ -4805,9 +4809,10 @@ async function handleDashboardMessage(msg){
           architectServerOperationSerial++;
           const stopped=await require('../../architect-server').stopProjectManaged({root});
           architectErrorLogs.append(activeProject.id,'save','Server cleanup: '+stopped.message);
-          const result=await resetService.reset({root,project:priorPrepared,baseBranch,expectedPlan:plan});
-          const archive=await resetService.archiveProjectStackDocuments(path.join(getWorkspace().uri.fsPath,'projects',current.id),oldId);
-          preparedProject=await registry.update(activeProject.id,{...current,techStackId:'',techStackCompanionId:'',techStackPrepared:null,techStackValidation:null,techStackServerVerification:null,techStackApproval:null,techStackGeneration:result.nextGeneration});
+          const {result,archive}=await resetService.resetWithProjectArchive({root,project:priorPrepared,baseBranch,expectedPlan:plan,
+            projectFolder,workspaceRoot,projectId:current.id,stackId:oldId,expectedArchivePlan:archivePlan});
+          try{preparedProject=await registry.update(activeProject.id,{...current,techStackId:'',techStackCompanionId:'',techStackPrepared:null,techStackValidation:null,techStackServerVerification:null,techStackApproval:null,techStackGeneration:result.nextGeneration});}
+          catch(error){error.message+=' Git is already on '+result.baseBranch+'. '+(archive.folder?'Previous stack records are in '+archive.folder+'. ':'')+'Retry Reset Tech Stack to finish updating project settings.';throw error;}
           activeProject=preparedProject;
           await refreshDashboard(); // Keep UI project state accurate even if new stack validation fails.
           await dashboard?.webview.postMessage({type:'architectStackProgress',projectId:activeProject.id,message:'Previous '+oldName+' branch preserved; '+archive.archived.length+' stack document(s) archived. Preparing '+id+'…'});

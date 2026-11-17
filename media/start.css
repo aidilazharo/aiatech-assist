@@ -1848,16 +1848,7 @@ button:focus-visible{outline:2px solid var(--vscode-focusBorder,#649ed2);outline
  #projectView .project-settings-panel-body{padding:10px 12px 16px;}
 }
 
-/* Persistent prerequisite and project-opening diagnostics at bottom left. */
-.atgv-startup-diagnostics-footer{
- display:flex;align-items:center;justify-content:flex-start;gap:12px;
- border-top:1px solid var(--vscode-panel-border);padding-top:13px;margin-top:13px;
- flex-wrap:wrap;
-}
-.atgv-startup-diagnostics-footer button{
- white-space:nowrap;font-size:12px;padding:7px 11px;min-height:32px;
-}
-.atgv-startup-diagnostics-footer span{font-size:11px;}
+/* Persistent prerequisite and project-opening diagnostics. */
 .atgv-startup-install-feedback{min-height:18px;margin:10px 0 0;font-size:12px;overflow-wrap:anywhere;}
 .atgv-startup-install-feedback.error{color:var(--vscode-errorForeground,#f48771);}
 .atgv-startup-install-feedback.success{color:var(--vscode-testing-iconPassed,#89d185);}
@@ -2004,11 +1995,10 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 .atgv-catalog-pull-progress{padding:12px;margin:8px 0 14px;border:1px solid var(--vscode-panel-border);border-radius:8px}
 @media(prefers-reduced-motion:reduce){.atgv-library-update-indicator{transition:none!important;animation:none!important}}
 
-/* Pin the unified log download alone to the bottom-left of prerequisite readiness. */
+/* Keep the unified log in the startup navigation row. */
 #startupComputerCard{display:flex;flex-direction:column;row-gap:12px;}
 #startupComputerCard>.atgv-startup-section-title{margin-bottom:4px;}
 #startupComputerCard>.atgv-startup-stack-grid{margin-top:8px;margin-bottom:4px;}
-#startupComputerCard .atgv-startup-diagnostics-footer{margin-top:auto;align-self:stretch;justify-content:flex-start;}
 
 /* Jira preview shows the same issue text that will be submitted to Jira. */
 .jira-preview-details{margin-top:14px;padding:16px;border:1px solid var(--vscode-panel-border,#45454a);border-radius:8px;background:var(--vscode-editor-background);}
@@ -2045,10 +2035,13 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 .startup-stack-modal-footer{border-top:1px solid var(--vscode-panel-border);}
 .startup-stack-modal-footer .atgv-startup-install-feedback{margin:0;flex:1;}
 @media(max-width:520px){.startup-stack-modal-header,.startup-stack-modal-footer{padding:14px;}.startup-stack-modal-content{padding:12px 14px 16px;}}
-.startup-copilot-setup{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px;border:1px solid var(--vscode-panel-border);border-radius:8px;background:var(--vscode-sideBar-background);}
-.startup-copilot-setup h4{margin:0 0 5px;font-size:13px;}.startup-copilot-setup p{margin:3px 0;line-height:1.45;font-size:12px;}.startup-copilot-setup button{flex:none;}
 .startup-copilot-status.success{color:var(--vscode-testing-iconPassed,#89d185);}.startup-copilot-status.error{color:var(--vscode-errorForeground,#f48771);}
-@media(max-width:600px){.startup-copilot-setup{align-items:flex-start;flex-direction:column;}}
+.startup-stack-grid-items{display:contents}.startup-copilot-card>span:first-child{min-width:0;overflow-wrap:anywhere}
+.atgv-startup-footer{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:12px;align-items:center}
+.atgv-startup-footer #startupUnifiedLog,.atgv-startup-footer #startupPrevious{grid-column:1;grid-row:1;justify-self:start}
+.atgv-startup-footer #startupProceedInfo{grid-column:2;grid-row:1;text-align:center;margin:0}
+.atgv-startup-footer #startupProceed{grid-column:3;grid-row:1;justify-self:end}
+@media(max-width:650px){.atgv-startup-footer{grid-template-columns:minmax(0,1fr) auto}.atgv-startup-footer #startupProceedInfo{grid-column:1/-1;grid-row:1}.atgv-startup-footer #startupUnifiedLog,.atgv-startup-footer #startupPrevious{grid-row:2}.atgv-startup-footer #startupProceed{grid-column:2;grid-row:2}}
 
 /* Show BR evidence and Jira records together without losing the BR actions. */
 #workView .ba-jira-project-table .atgv-datatable-table{min-width:1200px}

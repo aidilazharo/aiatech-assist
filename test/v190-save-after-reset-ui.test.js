@@ -75,7 +75,8 @@ test('switch action is disabled only while busy and never bypasses the guarded G
  assert.match(handler,/resetService\.plan\(\{root,project:priorPrepared,baseBranch\}\)/);
  assert.match(handler,/uiWarning\('Switch technology stack/);
  assert.match(handler,/if\(proceed!==action\).*?break;/);
- assert.match(handler,/resetService\.reset\(\{root,project:priorPrepared,baseBranch,expectedPlan:plan\}\)/);
+ assert.match(handler,/resetService\.resetWithProjectArchive\(\{root,project:priorPrepared,baseBranch,expectedPlan:plan,/);
+ assert.match(handler,/expectedArchivePlan:archivePlan/);
  assert.match(handler,/techStackGeneration:result\.nextGeneration/);
  assert.match(handler,/orchestrator\.bootstrap\(\{root,stackId:id,generation:preparedProject\.techStackGeneration/);
 });

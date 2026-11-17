@@ -6,7 +6,7 @@ const read=file=>fs.readFileSync(path.join(__dirname,'..',file),'utf8');
 test('startup Copilot setup reports availability, progress, success and retry',()=>{
  const ui=read('media/start.js'),from=ui.indexOf('function setStartupCopilotStatus('),to=ui.indexOf('function startupScanPercent(',from);
  assert.ok(from>=0&&to>from);
- const nodes={startupCopilotStatus:{},startupCopilotSetup:{}};
+ const nodes={startupCopilotStatus:{},startupCopilotSetup:{},startupCopilotBadge:{},startupCopilotCard:{classList:{toggle(){}},setAttribute(){}}};
  const create=new Function('$',"let startupCopilotBusy=false;"+ui.slice(from,to)+';return {set:setStartupCopilotStatus,render:renderStartupCopilotReadiness};');
  const controls=create(id=>nodes[id]);controls.render({installed:false,compatible:true});
  assert.equal(nodes.startupCopilotSetup.disabled,false);assert.match(nodes.startupCopilotStatus.textContent,/not installed/);

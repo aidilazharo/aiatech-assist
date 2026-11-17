@@ -76,7 +76,7 @@ test('readiness and installer UI retain the selected stack modal and show the un
  assert.match(ui,/startupLastInstalledTool/);
  assert.match(html,/id="startupStackModal"/);
  assert.match(ui,/if\(startupOpenStackId\)/);
- assert.match(css,/\.atgv-startup-diagnostics-footer/);
+ assert.match(css,/\.atgv-startup-footer/);
 });
 
 test('verified project transitions to open before activation refresh and rolls back on error',async()=>{

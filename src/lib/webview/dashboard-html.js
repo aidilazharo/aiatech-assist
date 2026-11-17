@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.3.97';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.3.98';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -65,6 +65,11 @@ function html(webview,{resumeLibrary=false}={}){
     <div class="startup-stack-modal-header"><div><h2 id="startupStackModalTitle">Technology stack requirements</h2><p id="startupStackModalDescription" class="muted">Host tools and project modules for the selected stack</p></div><button type="button" id="startupStackModalClose" class="secondary" aria-label="Close stack requirements">Close</button></div>
     <div id="startupStackModalContent" class="startup-stack-modal-content"></div>
     <div class="startup-stack-modal-footer"><p id="startupStackModalFeedback" class="atgv-startup-install-feedback muted" role="status" aria-live="polite"></p><button type="button" id="startupStackModalDone" class="secondary">Close</button></div>
+  </div></div>
+  <div id="startupCopilotModal" class="modal-overlay hidden" aria-hidden="true"><div class="modal-card startup-stack-modal-card" role="dialog" aria-modal="true" aria-labelledby="startupCopilotTitle" aria-describedby="startupCopilotDescription">
+    <div class="startup-stack-modal-header"><div><h2 id="startupCopilotTitle">GitHub Copilot SDK</h2><p id="startupCopilotDescription" class="muted">Set up the SDK for ATGV AI and issue analysis. A Copilot account and CLI sign-in are required.</p></div><button type="button" id="startupCopilotClose" class="secondary">Close</button></div>
+    <div class="startup-stack-modal-content"><p id="startupCopilotStatus" class="startup-copilot-status muted" role="status" aria-live="polite">Checking Copilot SDK…</p></div>
+    <div class="startup-stack-modal-footer"><button id="startupCopilotSetup" type="button" class="secondary" disabled>Set up Copilot SDK</button></div>
   </div></div>
   <div id="startupPrerequisiteModal" class="modal-overlay hidden" aria-hidden="true"><div class="modal-card atgv-upgrade-modal atgv-prerequisite-modal" role="dialog" aria-modal="true" aria-labelledby="startupPrerequisiteTitle" aria-describedby="startupPrerequisiteDescription startupPrerequisiteAssurance">
     <div class="atgv-upgrade-brand"><img src="${brand}" alt="ATGV AIATECH Assist logo"><div><strong>AIATECH ASSIST</strong><span>PREREQUISITE INSTALLATION</span></div></div>
@@ -125,11 +130,8 @@ function html(webview,{resumeLibrary=false}={}){
        <p id="startupToolMessage" class="muted" role="status" aria-live="polite">Checking installed runtimes and command-line tools…</p>
        <div class="atgv-tool-scan-status" role="status" aria-live="polite"><span id="startupScanToolName">Scanning prerequisites…</span><strong id="startupScanToolPercent">0%</strong></div>
        <div id="startupScanToolTrack" class="workspace-search-track" role="progressbar" aria-label="Technology stack prerequisites scan" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="startupScanToolFill" class="workspace-search-fill"></div></div>
-       <div id="startupStackGrid" class="atgv-startup-stack-grid"></div>
-       <p class="muted">Select a stack to open its required host tools and project modules. Project modules are installed in the project when the Solution Architect saves the stack.</p>
-       <section class="startup-copilot-setup" aria-labelledby="startupCopilotTitle"><div><h4 id="startupCopilotTitle">GitHub Copilot SDK</h4><p class="muted">Set up the SDK for ATGV AI and issue analysis. A Copilot account and CLI sign-in are required.</p><p id="startupCopilotStatus" class="startup-copilot-status muted" role="status" aria-live="polite">Checking Copilot SDK…</p></div><button id="startupCopilotSetup" type="button" class="secondary" disabled>Set up Copilot SDK</button></section>
+       <div class="atgv-startup-stack-grid"><div id="startupStackGrid" class="startup-stack-grid-items"></div><button id="startupCopilotCard" type="button" class="atgv-startup-stack atgv-startup-stack-button startup-copilot-card" aria-haspopup="dialog" aria-controls="startupCopilotModal" aria-label="GitHub Copilot SDK: checking setup"><span>GitHub Copilot SDK</span><span id="startupCopilotBadge" class="atgv-stack-ready">Checking…</span></button></div>
        <p id="startupInstallFeedback" class="atgv-startup-install-feedback muted" role="status" aria-live="polite"></p>
-       <div class="atgv-startup-diagnostics-footer"><button type="button" id="startupUnifiedLog" class="secondary" title="Download persistent installation results, detection checks and project-opening errors">Download Unified Error Log</button></div>
       </div>
       <form id="startupConnectionForm" class="atgv-startup-card hidden"><h3>Jira, Confluence &amp; GitHub connections</h3><div class="form-grid atgv-startup-connection-grid">
        <div class="field"><label for="startupJiraUrl">Jira URL</label><input type="url" id="startupJiraUrl" placeholder="https://aiamy-jira-azure.atlassian.net" required></div>
@@ -144,7 +146,7 @@ function html(webview,{resumeLibrary=false}={}){
          <button type="button" id="startupLibraryZipUpload" class="secondary" title="Import offline SDLC Library ZIP" aria-label="Upload SDLC Library ZIP" aria-describedby="startupLibraryZipStatus"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V3m-5 5 5-5 5 5"/><path d="M4 16v4h16v-4"/></svg></button>
         </div><small id="startupLibraryZipStatus" class="muted" role="status" aria-live="polite">Use the upload icon if GitHub Library access is unavailable.</small></div>
       </div><div class="atgv-startup-actions"><button type="submit" id="startupTestConnections">Test &amp; Save Connections</button><span id="startupConnectionMessage" role="status" aria-live="polite">Verify Jira, Confluence and both GitHub repositories to continue.</span></div></form>
-      <div class="atgv-startup-footer"><button type="button" id="startupPrevious" class="secondary hidden" disabled>← Previous</button><p id="startupProceedInfo" role="status">Checking computer prerequisites…</p><button type="button" id="startupProceed" disabled>Next →</button></div>
+      <div class="atgv-startup-footer"><button type="button" id="startupUnifiedLog" class="secondary" title="Download persistent installation results, detection checks and project-opening errors">Download Unified Error Log</button><button type="button" id="startupPrevious" class="secondary hidden" disabled>← Previous</button><p id="startupProceedInfo" role="status">Checking computer prerequisites…</p><button type="button" id="startupProceed" disabled>Next →</button></div>
     </section>
     <section id="gateFinder" class="gate-finder hidden">
       <div class="gate-search-bar"><input id="gateQuery" type="search" aria-label="Search projects" placeholder="Search Confluence spaces or local projects…"><button type="button" id="gateSearch">Search</button><button id="gateManual" class="secondary" type="button">+ New Project</button></div>
@@ -260,7 +262,6 @@ function html(webview,{resumeLibrary=false}={}){
         <button type="button" id="installExtensionRelease" class="secondary" disabled>Install Verified VSIX</button>
         <button type="button" id="viewExtensionRelease" class="secondary" disabled>View GitHub Release</button>
       </div>
-      <p class="muted">Extension and SDLC Library checks run automatically, including at startup; update notifications always require confirmation. Release sources are detected automatically and cannot be edited.</p>
       <p id="softwareExtensionStatus" class="test-status muted" role="status" aria-live="polite">Extension: not checked.</p>
       <p id="softwareLibraryStatus" class="test-status muted" role="status" aria-live="polite">Library: check the SDLC Catalog section for its installed version.</p>
       <div id="softwareLibraryPullProgress" class="atgv-catalog-pull-progress hidden" role="status" aria-live="polite" aria-atomic="true">
@@ -268,7 +269,6 @@ function html(webview,{resumeLibrary=false}={}){
         <div id="softwareLibraryPullBar" class="atgv-library-update-track" role="progressbar" aria-label="SDLC Library pull stages completed" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="softwareLibraryPullIndicator" class="atgv-library-update-indicator"></span></div>
         <p id="softwareLibraryPullMessage" class="muted">The GitHub pull and verification stages will appear here.</p>
       </div>
-      <p class="muted">Installation is optional, validates GitHub's published SHA-256 checksum, and requires a VS Code reload. Private releases require a saved GitHub token or VS Code GitHub sign-in. Catalog downloads use the existing pinned and verified Pull Catalog process.</p>
     </section></div></details>
   </main>
   <main id="projectView" class="hidden narrow unified-settings-view"><div class="view-heading"><button id="back" class="secondary">← Back to Workspace</button></div><h1>Settings</h1><div class="settings-page-tabs" role="tablist" aria-label="Settings scope"><button id="projectToExtensionSettings" type="button" role="tab" aria-selected="false" aria-controls="settingsView" class="settings-page-tab">Extension Settings</button><button id="projectSettingsTab" type="button" role="tab" aria-selected="true" aria-controls="projectView" class="settings-page-tab is-active">Project Settings</button></div><details class="editor project-settings-panel" id="projectSettingsPanel"><summary class="project-settings-panel-summary"><span id="formTitle">Project Settings</span></summary><div class="project-settings-panel-body"><div class="settings-scope-actions"><span class="settings-scope-label" id="projectScopeLabel">Scope: Current project</span></div><p class="muted">Project identity, Jira and Confluence destinations, GitHub repository, technology stack, role settings and schedule are saved per project. Shared account credentials are managed separately.</p><p class="muted" id="folderNote"></p>
