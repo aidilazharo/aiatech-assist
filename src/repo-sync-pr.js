@@ -81,11 +81,21 @@ function slugify(value){
  return String(value||'').normalize('NFKD').toLowerCase().replace(/[\u0300-\u036f]/g,'')
   .replace(/[^a-z0-9]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'');
 }
+// Use the actual code-change category, never the fact that two repos are
+// being synchronized, to name destination review branches.
+function branchType(sourceMessage=''){
+ const subject=commitSubject(sourceMessage);
+ const typed=/^(feat|fix|docs|chore|ci|refactor|test|perf|build|style|revert)(?:\([^)]+\))?!?:\s*/i.exec(subject);
+ if(typed)return typed[1].toLowerCase();
+ if(/^(?:fix|resolve|repair|correct|patch)\b/i.test(subject))return 'fix';
+ if(/^(?:add|implement|introduce|create)\b/i.test(subject))return 'feat';
+ if(/^(?:sync|mirror|import|copy|pull)\b/i.test(subject))return 'sync';
+ return 'chore';
+}
 function branchName(repo,sha,sourceMessage='',files=[]){
- const label=slugify(repo).slice(0,28)||'repo-a';
  const short=String(sha||'').slice(0,8).toLowerCase();
  if(!/^[a-f0-9]{8}$/.test(short))throw Error('Source commit SHA is required for Repo Sync naming.');
- const prefix='sync/'+label+'/';
+ const prefix=branchType(sourceMessage)+'/';
  const slug=slugify(actionText(meaningfulSubject(sourceMessage,files)))||'source-update';
  const room=110-prefix.length-short.length-1;
  return baseName(prefix+slug.slice(0,room).replace(/-$/,'')+'-'+short);
@@ -184,14 +194,16 @@ function cleanAiField(input,limit=220){
  const str=String(input||'').trim().replace(/[\x00-\x1f\x7f]/g,' ');
  return str.length<=limit?str:str.slice(0,limit).trim();
 }
-function aiSyncPlan(raw,source){
+function aiSyncPlan(raw,source,sourceMessage='',sourceSha=''){
  if(!raw||typeof raw!=='object'||Array.isArray(raw))return {};
- const prefix='sync/'+source.repo.toLowerCase().replace(/[^a-z0-9_-]/g,'-').slice(0,28)+'/';
+ const prefix=branchType(sourceMessage)+'/';
  let branch=cleanAiField(raw.branch,115);
- // Enforce Repo A namespace and reject generic branch names.
- if(!branch.startsWith(prefix)||!/^[a-z0-9/_-]+$/.test(branch)||branch.includes('..')||branch.includes('//')||branch.endsWith('/'))branch='';
+ // AI can improve a change slug but cannot override the verified commit type.
+ // Permit one conventional type segment and an 8-hex revision suffix only.
+ if(!branch.startsWith(prefix)||!/^[a-z]+\/[a-z0-9]+(?:-[a-z0-9]+)*-[a-f0-9]{8}$/.test(branch))branch='';
+ if(branch&&sourceSha&&(!/^[a-f0-9]{40}$/i.test(sourceSha)||!branch.endsWith('-'+sourceSha.slice(0,8).toLowerCase())))branch='';
  if(branch)try{baseName(branch);}catch{branch='';}
- const suffix=branch.slice(prefix.length).replace(/-[a-f0-9]{8,10}$/i,'').replace(/[-_/]+/g,' ');
+ const suffix=branch.slice(prefix.length).replace(/-[a-f0-9]{8}$/i,'').replace(/[-_/]+/g,' ');
  if(branch&&(genericMessage(suffix)||/^(?:main|master|develop|dev|source|latest|sync|updates|changes)$/.test(suffix)))branch='';
  const commitMessage=cleanAiField(raw.commitMessage,110);
  const prTitle=cleanAiField(raw.prTitle,110);
@@ -355,12 +367,12 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   // GitHub cannot create a pull request where the review branch equals the base.
   // Reuse the actual source branch in every other case.
   branch=chosenBranch===base
-   ?baseName('sync/'+slugify(source.repo).slice(0,28)+'/'+slugify(chosenBranch).slice(0,40)+'-'+sha.slice(0,8))
+   ?branchName(source.repo,sha,sourceMessage,sourceCommitFiles.length?sourceCommitFiles:files)
    :baseName(chosenBranch);
   const facts=await readSourceFacts({cloned,source,chosenBranch,sha,sourceMessage,files,destination,base,sourceCommitFiles});
   if(!sourcePr||previewOnly){
    await notify('ai','Studying verified source-code structure and commit history for the proposed branch, commit and PR details…');
-   try{aiPlan=aiSyncPlan(await planSync(facts),source);}
+   try{aiPlan=aiSyncPlan(await planSync(facts),source,sourceMessage,sha);}
    catch{await notify('ai','AI summary unavailable; using verified source metadata.');}
   }
   if(excludedSourceCommitFiles.length)
@@ -372,7 +384,7 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
    const baseLine=String(baseRefs||'').split(/\r?\n/).find(x=>x.endsWith('\trefs/heads/'+base));
    const baseSha=baseLine?.split('\t')[0]||'';
    if(!/^[a-f0-9]{40}$/.test(baseSha))throw Error('Destination PR base branch is missing or inaccessible.');
-   const proposedBranch=sourcePr&&chosenBranch!==base?chosenBranch:(aiPlan.branch||branchName(source.repo,sha,sourceMessage,sourceCommitFiles.length?sourceCommitFiles:files));
+   const proposedBranch=chosenBranch!==base?chosenBranch:(aiPlan.branch||branch);
    const proposedCommit=sourcePr?sourceMessage:(aiPlan.commitMessage||sourceMessage);
    const proposedTitle=sourcePr?sourcePr.title:(aiPlan.prTitle||commitSubject(sourceMessage));
    const proposedBody=sourcePr?sourcePr.body:(aiPlan.prDescription||'- '+readableTitle(sourceMessage,sourceCommitFiles||files));
@@ -490,4 +502,4 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   throw Error(e.message+suffix);
  }finally{await fs.rm(temp,{recursive:true,force:true}).catch(()=>{});}
 }
-module.exports={githubUrl,baseName,scopeName,isAllowedPath,commitSubject,genericMessage,meaningfulSubject,readableTitle,branchName,prDetails,patEnvironment,aiSyncPlan,readSourceFacts,inspectSourceCode,sync};
+module.exports={githubUrl,baseName,scopeName,isAllowedPath,commitSubject,genericMessage,meaningfulSubject,readableTitle,branchType,branchName,prDetails,patEnvironment,aiSyncPlan,readSourceFacts,inspectSourceCode,sync};
