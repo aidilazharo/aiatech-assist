@@ -13,7 +13,7 @@ test('v0.3.78 version metadata and single-action UI with both PAT roles',()=>{
  assert.match(pkg.version,/^\d+\.\d+\.\d+$/);
  assert.equal(pkg.atgvDisplayVersion,pkg.version);
  const html=workspace.workspaceHtml({nonce:'safe',version:pkg.version,cspSource:'vscode-resource:'});
- for(const label of ['Source · Repo A','Destination · Repo B','Source branch (optional)','Destination GitHub URL','outside ATGV workspace','Pull & Study Source Code','PATs'])assert.ok(html.includes(label),label);
+ for(const label of ['<h2>1. Source</h2>','<h2>2. Destination</h2>','Source branch (optional)','Destination GitHub URL','outside ATGV workspace','Pull & Study Source Code','PAT'])assert.ok(html.includes(label),label);
  assert.equal((html.match(/id="createPr"/g)||[]).length,1);
 });
 test('Repo B folder must be outside ATGV workspace before any process begins',async()=>{
