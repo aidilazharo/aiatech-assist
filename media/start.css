@@ -1956,3 +1956,17 @@ body:not(.gate-mode) .app-header .brand-identity{gap:1px}
 .gate-top .gate-product-title h1{margin:0;line-height:1.1}
 .gate-top .gate-product-title .gate-brand-versions{margin:0;line-height:1.15}
 .app-header .brand-identity{gap:0}
+
+/* v0.3.86: increase top-bar version legibility without enlarging the logo/title. */
+body:not(.gate-mode) .app-header .brand-identity .brand-versions{
+ font-size:11px;
+ line-height:1.16;
+ font-weight:600;
+ letter-spacing:-.08px;
+}
+@media(max-width:760px){
+ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
+  font-size:9px;
+  line-height:1.14;
+ }
+}
