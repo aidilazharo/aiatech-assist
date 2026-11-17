@@ -54,6 +54,11 @@ function html(webview,{resumeLibrary=false}={}){
     <p id="extensionUpgradeDescription">Upgrade ATGV using the verified GitHub release.</p>
     <div class="atgv-upgrade-versions"><div><small>INSTALLED</small><strong id="extensionUpgradeCurrent">—</strong></div><span aria-hidden="true">→</span><div><small>AVAILABLE</small><strong id="extensionUpgradeNext">—</strong></div></div>
     <p id="extensionUpgradeSource" class="muted"></p><p class="atgv-upgrade-assurance">Verified release asset and SHA-256 checksum. Installation requires your confirmation.</p>
+    <div id="extensionUpgradeProgress" class="atgv-upgrade-progress hidden" role="status" aria-live="polite" aria-atomic="true" tabindex="-1">
+      <div class="atgv-upgrade-progress-track" aria-hidden="true"><span class="atgv-upgrade-progress-indicator"></span></div>
+      <strong id="extensionUpgradeProgressTitle">Preparing verified extension update…</strong>
+      <p id="extensionUpgradeProgressMessage">Installation status will appear here.</p>
+    </div>
     <div class="atgv-upgrade-actions"><button type="button" id="extensionUpgradeLater" class="secondary">Later</button><button type="button" id="extensionUpgradeView" class="secondary">View Release</button><button type="button" id="extensionUpgradeInstall">Install Upgrade</button></div>
   </div></div>
   <div id="startupPrerequisiteModal" class="modal-overlay hidden" aria-hidden="true"><div class="modal-card atgv-upgrade-modal atgv-prerequisite-modal" role="dialog" aria-modal="true" aria-labelledby="startupPrerequisiteTitle" aria-describedby="startupPrerequisiteDescription startupPrerequisiteAssurance">
