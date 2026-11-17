@@ -74,7 +74,7 @@ test('reopen restores multiple saved repositories, reuses correct role PAT and f
  try{
   await panel.send({command:'getRepoSyncSaved'});
   const restored=x.messages.filter(m=>m.type==='repoSyncSavedList');
-  assert.equal(restored.length,4); // two from panel opening, two from explicit request
+  assert.equal(restored.length,2); // explicit request; the real webview also requests on load
   assert.equal(restored.at(-2).entries.length,2);
   assert.equal(restored.at(-1).entries.length,1);
   await panel.send({command:'testRepoConnection',kind:'Source',url:repoOne});
