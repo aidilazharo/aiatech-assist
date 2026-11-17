@@ -38,14 +38,15 @@ test('GitHub repo URLs, base branches, copy scopes and exclusions are validated'
   assert.equal(sync.isAllowedPath(file),false,file);
  for(const file of ['src/index.js','README.md','docs/guide.md'])assert.equal(sync.isAllowedPath(file),true,file);
 });
-test('PR title, commit and metadata identify the immutable Repo A main commit',()=>{
- const sha='a'.repeat(40),branch=sync.branchName('repo-a',sha,new Date('2026-11-16T13:10:20.000Z'),'abcdef');
- assert.match(branch,/^sync\/repo-a-main-aaaaaaaaaa-20261116t131020-abcdef$/);
- const details=sync.prDetails({source:{name:'Org/repo-a'},destination:{name:'Org/repo-b'},sha,scope:'src',base:'main',branch,count:1,changedFiles:['src/main.js']});
+test('PR title, commit and branch describe the source change rather than the branch name',()=>{
+ const sha='a'.repeat(40),sourceMessage='fix: validate repository setup scripts';
+ const branch=sync.branchName('repo-a',sha,sourceMessage,['src/main.js']);
+ assert.equal(branch,'sync/repo-a/validate-repository-setup-scripts-aaaaaaaa');
+ const details=sync.prDetails({source:{name:'Org/repo-a'},destination:{name:'Org/repo-b'},sha,scope:'src',base:'main',branch,count:1,changedFiles:['src/main.js'],sourceBranch:'main',sourceMessage,sourceCommitFiles:['src/main.js']});
  for(const text of [sha,'Org/repo-a','Org/repo-b','PR base: main','Files changed: 1','src/main.js'])
   assert.ok(details.body.includes(text),text);
- assert.match(details.title,/main @ aaaaaaaaaa/);
- assert.match(details.commit,/main \(aaaaaaaaaa\)/);
+ assert.equal(details.title,'Validate repository setup scripts');
+ assert.equal(details.commit,sourceMessage);
 });
 test('ATGV Workspace handles separate panel, local folder selection, review and open PR',async()=>{
  const messages=[];let handler,disposed,revealed=0,opened='',created=0;
@@ -59,7 +60,7 @@ test('ATGV Workspace handles separate panel, local folder selection, review and 
  };
  const original=sync.sync;
  try{
-  sync.sync=async args=>{assert.equal(args.destinationFolder,'/chosen/repo-b');assert.equal(args.copyScope,'src');assert.equal(args.sourceBranch,'main');assert.ok(args.sourcePat.startsWith('ghp_'));assert.ok(args.destPat.startsWith('ghp_'));return {prUrl:'https://github.com/Acme/repo-b/pull/12',sourceRepo:'Acme/repo-a',sourceSha:'b'.repeat(40),destinationRepo:'Acme/repo-b',base:'main',branch:'sync/test',fileCount:1};};
+  sync.sync=async args=>{assert.equal(args.destinationFolder,'/chosen/repo-b');assert.equal(args.copyScope,'src');assert.equal(args.sourceBranch,'');assert.ok(args.sourcePat.startsWith('ghp_'));assert.ok(args.destPat.startsWith('ghp_'));return {prUrl:'https://github.com/Acme/repo-b/pull/12',sourceRepo:'Acme/repo-a',sourceSha:'b'.repeat(40),destinationRepo:'Acme/repo-b',base:'main',branch:'sync/test',fileCount:1};};
   const first=workspace.open(fake,{version:pkg.version,secrets,workspaceRoot:'/another/atgv',testConnection:async(repo,pat,kind)=>({repo:repo.name,permission:kind==='Source'?'pull':'push'})});
   assert.equal(first,panel);
   assert.equal(workspace.open(fake),panel);
@@ -125,7 +126,7 @@ test('sync copies real tracked files, skips release workflows and creates a revi
  assert.equal(result.sourceSha,sourceSha);
  assert.equal(result.base,'main');
  assert.equal(result.fileCount,2);
- assert.match(result.branch,/^sync\/repo-a\/main$/);
+ assert.match(result.branch,/^sync\/repo-a\/.+-[a-f0-9]{8}$/);
  assert.equal(git(['rev-parse','refs/remotes/origin/main'],target),originalTargetSha);
  assert.equal(fs.readFileSync(path.join(target,'src','main.js'),'utf8'),'module.exports=42;\n');
  assert.equal(fs.readFileSync(path.join(target,'existing.txt'),'utf8'),'destination-only\n');
