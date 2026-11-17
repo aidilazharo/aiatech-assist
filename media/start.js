@@ -7078,7 +7078,7 @@ function renderStartupPage(){
  // Reconfiguration is managed in Settings; an unverified saved state must be tested.
  $('startupTestConnections').disabled=startupVerifying||startupConnectionVerified;
  $('startupTestConnections').classList.toggle('hidden',startupConnectionVerified);
- for(const id of [...Object.values(startupFieldMap),'startupAtlassianToken','startupGithubToken'])
+ for(const id of [...Object.values(startupFieldMap),'startupAtlassianToken','startupGithubToken','startupLibraryZipUpload'])
   $(id).disabled=startupVerifying||startupConnectionVerified;
  $('startupComputerCard').classList.toggle('hidden',startupPage!==0);
  $('startupConnectionForm').classList.toggle('hidden',startupPage!==1);
