@@ -5795,7 +5795,33 @@ async function handleDashboardMessage(msg){
         }
         break;
       }
-      case 'pmApproveEffortBaseline':{
+      case 'pmJiraTransition':{
+         const projectId=activeProject?.id||'';
+         try{
+           requireOpened();requireOnline();
+           if(msg.projectId!==projectId)throw Error('Project changed. Reopen the PM board.');
+           const key=developerGit.jiraKey(msg.key);
+           const target=String(msg.status||'').trim().slice(0,80);
+           if(!target||!msg.expectedUpdated)throw Error('Refresh Jira before moving the issue.');
+           const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
+           const issue=await jiraReadIssue(config,token,key);
+           if(String(issue.fields?.project?.key||'').toUpperCase()!==validProjectKey(config.get('jira.projectKey')))
+             throw Error('Jira issue belongs to another project.');
+           if(String(issue.fields?.updated||'')!==String(msg.expectedUpdated))
+             throw Error('The Jira issue changed since the Kanban loaded. Refresh before moving.');
+           const transitions=await jiraAvailableTransitions(config,token,key);
+           const selected=transitions.find(t=>String(t.to).toLowerCase()===target.toLowerCase());
+           if(!selected)throw Error('No permitted Jira transition to '+target+'. Available: '+(transitions.map(t=>t.to).join(', ')||'none'));
+           const accepted=await uiWarning('Move '+key+' from '+String(issue.fields?.status?.name||'current status')+' to '+selected.to+' in Jira?',{modal:true},'Move Jira Issue');
+           if(accepted!=='Move Jira Issue')throw Error('Cancelled; no Jira changes made.');
+           const result=await jiraMove(config,token,key,selected.id,String(msg.expectedUpdated));
+           await dashboard?.webview.postMessage({type:'pmJiraTransitionResult',projectId,success:true,...result});
+         }catch(error){
+           await dashboard?.webview.postMessage({type:'pmJiraTransitionResult',projectId,success:false,message:String(error.message||error).slice(0,350)});
+         }
+         break;
+       }
+       case 'pmApproveEffortBaseline':{
         requireOpened();requireOnline();const snapshot=pmLatestSnapshot;
         if(!snapshot||snapshot.projectId!==activeProject.id||Date.now()-snapshot.at>600000)throw Error('Refresh the complete Jira inventory before approving estimates.');
         const project=await registry.read(activeProject.id),existing=await projectEffortRegister.load(registry,activeProject.id);
