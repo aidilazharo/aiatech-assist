@@ -894,7 +894,7 @@ function navigate(destination){
     const baWorkspace=selectedRole==='business-analyst';
     setView(baWorkspace?'discovery':'work');renderSidebarRole();renderRoleWork();
     if(baWorkspace){renderDiscovery();refreshAIChangeResolution();}
-    renderRoleTimeline();ensurePMJiraInventory();ensureBAJiraInventory();send('roleHandoffOwners');return;
+    renderRoleTimeline();ensurePMJiraInventory(true);ensureBAJiraInventory(true);send('roleHandoffOwners');return;
   }
   if(destination==='overview'){setView('landing');$('overviewGanttDetails').open=false;send('loadPlanning');return;}
   if(destination==='settings'){$('settingsBack').textContent=workspaceOpened?'← Back to Workspace':'← Back to Projects';collapseExtensionSettings();setView('settings');updateExtensionSettingBadges();if(workspaceOpened)send('devRepositoryStatus');return;}
@@ -904,7 +904,7 @@ function navigate(destination){
   if(destination==='planning'){setView('planning');send('loadPlanning');renderDesignCards();return;}
   if(destination==='discovery'){
     selectedRole='business-analyst';renderSidebarRole();
-    setView('discovery');renderRoleWork();ensureBAJiraInventory();
+    setView('discovery');renderRoleWork();ensureBAJiraInventory(true);
     send('baOwnersRefresh');renderDiscovery();refreshAIChangeResolution();return;
   }
   if(destination==='flow'){setView('flow');renderFlow();return;}
@@ -1283,6 +1283,7 @@ function renderBAJiraInventory(){
 // Project Manager My Work shares the exact paginated, project-scoped Jira scan with BA and Overview.
 // Calculations are based on Jira's real assignee, priority, status, and due date fields.
 let pmJiraTableInstance=null;
+let pmKanbanPending=false;
 let pmForecast=null;
 let pmEffortEdits={};
 function pmOptionList(id,values,defaultText){
@@ -1303,6 +1304,20 @@ function renderPMDashboard(){
  const items=scoped?jiraInventoryItems:[];
  const today=pmToday(),summary=ATGVPMDelivery.analyze(items,today);
  const statusNode=$('pmDataStatus');$('pmRefreshJira').disabled=!activeId||!key||jiraInventoryRunning;
+  const kanbanRoot=$('pmKanbanBoard');
+  if(kanbanRoot&&window.ATGVKanban){
+    window.ATGVKanban.render(kanbanRoot,items,{
+      busy:pmKanbanPending||jiraInventoryRunning,
+      onOpen:item=>openJiraIssueModal(item.key),
+      onMove:(item,target)=>{
+        if(pmKanbanPending)return;
+        pmKanbanPending=true;
+        $('pmKanbanStatus').textContent='Checking Jira transitions for '+item.key+' → '+target+'…';
+        send('pmJiraTransition',{projectId:activeId,key:item.key,status:target,expectedUpdated:item.updated});
+      }
+    });
+    if(!pmKanbanPending)$('pmKanbanStatus').textContent=jiraInventoryRunning?'Loading Jira issues…':'Drag a card or choose a status. Jira permission and confirmation are required.';
+  }
  if(!activeId||!key)statusNode.textContent='Set and test the Jira Project Key using the Jira card on Overview to load PM delivery data.';
  else if(jiraInventoryError&&scoped)statusNode.textContent='Jira '+key+' retrieval failed: '+jiraInventoryError+'. Partial data may be displayed; do not treat it as complete.';
  else if(jiraInventoryRunning&&scoped)statusNode.textContent='Loading Jira '+key+' · '+items.length+' issues received… Metrics are provisional until the search completes.';
@@ -1401,11 +1416,11 @@ function renderPMDashboard(){
   {key:'updated',label:'Updated'}
  ],{label:'Project Manager Jira work items',pageSize:5,sortKey:'',onRowClick:item=>openJiraIssueModal(item.key)});
 }
-function ensurePMJiraInventory(){
+function ensurePMJiraInventory(force=false){
  if(view!=='work'||selectedRole!=='project-manager')return;
  renderPMDashboard();
  const key=projectConnectionsSnapshot.jira?.key||'';
- if(activeId&&key&&(jiraInventoryProject!==activeId||jiraInventoryKey!==key||!jiraInventoryRunning&&Date.now()-jiraInventoryLastChecked>=300000))searchJiraInventory();
+ if(activeId&&key&&!jiraInventoryRunning&&(force||jiraInventoryProject!==activeId||jiraInventoryKey!==key||Date.now()-jiraInventoryLastChecked>=300000))searchJiraInventory();
 }
 $('pmRefreshJira').addEventListener('click',searchJiraInventory);
 $('pmApproveEstimates').addEventListener('click',()=>send('pmApproveEffortBaseline',{projectId:activeId,overrides:pmEffortEdits}));
@@ -1426,12 +1441,12 @@ function searchJiraInventory(){
  $('jiraInventoryRefresh').disabled=true;renderJiraInventory();renderBAJiraInventory();renderPMDashboard();
  send('searchProjectJiraInventory',{projectId:activeId,requestId:jiraInventoryRequest});
 }
-function ensureBAJiraInventory(){
+function ensureBAJiraInventory(force=false){
  if(view!=='work'||selectedRole!=='business-analyst')return;
  renderBAJiraInventory();
  const key=projectConnectionsSnapshot.jira?.key||'';
  if(!activeId||!key)return;
- if(jiraInventoryProject!==activeId||jiraInventoryKey!==key||!jiraInventoryRunning&&Date.now()-jiraInventoryLastChecked>=300000)searchJiraInventory();
+ if(!jiraInventoryRunning&&(force||jiraInventoryProject!==activeId||jiraInventoryKey!==key||Date.now()-jiraInventoryLastChecked>=300000))searchJiraInventory();
 }
 function openJiraInventory(){
  if(!activeId||!projectConnectionsSnapshot.jira?.key){status('Configure a Jira Project Key in Project Connections first.',true);return;}
@@ -1521,7 +1536,13 @@ window.addEventListener('message',event=>{
  if(msg.type==='orphanJiraCleanupCompleted'){status('Verified historical Jira cleanup completed. Refreshing project items.');searchJiraInventory();return;}
  if(msg.type==='orphanJiraCleanupProgress'){status('Deleting verified historical Jira issues: '+msg.deleted+' of '+msg.total);return;}
  if(msg.projectId!==jiraInventoryProject||msg.requestId!==jiraInventoryRequest)return;
- if(msg.type==='jiraInventoryViewer'){
+ if(msg.type==='pmJiraTransitionResult'&&msg.projectId===activeId){
+    pmKanbanPending=false;
+    $('pmKanbanStatus').textContent=msg.success?'Jira transition saved. Refreshing statuses…':'Jira transition not applied: '+(msg.message||'Transition unavailable.');
+    if(msg.success)searchJiraInventory();else renderPMDashboard();
+    return;
+  }
+  if(msg.type==='jiraInventoryViewer'){
     jiraInventoryViewerId=String(msg.accountId||'');
     renderBAJiraInventory();renderPMDashboard();
  }
@@ -6964,7 +6985,7 @@ window.addEventListener('message',e=>{
   status('Operation finished.');
  }
 });
-send('refresh');
+// Initial state arrives after webview-asset-boot.js confirms CSS and controllers.
 
 function developerStatus(message){const target=$('devExecutionStatus');if(target)target.textContent=String(message||'');}
 function devSetStep(id,message){const element=$(id);if(element)element.textContent=message;}
