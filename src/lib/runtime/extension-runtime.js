@@ -6211,6 +6211,7 @@ async function handleDashboardMessage(msg){
           const pinned=await sdlcCatalog.remoteVersion(config,token);
           await progress('running',50,'Pulling library files…','Fetching GitHub main into the workspace SDLC Catalog checkout. This stage can take longer for large libraries.');
           const snapshot=await sdlcCatalog.syncGitWorkspace(config,token,getWorkspace().uri.fsPath,context.globalStorageUri.fsPath,{
+            expectedSha:pinned.sha,
             onProgress:async event=>progress('running',event.percent,event.title,event.message)
           });
           await progress('running',75,'Library files downloaded','Checking the active checkout, manifest version, and expected commit.');
