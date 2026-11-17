@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.3.96';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.3.97';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -358,8 +358,12 @@ function html(webview,{resumeLibrary=false}={}){
     <section id="baStartPanel" class="ba-start-history-only hidden" aria-label="Business Requirements register and Jira reconciliation">
       <div id="baCompletedSection" class="ba-completed-flat" aria-label="Approved requirements history">
         <div id="baCompletedActions" class="ba-completed-actions"></div>
-        <div id="baCompletedList" aria-live="polite"></div>
-        <div id="baJiraBackedEpics" class="ba-jira-recovery" aria-live="polite" aria-label="Jira Epics not linked to the local Business Requirements register"></div>
+        <div id="baCompletedList" class="hidden" aria-live="polite"></div>
+        <div id="baJiraBackedEpics" class="ba-jira-recovery hidden" aria-live="polite" aria-label="Jira Epics not linked to the local Business Requirements register"></div>
+        <div id="baRequirementModal" class="modal-overlay hidden" aria-hidden="true"><div class="modal-card ba-requirement-modal-card" role="dialog" aria-modal="true" aria-labelledby="baRequirementModalTitle">
+          <div class="ba-requirement-modal-heading"><h2 id="baRequirementModalTitle">Business Requirement details</h2><button type="button" id="baRequirementModalClose" class="secondary">Close</button></div>
+          <div id="baRequirementModalContent" aria-live="polite"></div>
+        </div></div>
         <div id="baCompletedJiraHistory" class="hidden" aria-hidden="true"><div id="brPublishedJira"></div></div>
       </div>
     </section>
@@ -412,7 +416,7 @@ function html(webview,{resumeLibrary=false}={}){
       </div>
       <p id="baJiraInventoryStatus" class="muted" role="status" aria-live="polite">Open Business Analyst My Work to load Jira project items.</p>
       <div id="baJiraInventoryTable" aria-label="All Jira project issues with creator"></div><div id="baJiraHierarchy" class="ba-jira-hierarchy hidden" aria-label="Jira issue hierarchy"></div>
-      <p class="ba-jira-inventory-note muted">By default, issues created by your connected Jira account appear first, then other issues. Select a column to change the sort. Only visible Jira issues are listed.</p>
+      <p class="ba-jira-inventory-note muted">BRs appear first. Other Jira issues created by your connected account follow, then remaining issues. Local BRs without a visible Jira Epic are labelled separately.</p>
     </section>
     <section id="pmDailyCockpit" class="pm-daily-cockpit hidden" aria-label="Project Manager daily delivery cockpit">
       <div class="pm-dashboard-head"><div><h2>Daily Delivery Cockpit</h2><p class="muted">Project-wide Jira delivery activity, team workload and saved role schedules. Read-only: issue changes are made in Jira.</p></div><button id="pmRefreshJira" type="button" class="secondary">Refresh Jira</button></div>

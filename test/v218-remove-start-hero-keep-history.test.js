@@ -14,12 +14,12 @@ test('removed redundant Start heading, duplicate New BR create card and complete
  assert.match(panel,/id="baCompletedSection"/);
  assert.match(css,/\.ba-start-history-only\{background:transparent/);
 });
-test('keeps only the header New Business Requirement, Start milestone, and collapsed BR/Jira history',()=>{
+test('keeps the header New Business Requirement, Start milestone and BR/Jira evidence',()=>{
  assert.equal((host.match(/id="baNewRequirement"/g)||[]).length,1);
  assert.match(host,/id="discoveryStepStart"/);
  assert.match(host,/id="baCompletedList"/);
  assert.match(host,/id="baCompletedJiraHistory"/);
- assert.match(ui,/details\.className='ba-completed-br-section';details\.dataset\.requirementId=group\.id;details\.open=expandedBrIds\.has\(group\.id\)/);
+ assert.match(ui,/details\.className='ba-completed-br-section';details\.dataset\.requirementId=group\.id;details\.dataset\.requirementTarget=target;details\.open=expandedBrIds\.has\(target\)/);
  assert.match(ui,/\$\('baNewRequirement'\)\.addEventListener\('click',beginNewBusinessRequirement\)/);
  assert.match(ui,/send\('startOrRestartBusinessRequirements',\{revision:brState\.revision,openUploadImmediately:true\}\)/);
  assert.match(ui,/\$\('baStartPanel'\)\.classList\.toggle\('hidden',displayed!=='start'\)/);

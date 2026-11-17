@@ -16,8 +16,8 @@ test('approved BR history belongs to Start only and is never moved into a floati
  assert.doesNotMatch(ui,/\$\('baStartPanel'\)\.after\(completedHistory\)/);
 });
 
-test('completed BR record panels are default-collapsed with dark gray styling',()=>{
- assert.match(ui,/details\.className='ba-completed-br-section';details\.dataset\.requirementId=group\.id;details\.open=expandedBrIds\.has\(group\.id\)/);
+test('completed BR record panels retain their identity and dark gray styling',()=>{
+ assert.match(ui,/details\.className='ba-completed-br-section';details\.dataset\.requirementId=group\.id;details\.dataset\.requirementTarget=target;details\.open=expandedBrIds\.has\(target\)/);
  assert.match(css,/#discoveryView \.ba-completed-flat \.ba-completed-br-section\{background:#32343a/);
  assert.match(css,/#discoveryView \.ba-completed-flat\{background:transparent/);
  assert.doesNotMatch(host,/<details id="baCompletedJiraHistory"[^>]*\sopen\b/);

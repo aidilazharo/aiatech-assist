@@ -14,10 +14,10 @@ test('one persistent header action invokes the guarded new BR workflow and auto-
  assert.doesNotMatch(host,/id="baStart"/);
  assert.match(host,/id="baStartPanel" class="ba-start-history-only hidden"/);
 });
-test('completed requirements remain nested in Start and default collapsed',()=>{
+test('completed requirement evidence remains accessible from Start',()=>{
  assert.match(ui,/\$\('baCompletedSection'\)\.classList\.toggle\('hidden',displayed!=='start'\)/);
  assert.match(host,/<div id="baCompletedSection" class="ba-completed-flat"/);assert.doesNotMatch(host,/ba-completed-summary|id="baCompletedCount"/);
- assert.match(ui,/details\.dataset\.requirementId=group\.id;details\.open=expandedBrIds\.has\(group\.id\)/);
+ assert.match(ui,/details\.dataset\.requirementId=group\.id;details\.dataset\.requirementTarget=target;details\.open=expandedBrIds\.has\(target\)/);
  assert.equal(history.group([{requirements:[{id:'BR-009',title:'Visitor access'}]},{requirements:[{id:'BR-009',title:'Visitor access'}]}]).length,1);
  assert.match(ui,/root\.replaceChildren\(\)/);
 });

@@ -64,9 +64,9 @@ test('discovery saved indicators are truthful, distinct from local editing state
  assert.match(front,/saved:savedDiscovery,filled,total/);
 });
 
-test('rerender keeps expanded completed BR IDs and keeps rows collapsed initially',()=>{
- assert.match(front,/const expandedBrIds=new Set\(\[\.\.\.root\.querySelectorAll\('details\.ba-completed-br-section\[open\]'\)\]/);
- assert.match(front,/details\.open=expandedBrIds\.has\(group\.id\)/);
+test('rerender keeps the selected BR evidence open in the details modal',()=>{
+ assert.match(front,/const evidenceScopes=\[root,\$\('baRequirementModalContent'\)\]/);
+ assert.match(front,/details\.open=expandedBrIds\.has\(target\)/);
 });
 
 test('confirmed generation risk includes actor, source fingerprint and finding snapshot',()=>fixture(async registry=>{

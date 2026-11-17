@@ -52,7 +52,7 @@ test('the BA register stays present even without a local completed-cycle snapsho
  assert.match(ui,/\$\('baCompletedSection'\)\.classList\.toggle\('hidden',displayed!=='start'\)/);
  assert.doesNotMatch(ui,/\$\('baStartPanel'\)\.classList\.toggle\('hidden',displayed!=='start'\|\|!completedBARecords\(\)\.length\)/);
  assert.match(ui,/const inScope=!!activeId&&jiraInventoryProject===activeId&&jiraInventoryKey===projectKey/);
- assert.match(ui,/renderBAJiraBackedEpics\(\);brPicker\.replaceChildren\(\)/);
+ assert.match(ui,/renderBAJiraBackedEpics\(combined\.unlinked\);brPicker\.replaceChildren\(\)/);
  assert.match(css,/\.ba-jira-only-br-section/);
  assert.match(ui,/className='ba-completed-br-section ba-jira-only-br-section'/);
 });
