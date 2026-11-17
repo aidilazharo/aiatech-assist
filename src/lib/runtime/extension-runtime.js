@@ -51,6 +51,7 @@ const startupSetup=require('../startup-setup');
 const startupInstall=require('../startup-install');
 const installCache=require('../../library-install-cache');
 const startupDiagnostics=require('../startup-diagnostics');
+const myWorkPresence=require('../../my-work-presence');
 const {SelfImprovement}=require('../../self-improvement');
 const selfImprovementView=require('../../self-improvement-view');
 const copilotRepairSdk=require('../../copilot-repair-sdk');
@@ -1290,6 +1291,24 @@ async function publishBlueprintState(){
     brWorkflow.load(registry,activeProject.id),designProposals.load(registry,activeProject.id),deliveryBlueprint.load(registry,activeProject.id)
   ]);
   await dashboard.webview.postMessage({type:'blueprintState',register:blueprints,assessment:deliveryBlueprint.assess(brs,designs,blueprints)});
+}
+let presenceQueue=Promise.resolve();
+function queueMyWorkPresence(roleId){
+ const projectId=activeProject?.id;
+ if(!projectId)return;
+ // Serialize versioned Confluence edits across role switches. Never overwrite a
+ // concurrent writer; the presence adapter re-fetches after version conflicts.
+ presenceQueue=presenceQueue.catch(()=>{}).then(async()=>{
+  if(activeProject?.id!==projectId)return;
+  const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
+  const key=validProjectKey(config.get('jira.projectKey'));
+  const result=await myWorkPresence.visit(config,token,{projectKey:key,roleId});
+  if(activeProject?.id===projectId)
+   await dashboard?.webview.postMessage({type:'myWorkRoster',projectId,...result});
+ }).catch(async error=>{
+  report('My Work Confluence user register: '+error.message);
+  if(activeProject?.id===projectId)await dashboard?.webview.postMessage({type:'myWorkRosterError',projectId,message:String(error.message||error).slice(0,280)});
+ });
 }
 async function refreshDashboard(){if(dashboard){if(activeProject)await dashboard.webview.postMessage({type:'jiraMonitorState',enabled:context.workspaceState.get('atgvAssist.monitorJira.'+activeProject.id,false)});await dashboard.webview.postMessage(await dashboardState());}}
 async function focusAtgvWorkspace(){
@@ -5549,7 +5568,7 @@ async function handleDashboardMessage(msg){
         await dashboard?.webview.postMessage({type:'guideSaved',guideId:id,value:normalized});
         break;
       }
-      case 'markRoleUsed':{requireOpened();const roles=await getRoleSettings(registry,activeProject.id);const allowed=new Set(roles.roles.map(r=>r.id));if(!allowed.has(msg.roleId))throw Error('Role is not enabled for this project.');const key='atgvAssist.usedRoles.'+activeProject.id;const before=context.workspaceState.get(key,[]);const after=[...new Set([...before.filter(x=>allowed.has(x)),msg.roleId])].slice(0,40);await context.workspaceState.update(key,after);await dashboard?.webview.postMessage({type:'roleMembership',roles:after});break;}
+      case 'markRoleUsed':{requireOpened();const roles=await getRoleSettings(registry,activeProject.id);const allowed=new Set(roles.roles.map(r=>r.id));if(!allowed.has(msg.roleId))throw Error('Role is not enabled for this project.');const key='atgvAssist.usedRoles.'+activeProject.id;const before=context.workspaceState.get(key,[]);const after=[...new Set([...before.filter(x=>allowed.has(x)),msg.roleId])].slice(0,40);await context.workspaceState.update(key,after);await dashboard?.webview.postMessage({type:'roleMembership',roles:after});queueMyWorkPresence(msg.roleId);break;}
       case 'designOpenTab':{
         // Backward-compatible command from older webviews: keep preview inside ATGV.
         await openSolutionDesignInline(String(msg.kind||''),String(msg.proposalId||''));break;
@@ -5795,7 +5814,18 @@ async function handleDashboardMessage(msg){
         }
         break;
       }
-      case 'pmJiraTransition':{
+      case 'myWorkRosterRefresh':{
+         try{
+           requireOpened();requireOnline();
+           if(msg.projectId&&msg.projectId!==activeProject.id)throw Error('Project changed.');
+           const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
+           const key=validProjectKey(config.get('jira.projectKey'));
+           const snapshot=await myWorkPresence.snapshot(config,token,key);
+           await dashboard?.webview.postMessage({type:'myWorkRoster',projectId:activeProject.id,...snapshot});
+         }catch(error){await dashboard?.webview.postMessage({type:'myWorkRosterError',projectId:activeProject?.id,message:String(error.message||error).slice(0,280)});}
+         break;
+       }
+       case 'pmJiraTransition':{
          const projectId=activeProject?.id||'';
          try{
            requireOpened();requireOnline();
