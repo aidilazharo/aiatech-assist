@@ -135,3 +135,31 @@ test('v400: webview startup watches SortableJS failures and keeps permitted Jira
  assert.match(ui,/queueMicrotask\(\(\)=>\{if\(pmKanbanPending\)renderPMDashboard\(\);\}\)/);
  assert.equal(require('../package.json').version,'0.4.0');
 });
+
+
+test('v400: Project Manager defaults to Jira DataTable and can switch to drag-and-drop Kanban',()=>{
+ const original=Module._load;let createDashboardHtml;
+ try{
+  Module._load=function(name,parent,isMain){
+   if(name==='vscode')return {Uri:{joinPath:(base,...parts)=>({fsPath:path.join(base.fsPath,...parts)})}};
+   return original.call(this,name,parent,isMain);
+  };
+  ({createDashboardHtml}=require('../src/lib/webview/dashboard-html'));
+ }finally{Module._load=original;}
+ const html=createDashboardHtml(()=>({extensionUri:{fsPath:'/atgv-extension'}}),()=>null)({
+  asWebviewUri:uri=>uri.fsPath,cspSource:'vscode-resource:'
+ });
+ for(const id of ['pmJiraWorkspace','pmJiraTableView','pmJiraKanbanView','pmShowTable','pmShowKanban','pmJiraTable','pmKanbanBoard']){
+  assert.equal((html.match(new RegExp('id="'+id+'"','g'))||[]).length,1,'one '+id);
+ }
+ assert.match(html,/id="pmShowTable"[^>]*aria-pressed="true"/);
+ assert.match(html,/id="pmShowKanban"[^>]*aria-pressed="false"/);
+ assert.match(html,/id="pmJiraKanbanView" class="hidden"/);
+ assert.ok(html.indexOf('id="pmJiraTableView"')<html.indexOf('id="pmJiraKanbanView"'));
+ const script=read('media/start.js');
+ assert.match(script,/let pmJiraDisplayMode='table'/);
+ assert.match(script,/ATGVDataTables\.mount\(grid,matches,/);
+ assert.match(script,/setPMJiraView\('table'\)/);
+ assert.match(script,/setPMJiraView\('kanban'\)/);
+ assert.match(script,/if\(pmJiraDisplayMode==='kanban'&&kanbanRoot/);
+});
