@@ -46,36 +46,73 @@ function isAllowedPath(relative){
  if(BLOCKED_FILES.has(name)||name.startsWith('.env.')||/\.(?:pem|key|p12|pfx|jks|keystore)$/i.test(name))return false;
  return true;
 }
-function branchName(repo,sha,clock=new Date(),suffix=crypto.randomBytes(3).toString('hex')){
- const stamp=clock.toISOString().replace(/[-:]/g,'').slice(0,15).replace('T','t');
- const label=String(repo||'repo-a').toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-|-$/g,'').slice(0,35)||'repo-a';
- return 'sync/'+label+'-main-'+String(sha).slice(0,10)+'-'+stamp+'-'+suffix;
+// Prefer the actual Repo A commit intent. File names are a factual fallback
+// for generic upstream messages such as "Sync tech-stacks-skills from main".
+function commitSubject(message){
+ const line=String(message||'').split(/\r?\n/).map(x=>x.trim()).find(Boolean)||'';
+ return cleanAiField(line,110).replace(/\s+/g,' ');
 }
-function prDetails({source,destination,sha,scope,base,branch,count,changedFiles=[],sourceBranch='main'}){
- const short=sha.slice(0,10);
+function actionText(message){
+ return commitSubject(message).replace(/^(?:feat|fix|docs|chore|ci|refactor|test|perf|build|style|revert)(?:\([^)]+\))?!?:\s*/i,'').trim();
+}
+function genericMessage(message){
+ const value=actionText(message).toLowerCase().replace(/[-_]+/g,' ').replace(/\s+/g,' ').trim();
+ return !value||value.length<6||
+  /^(?:sync|copy|import|pull|merge)(?:\s+.+)?\s+from\s+(?:main|master|develop|dev|[a-z0-9./-]+)$/.test(value)||
+  /^(?:sync|update|copy|import|pull|refresh)(?:\s+(?:the\s+)?(?:latest\s+)?(?:repo|repository|files|source|code|changes|updates|library|catalog|content|project|improvements))?$/.test(value)||
+  /^(?:merge|rebase)\s+(?:branch|pull request)\b/.test(value)||
+  /^(?:initial commit|minor changes|misc changes|various updates)$/.test(value);
+}
+function pathsSummary(files=[]){
+ const paths=[...new Set((Array.isArray(files)?files:[]).map(x=>String(x||'').trim()).filter(x=>x&&isAllowedPath(x)))].slice(0,2);
+ return paths.length?'Update '+paths.join(' and '):'Update source files';
+}
+function meaningfulSubject(sourceMessage,files=[]){
+ const subject=commitSubject(sourceMessage);
+ return genericMessage(subject)?pathsSummary(files):subject;
+}
+function readableTitle(sourceMessage,files=[]){
+ const text=actionText(meaningfulSubject(sourceMessage,files));
+ return text?text.charAt(0).toUpperCase()+text.slice(1):'Update source files';
+}
+function slugify(value){
+ return String(value||'').normalize('NFKD').toLowerCase().replace(/[\u0300-\u036f]/g,'')
+  .replace(/[^a-z0-9]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'');
+}
+function branchName(repo,sha,sourceMessage='',files=[]){
+ const label=slugify(repo).slice(0,28)||'repo-a';
+ const short=String(sha||'').slice(0,8).toLowerCase();
+ if(!/^[a-f0-9]{8}$/.test(short))throw Error('Source commit SHA is required for Repo Sync naming.');
+ const prefix='sync/'+label+'/';
+ const slug=slugify(actionText(meaningfulSubject(sourceMessage,files)))||'source-update';
+ const room=110-prefix.length-short.length-1;
+ return baseName(prefix+slug.slice(0,room).replace(/-$/,'')+'-'+short);
+}
+function prDetails({source,destination,sha,scope,base,branch,count,changedFiles=[],sourceBranch='',sourceMessage='',sourceCommitFiles=[]}){
+ const short=sha.slice(0,8);
+ const relevant=sourceCommitFiles.length?sourceCommitFiles:changedFiles;
+ const action=meaningfulSubject(sourceMessage,relevant);
+ const label=readableTitle(sourceMessage,relevant);
+ const displayed=changedFiles.slice(0,8).map(file=>'- `'+String(file).replace(/[\r\n\0`]/g,'?')+'`');
  return {
-  title:'sync: '+source.name+' '+sourceBranch+' @ '+short,
-  commit:'sync: '+source.name+' '+sourceBranch+' ('+short+') into '+destination.name,
+  title:label.slice(0,110),
+  commit:action.slice(0,110),
   body:[
-   '## Source', '',
-   '- Repository: '+source.name,
-   '- Branch: '+(sourceBranch||'main'),
-   '- Commit: '+sha,
-   '- Copied scope: '+(scope==='.'?'all eligible tracked files':scope),
-   '', '## Destination', '',
-   '- Repository: '+destination.name,
-   '- PR base: '+base,
-   '- New branch: '+branch,
-   '- Files changed: '+count,
+   '## Summary',
+   '- '+label,
    '',
-   '## Changed paths', '',
-   ...(changedFiles.slice(0,60).map(file=>'- '+String(file).replace(/[\r\n\0`]/g,'?'))),
-   ...(changedFiles.length>60?['- ... and '+(changedFiles.length-60)+' more changed paths']:[]),
-   '', '## Safety and review', '',
-   '- Repo B existing files are not deleted just because they are absent from Repo A.',
-   '- Git metadata, release workflows, secrets and generated dependencies were not imported.',
-   '- Review the diff, build, tests and ownership before merging.',
-   '- Created by ATGV AIATECH Assist Repo Sync.'
+   '## Changes',
+   '- Files changed: '+count,
+   ...displayed,
+   ...(changedFiles.length>8?['- And '+(changedFiles.length-8)+' other files']:[]),
+   '',
+   '## Source',
+   '- '+source.name+' ('+(sourceBranch||'default')+' @ '+short+')',
+   '- Target: '+destination.name+' / '+base,
+   '- Review branch: '+branch,
+   '- Copy scope: '+(scope==='.'?'eligible tracked files':scope),
+   '',
+   'Review the diff and run applicable tests before merging.'
   ].join('\n')
  };
 }
@@ -147,11 +184,15 @@ function aiSyncPlan(raw,source){
  if(!raw||typeof raw!=='object'||Array.isArray(raw))return {};
  const prefix='sync/'+source.repo.toLowerCase().replace(/[^a-z0-9_-]/g,'-').slice(0,28)+'/';
  let branch=cleanAiField(raw.branch,115);
- // Enforce deterministic Repo A namespace regardless of model output.
+ // Enforce Repo A namespace and reject generic branch names.
  if(!branch.startsWith(prefix)||!/^[a-z0-9/_-]+$/.test(branch)||branch.includes('..')||branch.includes('//')||branch.endsWith('/'))branch='';
  if(branch)try{baseName(branch);}catch{branch='';}
- return {branch,commitMessage:cleanAiField(raw.commitMessage,160),
-  prTitle:cleanAiField(raw.prTitle,140),prDescription:String(raw.prDescription||'').trim().slice(0,1200)};
+ const suffix=branch.slice(prefix.length).replace(/[-_/]+/g,' ');
+ if(branch&&(genericMessage(suffix)||/^(?:main|master|develop|dev|source|latest|sync|updates|changes)$/.test(suffix)))branch='';
+ const commitMessage=cleanAiField(raw.commitMessage,110);
+ const prTitle=cleanAiField(raw.prTitle,110);
+ return {branch,commitMessage:genericMessage(commitMessage)?'':commitMessage,
+  prTitle:genericMessage(prTitle)?'':prTitle,prDescription:String(raw.prDescription||'').trim().slice(0,550)};
 }
 async function readSourceFacts({cloned,source,chosenBranch,sha,sourceMessage,files,destination,base}){
  let project={};
@@ -325,4 +366,4 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   throw Error(e.message+suffix);
  }finally{await fs.rm(temp,{recursive:true,force:true}).catch(()=>{});}
 }
-module.exports={githubUrl,baseName,scopeName,isAllowedPath,branchName,prDetails,patEnvironment,aiSyncPlan,readSourceFacts,sync};
+module.exports={githubUrl,baseName,scopeName,isAllowedPath,commitSubject,genericMessage,meaningfulSubject,readableTitle,branchName,prDetails,patEnvironment,aiSyncPlan,readSourceFacts,sync};
