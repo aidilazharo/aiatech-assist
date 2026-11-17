@@ -414,18 +414,71 @@ async function releaseAccessToken({interactive=false}={}){
  try{return (await vscode.authentication.getSession('github',['repo'],interactive?{createIfNone:true}:{silent:true}))?.accessToken||'';}
  catch{return '';}
 }
+// Only the host can confirm that VSIX download, checksum and VS Code install succeeded.
+// Keep the upgrade prompt open until that confirmation, including on retryable failures.
+let activeExtensionUpgradeInstall=null;
+async function postExtensionInstallProgress(operation,stage,title,message){
+ if(!operation?.requestId||!dashboard)return;
+ try{
+  await dashboard.webview.postMessage({
+   type:'extensionUpgradeProgress',requestId:operation.requestId,
+   stage,title:String(title||'').slice(0,180),message:String(message||'').slice(0,700)
+  });
+ }catch(error){report('Upgrade progress could not be displayed: '+error.message);}
+}
+async function performVerifiedExtensionInstall(operation){
+ if(!operation||operation.running)return;
+ operation.running=true;
+ let installed=false;
+ try{
+  const phases={
+   downloading:['Downloading verified extension…','Fetching the VSIX and published SHA-256 checksum from GitHub.'],
+   verifying:['Verifying release integrity…','Checking the downloaded file size and SHA-256 checksum.'],
+   staging:['Preparing VSIX installation…','Saving the verified extension package locally.']
+  };
+  await postExtensionInstallProgress(operation,'downloading',...phases.downloading);
+  const folder=path.join(context.globalStorageUri.fsPath,'updates');
+  const vsix=await releaseUpdater.downloadVerified(operation.release,{
+   token:operation.token,directory:folder,
+   onProgress:async stage=>{
+    if(phases[stage])await postExtensionInstallProgress(operation,stage,...phases[stage]);
+   }
+  });
+  await postExtensionInstallProgress(operation,'installing','Installing extension…','VS Code is installing the verified package. Keep this dialog open.');
+  await vscode.commands.executeCommand('workbench.extensions.installExtension',vscode.Uri.file(vsix));
+  installed=true;
+  await postExtensionInstallProgress(operation,'completed','Upgrade installed successfully','Installation finished. ATGV is reloading.');
+  activeExtensionUpgradeInstall=null;
+ }catch(error){
+  report('Verified ATGV upgrade failed: '+error.message);
+  const safeMessage=String(error.message||'Unknown error').slice(0,400);
+  await postExtensionInstallProgress(operation,'failed','Installation failed',safeMessage+' You can retry without closing this dialog.');
+  if(!operation.requestId||!dashboard){
+   const answer=await vscode.window.showErrorMessage('Automatic ATGV upgrade failed: '+safeMessage,'View Release');
+   if(answer==='View Release')await vscode.env.openExternal(vscode.Uri.parse(operation.release.url));
+  }
+ }finally{
+  operation.running=false;
+ }
+ if(installed){
+  // Let the webview render completion and close its modal before VS Code reloads.
+  if(operation.requestId)await new Promise(resolve=>setTimeout(resolve,250));
+  try{await restart();}
+  catch(error){report('ATGV upgrade installed but reload failed: '+error.message);}
+ }
+}
 async function offerBrandedExtensionUpgrade(release){
- if(!dashboard)return vscode.window.showInformationMessage(`ATGV v${release.version} is available. Install the verified GitHub release?`,{modal:true},'Install Upgrade','View Release','Later');
+ if(!dashboard)return vscode.window.showInformationMessage('ATGV v'+release.version+' is available. Install the verified GitHub release?',{modal:true},'Install Upgrade','View Release','Later');
  const requestId=crypto.randomUUID();
  return new Promise(resolve=>{
-  const timer=setTimeout(()=>{pendingExtensionUpgradeOffers.delete(requestId);resolve('Later');},120000);
+  const timer=setTimeout(()=>{pendingExtensionUpgradeOffers.delete(requestId);resolve({action:'Later',requestId});},120000);
   timer.unref?.();
   pendingExtensionUpgradeOffers.set(requestId,{resolve,timer});
   Promise.resolve(dashboard.webview.postMessage({type:'extensionUpgradeOffer',requestId,
     currentVersion:require('../../../package.json').version,version:release.version,
     repository:release.repository||releaseUpdater.REPO,tag:release.tag,url:release.url})).then(success=>{
-      if(!success){const entry=pendingExtensionUpgradeOffers.get(requestId);if(entry){clearTimeout(entry.timer);pendingExtensionUpgradeOffers.delete(requestId);resolve('Later');}}
-    }).catch(()=>{clearTimeout(timer);pendingExtensionUpgradeOffers.delete(requestId);resolve('Later');});
+      if(!success){const entry=pendingExtensionUpgradeOffers.get(requestId);if(entry){clearTimeout(entry.timer);pendingExtensionUpgradeOffers.delete(requestId);resolve({action:'Later',requestId});}}
+    }).catch(()=>{clearTimeout(timer);pendingExtensionUpgradeOffers.delete(requestId);resolve({action:'Later',requestId});});
  });
 }
 async function promptExtensionRelease(release,token){
@@ -434,17 +487,14 @@ async function promptExtensionRelease(release,token){
  const promptId=(release.repository||releaseUpdater.REPO)+'|'+(release.tag||'');
  if(context.globalState.get(key)===promptId)return;
  await context.globalState.update(key,promptId);
- const answer=await offerBrandedExtensionUpgrade(release);
- if(answer==='View Release')await vscode.env.openExternal(vscode.Uri.parse(release.url));
- if(answer==='Install Upgrade'){
-  try{
-   const folder=path.join(context.globalStorageUri.fsPath,'updates');
-   const vsix=await releaseUpdater.downloadVerified(release,{token,directory:folder});
-   await vscode.commands.executeCommand('workbench.extensions.installExtension',vscode.Uri.file(vsix));
-   // Only a successfully installed, checksum-verified VSIX triggers restart.
-   // The existing restart flag recreates ATGV Start with a fresh webview.
-   await restart();
-  }catch(error){report('Verified ATGV upgrade failed: '+error.message);await vscode.window.showErrorMessage(`Automatic upgrade failed: ${error.message} Use the GitHub release page for manual installation.`,'View Release').then(choice=>choice==='View Release'?vscode.env.openExternal(vscode.Uri.parse(release.url)):undefined);}
+ const selected=await offerBrandedExtensionUpgrade(release);
+ const action=typeof selected==='string'?selected:selected?.action;
+ const requestId=typeof selected==='object'&&selected?selected.requestId:null;
+ if(action==='View Release')await vscode.env.openExternal(vscode.Uri.parse(release.url));
+ if(action==='Install Upgrade'&&!activeExtensionUpgradeInstall){
+  const operation={requestId,release,token,running:false};
+  activeExtensionUpgradeInstall=operation;
+  await performVerifiedExtensionInstall(operation);
  }
 }
 async function checkExtensionRelease({prompt=false,interactive=false}={}){
