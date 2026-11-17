@@ -132,9 +132,27 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+  windows-reset:
+    name: Test Windows stack reset
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify reset and startup layout on Windows
+        run: node --test test/v398-reset-workspace-alias.test.js test/v398-startup-layout.test.js
+
   release:
     name: Publish GitHub prerelease
-    needs: build
+    needs: [build, windows-reset]
     if: needs.build.outputs.source_ready == 'true' && github.event_name != 'pull_request'
     runs-on: ${{ vars.ATGV_LINUX_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 10

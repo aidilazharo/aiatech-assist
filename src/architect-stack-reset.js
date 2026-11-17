@@ -5,6 +5,8 @@
 // base history, or operate on arbitrary feature branches.
 const path=require('node:path');
 const fs=require('node:fs/promises');
+const {createReadStream}=require('node:fs');
+const {createHash}=require('node:crypto');
 const {execFile}=require('node:child_process');
 const {promisify}=require('node:util');
 const exec=promisify(execFile);
@@ -142,33 +144,112 @@ async function reset(options={}){
  return {...approved,currentBranch:approved.baseBranch,recoveryStash};
 }
 
-async function archiveProjectStackDocuments(projectFolder,stackId){
- if(!projectFolder||!path.isAbsolute(projectFolder)||!/^[a-z][a-z0-9-]{0,48}$/.test(stackId))throw Error('Invalid project stack archive location.');
- const base=await fs.realpath(projectFolder);
- if(base!==path.normalize(projectFolder))throw Error('Refusing to archive project documents through a symlink.');
- const names=['tech-stack.json','documents/architecture/tech-stack.md'];
- const found=[];
- for(const relative of names){
-  let folder=base;
-  for(const segment of relative.split('/').slice(0,-1)){
-   folder=path.join(folder,segment);
-   const stat=await fs.lstat(folder).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
-   if(stat?.isSymbolicLink()||(stat&&!stat.isDirectory()))throw Error('Unsafe project stack document directory: '+relative);
-  }
-  const filename=path.join(base,relative),stat=await fs.lstat(filename).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
-  if(stat){if(stat.isSymbolicLink()||!stat.isFile())throw Error('Unsafe project stack document: '+relative);found.push(relative);}
- }
- if(!found.length)return {archived:[],folder:''};
- const history=path.join(base,'stack-history'),stat=await fs.lstat(history).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
- if(stat&&(stat.isSymbolicLink()||!stat.isDirectory()))throw Error('Unsafe project stack archive directory.');
- await fs.mkdir(history,{recursive:true});
- const folder=await fs.mkdtemp(path.join(history,Date.now()+'-'+stackId+'-'));
- const archived=[];
- for(const name of found){
-  const source=path.join(base,name),destination=path.join(folder,name);
-  await fs.mkdir(path.dirname(destination),{recursive:true});
-  await fs.rename(source,destination);archived.push(name);
- }
- return {archived,folder};
+const ARCHIVE_NAMES=['tech-stack.json','documents/architecture/tech-stack.md'];
+function samePath(a,b,platform=process.platform){
+ const api=platform==='win32'?path.win32:path.posix;
+ const left=api.normalize(String(a)),right=api.normalize(String(b));
+ return platform==='win32'?left.toLowerCase()===right.toLowerCase():left===right;
 }
-module.exports={plan,reset,archiveProjectStackDocuments,inspectWorkingTree,dirtyCheckoutMessage};
+function identity(stat){return stat?{dev:stat.dev,ino:stat.ino,size:stat.size,mtimeMs:stat.mtimeMs}:null;}
+async function safeArchiveParent(base,relative){
+ let folder=base;
+ for(const segment of relative.split('/').slice(0,-1)){
+  folder=path.join(folder,segment);
+  const stat=await fs.lstat(folder).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
+  if(stat?.isSymbolicLink()||(stat&&!stat.isDirectory()))throw Error('Unsafe project stack document directory: '+relative);
+ }
+}
+async function archiveBase(projectFolder,{workspaceRoot,projectId}={}){
+ if(!projectFolder||!path.isAbsolute(projectFolder))throw Error('Invalid project stack archive location.');
+ let folder=projectFolder;
+ if(workspaceRoot!==undefined||projectId!==undefined){
+  if(!workspaceRoot||!path.isAbsolute(workspaceRoot)||!/^[a-z][a-z0-9-]{0,48}$/.test(String(projectId||''))||
+     !samePath(path.resolve(projectFolder),path.join(path.resolve(workspaceRoot),'projects',projectId)))throw Error('Project stack archive is outside the selected workspace project.');
+  // The user-selected workspace itself may be an alias or use different
+  // Windows casing. Resolve it first, then reject links in projects/<id>.
+  const workspace=await fs.realpath(workspaceRoot),projects=path.join(workspace,'projects');
+  const projectsStat=await fs.lstat(projects);
+  if(projectsStat.isSymbolicLink()||!projectsStat.isDirectory())throw Error('Projects folder must be a real directory.');
+  folder=path.join(projects,projectId);
+ }
+ const stat=await fs.lstat(folder);
+ if(stat.isSymbolicLink()||!stat.isDirectory())throw Error('Project folder must be a real directory; linked project folders cannot be reset.');
+ const base=await fs.realpath(folder);
+ if(workspaceRoot!==undefined&&!samePath(base,folder))throw Error('Project folder resolves outside the selected workspace.');
+ return {base,projectIdentity:{dev:stat.dev,ino:stat.ino}};
+}
+async function fileDigest(file){
+ const hash=createHash('sha256');for await(const chunk of createReadStream(file))hash.update(chunk);return hash.digest('hex');
+}
+async function planProjectStackArchive(projectFolder,stackId,options={}){
+ if(!/^[a-z][a-z0-9-]{0,48}$/.test(String(stackId||'')))throw Error('Invalid project stack archive location.');
+ const {base,projectIdentity}=await archiveBase(projectFolder,options),entries=[];
+ for(const relative of ARCHIVE_NAMES){
+  await safeArchiveParent(base,relative);
+  const filename=path.join(base,relative),stat=await fs.lstat(filename).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
+  if(!stat)continue;
+  if(stat.isSymbolicLink()||!stat.isFile())throw Error('Unsafe project stack document: '+relative);
+  const digest=await fileDigest(filename),after=await fs.lstat(filename);
+  if(after.isSymbolicLink()||!after.isFile()||JSON.stringify(identity(stat))!==JSON.stringify(identity(after)))throw Error('Project stack document changed while preparing reset: '+relative);
+  entries.push({name:relative,identity:identity(after),digest});
+ }
+ const history=path.join(base,'stack-history'),stat=entries.length?await fs.lstat(history).catch(e=>e.code==='ENOENT'?null:Promise.reject(e)):null;
+ if(stat&&(stat.isSymbolicLink()||!stat.isDirectory()))throw Error('Unsafe project stack archive directory.');
+ return {base,stackId,projectIdentity,entries,historyIdentity:stat?{dev:stat.dev,ino:stat.ino}:null};
+}
+async function restoreProjectStackDocuments(archive){
+ const names=archive?.archived||[];if(!names.length)return;
+ if(!archive.base||!archive.folder||!path.isAbsolute(archive.base)||!path.isAbsolute(archive.folder)||
+    new Set(names).size!==names.length||names.some(name=>!ARCHIVE_NAMES.includes(name)))throw Error('Invalid stack document recovery information.');
+ const base=await fs.realpath(archive.base),history=path.join(base,'stack-history');
+ const h=await fs.lstat(history),folderStat=await fs.lstat(archive.folder),relative=path.relative(history,archive.folder);
+ if(h.isSymbolicLink()||!h.isDirectory()||folderStat.isSymbolicLink()||!folderStat.isDirectory()||!relative||relative.startsWith('..')||path.isAbsolute(relative)||relative.includes(path.sep)||
+    !samePath(await fs.realpath(archive.folder),archive.folder))throw Error('Unsafe stack document recovery folder.');
+ for(const name of names){
+  await safeArchiveParent(base,name);
+  const original=path.join(base,name),existing=await fs.lstat(original).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
+  if(existing)throw Error('Cannot restore '+name+' because a file already exists there.');
+  const stored=path.join(archive.folder,name);await safeArchiveParent(archive.folder,name);
+  const stat=await fs.lstat(stored);if(stat.isSymbolicLink()||!stat.isFile())throw Error('Unsafe archived stack document: '+name);
+ }
+ for(const name of [...names].reverse())await fs.rename(path.join(archive.folder,name),path.join(base,name));
+}
+async function archiveProjectStackDocuments(projectFolder,stackId,options={}){
+ const current=await planProjectStackArchive(projectFolder,stackId,options),expected=options.expectedPlan;
+ if(expected&&JSON.stringify(current)!==JSON.stringify(expected))throw Error('Project stack documents changed since reset confirmation. No Git changes made; review and retry.');
+ if(!current.entries.length)return {archived:[],folder:'',base:current.base};
+ const baseStat=await fs.lstat(current.base);
+ if(baseStat.isSymbolicLink()||!baseStat.isDirectory()||baseStat.dev!==current.projectIdentity.dev||baseStat.ino!==current.projectIdentity.ino)throw Error('Project folder changed while preparing reset. No Git changes made.');
+ const history=path.join(current.base,'stack-history');await fs.mkdir(history,{recursive:true});
+ const h=await fs.lstat(history);if(h.isSymbolicLink()||!h.isDirectory()||!samePath(await fs.realpath(history),history))throw Error('Unsafe project stack archive directory.');
+ const folder=await fs.mkdtemp(path.join(history,Date.now()+'-'+stackId+'-')),archived=[];
+ try{
+  for(const entry of current.entries){
+   const source=path.join(current.base,entry.name),destination=path.join(folder,entry.name);
+   await safeArchiveParent(current.base,entry.name);
+   const stat=await fs.lstat(source);
+   if(stat.isSymbolicLink()||!stat.isFile()||JSON.stringify(identity(stat))!==JSON.stringify(entry.identity))throw Error('Project stack document changed before archiving: '+entry.name);
+   if(await fileDigest(source)!==entry.digest)throw Error('Project stack document content changed before archiving: '+entry.name);
+   const after=await fs.lstat(source);if(after.isSymbolicLink()||JSON.stringify(identity(after))!==JSON.stringify(entry.identity))throw Error('Project stack document changed before archiving: '+entry.name);
+   await fs.mkdir(path.dirname(destination),{recursive:true});await fs.rename(source,destination);archived.push(entry.name);
+  }
+ }catch(error){
+  try{await restoreProjectStackDocuments({base:current.base,folder,archived});}
+  catch(restoreError){throw Error('Stack document archive failed: '+error.message+'. Some files may remain in '+folder+'. Recovery failed: '+restoreError.message);}
+  throw Error('Stack document archive failed; previously moved documents were restored: '+error.message);
+ }
+ return {archived,folder,base:current.base};
+}
+async function resetWithProjectArchive({projectFolder,stackId,workspaceRoot,projectId,expectedArchivePlan,...resetOptions}={}){
+ // Archive first after confirmation: a bad project path or changed document
+ // must not leave Git on another branch while project settings remain approved.
+ const archive=await archiveProjectStackDocuments(projectFolder,stackId,{workspaceRoot,projectId,expectedPlan:expectedArchivePlan});
+ try{return {result:await reset(resetOptions),archive};}
+ catch(error){
+  try{await restoreProjectStackDocuments(archive);}
+  catch(restoreError){throw Error(error.message+'. Stack documents remain in '+archive.folder+'; automatic recovery failed: '+restoreError.message);}
+  error.message+=' Stack documents were restored. If Git created a recovery stash, it remains available.';
+  throw error;
+ }
+}
+module.exports={plan,reset,resetWithProjectArchive,planProjectStackArchive,archiveProjectStackDocuments,restoreProjectStackDocuments,samePath,inspectWorkingTree,dirtyCheckoutMessage};

@@ -34,7 +34,7 @@ function createPageHarness(){
  };
  const create=new Function('$',[
   "const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluenceUrl',email:'startupEmail',githubUrl:'startupGithubUrl',projectRepoUrl:'startupProjectRepo',libraryRepoUrl:'startupLibraryRepo'};",
-  "let startupSetupRequired=true,startupPage=1,startupVerifying=false,startupInstallingModule='',startupScanComplete=true,startupConnectionVerified=true,startupOpenStackId='';",
+  "let startupSetupRequired=true,startupPage=1,startupVerifying=false,startupInstallingModule='',startupScanComplete=true,startupConnectionVerified=true,startupOpenStackId='',startupCopilotModalOpen=false;",
   ui.slice(start,end),
   ui.slice(invalidateStart,invalidateEnd),
   'return {renderStartupPage,invalidateStartupConnection,setVerifying:v=>startupVerifying=v,setVerified:v=>startupConnectionVerified=v};'
@@ -45,6 +45,7 @@ function createPageHarness(){
 test('successful Test & Save hides and disables action, changes restore it, and verification locks inputs',()=>{
  const {page,node}=createPageHarness();
  page.renderStartupPage();
+ assert.equal(node('startupUnifiedLog').hiddenClasses.has('hidden'),true);
  assert.equal(node('startupTestConnections').disabled,true);
  assert.equal(node('startupTestConnections').hiddenClasses.has('hidden'),true);
  assert.equal(node('startupProceed').disabled,false);

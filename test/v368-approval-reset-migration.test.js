@@ -86,10 +86,12 @@ test('host reset and stack-switch stop managed servers before reset and never fo
  const host=await fs.readFile(path.join(__dirname,'..','src/lib/runtime/extension-runtime.js'),'utf8');
  const resetBlock=host.slice(host.indexOf("case 'architectResetStack':{"),host.indexOf("case 'architectSaveStack':{"));
  assert.match(resetBlock,/stopProjectManaged\(\{root\}\)/);
- assert.ok(resetBlock.indexOf('stopProjectManaged({root})')<resetBlock.indexOf('service.reset('));
+ assert.ok(resetBlock.indexOf('planProjectStackArchive(')<resetBlock.indexOf('stopProjectManaged({root})'));
+ assert.ok(resetBlock.indexOf('stopProjectManaged({root})')<resetBlock.indexOf('service.resetWithProjectArchive('));
  const switchBlock=host.slice(host.indexOf("case 'architectSaveStack':{"),host.indexOf("case 'architectTestStack':{"));
  assert.match(switchBlock,/stopProjectManaged\(\{root\}\)/);
- assert.ok(switchBlock.indexOf('stopProjectManaged({root})')<switchBlock.indexOf('resetService.reset('));
+ assert.ok(switchBlock.indexOf('planProjectStackArchive(')<switchBlock.indexOf('stopProjectManaged({root})'));
+ assert.ok(switchBlock.indexOf('stopProjectManaged({root})')<switchBlock.indexOf('resetService.resetWithProjectArchive('));
  const gitCode=await fs.readFile(path.join(__dirname,'..','src/git-handoff-coordinator.js'),'utf8');
  assert.doesNotMatch(gitCode.slice(gitCode.indexOf('async function publishApprovedStack'),gitCode.indexOf('async function approvedBase')),/--force|force-with-lease/);
 });

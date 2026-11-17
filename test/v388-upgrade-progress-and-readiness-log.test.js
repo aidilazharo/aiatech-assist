@@ -131,16 +131,18 @@ test('Verified installer failures are reported to the open dialog without claimi
  assert.match(posted.at(-1).message,/Install failed/);
  assert.equal(posted.some(x=>x.stage==='completed'),false);
 });
-test('Readiness diagnostic download sits at bottom left with no redundant explanation',()=>{
+test('Readiness diagnostic download sits at the left of the startup navigation row',()=>{
  const start=html.indexOf('id="startupComputerCard"');
  const end=html.indexOf('id="startupConnectionForm"',start);
  assert.ok(start>=0&&end>start);
  const markup=html.slice(start,end);
- assert.ok(markup.indexOf('id="startupUnifiedLog"')>markup.indexOf('id="startupInstallFeedback"'));
+ assert.ok(!markup.includes('id="startupUnifiedLog"'));
+ const footer=html.slice(html.indexOf('<div class="atgv-startup-footer">'),html.indexOf('</section>',end));
+ assert.ok(footer.indexOf('id="startupUnifiedLog"')<footer.indexOf('id="startupProceedInfo"'));
  assert.doesNotMatch(markup,/Includes installer status, verification and troubleshooting details\./);
  assert.match(css,/#startupComputerCard\{display:flex;flex-direction:column;row-gap:12px;\}/);
  assert.match(css,/#startupComputerCard>\.atgv-startup-section-title\{margin-bottom:4px;\}/);
- assert.match(css,/#startupComputerCard \.atgv-startup-diagnostics-footer\{margin-top:auto;align-self:stretch;justify-content:flex-start;\}/);
+ assert.match(css,/\.atgv-startup-footer #startupUnifiedLog,\.atgv-startup-footer #startupPrevious\{grid-column:1/);
  assert.match(ui,/for\(const id of \['startupUnifiedLog','gateUnifiedLog'\]\)/);
  assert.match(host,/case 'startupExportUnifiedLog':/);
 });
