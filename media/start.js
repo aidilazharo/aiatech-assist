@@ -1292,6 +1292,7 @@ function renderBAJiraInventory(){
 // Project Manager My Work shares the exact paginated, project-scoped Jira scan with BA and Overview.
 // Calculations are based on Jira's real assignee, priority, status, and due date fields.
 let pmJiraTableInstance=null;
+let pmJiraDisplayMode='table'; // Table is the default; Kanban is optional.
 let pmKanbanPending=false;
 let pmForecast=null;
 let pmEffortEdits={};
@@ -1306,6 +1307,25 @@ function pmOptionList(id,values,defaultText){
 function pmToday(){const now=new Date();return [now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-');}
 function pmText(tag,text,className=''){const node=document.createElement(tag);node.textContent=String(text??'');if(className)node.className=className;return node;}
 function pmJiraLink(item){const link=document.createElement('button');link.type='button';link.className='jira-issue-inline-link';link.textContent=item.key;link.addEventListener('click',()=>openJiraIssueModal(item.key));return link;}
+function syncPMJiraView(){
+ const asKanban=pmJiraDisplayMode==='kanban';
+ const table=$('pmJiraTableView'),board=$('pmJiraKanbanView');
+ if(!table||!board)return;
+ table.classList.toggle('hidden',asKanban);
+ board.classList.toggle('hidden',!asKanban);
+ $('pmShowTable').setAttribute('aria-pressed',String(!asKanban));
+ $('pmShowKanban').setAttribute('aria-pressed',String(asKanban));
+ $('pmShowTable').classList.toggle('active',!asKanban);
+ $('pmShowKanban').classList.toggle('active',asKanban);
+ if(!asKanban)window.ATGVKanban?.destroy?.();
+}
+function setPMJiraView(mode){
+ if(!['table','kanban'].includes(mode)||pmJiraDisplayMode===mode)return;
+ pmJiraDisplayMode=mode;syncPMJiraView();renderPMDashboard();
+}
+$('pmShowTable').addEventListener('click',()=>setPMJiraView('table'));
+$('pmShowKanban').addEventListener('click',()=>setPMJiraView('kanban'));
+
 function renderPMDashboard(){
  const root=$('pmDailyCockpit');if(!root||selectedRole!=='project-manager'||view!=='work')return;
  const key=projectConnectionsSnapshot.jira?.key||'';
@@ -1313,8 +1333,9 @@ function renderPMDashboard(){
  const items=scoped?jiraInventoryItems:[];
  const today=pmToday(),summary=ATGVPMDelivery.analyze(items,today);
  const statusNode=$('pmDataStatus');$('pmRefreshJira').disabled=!activeId||!key||jiraInventoryRunning;
+  syncPMJiraView();
   const kanbanRoot=$('pmKanbanBoard');
-  if(kanbanRoot&&window.ATGVKanban){
+  if(pmJiraDisplayMode==='kanban'&&kanbanRoot&&window.ATGVKanban){
     window.ATGVKanban.render(kanbanRoot,items,{
       busy:pmKanbanPending||jiraInventoryRunning,
       onOpen:item=>openJiraIssueModal(item.key),
