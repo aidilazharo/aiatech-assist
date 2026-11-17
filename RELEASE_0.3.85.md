@@ -8,7 +8,7 @@
 - A saved entry is not assumed to be currently connected: selecting it still verifies the saved PAT and repository permissions before syncing.
 - **Forget selected** deletes the role-specific saved PAT and removes its URL entry after confirmation, without deleting the other role's credentials.
 - Migrate the previously saved single Source/Destination URL into the new lists without losing it.
-- Do not expose PATs in webview messages, Git command arguments, branch names, commit messages or PR descriptions.
+- One-time credential input is submitted only to the trusted extension host for verification; PATs are never returned in webview result messages or written to GlobalState, Git command arguments, branch names, commit messages or PR descriptions.
 
 ## Repo Sync: meaningful branch, commit and simple PR text
 
