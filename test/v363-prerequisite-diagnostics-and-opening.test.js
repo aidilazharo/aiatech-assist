@@ -63,7 +63,7 @@ test('host verifies installer output before reporting success and exposes downlo
  assert.match(host,/status:'failed',detail:error\.message,output:error\.installOutput/);
 });
 
-test('readiness and installer UI keep the selected stack expanded and show bottom-left unified log',async()=>{
+test('readiness and installer UI retain the selected stack modal and show the unified log',async()=>{
  const html=await read('src/lib/webview/dashboard-html.js');
  const ui=await read('media/start.js');
  const css=await read('media/start.css');
@@ -74,7 +74,8 @@ test('readiness and installer UI keep the selected stack expanded and show botto
  assert.match(ui,/status==='verified'/);
  assert.match(ui,/status==='manual'/);
  assert.match(ui,/startupLastInstalledTool/);
- assert.match(ui,/grid\.querySelectorAll\('details\[open\]'\)/);
+ assert.match(html,/id="startupStackModal"/);
+ assert.match(ui,/if\(startupOpenStackId\)/);
  assert.match(css,/\.atgv-startup-diagnostics-footer/);
 });
 

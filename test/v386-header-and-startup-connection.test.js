@@ -34,7 +34,7 @@ function createPageHarness(){
  };
  const create=new Function('$',[
   "const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluenceUrl',email:'startupEmail',githubUrl:'startupGithubUrl',projectRepoUrl:'startupProjectRepo',libraryRepoUrl:'startupLibraryRepo'};",
-  "let startupSetupRequired=true,startupPage=1,startupVerifying=false,startupInstallingModule='',startupScanComplete=true,startupConnectionVerified=true;",
+  "let startupSetupRequired=true,startupPage=1,startupVerifying=false,startupInstallingModule='',startupScanComplete=true,startupConnectionVerified=true,startupOpenStackId='';",
   ui.slice(start,end),
   ui.slice(invalidateStart,invalidateEnd),
   'return {renderStartupPage,invalidateStartupConnection,setVerifying:v=>startupVerifying=v,setVerified:v=>startupConnectionVerified=v};'

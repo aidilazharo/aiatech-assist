@@ -93,7 +93,7 @@ function webviewFixture(){
  assert.ok(a>0&&z>a);
  const source=[
   "const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluenceUrl',email:'startupEmail',githubUrl:'startupGithubUrl',projectRepoUrl:'startupProjectRepo',libraryRepoUrl:'startupLibraryRepo'};",
-  "let startupSetupRequired=true,startupPage=0,startupVerifying=false,startupInstallingModule='',startupConnectionVerified=false,startupScanComplete=true,startupFormInitialized=false,startupReturnToConnections=false,startupPrereqRequested=false;",
+  "let startupSetupRequired=true,startupPage=0,startupVerifying=false,startupInstallingModule='',startupConnectionVerified=false,startupScanComplete=true,startupFormInitialized=false,startupReturnToConnections=false,startupPrereqRequested=false,startupOpenStackId='';",
   ui.slice(a,z),
   "return {renderStartupConfig,renderStartupPage,getPage:()=>startupPage,isVerified:()=>startupConnectionVerified};"
  ].join('\n');
