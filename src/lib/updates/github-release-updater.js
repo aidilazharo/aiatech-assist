@@ -109,18 +109,21 @@ function verifyChecksum(checksumBytes,assetBytes,filename){
  if(!matching)throw Error('VSIX checksum verification failed; the upgrade was not installed.');
  return digest;
 }
-async function downloadVerified(release,{token='',directory,request=getBytes}={}){
+async function downloadVerified(release,{token='',directory,request=getBytes,onProgress=async()=>{}}={}){
  if(!release||!directory)throw Error('Verified release and local staging directory required.');
  const filename=`atgv-aiatech-assist-${release.version}.vsix`;
  const repo=parseRepositoryUrl(release.releaseUrl||DEFAULT_RELEASE_URL);
  if(release.repository&&release.repository!==repo.repository)throw Error('Release repository does not match its source.');
  if(!validAsset(release.asset,filename,repo.repository)||!validAsset(release.checksum,'vsix.sha256',repo.repository))throw Error('Release assets are not trusted GitHub API assets.');
+ await onProgress('downloading');
  const [vsix,checksum]=await Promise.all([
   request(release.asset.url,{token,maxBytes:MAX_ASSET,accept:'application/octet-stream'}),
   request(release.checksum.url,{token,maxBytes:10000,accept:'application/octet-stream'})
  ]);
  if(vsix.length!==release.asset.size)throw Error('Downloaded VSIX size does not match the release metadata.');
+ await onProgress('verifying');
  verifyChecksum(checksum,vsix,filename);
+ await onProgress('staging');
  await fs.mkdir(directory,{recursive:true});
  const target=path.join(directory,filename);
  await fs.writeFile(target+'.part',vsix,{mode:0o600});await fs.rename(target+'.part',target);
