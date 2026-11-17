@@ -1,5 +1,5 @@
 'use strict';
-// Independent ATGV: Workspace webview for Repo A main -> Repo B pull request.
+// Independent ATGV: Workspace webview for Source main -> Destination pull request.
 const crypto=require('node:crypto');
 const repoSync=require('./repo-sync-pr');
 const repoCredentials=require('./repo-sync-credentials');
@@ -377,7 +377,7 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
   if(message.command==='selectRepoB'){
    if(busy)return;
    try{
-    const picked=await vscode.window.showOpenDialog({canSelectFolders:true,canSelectFiles:false,canSelectMany:false,openLabel:'Select Repo B Git root',title:'ATGV Workspace: Choose Repo B Git root or an empty folder'});
+    const picked=await vscode.window.showOpenDialog({canSelectFolders:true,canSelectFiles:false,canSelectMany:false,openLabel:'Select Destination Git root',title:'ATGV Workspace: Choose Destination Git root or an empty folder'});
     if(picked?.[0]){selectedFolder=picked[0].fsPath;pendingReview=null;await post({type:'repoBSelected',folder:selectedFolder});}
    }catch(error){await post({type:'repoSyncResult',success:false,message:sanitize(error)});}
    return;
@@ -408,9 +408,9 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
   if(isPrepare)pendingReview=null;
   let sourcePat='',destPat='',source=null,destination=null;
   try{
-   if(!selectedFolder)throw Error('Choose a Repo B Git folder outside ATGV workspace first.');
+   if(!selectedFolder)throw Error('Choose a Destination Git folder outside ATGV workspace first.');
    if(isPublish&&(!pendingReview||pendingReview.folder!==selectedFolder))
-    throw Error('Pull & Study Repo A before publishing. The destination folder or source review changed.');
+    throw Error('Pull & Study Source before publishing. The destination folder or source review changed.');
    const input=isPublish?pendingReview.input:message;
    source=repoCredentials.parseCredentialUrl(input.sourceUrl);
    destination=repoCredentials.parseCredentialUrl(input.destinationUrl);
@@ -425,7 +425,7 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
     prDescription:message.prDescription}:null;
    if(reviewed)repoSync.validateReviewPresentation(reviewed,reviewed.sourceSha);
    const response=isPrepare?'Prepare Source Review':await vscode.window.showWarningMessage(
-    'Repo A: '+source.name+' ('+(sourcePrNumber?'PR #'+sourcePrNumber:sourceBranch||'GitHub default branch (auto)')+')\nRepo B: '+destination.name+' in '+selectedFolder+
+    'Source: '+source.name+' ('+(sourcePrNumber?'PR #'+sourcePrNumber:sourceBranch||'GitHub default branch (auto)')+')\nDestination: '+destination.name+' in '+selectedFolder+
     '\nScope: '+scope+'\nPR base: '+(base||'GitHub default branch')+
     (isPublish?'\n\nPublish the reviewed branch, commit message, PR title and description?':'\n\nVerify both PATs, clone to temp and create the PR?'),
     {modal:true},isPublish?'Publish Reviewed PR':'Create Sync PR');
