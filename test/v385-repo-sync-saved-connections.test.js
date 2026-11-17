@@ -105,7 +105,7 @@ test('source commit drives descriptive branch, message and brief PR details',()=
  const repo='tech-stacks-skills',files=['catalog.json','VERSION'];
  assert.equal(sync.genericMessage('Sync tech-stacks-skills from main'),true);
  assert.equal(sync.meaningfulSubject(specific,files),specific);
- assert.match(sync.branchName(repo,sha,specific,files),/^sync\/tech-stacks-skills\/remove-non-release-workflow-.*-2a50944d$/);
+ assert.match(sync.branchName(repo,sha,specific,files),/^ci\/remove-non-release-workflow-.*-2a50944d$/);
  const details=sync.prDetails({source:{name:'Acme/'+repo},destination:{name:'Acme/other'},
   sha,scope:'.',base:'main',sourceBranch:'main',
   branch:sync.branchName(repo,sha,specific,files),sourceMessage:specific,
@@ -116,7 +116,7 @@ test('source commit drives descriptive branch, message and brief PR details',()=
  assert.ok(details.body.includes('Files changed: 2'));
  assert.equal(details.body.includes('Safety and review'),false);
  const fallback=sync.branchName(repo,sha,'Sync tech-stacks-skills from main',['catalog.json']);
- assert.equal(fallback,'sync/tech-stacks-skills/update-catalog-json-2a50944d');
+ assert.equal(fallback,'sync/update-catalog-json-2a50944d');
  const ai=sync.aiSyncPlan({branch:'sync/tech-stacks-skills/main',
   commitMessage:'Sync tech-stacks-skills from main',
   prTitle:'Sync tech-stacks-skills from main'}, {repo});
