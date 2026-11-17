@@ -198,6 +198,34 @@ function aiSyncPlan(raw,source){
  return {branch,commitMessage:genericMessage(commitMessage)?'':commitMessage,
   prTitle:genericMessage(prTitle)?'':prTitle,prDescription:String(raw.prDescription||'').trim().slice(0,550)};
 }
+async function inspectSourceCode(cloned,files){
+ // Inspect source syntax and package scripts locally; never send raw source bodies,
+ // credentials or ignored files to the AI planner.
+ const code=files.filter(f=>/\.(?:js|jsx|ts|tsx|py|php|go|rs|java|cs|rb|vue)$/i.test(f)&&
+  !/(?:\.min\.|\.bundle\.|\.lock$)/i.test(f))
+  .sort((a,b)=>(/^(src|app|lib)\//.test(a)?-1:0)-(/^(src|app|lib)\//.test(b)?-1:0)||a.localeCompare(b));
+ const counts={};for(const f of files){const ext=path.extname(f).slice(1).toLowerCase()||'other';counts[ext]=(counts[ext]||0)+1;}
+ const keyFiles=[],symbols=[];
+ for(const file of code.slice(0,18)){
+  const full=path.join(cloned,...file.split('/'));
+  let body='';try{const stat=await fs.stat(full);if(stat.size>35000)continue;body=await fs.readFile(full,'utf8');}catch{continue;}
+  keyFiles.push(file);
+  // Only identifiers/signatures, not executable code, comments or arbitrary strings.
+  const expression=/\b(?:async\s+)?function\s+([a-zA-Z_$][\w$]*)\s*\(|\bclass\s+([A-Za-z_$][\w$]*)\b|\b(?:export\s+(?:default\s+)?(?:const|function|class)|module\.exports\s*=)\s*([A-Za-z_$][\w$]*)/g;
+  for(const match of body.matchAll(expression)){
+   const name=(match[1]||match[2]||match[3]||'').slice(0,75);
+   if(name&&symbols.length<40&&!symbols.some(s=>s.file===file&&s.name===name))symbols.push({file,name});
+  }
+ }
+ let scripts=[],dependencies=[];
+ if(files.includes('package.json'))try{
+  const pkg=JSON.parse(await fs.readFile(path.join(cloned,'package.json'),'utf8'));
+  scripts=Object.keys(pkg.scripts||{}).slice(0,18);
+  dependencies=Object.keys({...pkg.dependencies,...pkg.devDependencies}).slice(0,30);
+ }catch{}
+ return {fileTypes:counts,keyFiles,testFiles:files.filter(f=>/(?:^|\/)(?:test|tests|__tests__)\/|\.(?:test|spec)\./i.test(f)).slice(0,16),
+  symbols,scripts,dependencies};
+}
 async function readSourceFacts({cloned,source,chosenBranch,sha,sourceMessage,files,destination,base,sourceCommitFiles=[]}){
  let project={};
  if(files.includes('package.json'))try{
@@ -205,11 +233,12 @@ async function readSourceFacts({cloned,source,chosenBranch,sha,sourceMessage,fil
   project={name:cleanAiField(pkg.name,80),version:cleanAiField(pkg.version,35),description:cleanAiField(pkg.description,180)};
  }catch{}
  // Source info: safe metadata only, never PATs, raw code, README text or secrets.
+ const codeOverview=await inspectSourceCode(cloned,files);
  return {sourceRepo:source.name,sourceBranch:chosenBranch,sourceSha:sha,
-  sourceCommitMessage:sourceMessage.slice(0,700),sourceCommitFiles:sourceCommitFiles.slice(0,30),project,
+  sourceCommitMessage:sourceMessage.slice(0,700),sourceCommitFiles:sourceCommitFiles.slice(0,30),project,codeOverview,
   destinationRepo:destination.name,baseBranch:base,files:files.slice(0,80),fileCount:files.length};
 }
-async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.',sourceBranch='',sourcePrNumber='',baseBranch='',sourcePat,destPat,workspaceRoot='',onProgress=()=>{},runner=run,githubApi=githubApiDefault,describePr=async()=>'',planSync=async()=>null}){
+async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.',sourceBranch='',sourcePrNumber='',baseBranch='',sourcePat,destPat,workspaceRoot='',onProgress=()=>{},runner=run,githubApi=githubApiDefault,describePr=async()=>'',planSync=async()=>null,previewOnly=false,approvedReview=null}){
  const source=githubUrl(sourceUrl),scope=scopeName(copyScope);
  let chosenBranch=sourceBranch?baseName(sourceBranch):'';
  const sourceEnv=patEnvironment(sourcePat),destinationEnv=patEnvironment(destPat);
@@ -272,13 +301,16 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   });
   if(!String(baseRefs||'').split(/\r?\n/).some(line=>line.endsWith('\trefs/heads/'+base)))
    throw Error('Repo B has no branch "'+base+'". If this GitHub repository is empty, create its first commit on the intended default branch before running Repo Sync. No files were changed.');
-  await notify('destination','Cloning '+destination.name+' / '+base+' into the selected empty Repo B folder…');
+  if(!previewOnly)await notify('destination','Cloning '+destination.name+' / '+base+' into the selected empty Repo B folder…');
   // Git refuses to clone into a nonempty directory. Do not delete or reset user files.
-  await runner('git',['clone','--quiet','--single-branch','--branch',base,'--',destination.url,'.'],{
-   cwd:destRoot,timeout:180000,env:destinationEnv
-  });
-  await notify('destination','Repo B checkout prepared. Creating the review branch next.');
+  if(!previewOnly){
+   await runner('git',['clone','--quiet','--single-branch','--branch',base,'--',destination.url,'.'],{
+    cwd:destRoot,timeout:180000,env:destinationEnv
+   });
+   await notify('destination','Repo B checkout prepared. Creating the review branch next.');
+  }
  }
+ if(!previewOnly||alreadyCloned){
  const top=await runner('git',['rev-parse','--show-toplevel'],{cwd:destRoot});
  if(await fs.realpath(top)!==destRoot)throw Error('Repo B checkout root changed during verification.');
  const origin=await runner('git',['remote','get-url','origin'],{cwd:destRoot});
@@ -288,6 +320,7 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
  if(dirty)throw Error('Repo B has uncommitted or untracked changes. Commit or stash them first.');
  const oldBranch=await runner('git',['symbolic-ref','--quiet','--short','HEAD'],{cwd:destRoot});
  if(!oldBranch)throw Error('Repo B cannot be in detached HEAD.');
+ }
  // Derive the review branch only after inspecting Repo A's actual HEAD commit.
  let branch='';
  let aiPlan={};
@@ -324,22 +357,65 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
    ?baseName('sync/'+slugify(source.repo).slice(0,28)+'/'+slugify(chosenBranch).slice(0,40)+'-'+sha.slice(0,8))
    :baseName(chosenBranch);
   const facts=await readSourceFacts({cloned,source,chosenBranch,sha,sourceMessage,files,destination,base,sourceCommitFiles});
-  if(!sourcePr){
-   await notify('ai','No matching source PR; optional AI description cannot change source branch, commit or PR title…');
+  if(!sourcePr||previewOnly){
+   await notify('ai','Studying verified source-code structure and commit history for the proposed branch, commit and PR details…');
    try{aiPlan=aiSyncPlan(await planSync(facts),source);}
    catch{await notify('ai','AI summary unavailable; using verified source metadata.');}
   }
   if(excludedSourceCommitFiles.length)
    await notify('source','Source commit has '+excludedSourceCommitFiles.length+' excluded or deleted path(s): '+excludedSourceCommitFiles.slice(0,3).join(', '));
-  await notify('source','Using original source branch '+chosenBranch+', commit message and '+(sourcePr?'PR #'+sourcePr.number:'commit-based PR title')+'.');
+  if(previewOnly){
+   // Verify actual destination base without fetching or changing Repo B files.
+   const baseRefs=await runner('git',['ls-remote','--heads','--',destination.url,'refs/heads/'+base],{
+    cwd:destRoot,timeout:120000,env:destinationEnv});
+   const baseLine=String(baseRefs||'').split(/\r?\n/).find(x=>x.endsWith('\trefs/heads/'+base));
+   const baseSha=baseLine?.split('\t')[0]||'';
+   if(!/^[a-f0-9]{40}$/.test(baseSha))throw Error('Destination PR base branch is missing or inaccessible.');
+   const proposedBranch=sourcePr&&chosenBranch!==base?chosenBranch:(aiPlan.branch||branchName(source.repo,sha,sourceMessage,sourceCommitFiles.length?sourceCommitFiles:files));
+   const proposedCommit=sourcePr?sourceMessage:(aiPlan.commitMessage||sourceMessage);
+   const proposedTitle=sourcePr?sourcePr.title:(aiPlan.prTitle||commitSubject(sourceMessage));
+   const proposedBody=sourcePr?sourcePr.body:(aiPlan.prDescription||'- '+readableTitle(sourceMessage,sourceCommitFiles||files));
+   const proposed={
+    branch:baseName(proposedBranch===base?branch:proposedBranch),
+    commitMessage:String(proposedCommit||'').slice(0,12000),
+    prTitle:String(proposedTitle||'').slice(0,110),
+    prDescription:String(proposedBody||'').slice(0,4000)
+   };
+   return {preview:true,review:{
+    ...proposed,sourceSha:sha,baseSha,sourceBranch:chosenBranch,sourceRepo:source.name,
+    destinationRepo:destination.name,base,copyScope:scope,
+    sourcePrUrl:sourcePr?.url||'',fileCount:files.length,sourceCode:facts.codeOverview,
+    sourceCommitFiles,excludedSourceCommitFiles,
+    notice:'Suggestions use verified source code structure and latest source commit. No Repo B files were changed.'
+   }};
+  }
+  if(approvedReview){
+   if(approvedReview.sourceSha!==sha||approvedReview.base!==base||
+    approvedReview.sourceBranch!==chosenBranch||
+    approvedReview.sourceRepo?.toLowerCase()!==source.name.toLowerCase()||
+    approvedReview.destinationRepo?.toLowerCase()!==destination.name.toLowerCase()||
+    approvedReview.copyScope!==scope)
+    throw Error('Source or destination changed since review. Pull and study Repo A again before publishing.');
+   const value=String(approvedReview.branch||'').trim();
+   branch=baseName(value);
+   if(branch===base)throw Error('PR review branch must differ from destination base '+base+'.');
+   if(!String(approvedReview.commitMessage||'').trim()||String(approvedReview.commitMessage).length>12000)throw Error('Enter a commit message up to 12000 characters.');
+   if(!String(approvedReview.prTitle||'').trim()||String(approvedReview.prTitle).length>110)throw Error('Enter a PR title up to 110 characters.');
+   if(!String(approvedReview.prDescription||'').trim()||String(approvedReview.prDescription).length>4000)throw Error('Enter a short PR description (up to 4000 characters).');
+  }
+  await notify('source','Source HEAD verified. '+(approvedReview?'Applying reviewed PR metadata.':'Using source commit and PR metadata.'));
   await runner('git',['check-ref-format','--branch',branch],{cwd:destRoot});
   await notify('preflight',files.length+' tracked files; checking '+destination.name+' / '+base+'…');
   await runner('git',['fetch','origin','+refs/heads/'+base+':refs/remotes/origin/'+base],{cwd:destRoot,timeout:180000,env:destinationEnv});
+  if(approvedReview?.baseSha){
+   const baseSha=await runner('git',['rev-parse','refs/remotes/origin/'+base],{cwd:destRoot});
+   if(baseSha!==approvedReview.baseSha)throw Error('Repo B base changed after the review; analyze again before publishing.');
+  }
   const remoteBranch=(await runner('git',['ls-remote','--heads','origin','refs/heads/'+branch],{cwd:destRoot,env:destinationEnv})).trim();
   if(remoteBranch){
    await runner('git',['fetch','origin','+refs/heads/'+branch+':refs/remotes/origin/'+branch],{cwd:destRoot,timeout:180000,env:destinationEnv});
    const previous=await runner('git',['log','-1','--pretty=%B','refs/remotes/origin/'+branch],{cwd:destRoot});
-   if(previous.trim()!==sourceMessage&&!previous.includes('ATGV-Sync-Source: '+source.name))
+   if(previous.trim()!==String(approvedReview?.commitMessage||sourceMessage).trim()&&!previous.includes('ATGV-Sync-Source: '+source.name))
     throw Error('Repo B branch '+branch+' already exists with a different commit message. Refusing to overwrite it.');
    const local=await runner('git',['branch','--list',branch],{cwd:destRoot});
    if(local){
@@ -379,14 +455,17 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   }
   const details=prDetails({source,destination,sha,scope,base,branch,count:changedFiles.length,changedFiles,sourceBranch:chosenBranch,sourceMessage,sourceCommitFiles});
   // Preserve the complete original source commit message, without AI rewriting.
-  const commitMessage=sourceMessage;
+  const commitMessage=approvedReview?String(approvedReview.commitMessage).trim():sourceMessage;
   await notify('commit','Committing with the exact Repo A commit message…');
   await runner('git',['commit','-m',commitMessage],{cwd:destRoot,timeout:180000});
   await notify('push','Pushing '+branch+' using the destination PAT…');
   await runner('git',['push','--set-upstream','origin',branch],{cwd:destRoot,timeout:180000,env:destinationEnv});
   pushed=true;
   let body=details.body;
-  if(sourcePr){
+  if(approvedReview){
+   body=String(approvedReview.prDescription).trim();
+   await notify('pr','Using the approved PR title and description…');
+  }else if(sourcePr){
    // Replicate the source PR title and body exactly, even if AI suggests otherwise.
    body=sourcePr.body;
    await notify('pr','Copying exact source PR #'+sourcePr.number+' title and description…');
@@ -401,7 +480,7 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
    if(excludedSourceCommitFiles.length)body+='\n\nExcluded source-commit paths (not copied): '+excludedSourceCommitFiles.slice(0,12).map(x=>'\x60'+x+'\x60').join(', ');
   }
   await notify('pr','Creating or reusing the review PR via GitHub HTTPS API for '+branch+'…');
-  const prTitle=sourcePr?sourcePr.title:commitSubject(sourceMessage);
+  const prTitle=approvedReview?String(approvedReview.prTitle).trim():(sourcePr?sourcePr.title:commitSubject(sourceMessage));
   const prUrl=await githubApi.findOpenPr(destination,destPat,{branch,base})||
    await githubApi.createPr(destination,destPat,{branch,base,title:prTitle,body});
   return {prUrl,branch,sourceBranch:chosenBranch,sourceSha:sha,sourceRepo:source.name,destinationRepo:destination.name,base,fileCount:changedFiles.length,commitMessage,sourcePrUrl:sourcePr?.url||'',excludedSourceCommitFiles};
@@ -410,4 +489,4 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   throw Error(e.message+suffix);
  }finally{await fs.rm(temp,{recursive:true,force:true}).catch(()=>{});}
 }
-module.exports={githubUrl,baseName,scopeName,isAllowedPath,commitSubject,genericMessage,meaningfulSubject,readableTitle,branchName,prDetails,patEnvironment,aiSyncPlan,readSourceFacts,sync};
+module.exports={githubUrl,baseName,scopeName,isAllowedPath,commitSubject,genericMessage,meaningfulSubject,readableTitle,branchName,prDetails,patEnvironment,aiSyncPlan,readSourceFacts,inspectSourceCode,sync};
