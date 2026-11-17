@@ -74,7 +74,7 @@ test('discovery cannot read another project through invalid ID',()=>fixture(asyn
 }));
 test('webview-only presentation keeps only two commands and uses provider-agnostic AI routing',()=>{
   const pkg=require('../package.json');
-  assert.deepEqual(pkg.contributes.commands.map(c=>c.title),['ATGV: Start','ATGV: Workspace','ATGV: Refresh Shared Project Artifacts','ATGV: Restart','ATGV: Reset','ATGV: Report an Issue']);
+  assert.deepEqual(pkg.contributes.commands.map(c=>c.title),['ATGV: Start','ATGV: Workspace','ATGV: AI','ATGV: Refresh Shared Project Artifacts','ATGV: Restart','ATGV: Reset','ATGV: Report an Issue']);
   assert.equal(pkg.contributes.viewsContainers,undefined);
   const ext=require('node:fs').readFileSync(path.join(__dirname,'../test/generated/extension-source.txt'),'utf8');
   for(const id of ['workbench.action.closeSidebar','workbench.action.closePanel','workbench.action.closeAuxiliaryBar'])assert.ok(ext.includes(id));
