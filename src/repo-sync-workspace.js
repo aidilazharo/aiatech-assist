@@ -89,10 +89,10 @@ ol{line-height:1.85;padding-left:20px}
 <h2>4. Review suggested Git and PR details</h2>
 <p class="muted review-help">Based on the pulled source. Edit any field, then approve and run the full Repo B operation. Source and destination are checked again before publishing.</p>
 <div id="sourceAnalysis" class="status" role="status"></div>
-<label for="reviewBranch">Destination branch name</label><input id="reviewBranch" type="text" maxlength="110" required>
-<label for="reviewCommit">Commit message</label><textarea id="reviewCommit" rows="3" maxlength="12000" required></textarea>
-<label for="reviewTitle">PR title</label><input id="reviewTitle" type="text" maxlength="110" required>
-<label for="reviewDescription">Simple PR details</label><textarea id="reviewDescription" rows="4" maxlength="4000" required></textarea>
+<label for="reviewBranch">Destination branch name</label><input id="reviewBranch" type="text" maxlength="110">
+<label for="reviewCommit">Commit message</label><textarea id="reviewCommit" rows="3" maxlength="12000"></textarea>
+<label for="reviewTitle">PR title</label><input id="reviewTitle" type="text" maxlength="110">
+<label for="reviewDescription">Simple PR details</label><textarea id="reviewDescription" rows="4" maxlength="4000"></textarea>
 <div class="actions"><button id="publishReviewed" type="button">Approve & Run Full Sync · Push & Create PR</button><button id="redoReview" type="button" class="secondary">Pull & Study Again</button></div>
 </section></div></form>
 <p class="muted note">Repo B-only files and release workflows are preserved. GitHub PR merge is a separate action; source analysis does not alter Repo B.</p>
@@ -194,7 +194,9 @@ get('repoSyncForm').addEventListener('submit',e=>{
 get('publishReviewed').addEventListener('click',()=>{
  if(busy||!reviewReady)return;
  const fields=['reviewBranch','reviewCommit','reviewTitle','reviewDescription'];
- if(!fields.every(id=>get(id).reportValidity()))return;
+ if(!fields.every(id=>get(id).value.trim()&&get(id).reportValidity())){
+  show('Enter a branch, commit message, PR title and PR description before publishing.','error');return;
+ }
  busy=true;buttons();show('Confirm final publication in VS Code. Source SHA is pinned to your review.');
  vscode.postMessage({command:'publishReviewedSync',branch:get('reviewBranch').value.trim(),
   commitMessage:get('reviewCommit').value.trim(),prTitle:get('reviewTitle').value.trim(),
