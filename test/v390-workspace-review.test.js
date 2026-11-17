@@ -41,7 +41,7 @@ test('Study reads real source code and does not mutate Repo B until reviewed pub
   sourcePat:'ghp_'+'a'.repeat(40),destPat:'ghp_'+'b'.repeat(40),githubApi,runner,
   planSync:async facts=>{
    assert.equal(facts.sourceSha,sha);assert.ok(facts.codeOverview.symbols.some(v=>v.name==='listBooks'));
-   return {branch:'sync/repo-a/book-service-'+sha.slice(0,8),commitMessage:'feat: proposed book service',
+   return {branch:'feat/book-service-'+sha.slice(0,8),commitMessage:'feat: proposed book service',
     prTitle:'Book service update',prDescription:'- Implement book service.'};
   }};
  const preview=await sync.sync({...opts,previewOnly:true});
