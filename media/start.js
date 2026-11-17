@@ -4868,6 +4868,8 @@ function completedBARecords(){
 // no Jira issue becomes a completed ATGV BR without its original evidence.
 function renderBAJiraBackedEpics(){
  const root=$('baJiraBackedEpics');if(!root)return;
+ // Preserve expanded Jira-only BRs across inventory refreshes just like completed BRs.
+ const expandedKeys=new Set([...root.querySelectorAll('details.ba-jira-only-br-section[open]')].map(node=>node.dataset.jiraKey));
  root.replaceChildren();
  const projectKey=String(projectConnectionsSnapshot.jira?.key||'').trim().toUpperCase();
  const inScope=!!activeId&&jiraInventoryProject===activeId&&jiraInventoryKey===projectKey;
@@ -4882,14 +4884,31 @@ function renderBAJiraBackedEpics(){
   ?ATGVBAJiraEpics.unlinkedEpics(jiraInventoryItems,known,projectKey):[];
  if(!rows.length)return;
  for(const item of rows.slice(0,50)){
-  const card=brElement('div','ba-jira-recovery-item');
+  // Use the same details/summary/classes as approved BR history: only the data
+  // and available actions differ, never the visual style or accordion behavior.
+  const card=document.createElement('details');card.className='ba-completed-br-section ba-jira-only-br-section';
+  card.dataset.jiraKey=item.key;card.open=expandedKeys.has(item.key);
+  const heading=document.createElement('summary');heading.className='ba-completed-br-heading';
+  const title=String(item.summary||'').replace(/^\s*BR-[0-9]+\s*(?:[:·.\-–—]|\s)\s*/i,'').trim();
+  heading.append(brElement('strong','ba-completed-br-title',item.brId?item.brId+' · '+(title||item.summary):item.summary));
+  heading.append(brElement('span','ba-completed-br-meta',(item.status||'Status unknown')+' · Unlinked to local BR'));
+  // Mirror the completed BR's action alignment, but never present missing
+  // discovery answers as accessible or reconstructed from Jira.
+  const answers=brElement('button','secondary ba-view-br-answers ba-jira-answers-unavailable','View 12 Answers');
+  answers.type='button';answers.disabled=true;answers.title='Discovery answers unavailable in this ATGV project';
+  answers.setAttribute('aria-label','View 12 Answers unavailable: discovery evidence is not stored in this ATGV project');
+  heading.append(answers);
+  const open=brElement('button','secondary ba-view-jira','View Jira · '+item.linkedIssueCount+' linked');
+  open.type='button';open.title='Open Jira Epic '+item.key;
+  open.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();openJiraIssueModal(item.key);});
+  open.addEventListener('keydown',event=>event.stopPropagation());
+  heading.append(open);
+  card.append(heading);
+  const body=brElement('div','ba-completed-br-body');
   const info=brElement('div','ba-jira-recovery-info');
-  info.append(brElement('strong','',(item.brId?item.brId+' · ':'')+item.summary));
   info.append(brElement('small','muted',item.key+' · '+(item.status||'Status unknown')+' · '+item.linkedIssueCount+' Jira descendant(s) verified by parent links · Unlinked to local BR'));
   info.append(brElement('small','muted ba-jira-evidence-help','Original 12 discovery answers and uploaded file are not stored in this project. Open the ATGV project folder that published this BR to access its evidence; Jira alone cannot reconstruct it.'));
-  const open=brElement('button','secondary','View Jira');open.type='button';
-  open.addEventListener('click',()=>openJiraIssueModal(item.key));
-  card.append(info,open);root.append(card);
+  body.append(info);card.append(body);root.append(card);
  }
  if(rows.length>50)root.append(brElement('p','muted',String(rows.length-50)+' additional unlinked Epics: use the Jira inventory below.'));
  if(jiraInventoryRunning)root.append(brElement('p','muted','Jira search is still running; counts may increase.'));
