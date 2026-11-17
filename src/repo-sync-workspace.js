@@ -423,7 +423,7 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
    const response=isPrepare?'Prepare Source Review':await vscode.window.showWarningMessage(
     'Repo A: '+source.name+' ('+(sourcePrNumber?'PR #'+sourcePrNumber:sourceBranch||'GitHub default branch (auto)')+')\nRepo B: '+destination.name+' in '+selectedFolder+
     '\nScope: '+scope+'\nPR base: '+(base||'GitHub default branch')+
-    isPublish?'\n\nPublish the reviewed branch, commit message, PR title and description?':'\n\nVerify both PATs, clone to temp and create the PR?',
+    (isPublish?'\n\nPublish the reviewed branch, commit message, PR title and description?':'\n\nVerify both PATs, clone to temp and create the PR?'),
     {modal:true},isPublish?'Publish Reviewed PR':'Create Sync PR');
    if(response!==(isPrepare?'Prepare Source Review':isPublish?'Publish Reviewed PR':'Create Sync PR')){
     await post({type:'repoSyncResult',success:false,message:'Cancelled. No files were changed.'});return;
