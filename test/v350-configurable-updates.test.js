@@ -68,7 +68,7 @@ test('verification downloads from selected repository only and enforces checksum
  const bad=async(url)=>url.endsWith('/131')?Buffer.from('tampered'):Buffer.from(`${checksum}  ${filename}\n`);
  await assert.rejects(updater.downloadVerified(selected,{directory:temp,request:bad}),/checksum verification/);
 });
-test('release URLs derive from source repositories and are not manually editable',()=>{
+test('release URLs are independently configurable and still validated as GitHub repositories',()=>{
  const pkg=require('../package.json');assert.match(pkg.version,/^\d+\.\d+\.\d+$/);
  assert.equal(pkg.repository.url,'https://github.com/aidilazharo/aiatech-assist.git');
  assert.equal(updater.releaseUrlForRepository(pkg.repository.url),updater.DEFAULT_RELEASE_URL);
@@ -77,13 +77,15 @@ test('release URLs derive from source repositories and are not manually editable
  const runtime=require('node:fs').readFileSync(path.join(__dirname,'../src/lib/runtime/extension-runtime.js'),'utf8');
  const html=require('node:fs').readFileSync(path.join(__dirname,'../src/lib/webview/dashboard-html.js'),'utf8');
  const js=require('node:fs').readFileSync(path.join(__dirname,'../media/start.js'),'utf8');
- assert.ok(!html.includes('id="softwareReleaseRepositoryUrl"'));
- assert.ok(!html.includes('id="saveSoftwareUpdateSettings"'));
- assert.ok(!js.includes("$('softwareReleaseRepositoryUrl')"));
- assert.ok(!js.includes("'saveSoftwareUpdateSettings'"));
- assert.ok(!runtime.includes("case 'saveSoftwareUpdateSettings':"));
- assert.ok(!runtime.includes("c.get('updates.releaseRepositoryUrl'"));
- assert.match(runtime,/releaseRepositoryUrl:releaseUpdater\.releaseUrlForRepository\(extensionSourceRepository\)/);
+ for(const id of ['softwareReleaseRepositoryUrl','softwareLibraryRepositoryUrl','saveSoftwareUpdateSources'])
+  assert.ok(html.includes('id="'+id+'"'),id);
+ assert.match(js,/send\('saveSoftwareUpdateSources'/);
+ assert.match(runtime,/case 'saveSoftwareUpdateSources':/);
+ assert.match(runtime,/const release=releaseUpdater\.parseRepositoryUrl\(/);
+ assert.match(runtime,/const library=sdlcCatalog\.normalizeConfig\(/);
+ assert.match(runtime,/RELEASE_REPOSITORY_SETTING/);
+ assert.match(runtime,/releaseRepositoryUrl,/);
+ assert.match(runtime,/libraryRepositoryUrl:libraryRepository\|\|DEFAULT_LIBRARY_REPOSITORY_URL/);
  assert.match(runtime,/libraryReleaseUrl:libraryRepository\?releaseUpdater\.releaseUrlForRepository\(libraryRepository\):''/);
  assert.match(runtime,/if\(force\|\|config\.autoCheckLibrary\)/);
 });

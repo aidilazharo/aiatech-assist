@@ -133,7 +133,7 @@ test('v400: webview startup watches SortableJS failures and keeps permitted Jira
  assert.match(host,/jiraAvailableTransitions\(config,token,key\)/);
  assert.match(host,/jiraMove\(config,token,key,selected.id/);
  assert.match(ui,/queueMicrotask\(\(\)=>\{if\(pmKanbanPending\)renderPMDashboard\(\);\}\)/);
- assert.equal(require('../package.json').version,'0.4.10');
+ assert.equal(require('../package.json').version,'0.4.11');
 });
 
 

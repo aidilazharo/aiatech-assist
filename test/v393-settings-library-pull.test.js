@@ -20,7 +20,7 @@ function createUiHarness(){
   }
   return nodes.get(id);
  };
- const first=script.indexOf('let latestSoftwareUpdateState=null,softwareLibraryPulling=false;');
+ const first=script.indexOf('let latestSoftwareUpdateState=null,softwareLibraryPulling=false,softwareSourcesDirty=false,softwareSourcesSaving=false;');
  const second=script.indexOf('function renderSoftwareUpdates(',first);
  const clickStart=script.indexOf("$('pullLibraryFiles').addEventListener('click',()=>{",second);
  const clickEnd=script.indexOf("$('viewExtensionRelease').addEventListener(",clickStart);

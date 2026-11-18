@@ -265,7 +265,12 @@ function html(webview,{resumeLibrary=false}={}){
       <p id="localBackupStatus" class="muted" role="status" aria-live="polite">No backup or restore running.</p>
     </section></div></details>
     <details class="ext-settings-accordion" id="settingsSoftwareUpdateGroup" data-requirement="required"><summary><span>8. Extension &amp; SDLC Library Updates</span><span class="ext-settings-badge" data-state="required">Required</span></summary><div class="ext-settings-content"><section>
-      <p class="muted">ATGV detects the extension Releases source from its GitHub repository and the SDLC Library source from the configured catalog repository. Update checks never modify local projects or remote repositories.</p>
+      <p class="muted">Select separate GitHub repositories for verified extension Releases and the SDLC Library main branch. Save the URLs before checking or pulling updates.</p>
+      <div class="form-grid software-update-sources">
+        <div class="field"><label for="softwareReleaseRepositoryUrl">Extension Release Repository URL</label><input id="softwareReleaseRepositoryUrl" type="url" inputmode="url" maxlength="300" spellcheck="false" autocomplete="url" placeholder="https://github.com/aidilazharo/aiatech-assist/releases"></div>
+        <div class="field"><label for="softwareLibraryRepositoryUrl">SDLC Library Repository URL</label><input id="softwareLibraryRepositoryUrl" type="url" inputmode="url" maxlength="300" spellcheck="false" autocomplete="url" placeholder="https://github.com/aidilazharo/tech-stacks-skills"></div>
+      </div>
+      <div class="actions"><button type="button" id="saveSoftwareUpdateSources">Save Repository URLs</button><span id="softwareUpdateSourcesStatus" class="test-status muted" role="status" aria-live="polite"></span></div>
       <div class="software-update-toolbar" role="group" aria-label="Software update actions">
         <button type="button" id="checkSoftwareUpdates" class="secondary">Check Updates</button>
         <button type="button" id="pullLibraryFiles" class="secondary">Pull Library Files</button>

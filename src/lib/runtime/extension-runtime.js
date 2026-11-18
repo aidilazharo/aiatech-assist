@@ -392,14 +392,22 @@ function scheduleCatalogChecks(){
   catalogWatch.unref?.();
 }
 
-// Release URLs come from verified repository configuration, never from user-entered settings.
+// Release and library sources are independently configurable, with strict GitHub URL validation.
 const extensionSourceRepository=require('../../../package.json').repository.url;
+const DEFAULT_LIBRARY_REPOSITORY_URL='https://github.com/aidilazharo/tech-stacks-skills';
+const RELEASE_REPOSITORY_SETTING='atgvAssist.updates.releaseRepositoryUrl';
 let softwareUpdateTimer=null,softwareStartupTimer=null,softwareCheckBusy=false;
 let extensionRelease=null,extensionUpdateChecked='',extensionUpdateError='',libraryUpdateError='';
 function updatePreferences(){
  const libraryRepository=catalogConfig().repositoryUrl;
+ const savedRelease=context.globalState.get(RELEASE_REPOSITORY_SETTING,'');
+ let releaseRepositoryUrl;
+ try{releaseRepositoryUrl=releaseUpdater.parseRepositoryUrl(savedRelease||releaseUpdater.releaseUrlForRepository(extensionSourceRepository)).url;}
+ catch{releaseRepositoryUrl=releaseUpdater.releaseUrlForRepository(extensionSourceRepository);}
  return {
-  releaseRepositoryUrl:releaseUpdater.releaseUrlForRepository(extensionSourceRepository),
+  releaseRepositoryUrl,
+  libraryRepositoryUrl:libraryRepository||DEFAULT_LIBRARY_REPOSITORY_URL,
+  libraryConfigured:!!libraryRepository,
   libraryReleaseUrl:libraryRepository?releaseUpdater.releaseUrlForRepository(libraryRepository):'',
   // Required checks and consent prompts cannot be disabled by legacy saved settings.
   autoCheckExtension:true,
@@ -4101,6 +4109,31 @@ async function handleDashboardMessage(msg){
         await handleDashboardMessage({command:'catalogPull'});
         break;
       }
+      case 'saveSoftwareUpdateSources':{
+        try{
+          if(softwareCheckBusy||catalogBusy||activeExtensionUpgradeInstall?.running)throw Error('An update operation is running. Retry after it completes.');
+          // Validate BOTH sources before changing any saved configuration.
+          const release=releaseUpdater.parseRepositoryUrl(String(msg.releaseRepositoryUrl||'').trim());
+          const previous=catalogConfig();
+          const library=sdlcCatalog.normalizeConfig({...previous,repositoryUrl:String(msg.libraryRepositoryUrl||'').trim()});
+          if(!library.repositoryUrl)throw Error('Enter an SDLC Library GitHub repository URL.');
+          const previousRelease=context.globalState.get(RELEASE_REPOSITORY_SETTING,'');
+          await context.globalState.update('atgvAssist.sdlcCatalog',library);
+          try{await context.globalState.update(RELEASE_REPOSITORY_SETTING,release.url);}
+          catch(error){await context.globalState.update('atgvAssist.sdlcCatalog',previous);throw error;}
+          const changedLibrary=library.repositoryUrl!==previous.repositoryUrl;
+          if(changedLibrary){catalogRemote=null;catalogLastCheck='';catalogLastError='';libraryUpdateError='';scheduleCatalogChecks();}
+          extensionRelease=null;extensionUpdateChecked='';extensionUpdateError='';
+          await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});
+          await publishUpdateStatus();
+          await dashboard?.webview.postMessage({type:'softwareUpdateSourcesSaved',success:true,
+            releaseRepositoryUrl:release.url,libraryRepositoryUrl:library.repositoryUrl,
+            message:'Repository URLs saved. Check Updates to verify both sources.'});
+        }catch(error){
+          await dashboard?.webview.postMessage({type:'softwareUpdateSourcesSaved',success:false,message:String(error.message||error).slice(0,500)});
+        }
+        break;
+      }
       case 'checkSoftwareUpdates':{
         await checkSoftwareUpdates({prompt:true,interactive:true,force:true});break;
       }
@@ -6300,6 +6333,7 @@ async function handleDashboardMessage(msg){
         await context.globalState.update('atgvAssist.startupSetup.completed',false);
         catalogRemote=null;catalogLastCheck='';catalogLastError='';scheduleCatalogChecks();
         await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});
+        await publishUpdateStatus();
         await dashboard?.webview.postMessage({type:'catalogAction',action:'save',success:true,message:'Read-only GitHub SDLC Catalog settings saved.'});
         await notice('Read-only GitHub SDLC Catalog settings saved.');break;
       }
