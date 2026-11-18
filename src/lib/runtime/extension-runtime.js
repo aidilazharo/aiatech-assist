@@ -1164,7 +1164,12 @@ async function startupStatus(projects=[]){
  try{if(workspace){const installed=await sdlcCatalog.activeRoot(workspace);offline=installed.offline?installed:null;}}catch(e){if(!/not activated/.test(e.message))report('Offline Library startup status: '+e.message);}
  const selectedId=context.workspaceState?.get('atgvAssist.activeProject','')||'';
  const selected=Array.isArray(projects)?projects.find(project=>project.id===selectedId&&project.techStackId):null;
- return {required:!startupSessionProceedApproved,defaults:startupSetup.DEFAULTS,
+ // An in-flight or already-open project must not be replaced by the startup
+ // credential wizard during an unrelated dashboard refresh. The setup gate is
+ // only for the unselected Start screen; credential errors stay in the project
+ // opening error panel so the user can retry or explicitly go back.
+ const openingActive=openingLocked||openingFlow.phase!=='search'||!!activeProject;
+ return {required:!startupSessionProceedApproved&&!openingActive,defaults:startupSetup.DEFAULTS,
   selectedProject:selected?{id:selected.id,name:selected.name,techStackId:selected.techStackId,techStackCompanionId:selected.techStackCompanionId||''}:null,
   verified:!!verified,offlineLibrary:offline?{version:offline.version,filename:offline.filename,repository:offline.repository}:null,
   saved:startupSavedConnectionFields()};
