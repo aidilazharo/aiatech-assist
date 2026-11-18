@@ -4431,7 +4431,7 @@ window.addEventListener('message',event=>{
 });
 
 
-let latestSoftwareUpdateState=null,softwareLibraryPulling=false,softwareSourcesDirty=false,softwareSourcesSaving=false;
+let latestSoftwareUpdateState=null,softwareLibraryPulling=false;
 function renderSoftwareLibraryPullProgress(event){
  const box=$('softwareLibraryPullProgress');
  const stage=event.stage==='completed'?'completed':event.stage==='failed'?'failed':'running';
@@ -4450,69 +4450,29 @@ function renderSoftwareLibraryPullProgress(event){
 function renderSoftwareUpdates(data,force=false){
  if(!data)return;
  latestSoftwareUpdateState=data;
- if(!softwareSourcesDirty&&!softwareSourcesSaving){
-  field('softwareReleaseRepositoryUrl',data.settings?.releaseRepositoryUrl||'');
-  field('softwareLibraryRepositoryUrl',data.settings?.libraryRepositoryUrl||'');
-  if(data.settings?.libraryConfigured===false)
-   $('softwareUpdateSourcesStatus').textContent='Library URL is a suggested default; save both URLs to activate it.';
- }
- $('saveSoftwareUpdateSources').disabled=softwareSourcesSaving||!!data.busy;
  const version=data.installedVersion||'?';
  $('softwareExtensionStatus').textContent=data.extensionError?`Extension: ${data.extensionError}`:data.latest?`Extension v${data.latest.version} available (installed v${version}). Release: ${data.latest.tag}.`:data.extensionLastCheck?`Extension v${version} is up to date (checked ${new Date(data.extensionLastCheck).toLocaleString()}).`:`Installed extension: v${version}; not checked yet.`;
- $('softwareLibraryStatus').textContent=data.libraryError?`Library: ${data.libraryError}`:data.libraryLatest?`Library on GitHub main: v${data.libraryLatest}. See SDLC Catalog to compare installed and available versions.`:'Library: no verified remote version yet.';
+ $('softwareLibraryStatus').textContent=data.libraryError?`Library: ${data.libraryError}`:data.libraryLatest?`Library release: v${data.libraryLatest}. Pull Library Files to install the verified source archive.`:'Library: no verified release yet.';
  $('viewExtensionRelease').disabled=!data.latest;
  $('installExtensionRelease').disabled=!data.latest;
- $('checkSoftwareUpdates').disabled=!!data.busy||softwareSourcesDirty||softwareSourcesSaving;
- $('pullLibraryFiles').disabled=softwareLibraryPulling||!!catalogBusyUI||!!catalogState?.busy||softwareSourcesDirty||softwareSourcesSaving;
+ $('checkSoftwareUpdates').disabled=!!data.busy;
+ $('pullLibraryFiles').disabled=softwareLibraryPulling||!!catalogBusyUI||!!catalogState?.busy;
 }
-for(const id of ['softwareReleaseRepositoryUrl','softwareLibraryRepositoryUrl']){
- $(id).addEventListener('input',()=>{
-  softwareSourcesDirty=true;
-  $('softwareUpdateSourcesStatus').textContent='Unsaved repository changes. Save before checking or pulling.';
-  $('softwareUpdateSourcesStatus').className='test-status muted';
-  $('checkSoftwareUpdates').disabled=true;
-  $('pullLibraryFiles').disabled=true;
- });
-}
-$('saveSoftwareUpdateSources').addEventListener('click',()=>{
- if(softwareSourcesSaving||latestSoftwareUpdateState?.busy)return;
- softwareSourcesSaving=true;
- $('saveSoftwareUpdateSources').disabled=true;
- $('softwareUpdateSourcesStatus').textContent='Saving GitHub repository URLs…';
- $('softwareUpdateSourcesStatus').className='test-status muted';
- send('saveSoftwareUpdateSources',{
-  releaseRepositoryUrl:read('softwareReleaseRepositoryUrl').trim(),
-  libraryRepositoryUrl:read('softwareLibraryRepositoryUrl').trim()
- });
-});
 window.addEventListener('message',event=>{
  const m=event.data||{};
  if(m.type==='state'&&m.updates)renderSoftwareUpdates(m.updates);
  if(m.type==='softwareUpdateState')renderSoftwareUpdates(m.value);
- if(m.type==='softwareUpdateSourcesSaved'){
-  softwareSourcesSaving=false;
-  $('saveSoftwareUpdateSources').disabled=false;
-  if(m.success){
-   softwareSourcesDirty=false;
-   field('softwareReleaseRepositoryUrl',m.releaseRepositoryUrl);
-   field('softwareLibraryRepositoryUrl',m.libraryRepositoryUrl);
-  }
-  $('softwareUpdateSourcesStatus').textContent=m.message||'Repository URL save failed.';
-  $('softwareUpdateSourcesStatus').className='test-status '+(m.success?'success':'error');
-  if(latestSoftwareUpdateState)renderSoftwareUpdates(latestSoftwareUpdateState);
- }
 });
 $('checkSoftwareUpdates').addEventListener('click',()=>{
- if(softwareSourcesDirty||softwareSourcesSaving)return;
- $('softwareExtensionStatus').textContent='Checking extension releases…';
- $('softwareLibraryStatus').textContent='Checking SDLC Library main…';
+ $('softwareExtensionStatus').textContent='Checking fixed extension release source…';
+ $('softwareLibraryStatus').textContent='Checking fixed SDLC Library release source…';
  send('checkSoftwareUpdates');
 });
 $('pullLibraryFiles').addEventListener('click',()=>{
- if(softwareLibraryPulling||!!catalogBusyUI||!!catalogState?.busy||softwareSourcesDirty||softwareSourcesSaving)return;
+ if(softwareLibraryPulling||!!catalogBusyUI||!!catalogState?.busy)return;
  renderSoftwareLibraryPullProgress({stage:'running',percent:0,
-  title:'Starting verified library pull…',
-  message:'Requesting the configured SDLC Library GitHub main branch. Local catalog edits will be preserved before activation.'});
+  title:'Starting verified library release download…',
+  message:'Requesting the fixed SDLC Library GitHub Releases source. The ZIP and SHA-256 checksum must both pass verification.'});
  send('catalogPull');
 });
 $('viewExtensionRelease').addEventListener('click',()=>send('viewExtensionRelease'));
