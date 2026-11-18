@@ -403,9 +403,12 @@ function scheduleCatalogChecks(){
 // Fixed trusted update repositories; never use a saved URL for code updates.
 const extensionSourceRepository=require('../../../package.json').repository.url;
 const libraryReleaseUpdater=require('../updates/library-release-updater');
+const releasePatAccess=require('../updates/release-pat-access');
 const FIXED_LIBRARY_REPOSITORY='https://github.com/aidilazharo/tech-stacks-skills';
 let softwareUpdateTimer=null,softwareStartupTimer=null,softwareCheckBusy=false;
 let extensionRelease=null,extensionLatest=null,libraryRelease=null,extensionUpdateChecked='',extensionUpdateError='',libraryUpdateError='';
+const RELEASE_DOWNLOAD_PAT_SECRET='atgvAssist.releaseDownload.pat';
+let releaseDownloadPatSaved=false;
 let startupSessionId=0,startupUpdateSessionChecked=0,pendingStartupUpdateCheck=false;
 function updatePreferences(){
  return {
@@ -421,14 +424,24 @@ function updateStatus(){return {settings:updatePreferences(),installedVersion:re
  extensionLatest:extensionLatest?{version:extensionLatest.version,tag:extensionLatest.tag,url:extensionLatest.url}:null,
  extensionLastCheck:extensionUpdateChecked,extensionError:extensionUpdateError,
  libraryLastCheck:catalogLastCheck,libraryError:libraryUpdateError,
- libraryLatest:catalogRemote?.version||'',libraryLatestSha:catalogRemote?.sha||'',busy:softwareCheckBusy};}
-async function publishUpdateStatus(){await dashboard?.webview.postMessage({type:'softwareUpdateState',value:updateStatus()});}
-async function releaseAccessToken({interactive=false}={}){
+ libraryLatest:catalogRemote?.version||'',libraryLatestSha:catalogRemote?.sha||'',busy:softwareCheckBusy,releasePatSaved:releaseDownloadPatSaved};}
+async function publishUpdateStatus(){
+ releaseDownloadPatSaved=!!(await context.secrets.get(RELEASE_DOWNLOAD_PAT_SECRET));
+ await dashboard?.webview.postMessage({type:'softwareUpdateState',value:updateStatus()});
+}
+// Release-only credential. Public releases work anonymously; never fall back to
+// project credentials or interactive GitHub sign-in for release downloads.
+async function releaseAccessToken(){
+ return String(await context.secrets.get(RELEASE_DOWNLOAD_PAT_SECRET)||'');
+}
+// GitHub issue submission and source workflows must never receive the
+// restricted release token: they use the independent project/account identity.
+async function githubIssueAccessToken({interactive=false}={}){
  try{
   const identity=globalCredentialEndpoint('github');
   const saved=await readToken(globalSecretKey('github'),identity);
   if(saved)return saved;
- }catch{ /* No GitHub token configured in extension-wide settings. */ }
+ }catch{ /* Account token may be absent. */ }
  try{return (await vscode.authentication.getSession('github',['repo'],interactive?{createIfNone:true}:{silent:true}))?.accessToken||'';}
  catch{return '';}
 }
@@ -785,7 +798,7 @@ function openIssueReport(screen=''){
  if(!selfImprovementManager)throw Error('Issue reporting is not ready yet.');
  return selfImprovementView.open(vscode,{manager:selfImprovementManager,storage:context.globalStorageUri.fsPath,version:require('../../../package.json').version,screen,
   getRepository:async target=>{if(target==='extension')return extensionSourceRepository;const url=catalogConfig().repositoryUrl;if(!url)throw Error('Configure the GitHub SDLC Library in Settings first.');return url;},
-  getToken:async(target,write)=>{if(write){const token=await releaseAccessToken({interactive:true});if(token)return token;if(target==='library')return catalogToken(catalogConfig(),{interactive:true});return '';}return target==='library'?catalogToken(catalogConfig(),{interactive:true}):releaseAccessToken({interactive:true});},
+  getToken:async(target,write)=>{const token=await githubIssueAccessToken({interactive:true});if(token)return token;return target==='library'?catalogToken(catalogConfig(),{interactive:true}):'';},
   onSdkInstalled:()=>invalidateModelStatus()
  });
 }
@@ -795,7 +808,7 @@ async function initialize(){
   if(ownershipRetryTimer){clearInterval(ownershipRetryTimer);ownershipRetryTimer=null;}ownershipOfflineUntil=0;
   if(aiServiceTimer){clearInterval(aiServiceTimer);aiServiceTimer=null;}if(autoSyncTimer){clearInterval(autoSyncTimer);autoSyncTimer=null;}if(jiraMonitorTimer){clearInterval(jiraMonitorTimer);jiraMonitorTimer=null;}
   if(liveRemoteTimer){clearInterval(liveRemoteTimer);liveRemoteTimer=null;}
-  approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;++activationEpoch;activeProject=undefined;store=undefined;pendingTests={jira:null,github:null};verifiedConnections.clear();extensionSettings=normalizeExtensionSettings(context.globalState.get('atgvAssist.extensionSettings',{}));
+  approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;++activationEpoch;activeProject=undefined;store=undefined;pendingTests={jira:null,github:null};verifiedConnections.clear();extensionSettings=normalizeExtensionSettings(context.globalState.get('atgvAssist.extensionSettings',{}));releaseDownloadPatSaved=!!(await context.secrets.get(RELEASE_DOWNLOAD_PAT_SECRET));
   workspaceOverridePath=null;
   const actualFolder=vscode.workspace.workspaceFolders?.[0];
   if(actualFolder){const located=await workspaceForFolder(actualFolder.uri.fsPath);if(located.source==='project-folder')workspaceOverridePath=located.root;}
@@ -4206,6 +4219,31 @@ async function handleDashboardMessage(msg){
          stage:'running',percent:1,title:'Retrying Library pull…',
          message:'Starting the verified GitHub pull again.'});
         await handleDashboardMessage({command:'catalogPull'});
+        break;
+      }
+      case 'saveReleaseDownloadPat':{
+        try{
+          const token=releasePatAccess.normalizeToken(msg.token);
+          const verified=await releasePatAccess.verifyReadOnlyReleaseAccess(token);
+          await context.secrets.store(RELEASE_DOWNLOAD_PAT_SECRET,token);
+          releaseDownloadPatSaved=true;
+          await publishUpdateStatus();
+          await dashboard?.webview.postMessage({type:'releaseDownloadPatResult',saved:true,success:true,message:'Release-only PAT securely saved. '+verified.summary});
+        }catch(error){
+          await dashboard?.webview.postMessage({type:'releaseDownloadPatResult',success:false,message:String(error.message||error).slice(0,460)});
+        }
+        break;
+      }
+      case 'clearReleaseDownloadPat':{
+        const accept=await uiWarning('Remove the release-only GitHub PAT from VS Code secure storage? Public release downloads will still work. This does not change project GitHub, Jira or SDLC Catalog credentials.',{modal:true},'Remove Release PAT');
+        if(accept!=='Remove Release PAT'){
+          await dashboard?.webview.postMessage({type:'releaseDownloadPatResult',cancelled:true,message:'Release PAT was not changed.'});
+          break;
+        }
+        await context.secrets.delete(RELEASE_DOWNLOAD_PAT_SECRET);
+        releaseDownloadPatSaved=false;
+        await publishUpdateStatus();
+        await dashboard?.webview.postMessage({type:'releaseDownloadPatResult',saved:false,success:true,message:'Release-only PAT removed. Public releases can be downloaded without authentication.'});
         break;
       }
       case 'checkSoftwareUpdates':{
