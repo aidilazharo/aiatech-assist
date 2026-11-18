@@ -12,6 +12,7 @@ const MAX_FILE_BYTES = 12 * 1024 * 1024;
 // bounded separately with splitDocumentText; never silently use only a prefix.
 const MAX_EXTRACTED = 300000;
 const MAX_MAPPING_CHUNK = 28000;
+const MAX_SECTION_ANSWER_LENGTH = 5000;
 const { extractDocx } = require('./docx-extractor');
 function extractBasicPdf(data) {
     const latin = data.toString('latin1');
@@ -144,7 +145,7 @@ function mergeMappingAnswers(parts) {
         }
         const full = values.join('\n\n');
         if (full.length > MAX_ANSWER_LENGTH)
-            throw Error('Merged discovery answer "'+label+'" ('+key+') requires '+full.length.toLocaleString('en-US')+' characters from '+parts.length+' document sections, exceeding the 5,000-character answer limit. No mapping was saved; review the full source or divide it into separate Business Requirements. The uploaded original is preserved.');
+            throw Error('Merged discovery answer "'+label+'" ('+key+') exceeds the '+MAX_ANSWER_LENGTH.toLocaleString('en-US')+'-character safety limit. No mapping was saved; the original document is preserved.');
         merged[key] = full || (key === 'questions' && onlyNone ? 'NONE' : '');
     }
     return merged;
@@ -181,8 +182,8 @@ function parseMappingResponse(raw) {
         const v = answers[key];
         if (typeof v !== 'string')
             throw Error(`AI mapping has an invalid ${key} answer.`);
-        if (v.length > MAX_ANSWER_LENGTH)
-            throw Error(`AI response exceeds 5,000 characters for ${key}.`);
+        if (v.length > MAX_SECTION_ANSWER_LENGTH)
+            throw Error(`AI section response exceeds 5,000 characters for ${key}.`);
         proposal[key] = v.trim();
     }
     return proposal;
@@ -199,4 +200,4 @@ function extractSupplementalEvidence(document, { maxChars = 6500 } = {}) {
     const limit = Math.min(6500, Math.max(500, Number(maxChars) || 6500));
     return tail.slice(0, limit);
 }
-module.exports = { MAX_FILE_BYTES, MAX_EXTRACTED, MAX_MAPPING_CHUNK, extractDocx, extractBasicPdf, extractPdf, importDocumentText, splitDocumentText, mergeMappingAnswers, createMappingPrompt, parseMappingResponse, extractSupplementalEvidence };
+module.exports = { MAX_FILE_BYTES, MAX_EXTRACTED, MAX_MAPPING_CHUNK, MAX_SECTION_ANSWER_LENGTH, extractDocx, extractBasicPdf, extractPdf, importDocumentText, splitDocumentText, mergeMappingAnswers, createMappingPrompt, parseMappingResponse, extractSupplementalEvidence };
