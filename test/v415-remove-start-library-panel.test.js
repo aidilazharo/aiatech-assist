@@ -32,7 +32,7 @@ test('v415: Library source and optional offline ZIP import remain in trusted hos
  assert.match(host,/offlineLibrary\.importZip/);
  assert.match(host,/releaseRepositoryUrl:releaseUpdater\.PINNED_RELEASE_URL/);
  assert.match(host,/libraryReleaseUrl:libraryReleaseUpdater\.LATEST_URL/);
- assert.equal(require('../package.json').version,'0.4.16');
+ assert.equal(require('../package.json').version,'0.4.17');
 });
 test('v415: rendered Start HTML does not inject the removed Library block',()=>{
  const previous=Module._load;let createDashboardHtml;
