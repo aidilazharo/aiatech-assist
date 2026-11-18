@@ -6370,6 +6370,10 @@ async function handleDashboardMessage(msg){
           await progress('running',85,'Library verified','Activating the checksum-verified release and refreshing available roles and stacks.');
           catalogRemote={sha:'',repository:release.repository,version:release.version};catalogLastError='';catalogLastCheck=new Date().toISOString();
           const message='Verified Library v'+selected.version+' from GitHub Releases ('+release.tag+'). '+selected.roleCount+' roles and '+selected.stackCount+' tech stacks.';
+          // Install only checksum-pinned browser libraries from the verified
+          // Library snapshot. SortableJS remains optional: native Kanban works
+          // if a trusted asset is unavailable.
+          await prepareVendorAssets({syncIfMissing:false});
           await dashboard?.webview.postMessage({type:'catalogAction',action:'pull',success:true,message});
           if(activeProject&&getWorkspace()){
             const available=await sdlcCatalog.designFrameworkAvailability(getWorkspace().uri.fsPath);
@@ -6378,6 +6382,13 @@ async function handleDashboardMessage(msg){
           await progress('running',96,'Refreshing workspace…','Finalizing the verified Library release update.');
           await refreshDashboard();
           await progress('completed',100,'SDLC Library update complete',message);
+          if(installedVendorAssets&&dashboard&&webviewVendorDir!==installedVendorAssets.dir){
+            vendorBootRecoveryCount=0;vendorWebviewReady=false;webviewCoreReady=false;
+            dashboard.webview.options={...dashboard.webview.options,localResourceRoots:[
+              vscode.Uri.joinPath(context.extensionUri,'media'),vscode.Uri.file(installedVendorAssets.dir)]};
+            dashboard.webview.html=html(dashboard.webview,{resumeLibrary:true});
+            webviewVendorDir=installedVendorAssets.dir;
+          }
           activeLibraryUpdatePullRequestId=null;
         }catch(error){
           catalogLastError=String(error?.message||error).slice(0,600);
