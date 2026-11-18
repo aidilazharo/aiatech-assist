@@ -43,7 +43,7 @@ function parseReviewResponse(raw) {
             throw Error('Invalid AI review issue text.');
         const suggestedAnswer = String(item.suggestedAnswer || '').trim();
         if (suggestedAnswer.length > MAX_ANSWER_LENGTH)
-            throw Error('AI review suggested answer exceeds 5,000 characters.');
+            throw Error('AI review suggested answer exceeds '+MAX_ANSWER_LENGTH.toLocaleString('en-US')+' characters.');
         const resolutionGuidance = String(item.resolutionGuidance || '').trim().slice(0, 1200);
         suggestions.push({ key, severity, issue, suggestedAnswer, resolutionGuidance });
     }
