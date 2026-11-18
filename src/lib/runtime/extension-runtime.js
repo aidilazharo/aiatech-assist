@@ -30,6 +30,7 @@ const {readTimeline,saveRoleTimeline,saveBulkRoleTimelines,readDiagram,saveDiagr
 const discovery=require('../../ba-discovery');
 const discoveryImport=require('../../discovery-import');
 const baDocumentPreflight=require('../../ba-document-preflight');
+const baPreflightReports=require('../../ba-preflight-report');
 const discoveryReview=require('../../discovery-review');
 const brWorkflow=require('../../br-workflow');
 const jiraPreviewDetails=require('../../jira-preview-details');
@@ -1787,6 +1788,7 @@ async function importDiscoveryDocument(roleId){
  const current=await brWorkflow.load(registry,activeProject.id);
  if(current.revision!==initial.revision)throw Error('Source document list changed during upload. Refresh and retry.');
  const register=await brWorkflow.addSources(registry,activeProject.id,current.revision,prospective,{actor:uploader,singleSourceCycle:true});
+ if(updatedDocuments.length)documentPreflightSessions.delete(activeProject.id); // Invalidate stale results after a source revision.
  if(modified.length||fresh.length&&!!initial.mappingCompleted){
   approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;jiraPreviewValidation=null;
   // Keep old discovery evidence and immutable approved requirements until the
@@ -1808,6 +1810,7 @@ async function importDiscoveryDocument(roleId){
  }
 }
 const successfulSourceMappings=new Map();
+const documentPreflightSessions=new Map(); // Project-scoped, in-memory section/attempt reports.
 // Mapping is cancellable until the atomic register write starts. No partial mapping
 // updates may reach the active discovery record, even after a timeout or Stop.
 const SOURCE_MAPPING_AI_TIMEOUT_MS=180000;
@@ -1828,6 +1831,9 @@ async function processSelectedDiscoverySources(msg){
   if(msg.revision!==original.revision)throw Error('Source selection changed. Refresh and retry.');
   const documents=selected.map(d=>original.sourceDocuments.find(x=>x.digest===d));
   if(documents.some(x=>!x))throw Error('Source selection includes a missing document.');
+  documentPreflightSessions.set(run.projectId,baPreflightReports.create(run.projectId,documents));
+  // Retain at most ten active project reports in the extension process.
+  if(documentPreflightSessions.size>10)documentPreflightSessions.delete(documentPreflightSessions.keys().next().value);
   await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preparing',message:'Checking the selected documents and AI model…'});
   const target=await activeAiTarget();check();
   const readable=[];
@@ -1855,7 +1861,9 @@ async function processSelectedDiscoverySources(msg){
       throw error;
      }finally{clearTimeout(timer);}
      check();
-     await dashboard?.webview.postMessage({type:'discoverySourcePreflight',sourceName:source.name,phase:result.ready?'ready':attempt===1?'repair':'blocked',status:result.status,summary:result.summary,applied:result.applied,issues:result.issues,resolutions:result.resolutions||[],section:part+1,totalSections:sections.length});
+     const reportSession=documentPreflightSessions.get(run.projectId);
+     if(reportSession)baPreflightReports.capture(reportSession,{digest:selected[i],sourceName:source.name,section:part+1,totalSections:sections.length,attempt,report:result});
+     await dashboard?.webview.postMessage({type:'discoverySourcePreflight',sourceName:source.name,digest:selected[i],phase:result.ready?'ready':attempt===1?'repair':'blocked',status:result.status,summary:result.summary,applied:result.applied,issues:result.issues,resolutions:result.resolutions||[],section:part+1,totalSections:sections.length,attempt});
      if(result.ready)break;
      if(attempt===1){
       previous=JSON.stringify({issues:result.issues,skipped:result.skipped}).slice(0,4500);
@@ -1909,7 +1917,7 @@ async function processSelectedDiscoverySources(msg){
     applied:reports.flatMap(x=>x.applied).slice(0,12),
     issues:reports.flatMap(x=>x.issues).slice(0,16),
     resolutions:reports.flatMap(x=>x.resolutions||[]).slice(0,12)};
-   preflights.push(baDocumentPreflight.evidence(report,source.digest));
+   preflights.push(baDocumentPreflight.evidence(report,selected[i]));
    mappedProposals.push({filename:source.name,answers:proposals});
   }
   check();run.phase='committing';
@@ -1919,9 +1927,15 @@ async function processSelectedDiscoverySources(msg){
   // Results appear only after the atomic commit. Failed or stopped runs do
   // not present unsaved proposals to the analyst.
   for(let i=0;i<mappedProposals.length;i++)await dashboard?.webview.postMessage({type:'discoveryImportResult',filename:mappedProposals[i].filename,position:i+1,total:mappedProposals.length,answers:mappedProposals[i].answers});
+  const completedReport=documentPreflightSessions.get(run.projectId);
+  if(completedReport)baPreflightReports.finish(completedReport,{state:'completed',crossSectionChecked:preflights.every(x=>x.crossSectionChecked===true)});
   await dashboard?.webview.postMessage({type:'brUpdated',register:latest});
   await dashboard?.webview.postMessage({type:'discoveryImportDone',count:readable.length,automatic:!!msg.automatic,preflightCount:preflights.length});
-  }catch(error){if(!error.phase)error.phase=run.phase;throw error;}
+  }catch(error){
+   const reportSession=documentPreflightSessions.get(run.projectId);
+   if(reportSession)baPreflightReports.finish(reportSession,{state:error.name==='AbortError'?'stopped':['preflight','repair'].includes(run.phase)?'blocked':'interrupted',error:String(error.message||error)});
+   if(!error.phase)error.phase=run.phase;throw error;
+  }
   finally{if(activeDiscoveryMappingRun===run)activeDiscoveryMappingRun=null;}
 }
 async function removeDiscoverySource(msg){
@@ -7413,6 +7427,36 @@ async function handleDashboardMessage(msg){
       case 'importDiscovery':{
         await dashboard?.webview.postMessage({type:'discoveryImportProgress',message:'Reading selected documents…'});
         try{await importDiscoveryDocument(msg.roleId);}catch(e){await dashboard?.webview.postMessage({type:'discoveryImportFailed',message:e.message});throw e;}
+        break;
+      }
+      case 'downloadDocumentPreflight':{
+        const projectId=activeProject?.id||'';
+        try{
+          requireOpened();
+          if(msg.projectId!==projectId)throw Error('The Business Analyst project changed. Reopen the report.');
+          await requireBAOwner('ba-discovery');
+          if(activeProject?.id!==projectId)throw Error('The project changed. Please retry report download.');
+          const register=await brWorkflow.load(registry,projectId);
+          const documents=register.sourceDocuments||[];
+          const live=documentPreflightSessions.get(projectId);
+          const validLive=live&&live.entries.length>0&&live.documents.length>0&&live.documents.every(x=>documents.some(doc=>doc.digest===x.digest));
+          const report=validLive?live:baPreflightReports.fromSaved(projectId,documents,register.mappingCompleted?.preflights||[]);
+          if(!report)throw Error('No AI document pre-flight findings are available yet. Complete at least one check first.');
+          const content=baPreflightReports.format(report);
+          const suggestedName=baPreflightReports.filename(projectId,report.documents[0].name);
+          const destination=await vscode.window.showSaveDialog({
+            title:'Download AI Document Pre-flight Report (.txt)',
+            defaultUri:vscode.Uri.file(path.join(require('node:os').homedir(),suggestedName)),
+            filters:{'Plain text files':['txt']},saveLabel:'Download Report'
+          });
+          if(destination){
+            await vscode.workspace.fs.writeFile(destination,Buffer.from(content,'utf8'));
+            await dashboard?.webview.postMessage({type:'discoveryPreflightDownloadResult',projectId,saved:true,filename:path.basename(destination.fsPath||suggestedName)});
+          }else await dashboard?.webview.postMessage({type:'discoveryPreflightDownloadResult',projectId,cancelled:true});
+        }catch(error){
+          report('BA preflight text export: '+String(error.message||error));
+          if(activeProject?.id===projectId)await dashboard?.webview.postMessage({type:'discoveryPreflightDownloadResult',projectId,error:String(error.message||error).slice(0,400)});
+        }
         break;
       }
       case 'processDiscoverySources':{

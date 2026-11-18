@@ -1,3 +1,14 @@
+# ATGV AIATECH Assist v0.4.21
+
+- Add Download Pre-flight (.txt) action to Business Analyst > Uploaded documents > AI document preflight.
+- Export complete available preflight section and retry findings, recommended standards, warnings, blockers, and interrupted-run reasons without modifying uploaded DOCX/PDF.
+- Enable export once the first section finishes and preserve retries in the current VS Code session.
+- Offer labelled bounded saved-evidence reports for successful mappings after extension restart.
+- Use VS Code Save dialog and UTF-8 text; no Jira, Confluence or GitHub changes.
+- Add tests for section history, blocked checks, saved evidence, filenames and empty results.
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.20
 
 - Remove inline BR answer and linked-Jira buttons from the All Jira Project Items DataTable.
