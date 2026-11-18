@@ -27,6 +27,8 @@ function mappingHarness(aiAnswer,opts={}){
   sourceStore:{async read(){return {name:'visitor.pdf',text:'Requirements'}}},
   discoveryImport:{...discoveryModule,createMappingPrompt(){return 'Map'},parseMappingResponse(answer){return JSON.parse(answer)}},
   baDocumentPreflight,
+  baPreflightReports:require('../src/ba-preflight-report'),
+  documentPreflightSessions:new Map(),
   successfulSourceMappings:new Map(),
   aiAnswer:(target,prompt,limit,settings)=>{
    if(String(prompt).includes('automated Business Analyst source-document quality checker'))return Promise.resolve(JSON.stringify({status:'ready',summary:'Checked',edits:[],issues:[]}));
