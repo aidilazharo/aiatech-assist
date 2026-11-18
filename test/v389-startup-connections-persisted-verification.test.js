@@ -126,3 +126,48 @@ test('Unverified settings keep Test & Save available and Search Project unavaila
  assert.equal(find('startupTestConnections').disabled,false);
  assert.equal(find('startupJiraUrl').disabled,false);
 });
+
+test('session startup flag cannot redisplay credential wizard during an opening or opened project',async()=>{
+ const x=hostFixture();
+ assert.equal((await x.state()).required,true,'brand new Start screen still requests setup');
+ for(const phase of ['selected','tested','initialized','open']){
+  x.sandbox.openingFlow.phase=phase;
+  assert.equal((await x.state()).required,false,'never redirect during '+phase);
+ }
+ x.sandbox.openingFlow.phase='search';
+ x.sandbox.openingLocked=true;
+ assert.equal((await x.state()).required,false,'project resolution also suppresses setup screen');
+ x.sandbox.openingLocked=false;
+ x.sandbox.activeProject={id:'demo'};
+ assert.equal((await x.state()).required,false,'already activated project cannot return to credentials');
+ x.sandbox.activeProject=null;
+ assert.equal((await x.state()).required,true,'fresh Start screen can still display onboarding');
+});
+test('stale startup state never overlays Open Project progress, success or a retryable error',()=>{
+ const {find,client}=webviewFixture();
+ const config={required:true,verified:true,saved:setup.DEFAULTS,defaults:setup.DEFAULTS};
+ client.renderStartupConfig(config);
+ assert.equal(find('startupSetup').classList.contains('hidden'),false,'initial onboarding is visible');
+ client.setGateBusy(true);
+ client.renderStartupConfig(config);
+ assert.equal(find('startupSetup').classList.contains('hidden'),true,'opening progress must stay visible');
+ assert.equal(find('gateFinder').classList.contains('hidden'),false);
+ client.setGateBusy(false);client.setOpening('selected');
+ client.renderStartupConfig(config);
+ assert.equal(find('startupSetup').classList.contains('hidden'),true,'selected project retains search screen');
+ client.setOpening('open');
+ client.renderStartupConfig(config);
+ assert.equal(find('startupSetup').classList.contains('hidden'),true,'opened project must not show credentials');
+ client.setOpening('search');client.setGateError('Jira project access denied');
+ client.renderStartupConfig(config);
+ assert.equal(find('startupSetup').classList.contains('hidden'),true,'failed opening retains actionable error');
+ client.setGateError('');
+ client.renderStartupConfig(config);
+ assert.equal(find('startupSetup').classList.contains('hidden'),false,'new search may intentionally start onboarding');
+});
+test('intermediate opening state refresh never resets user-visible progress',()=>{
+ const ui=read('media/start.js');
+ assert.match(ui,/if\(opening\.phase==='open'\|\|\(opening\.phase==='search'&&prior!=='search'\)\)gateBusy=false/);
+ assert.match(ui,/if\(gateBusy\)\{document\.body\.classList\.add\('gate-mode'\);renderGate\(\);\}/);
+ assert.match(ui,/const openingInProgress=gateBusy\|\|!!gateError\|\|workspaceOpened/);
+});
