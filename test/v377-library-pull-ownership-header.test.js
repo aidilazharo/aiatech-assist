@@ -16,11 +16,18 @@ test('library pull success requires matching installed SemVer and pinned main SH
  assert.deepEqual(verification.verifyActivatedPull(expected,{version:'1.1.16',offline:true}),{version:'1.1.16',offline:true});
  assert.throws(()=>verification.verifyActivatedPull(expected,{version:'1.1.15',offline:true}),/remains active/);
 });
-test('both catalog pull pathways verify the active library instead of reporting success on Git exit alone',()=>{
+test('Library Git and Releases paths verify the active contents before reporting success',()=>{
  const s=read('src/lib/runtime/extension-runtime.js');
+ // The explicit Git-pinned Catalog action is still verified.
  assert.match(s,/const pinned=await sdlcCatalog\.remoteVersion\(config,token\)/);
- assert.equal((s.match(/libraryUpdateVersion\.verifyActivatedPull\(pinned,selected\)/g)||[]).length,2);
- assert.match(s,/Installed Library v'\+selected\.version/);
+ assert.equal((s.match(/libraryUpdateVersion\.verifyActivatedPull\(pinned,selected\)/g)||[]).length,1);
+ // The Release ZIP path independently validates downloaded bytes, manifest,
+ // VERSION and the actual activated Library, without relying on Git exit codes.
+ assert.match(s,/libraryReleaseUpdater\.downloadVerified/);
+ assert.match(s,/offlineLibrary\.inspectZip\(archive\)/);
+ assert.match(s,/offlineLibrary\.importZip/);
+ assert.match(s,/active\.version!==selected\.version/);
+ assert.match(s,/Verified Library v'\+selected\.version/);
 });
 test('all destructive BR pathways enforce verified BR owner, including source deletion and remote retries',()=>{
  const s=read('src/lib/runtime/extension-runtime.js'),remote=read('src/remote-br-deletion.js');
