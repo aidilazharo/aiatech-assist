@@ -1,3 +1,14 @@
+# ATGV AIATECH Assist v0.4.20
+
+- Remove inline BR answer and linked-Jira buttons from the All Jira Project Items DataTable.
+- Rebalance My Work Users table columns and show live assigned Jira issues by assignee, with readable task statuses.
+- Add Custom Stack for inspecting an existing configured project checkout and running its detected application with explicit consent; never overwrite starter files or push Git automatically.
+- Remove redundant extension/library latest-version summary text from the Start screen while retaining update checks.
+- Use icon-only unified log controls with accessible labels and tooltips.
+- Display circular, animated startup prerequisite progress for stack, permission and Copilot checks, with reduced-motion support.
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.19
 
 - Show the installed workspace library version and latest library release version without repeating the GitHub build tag.

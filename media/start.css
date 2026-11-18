@@ -2073,3 +2073,39 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 .atgv-permission-row[data-state=error] strong{color:var(--vscode-errorForeground)}
 .atgv-permission-row[data-state=ready] strong{color:var(--vscode-testing-iconPassed)}
 @media(max-width:440px){.atgv-startup-stack-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.atgv-startup-footer{gap:6px}.atgv-startup-footer button{max-width:100%;white-space:normal}}
+
+/* Circular startup prerequisite steps: animation never signals completion before checks finish. */
+.atgv-scan-ring-fill,.atgv-stack-ring-fill{transition:background 320ms ease,filter 320ms ease}
+.atgv-startup-stack[data-progress-state=running] .atgv-stack-ring,
+.atgv-permission-step[data-progress-state=running] .atgv-stack-ring{animation:atgvPrereqPulse 1.25s ease-in-out infinite}
+.atgv-startup-stack[data-progress-state=complete] .atgv-stack-ring,
+.atgv-permission-step[data-progress-state=complete] .atgv-stack-ring{animation:atgvPrereqComplete .55s ease-out}
+@keyframes atgvPrereqPulse{0%,100%{opacity:.72;transform:scale(.94)}50%{opacity:1;transform:scale(1.04)}}
+@keyframes atgvPrereqComplete{0%{transform:scale(.9)}60%{transform:scale(1.08)}100%{transform:scale(1)}}
+.atgv-permission-step{display:flex;align-items:center;gap:12px;min-height:80px}
+.atgv-permission-step .atgv-stack-ring{width:48px}
+.atgv-permission-copy{min-width:0;flex:1}
+.atgv-permission-step .atgv-permission-copy strong,.atgv-permission-step .atgv-permission-copy small{display:block}
+.startup-copilot-card.atgv-stack-ring-card{justify-content:center;align-items:center;min-height:92px}
+.startup-copilot-card.atgv-stack-ring-card .atgv-stack-ring{order:1}
+.startup-copilot-card.atgv-stack-ring-card .atgv-stack-ready{order:2}
+.atgv-icon-only{display:inline-flex!important;justify-content:center;align-items:center;flex:0 0 auto;min-width:34px!important;width:34px!important;max-width:34px!important;height:34px!important;min-height:34px!important;padding:6px!important}
+.atgv-icon-only svg{width:17px;height:17px;pointer-events:none}
+#workView .architect-simple-fields button.atgv-icon-only{width:34px;min-width:34px;padding:6px}
+@media(prefers-reduced-motion:reduce){.atgv-startup-stack .atgv-stack-ring,.atgv-permission-step .atgv-stack-ring{animation:none!important}.atgv-scan-ring-fill,.atgv-stack-ring-fill{transition:none!important}}
+
+/* Existing application scanner remains isolated from the catalogue bootstrap workflow. */
+.architect-custom-panel{border:1px solid var(--vscode-panel-border);border-radius:8px;padding:13px 14px;margin:11px 0;background:var(--vscode-editor-background)}
+.architect-custom-panel.hidden{display:none!important}
+.architect-custom-heading{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:baseline}
+.architect-custom-heading strong{font-size:13px}
+.architect-custom-panel p{font-size:11px;line-height:1.5;overflow-wrap:anywhere}
+.architect-custom-controls{display:grid;grid-template-columns:minmax(180px,1.2fr) minmax(180px,1.3fr) auto auto auto;gap:8px;align-items:end}
+.architect-custom-controls label{display:grid;gap:5px;min-width:0;font-size:11px}
+.architect-custom-controls select,.architect-custom-controls input{box-sizing:border-box;min-width:0;width:100%;height:34px}
+.architect-custom-controls button{height:34px;white-space:nowrap;font-size:11px}
+#architectCustomStatus[data-state=error]{color:var(--vscode-errorForeground)}
+#architectCustomStatus[data-state=running]{color:var(--vscode-charts-blue,#61afef)}
+#architectCustomStatus[data-state=complete]{color:var(--vscode-testing-iconPassed)}
+@media(max-width:940px){.architect-custom-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.architect-custom-controls label{grid-column:auto}.architect-custom-controls button{width:auto}}
+@media(max-width:490px){.architect-custom-controls{grid-template-columns:minmax(0,1fr)}}

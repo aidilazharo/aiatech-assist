@@ -7,3 +7,17 @@
 .overview-roster-scroll th{font-size:11px;text-transform:uppercase}
 .overview-roster-scroll td{font-size:12px}
 .overview-roster-scroll small{display:block;font-size:10px;color:var(--vscode-descriptionForeground)}
+
+/* Wide, legible roster: prevent email/name/role text from collapsing into narrow letters. */
+#overviewMyWorkUsers .overview-roster-scroll{overflow-x:auto;max-width:100%}
+#overviewMyWorkUsers table{width:100%;min-width:760px;table-layout:fixed}
+#overviewMyWorkUsers .overview-user-name-col{width:24%}
+#overviewMyWorkUsers .overview-user-roles-col{width:23%}
+#overviewMyWorkUsers .overview-user-tasks-col{width:53%}
+#overviewMyWorkUsers th,#overviewMyWorkUsers td{padding:10px 14px;overflow-wrap:break-word;word-break:normal;white-space:normal;line-height:1.5}
+#overviewMyWorkUsers td:first-child strong,#overviewMyWorkUsers td:first-child small{display:block;overflow-wrap:anywhere;word-break:normal}
+#overviewMyWorkUsers td:nth-child(2){white-space:normal}
+#overviewMyWorkUsers .overview-roster-tasks{display:flex;align-items:flex-start;align-content:flex-start;flex-wrap:wrap;gap:6px}
+#overviewMyWorkUsers .overview-roster-task{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:3px 7px;border:1px solid var(--vscode-panel-border,#555);border-radius:5px;background:var(--vscode-editorWidget-background);font-size:11px;overflow-wrap:anywhere}
+#overviewMyWorkUsers .overview-roster-task small{display:inline;color:var(--vscode-descriptionForeground);font-size:10px;white-space:nowrap}
+@media(max-width:800px){#overviewMyWorkUsers table{min-width:650px}#overviewMyWorkUsers .overview-user-name-col{width:27%}#overviewMyWorkUsers .overview-user-roles-col{width:26%}#overviewMyWorkUsers .overview-user-tasks-col{width:47%}}

@@ -1269,15 +1269,6 @@ function renderBAJiraInventory(){
    const open=document.createElement('button');open.type='button';open.className='jira-issue-inline-link';open.textContent=ref.label;
    open.title=ref.kind==='local'?'View '+ref.label+' details':'View Jira-only Epic details';open.addEventListener('click',event=>{event.stopPropagation();openBARequirementModal(ref);});line.append(open);
    if(ref.kind==='jira'){const badge=document.createElement('small');badge.className='ba-jira-br-origin';badge.textContent='Jira only · no local BR evidence';line.append(badge);}
-   if(item._brRoots.includes(ref)){
-    const actions=document.createElement('div');actions.className='ba-jira-br-actions';
-    const answers=document.createElement('button');answers.type='button';answers.className='secondary';answers.textContent='View 12 Answers';answers.disabled=!ref.hasAnswers;
-    answers.title=ref.hasAnswers?'View saved discovery answers':'Discovery answers are unavailable in this project';answers.setAttribute('aria-label',answers.title+' for '+ref.label);
-    answers.addEventListener('click',event=>{event.stopPropagation();openBARequirementModal(ref,true);});actions.append(answers);
-    if(ref.keys.length){const jira=document.createElement('button');jira.type='button';jira.className='secondary';jira.textContent='View Jira · '+ref.linkedIssueCount+' linked';jira.title='Show linked Jira items for '+ref.label;
-     jira.addEventListener('click',event=>{event.stopPropagation();openBRJiraInventory(ref.scopeId);});actions.append(jira);}
-    line.append(actions);
-   }
    cell.append(line);
   }
   return cell;
@@ -1920,6 +1911,13 @@ function renderArchitectRequirements(project){
  const stackId=$('architectStackSelect').value;
  const stack=techStacks.find(item=>item.id===stackId);
  const container=$('architectRequiredComponents');
+ if(stackId==='custom'){
+  container.classList.add('hidden');
+  $('architectStackProgressFill').style.width='0%';
+  $('architectStackProgress').setAttribute('aria-valuenow','0');
+  $('architectStackProgressText').textContent='Custom Stack · scan the existing Git repository, then install and run after approval.';
+  return;
+ }
  container.classList.toggle('hidden',!stack);
  if(!stack){
   $('architectRequirementsList').replaceChildren();$('architectRequirementsCount').textContent='0 of 0 ready';$('architectPackageToggle')?.classList.add('hidden');
@@ -2004,7 +2002,7 @@ function architectStackSelection(project){
  if(architectStackDraft.projectId!==activeId){
   architectStackDraft={projectId:activeId,stackId:project?.techStackId||''};
  }
- const known=techStacks.some(stack=>stack.id===architectStackDraft.stackId);
+ const known=architectStackDraft.stackId==='custom'||techStacks.some(stack=>stack.id===architectStackDraft.stackId);
  if(!known)architectStackDraft.stackId=techStacks.some(stack=>stack.id===project?.techStackId)?project.techStackId:'';
  return architectStackDraft.stackId;
 }
@@ -2034,6 +2032,13 @@ function syncArchitectStackButtons(project){
  const serverVerified=!!(saved&&tested&&architectServerRequirementReady(project,stackId));
  const canRequestApproval=!!(saved&&tested&&prepared?.remotePushed===true);
  const save=$('architectSaveStack');
+ if(stackId==='custom'){
+  save.disabled=true;save.textContent='Save Stack';save.title='Custom Stack does not overwrite a catalogue-managed stack. Use Scan Repository and Install & Run.';
+  $('architectResetStack').disabled=true;
+  $('architectTestStack').disabled=true;
+  $('architectApproveStack').disabled=true;
+  return;
+ }
  // A different prepared stack can be replaced only through a confirmed,
  // clean-checkout Git reset. Keep the action available and explain that path.
  save.disabled=architectActionBusy||!activeId||!stackId;
@@ -3557,7 +3562,9 @@ function renderRoleWork(){
     const picker=$('architectStackSelect');picker.replaceChildren();
     const empty=document.createElement('option');empty.value='';empty.textContent='Select a technology stack';picker.append(empty);
     for(const stack of techStacks){const option=document.createElement('option');option.value=stack.id;option.textContent=stack.name;picker.append(option);}
+    const customOption=document.createElement('option');customOption.value='custom';customOption.textContent='Custom Stack (scan existing repository)';picker.append(customOption);
     picker.value=architectStackSelection(project);
+    renderArchitectCustomPanel();
     // Restore all action buttons (including Save) after Reset or Save completes.
     // The previous implementation only recalculated Reset/Test/Approve and left
     // Save disabled by architectBegin() even after the operation had finished.
@@ -3566,13 +3573,13 @@ function renderRoleWork(){
     $('architectBootstrapStatus').textContent=architectLastMessage;
     const prepared=project?.techStackPrepared;
     const saved=!!(prepared&&prepared.stackId===picker.value&&prepared.stackId===project.techStackId&&prepared.companionId===(project.techStackCompanionId||''));
-    $('architectStackSummary').textContent=prepared?.stackId&&prepared.stackId!==picker.value?'Prepared stack: '+prepared.stackId+'. Switching to '+picker.value+' will require confirmation and a clean Git checkout.':saved?(prepared.remotePushed?'Branch: '+prepared.branch+' · pushed to GitHub':'Repository prepared.'):project?.techStackId?'Save to prepare the project repository.':'Select a stack and save it to begin.';
+    $('architectStackSummary').textContent=picker.value==='custom'?'Scan and run the configured project Git checkout. The catalog skeleton and existing project files will not be overwritten.':prepared?.stackId&&prepared.stackId!==picker.value?'Prepared stack: '+prepared.stackId+'. Switching to '+picker.value+' will require confirmation and a clean Git checkout.':saved?(prepared.remotePushed?'Branch: '+prepared.branch+' · pushed to GitHub':'Repository prepared.'):project?.techStackId?'Save to prepare the project repository.':'Select a stack and save it to begin.';
     const tested=saved&&project?.techStackValidation?.status==='tested'&&project.techStackValidation.stackId===project.techStackId;
     const approved=tested&&project?.techStackApproval?.status==='approved'&&project.techStackApproval.stackId===project.techStackId;
     $('architectTestStack').classList.remove('hidden');
     $('architectApproveStack').classList.remove('hidden');
     renderArchitectRequirements(project);
-    const badge=$('architectStackStatusBadge');badge.textContent=approved?'Approved':tested?'Tested':saved?'Saved':'Not configured';badge.dataset.state=approved?'approved':tested?'tested':saved?'saved':'pending';
+    const badge=$('architectStackStatusBadge');badge.textContent=picker.value==='custom'?'Custom Stack':approved?'Approved':tested?'Tested':saved?'Saved':'Not configured';badge.dataset.state=approved?'approved':tested?'tested':saved?'saved':'pending';
     refreshArchitectStageClasses(project);
     updateArchitectServerControls(saved);
     updateArchitectFailureLogButtons();
@@ -4467,7 +4474,7 @@ function renderSoftwareUpdates(data,force=false){
  $('softwareLibraryStatus').textContent=data.libraryError?`Library: ${data.libraryError}`:data.libraryLatest?`Library release: v${data.libraryLatest}. Pull Library Files to install the verified source archive.`:'Library: no verified release yet.';
  const extensionText=data.extensionError?'Extension latest: unavailable':latestVersion?'Extension latest: v'+latestVersion+(data.latest?' · update available':' · up to date'):'Extension latest: checking…';
  const libraryText=data.libraryError?'Library latest: unavailable':data.libraryLatest?'Library latest: v'+data.libraryLatest:'Library latest: checking…';
- $('gateLatestVersions').textContent=extensionText+'  ·  '+libraryText;
+ $('gateLatestVersions').textContent=''; // Detailed release status remains in Check Updates and upgrade modals.
  $('viewExtensionRelease').disabled=!data.latest;
  $('installExtensionRelease').disabled=!data.latest;
  $('checkSoftwareUpdates').disabled=!!data.busy;
@@ -7061,7 +7068,19 @@ function renderMyWorkRoster(rows){
   const email=document.createElement('small');email.textContent=String(item.email||'');
   name.append(strong,email);
   roles.textContent=(Array.isArray(item.roles)?item.roles:[]).join(', ')||'—';
-  tasks.textContent=String(item.tasks||'No assigned task');
+  tasks.className='overview-roster-tasks';
+  const assigned=String(item.tasks||'No assigned task').split(/\s*;\s*/).map(s=>s.trim()).filter(Boolean);
+  if(!assigned.length)assigned.push('No assigned task');
+  for(const entry of assigned){
+   const matched=/^([A-Z][A-Z0-9_]*-\d+)\s+\(([^)]+)\)$/.exec(entry);
+   const chip=document.createElement('span');chip.className='overview-roster-task';
+   if(matched){
+    const key=document.createElement('strong');key.textContent=matched[1];
+    const state=document.createElement('small');state.textContent=matched[2];
+    chip.append(key,state);
+   }else{chip.textContent=entry;chip.classList.add('overview-roster-task-note');}
+   tasks.append(chip);
+  }
   tr.append(name,roles,tasks);target.append(tr);
  }
 }
@@ -7074,7 +7093,7 @@ window.addEventListener('message',event=>{
  if(!activeId||m.projectId!==activeId)return;
  if(m.type==='myWorkRoster'){
   renderMyWorkRoster(m.rows);
-  $('overviewUserStatus').textContent=(m.rows?.length||0)+' users · Confluence space '+(m.spaceKey||'')+(m.updatedAt?' · '+new Date(m.updatedAt).toLocaleString():'');
+  $('overviewUserStatus').textContent=(m.rows?.length||0)+' users · assigned Jira tasks refreshed'+(m.assignmentWarning?' · '+m.assignmentWarning:'')+' · Confluence space '+(m.spaceKey||'')+(m.updatedAt?' · '+new Date(m.updatedAt).toLocaleString():'');
  }else if(m.type==='myWorkRosterError'){
   $('overviewUserStatus').textContent='Confluence roster unavailable: '+(m.message||'Check space configuration and permissions.');
  }
@@ -7160,12 +7179,93 @@ function architectBegin(action,message){
  $('architectStopInstall').disabled=action!=='architectSaveStack';
  send(action,{stackId:$('architectStackSelect').value});return true;
 }
+let architectCustomInfo=null,architectCustomBusy=false,architectCustomRunning=false;
+function renderArchitectCustomPanel(){
+ const panel=$('architectCustomPanel');if(!panel)return;
+ const isCustom=$('architectStackSelect').value==='custom';
+ panel.classList.toggle('hidden',!isCustom);
+ if(!isCustom)return;
+ const current=architectCustomInfo?.projectId===activeId?architectCustomInfo:null;
+ const select=$('architectCustomTarget'),previous=select.value;
+ select.replaceChildren();
+ for(const target of current?.targets||[]){
+  const option=document.createElement('option');option.value=target.relative;
+  option.textContent=(target.relative||'Repository root')+' · '+target.framework+(target.runnable?'':' (no run script)');
+  option.disabled=!target.runnable;select.append(option);
+ }
+ const selected=(current?.targets||[]).find(t=>t.relative===previous&&t.runnable)||(current?.targets||[]).find(t=>t.runnable);
+ if(selected){select.value=selected.relative;const preview=$('architectCustomPreviewUrl');if(!preview.value||!current?.previewCustomized)preview.value=selected.previewUrl;}
+ select.disabled=architectCustomBusy||!current?.ready;
+ $('architectCustomScan').disabled=architectCustomBusy||!activeId;
+ $('architectCustomRun').disabled=architectCustomBusy||!current?.ready||architectCustomRunning;
+ $('architectCustomStop').disabled=architectCustomBusy||!architectCustomRunning;
+ if(current){
+  $('architectCustomDetails').textContent=current.targets.map(t=>(t.relative||'Root')+': '+t.framework+' · '+t.kind+' · '+(t.scripts?.join(', ')||'native build/test/run')+(t.installed?' · dependencies present':' · dependencies may need installation')).join(' | ')+' · Git '+(current.sha||'').slice(0,12)+' · '+(current.clean?'clean checkout':'uncommitted edits present; no files will be committed');
+ }
+}
+function architectCustomNotify(text,state='running'){
+ const node=$('architectCustomStatus');node.textContent=String(text||'');node.dataset.state=state;
+}
+$('architectCustomTarget').addEventListener('change',()=>{
+ const current=architectCustomInfo?.projectId===activeId?architectCustomInfo:null;
+ const selected=current?.targets?.find(x=>x.relative===$('architectCustomTarget').value);
+ if(selected){$('architectCustomPreviewUrl').value=selected.previewUrl;current.previewCustomized=false;}
+ renderArchitectCustomPanel();
+});
+$('architectCustomPreviewUrl').addEventListener('input',()=>{
+ if(architectCustomInfo?.projectId===activeId)architectCustomInfo.previewCustomized=true;
+});
+$('architectCustomScan').addEventListener('click',()=>{
+ if(!activeId||architectCustomBusy)return;
+ architectCustomBusy=true;architectCustomInfo=null;architectCustomRunning=false;
+ architectCustomNotify('Scanning the configured project repository without changing its files…');
+ renderArchitectCustomPanel();send('architectCustomScan',{projectId:activeId});
+});
+$('architectCustomRun').addEventListener('click',()=>{
+ if(!activeId||architectCustomBusy||!architectCustomInfo?.ready)return;
+ architectCustomBusy=true;architectCustomNotify('Review the host confirmation before installing dependencies and running project scripts…');
+ renderArchitectCustomPanel();
+ send('architectCustomRun',{projectId:activeId,sha:architectCustomInfo.sha,relative:$('architectCustomTarget').value,previewUrl:$('architectCustomPreviewUrl').value.trim()});
+});
+$('architectCustomStop').addEventListener('click',()=>{
+ if(!activeId||architectCustomBusy||!architectCustomRunning)return;
+ architectCustomBusy=true;architectCustomNotify('Stopping the ATGV-managed custom application…');
+ renderArchitectCustomPanel();
+ send('architectCustomStop',{projectId:activeId,relative:$('architectCustomTarget').value});
+});
+window.addEventListener('message',event=>{
+ const m=event.data||{};
+ if(!activeId||m.projectId!==activeId)return;
+ if(m.type==='architectCustomScanResult'){
+  architectCustomBusy=false;architectCustomRunning=!!m.value?.running;
+  architectCustomInfo={...m.value,projectId:activeId,previewCustomized:false};
+  architectCustomNotify(m.value?.ready?('Found '+m.value.recognized+' application target(s). Select the target and local preview URL, then Install & Run.'):'No runnable application was identified at the supported repository locations.',m.value?.ready?'complete':'error');
+  renderArchitectCustomPanel();
+ }
+ if(m.type==='architectCustomError'){architectCustomBusy=false;if(m.logAvailable)architectRecordErrorLog(m);architectCustomNotify(m.message||'Custom Stack operation failed.','error');renderArchitectCustomPanel();}
+ if(m.type==='architectCustomProgress'){architectCustomNotify(m.message||'Working with custom application…');}
+ if(m.type==='architectCustomRunResult'){
+  architectCustomBusy=false;architectCustomRunning=!!m.value?.running;
+  architectCustomNotify(m.value?.message||'Custom Stack execution completed.',m.value?.running?'complete':'error');
+  renderArchitectCustomPanel();
+ }
+ if(m.type==='architectCustomStopResult'){
+  architectCustomBusy=false;architectCustomRunning=false;architectCustomNotify(m.value?.message||'Custom Stack stopped.','complete');renderArchitectCustomPanel();
+ }
+});
+
 $('architectStackSelect').addEventListener('change',event=>{
  architectStackDraft={projectId:activeId,stackId:event.target.value};
  architectChecklistSession(event.target.value);
  const project=projects.find(p=>p.id===activeId);
  syncArchitectStackButtons(project);
  renderArchitectRequirements(project);
+ renderArchitectCustomPanel();
+ if(event.target.value==='custom'&&activeId){
+  architectCustomBusy=true;architectCustomInfo=null;architectCustomRunning=false;
+  architectCustomNotify('Scanning the configured project repository…');
+  renderArchitectCustomPanel();send('architectCustomScan',{projectId:activeId});
+ }
 });
 $('architectReviewGitChanges').addEventListener('click',()=>{if(activeId&&!architectActionBusy)send('architectReviewGitChanges');});
 $('architectResetStack').addEventListener('click',()=>{
@@ -7173,7 +7273,7 @@ $('architectResetStack').addEventListener('click',()=>{
  architectBegin('architectResetStack','Checking checkout and requesting reset confirmation…');
 });
 $('architectSaveStack').addEventListener('click',()=>{
- if(!$('architectStackSelect').value){architectLastMessage='Choose a technology stack before saving.';$('architectBootstrapStatus').textContent=architectLastMessage;return;}
+ if(!$('architectStackSelect').value||$('architectStackSelect').value==='custom'){architectLastMessage='Choose a catalogue technology stack to Save, or use Scan Repository for Custom Stack.';$('architectBootstrapStatus').textContent=architectLastMessage;return;}
  architectBegin('architectSaveStack','Checking main, preparing the skeleton, installing, testing, launching and pushing…');
 });
 $('architectStopInstall').addEventListener('click',()=>{if(architectActionBusy&&architectPendingAction==='architectSaveStack'){$('architectStopInstall').disabled=true;send('architectStopInstall');}});
@@ -7351,6 +7451,8 @@ function setStartupCopilotStatus(state,message){
  badge.textContent=startupCopilotBusy?'Setting up…':state==='ready'?'Installed':state==='unsupported'?'Update required':state==='error'?'Setup failed':'Needs setup';
  card.classList.toggle('is-ready',state==='ready');card.classList.toggle('is-missing',state==='error'||state==='unsupported'||state==='available');
  card.setAttribute('aria-label','GitHub Copilot SDK: '+badge.textContent);
+ if(typeof startupRing==='function'&&!card._atgvProgress)startupRing(card);
+ if(typeof paintStartupStack==='function')paintStartupStack(card,{id:'copilot-sdk',name:'GitHub Copilot SDK',percent:state==='ready'?100:state==='working'?45:0,status:state==='ready'?'complete':state==='working'?'running':'error',message:badge.textContent});
 }
 function openStartupCopilotModal(){
  startupCopilotPriorFocus=document.activeElement;startupCopilotModalOpen=true;
@@ -7414,9 +7516,12 @@ function startupPayload(){return Object.fromEntries(Object.entries(startupFieldM
 function renderStartupPermissionRows(checks){
  const root=$('startupPermissionChecks');root.replaceChildren();
  for(const check of checks||[]){
-  const row=document.createElement('div');row.className='atgv-permission-row';row.dataset.state=check.ok?'ready':'error';
+  const row=document.createElement('div');row.className='atgv-permission-row atgv-permission-step';row.dataset.state=check.ok?'ready':'error';
+  startupRing(row);
+  paintStartupStack(row,{name:check.label||'Permission',status:check.ok?'complete':'error',percent:check.ok?100:0,message:check.detail||''});
+  const summary=document.createElement('div');summary.className='atgv-permission-copy';
   const title=document.createElement('strong');title.textContent=String(check.label||'Permission')+': '+(check.ok?'Ready':'Needs attention');
-  const detail=document.createElement('small');detail.textContent=String(check.detail||'');row.append(title,detail);root.append(row);
+  const detail=document.createElement('small');detail.textContent=String(check.detail||'');summary.append(title,detail);row.append(summary);root.append(row);
  }
 }
 function renderStartupPermissions(result){
@@ -7522,7 +7627,7 @@ function renderStartupStackReadiness(result){
  }
  startupStackData=result;startupScanComplete=true;
  if(result.copilotSdk)renderStartupCopilotReadiness(result.copilotSdk);
- startupScanPercent(100,'Completed prerequisite checks for all '+result.stacks.length+' technology stacks.');
+ startupScanPercent(100,'Completed prerequisite scans for all '+result.stacks.length+' technology stacks.');
  const ready=result.stacks.filter(s=>s.ready).length;
  $('startupToolMessage').textContent=`${ready} of ${result.stacks.length} technology stacks have their required host tools available. `+(result.catalog?.available?`Project modules loaded from ${result.catalog.source}${result.catalog.version?' v'+result.catalog.version:''}.`:'Project module lists are unavailable until the SDLC Library is connected.');
  for(const stack of result.stacks){

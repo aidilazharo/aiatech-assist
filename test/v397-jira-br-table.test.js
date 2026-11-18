@@ -41,7 +41,7 @@ test('BR cards are hosted in an accessible details modal within the combined Jir
  assert.match(ui,/openBARequirementModal\(/);assert.match(ui,/closeBARequirementModal\(/);
 });
 
-test('combined table exposes BR evidence and filters linked Jira without duplicating the Epic',()=>{
+test('combined table keeps BR links and filters without redundant row-action buttons',()=>{
  const ui=read('media/start.js'),from=ui.indexOf('function renderBAJiraInventory(){'),to=ui.indexOf('// Project Manager My Work',from);assert.ok(from>=0&&to>from);
  function element(tag='div'){
   const handlers={};return {tagName:tag.toUpperCase(),children:[],dataset:{},value:'',className:'',textContent:'',disabled:false,
@@ -65,10 +65,12 @@ test('combined table exposes BR evidence and filters linked Jira without duplica
  render();assert.equal(capture.rows.length,4);assert.equal(capture.rows.filter(row=>row.key==='TC-1').length,1);
  const brColumn=capture.columns.find(column=>column.key==='brLabel');assert.ok(brColumn);
  const all=node=>[node,...node.children.flatMap(all)],linked=brColumn.render(capture.rows.find(row=>row.key==='TC-1'));
- all(linked).find(node=>node.textContent==='View 12 Answers').click();assert.deepEqual(opened,[['BR-001',true]]);
- all(linked).find(node=>node.textContent.startsWith('View Jira')).click();assert.deepEqual(filters,['BR-001']);
+ assert.ok(all(linked).some(node=>node.textContent==='BR-001'));
+ assert.equal(all(linked).find(node=>node.textContent==='View 12 Answers'),undefined);
+ assert.equal(all(linked).find(node=>node.textContent.startsWith('View Jira')),undefined);
+ assert.deepEqual(opened,[]);assert.deepEqual(filters,[]);
  const unlinked=brColumn.render(capture.rows.find(row=>row.key==='TC-9'));
- assert.equal(all(unlinked).find(node=>node.textContent==='View 12 Answers').disabled,true);
+ assert.equal(all(unlinked).find(node=>node.textContent==='View 12 Answers'),undefined);
  assert.ok(all(unlinked).some(node=>node.textContent==='Jira only · no local BR evidence'));
  all(unlinked).find(node=>node.textContent==='BR-003').click();assert.deepEqual(opened.at(-1),['jira:TC-9',false]);
  capture.options.onRowClick(capture.rows.find(row=>row.key==='TC-404'));assert.deepEqual(opened.at(-1),['BR-002',false]);

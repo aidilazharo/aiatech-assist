@@ -4888,6 +4888,78 @@ async function handleDashboardMessage(msg){
         await dashboard?.webview.postMessage({type:'architectStackState',value:{message:stopped.message+' Technology stack force-reset. Checkout is on '+result.baseBranch+'; previous bootstrap branch is preserved. '+(result.preservedWorkBranch?'Development branch '+result.preservedWorkBranch+' and its commits are preserved. ':'')+(result.recoveryStash?'Local changes are recoverable in Git stash '+result.recoveryStash.slice(0,12)+'. ':'')+(result.recovery?'Recovered older bootstrap branch ('+result.recovery+'). ':'')+(archive.archived.length?archive.archived.length+' previous stack record(s) archived. ':'')+'Choose a stack and click Save Stack to generate fresh catalog files on a new branch.'}});
         break;
       }
+      case 'architectCustomScan':{
+        const projectId=activeProject?.id||'';
+        try{
+          requireOpened();
+          if(msg.projectId!==projectId)throw Error('The project changed. Select Custom Stack again.');
+          const conf=effectiveConfig(activeProject);
+          const root=await architectRepository.resolve(context.workspaceState,projectId,developerGit,{
+            projectRoot:aiRoot(),githubOwner:conf.get('github.owner'),githubRepo:conf.get('github.repo')});
+          const detected=await require('../../architect-custom-stack').scan(root);
+          const process=developerGit.localLogs();
+          detected.running=!!(process.running&&detected.targets.some(item=>path.resolve(root,item.relative)===path.resolve(process.cwd||'')));
+          if(activeProject?.id===projectId)await dashboard?.webview.postMessage({type:'architectCustomScanResult',projectId,value:detected});
+        }catch(error){
+          report('Custom Stack scan: '+error.message);
+          if(activeProject?.id===projectId)await dashboard?.webview.postMessage({type:'architectCustomError',projectId,message:String(error.message||error).slice(0,450)});
+        }
+        break;
+      }
+      case 'architectCustomRun':{
+        const projectId=activeProject?.id||'';
+        const notify=message=>activeProject?.id===projectId?dashboard?.webview.postMessage({type:'architectCustomProgress',projectId,message}):undefined;
+        try{
+          requireOpened();
+          if(msg.projectId!==projectId)throw Error('The project changed. Re-scan the Custom Stack.');
+          const conf=effectiveConfig(activeProject);
+          const root=await architectRepository.resolve(context.workspaceState,projectId,developerGit,{
+            projectRoot:aiRoot(),githubOwner:conf.get('github.owner'),githubRepo:conf.get('github.repo')});
+          const custom=require('../../architect-custom-stack'),inspection=await custom.scan(root);
+          if(inspection.sha!==msg.sha)throw Error('Git commit changed after the scan. Scan Repository again.');
+          const chosen=inspection.targets.find(row=>row.relative===msg.relative&&row.runnable);
+          if(!chosen)throw Error('The selected repository target has no supported run command.');
+          const url=custom.loopbackPreview(msg.previewUrl||chosen.previewUrl);
+          const action='Install & Run Custom Stack';
+          const allowed=await uiWarning('Custom Stack detected '+chosen.framework+' in '+(chosen.relative||'repository root')+
+           '.\n\nGit revision: '+inspection.sha.slice(0,12)+'\nPreview: '+url+
+           '\n\nATGV will execute dependency installation/restore and the existing project '+chosen.runScript+
+           ' script on this computer. Package installation may modify local dependency files. No project skeleton will be copied, and ATGV will not commit, push or approve this project automatically. Only the ATGV-managed process can be stopped by this screen. Continue?',
+           {modal:true},action);
+          if(allowed!==action){
+            await dashboard?.webview.postMessage({type:'architectCustomError',projectId,message:'Custom Stack run cancelled. No scripts were executed.'});break;
+          }
+          architectErrorLogs.begin(projectId,'custom-stack');
+          const result=await custom.run(root,{sha:inspection.sha,relative:chosen.relative,previewUrl:url,
+           onProgress:async message=>{architectErrorLogs.append(projectId,'custom-stack',message);await notify(message);}});
+          if(activeProject?.id===projectId){
+            await vscode.env.openExternal(vscode.Uri.parse(result.url)).catch(error=>report('Custom Stack browser: '+error.message));
+            await dashboard?.webview.postMessage({type:'architectCustomRunResult',projectId,value:result});
+          }
+          architectErrorLogs.clear(projectId,'custom-stack');
+        }catch(error){
+          if(projectId)architectErrorLogs.append(projectId,'custom-stack',error.diagnosticLogs||String(error.stack||error.message||error));
+          report('Custom Stack run: '+error.message);
+          if(activeProject?.id===projectId)await dashboard?.webview.postMessage({type:'architectCustomError',projectId,message:String(error.message||error).slice(0,450),logAvailable:true,logCount:architectErrorLogs.count(projectId)});
+        }
+        break;
+      }
+      case 'architectCustomStop':{
+        const projectId=activeProject?.id||'';
+        try{
+          requireOpened();
+          if(msg.projectId!==projectId)throw Error('Project changed; refusing to stop another application.');
+          const conf=effectiveConfig(activeProject);
+          const root=await architectRepository.resolve(context.workspaceState,projectId,developerGit,{
+            projectRoot:aiRoot(),githubOwner:conf.get('github.owner'),githubRepo:conf.get('github.repo')});
+          const result=await require('../../architect-custom-stack').stop(root,{relative:String(msg.relative||'')});
+          if(activeProject?.id===projectId)await dashboard?.webview.postMessage({type:'architectCustomStopResult',projectId,value:result});
+        }catch(error){
+          report('Custom Stack stop: '+error.message);
+          if(activeProject?.id===projectId)await dashboard?.webview.postMessage({type:'architectCustomError',projectId,message:String(error.message||error).slice(0,450)});
+        }
+        break;
+      }
       case 'architectSaveStack':{
         architectServerOperationSerial++;
         requireOpened();architectErrorLogs.begin(activeProject.id,'save');
