@@ -35,8 +35,10 @@ function select(releases){
 }
 async function latest({token='',request=updater.getBytes}={}){
  const fetch=async url=>JSON.parse((await request(url,{token,maxBytes:1024*1024})).toString('utf8'));
- try{const found=select([await fetch(API_LATEST)]);if(found)return found;}catch{/* Verify same-repository prereleases below. */}
- return select(await fetch(API_LIST));
+ let stable=null;try{stable=await fetch(API_LATEST);}catch{/* Verify same-repository prereleases below. */}
+ const releases=await fetch(API_LIST);
+ if(!Array.isArray(releases))throw Error('Invalid Library Releases response.');
+ return select(stable?[...releases,stable]:releases);
 }
 async function downloadVerified(release,{token='',directory,request=updater.getBytes}={}){
  if(!release||!directory||release.repository!==REPO||!trustedAsset(release.archive,release.filename)||!trustedAsset(release.checksum,'library-source.sha256'))

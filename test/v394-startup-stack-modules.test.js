@@ -97,6 +97,7 @@ test('each startup stack opens its modules and tools in a modal that survives a 
  nodes.startupStackModal.classList.add('hidden');const sent=[];
  const create=new Function('document','$','startupScanPercent','renderStartupPage','send',[
   "let startupScanComplete=false,startupStackData=null,startupOpenStackId='',startupStackPriorFocus=null,startupLastInstalledTool='',startupInstallingModule='';",
+  "const startupStackProgress=new Map();let startupAutoEnabled=false;function stopStartupAuto(){}function startupRing(){}function paintStartupStack(){}",
   source.slice(from,to),
   'return {render:renderStartupStackReadiness,close:closeStartupStackModal,finishInstall:()=>startupInstallingModule=""};'
  ].join('\n'));

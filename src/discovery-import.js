@@ -12,75 +12,7 @@ const MAX_FILE_BYTES = 12 * 1024 * 1024;
 // bounded separately with splitDocumentText; never silently use only a prefix.
 const MAX_EXTRACTED = 300000;
 const MAX_MAPPING_CHUNK = 28000;
-function decodeEntities(s) {
-    return s.replace(/&#(x[\da-f]+|\d+);|&(amp|lt|gt|quot|apos);/gi, (_, numeric, entity) => {
-        if (numeric) {
-            const n = numeric[0].toLowerCase() === 'x' ? parseInt(numeric.slice(1), 16) : parseInt(numeric, 10);
-            return n > 0 && n <= 0x10ffff && !(n >= 0xd800 && n <= 0xdfff) ? String.fromCodePoint(n) : '';
-        }
-        return { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }[entity.toLowerCase()];
-    });
-}
-function readZipPart(data, requested) {
-    let eocd = -1;
-    for (let i = data.length - 22; i >= Math.max(0, data.length - 65557); i--) {
-        if (data.readUInt32LE(i) === 0x06054b50) {
-            eocd = i;
-            break;
-        }
-    }
-    if (eocd < 0)
-        throw Error('Invalid Word document ZIP directory.');
-    const count = data.readUInt16LE(eocd + 10), start = data.readUInt32LE(eocd + 16);
-    let cursor = start;
-    if (count > 10000 || start >= data.length)
-        throw Error('Invalid Word document directory.');
-    for (let i = 0; i < count; i++) {
-        if (cursor + 46 > data.length || data.readUInt32LE(cursor) !== 0x02014b50)
-            throw Error('Invalid Word ZIP entry.');
-        const method = data.readUInt16LE(cursor + 10), compressed = data.readUInt32LE(cursor + 20), expanded = data.readUInt32LE(cursor + 24), nameLen = data.readUInt16LE(cursor + 28), extra = data.readUInt16LE(cursor + 30), comment = data.readUInt16LE(cursor + 32), offset = data.readUInt32LE(cursor + 42);
-        if (cursor + 46 + nameLen + extra + comment > data.length)
-            throw Error('Invalid Word ZIP directory.');
-        const name = data.subarray(cursor + 46, cursor + 46 + nameLen).toString('utf8');
-        cursor += 46 + nameLen + extra + comment;
-        if (name !== requested)
-            continue;
-        if (expanded > 3 * 1024 * 1024 || compressed > MAX_FILE_BYTES)
-            throw Error('Word document text exceeds import limit.');
-        if (offset + 30 > data.length || data.readUInt32LE(offset) !== 0x04034b50)
-            throw Error('Invalid Word ZIP local entry.');
-        const startData = offset + 30 + data.readUInt16LE(offset + 26) + data.readUInt16LE(offset + 28);
-        if (startData + compressed > data.length)
-            throw Error('Word ZIP data is truncated.');
-        const raw = data.subarray(startData, startData + compressed);
-        if (method === 0)
-            return raw.toString('utf8');
-        if (method === 8) {
-            const out = zlib.inflateRawSync(raw, { maxOutputLength: 3 * 1024 * 1024 });
-            if (out.length !== expanded)
-                throw Error('Word ZIP size mismatch.');
-            return out.toString('utf8');
-        }
-        throw Error('Unsupported Word document compression.');
-    }
-    throw Error('Word document is missing document.xml.');
-}
-function extractDocx(data) {
-    if (!Buffer.isBuffer(data) || data.length < 40)
-        throw Error('Invalid Word file.');
-    const xml = readZipPart(data, 'word/document.xml');
-    if (!/<w:document\b/.test(xml))
-        throw Error('Invalid Word document XML.');
-    let text = xml.replace(/<w:(?:tab|ptab)\b[^>]*\/?\s*>/g, '\t')
-        .replace(/<w:(?:br|cr)\b[^>]*\/?\s*>/g, '\n')
-        .replace(/<\/w:(?:p|tr)>/g, '\n')
-        .replace(/<\/w:tc>/g, '\t')
-        .replace(/<[^>]+>/g, '');
-    text = decodeEntities(text).replace(/\r/g, '').replace(/\n[ \t]*\n[ \t]*\n+/g, '\n\n').trim();
-    if (!text)
-        throw Error('No readable text found in this Word file.');
-    return text;
-}
+const { extractDocx } = require('./docx-extractor');
 function extractBasicPdf(data) {
     const latin = data.toString('latin1');
     if (!latin.startsWith('%PDF-'))

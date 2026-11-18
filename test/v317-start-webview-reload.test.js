@@ -22,7 +22,7 @@ test('each ATGV Start internal reopen reloads webview HTML, not just reveals the
   openingGeneration:0,openingFlow:{reset:()=>{}},openingOffline:false,
   discoveredSpaces:[],discoveredJiraProjects:[],approvedJiraPreviewRevision:null,
   approvedJiraPreviewBinding:null,activationEpoch:0,activeProject:null,store:null,
-  tree:{refresh:()=>{}},startupSequence:0,startupScan:null,
+  tree:{refresh:()=>{}},startupSequence:0,startupScan:null,startupReadinessSequence:0,startupPermissionsState:null,startupReadinessState:null,startupSessionId:0,
   html:()=>`<html>ATGV fresh ${++serial}</html>`,
   refreshDashboard:async()=>events.push(['refresh']),
   finishManualProjectDiscovery:async seq=>{events.push(['manual-list',seq]);events.push(['refresh']);},
@@ -39,7 +39,7 @@ test('each ATGV Start internal reopen reloads webview HTML, not just reveals the
  assert.equal(events.filter(([name])=>name==='reveal').length,2);
  assert.equal(events.filter(([name])=>name==='refresh').length,2);
  assert.deepEqual(events.filter(([name])=>name==='manual-list').map(x=>x[1]),[1,2]);
- assert.equal(events.some(([name])=>name==='load'||name==='open'),false,'Startup must never auto-open the last project');
+ assert.equal(events.some(([name])=>name==='load'||name==='open'),false,'Rebuilding the webview must not itself open a project');
  assert.equal(events.some(([name,type])=>name==='send'&&type==='openingStart'),false,
    'A fresh webview must not receive an obsolete partial-reset message');
 });

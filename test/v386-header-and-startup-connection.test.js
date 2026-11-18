@@ -35,6 +35,7 @@ function createPageHarness(){
  const create=new Function('$',[
   "const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluenceUrl',email:'startupEmail',githubUrl:'startupGithubUrl'};",
   "let startupSetupRequired=true,startupPage=1,startupVerifying=false,startupInstallingModule='',startupScanComplete=true,startupConnectionVerified=true,startupOpenStackId='',startupCopilotModalOpen=false;",
+  "let startupAutoNotice='',startupAutoEnabled=false;",
   ui.slice(start,end),
   ui.slice(invalidateStart,invalidateEnd),
   'return {renderStartupPage,invalidateStartupConnection,setVerifying:v=>startupVerifying=v,setVerified:v=>startupConnectionVerified=v};'

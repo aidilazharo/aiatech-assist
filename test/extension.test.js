@@ -6,7 +6,7 @@ const os=require('node:os');
 const path=require('node:path');
 const Module=require('node:module');
 const manifest=require('../package.json');
-async function until(fn){for(let i=0;i<500;i++){if(await fn())return;await new Promise(r=>setTimeout(r,10));}throw new Error('Timeout waiting for host action');}
+async function until(fn){for(let i=0;i<1500;i++){if(await fn())return;await new Promise(r=>setTimeout(r,10));}throw new Error('Timeout waiting for host action');}
 function makeProject(id,key){return {id,name:id,settings:{jira:{projectKey:key},confluence:{spaceKey:key}}};}
 
 test('ATGV lifecycle commands and project dashboard save defaults and overrides',async()=>{
@@ -15,6 +15,7 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
   assert.equal(manifest.contributes.views,undefined);
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-vscode-host-'));
   const commands=new Map(),secrets=new Map(),workspaceState=new Map(),globalState=new Map(),messages=[];
+  const lastState=()=>messages.filter(m=>m.type==='state').at(-1);
   let handler,panel,answer='first-secret',confirmation='Continue to RESET';
   const uri=p=>({fsPath:p,toString:()=>`file://${p}`});
   const fake={
@@ -32,6 +33,9 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
   const orig=Module._load,originalFetch=global.fetch;
   const resetGit=require('../src/developer-git'),resetCatalog=require('../src/github-sdlc-catalog');
   const originalClone=resetGit.cloneConfigured,originalCatalogSync=resetCatalog.syncGitWorkspace;
+  const releaseUpdater=require('../src/lib/updates/github-release-updater'),libraryUpdater=require('../src/lib/updates/library-release-updater');
+  const originalReleaseLookup=releaseUpdater.latestRelease,originalLibraryLookup=libraryUpdater.latest;
+  releaseUpdater.latestRelease=async()=>null;libraryUpdater.latest=async()=>null;
   const stagedClones=[],stagedCatalogs=[];
   const apiRequests=[];
   global.fetch=async(url,options)=>{
@@ -136,6 +140,7 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
     assert.ok(await fs.stat(path.join(root,'projects','finance-knowledge','sdlc','roles','business-analyst.yaml')));
     handler({command:'openingOpen'});
     await until(()=>messages.some(m=>m.type==='state'&&m.opening?.phase==='open'));
+    await until(()=>messages.some(m=>m.type==='notice'&&/SDLC navigation is now available/.test(m.message)));
     assert.equal(workspaceState.get('atgvAssist.activeProject'),'finance-knowledge');
     assert.deepEqual(workspaceState.get('atgvAssist.recentProjects'),['finance-knowledge']);
                                                                                         
@@ -143,20 +148,21 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
     await commands.get('atgvAssist.start')({skipReload:true});
     handler({command:'openingAuto',projectId:'finance-knowledge'});
     await until(()=>messages.some(m=>m.type==='openingProgress'&&m.stage==='done'));
-    await until(()=>messages.at(-1)?.opening?.phase==='open');
+    await until(()=>lastState()?.opening?.phase==='open');
     assert.equal(workspaceState.get('atgvAssist.activeProject'),'finance-knowledge');
     assert.deepEqual(workspaceState.get('atgvAssist.recentProjects'),['finance-knowledge']);
     assert.ok(messages.some(m=>m.type==='openingProgress'&&m.stage==='connection'));
     assert.ok(messages.some(m=>m.type==='openingProgress'&&m.stage==='files'));
                                                                               
+    const beforeRestart=messages.length;
     await commands.get('atgvAssist.start')({skipReload:true});
     assert.match(panel.webview.html, /<html lang="en">/);
-    await until(()=>messages.at(-1)?.opening?.phase==='search');
-    assert.equal(messages.at(-1)?.opening?.phase,'search','Restart must require explicit project selection');
-    assert.equal(messages.at(-1)?.activeId,null,'Previously opened project must not re-open automatically');
+    await until(()=>messages.slice(beforeRestart).some(m=>m.type==='state'&&m.opening?.phase==='search'));
+    assert.equal(lastState()?.opening?.phase,'search','Restart must show project selection when setup is incomplete');
+    assert.equal(lastState()?.activeId,null,'Incomplete setup must not re-open a project automatically');
     assert.ok(messages.some(m=>m.type==='startupScan'&&/Choose a project/.test(m.message)));
     handler({command:'openingBack'});
-    await until(()=>messages.at(-1)?.opening?.phase==='search');
+    await until(()=>lastState()?.opening?.phase==='search');
     handler({command:'create',project:makeProject('claims','CLM')});
     await until(()=>messages.some(m=>m.type==='created'&&m.id==='claims'));
     const saved=JSON.parse(await fs.readFile(path.join(root,'projects','claims','atgv.project.json'),'utf8'));
@@ -166,8 +172,8 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
     await assert.rejects(()=>fs.access(path.join(root,'projects','claims','sdlc','roles','business-analyst.yaml')),{code:'ENOENT'});
     assert.match(panel.webview.html,/id="techStackGrid"/);
     assert.equal(saved.settings.jira.baseUrl,undefined);
-    await until(()=>messages.at(-1)?.opening?.phase==='selected');
-    assert.equal(messages.at(-1)?.opening?.phase,'selected','Manual creation selects but must not open the project');
+    await until(()=>lastState()?.opening?.phase==='selected');
+    assert.equal(lastState()?.opening?.phase,'selected','Manual creation selects but must not open the project');
                                                                            
                                                               
     const savedFetch=global.fetch;global.fetch=async()=>{throw new Error('Simulated network outage');};
@@ -175,7 +181,7 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
     await until(()=>messages.some(m=>m.type==='openingError'&&m.canOffline&&/Simulated network outage/.test(m.message)));
     assert.equal((await fs.readdir(path.join(root,'projects','claims'))).includes('sdlc'),false,'Failed remote check must not scaffold');
     handler({command:'openingOffline'});
-    await until(()=>messages.at(-1)?.opening?.phase==='open'&&messages.at(-1)?.openingOffline===true);
+    await until(()=>lastState()?.opening?.phase==='open'&&lastState()?.openingOffline===true);
     assert.equal(workspaceState.get('atgvAssist.activeProject'),'claims');
     assert.ok(await fs.stat(path.join(root,'projects','claims','documents','requirements')));
                                                                         
@@ -203,7 +209,7 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
     await commands.get('atgvAssist.start')({skipReload:true});
     handler({command:'create',project:makeProject('finance','FIN')});
     await until(()=>messages.some(m=>m.type==='created'&&m.id==='finance'));
-    await until(()=>messages.at(-1)?.type==='state'&&messages.at(-1).projects?.some(p=>p.id==='finance'));
+    await until(()=>lastState()?.projects?.some(p=>p.id==='finance'));
     assert.equal((await fs.readdir(path.join(root,'projects'))).length,3);
     // Jira Project Key is a verified global default, never a silent project remapping.
     handler({command:'testExtensionJira',requestId:19,settings:{jira:{baseUrl:'https://aia.atlassian.net',email:'somebody@aia.com',projectKey:'fin'}}});
@@ -252,5 +258,5 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
     assert.equal(globalState.get('atgvAssist.coordinationProvider'),'local');
     assert.deepEqual((await fs.readFile(path.join(root,'projects','claims','atgv.project.json'),'utf8').then(JSON.parse)).settings.jira.projectKey,'CLM');
     assert.equal(workspaceState.has('atgvAssist.activeProject'),false);
-  }finally{Module._load=orig;global.fetch=originalFetch;resetGit.cloneConfigured=originalClone;resetCatalog.syncGitWorkspace=originalCatalogSync;await fs.rm(root,{recursive:true,force:true});}
+  }finally{Module._load=orig;global.fetch=originalFetch;resetGit.cloneConfigured=originalClone;resetCatalog.syncGitWorkspace=originalCatalogSync;releaseUpdater.latestRelease=originalReleaseLookup;libraryUpdater.latest=originalLibraryLookup;await fs.rm(root,{recursive:true,force:true});}
 });

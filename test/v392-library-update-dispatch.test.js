@@ -60,7 +60,7 @@ test('Later dismisses without publishing; background checker cannot duplicate di
  const result=await invoke({command:'libraryUpdateDecision',requestId:'cancel-1',action:'Later'},{pending});
  assert.equal(resolved,'Later');
  assert.equal(result.started.length,0);
- const startCheck=host.indexOf('async function checkLibraryRelease(');
+ const startCheck=host.indexOf('async function promptLibraryRelease(');
  const endCheck=host.indexOf('async function checkSoftwareUpdates(',startCheck);
  assert.ok(startCheck>0&&endCheck>startCheck);
  const checker=host.slice(startCheck,endCheck);

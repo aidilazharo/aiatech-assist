@@ -129,7 +129,13 @@ async function inspectZip(file){
  if(!stat.isFile()||stat.isSymbolicLink()||stat.size>MAX_ZIP)throw Error('Invalid or oversized SDLC Library ZIP.');
  return readArchive(await fs.readFile(file)).info;
 }
-async function importZip({file,workspace,repositoryUrl}){
+function releaseIdentity(release,repository,version){
+ if(!release)return null;
+ const match=/^v?(\d+\.\d+\.\d+)(?:-source-build\.(\d+))?$/.exec(String(release.tag||''));
+ if(!match||match[1]!==version||String(release.repository||'').toLowerCase()!==repository.toLowerCase())throw Error('Invalid verified Library release identity.');
+ return {tag:release.tag,build:Number(match[2]||0)};
+}
+async function importZip({file,workspace,repositoryUrl,verifiedRelease=null}){
  const catalog=require('./github-sdlc-catalog'),p=catalog.parseRepository(repositoryUrl||'');
  if(!p)throw Error('Enter the SDLC Library GitHub repository URL before importing ZIP.');
  if(!workspace)throw Error('Open a VS Code folder before importing an SDLC Library ZIP.');
@@ -137,18 +143,35 @@ async function importZip({file,workspace,repositoryUrl}){
  const stat=await fs.lstat(file);
  if(!stat.isFile()||stat.isSymbolicLink()||stat.size>MAX_ZIP)throw Error('Invalid or oversized SDLC Library ZIP.');
  const existing=await imported(workspace,repositoryUrl);
- const data=await fs.readFile(file),archive=readArchive(data),parent=path.join(workspace,'.atgv');
+ const data=await fs.readFile(file),archive=readArchive(data),archiveHash=hash(data),parent=path.join(workspace,'.atgv');
+ const release=releaseIdentity(verifiedRelease,p.owner+'/'+p.repo,archive.info.version);
  // Keep the newest verified local source even when an older ZIP is uploaded.
  // In an equal-version tie, the authenticated Git checkout wins over ZIP data.
  const installed=await catalog.gitInstalled(workspace,{repositoryUrl});
- const gitWins=installed?.version&&compareVersions(installed.version,archive.info.version)>=0&&
+ const gitWins=installed?.version&&(compareVersions(installed.version,archive.info.version)>0||!release&&compareVersions(installed.version,archive.info.version)===0)&&
   (!existing||compareVersions(installed.version,existing.version)>=0);
  if(gitWins){
   if(existing)await removeAfterVerifiedGit(workspace,repositoryUrl);
   return {...installed,root:installed.checkout,offline:false,selectedSource:'github',unchanged:true};
  }
- if(existing&&compareVersions(existing.version,archive.info.version)>=0)
-  return {...existing,selectedSource:'zip',unchanged:true};
+ if(existing){
+  const comparison=compareVersions(existing.version,archive.info.version);
+  if(comparison>0||comparison===0&&!release)return {...existing,selectedSource:'zip',unchanged:true};
+  if(comparison===0&&release){
+   const previous=existing.releaseTag?releaseIdentity({tag:existing.releaseTag,repository:existing.repository},existing.repository,existing.version):null;
+   if(previous&&previous.build>release.build)return {...existing,selectedSource:'zip',unchanged:true};
+   if(previous&&previous.tag===release.tag&&existing.archiveHash!==archiveHash)throw Error('The installed Library release tag has different archive bytes. Update stopped.');
+   if(existing.archiveHash===archiveHash){
+    if(existing.releaseTag!==release.tag){
+     const statePath=path.join(base(workspace),'state.json'),state=JSON.parse(await fs.readFile(statePath,'utf8'));
+     state.releaseTag=release.tag;state.releaseBuild=release.build;
+     const tmp=statePath+'.'+crypto.randomUUID()+'.tmp';
+     try{await fs.writeFile(tmp,JSON.stringify(state,null,2)+'\n',{flag:'wx',mode:0o600});await fs.rename(tmp,statePath);}finally{await fs.rm(tmp,{force:true});}
+    }
+    return {...existing,releaseTag:release.tag,releaseBuild:release.build,selectedSource:'zip',unchanged:true};
+   }
+  }
+ }
  // Refuse to replace an offline ZIP bound to a different repository.
  const priorState=await fs.readFile(path.join(base(workspace),'state.json'),'utf8').catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
  if(priorState&&!existing)throw Error('An offline Library ZIP for a different GitHub repository is installed. Preserve or export it before changing libraries.');
@@ -163,7 +186,8 @@ async function importZip({file,workspace,repositoryUrl}){
    await fs.mkdir(path.dirname(destination),{recursive:true});await fs.writeFile(destination,contents,{flag:'wx',mode:0o600});
    assets[relative]=hash(contents);
   }
-  const state={schema:1,source:'zip',repository:p.owner+'/'+p.repo,archiveHash:hash(data),filename:path.basename(file),
+  const state={schema:1,source:'zip',repository:p.owner+'/'+p.repo,archiveHash,filename:path.basename(file),
+   ...(release?{releaseTag:release.tag,releaseBuild:release.build}:{}),
    version:archive.info.version,roles:archive.info.roles,techStacks:archive.info.techStacks,
    workflows:archive.info.workflows,templates:archive.info.templates,assets,installedAt:new Date().toISOString()};
   await fs.writeFile(path.join(staging,'state.json'),JSON.stringify(state,null,2)+'\n',{flag:'wx',mode:0o600});

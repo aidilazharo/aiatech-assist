@@ -53,7 +53,7 @@ test('ATGV Start closes editors, reloads once, and persists the reopen marker',a
  const events=[],state=new Map();
  const vscode={commands:{executeCommand:async name=>events.push(name)},window:{tabGroups:{all:[{tabs:[]}]}}};
  const context={workspaceState:{update:async(k,v)=>{events.push('store:'+k);state.set(k,v);}}};
- const start=new Function('vscode','ready','context','uiInformation',source.slice(a,b)+'\nreturn start;')(vscode,Promise.resolve(),context,()=>{});
+ const start=new Function('vscode','ready','context','uiInformation','let startupReadinessSequence=0,startupPermissionsState=null,startupReadinessState=null;\n'+source.slice(a,b)+'\nreturn start;')(vscode,Promise.resolve(),context,()=>{});
  await start();
  assert.deepEqual(events,['workbench.action.closeAllEditors','store:atgvAssist.startAfterWindowReload','workbench.action.reloadWindow']);
  assert.equal(state.get('atgvAssist.startAfterWindowReload'),true);
@@ -66,7 +66,7 @@ test('ATGV Start does not reload if tabs remain after a cancelled close',async()
  const events=[],state=new Map();
  const vscode={commands:{executeCommand:async name=>events.push(name)},window:{tabGroups:{all:[{tabs:[{id:'unsaved'}]}]}}};
  const context={workspaceState:{update:async(k,v)=>state.set(k,v)}};
- const start=new Function('vscode','ready','context','uiInformation',source.slice(a,b)+'\nreturn start;')(vscode,Promise.resolve(),context,()=>events.push('cancel-notice'));
+ const start=new Function('vscode','ready','context','uiInformation','let startupReadinessSequence=0,startupPermissionsState=null,startupReadinessState=null;\n'+source.slice(a,b)+'\nreturn start;')(vscode,Promise.resolve(),context,()=>events.push('cancel-notice'));
  await start();
  assert.deepEqual(events,['workbench.action.closeAllEditors','cancel-notice']);
  assert.equal(state.size,0);

@@ -510,6 +510,7 @@ function gateOpeningPercent(percent,message){
 }
 function launchFromGate(selection={}){
   if(gateBusy)return;
+  if(!selection.autoResume&&startupAutoEnabled)stopStartupAuto('Automatic opening paused for your project selection.');
   gateError='';gateOfflineAvailable=false;gateBusy=true;
   $('gateProgress').classList.remove('hidden');
   gateOpeningPercent(5,'Selecting project…');
@@ -581,6 +582,7 @@ $('gateOpenFolder').addEventListener('click',()=>send('openWorkspaceFolder'));
 for(const [id,provider] of [['guideJiraTokenLink','jira'],['guideConfluenceTokenLink','confluence'],['guideGithubTokenLink','github']])$(id).addEventListener('click',()=>send('guideTokenLink',{provider}));
 $('gateSearch').addEventListener('click',()=>{
   if(gateBusy)return;
+  if(startupAutoEnabled)stopStartupAuto();
   const q=read('gateQuery');renderGateResults();
   if(q.length<2){status('Enter at least 2 characters to search Confluence spaces.',true);return;}
   const requestId=++spaceSearchSequence;gateSearchId=requestId;gateSearched=true;spaces=[];$('gateSearchMessage').textContent='';renderGateResults();
@@ -589,9 +591,10 @@ $('gateSearch').addEventListener('click',()=>{
 });
 $('gateQuery').addEventListener('input',()=>{gateSearchId=null;spaces=[];gateSearched=false;$('gateSearchMessage').textContent='';renderGateResults();});
 $('gateQuery').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('gateSearch').click();}});
-$('gateManual').addEventListener('click',()=>openProject());
+$('gateManual').addEventListener('click',()=>{if(startupAutoEnabled)stopStartupAuto();openProject();});
 $('gateSearchPrevious').addEventListener('click',()=>{
  if(gateBusy)return;
+ if(startupAutoEnabled)stopStartupAuto();
  startupReturnToConnections=true;startupPage=1;
  if(!startupPrereqRequested){startupPrereqRequested=true;send('startupReadiness');}
  $('startupConnectionMessage').textContent=startupConnectionVerified?'Connections already verified and saved.':'Test & Save Connections to continue to Search Project.';
@@ -4459,8 +4462,12 @@ function renderSoftwareUpdates(data,force=false){
  if(!data)return;
  latestSoftwareUpdateState=data;
  const version=data.installedVersion||'?';
- $('softwareExtensionStatus').textContent=data.extensionError?`Extension: ${data.extensionError}`:data.latest?`Extension v${data.latest.version} available (installed v${version}). Release: ${data.latest.tag}.`:data.extensionLastCheck?`Extension v${version} is up to date (checked ${new Date(data.extensionLastCheck).toLocaleString()}).`:`Installed extension: v${version}; not checked yet.`;
+ const latestVersion=data.extensionLatest?.version||data.latest?.version||'';
+ $('softwareExtensionStatus').textContent=data.extensionError?`Extension: ${data.extensionError}`:data.latest?`Extension v${data.latest.version} available (installed v${version}). Release: ${data.latest.tag}.`:data.extensionLastCheck?`Extension v${version} is up to date${latestVersion?' · latest v'+latestVersion:''} (checked ${new Date(data.extensionLastCheck).toLocaleString()}).`:`Installed extension: v${version}; not checked yet.`;
  $('softwareLibraryStatus').textContent=data.libraryError?`Library: ${data.libraryError}`:data.libraryLatest?`Library release: v${data.libraryLatest}. Pull Library Files to install the verified source archive.`:'Library: no verified release yet.';
+ const extensionText=data.extensionError?'Extension latest: unavailable':latestVersion?'Extension latest: v'+latestVersion+(data.latest?' · update available':' · up to date'):'Extension latest: checking…';
+ const libraryText=data.libraryError?'Library latest: unavailable':data.libraryLatest?'Library latest: v'+data.libraryLatest:'Library latest: checking…';
+ $('gateLatestVersions').textContent=extensionText+'  ·  '+libraryText;
  $('viewExtensionRelease').disabled=!data.latest;
  $('installExtensionRelease').disabled=!data.latest;
  $('checkSoftwareUpdates').disabled=!!data.busy;
@@ -7328,7 +7335,12 @@ let startupVerifying=false,startupScanComplete=false,startupPage=0,startupInstal
 let startupLastInstalledTool='';
 let startupStackData=null,startupOpenStackId='',startupStackPriorFocus=null;
 let startupCopilotBusy=false,startupCopilotModalOpen=false,startupCopilotPriorFocus=null;
-const STARTUP_STACK_NAMES=['ReactJS','Angular','NestJS','.NET','Spring Boot'];
+let startupPermissions=null,startupAutoProject=null,startupAutoEnabled=false,startupAutoTimer=null,startupAutoStage='',startupAutoDeadline=0,startupAutoNotice='';
+const startupStackProgress=new Map();
+const startupPermissionProgress=new Map();
+const STARTUP_STACKS=[['react','ReactJS'],['angular','Angular'],['nestjs','NestJS'],['dotnet','.NET'],['spring-boot','Spring Boot']];
+const STARTUP_STACK_NAMES=STARTUP_STACKS.map(([,name])=>name);
+const STARTUP_SCREEN_MS=5000;
 function setStartupCopilotStatus(state,message){
  startupCopilotBusy=state==='working';
  const button=$('startupCopilotSetup');button.disabled=startupCopilotBusy||state==='ready'||state==='unsupported';
@@ -7357,23 +7369,96 @@ function renderStartupCopilotReadiness(info){
 }
 function startupScanPercent(percent,message){
  const value=Math.max(0,Math.min(100,Number(percent)||0));
- $('startupScanToolFill').style.width=value+'%';
+ $('startupScanToolFill').style.background='conic-gradient(var(--atgv-accent) '+value+'%, var(--vscode-panel-border) 0)';
  $('startupScanToolPercent').textContent=value+'%';
  $('startupScanToolTrack').setAttribute('aria-valuenow',String(value));
  $('startupScanToolTrack').setAttribute('aria-valuetext',String(message||'Checking tools'));
  $('startupScanToolName').textContent=message||'Checking tools…';
 }
+function startupRing(card){
+ const ring=document.createElement('span');ring.className='atgv-stack-ring';ring.setAttribute('role','progressbar');
+ ring.setAttribute('aria-valuemin','0');ring.setAttribute('aria-valuemax','100');
+ const fill=document.createElement('span');fill.className='atgv-stack-ring-fill';
+ const number=document.createElement('strong');number.textContent='0%';ring.append(fill,number);card.append(ring);
+ card._atgvProgress={ring,fill,number};
+}
+function paintStartupStack(card,event){
+ const value=Math.max(0,Math.min(100,Number(event?.percent)||0)),state=event?.status||'running';
+ const indicator=card._atgvProgress;if(!indicator)return;
+ const color=state==='error'?'var(--vscode-testing-iconFailed, var(--vscode-errorForeground))':state==='complete'?'var(--vscode-testing-iconPassed)':'var(--atgv-accent)';
+ indicator.fill.style.background='conic-gradient('+color+' '+value+'%, var(--vscode-panel-border) 0)';
+ indicator.number.textContent=state==='error'?'!':value+'%';indicator.ring.setAttribute('aria-valuenow',String(value));
+ indicator.ring.setAttribute('aria-valuetext',String(event?.message||'Checking prerequisites'));
+ indicator.ring.setAttribute('aria-label',String(event?.name||card.dataset.stackId||'Technology stack')+' prerequisites');
+ card.dataset.progressState=state;
+}
+function updateStartupStackProgress(event){
+ if(!event?.id)return;
+ const prior=startupStackProgress.get(event.id);if(prior?.status==='error')return;
+ startupStackProgress.set(event.id,event);
+ const card=[...$('startupStackGrid').children].find(item=>item.dataset.stackId===event.id);
+ if(card)paintStartupStack(card,event);
+}
 function renderStartupScanPlaceholders(){
  const grid=$('startupStackGrid');
- if(grid.childElementCount)return;
- for(const name of STARTUP_STACK_NAMES){
+ grid.replaceChildren();startupStackProgress.clear();
+ for(const [id,name] of STARTUP_STACKS){
   const card=document.createElement('div');card.className='atgv-startup-stack atgv-stack-pending';
+  card.dataset.stackId=id;startupRing(card);paintStartupStack(card,{id,name,status:'running',percent:0});
   const label=document.createElement('strong');label.textContent=name;
   const status=document.createElement('small');status.textContent='Checking prerequisites…';
   card.append(label,status);grid.append(card);
  }
 }
 function startupPayload(){return Object.fromEntries(Object.entries(startupFieldMap).map(([key,id])=>[key,$(id).value.trim()]));}
+function renderStartupPermissionRows(checks){
+ const root=$('startupPermissionChecks');root.replaceChildren();
+ for(const check of checks||[]){
+  const row=document.createElement('div');row.className='atgv-permission-row';row.dataset.state=check.ok?'ready':'error';
+  const title=document.createElement('strong');title.textContent=String(check.label||'Permission')+': '+(check.ok?'Ready':'Needs attention');
+  const detail=document.createElement('small');detail.textContent=String(check.detail||'');row.append(title,detail);root.append(row);
+ }
+}
+function renderStartupPermissions(result){
+ startupPermissions=result;renderStartupPermissionRows(result?.checks||[]);
+ if(!result?.ok&&startupAutoEnabled)stopStartupAuto('Automatic opening paused: review the permission checks.');
+}
+function stopStartupAuto(message='Automatic opening paused.'){
+ if(startupAutoTimer)clearTimeout(startupAutoTimer);startupAutoTimer=null;startupAutoEnabled=false;startupAutoStage='';startupAutoNotice=message;
+ $('startupAutoPause').classList.add('hidden');$('gateAutoPause').classList.add('hidden');
+ if(startupSetupRequired)$('startupProceedInfo').textContent=message;else $('gateAutoMessage').textContent=message;
+}
+function beginStartupAuto(stage){
+ if(!startupAutoEnabled||!startupAutoProject)return;
+ if(startupAutoTimer)clearTimeout(startupAutoTimer);
+ startupAutoStage=stage;startupAutoDeadline=Date.now()+STARTUP_SCREEN_MS;
+ $('startupAutoPause').classList.toggle('hidden',stage==='project');$('gateAutoPause').classList.toggle('hidden',stage!=='project');
+ const tick=()=>{
+  if(!startupAutoEnabled||startupAutoStage!==stage)return;
+  const dialogOpen=!$('extensionUpgradeModal').classList.contains('hidden')||!$('libraryUpdateModal').classList.contains('hidden')||startupOpenStackId||startupCopilotModalOpen;
+  if(dialogOpen||latestSoftwareUpdateState?.busy){startupAutoDeadline=Date.now()+STARTUP_SCREEN_MS;startupAutoTimer=setTimeout(tick,250);return;}
+  const seconds=Math.max(0,Math.ceil((startupAutoDeadline-Date.now())/1000));
+  const target=stage==='project'?$('gateAutoMessage'):$('startupProceedInfo');
+  target.textContent=stage==='project'?'Opening '+startupAutoProject.name+' in '+seconds+'s…':'Continuing automatically in '+seconds+'s…';
+  if(seconds>0){startupAutoTimer=setTimeout(tick,250);return;}
+  if(stage==='stack'){
+   if(!startupScanComplete||!startupPermissions){target.textContent='Waiting for prerequisite and permission checks…';startupAutoTimer=setTimeout(tick,250);return;}
+   const ids=[startupAutoProject.techStackId,startupAutoProject.techStackCompanionId].filter(Boolean);
+   if(!startupPermissions.ok||!startupStackData?.catalog?.available||ids.some(id=>!startupStackData.stacks.some(stack=>stack.id===id&&stack.ready))){stopStartupAuto('Automatic opening paused: review the selected stack and permissions.');return;}
+   startupPage=1;renderStartupPage();beginStartupAuto('connections');return;
+  }
+  if(stage==='connections'){
+   if(!startupConnectionVerified){stopStartupAuto('Automatic opening paused: verify the saved connections.');return;}
+   startupAutoStage='proceeding';$('startupProceed').disabled=true;
+   send('startupProceed',{settings:startupPayload(),autoResume:true,projectId:startupAutoProject.id});return;
+  }
+  if(stage==='project'){
+   const projectId=startupAutoProject.id;startupAutoEnabled=false;startupAutoTimer=null;startupAutoStage='';$('gateAutoPause').classList.add('hidden');
+   launchFromGate({projectId,autoResume:true});
+  }
+ };
+ startupAutoTimer=setTimeout(tick,0);
+}
 function renderStartupPage(){
  if(!startupSetupRequired)return;
  if(startupPage!==0&&startupOpenStackId)closeStartupStackModal();
@@ -7393,6 +7478,7 @@ function renderStartupPage(){
  $('startupProceed').textContent=startupPage===0?'Next →':'Next: Search Project →';
  $('startupProceedInfo').textContent=startupPage===0?(startupScanComplete?'Review available modules, then select Next.':'Checking computer prerequisites…'):
   startupConnectionVerified?'Connections verified. Select Next to search projects.':'Test & Save Connections to enable Next.';
+ if(startupAutoNotice&&!startupAutoEnabled)$('startupProceedInfo').textContent=startupAutoNotice;
 }
 function showStartupStep(required){
  if(!required&&startupOpenStackId)closeStartupStackModal();
@@ -7412,7 +7498,9 @@ function renderStartupConfig(config){
   // Restore verified state before rendering the wizard so "Next: Search Project"
   // is enabled immediately after restarting the extension or VS Code.
   startupConnectionVerified=config.verified===true;
-  if(startupConnectionVerified)startupPage=1;
+  startupAutoProject=startupConnectionVerified&&config.selectedProject?.id?config.selectedProject:null;
+  startupAutoEnabled=required&&!!startupAutoProject;
+  if(startupConnectionVerified&&!startupAutoEnabled)startupPage=1;
   startupFormInitialized=true;
  }else if(config.verified===true){
   startupConnectionVerified=true;
@@ -7423,6 +7511,7 @@ function renderStartupConfig(config){
  }
  showStartupStep(required||startupReturnToConnections);
  if(required&&!startupPrereqRequested){startupPrereqRequested=true;startupScanPercent(0,'Starting prerequisite scan…');renderStartupScanPlaceholders();send('startupReadiness');}
+ if(required&&startupAutoEnabled&&!startupAutoStage)beginStartupAuto('stack');
 }
 function renderStartupStackReadiness(result){
  const grid=$('startupStackGrid');grid.replaceChildren();
@@ -7437,12 +7526,14 @@ function renderStartupStackReadiness(result){
  const ready=result.stacks.filter(s=>s.ready).length;
  $('startupToolMessage').textContent=`${ready} of ${result.stacks.length} technology stacks have their required host tools available. `+(result.catalog?.available?`Project modules loaded from ${result.catalog.source}${result.catalog.version?' v'+result.catalog.version:''}.`:'Project module lists are unavailable until the SDLC Library is connected.');
  for(const stack of result.stacks){
-  const card=document.createElement('button');card.type='button';card.className='atgv-startup-stack atgv-startup-stack-button '+(stack.ready?'is-ready':'is-missing');card.dataset.stackId=stack.id;
+  const card=document.createElement('button');card.type='button';card.className='atgv-startup-stack atgv-startup-stack-button atgv-stack-ring-card '+(stack.ready?'is-ready':'is-missing');card.dataset.stackId=stack.id;
   card.setAttribute('aria-haspopup','dialog');card.setAttribute('aria-controls','startupStackModal');
   const title=document.createElement('span');title.textContent=stack.name;
   const badge=document.createElement('span');badge.className='atgv-stack-ready';badge.textContent=stack.hostRequirementsUnknown?'Host check unavailable':stack.ready?'Host tools available':'Needs tools';
   card.setAttribute('aria-label',stack.name+': '+badge.textContent+'. View host tools and project modules');
-  card.append(title,badge);card.addEventListener('click',()=>openStartupStackModal(stack.id,card));grid.append(card);
+  card.append(title);startupRing(card);card.append(badge);
+  paintStartupStack(card,startupStackProgress.get(stack.id)||{name:stack.name,status:stack.ready?'complete':'error',percent:stack.ready?100:0,message:badge.textContent});
+  card.addEventListener('click',()=>{if(startupAutoEnabled)stopStartupAuto('Automatic opening paused while reviewing the stack.');openStartupStackModal(stack.id,card);});grid.append(card);
  }
  if(startupOpenStackId){
   const stack=result.stacks.find(item=>item.id===startupOpenStackId);
@@ -7568,19 +7659,25 @@ $('startupCopilotSetup').addEventListener('click',()=>{
  setStartupCopilotStatus('working','Preparing Copilot SDK setup…');send('startupSetupCopilot');
 });
 for(const id of ['startupUnifiedLog','gateUnifiedLog'])$(id).addEventListener('click',()=>send('startupExportUnifiedLog'));
+$('startupAutoPause').addEventListener('click',()=>stopStartupAuto());
+$('gateAutoPause').addEventListener('click',()=>stopStartupAuto());
 $('startupRefresh').addEventListener('click',()=>{
  if(startupInstallingModule)return;
+ if(startupAutoEnabled)stopStartupAuto('Automatic opening paused while checks are refreshed.');
+ startupPermissions=null;startupPermissionProgress.clear();renderStartupScanPlaceholders();
  startupScanComplete=false;
  startupScanPercent(0,'Refreshing local computer prerequisites…');
  $('startupToolMessage').textContent='Refreshing local computer prerequisites…';
  $('startupRefresh').disabled=true;renderStartupPage();send('startupReadiness');
 });
 $('startupPrevious').addEventListener('click',()=>{
+ if(startupAutoEnabled)stopStartupAuto();
  if(startupPage===1&&!startupVerifying&&!startupInstallingModule){startupPage=0;renderStartupPage();}
 });
 $('startupEmail').addEventListener('input',()=>updateHeaderUserName(read('startupEmail')));
 $('startupConnectionForm').addEventListener('submit',event=>{
  event.preventDefault();if(startupVerifying||startupConnectionVerified)return;
+ if(startupAutoEnabled)stopStartupAuto();
  startupConnectionVerified=false;startupVerifying=true;
  renderStartupPage();
  $('startupConnectionMessage').textContent='Testing Jira, Confluence and GitHub account…';
@@ -7588,6 +7685,7 @@ $('startupConnectionForm').addEventListener('submit',event=>{
 });
 $('startupProceed').addEventListener('click',()=>{
  if(startupVerifying||startupInstallingModule)return;
+ if(startupAutoEnabled)stopStartupAuto();
  if(startupPage===0){if(!startupScanComplete)return;startupPage=1;renderStartupPage();$('startupJiraUrl').focus();return;}
  if(!startupConnectionVerified)return;
  $('startupProceed').disabled=true;$('startupProceedInfo').textContent='Opening project search…';
@@ -7599,9 +7697,12 @@ window.addEventListener('message',event=>{
  if(message.type==='startupReadinessProgress'){
   startupScanPercent(message.percent,message.message);
  }
+ if(message.type==='startupStackProgress')updateStartupStackProgress(message);
+ if(message.type==='startupPermissionProgress'&&message.check?.id){startupPermissionProgress.set(message.check.id,message.check);renderStartupPermissionRows([...startupPermissionProgress.values()]);}
+ if(message.type==='startupPermissionsResult')renderStartupPermissions(message.value);
  if(message.type==='startupReadinessResult'){
   $('startupRefresh').disabled=false;
-  if(message.error){startupScanPercent(0,'Prerequisite scan failed.');startupScanComplete=false;$('startupToolMessage').textContent=message.error;renderStartupCopilotReadiness({unknown:true});setStartupInstallFeedback('Prerequisite scan failed. Download Unified Error Log for details.','error');renderStartupPage();}
+  if(message.error){startupScanPercent(0,'Prerequisite scan failed.');startupScanComplete=false;$('startupToolMessage').textContent=message.error;renderStartupCopilotReadiness({unknown:true});setStartupInstallFeedback('Prerequisite scan failed. Download Unified Error Log for details.','error');if(startupAutoEnabled)stopStartupAuto('Automatic opening paused: prerequisite scan failed.');renderStartupPage();}
   else renderStartupStackReadiness(message.value);
  }
  if(message.type==='startupCopilotSetup')setStartupCopilotStatus(message.status,message.message||'Copilot SDK setup finished.');
@@ -7613,8 +7714,12 @@ window.addEventListener('message',event=>{
   if(['verified','unverified','complete','error','manual'].includes(status)){
    setStartupInstallFeedback(message.detail||'Installer finished. Download Unified Error Log for verification details.',status==='verified'?'success':status==='manual'?'muted':'error');
    startupInstallingModule='';
-   $('startupRefresh').disabled=true;startupScanComplete=false;renderStartupPage();
-   send('startupReadiness');
+   if(status==='verified'||status==='complete'){
+    $('startupRefresh').disabled=true;startupScanComplete=false;startupPermissions=null;renderStartupScanPlaceholders();renderStartupPage();send('startupReadiness');
+   }else{
+    $('startupRefresh').disabled=false;renderStartupPage();
+    $('startupToolMessage').textContent=message.detail||'Installation stopped. Review the error and select Refresh to retry checks.';
+   }
   }
  }
  if(message.type==='startupDiagnosticSaved'){
@@ -7628,7 +7733,10 @@ window.addEventListener('message',event=>{
   if(startupConnectionVerified){$('startupAtlassianToken').value='';$('startupGithubToken').value='';send('startupReadiness');}
   renderStartupPage();
  }
- if(message.type==='startupProceedResult'&&message.success){startupReturnToConnections=false;showStartupStep(false);$('gateQuery').focus();}
+ if(message.type==='startupProceedResult'){
+  if(message.success){startupReturnToConnections=false;showStartupStep(false);$('gateQuery').focus();if(startupAutoEnabled&&startupAutoStage==='proceeding')beginStartupAuto('project');}
+  else{if(startupAutoEnabled)stopStartupAuto(message.message||'Automatic opening paused.');startupVerifying=false;renderStartupPage();$('startupProceedInfo').textContent=message.message||'Unable to continue.';}
+ }
 });
 
 let activePrerequisiteRequest=null,prerequisitePriorFocus=null;
@@ -7749,9 +7857,9 @@ window.addEventListener('message',event=>{
  const installed=String(message.installedVersion||'');
  $('libraryUpdateCurrent').textContent=installed?'v'+installed:'Not installed';
  const latest=String(message.remoteVersion||'');
- $('libraryUpdateNext').textContent=latest?'v'+latest:'Version unavailable';
- $('libraryUpdateDescription').textContent=latest?'A newer verified SDLC Library version is available on the configured GitHub main branch.':'The remote SDLC Library version could not be verified.';
- $('libraryUpdateSource').textContent='GitHub: '+String(message.repository||'tech-stacks-skills')+'/main';
+ $('libraryUpdateNext').textContent=latest?'v'+latest+(message.remoteTag?' · '+String(message.remoteTag):''):'Version unavailable';
+ $('libraryUpdateDescription').textContent=latest?'A newer verified SDLC Library release is available.':'The remote SDLC Library version could not be verified.';
+ $('libraryUpdateSource').textContent='GitHub: '+String(message.repository||'tech-stacks-skills');
  const modal=$('libraryUpdateModal');modal.classList.remove('hidden');modal.setAttribute('aria-hidden','false');
  $('libraryUpdatePull').focus();
 });
