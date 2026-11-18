@@ -10,7 +10,7 @@ const ui=read('media/start.js');
 const hash=value=>crypto.createHash('sha256').update(String(value)).digest('hex');
 
 function hostFixture(){
- const saved=setup.DEFAULTS,library={repositoryUrl:saved.libraryRepoUrl};
+ const saved=setup.DEFAULTS,library={repositoryUrl:setup.FIXED_LIBRARY_REPOSITORY};
  const env={
   saved:JSON.parse(JSON.stringify(saved)),
   tokens:{atlassian:'ATL',github:'GIT'},
@@ -51,7 +51,7 @@ test('Saved successful Test & Save verification restores across VS Code restart 
  const x=hostFixture(),status=await x.state();
  assert.equal(status.verified,true);
  assert.equal(status.required,true);
- assert.equal(status.saved.projectRepoUrl,setup.DEFAULTS.projectRepoUrl);
+ assert.equal(status.saved.projectRepoUrl,undefined,'project URL does not belong to Start connections');
  assert.equal(x.sandbox.startupSessionVerified,true);
  assert.equal(x.sandbox.startupVerifiedSignature,x.signature);
  assert.ok(await x.stored());
@@ -59,9 +59,11 @@ test('Saved successful Test & Save verification restores across VS Code restart 
 test('Changed endpoint, revoked token, missing catalog PAT or altered proof cannot bypass verification',async()=>{
  const x=hostFixture();
  const ok=await x.stored();assert.ok(ok);
+ x.env.extensionSettings.github.owner='changed';
+ assert.equal(await x.stored(),null,'changed GitHub account owner invalidates saved proof');
+ x.env.extensionSettings.github.owner='aiamalaysia';
  x.env.extensionSettings.github.repo='changed';
- assert.equal(await x.stored(),null,'changed project repo invalidates saved proof');
- x.env.extensionSettings.github.repo='my-fow-technology-app-techassists-enterprise-cockpit';
+ assert.ok(await x.stored(),'project repository changes do not invalidate account verification');
  x.env.tokens.github='GIT-CHANGED';
  assert.equal(await x.stored(),null,'changed PAT invalidates saved proof');
  x.env.tokens.github='GIT';
@@ -92,7 +94,7 @@ function webviewFixture(){
  const z=ui.indexOf('function renderStartupStackReadiness(',a);
  assert.ok(a>0&&z>a);
  const source=[
-  "const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluenceUrl',email:'startupEmail',githubUrl:'startupGithubUrl',projectRepoUrl:'startupProjectRepo',libraryRepoUrl:'startupLibraryRepo'};",
+  "const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluenceUrl',email:'startupEmail',githubUrl:'startupGithubUrl'};",
   "let startupSetupRequired=true,startupPage=0,startupVerifying=false,startupInstallingModule='',startupConnectionVerified=false,startupScanComplete=true,startupFormInitialized=false,startupReturnToConnections=false,startupPrereqRequested=false,startupOpenStackId='',startupCopilotModalOpen=false;",
   ui.slice(a,z),
   "return {renderStartupConfig,renderStartupPage,getPage:()=>startupPage,isVerified:()=>startupConnectionVerified};"
@@ -109,7 +111,7 @@ test('Verified settings restore locked fields, hidden Test & Save and enabled Ne
  assert.equal(find('startupProceed').disabled,false);
  assert.equal(find('startupTestConnections').disabled,true);
  assert.equal(find('startupTestConnections').classList.contains('hidden'),true);
- for(const id of ['startupJiraUrl','startupConfluenceUrl','startupEmail','startupAtlassianToken','startupGithubUrl','startupGithubToken','startupProjectRepo','startupLibraryRepo','startupLibraryZipUpload'])
+ for(const id of ['startupJiraUrl','startupConfluenceUrl','startupEmail','startupAtlassianToken','startupGithubUrl','startupGithubToken','startupLibraryZipUpload'])
   assert.equal(find(id).disabled,true,id);
  assert.match(find('startupConnectionMessage').textContent,/already verified and saved/);
 });
