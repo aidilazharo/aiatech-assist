@@ -9,8 +9,8 @@ test('Quill and Frappe are externalized into approved GitHub browser library man
  assert.ok(fs.statSync(path.join(root,'media/diagram-canvas.js')).size<15000);
 });
 test('trusted library hashes are pinned inside ATGV with no actual third-party JS bundles packaged',()=>{
- assert.equal(lock.schema,1);assert.equal(lock.version,'1.0.0');
- assert.equal(lock.assets.length,21);
+ assert.equal(lock.schema,1);assert.equal(lock.version,'1.0.1');
+ assert.equal(lock.assets.length,24);
  for(const item of lock.assets){assert.match(item.sha256,/^[a-f0-9]{64}$/);assert.ok(item.bytes>0);}
  assert.ok(lock.assets.reduce((sum,x)=>sum+x.bytes,0)<1_400_000);
 });
