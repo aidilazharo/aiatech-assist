@@ -43,3 +43,24 @@ test('download filename is Windows-safe and has a TXT extension',()=>{
  assert.equal(report.filename('TC','GATE Project Initiation and Project Approval BRD Revised v1.1.docx'),'ATGV-Preflight-TC-GATE-Project-Initiation-and-Project-Approval-BRD-Revised-v1.1.txt');
  assert.match(report.filename('T|C','../bad<name>?.pdf'),/^ATGV-Preflight-T-C-bad-name-.txt$|^ATGV-Preflight-T-C-bad-name.txt$/);
 });
+
+test('BA panel exposes TXT download; host captures checked sections and exports via VS Code',()=>{
+ const fs=require('node:fs'),path=require('node:path');
+ const root=path.join(__dirname,'..');
+ const markup=fs.readFileSync(path.join(root,'src/lib/webview/dashboard-html.js'),'utf8');
+ const ui=fs.readFileSync(path.join(root,'media/start.js'),'utf8');
+ const host=fs.readFileSync(path.join(root,'src/lib/runtime/extension-runtime.js'),'utf8');
+ const css=fs.readFileSync(path.join(root,'media/start.css'),'utf8');
+ assert.match(markup,/id="baPreflightDownload"[^>]*disabled/);
+ assert.match(markup,/Download Pre-flight \(\.txt\)/);
+ assert.match(ui,/\$\('baPreflightDownload'\)\.addEventListener\('click'/);
+ assert.match(ui,/send\('downloadDocumentPreflight',\{projectId:activeId\}\)/);
+ assert.match(ui,/reportAvailable:true/);
+ assert.match(ui,/discoveryPreflightDownloadResult/);
+ assert.match(host,/case 'downloadDocumentPreflight':/);
+ assert.match(host,/baPreflightReports\.capture\(/);
+ assert.match(host,/baPreflightReports\.fromSaved\(/);
+ assert.match(host,/baPreflightReports\.format\(/);
+ assert.match(host,/vscode\.workspace\.fs\.writeFile\(destination,Buffer\.from\(content,'utf8'\)\)/);
+ assert.match(css,/#discoveryView #baPreflightDownload/);
+});
