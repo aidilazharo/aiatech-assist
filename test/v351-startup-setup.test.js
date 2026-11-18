@@ -13,23 +13,23 @@ test('AIA connection placeholders are exact and validated, not treated as saved 
   jiraUrl:'https://aiamy-jira-azure.atlassian.net',
   confluenceUrl:'https://aiamy-jira-azure.atlassian.net/wiki',
   email:'user.name@aia.com',
-  githubUrl:'https://github.com/aiamalaysia',
-  projectRepoUrl:'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-cockpit',
-  libraryRepoUrl:'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills'
+  githubUrl:'https://github.com/aiamalaysia'
  });
  const parsed=defaults.validate(defaults.DEFAULTS);assert.equal(parsed.owner,'aiamalaysia');
- assert.equal(parsed.library.repo,'my-fow-technology-app-techassists-enterprise-skills');
+ assert.equal(parsed.library.repo,'tech-stacks-skills');
+ assert.equal(parsed.library.owner,'aidilazharo');
+ assert.equal(parsed.libraryRepoUrl,defaults.FIXED_LIBRARY_REPOSITORY);
 });
 test('connection form disallows incorrect service origins, untrusted URL forms and repository owners',()=>{
  const base=defaults.DEFAULTS;
  for(const config of [
   {...base,jiraUrl:'http://aiamy-jira-azure.atlassian.net'},
   {...base,confluenceUrl:'https://aiamy-jira-azure.atlassian.net/other'},
-  {...base,projectRepoUrl:'https://github.com/evil/another'},
   {...base,githubUrl:'https://github.com/aiamalaysia/extra'},
-  {...base,libraryRepoUrl:'https://github.com/aiamalaysia/repo?token=BAD'},
   {...base,email:'invalid'}
  ])assert.throws(()=>defaults.validate(config));
+ const spoof=defaults.validate({...base,projectRepoUrl:'https://github.com/evil/project',libraryRepoUrl:'https://github.com/evil/repo'});
+ assert.equal(spoof.libraryRepoUrl,defaults.FIXED_LIBRARY_REPOSITORY,'user-entered repository overrides are ignored');
 });
 test('all five technology stacks report real prerequisite status and component details',async()=>{
  const result=await readiness.check({runner:async name=>{
@@ -73,7 +73,8 @@ test('version and AIA email placeholders are consistent',()=>{
  const pkg=require('../package.json');assert.match(pkg.version,/^\d+\.\d+\.\d+$/);assert.equal(pkg.atgvDisplayVersion,pkg.version);
  const html=read('src/lib/webview/dashboard-html.js');
  assert.match(html,/field\('jiraEmail'/);assert.match(html,/user\.name@aia\.com/);
- assert.match(html,/my-fow-technology-app-techassists-enterprise-cockpit/);
+ assert.match(html,/id="projectGithubRepositoryUrl"/);
+ assert.doesNotMatch(html,/id="startupProjectRepo"|id="startupLibraryRepo"/);
 });
 
 test('setup host saves no credentials before all five remote access checks succeed',async()=>{
@@ -119,8 +120,8 @@ test('setup host saves no credentials before all five remote access checks succe
  const accepted=await testContext.testAndSaveStartupConnections({settings:form,atlassianToken:'ATL',githubToken:'PAT'});
  assert.equal(accepted.success,true);
  assert.deepEqual(events.filter(e=>['jira','confluence','github-account','library-main'].includes(e)).slice(-4),['jira','confluence','github-account','library-main']);
- assert.equal(state.get('atgvAssist.extensionSettings').github.repo,'my-fow-technology-app-techassists-enterprise-cockpit');
- assert.equal(state.get('atgvAssist.sdlcCatalog').repositoryUrl,form.libraryRepoUrl);
+ assert.equal(state.get('atgvAssist.extensionSettings').github.repo,undefined,'onboarding does not set a project repo');
+ assert.equal(state.get('atgvAssist.sdlcCatalog').repositoryUrl,defaults.FIXED_LIBRARY_REPOSITORY);
  assert.equal(state.get('atgvAssist.startupSetup.completed'),undefined,'Testing alone must not mark setup complete. Proceed must do that.');
  assert.equal(secrets.get('secret-atlassian').token,'ATL');
  assert.equal(secrets.get('secret-github').token,'PAT');
