@@ -29,6 +29,7 @@ function hostFixture(){
   }},
   extensionSettings:env.extensionSettings,
   startupSessionVerified:false,startupVerifiedSignature:'',startupSessionProceedApproved:false,
+  openingLocked:false,openingFlow:{phase:'search'},activeProject:null,
   catalogConfig:()=>library,getWorkspace:()=>null,
   globalSecretKey:x=>x,globalCredentialEndpoint:kind=>({kind}),
   readToken:async(kind)=>env.tokens[kind],
@@ -95,10 +96,10 @@ function webviewFixture(){
  assert.ok(a>0&&z>a);
  const source=[
   "const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluenceUrl',email:'startupEmail',githubUrl:'startupGithubUrl'};",
-  "let startupSetupRequired=true,startupPage=0,startupVerifying=false,startupInstallingModule='',startupConnectionVerified=false,startupScanComplete=true,startupFormInitialized=false,startupReturnToConnections=false,startupPrereqRequested=false,startupOpenStackId='',startupCopilotModalOpen=false;",
+  "let startupSetupRequired=true,startupPage=0,startupVerifying=false,startupInstallingModule='',startupConnectionVerified=false,startupScanComplete=true,startupFormInitialized=false,startupReturnToConnections=false,startupPrereqRequested=false,startupOpenStackId='',startupCopilotModalOpen=false; let gateBusy=false,gateError='',workspaceOpened=false,opening={phase:'search'};", 
   "let startupAutoNotice='',startupAutoEnabled=false,startupAutoProject=null,startupAutoStage=''; function beginStartupAuto(){}",
   ui.slice(a,z),
-  "return {renderStartupConfig,renderStartupPage,getPage:()=>startupPage,isVerified:()=>startupConnectionVerified};"
+  "return {renderStartupConfig,renderStartupPage,getPage:()=>startupPage,isVerified:()=>startupConnectionVerified,setOpening:p=>opening={phase:p},setGateBusy:v=>gateBusy=v,setGateError:v=>gateError=v};"
  ].join('\n');
  const create=new Function('$','updateHeaderUserName','extensionSettings','startupScanPercent','renderStartupScanPlaceholders','send',source);
  return {find,sent,client:create(find,()=>{}, {jira:{}},()=>{},()=>{},(command,extra)=>sent.push({command,...extra}))};
