@@ -267,6 +267,16 @@ function html(webview,{resumeLibrary=false}={}){
         <button type="button" id="installExtensionRelease" class="secondary" disabled>Install Verified VSIX</button>
         <button type="button" id="viewExtensionRelease" class="secondary" disabled>View GitHub Release</button>
       </div>
+      <div class="release-download-pat-settings" aria-label="Optional GitHub Release Download PAT">
+        <label for="releaseDownloadPat"><strong>Release Download PAT</strong> <span class="muted">(optional · downloads only)</span></label>
+        <div class="release-download-pat-controls">
+          <input id="releaseDownloadPat" type="password" autocomplete="new-password" spellcheck="false" maxlength="512" placeholder="github_pat_… (not stored in project settings)" aria-describedby="releaseDownloadPatHelp releaseDownloadPatStatus">
+          <button type="button" id="saveReleaseDownloadPat" class="secondary">Save &amp; Test PAT</button>
+          <button type="button" id="clearReleaseDownloadPat" class="secondary" disabled>Remove PAT</button>
+        </div>
+        <p id="releaseDownloadPatHelp" class="muted">Use a fine-grained PAT with <strong>Contents: Read-only</strong> for private release repositories. Public release downloads need no PAT. Stored in VS Code SecretStorage; not used for Git pushes, project repositories, PRs or Jira.</p>
+        <p id="releaseDownloadPatStatus" class="muted" role="status" aria-live="polite">Public release downloads work without a PAT.</p>
+      </div>
       <p id="softwareExtensionStatus" class="test-status muted" role="status" aria-live="polite">Extension: not checked.</p>
       <p id="softwareLibraryStatus" class="test-status muted" role="status" aria-live="polite">Library: check the SDLC Catalog section for its installed version.</p>
       <div id="softwareLibraryPullProgress" class="atgv-catalog-pull-progress hidden" role="status" aria-live="polite" aria-atomic="true">

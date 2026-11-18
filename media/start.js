@@ -4487,11 +4487,50 @@ function renderSoftwareUpdates(data,force=false){
  $('installExtensionRelease').disabled=!data.latest;
  $('checkSoftwareUpdates').disabled=!!data.busy;
  $('pullLibraryFiles').disabled=softwareLibraryPulling||!!catalogBusyUI||!!catalogState?.busy;
+ const patStatus=$('releaseDownloadPatStatus');
+ if(patStatus&&!releaseDownloadPatBusy){
+  patStatus.textContent=data.releasePatSaved?'Release-only PAT is securely saved in VS Code.':'No release-only PAT saved. Public releases work without authentication.';
+  patStatus.dataset.state='';
+ }
+ const clearPat=$('clearReleaseDownloadPat');
+ if(clearPat)clearPat.disabled=releaseDownloadPatBusy||!data.releasePatSaved;
+}
+let releaseDownloadPatBusy=false;
+function setReleaseDownloadPatBusy(busy){
+ releaseDownloadPatBusy=!!busy;
+ $('saveReleaseDownloadPat').disabled=releaseDownloadPatBusy;
+ $('clearReleaseDownloadPat').disabled=releaseDownloadPatBusy||!latestSoftwareUpdateState?.releasePatSaved;
 }
 window.addEventListener('message',event=>{
  const m=event.data||{};
  if(m.type==='state'&&m.updates)renderSoftwareUpdates(m.updates);
  if(m.type==='softwareUpdateState')renderSoftwareUpdates(m.value);
+ if(m.type==='releaseDownloadPatResult'){
+  setReleaseDownloadPatBusy(false);
+  $('releaseDownloadPat').value='';
+  const statusNode=$('releaseDownloadPatStatus');
+  statusNode.textContent=String(m.message||'Release PAT operation finished.');
+  statusNode.dataset.state=m.success?'success':m.cancelled?'':'error';
+ }
+});
+$('saveReleaseDownloadPat').addEventListener('click',()=>{
+ if(releaseDownloadPatBusy)return;
+ const input=$('releaseDownloadPat'),token=input.value.trim();
+ input.value='';
+ if(!token){
+  $('releaseDownloadPatStatus').textContent='Enter a GitHub PAT to save, or leave empty for public release downloads.';
+  $('releaseDownloadPatStatus').dataset.state='error';
+  return;
+ }
+ setReleaseDownloadPatBusy(true);
+ $('releaseDownloadPatStatus').textContent='Testing read access to the two fixed ATGV release repositories…';
+ $('releaseDownloadPatStatus').dataset.state='';
+ send('saveReleaseDownloadPat',{token});
+});
+$('clearReleaseDownloadPat').addEventListener('click',()=>{
+ if(releaseDownloadPatBusy)return;
+ setReleaseDownloadPatBusy(true);
+ send('clearReleaseDownloadPat');
 });
 $('checkSoftwareUpdates').addEventListener('click',()=>{
  $('softwareExtensionStatus').textContent='Checking fixed extension release source…';
