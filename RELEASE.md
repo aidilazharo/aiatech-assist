@@ -1,3 +1,13 @@
+# ATGV AIATECH Assist v0.4.13
+
+- Move SortableJS 1.15.7, MIT license, and provenance notice from the VSIX into SDLC Library v1.1.16.
+- Load SortableJS only from the approved, SHA-256 pinned Library cache. Project Manager Kanban continues to support native drag-and-drop when the optional library is missing.
+- Check both extension and SDLC Library GitHub releases automatically every hour while VS Code is running, retaining startup checks and manual approval before installing.
+- Hardcode trusted update sources: https://github.com/aidilazharo/aiatech-assist/releases/latest and https://github.com/aidilazharo/tech-stacks-skills/releases/latest.
+- Fall back to verified same-repository prereleases when /latest is unavailable; download verified VSIX and Library source ZIP with SHA-256 checksums.
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.11
 
 - Add independently configurable **Extension Release Repository URL** and **SDLC Library Repository URL** in Extension Settings → Extension & SDLC Library Updates.
