@@ -91,11 +91,11 @@ test('Host progress reflects actual pull and verification milestones before comp
  const from=host.indexOf("case 'catalogPull':{"),to=host.indexOf("case 'openingSelect':{",from);
  assert.ok(from>=0&&to>from);
  const segment=host.slice(from,to);
- for(const key of ['catalogPullProgress','libraryUpdateProgress','syncGitWorkspace',
-  'remoteVersion','activeRoot','verifyActivatedPull','refreshDashboard',
+ for(const key of ['catalogPullProgress','libraryUpdateProgress','libraryReleaseUpdater.downloadVerified',
+  'offlineLibrary.inspectZip','offlineLibrary.importZip','refreshDashboard',
   "progress('completed',100","progress('failed',completedStage"])
   assert.ok(segment.includes(key),key);
- assert.ok(segment.indexOf('verifyActivatedPull')<segment.indexOf("progress('completed',100"));
+ assert.ok(segment.indexOf('offlineLibrary.importZip')<segment.indexOf("progress('completed',100"));
  assert.ok(segment.indexOf('refreshDashboard()')<segment.indexOf("progress('completed',100"));
  assert.match(host,/case 'libraryUpdateRetry':/);
  assert.match(host,/activeLibraryUpdatePullRequestId===msg.requestId/);
