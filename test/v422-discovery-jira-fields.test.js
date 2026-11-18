@@ -22,6 +22,7 @@ test('large discovery merges keep the screenshot 5,569-character business rules 
 test('Jira metadata maps known BR fields and uses safe placeholder for unsupported text',()=>{
  const meta=[
   {id:'summary',name:'Summary',required:true,schema:{type:'string'}},
+  {id:'customfield_10011',name:'Epic Name',required:true,schema:{type:'string'}},
   {id:'customfield_10101',name:'Acceptance Criteria',required:true,schema:{type:'string'}},
   {id:'customfield_10102',name:'Definition of Done',schema:{type:'string',custom:'com.atlassian.jira.plugin.system.customfieldtypes:textarea'}},
   {id:'customfield_10103',name:'Custom Free Text',schema:{type:'string'}},
@@ -30,6 +31,7 @@ test('Jira metadata maps known BR fields and uses safe placeholder for unsupport
  ];
  const item={title:'Create visitor',description:'Visitor workflow',jiraDetails:{definitionOfDone:'Tests pass'}};
  const plan=planFields(item,meta,{approvedBR:{acceptanceCriteria:'Visitor confirmed'}});
+ assert.equal(plan.extraFields.customfield_10011,'Create visitor');
  assert.equal(plan.extraFields.customfield_10101,'Visitor confirmed');
  assert.match(JSON.stringify(plan.extraFields.customfield_10102),/Tests pass/);
  assert.equal(plan.extraFields.customfield_10103,MISSING);
