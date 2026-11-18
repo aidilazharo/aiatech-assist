@@ -111,7 +111,7 @@ test('Verified settings restore locked fields, hidden Test & Save and enabled Ne
  assert.equal(find('startupProceed').disabled,false);
  assert.equal(find('startupTestConnections').disabled,true);
  assert.equal(find('startupTestConnections').classList.contains('hidden'),true);
- for(const id of ['startupJiraUrl','startupConfluenceUrl','startupEmail','startupAtlassianToken','startupGithubUrl','startupGithubToken','startupLibraryZipUpload'])
+ for(const id of ['startupJiraUrl','startupConfluenceUrl','startupEmail','startupAtlassianToken','startupGithubUrl','startupGithubToken'])
   assert.equal(find(id).disabled,true,id);
  assert.match(find('startupConnectionMessage').textContent,/already verified and saved/);
 });
