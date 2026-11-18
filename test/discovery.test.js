@@ -55,7 +55,7 @@ test('stale writer cannot overwrite a more recent discovery revision',()=>fixtur
 test('untrusted answer types or oversized answer content rejected',()=>fixture(async reg=>{
   const a=await discovery.load(reg,'claims');
   await assert.rejects(discovery.save(reg,'claims',{problem:{unexpected:true}},a.revision),/Invalid answer/);
-  await assert.rejects(discovery.save(reg,'claims',{scope:'X'.repeat(9000)},a.revision),/Invalid answer/);
+  await assert.rejects(discovery.save(reg,'claims',{scope:'X'.repeat(100001)},a.revision),/Invalid answer/);
 }));
 test('symlinked discovery file and folder are rejected',()=>fixture(async(reg,root)=>{
   const dir=path.join(root,'projects','claims','documents','requirements');

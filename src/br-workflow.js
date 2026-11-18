@@ -11,6 +11,7 @@ const changeControl=require('./jira-change-control');
 const {evidenceFor}=require('./evidence-link');
 const {detectCrossSourceConflicts}=require('./conflict-engine');
 const jiraPreviewDetails=require('./jira-preview-details');
+const {MAX_ANSWER_LENGTH}=require('./ba-discovery');
 const MAX_BRS=25,MAX_FEATURES=16,MAX_STORIES=16,MAX_TASKS=16;
 const plain=(v,max)=>{if(typeof v!=='string')throw Error('Expected plain text.');const s=v.trim();if(!s||s.length>max)throw Error('Required text is empty or too long.');return s;};
 const slugTitle=text=>String(text||'').toLowerCase().replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim();
@@ -601,7 +602,7 @@ async function commitSourceMapping(registry,id,revision,{digests,proposals=[],pr
   const answers=proposals.map((proposal,i)=>{
    if(!proposal||proposal.filename!==documents[i].name||!proposal.answers||typeof proposal.answers!=='object'||Array.isArray(proposal.answers))throw Error('Invalid AI mapping for '+documents[i].name);
    const entries=Object.entries(proposal.answers);
-   if(!entries.length||entries.some(([k,v])=>!changeEngine.QUESTION_KEYS.includes(k)||typeof v!=='string'||v.length>5000))throw Error('Invalid Discovery answers for '+documents[i].name);
+   if(!entries.length||entries.some(([k,v])=>!changeEngine.QUESTION_KEYS.includes(k)||typeof v!=='string'||v.length>MAX_ANSWER_LENGTH))throw Error('Invalid Discovery answers for '+documents[i].name);
    return {filename:documents[i].name,answers:Object.fromEntries(entries)};
   });
   next.processedSources=[...digests];
@@ -797,7 +798,7 @@ async function discoverySaved(registry,id,revision,discoveryRevision,{preserveRe
    if(!(next.changeQueue||[]).some(q=>q.status==='pending'&&q.origin==='discovery'&&q.sourceId===diff.key&&q.value===diff.after&&q.targetIds.length===1&&q.targetIds[0]===scope.targets[0]))next.changeQueue=(next.changeQueue||[]).concat(item).slice(-250);
   }
   next.discoveryRevision=discoveryRevision;
-  if(answers){next.discoveryAnswers=Object.fromEntries(changeEngine.QUESTION_KEYS.map(key=>[key,String(answers[key]||'').slice(0,8000)]));}
+  if(answers){next.discoveryAnswers=Object.fromEntries(changeEngine.QUESTION_KEYS.map(key=>[key,String(answers[key]||'')]));}
   if(preserveReview&&unchanged&&next.reviewText)return;
   // A project-wide discovery edit invalidates the review of those answers,
   // not every previously approved Business Requirement or its Jira baseline.

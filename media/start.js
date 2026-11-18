@@ -176,6 +176,7 @@ function baHasRecoverableBR(state){
 
 let jiraPublishState={phase:'idle',confirmed:0,total:0,message:'No Jira publication is running.',currentKey:'',error:''};
 let jiraPublicationPlan=[],jiraPublicationConfirmed=new Map();
+let jiraPreviewFieldsByPath={};
 let jiraPlanForCR=[],jiraProtectionForCR=[],jiraPreviewIssueTypes={},jiraPreviewProject='',discoveryAutoSaveTimer=null,discoveryAutosaving=false,discoveryAutosaveSnapshot=null;
 let brRoleRepairPreview=null,brRoleRepairBusy=false;
 let mappingRunPhase='',mappingRetryAvailable=false,mappingFailureMessage='',mappingFailurePhase='',baPreflightInfo=null,reviewStopReason='',restoredMappingEpoch=null,sourceSelectedDigests=new Set(),jiraBrowseBaseUrl='',discoveryData=null,discoveryDirty=false,discoveryImportProposal=null,discoveryImportQueue=[],discoveryImportBusy=false,sourceRemoving=false,discoveryReviewProposal=null,preserveReviewOnSave=false,applyingAiReview=false,flowData=null,brState=null,brEditing=null,brPlanRevision=null,brJiraPreviewApproved=false,brQuill=null,brReadOnly=false,baOwnerState=null,baBusyTask='',brEditorDirty=false,brEditorSaving=false,brApprovePending=false,brJiraPlanChanges=0,brJiraPlanConflicts=0,pendingUploadAfterClaim=false,reviewApplyRetry=null,reviewApplyPhase='',reviewApplyRetryAvailable=false,reviewStageState=null;
@@ -4810,14 +4811,28 @@ function renderJiraApprovalTable(){
   {key:'details',label:'Details',sortable:false,render:row=>jiraDetailsButton(row.entry,true)}
  ],{label:'Jira preview items awaiting approval',pageSize:5});
 }
+function closeJiraIssuePreview(){
+ const dialog=$('brJiraIssueModal');if(!dialog)return;
+ dialog.classList.add('hidden');dialog.setAttribute('aria-hidden','true');
+ $('brJiraIssueModalContent')?.replaceChildren();
+}
+$('brJiraIssueModalClose')?.addEventListener('click',closeJiraIssuePreview);
+$('brJiraIssueModal')?.addEventListener('click',event=>{if(event.target===$('brJiraIssueModal'))closeJiraIssuePreview();});
+document.addEventListener?.('keydown',event=>{if(event.key==='Escape'&&!$('brJiraIssueModal')?.classList.contains('hidden'))closeJiraIssuePreview();});
 function jiraDetailsButton(entry,readOnly=false){
  const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='View details';
  button.setAttribute('aria-label','View Jira details for '+String(entry.title||entry.path));
  button.addEventListener('click',()=>renderJiraIssueDetails(entry,readOnly));return button;
 }
 function renderJiraIssueDetails(entry,readOnly=false){
- const root=$(readOnly?'brJiraApprovalDetails':'brJiraDetailsPanel');if(!root)return;
+ const dialog=$('brJiraIssueModal');
+ const root=dialog?$('brJiraIssueModalContent'):$(readOnly?'brJiraApprovalDetails':'brJiraDetailsPanel');if(!root)return;
  root.replaceChildren();root.classList.remove('hidden');
+ if(dialog){
+  dialog.classList.remove('hidden');dialog.setAttribute('aria-hidden','false');
+  const caption=$('brJiraIssueModalTitle');if(caption)caption.textContent='Jira Issue Preview · '+String(entry.key||entry.title||entry.path);
+  $('brJiraIssueModalClose')?.focus?.();
+ }
  const heading=document.createElement('h3');heading.textContent='Jira issue details';root.append(heading);
  const addValue=(label,value)=>{const group=document.createElement('div');group.className='jira-preview-detail';const title=document.createElement('strong');title.textContent=label;const text=document.createElement('div');text.className='jira-preview-detail-value';text.textContent=String(value||'Not specified');group.append(title,text);root.append(group);};
  addValue('Summary',entry.title);addValue('Action',String(entry.action||'').toUpperCase());addValue('Jira project',jiraPreviewProject||'Not verified');
@@ -4842,8 +4857,25 @@ function renderJiraIssueDetails(entry,readOnly=false){
    send('brJiraSaveDetails',{revision:brPlanRevision,path:entry.path,hash:entry.hash,acceptanceCriteria:inputs.acceptanceCriteria.value,definitionOfDone:inputs.definitionOfDone.value});
   });root.append(save);}
  }else addValue('Retirement','The existing issue will be marked obsolete; no description is replaced.');
- const close=document.createElement('button');close.type='button';close.className='secondary jira-preview-details-close';close.textContent='Close';close.addEventListener('click',()=>{root.classList.add('hidden');root.replaceChildren();});root.append(close);
- root.scrollIntoView?.({block:'nearest',behavior:'smooth'});
+ const fieldPlan=typeof jiraPreviewFieldsByPath==='undefined'?null:jiraPreviewFieldsByPath?.[entry.path];
+ if(fieldPlan){
+  const section=document.createElement('section');section.className='jira-preview-field-list';
+  const title=document.createElement('h3');title.textContent='All available Jira fields ('+(fieldPlan.fields||[]).length+')';section.append(title);
+  const explanation=document.createElement('p');explanation.className='muted';explanation.textContent='Field names and types are verified against the selected Jira issue type. Unsupported structured values are not fabricated. Existing Jira values remain unchanged unless supported by approved requirements.';section.append(explanation);
+  for(const field of fieldPlan.fields||[]){
+   const row=document.createElement('div');row.className='jira-preview-field';
+   const caption=document.createElement('strong');caption.textContent=field.name+(field.required?' · Required':'');
+   const value=document.createElement('div');value.className='jira-preview-detail-value';value.textContent=field.display||'Information not available in the approved Business Requirements document.';
+   const status=document.createElement('small');status.textContent='Field ID: '+field.id+' · Type: '+field.type+' · '+field.status+' · Source: '+field.source;
+   row.append(caption,value,status);section.append(row);
+  }
+  for(const message of fieldPlan.blocking||[]){
+   const warning=document.createElement('p');warning.setAttribute('role','alert');warning.textContent='Jira field requires attention: '+message;section.append(warning);
+  }
+  root.append(section);
+ }
+ const close=document.createElement('button');close.type='button';close.className='secondary jira-preview-details-close';close.textContent='Close';close.addEventListener('click',()=>{if(dialog)closeJiraIssuePreview();else{root.classList.add('hidden');root.replaceChildren();}});root.append(close);
+ if(!dialog)root.scrollIntoView?.({block:'nearest',behavior:'smooth'});
 }
 function renderJiraPublishedItems(){
  const root=$('brJiraPublishedTable');if(!root||!brState)return;
@@ -5781,11 +5813,11 @@ function renderDiscovery(){
       const questionLabel=document.createElement('label');questionLabel.htmlFor='ba-'+key;questionLabel.textContent=(idx+1)+'. '+label;
       const state=document.createElement('span');state.className='ba-question-state';state.textContent=answer.trim()?'Answered':'Required';
       labelRow.append(questionLabel,state);
-      const area=document.createElement('textarea');area.id='ba-'+key;area.rows=5;area.maxLength=5000;area.placeholder='Add the evidence, context or decision for this question.';
+      const area=document.createElement('textarea');area.id='ba-'+key;area.rows=5;area.maxLength=100000;area.placeholder='Add the evidence, context or decision for this question.';
       area.value=answer;area.readOnly=!baCanEdit('ba-discovery');
       const counter=document.createElement('small');counter.className='discovery-answer-count';
       const helper=document.createElement('small');helper.className='muted';helper.textContent=key==='questions'?'Enter NONE if there are no unresolved questions.':'Use evidence from the uploaded document or confirmed business context.';
-      const updateCounter=()=>{counter.textContent=area.value.length.toLocaleString()+' / 5,000';state.textContent=area.value.trim()?'Answered':'Required';wrap.classList.toggle('complete',!!area.value.trim());};
+      const updateCounter=()=>{counter.textContent=area.value.length.toLocaleString()+' / 100,000';state.textContent=area.value.trim()?'Answered':'Required';wrap.classList.toggle('complete',!!area.value.trim());};
       updateCounter();area.addEventListener('input',()=>{if(!applyingAiReview)preserveReviewOnSave=false;discoveryDirty=true;$('discoverySave').disabled=!baCanEdit('ba-discovery');updateCounter();refreshDiscoveryGroupCounts();renderDiscoverySummary();scheduleDiscoveryAutosave();});
       wrap.append(labelRow,area,helper,counter);section.append(wrap);
     }
@@ -6620,7 +6652,7 @@ window.addEventListener('message',event=>{
       $('baUncompletedPanel').classList.add('hidden');
     }
     brPlanRevision=null;brJiraPreviewApproved=false;brJiraPlanChanges=0;brJiraPlanConflicts=0;jiraPlanForCR=[];jiraProtectionForCR=[];
-    for(const id of ['brJiraDetailsPanel','brJiraApprovalDetails']){$(id).classList.add('hidden');$(id).replaceChildren();}
+    closeJiraIssuePreview();for(const id of ['brJiraDetailsPanel','brJiraApprovalDetails']){$(id).classList.add('hidden');$(id).replaceChildren();}
     if(task==='jiraSync'||jiraPublishState.phase==='completed')renderJiraPublishedItems();
     $('brJiraChanges').classList.add('hidden');$('brJiraConflicts').classList.add('hidden');
     if(brState?.reviewText){try{discoveryReviewProposal=JSON.parse(brState.reviewText);}catch{discoveryReviewProposal=null;}}else discoveryReviewProposal=null;
@@ -6644,7 +6676,7 @@ window.addEventListener('message',event=>{
     if(task==='skipReview'&&view==='discovery')requestAnimationFrame(()=>$('brGenerate').scrollIntoView({block:'nearest',behavior:'smooth'}));
   }
   if(m.type==='brJiraPlan'){baFailedProcess='';baFailedMessage='';
-    stageProgress('jiraPreview','JIRA preview generated.',100);baBusy('',null);brPlanRevision=m.revision;jiraPlanForCR=m.changes||[];jiraPreviewIssueTypes=m.issueTypes||{};jiraPreviewProject=m.jiraProject||'';jiraProtectionForCR=m.protection||[];brJiraPreviewApproved=false;brJiraPlanChanges=(m.changes||[]).length;brJiraPlanConflicts=(m.conflicts||[]).length;
+    stageProgress('jiraPreview','JIRA preview generated.',100);baBusy('',null);brPlanRevision=m.revision;jiraPlanForCR=m.changes||[];jiraPreviewIssueTypes=m.issueTypes||{};jiraPreviewProject=m.jiraProject||'';jiraPreviewFieldsByPath=m.fieldPlans||{};jiraProtectionForCR=m.protection||[];brJiraPreviewApproved=false;brJiraPlanChanges=(m.changes||[]).length;brJiraPlanConflicts=(m.conflicts||[]).length;
     jiraPublicationPlan=[];jiraPublicationConfirmed.clear();renderJiraApprovalTable();
     for(const id of ['brJiraDetailsPanel','brJiraApprovalDetails']){$(id).classList.add('hidden');$(id).replaceChildren();}
     const box=$('brJiraChanges');box.replaceChildren();box.classList.remove('hidden');

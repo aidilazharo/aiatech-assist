@@ -58,15 +58,15 @@ test('mapping prompt is evidence only and parser validates exactly 12 controlled
  assert.throws(()=>importer.parseMappingResponse(JSON.stringify({answers:{...answers,problem:{some:'value'}}})),/invalid/);
  assert.throws(()=>importer.parseMappingResponse(JSON.stringify({answers:{problem:'a'}})),/invalid/);
 });
-test('each answer supports exactly 5k chars, older saved 8k answer remains readable',async()=>{
- assert.equal(discovery.MAX_ANSWER_LENGTH,5000);
+test('full multi-section discovery answers persist without 5k truncation',async()=>{
+ assert.equal(discovery.MAX_ANSWER_LENGTH,100000);
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-import-limits-'));
  try{
   const registry=new ProjectRegistry(root);await registry.create({id:'demo',name:'Demo'});
   const initial=await discovery.load(registry,'demo');
-  await discovery.save(registry,'demo',{problem:'p'.repeat(5000)},initial.revision);
-  const again=await discovery.load(registry,'demo');assert.equal(again.answers.problem.length,5000);
-  await assert.rejects(discovery.save(registry,'demo',{problem:'x'.repeat(5001)},again.revision),/5,000/);
+  await discovery.save(registry,'demo',{problem:'p'.repeat(5569)},initial.revision);
+  const again=await discovery.load(registry,'demo');assert.equal(again.answers.problem.length,5569);
+  await assert.rejects(discovery.save(registry,'demo',{problem:'x'.repeat(100001)},again.revision),/100,000/);
   const folder=path.join(root,'projects','demo','documents','requirements');await fs.mkdir(folder,{recursive:true});
   await fs.writeFile(path.join(folder,'discovery-12.json'),JSON.stringify({answers:{problem:'L'.repeat(7500)}}));
   const legacy=await discovery.load(registry,'demo');assert.equal(legacy.answers.problem.length,7500);
@@ -76,7 +76,7 @@ test('UI exposes controlled import and review, prevents automatic overwrite and 
  const html=fsSync.readFileSync(path.join(__dirname,'../test/generated/extension-source.txt'),'utf8');
  const js=fsSync.readFileSync(path.join(__dirname,'../media/start.js'),'utf8');
  for(const id of ['discoveryImport','discoveryImportPreview','discoveryImportApply','discoveryImportStatus'])assert.match(html,new RegExp('id="'+id+'"'));
- assert.match(js,/area\.maxLength=5000/);assert.match(js,/check\.checked=!existing/);
+ assert.match(js,/area\.maxLength=100000/);assert.match(js,/check\.checked=!existing/);
  assert.match(js,/send\('importDiscovery',\{roleId:selectedRole\}\)/);assert.match(js,/save 12 questions/);
  assert.match(html,/askAiSendConsent\(/);assert.match(html,/aiSendConsentResponse/);
  const pkg=require('../package.json');assert.equal(pkg.atgvDisplayVersion,pkg.version.split('.').map((n,i)=>i===2?String(Number(n)).padStart(2,'0'):n).join('.'));

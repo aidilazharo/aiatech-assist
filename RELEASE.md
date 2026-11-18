@@ -1,3 +1,16 @@
+# ATGV AIATECH Assist v0.4.22
+
+- Fix BA Discovery Mapping when the combined evidence across source sections exceeds 5,000 characters. Preserve complete merged answers up to 100,000 characters each, while AI section responses stay capped at 5,000.
+- Preserve source document integrity, approval gates, and atomic mapping commits.
+- Discover creatable/editable Jira issue fields per project and issue type, including project-specific custom Acceptance Criteria and Definition of Done fields.
+- Prefill verified string fields from approved BR data; for missing text evidence use "Information not available in the approved Business Requirements document." Never invent typed values for user, numeric, option, or date fields.
+- Block Jira Preview approval where required nontext fields lack valid values.
+- Show each Jira issue in an individual scrollable modal with the field names, types, evidence source, and preserved values.
+- Bind approved custom fields to create/update payloads, rechecking metadata and existing custom fields before publication.
+- Include tests for the original 5,569-character failure, editable-field metadata, custom Jira payloads, safe fallbacks and modal preview.
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.21
 
 - Add Download Pre-flight (.txt) action to Business Analyst > Uploaded documents > AI document preflight.

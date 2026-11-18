@@ -60,13 +60,14 @@ const selfImprovementView=require('../../self-improvement-view');
 const copilotRepairSdk=require('../../copilot-repair-sdk');
 const jiraControl=require('../../jira-change-control');
 const jiraDuplicates=require('../../jira-duplicate-cleanup');
+const jiraFieldPreflight=require('../../jira-field-preflight');
 const jiraProjectInventory=require('../../jira-project-inventory');
 const jiraItemEditor=require('../../jira-item-editor');
 const sourceStore=require('../../source-store');
 const {evaluate:continuityEvaluate}=require('../../continuity');
 const {WorkflowEngine}=require('../../workflow-engine');
 const {DocumentSync}=require('../../confluence-docsync');
-const {validProjectKey,jiraIssueTypes,jiraCreateIssue,jiraUpdateIssue,jiraRetireIssue,jiraFindIssueByMarker,jiraReadIssue,jiraReadIssueChangelog,jiraMarker,remoteFingerprint,githubBranch,githubPullRequest,jiraAssignCurrentUser,jiraAssignRoleCurrentUser,jiraUnassignCurrentUser,jiraAvailableTransitions,jiraMove}=require('../../remote-actions');
+const {validProjectKey,jiraIssueTypes,jiraCreateIssue,jiraUpdateIssue,jiraRetireIssue,jiraFindIssueByMarker,jiraReadIssue,jiraReadIssueChangelog,jiraIssueFieldMetadata,jiraReadIssueAllFields,jiraMarker,remoteFingerprint,githubBranch,githubPullRequest,jiraAssignCurrentUser,jiraAssignRoleCurrentUser,jiraUnassignCurrentUser,jiraAvailableTransitions,jiraMove}=require('../../remote-actions');
 const companion=require('../../companion-client');
 const {OwnershipRegistry}=require('../../ownership');
 const {JiraConfluenceCoordination}=require('../../atlassian-coordination');
@@ -2690,6 +2691,7 @@ async function roleRepairPreviewFor(brId,register,config,token){
   missing:rows.filter(r=>r.status==='missing').length,adopt:rows.filter(r=>r.status==='adopt').length,
   existing:rows.filter(r=>r.status==='existing').length,conflicts:rows.filter(r=>r.status==='conflict').length};
 }
+let jiraPreviewFieldPlans={};
 async function syncApprovedBRs(expectedRevision){
  requireOnline();if(jiraSyncBusy)throw Error('Jira synchronization is already running.');
  if(approvedJiraPreviewRevision!==expectedRevision||!approvedJiraPreviewBinding)throw Error('Approve the current Jira preview before publishing.');
@@ -2706,7 +2708,7 @@ async function syncApprovedBRs(expectedRevision){
   const items=brWorkflow.plan(state);
   if(items.some(item=>item.staleJiraDetails))throw Error('Review Jira issue details again after the approved Business Requirement changed.');
   const actor=await verifiedBAActor();
-  const binding=JSON.stringify({atgvProjectId:activeProject.id,site:baseAtlassian(config),project:config.get('jira.projectKey'),actor,items});
+  const binding=JSON.stringify({atgvProjectId:activeProject.id,site:baseAtlassian(config),project:config.get('jira.projectKey'),actor,items,fields:jiraPreviewFieldPlans});
   if(sha(binding)!==approvedJiraPreviewBinding)throw Error('Jira target, identity or change plan changed since approval. Preview again.');
   if(!items.length){approvedJiraPreviewRevision=null;await publishProgress('completed','No pending Jira changes.');return;}
   total=items.length;
@@ -2715,6 +2717,7 @@ async function syncApprovedBRs(expectedRevision){
   if(!duplicateGate.safe)throw Error('Jira publication blocked by possible duplicates: '+formatIdentityConflicts(duplicateGate).join('; '));
   const conflicts=await jiraPreflight(state,config,token,items);
   if(conflicts.length)throw Error('Jira synchronization blocked: '+conflicts.join('; '));
+  if(items.some(item=>item.action!=='retire'&&!jiraPreviewFieldPlans[item.path]))throw Error('Jira issue field metadata was not verified. Generate Jira Preview again.');
   const types=await jiraIssueTypes(config,token);
   const hasType=name=>types.some(t=>t.name?.toLowerCase()===name.toLowerCase()&&!t.subtask);
   if(items.some(x=>x.action==='create'&&x.kind==='Epic')&&!hasType('Epic'))throw Error('Jira project requires an Epic issue type.');
@@ -2732,6 +2735,19 @@ async function syncApprovedBRs(expectedRevision){
   for(const item of items){
    await publishProgress('publishing',`Processing ${confirmed+1} of ${total}: ${item.kind} · ${item.title}`,{currentPath:item.path,currentAction:item.action});
    const previous=state.synced[item.path];
+   const fieldPlan=jiraPreviewFieldPlans[item.path];
+   if(item.action!=='retire'){
+    const actualMeta=await jiraIssueFieldMetadata(config,token,item.action==='create'?{issueTypeId:types.find(x=>x.name===plannedIssueType(item))?.id}:{key:item.key});
+    const actualIds=actualMeta.map(field=>field.id+':'+String(field.schema?.type||'unknown')+':'+field.required).sort();
+    const plannedIds=fieldPlan.fields.map(field=>field.id+':'+field.type+':'+field.required).sort();
+    if(JSON.stringify(actualIds)!==JSON.stringify(plannedIds))throw Error('Jira field configuration changed since the approved preview for '+item.path+'. Refresh Jira Preview.');
+    if(item.action==='update'){
+     const latestFull=await jiraReadIssueAllFields(config,token,item.key);
+     const selected=Object.keys(fieldPlan.extraFields||{});
+     const liveHash=sha(JSON.stringify(Object.fromEntries(selected.map(k=>[k,latestFull.fields?.[k]??null]))));
+     if(liveHash!==fieldPlan.existingDigest)throw Error('Jira custom fields changed since the approved preview for '+item.key+'. Refresh Jira Preview.');
+    }
+   }
    // Recheck immediately before each Jira write, not just at preview or batch start.
    // A developer may transition an issue while a long multi-item publish is running.
    const liveProtection=await jiraProtectionAssessment(state,config,token,[item],{approvedPlan:items});
@@ -2752,13 +2768,13 @@ async function syncApprovedBRs(expectedRevision){
      state=await brWorkflow.markAttempt(registry,activeProject.id,state.revision,{path:item.path});
      const parentKey=item.parent?state.synced[item.parent]?.key:undefined;
      if(item.parent&&!parentKey)throw Error('Missing Jira parent for '+item.path);
-     const created=await jiraCreateIssue(config,token,{summary:item.title,description:item.description,issueType:plannedIssueType(item),parentKey,marker,issueTypes:types,extraLabels:item.roleLabel?[item.roleLabel]:[]});
+     const created=await jiraCreateIssue(config,token,{summary:item.title,description:item.description,issueType:plannedIssueType(item),parentKey,marker,issueTypes:types,extraLabels:item.roleLabel?[item.roleLabel]:[],extraFields:fieldPlan.extraFields});
      key=created.key;
     }
    }else if(item.action==='update'){
     const current=await jiraReadIssue(config,token,key);
     if(!previous?.remoteDigest||remoteFingerprint(current)!==previous.remoteDigest)throw Error('Jira content conflict: '+key);
-    await jiraUpdateIssue(config,token,{key,summary:item.title,description:item.description});
+    await jiraUpdateIssue(config,token,{key,summary:item.title,description:item.description,extraFields:fieldPlan.extraFields});
    }else if(item.action==='retire'){
     const current=await jiraReadIssue(config,token,key);
     if(!previous?.remoteDigest||remoteFingerprint(current)!==previous.remoteDigest)throw Error('Jira retirement blocked: missing trusted baseline or external changes on '+key);
@@ -7313,6 +7329,7 @@ async function handleDashboardMessage(msg){
         break;
       }
       case 'brJiraPreview':{
+        jiraPreviewFieldPlans={};
         requireOpened();let register=await brWorkflow.load(registry,activeProject.id);approvedJiraPreviewRevision=null;jiraPreviewValidation=null;
         const currentRequirements=register.brs.filter(item=>!item.archivedFromRestart&&item.status!=='retired'&&item.status!=='retire-proposed');
         const activeRetirements=register.brs.some(item=>!item.archivedFromRestart&&item.status==='retire-proposed'&&item.approvedContent);
@@ -7345,10 +7362,34 @@ async function handleDashboardMessage(msg){
           }
         }
         for(const item of changes.filter(row=>row.staleJiraDetails))conflicts.push('Review saved Jira acceptance criteria and definition of done for '+item.path+' because its approved BR changed.');
-        jiraPreviewValidation=conflicts.length?null:{projectId:activeProject.id,revision:register.revision,planHash:sha(JSON.stringify(changes)),verifiedAt:Date.now(),site:baseAtlassian(effectiveConfig(activeProject)),jiraProject:effectiveConfig(activeProject).get('jira.projectKey')};
         const issueTypes=Object.fromEntries(changes.map(item=>[item.path,jiraPreviewDetails.issueType(item,previewTypes,register.synced?.[item.path])]));
+        if(changes.length){
+         const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
+         const metaCache=new Map();
+         for(const item of changes.filter(entry=>entry.action!=='retire')){
+          try{
+           const type=previewTypes.find(value=>value.name===issueTypes[item.path]);
+           const identifier=item.action==='create'?{issueTypeId:type?.id}:{key:item.key};
+           if(item.action==='create'&&!type?.id)throw Error('No verified creatable Jira issue type for '+item.kind);
+           const cacheKey=item.action==='create'?'create:'+type.id:'edit:'+item.key;
+           let metadata=metaCache.get(cacheKey);
+           if(!metadata){metadata=await jiraIssueFieldMetadata(config,token,identifier);metaCache.set(cacheKey,metadata);}
+           const existing=item.action==='update'?await jiraReadIssueAllFields(config,token,item.key):null;
+           const approvedBR=register.brs.find(br=>br.id===item.path.split('/')[0])?.approvedContent||{};
+           const fieldPlan=jiraFieldPreflight.planFields(item,metadata,{approvedBR,discoveryAnswers:register.discoveryAnswers||{},existing});
+           const selected=Object.keys(fieldPlan.extraFields);
+           fieldPlan.existingDigest=item.action==='update'?sha(JSON.stringify(Object.fromEntries(selected.map(key=>[key,existing?.fields?.[key]??null])))):null;
+           jiraPreviewFieldPlans[item.path]=fieldPlan;
+           conflicts.push(...fieldPlan.blocking.map(message=>item.path+': '+message));
+          }catch(error){
+           const message=item.path+': unable to inspect all Jira fields: '+String(error.message||error);
+           conflicts.push(message);jiraPreviewFieldPlans[item.path]={fields:[],extraFields:{},blocking:[message]};
+          }
+         }
+        }
+        jiraPreviewValidation=conflicts.length?null:{projectId:activeProject.id,revision:register.revision,planHash:sha(JSON.stringify(changes)),fieldPlansHash:sha(JSON.stringify(jiraPreviewFieldPlans)),verifiedAt:Date.now(),site:baseAtlassian(effectiveConfig(activeProject)),jiraProject:effectiveConfig(activeProject).get('jira.projectKey')};
         const jiraProject=changes.length?validProjectKey(effectiveConfig(activeProject).get('jira.projectKey')):'';
-        await dashboard?.webview.postMessage({type:'baProgress',task:'jiraPreview',message:'JIRA changes checked.',percent:100});await dashboard?.webview.postMessage({type:'brJiraPlan',changes,issueTypes,jiraProject,conflicts,protection:conflicts.assessment?.protection||[],revision:register.revision});break;
+        await dashboard?.webview.postMessage({type:'baProgress',task:'jiraPreview',message:'JIRA changes checked.',percent:100});await dashboard?.webview.postMessage({type:'brJiraPlan',changes,issueTypes,jiraProject,fieldPlans:jiraPreviewFieldPlans,conflicts,protection:conflicts.assessment?.protection||[],revision:register.revision});break;
       }
       case 'brJiraApprove':{
         requireOpened();const register=await brWorkflow.load(registry,activeProject.id);
@@ -7358,11 +7399,11 @@ async function handleDashboardMessage(msg){
         if(changes.some(item=>item.staleJiraDetails))throw Error('Review Jira issue details again after the approved Business Requirement changed.');
         if(changes.some(item=>item.requiresApproval))throw Error('Approve Jira retirements separately before approving the Jira preview.');
         requireOnline();const config=effectiveConfig(activeProject);
-        const valid=jiraPreviewValidation&&jiraPreviewValidation.projectId===activeProject.id&&jiraPreviewValidation.revision===register.revision&&jiraPreviewValidation.planHash===sha(JSON.stringify(changes))&&jiraPreviewValidation.site===baseAtlassian(config)&&jiraPreviewValidation.jiraProject===config.get('jira.projectKey')&&Date.now()-jiraPreviewValidation.verifiedAt<300000;
+        const valid=jiraPreviewValidation&&jiraPreviewValidation.projectId===activeProject.id&&jiraPreviewValidation.revision===register.revision&&jiraPreviewValidation.planHash===sha(JSON.stringify(changes))&&jiraPreviewValidation.fieldPlansHash===sha(JSON.stringify(jiraPreviewFieldPlans))&&jiraPreviewValidation.site===baseAtlassian(config)&&jiraPreviewValidation.jiraProject===config.get('jira.projectKey')&&Date.now()-jiraPreviewValidation.verifiedAt<300000;
         if(!valid)throw Error('Jira preview validation expired or the plan changed. Generate a fresh Jira Preview before approving.');
         await dashboard?.webview.postMessage({type:'baProgress',task:'jiraApprove',message:'Verifying Jira approver and locking preview…',percent:85});
         const actor=await verifiedBAActor();
-        approvedJiraPreviewBinding=sha(JSON.stringify({atgvProjectId:activeProject.id,site:baseAtlassian(config),project:config.get('jira.projectKey'),actor,items:changes}));
+        approvedJiraPreviewBinding=sha(JSON.stringify({atgvProjectId:activeProject.id,site:baseAtlassian(config),project:config.get('jira.projectKey'),actor,items:changes,fields:jiraPreviewFieldPlans}));
         approvedJiraPreviewRevision=register.revision;
         await dashboard?.webview.postMessage({type:'baProgress',task:'jiraApprove',message:'JIRA preview approved.',percent:100});await dashboard?.webview.postMessage({type:'brJiraPlanApproved',revision:register.revision,count:changes.length});break;
       }

@@ -2116,3 +2116,12 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 #discoveryView .ba-source-preflight-header{flex-wrap:wrap;gap:8px}
 #discoveryView #baPreflightDownload.hidden{display:none!important}
 @media(max-width:550px){#discoveryView #baPreflightDownload{margin-left:0}#discoveryView .ba-source-preflight-header strong{flex:1 1 100%}}
+
+/* Jira preview is one focused modal per issue, not an expanding inline panel. */
+.jira-issue-modal-card{width:min(980px,96vw);max-height:92vh;display:flex;flex-direction:column;min-width:0}
+.jira-issue-modal-content{overflow-y:auto;overflow-x:hidden;max-height:76vh;padding:8px 6px 16px;min-width:0}
+.jira-issue-modal-content .jira-preview-detail-value{overflow-wrap:anywhere;white-space:pre-wrap}
+.jira-issue-modal-content .jira-preview-field-list{display:grid;gap:8px;margin:12px 0}
+.jira-issue-modal-content .jira-preview-field{border:1px solid var(--vscode-panel-border, #6666);border-radius:6px;padding:10px}
+.jira-issue-modal-content .jira-preview-field strong{display:block;margin-bottom:4px}
+.jira-issue-modal-content .jira-preview-field small{display:block;color:var(--vscode-descriptionForeground, #888);margin-top:4px}

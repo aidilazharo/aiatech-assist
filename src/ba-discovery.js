@@ -4,7 +4,9 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { withLock } = require('./file-lock');
 const { checksum } = require('./document-editor');
-const MAX_ANSWER_LENGTH = 5000;
+// AI responses remain capped at 5,000 characters per *source section*;
+// final discovery answers must retain the merged evidence from all sections.
+const MAX_ANSWER_LENGTH = 100000;
 const QUESTIONS = Object.freeze([
     ['problem', 'Business problem and expected outcome'],
     ['stakeholders', 'Users, stakeholders and decision makers'],
@@ -45,8 +47,8 @@ function normalize(answers = {}, options = {}) {
     const result = {};
     for (const [key] of QUESTIONS) {
         const v = answers[key] ?? '';
-        if (typeof v !== 'string' || v.length > (options.allowLegacy ? 8000 : MAX_ANSWER_LENGTH))
-            throw new Error('Invalid answer: ' + key + ' (5,000 characters maximum for new edits)');
+        if (typeof v !== 'string' || v.length > MAX_ANSWER_LENGTH)
+            throw new Error('Invalid answer: ' + key + ' (' + MAX_ANSWER_LENGTH.toLocaleString('en-US') + ' characters maximum)');
         result[key] = v.trim();
     }
     return result;
