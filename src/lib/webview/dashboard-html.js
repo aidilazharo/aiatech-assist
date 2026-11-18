@@ -489,6 +489,18 @@ function html(webview,{resumeLibrary=false}={}){
         <div class="architect-progress-description"><p id="architectStackProgressText" class="muted">Choose a stack to begin · 0%</p><p id="architectStackSummary" class="muted"></p></div>
       </div>
       <div class="architect-simple-fields"><label for="architectStackSelect" class="architect-stack-picker"><span class="sr-only">Technology stack</span><select id="architectStackSelect" aria-label="Project technology stack"><option value="">Choose a technology stack</option></select></label><button id="architectSaveStack" type="button">Save Stack</button><button id="architectStopInstall" type="button" class="secondary" disabled>Stop Install</button><button id="architectResetStack" type="button" class="secondary">Reset Tech Stack</button><button id="architectReviewGitChanges" type="button" class="secondary">Review Git Changes</button><button type="button" id="architectDownloadUnifiedLog" class="secondary atgv-icon-only" disabled aria-label="Download unified technology stack error log" title="Download unified technology stack error log"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m-4-4 4 4 4-4M5 17v4h14v-4"/></svg></button><button type="button" id="architectDownloadDependencyHistory" class="secondary">Download Dependency History</button></div>
+      <div id="architectCustomPanel" class="architect-custom-panel hidden" aria-label="Custom Stack existing application">
+        <div class="architect-custom-heading"><strong>Custom Stack · Existing Repository</strong><span class="muted">Read-only scan before explicit install and run</span></div>
+        <p id="architectCustomStatus" class="muted" role="status" aria-live="polite">Scan the configured project Git checkout to identify its runtime and scripts. No starter files will be copied.</p>
+        <div class="architect-custom-controls">
+          <label for="architectCustomTarget">Detected application<select id="architectCustomTarget" aria-label="Detected custom application"></select></label>
+          <label for="architectCustomPreviewUrl">Local preview URL<input id="architectCustomPreviewUrl" type="url" spellcheck="false" value="http://127.0.0.1:3000/" placeholder="http://127.0.0.1:3000/"></label>
+          <button id="architectCustomScan" class="secondary" type="button">Scan Repository</button>
+          <button id="architectCustomRun" type="button" disabled>Install &amp; Run</button>
+          <button id="architectCustomStop" class="secondary" type="button" disabled>Stop</button>
+        </div>
+        <p id="architectCustomDetails" class="muted">Select Custom Stack to inspect an existing checkout. Running project scripts requires confirmation.</p>
+      </div>
       <div id="architectRequiredComponents" class="architect-required-components hidden" aria-label="Required technology stack components">
         <div class="architect-requirement-heading">
           <strong id="architectRequirementsTitle">Selected stack</strong>
