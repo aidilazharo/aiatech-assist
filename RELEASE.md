@@ -1,3 +1,15 @@
+# ATGV AIATECH Assist v0.4.24
+
+- Add an optional **Release Download PAT** control under Settings → Extension & SDLC Library Updates.
+- Save & Test checks read-only GitHub Releases API access for the fixed extension and SDLC Library repositories; public releases need no token.
+- Store the PAT only in VS Code SecretStorage, independent of project GitHub, source-sync, issue reporter, PR and Jira credentials.
+- Remove PAT clears only the release-download credential; all project connection settings remain unchanged.
+- Use the release-only token for verified release checks, VSIX downloads, SDLC Library ZIP pulls and their SHA-256 checksums.
+- Preserve anonymous download support, checksum verification, controlled upgrade prompts, and hourly update checks.
+- Add regression tests for private/public release access, invalid PATs, trusted endpoints, secure credential separation and UI controls.
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.23
 
 - Fix **Open Project** unexpectedly returning to Jira, Confluence and GitHub credentials during project launch.
