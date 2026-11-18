@@ -33,8 +33,9 @@ test('update actions retain two fixed immutable GitHub release sources',()=>{
   assert.ok(section.includes('id="'+id+'"'),id);
  for(const id of ['softwareReleaseRepositoryUrl','softwareLibraryRepositoryUrl','saveSoftwareUpdateSources'])
   assert.ok(!section.includes('id="'+id+'"'),id);
- assert.match(section,/https:\/\/github\.com\/aidilazharo\/aiatech-assist\/releases\/latest/);
- assert.match(section,/https:\/\/github\.com\/aidilazharo\/tech-stacks-skills\/releases\/latest/);
+ assert.doesNotMatch(section,/Release sources are fixed and verified/);
+ assert.doesNotMatch(section,/software-update-sources|Extension release:|SDLC Library release:/);
+ assert.doesNotMatch(section,/https:\/\/github\.com\/aidilazharo\/(?:aiatech-assist|tech-stacks-skills)\/releases\/latest/);
  assert.ok(!ui.includes('softwareSourcesDirty'));
  for(const id of ['softwareAutoExtension','softwareAutoLibrary','softwarePromptUpdates','softwareCheckOnStartup']){
   assert.ok(!section.includes('id="'+id+'"'),id);

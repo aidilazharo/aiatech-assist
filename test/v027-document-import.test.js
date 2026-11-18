@@ -40,7 +40,11 @@ test('import only accepts user-selected Word/PDF, limits bytes and source text',
   await fs.writeFile(path.join(temp,'big.pdf'),Buffer.alloc(importer.MAX_FILE_BYTES+1));
   await assert.rejects(importer.importDocumentText(path.join(temp,'big.pdf')),/12 MB/);
   const veryLong=await importer.importDocumentText(path.join(temp,'long.pdf'),{readFile:async()=>Buffer.from('%PDF-1.7'+'.'.repeat(20)),pdfExtractor:async()=>('abcdef\n').repeat(7000)});
-  assert.equal(veryLong.truncated,true);assert.equal(veryLong.text.length,importer.MAX_EXTRACTED);
+  assert.equal(veryLong.truncated,false,'49,000 extracted characters are fully accepted');
+  assert.equal(veryLong.text.length,48999);
+  const beyondLimit=await importer.importDocumentText(path.join(temp,'huge.pdf'),{readFile:async()=>Buffer.from('%PDF-1.7'+'.'.repeat(20)),pdfExtractor:async()=>('ABCDE').repeat(importer.MAX_EXTRACTED/5+1)});
+  assert.equal(beyondLimit.truncated,true);
+  assert.equal(beyondLimit.text.length,importer.MAX_EXTRACTED);
  }finally{await fs.rm(temp,{force:true,recursive:true});}
 });
 test('mapping prompt is evidence only and parser validates exactly 12 controlled keys',()=>{

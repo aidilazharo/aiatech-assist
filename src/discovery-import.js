@@ -8,7 +8,10 @@ const { promisify } = require('node:util');
 const { QUESTIONS, MAX_ANSWER_LENGTH } = require('./ba-discovery');
 const execFileAsync = promisify(execFile);
 const MAX_FILE_BYTES = 12 * 1024 * 1024;
-const MAX_EXTRACTED = 45000;
+// Keep the complete text for normal long BA requirements. AI requests are
+// bounded separately with splitDocumentText; never silently use only a prefix.
+const MAX_EXTRACTED = 300000;
+const MAX_MAPPING_CHUNK = 28000;
 function decodeEntities(s) {
     return s.replace(/&#(x[\da-f]+|\d+);|&(amp|lt|gt|quot|apos);/gi, (_, numeric, entity) => {
         if (numeric) {
@@ -165,6 +168,55 @@ async function importDocumentText(file, { readFile = fs.readFile, pdfExtractor =
         throw Error('Document has insufficient readable text to map into 12 questions.');
     return { name: path.basename(file), text: extracted.slice(0, MAX_EXTRACTED), truncated: extracted.length > MAX_EXTRACTED, characters: Math.min(extracted.length, MAX_EXTRACTED) };
 }
+// Split at a nearby paragraph/word boundary without dropping any character.
+// The original source is never rewritten and concatenating sections is lossless.
+function splitDocumentText(text, maxChars = MAX_MAPPING_CHUNK) {
+    if (typeof text !== 'string') throw Error('Document text must be a string.');
+    if (!Number.isSafeInteger(maxChars) || maxChars < 2000 || maxChars > MAX_EXTRACTED)
+        throw Error('Invalid document mapping section size.');
+    const result = [];
+    let start = 0;
+    while (start < text.length) {
+        let end = Math.min(text.length, start + maxChars);
+        if (end < text.length) {
+            // Prefer line breaks, otherwise a word boundary, but never create
+            // an unreasonably short section or an infinite splitting loop.
+            const line = text.lastIndexOf('\n', end - 1);
+            const gap = text.lastIndexOf(' ', end - 1);
+            const preferred = line > start + maxChars / 2 ? line + 1 :
+                gap > start + maxChars / 2 ? gap + 1 : end;
+            end = preferred;
+        }
+        result.push(text.slice(start, end));
+        start = end;
+    }
+    return result.length ? result : [''];
+}
+// Merge AI output from every source section in document order. Unlike a final
+// substring truncation this never drops distinct requirements silently.
+function mergeMappingAnswers(parts) {
+    if (!Array.isArray(parts) || !parts.length)
+        throw Error('No source sections were mapped.');
+    const merged = {};
+    for (const [key, label] of QUESTIONS) {
+        const values = [], seen = new Set();
+        let onlyNone = false;
+        for (const part of parts) {
+            const value = String(part?.[key] || '').trim();
+            if (!value) continue;
+            if (key === 'questions' && value.toUpperCase() === 'NONE') { onlyNone = true; continue; }
+            const normalized = value.replace(/\s+/g, ' ').toLowerCase();
+            if (seen.has(normalized)) continue;
+            seen.add(normalized);
+            values.push(value);
+        }
+        const full = values.join('\n\n');
+        if (full.length > MAX_ANSWER_LENGTH)
+            throw Error('Merged discovery answer "'+label+'" ('+key+') requires '+full.length.toLocaleString('en-US')+' characters from '+parts.length+' document sections, exceeding the 5,000-character answer limit. No mapping was saved; review the full source or divide it into separate Business Requirements. The uploaded original is preserved.');
+        merged[key] = full || (key === 'questions' && onlyNone ? 'NONE' : '');
+    }
+    return merged;
+}
 function createMappingPrompt(document) {
     const schema = Object.fromEntries(QUESTIONS.map(([key]) => [key, '']));
     return [
@@ -215,4 +267,4 @@ function extractSupplementalEvidence(document, { maxChars = 6500 } = {}) {
     const limit = Math.min(6500, Math.max(500, Number(maxChars) || 6500));
     return tail.slice(0, limit);
 }
-module.exports = { MAX_FILE_BYTES, MAX_EXTRACTED, extractDocx, extractBasicPdf, extractPdf, importDocumentText, createMappingPrompt, parseMappingResponse, extractSupplementalEvidence };
+module.exports = { MAX_FILE_BYTES, MAX_EXTRACTED, MAX_MAPPING_CHUNK, extractDocx, extractBasicPdf, extractPdf, importDocumentText, splitDocumentText, mergeMappingAnswers, createMappingPrompt, parseMappingResponse, extractSupplementalEvidence };

@@ -1711,7 +1711,7 @@ async function importDiscoveryDocument(roleId){
  for(const selection of picked){
   await dashboard?.webview.postMessage({type:'discoveryImportProgress',message:`Reading ${path.basename(selection.fsPath)}…`});
   const doc=await discoveryImport.importDocumentText(selection.fsPath);
-  if(doc.truncated)throw Error(`${doc.name}: document exceeds the extraction limit.`);
+  if(doc.truncated)throw Error(`${doc.name}: extracted text exceeds ${discoveryImport.MAX_EXTRACTED.toLocaleString('en-US')} characters. Split the source into smaller documents or reduce non-requirement appendices; no text was silently discarded.`);
   documents.push({...doc,digest:sha(doc.text),originalPath:selection.fsPath});
  }
  if(new Set(documents.map(d=>d.name.toLowerCase())).size!==documents.length||new Set(documents.map(d=>d.digest)).size!==documents.length)throw Error('Select unique filenames and document contents.');
@@ -1809,54 +1809,70 @@ async function processSelectedDiscoverySources(msg){
   for(const source of documents){readable.push(await sourceStore.read(registry,run.projectId,source));check();}
   const mappedProposals=[],preflights=[];
   for(let i=0;i<readable.length;i++){
-   check();run.phase='preflight';
+   check();
    const source=readable[i];
-   await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:`AI document preflight ${i+1}/${readable.length}: checking acceptance criteria, contradictions and likely TDD blockers in ${source.name}…`});
-   let result,previous='';
-   for(let attempt=1;attempt<=2;attempt++){
-    check();run.timeout=false;
-    const timer=setTimeout(()=>{run.timeout=true;run.controller.abort();},SOURCE_MAPPING_AI_TIMEOUT_MS);
-    try{
-     const ai=await aiAnswer(target,baDocumentPreflight.prompt(source,{previous,attempt})+await roleSkillPrompt('business-analyst'),20000,{json:true,signal:run.controller.signal});
-     check();result=baDocumentPreflight.parse(ai,source.text);
-    }catch(error){
-     if(run.timeout)throw Error(`${source.name}: AI document preflight timed out. The original uploaded file is preserved; retry mapping.`);
-     throw error;
-    }finally{clearTimeout(timer);}
-    check();
-    await dashboard?.webview.postMessage({type:'discoverySourcePreflight',sourceName:source.name,phase:result.ready?'ready':attempt===1?'repair':'blocked',status:result.status,summary:result.summary,applied:result.applied,issues:result.issues,resolutions:result.resolutions||[]});
-    if(result.ready)break;
-    if(attempt===1){
-     previous=JSON.stringify({issues:result.issues,skipped:result.skipped}).slice(0,4500);
-     await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'repair',message:`Rechecking ${source.name}: attempting safe document corrections (${attempt}/2). Original file unchanged…`});
+   const sections=discoveryImport.splitDocumentText(source.text);
+   const reports=[],partAnswers=[];
+   for(let part=0;part<sections.length;part++){
+    check();run.phase='preflight';
+    const section={...source,text:sections[part]};
+    const label=sections.length>1?' (section '+(part+1)+'/'+sections.length+')':'';
+    await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'AI document preflight '+(i+1)+'/'+readable.length+label+': checking acceptance criteria and contradictions in '+source.name+'…'});
+    let result,previous='';
+    for(let attempt=1;attempt<=2;attempt++){
+     check();run.timeout=false;
+     const timer=setTimeout(()=>{run.timeout=true;run.controller.abort();},SOURCE_MAPPING_AI_TIMEOUT_MS);
+     try{
+      const ai=await aiAnswer(target,baDocumentPreflight.prompt(section,{previous,attempt})+await roleSkillPrompt('business-analyst'),20000,{json:true,signal:run.controller.signal});
+      check();result=baDocumentPreflight.parse(ai,section.text);
+     }catch(error){
+      if(run.timeout)throw Error(source.name+label+': AI document preflight timed out. The original uploaded file is preserved; retry mapping.');
+      throw error;
+     }finally{clearTimeout(timer);}
+     check();
+     await dashboard?.webview.postMessage({type:'discoverySourcePreflight',sourceName:source.name,phase:result.ready?'ready':attempt===1?'repair':'blocked',status:result.status,summary:result.summary,applied:result.applied,issues:result.issues,resolutions:result.resolutions||[],section:part+1,totalSections:sections.length});
+     if(result.ready)break;
+     if(attempt===1){
+      previous=JSON.stringify({issues:result.issues,skipped:result.skipped}).slice(0,4500);
+      await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'repair',message:'Rechecking '+source.name+label+': attempting safe document corrections ('+attempt+'/2). Original file unchanged…'});
+     }
     }
+    if(!result?.ready){
+     const blockers=(result?.blockers||[]).map(x=>x.detail).slice(0,3).join(' | ');
+     const problem=blockers||'AI could not safely resolve all document testability concerns.';
+     throw Error(source.name+label+': document needs Business Analyst clarification before mapping. '+problem+' Original document preserved; no unsupported requirements invented.');
+    }
+    reports.push(result);
+    check();run.phase='mapping';
+    const doc={...source,text:result.effectiveText};
+    await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'Mapping '+(i+1)+'/'+readable.length+': '+doc.name+label+'… (Stop Mapping is available)'});
+    const cacheKey=run.projectId+'|'+selected[i]+'|'+doc.name+'|'+target.label+'|'+part+'|'+sections.length;
+    let proposals=successfulSourceMappings.get(cacheKey);
+    if(!proposals){
+     run.timeout=false;
+     const timer=setTimeout(()=>{run.timeout=true;run.controller.abort();},SOURCE_MAPPING_AI_TIMEOUT_MS);
+     try{
+      const answer=await aiAnswer(target,discoveryImport.createMappingPrompt(doc)+baDocumentPreflight.mappingGuidance(result)+'\n\nSource preflight preserved original business rules; label recommendations as provisional. Do not invent TDD test inputs, expected outputs, approvals or policy.'+await roleSkillPrompt('business-analyst'),95000,{json:true,signal:run.controller.signal});
+      check();proposals=discoveryImport.parseMappingResponse(answer);
+     }catch(error){
+      if(run.timeout)throw Error(doc.name+label+': AI mapping timed out after '+SOURCE_MAPPING_AI_TIMEOUT_MS/1000+' seconds. Check AI provider access in Settings, then use Retry Mapping. No results were saved.');
+      throw error;
+     }finally{clearTimeout(timer);}
+     check();successfulSourceMappings.set(cacheKey,proposals);
+     if(successfulSourceMappings.size>50)successfulSourceMappings.delete(successfulSourceMappings.keys().next().value);
+    }
+    partAnswers.push(proposals);
+    await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'Mapped '+(i+1)+'/'+readable.length+' document(s), section '+(part+1)+'/'+sections.length+'. Validating results…'});
    }
-   if(!result?.ready){
-    const blockers=(result?.blockers||[]).map(x=>x.detail).slice(0,3).join(' | ');
-    const problem=blockers||'AI could not safely resolve all document testability concerns.';
-    throw Error(`${source.name}: document needs Business Analyst clarification before mapping. ${problem} Original document preserved; no unsupported requirements invented.`);
-   }
-   preflights.push(baDocumentPreflight.evidence(result,source.digest));
-   check();run.phase='mapping';
-   const doc={...source,text:result.effectiveText};
-   await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:`Mapping ${i+1}/${readable.length}: ${doc.name}… (Stop Mapping is available)`});
-   const cacheKey=run.projectId+'|'+selected[i]+'|'+doc.name+'|'+target.label;
-   let proposals=successfulSourceMappings.get(cacheKey);
-   if(!proposals){
-    run.timeout=false;
-    const timer=setTimeout(()=>{run.timeout=true;run.controller.abort();},SOURCE_MAPPING_AI_TIMEOUT_MS);
-    try{
-     const answer=await aiAnswer(target,discoveryImport.createMappingPrompt(doc)+baDocumentPreflight.mappingGuidance(result)+'\n\nSource preflight preserved original business rules; label recommendations as provisional. Do not invent TDD test inputs, expected outputs, approvals or policy.'+await roleSkillPrompt('business-analyst'),95000,{json:true,signal:run.controller.signal});
-     check();proposals=discoveryImport.parseMappingResponse(answer);
-    }catch(error){
-     if(run.timeout)throw Error(`${doc.name}: AI mapping timed out after ${SOURCE_MAPPING_AI_TIMEOUT_MS/1000} seconds. Check AI provider access in Settings, then use Retry Mapping. No results were saved.`);
-     throw error;
-    }finally{clearTimeout(timer);}
-    check();successfulSourceMappings.set(cacheKey,proposals);
-    if(successfulSourceMappings.size>50)successfulSourceMappings.delete(successfulSourceMappings.keys().next().value);
-   }
-   mappedProposals.push({filename:doc.name,answers:proposals});
-   await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:`Mapped ${i+1}/${readable.length} document(s). Validating results…`});
+   // Aggregate evidence from every source section, with bounded UI/report
+   // metadata. All sections must pass before the atomic mapping commit.
+   const report={status:'ready',summary:sections.length>1?'All '+sections.length+' document sections passed AI preflight; source remains unchanged.':reports[0].summary,
+    applied:reports.flatMap(x=>x.applied).slice(0,12),
+    issues:reports.flatMap(x=>x.issues).slice(0,16),
+    resolutions:reports.flatMap(x=>x.resolutions||[]).slice(0,12)};
+   preflights.push(baDocumentPreflight.evidence(report,source.digest));
+   const proposals=discoveryImport.mergeMappingAnswers(partAnswers);
+   mappedProposals.push({filename:source.name,answers:proposals});
   }
   check();run.phase='committing';
   await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'committing',message:'Saving complete mapping atomically. Cancellation is disabled during this step…'});

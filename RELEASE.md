@@ -1,3 +1,12 @@
+# ATGV AIATECH Assist v0.4.17
+
+- Remove the fixed GitHub extension and SDLC Library release URLs from Section 8 Settings, and remove its explanatory release-source paragraph. Update checks, release verification, and hourly scheduling remain unchanged.
+- Accept longer extractable PDF/DOCX requirements sources (up to 300,000 extracted characters), keeping the original uploaded file and a full source text digest. Do not silently truncate requirement text.
+- Process long Business Requirements documents in bounded text sections for AI preflight and discovery mapping, retaining source order and failing explicitly if combined answers exceed the existing 5,000-character discovery-field limit.
+- Preserve a single atomic mapping commit, cancellation and original-document integrity; all-or-nothing mapping avoids publishing incomplete requirements.
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.16
 
 - Make Jira HTTP 404 diagnostics actionable when an API response is empty or `null`.
