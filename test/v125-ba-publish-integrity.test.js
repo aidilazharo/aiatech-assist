@@ -79,5 +79,5 @@ test('supplemental snippets are capped and cannot inject instructions',()=>{
 
 test('Jira preview approval binding includes local project identity for both approve and publish',()=>{
  const host=fss.readFileSync(path.join(__dirname,'../test/generated/extension-source.txt'),'utf8');
- for(const x of ['items','items:changes'])assert.ok(host.includes("JSON.stringify({atgvProjectId:activeProject.id,site:baseAtlassian(config),project:config.get('jira.projectKey'),actor,"+x+'})'));
+ for(const x of ['items','items:changes'])assert.ok(host.includes("JSON.stringify({atgvProjectId:activeProject.id,site:baseAtlassian(config),project:config.get('jira.projectKey'),actor,"+x+',fields:jiraPreviewFieldPlans})'));
 });
