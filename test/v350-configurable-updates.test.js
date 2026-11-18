@@ -19,7 +19,7 @@ function release({version='0.3.52',assetRepo=repo,linkRepo=repo}={}){
 }
 test('release settings accept GitHub Releases URLs and normalize repo landing URLs',()=>{
  assert.deepEqual(updater.parseRepositoryUrl('https://github.com/testmaintainer/custom-assist/'),{
-  repository:repo,url:alternate,api:`https://api.github.com/repos/${repo}/releases?per_page=30`
+  repository:repo,url:alternate,api:`https://api.github.com/repos/${repo}/releases?per_page=30`,listApi:`https://api.github.com/repos/${repo}/releases?per_page=30`
  });
  assert.equal(updater.parseRepositoryUrl(alternate).repository,repo);
  assert.equal(updater.parseRepositoryUrl().repository,'aidilazharo/aiatech-assist');
@@ -68,24 +68,38 @@ test('verification downloads from selected repository only and enforces checksum
  const bad=async(url)=>url.endsWith('/131')?Buffer.from('tampered'):Buffer.from(`${checksum}  ${filename}\n`);
  await assert.rejects(updater.downloadVerified(selected,{directory:temp,request:bad}),/checksum verification/);
 });
-test('release URLs are independently configurable and still validated as GitHub repositories',()=>{
- const pkg=require('../package.json');assert.match(pkg.version,/^\d+\.\d+\.\d+$/);
- assert.equal(pkg.repository.url,'https://github.com/aidilazharo/aiatech-assist.git');
- assert.equal(updater.releaseUrlForRepository(pkg.repository.url),updater.DEFAULT_RELEASE_URL);
- assert.equal(updater.releaseUrlForRepository('https://github.com/aidilazharo/tech-stacks-skills'),'https://github.com/aidilazharo/tech-stacks-skills/releases');
- assert.equal(pkg.contributes.configuration.properties['atgvAssist.updates.releaseRepositoryUrl'],undefined);
- const runtime=require('node:fs').readFileSync(path.join(__dirname,'../src/lib/runtime/extension-runtime.js'),'utf8');
- const html=require('node:fs').readFileSync(path.join(__dirname,'../src/lib/webview/dashboard-html.js'),'utf8');
- const js=require('node:fs').readFileSync(path.join(__dirname,'../media/start.js'),'utf8');
+test('fixed extension source checks latest first and accepts signed prereleases from the same repo',async()=>{
+ assert.equal(updater.PINNED_RELEASE_URL,'https://github.com/aidilazharo/aiatech-assist/releases/latest');
+ const calls=[];
+ const fetch=async url=>{
+  calls.push(url);
+  if(url.endsWith('/latest'))throw Error('No stable release');
+  const version='0.4.20',tag='v'+version+'-build.100';
+  return Buffer.from(JSON.stringify([{tag_name:tag,html_url:'https://github.com/aidilazharo/aiatech-assist/releases/tag/'+tag,assets:[
+   {name:'atgv-aiatech-assist-'+version+'.vsix',size:11,url:'https://api.github.com/repos/aidilazharo/aiatech-assist/releases/assets/1'},
+   {name:'vsix.sha256',size:80,url:'https://api.github.com/repos/aidilazharo/aiatech-assist/releases/assets/2'}
+  ]}]));
+ };
+ const got=await updater.latestRelease({repositoryUrl:updater.PINNED_RELEASE_URL,version:'0.4.13',request:fetch});
+ assert.equal(got.version,'0.4.20');
+ assert.ok(calls[0].endsWith('/latest')&&calls[1].endsWith('?per_page=30'));
+});
+test('extension and library release sources are immutable; both check every hour',()=>{
+ const fs=require('node:fs');
+ const read=file=>fs.readFileSync(path.join(__dirname,'..',file),'utf8');
+ const runtime=read('src/lib/runtime/extension-runtime.js');
+ const html=read('src/lib/webview/dashboard-html.js');
+ const ui=read('media/start.js');
+ const library=require('../src/lib/updates/library-release-updater');
+ assert.equal(library.LATEST_URL,'https://github.com/aidilazharo/tech-stacks-skills/releases/latest');
+ assert.match(runtime,/releaseRepositoryUrl:releaseUpdater\.PINNED_RELEASE_URL/);
+ assert.match(runtime,/libraryReleaseUrl:libraryReleaseUpdater\.LATEST_URL/);
+ assert.match(runtime,/60\*60\*1000/);
+ assert.doesNotMatch(runtime,/6\*60\*60\*1000/);
  for(const id of ['softwareReleaseRepositoryUrl','softwareLibraryRepositoryUrl','saveSoftwareUpdateSources'])
-  assert.ok(html.includes('id="'+id+'"'),id);
- assert.match(js,/send\('saveSoftwareUpdateSources'/);
- assert.match(runtime,/case 'saveSoftwareUpdateSources':/);
- assert.match(runtime,/const release=releaseUpdater\.parseRepositoryUrl\(/);
- assert.match(runtime,/const library=sdlcCatalog\.normalizeConfig\(/);
- assert.match(runtime,/RELEASE_REPOSITORY_SETTING/);
- assert.match(runtime,/releaseRepositoryUrl,/);
- assert.match(runtime,/libraryRepositoryUrl:libraryRepository\|\|DEFAULT_LIBRARY_REPOSITORY_URL/);
- assert.match(runtime,/libraryReleaseUrl:libraryRepository\?releaseUpdater\.releaseUrlForRepository\(libraryRepository\):''/);
- assert.match(runtime,/if\(force\|\|config\.autoCheckLibrary\)/);
+  assert.ok(!html.includes('id="'+id+'"'),id);
+ assert.ok(!ui.includes('softwareSourcesDirty'));
+ assert.ok(!runtime.includes("case 'saveSoftwareUpdateSources':"));
+ assert.ok(html.includes(updater.PINNED_RELEASE_URL));
+ assert.ok(html.includes(library.LATEST_URL));
 });
