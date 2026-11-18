@@ -38,6 +38,16 @@ test('Jira metadata maps known BR fields and uses safe placeholder for unsupport
  assert.equal(plan.blocking.length,1);
  assert.match(plan.blocking[0],/Risk Score/);
 });
+test('Jira long rich text is retained losslessly or explicitly blocked, never shortened',()=>{
+ const meta=[{id:'customfield_10102',name:'Definition of Done',schema:{type:'string',custom:'com.atlassian.jira.plugin.system.customfieldtypes:textarea'}}];
+ const text='X'.repeat(14000);
+ const mapped=planFields({jiraDetails:{definitionOfDone:text}},meta);
+ assert.equal(mapped.blocking.length,0);
+ assert.equal(mapped.extraFields.customfield_10102.content[0].content.map(node=>node.text).join(''),text);
+ const oversized=planFields({jiraDetails:{definitionOfDone:'Y'.repeat(33000)}},meta);
+ assert.equal(oversized.extraFields.customfield_10102,undefined);
+ assert.match(oversized.blocking[0],/no content was truncated/i);
+});
 test('Jira edits retain existing unsupported values rather than overwrite',()=>{
  const meta=[{id:'customfield_12000',name:'Non-text selection',required:true,schema:{type:'option'}},
  {id:'customfield_12001',name:'Free Text',schema:{type:'string'},operations:['set']}];
