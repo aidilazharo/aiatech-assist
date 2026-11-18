@@ -115,7 +115,6 @@ function html(webview,{resumeLibrary=false}={}){
       <div class="nav-label">WORKSPACE</div>
       <button type="button" class="nav-item current" data-nav="overview"><span class="nav-icon">▦</span>Overview</button>
       <button type="button" class="nav-item" data-nav="sdlc-roles"><span class="nav-icon">◉</span>My Work</button>
-       <button type="button" class="nav-item" id="openAtgvAi"><span class="nav-icon">✦</span>ATGV: AI</button>
       <button type="button" class="nav-item" data-nav="flow"><span class="nav-icon">↻</span>SDLC</button>
       <button type="button" class="nav-item" data-nav="documents"><span class="nav-icon">▤</span>Documents</button>
       <button type="button" class="nav-item" data-nav="planning"><span class="nav-icon">▥</span>Solution Designs</button>

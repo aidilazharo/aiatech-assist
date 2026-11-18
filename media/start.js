@@ -865,7 +865,6 @@ function updateState(msg){
   else if(!workspaceOpened)document.body.classList.add('gate-mode');
   renderGate();
 }
-$('openAtgvAi').addEventListener('click',()=>send('openAtgvAi'));
 function navigate(destination){
   if(roleSettingsDirty&&view==='project'&&destination!=='project-settings'&&destination!=='tech'){status('Save project role settings before leaving Project Settings.',true);return;}
   if(view==='discovery'&&discoveryDirty){status('Save your discovery answers before leaving this screen.',true);return;}

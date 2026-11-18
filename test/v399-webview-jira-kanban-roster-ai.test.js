@@ -30,7 +30,8 @@ test('v399: packaged webview styles precede controllers, without duplicate fallb
  assert.ok(body.indexOf('webview-asset-boot.js')>body.indexOf('user-guide-controller.js'),'readiness probe must be last');
  assert.ok(body.includes('id="pmKanbanBoard"'));
  assert.ok(body.includes('id="overviewUserRows"'));
- assert.ok(body.includes('id="openAtgvAi"'));
+ assert.ok(!body.includes('id="openAtgvAi"'),'ATGV: AI should not appear in the left navigation');
+ assert.ok(!read('media/start.js').includes("$('openAtgvAi').addEventListener"),'No event handler should reference the removed button');
 });
 
 test('v399: Business Analyst My Work triggers live Jira scan from discovery view',()=>{
