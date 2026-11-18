@@ -1,3 +1,13 @@
+# ATGV AIATECH Assist v0.4.11
+
+- Add independently configurable **Extension Release Repository URL** and **SDLC Library Repository URL** in Extension Settings → Extension & SDLC Library Updates.
+- Save validated GitHub HTTPS URLs separately so extension VSIX releases and the SDLC Catalog can be fetched from different repositories.
+- Keep verified VSIX SHA-256 and pinned main-branch SDLC Catalog checks. Show URL validation errors without replacing existing settings.
+- Disable update and pull actions while repository edits are unsaved; refresh update status after successful saves.
+- Preserve the existing ATGV: AI standalone command while excluding its button from the left navigation (previous merged change).
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.10
 
 - Bundle upstream **SortableJS 1.15.7** with the extension, including its MIT license. No user npm installation, external CDN, or internet access is required to drag Jira cards.
