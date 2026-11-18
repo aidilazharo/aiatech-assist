@@ -5,6 +5,7 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const path=require('node:path');
 const baDocumentPreflight=require('../src/ba-document-preflight');
+const discoveryModule=require('../src/discovery-import');
 const host=fs.readFileSync(path.join(__dirname,'../test/generated/extension-source.txt'),'utf8');
 const ui=fs.readFileSync(path.join(__dirname,'../media/start.js'),'utf8');
 const html=host;
@@ -24,7 +25,7 @@ function mappingHarness(aiAnswer,opts={}){
   async activeAiTarget(){return {label:'Test model'};},
   async roleSkillPrompt(){return '';},
   sourceStore:{async read(){return {name:'visitor.pdf',text:'Requirements'}}},
-  discoveryImport:{createMappingPrompt(){return 'Map'},parseMappingResponse(answer){return JSON.parse(answer)}},
+  discoveryImport:{...discoveryModule,createMappingPrompt(){return 'Map'},parseMappingResponse(answer){return JSON.parse(answer)}},
   baDocumentPreflight,
   successfulSourceMappings:new Map(),
   aiAnswer:(target,prompt,limit,settings)=>{
