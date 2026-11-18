@@ -1862,8 +1862,8 @@ async function processSelectedDiscoverySources(msg){
      }finally{clearTimeout(timer);}
      check();
      const reportSession=documentPreflightSessions.get(run.projectId);
-     if(reportSession)baPreflightReports.capture(reportSession,{digest:source.digest,sourceName:source.name,section:part+1,totalSections:sections.length,attempt,report:result});
-     await dashboard?.webview.postMessage({type:'discoverySourcePreflight',sourceName:source.name,digest:source.digest,phase:result.ready?'ready':attempt===1?'repair':'blocked',status:result.status,summary:result.summary,applied:result.applied,issues:result.issues,resolutions:result.resolutions||[],section:part+1,totalSections:sections.length,attempt});
+     if(reportSession)baPreflightReports.capture(reportSession,{digest:selected[i],sourceName:source.name,section:part+1,totalSections:sections.length,attempt,report:result});
+     await dashboard?.webview.postMessage({type:'discoverySourcePreflight',sourceName:source.name,digest:selected[i],phase:result.ready?'ready':attempt===1?'repair':'blocked',status:result.status,summary:result.summary,applied:result.applied,issues:result.issues,resolutions:result.resolutions||[],section:part+1,totalSections:sections.length,attempt});
      if(result.ready)break;
      if(attempt===1){
       previous=JSON.stringify({issues:result.issues,skipped:result.skipped}).slice(0,4500);
@@ -1917,7 +1917,7 @@ async function processSelectedDiscoverySources(msg){
     applied:reports.flatMap(x=>x.applied).slice(0,12),
     issues:reports.flatMap(x=>x.issues).slice(0,16),
     resolutions:reports.flatMap(x=>x.resolutions||[]).slice(0,12)};
-   preflights.push(baDocumentPreflight.evidence(report,source.digest));
+   preflights.push(baDocumentPreflight.evidence(report,selected[i]));
    mappedProposals.push({filename:source.name,answers:proposals});
   }
   check();run.phase='committing';
