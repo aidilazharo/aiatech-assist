@@ -116,7 +116,7 @@ test('prerequisite progress events reflect checked tools and all five stacks',as
 });
 test('start wizard must show connection screen, all stack checks, and a real project-opening progress bar',async()=>{
  const [runtime,js,html]=await Promise.all(['src/lib/runtime/extension-runtime.js','media/start.js','src/lib/webview/dashboard-html.js'].map(f=>fs.readFile(path.join(root,f),'utf8')));
- assert.match(runtime,/required:!startupSessionProceedApproved/);
+ assert.match(runtime,/required:!startupSessionProceedApproved&&!openingActive/);
  assert.match(runtime,/startupSessionProceedApproved=true/);
  assert.match(runtime,/startupSessionProceedApproved=false/);
  assert.doesNotMatch(runtime,/if\(startupIsComplete\(\)\)await finishManualProjectDiscovery\(sequence\)/);
