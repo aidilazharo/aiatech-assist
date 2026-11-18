@@ -1,3 +1,13 @@
+# ATGV AIATECH Assist v0.4.14
+
+- Load the dependency-free Kanban controller early; a missing optional controller no longer blocks the whole UI, and Jira DataTable remains available.
+- Remove project and Library repository URL inputs from first-run connections.
+- Pin the SDLC Library globally to aidilazharo/tech-stacks-skills, independent of GitHub account organization.
+- Provide a full project-specific GitHub repository URL under Project Settings, mapped to the existing owner/repo fields.
+- Preserve checksum-verified Library ZIP import and Jira, Confluence, and GitHub account verification.
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.13
 
 - Move SortableJS 1.15.7, MIT license, and provenance notice from the VSIX into SDLC Library v1.1.16.
