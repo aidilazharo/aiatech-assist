@@ -46,5 +46,6 @@ test('settings and runtime expose dual update checks, safe prompts and verified 
  assert.match(runtime,/scheduleSoftwareUpdates\(\)/);
  assert.match(runtime,/downloadVerified/);
  assert.match(runtime,/context\.globalState\.update\(key,promptId\)/);
-  assert.match(runtime,/catalogRemote\?\.sha\|\|remote/);
+  assert.match(runtime,/libraryReleaseUpdater\.latest/);
+  assert.match(runtime,/libraryReleaseUpdater\.downloadVerified/);
 });
