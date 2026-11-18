@@ -5781,11 +5781,11 @@ function renderDiscovery(){
       const questionLabel=document.createElement('label');questionLabel.htmlFor='ba-'+key;questionLabel.textContent=(idx+1)+'. '+label;
       const state=document.createElement('span');state.className='ba-question-state';state.textContent=answer.trim()?'Answered':'Required';
       labelRow.append(questionLabel,state);
-      const area=document.createElement('textarea');area.id='ba-'+key;area.rows=5;area.maxLength=5000;area.placeholder='Add the evidence, context or decision for this question.';
+      const area=document.createElement('textarea');area.id='ba-'+key;area.rows=5;area.maxLength=100000;area.placeholder='Add the evidence, context or decision for this question.';
       area.value=answer;area.readOnly=!baCanEdit('ba-discovery');
       const counter=document.createElement('small');counter.className='discovery-answer-count';
       const helper=document.createElement('small');helper.className='muted';helper.textContent=key==='questions'?'Enter NONE if there are no unresolved questions.':'Use evidence from the uploaded document or confirmed business context.';
-      const updateCounter=()=>{counter.textContent=area.value.length.toLocaleString()+' / 5,000';state.textContent=area.value.trim()?'Answered':'Required';wrap.classList.toggle('complete',!!area.value.trim());};
+      const updateCounter=()=>{counter.textContent=area.value.length.toLocaleString()+' / 100,000';state.textContent=area.value.trim()?'Answered':'Required';wrap.classList.toggle('complete',!!area.value.trim());};
       updateCounter();area.addEventListener('input',()=>{if(!applyingAiReview)preserveReviewOnSave=false;discoveryDirty=true;$('discoverySave').disabled=!baCanEdit('ba-discovery');updateCounter();refreshDiscoveryGroupCounts();renderDiscoverySummary();scheduleDiscoveryAutosave();});
       wrap.append(labelRow,area,helper,counter);section.append(wrap);
     }
