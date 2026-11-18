@@ -13,7 +13,6 @@
     const failures=[...new Set([
       ...(window.atgvCoreAssetFailures||[]),
       ...missing.map(name=>'Missing stylesheet '+name),
-      ...(!window.Sortable||typeof window.Sortable.create!=='function'?['Bundled SortableJS could not initialize']:[]),
       ...(!window.ATGVKanban||typeof window.ATGVKanban.render!=='function'?['ATGV Kanban controller could not initialize']:[])
     ])].slice(0,20);
     if(failures.length){
