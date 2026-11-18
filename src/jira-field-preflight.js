@@ -6,6 +6,9 @@ const present=value=>value!==null&&value!==undefined&&value!==''&&!(Array.isArra
 function availableText(field,item,{approvedBR={},discoveryAnswers={}}={}){
  const name=norm(field.name), details=item.jiraDetails||{};
  const mapping=[
+  [/^epic name$|^issue name$|^requirement title$/,item.title,'Approved BR title'],
+  [/^business requirement id$|^br id$|^br reference$/,String(item.path||'').split('/')[0],'ATGV Business Requirement identity'],
+  [/^detailed description$|^business description$|^requirement description$/,item.description,'Approved BR description'],
   [/acceptance criteria|acceptance criterion|acceptance conditions/,details.acceptanceCriteria||approvedBR.acceptanceCriteria,'Approved BR acceptance criteria'],
   [/definition of done|completion criteria|done criteria|definition of complete/,details.definitionOfDone,'Approved Jira preview Definition of Done'],
   [/business rule|policy/,discoveryAnswers.businessRules,'Saved business rules'],
