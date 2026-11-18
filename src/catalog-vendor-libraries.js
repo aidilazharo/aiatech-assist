@@ -136,7 +136,7 @@ async function install(args){
 async function installOffline({catalogRoot,storageRoot,archiveHash}){
  if(!ARCHIVE_HASH.test(String(archiveHash||'')))throw Error('A verified offline Library ZIP SHA-256 is required to activate webview assets.');
  // The ZIP importer verified every extracted file and retained the archive SHA.
- // Only the exact known CodeMirror/Quill/Gantt assets pinned in this VSIX may run.
+ // Only the exact known CodeMirror/Quill/Gantt/SortableJS assets pinned in this VSIX may run.
  return installVerified({catalogRoot,storageRoot,commit:'zip-'+archiveHash,offline:true});
 }
 module.exports={MANIFEST,files,verifyManifest,verifyFiles,verifiedGitBlob,install,installOffline,cached};
