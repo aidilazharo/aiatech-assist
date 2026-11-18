@@ -33,7 +33,7 @@ test('project rows launch without duplicate project-selection confirmation',()=>
  assert.ok(js.includes("gateWorkspaceSection').classList.toggle('hidden',!others.length&&!!recentProjects.length)"));
 });
 
-test('ATGV start never automatically opens a saved or sole project',async()=>{
+test('ATGV start keeps manual discovery available until the webview is ready',async()=>{
  const source=read('src/lib/runtime/extension-runtime.js');
  assert.doesNotMatch(source,/autoLoadWorkspaceProject/);
  assert.doesNotMatch(source,/chooseProject\(projects/);
@@ -60,11 +60,12 @@ test('ATGV start never automatically opens a saved or sole project',async()=>{
  assert.deepEqual(messages.map(m=>m.type),['startupScan','refresh']);
 });
 
-test('project is opened only by explicit user action, never as a state or readiness side effect',()=>{
+test('manual project opening remains available alongside guarded automatic resume',()=>{
  const js=read('media/start.js');
  const runtime=read('src/lib/runtime/extension-runtime.js');
  assert.match(js,/action\.addEventListener\('click',\(\)=>launchFromGate\(\{projectId:project\.id\}\)\)/);
  assert.ok(js.includes("button.addEventListener('click',()=>launchFromGate({spaceId:sp.id}))"));
  assert.match(runtime,/case 'openingAuto':\{/);
- assert.doesNotMatch(runtime,/Auto-opened from local workspace metadata/);
+ assert.match(runtime,/if\(msg\.autoResume\).*requireAutomaticStartup/);
+ assert.match(js,/launchFromGate\(\{projectId,autoResume:true\}\)/);
 });

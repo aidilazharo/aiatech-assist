@@ -2053,3 +2053,23 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 #discoveryView .ba-requirement-modal-card{width:min(980px,calc(100vw - 32px));max-height:88vh;overflow:auto}
 #discoveryView .ba-requirement-modal-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:15px}
 #discoveryView .ba-requirement-modal-heading h2{margin:0;font-size:18px;overflow-wrap:anywhere}
+
+/* Responsive circular startup checks and permission summaries. */
+.atgv-startup-latest{margin:6px 0 12px;color:var(--vscode-descriptionForeground);font-size:12px;overflow-wrap:anywhere}
+.atgv-tool-scan-status{align-items:center;justify-content:flex-start;gap:12px}
+.atgv-scan-ring,.atgv-stack-ring{position:relative;display:grid;place-items:center;flex:none;width:clamp(44px,6vw,56px);aspect-ratio:1;border-radius:50%;font-size:11px;font-weight:700}
+.atgv-scan-ring-fill,.atgv-stack-ring-fill{position:absolute;inset:0;border-radius:50%;background:conic-gradient(var(--atgv-accent) 0%,var(--vscode-panel-border) 0)}
+.atgv-scan-ring-fill::after,.atgv-stack-ring-fill::after{content:'';position:absolute;inset:5px;border-radius:50%;background:var(--vscode-sideBar-background,var(--vscode-editor-background))}
+.atgv-scan-ring strong,.atgv-stack-ring strong{position:relative;z-index:1;font-variant-numeric:tabular-nums}
+.atgv-startup-stack-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,135px),1fr));align-items:stretch}
+.atgv-startup-stack.atgv-stack-pending,.atgv-startup-stack.atgv-stack-ring-card{min-height:92px;opacity:1;padding:10px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:5px}
+.atgv-stack-ring-card .atgv-stack-ready{white-space:normal;overflow-wrap:anywhere}
+.atgv-startup-stack[data-progress-state=error] .atgv-stack-ring strong{color:var(--vscode-testing-iconFailed,var(--vscode-errorForeground))}
+.atgv-startup-stack[data-progress-state=complete] .atgv-stack-ring strong{color:var(--vscode-testing-iconPassed)}
+.atgv-startup-permissions{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:7px;margin:12px 0}
+.atgv-permission-row{padding:8px 10px;border:1px solid var(--vscode-panel-border);border-radius:6px;min-width:0}
+.atgv-permission-row strong,.atgv-permission-row small{display:block;overflow-wrap:anywhere}
+.atgv-permission-row small{margin-top:3px;color:var(--vscode-descriptionForeground)}
+.atgv-permission-row[data-state=error] strong{color:var(--vscode-errorForeground)}
+.atgv-permission-row[data-state=ready] strong{color:var(--vscode-testing-iconPassed)}
+@media(max-width:440px){.atgv-startup-stack-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.atgv-startup-footer{gap:6px}.atgv-startup-footer button{max-width:100%;white-space:normal}}

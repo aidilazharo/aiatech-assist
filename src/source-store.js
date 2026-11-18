@@ -3,6 +3,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { importDocumentText } = require('./discovery-import');
+const { extractLegacyDocx } = require('./docx-extractor');
 const DIGEST = /^[a-f0-9]{64}$/;
 function sourceDirectory(registry, id) { return path.join(path.dirname(registry.fileFor(id)), 'documents', 'requirements', 'sources'); }
 async function checkedDirectory(registry, id) {
@@ -57,14 +58,26 @@ async function read(registry, id, entry) {
         throw Error('Stored source document is unavailable. Re-upload it.');
     if (!DIGEST.test(String(entry.byteDigest || '')))
         throw Error('Original file byte checksum is unavailable for this legacy source. Re-upload the document to establish a verified source baseline.');
-    const actualBytes = crypto.createHash('sha256').update(await fs.readFile(file)).digest('hex');
+    const sourceBytes = await fs.readFile(file);
+    const actualBytes = crypto.createHash('sha256').update(sourceBytes).digest('hex');
     if (actualBytes !== entry.byteDigest)
         throw Error('Stored source document bytes changed: original file integrity check failed.');
     const doc = await importDocumentText(file);
     const digest = crypto.createHash('sha256').update(doc.text).digest('hex');
-    if (digest !== entry.digest || doc.truncated)
+    if (doc.truncated)
         throw Error('Stored source document changed or exceeds text limit.');
-    return { ...doc, name: entry.name, digest, byteDigest: entry.byteDigest };
+    let extractionUpgraded = false;
+    if (digest !== entry.digest) {
+        // A verified original may have been registered using the older DOCX
+        // extractor. Check that exact legacy digest before accepting improved
+        // text; the old extracted text is never sent to the AI.
+        const legacy = ext === '.docx' ? extractLegacyDocx(sourceBytes).replace(/\0/g, '').trim() : '';
+        const legacyDigest = legacy && crypto.createHash('sha256').update(legacy).digest('hex');
+        if (!legacyDigest || legacyDigest !== entry.digest)
+            throw Error('Stored source document changed or exceeds text limit.');
+        extractionUpgraded = true;
+    }
+    return { ...doc, name: entry.name, digest: entry.digest, textDigest: digest, extractionUpgraded, byteDigest: entry.byteDigest };
 }
 // Verified, exact original bytes for an explicit download. Unlike read(),
 // this does not re-extract text or mutate the approved Business Requirement.

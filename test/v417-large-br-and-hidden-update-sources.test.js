@@ -56,7 +56,8 @@ test('v417: BA upload and mapping preserve source integrity and atomicity',()=>{
  const before=host.indexOf('discoveryImport.mergeMappingAnswers(partAnswers)');
  const after=host.indexOf('await brWorkflow.commitSourceMapping(',before);
  assert.ok(before>0&&after>before,'merge every section before committing the mapping');
- assert.match(read('src/source-store.js'),/if \(digest !== entry\.digest \|\| doc\.truncated\)/);
+ assert.match(read('src/source-store.js'),/if \(digest !== entry\.digest\)/);
+ assert.match(read('src/source-store.js'),/if \(doc\.truncated\)/);
 });
 
 test('v417: Section 8 shows update buttons and status, not fixed release URLs or explanation',()=>{
@@ -75,5 +76,5 @@ test('v417: Section 8 shows update buttons and status, not fixed release URLs or
  assert.match(host,/releaseRepositoryUrl:releaseUpdater\.PINNED_RELEASE_URL/);
  assert.match(host,/libraryReleaseUrl:libraryReleaseUpdater\.LATEST_URL/);
  assert.match(host,/60\*60\*1000/);
- assert.equal(require('../package.json').version,'0.4.17');
+ assert.equal(require('../package.json').version,'0.4.18');
 });

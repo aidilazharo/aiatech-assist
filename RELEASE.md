@@ -1,3 +1,14 @@
+# ATGV AIATECH Assist v0.4.18
+
+- Check workspace trust, folder access and extension and SDLC Library installation permissions on Start.
+- Show concurrent circular technology-stack checks, freeze failed checks, and offer a guarded timed return to a previously selected ready project.
+- Check and display the latest extension and Library releases on every Start and Restart, including newer prereleases and same-version Library builds.
+- Extract referenced Word document parts while excluding tracked deletions; preserve verified legacy source records.
+- Keep source text unchanged during AI preflight and reconcile mapped claims across long-document sections before saving.
+- Verify the activated Library release and its archive digest before reporting a successful update.
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.17
 
 - Remove the fixed GitHub extension and SDLC Library release URLs from Section 8 Settings, and remove its explanatory release-source paragraph. Update checks, release verification, and hourly scheduling remain unchanged.

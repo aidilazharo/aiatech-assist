@@ -23,14 +23,14 @@ test('BA AI preflight checks RED/GREEN testability but does not claim to execute
  assert.match(p,/Never fabricate a requirement/i);
  assert.match(p,/do not claim that this preflight executes/i);
 });
-test('automatically fixes only small text errors, original text remains identical',()=>{
+test('proposed text edits are never applied automatically',()=>{
  const response=ai({status:'ready',summary:'Source can be mapped',edits:[{before:'Add namme',after:'Add name',reason:'Obvious spelling correction'}],issues:[]});
  const result=preflight.parse(response,SRC);
  assert.equal(result.ready,true);
- assert.equal(result.applied.length,1);
- assert.match(result.effectiveText,/Add name using keyboard/);
+ assert.equal(result.applied.length,0);
+ assert.equal(result.effectiveText,SRC);
  assert.match(SRC,/Add namme using keyboard/);
- assert.equal(result.skipped.length,0);
+ assert.equal(result.skipped.length,1);
  assert.equal(preflight.evidence(result,SHA).originalPreserved,true);
 });
 test('unsafe AI proposals changing requirements, limits, negation, identifiers or ambiguous text are ignored',()=>{

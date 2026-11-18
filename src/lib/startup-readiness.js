@@ -85,13 +85,28 @@ async function findTrustedWindowsTool(name,{runner=run,env=process.env,fsApi=fs}
  }
  return null;
 }
-async function check({runner=run,platform=process.platform,env=process.env,fsApi=fs,onProgress=()=>{},loadCatalog=null}={}){
+async function check({runner=run,platform=process.platform,env=process.env,fsApi=fs,onProgress=()=>{},onStackProgress=()=>{},loadCatalog=null}={}){
  const names=[...new Set(STACKS.flatMap(s=>[...s.required,...s.optional]))];
  const total=names.length+(typeof loadCatalog==='function'?1:0);
  let completed=0;
+ const finishedTools={},failedStacks=new Set();
  const resultWithProgress=async(name,item)=>{
   completed++;
   try{await onProgress({name,completed,total,percent:Math.round(100*completed/total),message:'Checked '+name+' ('+completed+'/'+total+')'});}catch{}
+  if(item){
+   finishedTools[name]=item;
+   for(const stack of STACKS){
+    const names=[...stack.required,...stack.optional];
+    if(!names.includes(name)||failedStacks.has(stack.id))continue;
+    const done=names.filter(tool=>Object.hasOwn(finishedTools,tool)).length;
+    const assessed=assessStack(stack,finishedTools);
+    const failed=assessed.components.find(c=>c.required&&Object.hasOwn(finishedTools,c.id)&&!c.compatible);
+    const status=failed?'error':done===names.length?'complete':'running';
+    const event={id:stack.id,name:stack.name,status,completed:done,total:names.length,percent:Math.round(100*done/names.length),message:failed?failed.id+' is missing or incompatible':status==='complete'?'Prerequisites checked':'Checking prerequisites…'};
+    if(failed)failedStacks.add(stack.id);
+    try{await onStackProgress(event);}catch{}
+   }
+  }
   return [name,item];
  };
  const catalogPromise=typeof loadCatalog==='function'?(async()=>{

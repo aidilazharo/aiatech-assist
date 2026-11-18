@@ -956,7 +956,7 @@ async function activeRoot(workspace) {
     // An explicitly imported, checksum-verified ZIP remains active until a verified Git pull replaces it.
     const offline=await offlineLibrary.imported(workspace);
     const installed=offline?await gitInstalled(workspace,{repositoryUrl:'https://github.com/'+offline.repository}):null;
-    if(offline&&(!installed||offlineLibrary.compareVersions(offline.version,installed.version)>0))return offline;
+    if(offline&&(!installed||offlineLibrary.compareVersions(offline.version,installed.version)>0||offline.releaseTag&&offlineLibrary.compareVersions(offline.version,installed.version)===0))return offline;
     const gitState = await fs.readFile(gitCatalogState(workspace), 'utf8').catch(e => e.code === 'ENOENT' ? null : Promise.reject(e));
     if (gitState) {
         const active = JSON.parse(gitState);

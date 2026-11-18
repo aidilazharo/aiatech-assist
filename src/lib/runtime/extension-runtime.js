@@ -47,6 +47,7 @@ const localReset=require('../reset/local-reset');
 const localContentBackup=require('../backup/local-content-backup');
 const releaseUpdater=require('../updates/github-release-updater');
 const startupReadiness=require('../startup-readiness');
+const startupPermissions=require('../startup-permissions');
 const startupCatalogInventory=require('../../startup-catalog-inventory');
 const startupSetup=require('../startup-setup');
 const startupInstall=require('../startup-install');
@@ -129,6 +130,7 @@ let startupModuleInstalling=false,startupCopilotSetupRunning=false;
 let startupSessionVerified=false;
 let startupSessionProceedApproved=false;
 let startupVerifiedSignature='';
+let startupPermissionsState=null,startupReadinessState=null,startupReadinessSequence=0;
 async function recordStartupDiagnostic(entry){
  try{return await startupDiagnostics.append(context.globalStorageUri.fsPath,entry);}
  catch(error){report('Startup diagnostic write failed: '+error.message);return null;}
@@ -363,7 +365,7 @@ if((installed?.offline||installed?.sha&&/^[a-f0-9]{40}$/.test(installed.sha))&&A
      }catch(e){report('Catalog role variants '+id+': '+e.message);}
    }
  }
- const updateAvailable=!!installed&&libraryUpdateVersion.compareInstalledRemote(installed.version,catalogRemote?.version).available;
+ const updateAvailable=!!installed&&libraryUpdateVersion.compareInstalledRelease(installed,catalogRemote).available;
  return {config,installed,roleSkillDescriptions,roleSkillIdentifiers,roleSkillOptions,roleSkillSelections,remote:catalogRemote,updateAvailable,lastCheck:catalogLastCheck,error:catalogLastError,busy:catalogBusy,credentialSaved:!!(await context.secrets.get('atgvAssist.sdlcCatalogToken')),readOnly:true};
 }
 async function catalogCheck({interactive=false}={}){
@@ -401,7 +403,8 @@ const extensionSourceRepository=require('../../../package.json').repository.url;
 const libraryReleaseUpdater=require('../updates/library-release-updater');
 const FIXED_LIBRARY_REPOSITORY='https://github.com/aidilazharo/tech-stacks-skills';
 let softwareUpdateTimer=null,softwareStartupTimer=null,softwareCheckBusy=false;
-let extensionRelease=null,libraryRelease=null,extensionUpdateChecked='',extensionUpdateError='',libraryUpdateError='';
+let extensionRelease=null,extensionLatest=null,libraryRelease=null,extensionUpdateChecked='',extensionUpdateError='',libraryUpdateError='';
+let startupSessionId=0,startupUpdateSessionChecked=0,pendingStartupUpdateCheck=false;
 function updatePreferences(){
  return {
   releaseRepositoryUrl:releaseUpdater.PINNED_RELEASE_URL,
@@ -413,6 +416,7 @@ function updatePreferences(){
 }
 function updateStatus(){return {settings:updatePreferences(),installedVersion:require('../../../package.json').version,
  latest:extensionRelease?{version:extensionRelease.version,tag:extensionRelease.tag,url:extensionRelease.url}:null,
+ extensionLatest:extensionLatest?{version:extensionLatest.version,tag:extensionLatest.tag,url:extensionLatest.url}:null,
  extensionLastCheck:extensionUpdateChecked,extensionError:extensionUpdateError,
  libraryLastCheck:catalogLastCheck,libraryError:libraryUpdateError,
  libraryLatest:catalogRemote?.version||'',libraryLatestSha:catalogRemote?.sha||'',busy:softwareCheckBusy};}
@@ -496,11 +500,11 @@ async function offerBrandedExtensionUpgrade(release){
     }).catch(()=>{clearTimeout(timer);pendingExtensionUpgradeOffers.delete(requestId);resolve({action:'Later',requestId});});
  });
 }
-async function promptExtensionRelease(release,token){
+async function promptExtensionRelease(release,token,{force=false}={}){
  if(!updatePreferences().promptForUpdates||!release)return;
  const key='atgvAssist.updates.promptedRelease';
  const promptId=(release.repository||releaseUpdater.REPO)+'|'+(release.tag||'');
- if(context.globalState.get(key)===promptId)return;
+ if(!force&&context.globalState.get(key)===promptId)return;
  await context.globalState.update(key,promptId);
  const selected=await offerBrandedExtensionUpgrade(release);
  const action=typeof selected==='string'?selected:selected?.action;
@@ -512,14 +516,15 @@ async function promptExtensionRelease(release,token){
   await performVerifiedExtensionInstall(operation);
  }
 }
-async function checkExtensionRelease({prompt=false,interactive=false}={}){
+async function checkExtensionRelease({prompt=false,interactive=false,forcePrompt=false}={}){
  const token=await releaseAccessToken({interactive});
  try{
-  const result=await releaseUpdater.latestRelease({version:require('../../../package.json').version,token,repositoryUrl:updatePreferences().releaseRepositoryUrl});
-  extensionRelease=result;extensionUpdateError='';extensionUpdateChecked=new Date().toISOString();
-  if(prompt&&result)await promptExtensionRelease(result,token);
-  return result;
- }catch(error){extensionUpdateError=error.message;report('GitHub extension release check: '+error.message);if(interactive)throw error;return null;}
+  const installed=require('../../../package.json').version;
+  const result=await releaseUpdater.latestRelease({version:installed,token,repositoryUrl:updatePreferences().releaseRepositoryUrl,includeCurrent:true});
+  extensionLatest=result;extensionRelease=result&&releaseUpdater.compareVersion(result.version,installed)>0?result:null;extensionUpdateError='';extensionUpdateChecked=new Date().toISOString();
+  if(prompt&&extensionRelease)await promptExtensionRelease(extensionRelease,token,{force:forcePrompt});
+  return extensionRelease;
+ }catch(error){extensionLatest=null;extensionRelease=null;extensionUpdateError=error.message;report('GitHub extension release check: '+error.message);if(interactive)throw error;return null;}
  finally{await publishUpdateStatus();}
 }
 // A desktop prerequisite may change the host system. Keep the approved command
@@ -546,10 +551,10 @@ async function offerBrandedPrerequisiteInstall(plan){
  });
 }
 
-async function offerBrandedLibraryUpdate({repository,installedVersion,remoteVersion}){
- const comparison=libraryUpdateVersion.compareInstalledRemote(installedVersion,remoteVersion);
+async function offerBrandedLibraryUpdate({repository,installedVersion,remoteVersion,installedTag='',remoteTag=''}){
+ const comparison=libraryUpdateVersion.compareInstalledRelease({version:installedVersion,releaseTag:installedTag},{version:remoteVersion,tag:remoteTag});
  if(!comparison.available)throw Error('The remote library version is not newer than the installed library.');
- const message='SDLC Library v'+comparison.remote+' is available on '+repository+'/main '+(comparison.installed?'(installed v'+comparison.installed+')':'(not yet installed)')+'. Download the verified catalog? Active project files remain unchanged.';
+ const message='SDLC Library v'+comparison.remote+(remoteTag?' ('+remoteTag+')':'')+' is available from '+repository+' '+(comparison.installed?'(installed v'+comparison.installed+')':'(not yet installed)')+'. Download the verified catalog? Active project files remain unchanged.';
  if(!dashboard)return vscode.window.showInformationMessage(message,{modal:true},'Pull Library','Later');
  const requestId=crypto.randomUUID();
  return new Promise(resolve=>{
@@ -566,7 +571,7 @@ async function offerBrandedLibraryUpdate({repository,installedVersion,remoteVers
   timer.unref?.();
   pendingLibraryUpdateOffers.set(requestId,{resolve,timer});
   Promise.resolve(dashboard.webview.postMessage({type:'libraryUpdateOffer',requestId,
-   repository,installedVersion:comparison.installed,remoteVersion:comparison.remote}))
+   repository,installedVersion:comparison.installed,remoteVersion:comparison.remote,installedTag,remoteTag}))
    .then(ok=>{
     if(!ok){const entry=pendingLibraryUpdateOffers.get(requestId);
      if(entry){clearTimeout(entry.timer);pendingLibraryUpdateOffers.delete(requestId);resolve('Later');}}
@@ -576,52 +581,59 @@ async function offerBrandedLibraryUpdate({repository,installedVersion,remoteVers
    });
  });
 }
-async function checkLibraryRelease({prompt=false,interactive=false}={}){
+async function promptLibraryRelease(release,{force=false}={}){
+ const installedCatalog=(await catalogUiState()).installed||{};
+ const comparison=libraryUpdateVersion.compareInstalledRelease(installedCatalog,release);
+ if(!comparison.available||!updatePreferences().promptForUpdates||!getWorkspace())return;
+ const key='atgvAssist.updates.promptedLibrary';
+ const promptId=String(release.repository||'')+'|'+String(release.tag||release.version)+'|'+(comparison.installed||'not-installed')+'|'+getWorkspace().uri.fsPath;
+ if(!force&&context.globalState.get(key)===promptId)return;
+ await context.globalState.update(key,promptId);
+ const answer=await offerBrandedLibraryUpdate({repository:release.repository||'tech-stacks-skills',installedVersion:comparison.installed,
+  remoteVersion:comparison.remote,installedTag:installedCatalog.releaseTag||'',remoteTag:release.tag||''});
+ if(answer==='Pull Library'&&!dashboard){
+  if(!getWorkspace())await uiInformation('Open an ATGV workspace to update the SDLC Library.');
+  else await handleDashboardMessage({command:'catalogPull'});
+ }
+}
+async function checkLibraryRelease({prompt=false,interactive=false,forcePrompt=false}={}){
  try{
-  if(catalogBusy)return null;
+  if(catalogBusy){libraryRelease=null;libraryUpdateError='Library update check is waiting for another catalog operation.';return null;}
   const token=await releaseAccessToken({interactive});
   libraryRelease=await libraryReleaseUpdater.latest({token});
   if(!libraryRelease)throw Error('No verified Library source ZIP and checksum are available in GitHub Releases.');
-  catalogRemote={repository:libraryRelease.repository,version:libraryRelease.version,sha:''};
+  catalogRemote={repository:libraryRelease.repository,version:libraryRelease.version,tag:libraryRelease.tag,sha:''};
   catalogLastCheck=new Date().toISOString();catalogLastError='';libraryUpdateError='';
   const remote=libraryRelease.version,installedCatalog=(await catalogUiState()).installed||{};
-  const comparison=libraryUpdateVersion.compareInstalledRemote(installedCatalog.version,remote);
+  const comparison=libraryUpdateVersion.compareInstalledRelease(installedCatalog,libraryRelease);
   if(!comparison.available)return null;
-  if(prompt&&updatePreferences().promptForUpdates&&getWorkspace()){
-   const key='atgvAssist.updates.promptedLibrary';
-   const promptId=String(catalogRemote?.repository||'')+'|'+String(libraryRelease.tag||remote)+'|'+(comparison.installed||'not-installed')+'|'+getWorkspace().uri.fsPath;
-   if(context.globalState.get(key)!==promptId){
-    await context.globalState.update(key,promptId);
-    const answer=await offerBrandedLibraryUpdate({
-     repository:catalogRemote?.repository||'tech-stacks-skills',
-     installedVersion:comparison.installed,remoteVersion:comparison.remote
-    });
-    if(answer==='Pull Library'&&!dashboard){
-     if(!getWorkspace())await uiInformation('Open an ATGV workspace to update the SDLC Library.');
-     else await handleDashboardMessage({command:'catalogPull'});
-    }
-   }
-  }
+  if(prompt)await promptLibraryRelease(libraryRelease,{force:forcePrompt});
   return remote;
- }catch(error){libraryUpdateError=error.message;report('GitHub SDLC Library update: '+error.message);if(interactive)throw error;return null;}
+ }catch(error){libraryRelease=null;libraryUpdateError=error.message;report('GitHub SDLC Library update: '+error.message);if(interactive)throw error;return null;}
  finally{await publishUpdateStatus();}
 }
-async function checkSoftwareUpdates({prompt=false,interactive=false,force=false}={}){
- if(softwareCheckBusy)return;
+async function checkSoftwareUpdates({prompt=false,interactive=false,force=false,startup=false}={}){
+ if(softwareCheckBusy){if(startup)pendingStartupUpdateCheck=true;return;}
  softwareCheckBusy=true;await publishUpdateStatus();
  const config=updatePreferences();const errors=[];
  try{
-  if(force||config.autoCheckExtension)try{await checkExtensionRelease({prompt,interactive});}catch(e){errors.push('Extension: '+e.message);}
-  if(force||config.autoCheckLibrary)try{await checkLibraryRelease({prompt,interactive});}catch(e){errors.push('Library: '+e.message);}
+  await Promise.all([
+   (force||config.autoCheckExtension)?checkExtensionRelease({interactive}).catch(e=>errors.push('Extension: '+e.message)):Promise.resolve(),
+   (force||config.autoCheckLibrary)?checkLibraryRelease({interactive}).catch(e=>errors.push('Library: '+e.message)):Promise.resolve()
+  ]);
+  if(prompt){
+   if(extensionRelease)await promptExtensionRelease(extensionRelease,await releaseAccessToken({interactive}),{force:startup});
+   if(libraryRelease)await promptLibraryRelease(libraryRelease,{force:startup});
+  }
   if(errors.length&&interactive)throw Error(errors.join(' | '));
- }finally{softwareCheckBusy=false;await publishUpdateStatus();}
+ }finally{softwareCheckBusy=false;await publishUpdateStatus();if(pendingStartupUpdateCheck){pendingStartupUpdateCheck=false;void checkSoftwareUpdates({prompt:true,force:true,startup:true}).catch(e=>report('Startup update check: '+e.message));}}
 }
 function scheduleSoftwareUpdates(){
  if(softwareUpdateTimer)clearInterval(softwareUpdateTimer);
  if(softwareStartupTimer)clearTimeout(softwareStartupTimer);
  const prefs=updatePreferences();
  if(!prefs.autoCheckExtension&&!prefs.autoCheckLibrary)return;
- if(prefs.checkOnStartup){softwareStartupTimer=setTimeout(()=>{void checkSoftwareUpdates({prompt:true}).catch(e=>report('Startup update check: '+e.message));},15000);softwareStartupTimer.unref?.();}
+ // Start and Restart request an immediate check after the webview handshake.
  softwareUpdateTimer=setInterval(()=>{void checkSoftwareUpdates({prompt:true}).catch(e=>report('Scheduled update check: '+e.message));},60*60*1000);
  softwareUpdateTimer.unref?.();
 }
@@ -1141,16 +1153,27 @@ async function storedStartupVerification(){
   return {signature};
  }catch{return null;}
 }
-async function startupStatus(){
+async function startupStatus(projects=[]){
  const verified=await storedStartupVerification();
  startupSessionVerified=!!verified;
  startupVerifiedSignature=verified?.signature||'';
  const workspace=getWorkspace()?.uri.fsPath;
  let offline=null;
  try{if(workspace){const installed=await sdlcCatalog.activeRoot(workspace);offline=installed.offline?installed:null;}}catch(e){if(!/not activated/.test(e.message))report('Offline Library startup status: '+e.message);}
+ const selectedId=context.workspaceState?.get('atgvAssist.activeProject','')||'';
+ const selected=Array.isArray(projects)?projects.find(project=>project.id===selectedId&&project.techStackId):null;
  return {required:!startupSessionProceedApproved,defaults:startupSetup.DEFAULTS,
+  selectedProject:selected?{id:selected.id,name:selected.name,techStackId:selected.techStackId,techStackCompanionId:selected.techStackCompanionId||''}:null,
   verified:!!verified,offlineLibrary:offline?{version:offline.version,filename:offline.filename,repository:offline.repository}:null,
   saved:startupSavedConnectionFields()};
+}
+async function requireAutomaticStartup(projectId){
+ if(!registry||!getWorkspace()||!projectId||context.workspaceState.get('atgvAssist.activeProject','')!==projectId)throw Error('Previously selected project is unavailable. Select a project manually.');
+ if(!startupPermissionsState?.ok)throw Error('Workspace or install permissions need attention. Review the Start page before continuing.');
+ const project=await registry.read(projectId);
+ const ids=[project.techStackId,project.techStackCompanionId].filter(Boolean);
+ if(!startupReadinessState?.catalog?.available||!ids.length||ids.some(id=>!startupReadinessState?.stacks?.some(stack=>stack.id===id&&stack.ready)))throw Error('The selected project technology stack or SDLC Library is not ready. Review its prerequisites.');
+ return project;
 }
 async function testAndSaveStartupConnections(message){
  startupSessionVerified=false;startupVerifiedSignature='';
@@ -1282,7 +1305,7 @@ async function dashboardState(){
   }
   const roleSteps=activeProject&&openingFlow.phase==='open'?await roleStepEngine.overview(registry,activeProject.id,currentWork.roles):{scopeId:'project',roles:[]};
   const consolidatedSdlc=activeProject&&openingFlow.phase==='open'?await roleStepEngine.consolidated(registry,activeProject.id,currentWork.roles):{roles:[],scopes:0,verifiedEvidence:0,outputs:0};
-  return {architectErrorLogCount:activeProject?.id?architectErrorLogs.count(activeProject.id):0,projectConnections,emptyWorkspace:emptyWorkspace&&!unmanagedFolders.length,guideAutoShown,baSelectedSources,delivery,unifiedRepository,usedRoles,designState,approvedDesignHash,blueprintRegister,blueprintAssessment,health,aiService,unmanagedFolders,brState,exportRecoveryFailures:exportRecovery?.failures||[],jiraBrowseBaseUrl,roleSettings,timeline,modelStatus,recentProjects,projectReadiness,openingOffline,startupScan,startupSetup:await startupStatus(),serviceConfigured,serviceUrl,coordinationProvider:coordinationProvider(),remoteLinks:links,liveRemote:activeProject?.id===liveRemoteState.projectId?liveRemoteState:null,autoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.autoSync.'+activeProject.id,false)),jiraAutoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.jiraAutoSync.'+activeProject.id,false)),discovery:discoveryState,flow:flowState,type:'state',projects,techStacks,activeId:openingFlow.phase==='open'?activeProject?.id||null:null,opening:openingFlow.snapshot(),summary:openingFlow.phase==='open'?store?.summary()||{documents:0,chunks:0}:{documents:0,chunks:0},workspace:getWorkspace()?.uri.fsPath||null,extensionSettings,jiraTokenSaved,githubTokenSaved,catalog:await catalogUiState(),updates:updateStatus(),work:currentWork,roleSteps,consolidatedSdlc};
+  return {architectErrorLogCount:activeProject?.id?architectErrorLogs.count(activeProject.id):0,projectConnections,emptyWorkspace:emptyWorkspace&&!unmanagedFolders.length,guideAutoShown,baSelectedSources,delivery,unifiedRepository,usedRoles,designState,approvedDesignHash,blueprintRegister,blueprintAssessment,health,aiService,unmanagedFolders,brState,exportRecoveryFailures:exportRecovery?.failures||[],jiraBrowseBaseUrl,roleSettings,timeline,modelStatus,recentProjects,projectReadiness,openingOffline,startupScan,startupSetup:await startupStatus(projects),serviceConfigured,serviceUrl,coordinationProvider:coordinationProvider(),remoteLinks:links,liveRemote:activeProject?.id===liveRemoteState.projectId?liveRemoteState:null,autoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.autoSync.'+activeProject.id,false)),jiraAutoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.jiraAutoSync.'+activeProject.id,false)),discovery:discoveryState,flow:flowState,type:'state',projects,techStacks,activeId:openingFlow.phase==='open'?activeProject?.id||null:null,opening:openingFlow.snapshot(),summary:openingFlow.phase==='open'?store?.summary()||{documents:0,chunks:0}:{documents:0,chunks:0},workspace:getWorkspace()?.uri.fsPath||null,extensionSettings,jiraTokenSaved,githubTokenSaved,catalog:await catalogUiState(),updates:updateStatus(),work:currentWork,roleSteps,consolidatedSdlc};
 }
 async function publishBlueprintState(){
   if(!dashboard||!activeProject)return;
@@ -1332,6 +1355,7 @@ async function restart(){
 async function start(options={}){
   await ready;
   startupSessionVerified=false;startupVerifiedSignature='';startupSessionProceedApproved=false;
+  startupPermissionsState=null;startupReadinessState=null;++startupReadinessSequence;
   if(!options.skipReload){
     const pendingKey='atgvAssist.startAfterWindowReload';
     await vscode.commands.executeCommand('workbench.action.closeAllEditors');
@@ -1342,6 +1366,7 @@ async function start(options={}){
     catch(error){await context.workspaceState.update(pendingKey,undefined);throw error;}
     return;
   }
+  startupSessionId++;
   await focusAtgvWorkspace();
   vendorBootRecoveryCount=0;webviewCssRetry=0;webviewCoreReady=false;
   await prepareVendorAssets({syncIfMissing:true});
@@ -1864,14 +1889,27 @@ async function processSelectedDiscoverySources(msg){
     partAnswers.push(proposals);
     await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'Mapped '+(i+1)+'/'+readable.length+' document(s), section '+(part+1)+'/'+sections.length+'. Validating results…'});
    }
+   const proposals=discoveryImport.mergeMappingAnswers(partAnswers);
+   let crossSectionChecked=false;
+   if(sections.length>1){
+    check();run.phase='preflight';run.timeout=false;
+    await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Comparing mapped requirements across all '+sections.length+' document sections…'});
+    const timer=setTimeout(()=>{run.timeout=true;run.controller.abort();},SOURCE_MAPPING_AI_TIMEOUT_MS);
+    try{
+     const answer=await aiAnswer(target,baDocumentPreflight.crossSectionPrompt(partAnswers),12000,{json:true,signal:run.controller.signal});
+     check();const review=baDocumentPreflight.parseCrossSection(answer,partAnswers);
+     if(review.conflicts.length)throw Error(source.name+': conflicting requirements across document sections need Business Analyst clarification: '+review.conflicts.map(item=>String(item.detail).slice(0,250)).slice(0,3).join(' | ')+' No mapping was saved.');
+     crossSectionChecked=true;
+    }catch(error){if(run.timeout)throw Error(source.name+': cross-section review timed out. No mapping was saved; retry mapping.');throw error;}
+    finally{clearTimeout(timer);}
+   }
    // Aggregate evidence from every source section, with bounded UI/report
    // metadata. All sections must pass before the atomic mapping commit.
-   const report={status:'ready',summary:sections.length>1?'All '+sections.length+' document sections passed AI preflight; source remains unchanged.':reports[0].summary,
+   const report={status:'ready',crossSectionChecked,summary:sections.length>1?'All '+sections.length+' document sections and their mapped claims were reviewed; source remains unchanged.':reports[0].summary,
     applied:reports.flatMap(x=>x.applied).slice(0,12),
     issues:reports.flatMap(x=>x.issues).slice(0,16),
     resolutions:reports.flatMap(x=>x.resolutions||[]).slice(0,12)};
    preflights.push(baDocumentPreflight.evidence(report,source.digest));
-   const proposals=discoveryImport.mergeMappingAnswers(partAnswers);
    mappedProposals.push({filename:source.name,answers:proposals});
   }
   check();run.phase='committing';
@@ -3891,9 +3929,25 @@ async function handleDashboardMessage(msg){
         break;
       }
       case 'startupReadiness':{
+        const scan=++startupReadinessSequence;
+        startupPermissionsState=null;startupReadinessState=null;
         try{
           await dashboard?.webview.postMessage({type:'startupReadinessProgress',percent:0,completed:0,total:Object.keys(startupReadiness.TOOLS).length+1,message:'Checking technology stack prerequisites and project modules…'});
-          const result=await startupReadiness.check({onProgress:progress=>dashboard?.webview.postMessage({type:'startupReadinessProgress',...progress}),loadCatalog:startupStackCatalog});
+          const workspace=getWorkspace(),workspacePath=workspace?.uri.fsPath||'';
+          let projectPath='',workspaceWritable;
+          try{const id=context.workspaceState.get('atgvAssist.activeProject','');if(id&&registry)projectPath=path.dirname(registry.fileFor(id));}catch{}
+          const workspaceFolders=vscode.workspace.workspaceFolders||[];
+          const additionalWorkspacePaths=workspaceFolders.map(folder=>folder.uri.fsPath).filter(folder=>folder&&folder!==workspacePath);
+          try{const states=workspaceFolders.map(folder=>vscode.workspace.fs.isWritableFileSystem?.(folder.uri.scheme));workspaceWritable=states.includes(false)?false:states.includes(true)?true:undefined;}catch{}
+          const permissions=startupPermissions.check({workspacePath,additionalWorkspacePaths,projectPath,extensionPath:context.extensionUri.fsPath,storagePath:context.globalStorageUri.fsPath,
+           trusted:vscode.workspace.isTrusted,workspaceWritable,onProgress:check=>scan===startupReadinessSequence?dashboard?.webview.postMessage({type:'startupPermissionProgress',check}):undefined})
+           .then(async result=>{if(scan===startupReadinessSequence){startupPermissionsState=result;await dashboard?.webview.postMessage({type:'startupPermissionsResult',value:result});}return result;})
+           .catch(async error=>{const result={ok:false,checks:[{id:'permissions',label:'Permission checks',ok:false,detail:String(error.message||error)}]};if(scan===startupReadinessSequence){startupPermissionsState=result;await dashboard?.webview.postMessage({type:'startupPermissionsResult',value:result});}return result;});
+          const result=await startupReadiness.check({onProgress:progress=>scan===startupReadinessSequence?dashboard?.webview.postMessage({type:'startupReadinessProgress',...progress}):undefined,
+           onStackProgress:progress=>scan===startupReadinessSequence?dashboard?.webview.postMessage({type:'startupStackProgress',...progress}):undefined,loadCatalog:startupStackCatalog});
+          await permissions;
+          if(scan!==startupReadinessSequence)break;
+          startupReadinessState=result;
           result.copilotSdk={installed:await copilotRepairSdk.installed(context.globalStorageUri.fsPath),compatible:copilotRepairSdk.compatibleNode(),version:copilotRepairSdk.VERSION};
           const tools=Object.entries(result.tools||{}).map(([name,item])=>name+': '+(item.installed?'detected '+item.version+' via '+(item.source||'PATH'):'not detected'+(item.error?' ('+item.error+')':''))).join(' | ');
           await recordStartupDiagnostic({stage:'readiness-scan',status:'complete',detail:tools+' | SDLC Library: '+(result.catalog?.available?(result.catalog.source+' '+result.catalog.version):'unavailable')});
@@ -4039,13 +4093,17 @@ async function handleDashboardMessage(msg){
         break;
       }
       case 'startupProceed':{
-        const verified=await storedStartupVerification();
-        if(!verified||verified.signature!==sha(JSON.stringify(startupSetup.validate(msg.settings))))throw Error('Test Jira, Confluence and GitHub connections with the current fields before proceeding.');
-        await context.globalState.update('atgvAssist.startupSetup.completed',true);
-        startupSessionProceedApproved=true;
-        startupSessionVerified=true;startupVerifiedSignature=verified.signature;
-        await dashboard?.webview.postMessage({type:'startupProceedResult',success:true});
-        await refreshDashboard();break;
+        try{
+         const verified=await storedStartupVerification();
+         if(!verified||verified.signature!==sha(JSON.stringify(startupSetup.validate(msg.settings))))throw Error('Test Jira, Confluence and GitHub connections with the current fields before proceeding.');
+         if(msg.autoResume)await requireAutomaticStartup(String(msg.projectId||''));
+         await context.globalState.update('atgvAssist.startupSetup.completed',true);
+         startupSessionProceedApproved=true;
+         startupSessionVerified=true;startupVerifiedSignature=verified.signature;
+         await dashboard?.webview.postMessage({type:'startupProceedResult',success:true});
+         await refreshDashboard();
+        }catch(error){await dashboard?.webview.postMessage({type:'startupProceedResult',success:false,message:String(error.message||error)});}
+        break;
       }
       case 'extensionUpgradeDecision':{
         const entry=pendingExtensionUpgradeOffers.get(msg.requestId);
@@ -4164,6 +4222,10 @@ async function handleDashboardMessage(msg){
            await recordStartupDiagnostic({stage:'webview-assets',status:'failed',detail});
          }
          await finishManualProjectDiscovery(startupSequence);
+         if(startupUpdateSessionChecked!==startupSessionId){
+          startupUpdateSessionChecked=startupSessionId;
+          void checkSoftwareUpdates({prompt:true,force:true,startup:true}).catch(e=>report('Startup update check: '+e.message));
+         }
          break;
        }
        case 'refresh':if(!webviewCoreReady)break;await refreshLiveRemoteData({reason:'manual-refresh',force:true});await refreshDashboard();break;
@@ -6370,21 +6432,24 @@ async function handleDashboardMessage(msg){
           if(!release)throw Error('No verified SDLC Library release ZIP is available.');
           libraryRelease=release;
           const stage=path.join(context.globalStorageUri.fsPath,'updates','library-'+crypto.randomUUID());
-          let selected;
+          let selected,downloadedHash='';
           try{
             await progress('running',45,'Downloading Library archive','Downloading the fixed GitHub release ZIP and checksum.');
             const archive=await libraryReleaseUpdater.downloadVerified(release,{token,directory:stage});
+            downloadedHash=crypto.createHash('sha256').update(await fs.readFile(archive)).digest('hex');
             await progress('running',65,'Verifying Library contents','Checking archive entries, VERSION and catalog.json metadata.');
             const inspected=await offlineLibrary.inspectZip(archive);
             if(inspected.version!==release.version)throw Error('Released Library ZIP version does not match GitHub release tag.');
-            selected=await offlineLibrary.importZip({file:archive,workspace:getWorkspace().uri.fsPath,repositoryUrl:FIXED_LIBRARY_REPOSITORY});
+            selected=await offlineLibrary.importZip({file:archive,workspace:getWorkspace().uri.fsPath,repositoryUrl:FIXED_LIBRARY_REPOSITORY,verifiedRelease:release});
           }finally{await fs.rm(stage,{recursive:true,force:true}).catch(()=>{});}
           await context.globalState.update('atgvAssist.sdlcCatalog',config);
           const active=await sdlcCatalog.activeManifest(getWorkspace().uri.fsPath);
           if(active.version!==selected.version)throw Error('Imported Library manifest version does not match activated files.');
+          const activeRoot=await sdlcCatalog.activeRoot(getWorkspace().uri.fsPath);
+          if(selected.version===release.version&&(!activeRoot.offline||activeRoot.releaseTag!==release.tag||activeRoot.archiveHash!==downloadedHash))throw Error('Downloaded Library release was not activated. Existing files were preserved.');
           await progress('running',85,'Library verified','Activating the checksum-verified release and refreshing available roles and stacks.');
-          catalogRemote={sha:'',repository:release.repository,version:release.version};catalogLastError='';catalogLastCheck=new Date().toISOString();
-          const message='Verified Library v'+selected.version+' from GitHub Releases ('+release.tag+'). '+selected.roleCount+' roles and '+selected.stackCount+' tech stacks.';
+          catalogRemote={sha:'',repository:release.repository,version:release.version,tag:release.tag};catalogLastError='';catalogLastCheck=new Date().toISOString();
+          const message=selected.version===release.version?'Verified Library v'+selected.version+' from GitHub Releases ('+release.tag+'). '+selected.roleCount+' roles and '+selected.stackCount+' tech stacks.':'The active Library v'+selected.version+' is newer than release v'+release.version+'; no downgrade was performed.';
           // Install only checksum-pinned browser libraries from the verified
           // Library snapshot. SortableJS remains optional: native Kanban works
           // if a trusted asset is unavailable.
@@ -6433,6 +6498,7 @@ async function handleDashboardMessage(msg){
       case 'openingAuto':{
         ++startupSequence;
         try{
+          if(msg.autoResume){if(!startupSessionProceedApproved||!await storedStartupVerification())throw Error('Saved connections require verification.');await requireAutomaticStartup(String(msg.projectId||''));}
           await guardedOpeningStep(()=>launchProject(msg));
           await refreshDashboard();
         }catch(e){

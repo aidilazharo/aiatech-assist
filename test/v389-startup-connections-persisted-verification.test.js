@@ -96,6 +96,7 @@ function webviewFixture(){
  const source=[
   "const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluenceUrl',email:'startupEmail',githubUrl:'startupGithubUrl'};",
   "let startupSetupRequired=true,startupPage=0,startupVerifying=false,startupInstallingModule='',startupConnectionVerified=false,startupScanComplete=true,startupFormInitialized=false,startupReturnToConnections=false,startupPrereqRequested=false,startupOpenStackId='',startupCopilotModalOpen=false;",
+  "let startupAutoNotice='',startupAutoEnabled=false,startupAutoProject=null,startupAutoStage=''; function beginStartupAuto(){}",
   ui.slice(a,z),
   "return {renderStartupConfig,renderStartupPage,getPage:()=>startupPage,isVerified:()=>startupConnectionVerified};"
  ].join('\n');

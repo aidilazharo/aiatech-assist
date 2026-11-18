@@ -33,8 +33,8 @@ test('GitHub library updates compare validated SemVer, never commit SHA',()=>{
 test('pinned GitHub VERSION is checked for all update polls, including non-ZIP checkouts',()=>{
  assert.match(source,/const info=await sdlcCatalog\.remoteVersion\(config,token\)/);
  assert.doesNotMatch(source,/const info=currentZip\?await sdlcCatalog\.remoteVersion/);
- assert.match(source,/libraryUpdateVersion\.compareInstalledRemote\(installedCatalog\.version,remote\)/);
- assert.match(source,/installedVersion:comparison\.installed,remoteVersion:comparison\.remote/);
+ assert.match(source,/libraryUpdateVersion\.compareInstalledRelease\(installedCatalog,libraryRelease\)/);
+ assert.match(source,/installedVersion:comparison\.installed,\s*remoteVersion:comparison\.remote/);
  assert.match(source,/libraryLatest:catalogRemote\?\.version\|\|''/);
  assert.match(source,/catalogRemote=null;catalogLastError=error\.message/);
 });

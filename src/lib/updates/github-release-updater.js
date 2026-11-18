@@ -47,10 +47,10 @@ function validAsset(asset,name,repository=REPO){
     typeof asset.url==='string'&&new URL(asset.url).hostname==='api.github.com'&&
     asset.url.startsWith(`https://api.github.com/repos/${repository}/releases/assets/`);
 }
-function selectRelease(releases,currentVersion,repositoryUrl=DEFAULT_RELEASE_URL){
+function selectRelease(releases,currentVersion,repositoryUrl=DEFAULT_RELEASE_URL,{includeCurrent=false}={}){
  const {repository,url:releaseUrl}=parseRepositoryUrl(repositoryUrl);
  if(!Array.isArray(releases))throw Error('Invalid GitHub Releases response.');
- const candidates=releases.filter(r=>r&&!r.draft&&parseVersion(r.tag_name)&&compareVersion(r.tag_name,currentVersion)>0)
+ const candidates=releases.filter(r=>r&&!r.draft&&parseVersion(r.tag_name)&&(includeCurrent||compareVersion(r.tag_name,currentVersion)>0))
   .filter(r=>typeof r.html_url==='string'&&r.html_url.startsWith(`https://github.com/${repository}/releases/tag/`))
   .sort((a,b)=>{
    const x=parseVersion(a.tag_name),y=parseVersion(b.tag_name);
@@ -94,22 +94,21 @@ function getBytes(url,{token='',maxBytes=MAX_JSON,accept='application/vnd.github
   request.on('error',reject);
  });
 }
-async function latestRelease({version,token='',repositoryUrl=DEFAULT_RELEASE_URL,request=getBytes}={}){
+async function latestRelease({version,token='',repositoryUrl=DEFAULT_RELEASE_URL,request=getBytes,includeCurrent=false}={}){
  const repo=parseRepositoryUrl(repositoryUrl);
- // GitHub /releases/latest excludes prereleases. Signed automated ATGV builds
- // are prereleases; fall back to the same repository's verified releases list.
+ // /latest excludes prereleases. Always compare the full releases list, even
+ // when a stable release exists, so a newer approved prerelease is not missed.
+ let stable=null;
  if(repo.api!==repo.listApi){
   try{
    const bytes=await request(repo.api,{token,maxBytes:MAX_JSON});
-   const data=JSON.parse(bytes.toString('utf8'));
-   const selected=selectRelease([data],version,repo.url);
-   if(selected)return selected;
+   stable=JSON.parse(bytes.toString('utf8'));
   }catch{/* No latest stable release; verified prereleases may still exist. */}
  }
  const bytes=await request(repo.listApi,{token,maxBytes:MAX_JSON});
  let data;try{data=JSON.parse(bytes.toString('utf8'));}catch{throw Error('Invalid GitHub Releases JSON.');}
  if(data&&data.message&&!Array.isArray(data))throw Error('GitHub Releases unavailable. Check connection and permissions.');
- return selectRelease(data,version,repo.url);
+ return selectRelease(stable?[...data,stable]:data,version,repo.url,{includeCurrent});
 }
 function verifyChecksum(checksumBytes,assetBytes,filename){
  const lines=checksumBytes.toString('utf8').split(/\r?\n/);
