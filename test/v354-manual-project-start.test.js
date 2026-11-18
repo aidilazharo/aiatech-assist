@@ -38,7 +38,7 @@ test('ATGV start keeps manual discovery available until the webview is ready',as
  assert.doesNotMatch(source,/autoLoadWorkspaceProject/);
  assert.doesNotMatch(source,/chooseProject\(projects/);
  assert.match(source,/startupSessionProceedApproved=false/);
- assert.match(source,/required:!startupSessionProceedApproved/);
+ assert.match(source,/required:!startupSessionProceedApproved&&!openingActive/);
  assert.doesNotMatch(source,/if\(startupIsComplete\(\)\)await finishManualProjectDiscovery\(sequence\)/);
  const begin=source.indexOf('async function finishManualProjectDiscovery(sequence){');
  const end=source.indexOf('\nasync function restart(){',begin);

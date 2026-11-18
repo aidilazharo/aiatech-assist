@@ -809,7 +809,9 @@ function updateState(msg){
   renderWorkspaceSearch(msg.startupScan);
   const prior=opening.phase;
   opening=msg.opening||{phase:'search',candidate:null,warnings:[]};
-  if(opening.phase!==prior)gateBusy=false;
+  // Intermediate selected/tested/initialized states are still opening.
+  // Only a completed project or an explicit reset clears progress.
+  if(opening.phase==='open'||(opening.phase==='search'&&prior!=='search'))gateBusy=false;
   if($('coordinationProvider')){
     $('coordinationProvider').value=msg.coordinationProvider||'jira-confluence';
     const provider=msg.coordinationProvider||'jira-confluence';
@@ -870,7 +872,12 @@ function updateState(msg){
   if(opening.phase==='open'){
     if(!workspaceOpened){workspaceOpened=true;gateBusy=false;gateError='';document.body.classList.remove('gate-mode');$('extensionToProjectSettings').disabled=!activeId;renderSidebarRole();navigate('sdlc-roles');}
     if(restoreLibraryAfterVendorSync&&workspaceOpened){restoreLibraryAfterVendorSync=false;navigate('library');}
-  }else if(view!=='settings'&&view!=='project')showGate();
+  }else if(view!=='settings'&&view!=='project'){
+    // Do not reset gateBusy on every background dashboard update. A refresh
+    // can arrive between click and Jira/Confluence verification.
+    if(gateBusy){document.body.classList.add('gate-mode');renderGate();}
+    else showGate();
+  }
   else if(!workspaceOpened)document.body.classList.add('gate-mode');
   renderGate();
 }
@@ -7641,7 +7648,10 @@ function showStartupStep(required){
 }
 function renderStartupConfig(config){
  if(!config)return;
- const required=config.required===true;
+ // A stale startup-state response must never cover an in-flight or opened
+ // project with the Jira/GitHub credential form. Explicit Previous still works.
+ const openingInProgress=gateBusy||!!gateError||workspaceOpened||(opening?.phase&&opening.phase!=='search');
+ const required=config.required===true&&!openingInProgress;
  if(!startupFormInitialized){
   const saved=config.saved||{},defaults=config.defaults||{};
   updateHeaderUserName(saved.email||extensionSettings.jira?.email);
