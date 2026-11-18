@@ -46,7 +46,8 @@ test('UI has Custom Stack, requested roster controls, accessible icons and progr
  assert.match(html,/Assigned Jira Tasks/);
  assert.match(ui,/paintStartupStack\(row,/);
  assert.match(html,/aria-label="Download unified error log"/);
- const block=ui.slice(ui.indexOf('function renderBAJiraInventory()'),ui.indexOf('function renderBAJiraHierarchy('));
+ const start=ui.indexOf(' const brCell=item=>{',ui.indexOf('function renderBAJiraInventory()'));
+ const block=ui.slice(start,ui.indexOf(' baJiraTableInstance=ATGVDataTables.mount(root,rows',start));
  assert.ok(!block.includes("answers.textContent='View 12 Answers'"));
  assert.ok(!block.includes("jira.textContent='View Jira · '"));
 });
