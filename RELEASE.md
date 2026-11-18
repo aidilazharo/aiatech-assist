@@ -1,3 +1,13 @@
+# ATGV AIATECH Assist v0.4.16
+
+- Make Jira HTTP 404 diagnostics actionable when an API response is empty or `null`.
+- Identify failing REST method and URL path, never URL query parameters, credentials or access tokens.
+- Distinguish inaccessible Jira projects, invisible issues, and incorrect Jira site URLs without assuming deletion.
+- Parse Jira `errorMessages` and `errors` while ignoring empty or `null` entries.
+- Preserve existing Jira, GitHub and Confluence request behavior; add regression tests for null responses, authorization errors and URL query privacy.
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.15
 
 - Remove the entire SDLC Library panel from Start → Jira, Confluence & GitHub connections, including repository explanation, ZIP upload button, and offline ZIP status.
