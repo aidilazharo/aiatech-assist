@@ -51,7 +51,7 @@ test('BA extension maps provisional recommendations separately, keeps BR approva
  const ui=fs.readFileSync(path.join(root,'media/start.js'),'utf8');
  const mapping=fs.readFileSync(path.join(root,'src/discovery-import.js'),'utf8');
  assert.match(host,/baDocumentPreflight\.mappingGuidance\(result\)/);
- assert.match(host,/preflights\.push\(baDocumentPreflight\.evidence\(result,source\.digest\)\)/);
+ assert.match(host,/preflights\.push\(baDocumentPreflight\.evidence\(report,source\.digest\)\)/);
  assert.match(host,/commitSourceMapping\(registry,run\.projectId,original\.revision/);
  assert.match(ui,/industry-standard recommendation/);
  assert.match(ui,/provisional/);
