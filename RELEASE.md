@@ -1,3 +1,14 @@
+# ATGV AIATECH Assist v0.4.23
+
+- Fix **Open Project** unexpectedly returning to Jira, Confluence and GitHub credentials during project launch.
+- Do not require the startup connection wizard while a project is being resolved, checked, initialized or already opened.
+- Prevent stale state messages from replacing an in-progress project or a retryable opening error with the credential form.
+- Keep Open Project progress active across background dashboard updates until the project finishes opening or explicitly fails.
+- Preserve explicit Back to Connections, new-session verification, saved credential integrity and offline recovery behavior.
+- Add tests covering all opening phases, active projects, in-progress opening, stale-state responses and recovery screens.
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.22
 
 - Fix BA Discovery Mapping when the combined evidence across source sections exceeds 5,000 characters. Preserve complete merged answers up to 100,000 characters each, while AI section responses stay capped at 5,000.
