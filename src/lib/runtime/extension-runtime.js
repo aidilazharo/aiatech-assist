@@ -392,28 +392,19 @@ function scheduleCatalogChecks(){
   catalogWatch.unref?.();
 }
 
-// Release and library sources are independently configurable, with strict GitHub URL validation.
+// Fixed trusted update repositories; never use a saved URL for code updates.
 const extensionSourceRepository=require('../../../package.json').repository.url;
-const DEFAULT_LIBRARY_REPOSITORY_URL='https://github.com/aidilazharo/tech-stacks-skills';
-const RELEASE_REPOSITORY_SETTING='atgvAssist.updates.releaseRepositoryUrl';
+const libraryReleaseUpdater=require('../updates/library-release-updater');
+const FIXED_LIBRARY_REPOSITORY='https://github.com/aidilazharo/tech-stacks-skills';
 let softwareUpdateTimer=null,softwareStartupTimer=null,softwareCheckBusy=false;
-let extensionRelease=null,extensionUpdateChecked='',extensionUpdateError='',libraryUpdateError='';
+let extensionRelease=null,libraryRelease=null,extensionUpdateChecked='',extensionUpdateError='',libraryUpdateError='';
 function updatePreferences(){
- const libraryRepository=catalogConfig().repositoryUrl;
- const savedRelease=context.globalState.get(RELEASE_REPOSITORY_SETTING,'');
- let releaseRepositoryUrl;
- try{releaseRepositoryUrl=releaseUpdater.parseRepositoryUrl(savedRelease||releaseUpdater.releaseUrlForRepository(extensionSourceRepository)).url;}
- catch{releaseRepositoryUrl=releaseUpdater.releaseUrlForRepository(extensionSourceRepository);}
  return {
-  releaseRepositoryUrl,
-  libraryRepositoryUrl:libraryRepository||DEFAULT_LIBRARY_REPOSITORY_URL,
-  libraryConfigured:!!libraryRepository,
-  libraryReleaseUrl:libraryRepository?releaseUpdater.releaseUrlForRepository(libraryRepository):'',
-  // Required checks and consent prompts cannot be disabled by legacy saved settings.
-  autoCheckExtension:true,
-  autoCheckLibrary:true,
-  promptForUpdates:true,
-  checkOnStartup:true
+  releaseRepositoryUrl:releaseUpdater.PINNED_RELEASE_URL,
+  libraryReleaseUrl:libraryReleaseUpdater.LATEST_URL,
+  libraryRepositoryUrl:FIXED_LIBRARY_REPOSITORY,
+  libraryConfigured:true,
+  autoCheckExtension:true,autoCheckLibrary:true,promptForUpdates:true,checkOnStartup:true
  };
 }
 function updateStatus(){return {settings:updatePreferences(),installedVersion:require('../../../package.json').version,
@@ -582,26 +573,26 @@ async function offerBrandedLibraryUpdate({repository,installedVersion,remoteVers
  });
 }
 async function checkLibraryRelease({prompt=false,interactive=false}={}){
- const config=catalogConfig();if(!config.repositoryUrl){libraryUpdateError='Set the SDLC Catalog repository in Settings.';await publishUpdateStatus();return null;}
  try{
   if(catalogBusy)return null;
-  await catalogCheck({interactive});libraryUpdateError=catalogLastError;
-  const remote=catalogRemote?.version||'',installedCatalog=(await catalogUiState()).installed||{};
+  const token=await releaseAccessToken({interactive});
+  libraryRelease=await libraryReleaseUpdater.latest({token});
+  if(!libraryRelease)throw Error('No verified Library source ZIP and checksum are available in GitHub Releases.');
+  catalogRemote={repository:libraryRelease.repository,version:libraryRelease.version,sha:''};
+  catalogLastCheck=new Date().toISOString();catalogLastError='';libraryUpdateError='';
+  const remote=libraryRelease.version,installedCatalog=(await catalogUiState()).installed||{};
   const comparison=libraryUpdateVersion.compareInstalledRemote(installedCatalog.version,remote);
   if(!comparison.available)return null;
   if(prompt&&updatePreferences().promptForUpdates&&getWorkspace()){
-    const key='atgvAssist.updates.promptedLibrary';
-    // Distinguish workspace and installed version so a different project is prompted.
-    const promptId=String(catalogRemote?.repository||'')+'|'+String(catalogRemote?.sha||remote)+'|'+(comparison.installed||'not-installed')+'|'+getWorkspace().uri.fsPath;
-    if(context.globalState.get(key)!==promptId){
-     await context.globalState.update(key,promptId);
-     const answer=await offerBrandedLibraryUpdate({
+   const key='atgvAssist.updates.promptedLibrary';
+   const promptId=String(catalogRemote?.repository||'')+'|'+String(libraryRelease.tag||remote)+'|'+(comparison.installed||'not-installed')+'|'+getWorkspace().uri.fsPath;
+   if(context.globalState.get(key)!==promptId){
+    await context.globalState.update(key,promptId);
+    const answer=await offerBrandedLibraryUpdate({
      repository:catalogRemote?.repository||'tech-stacks-skills',
      installedVersion:comparison.installed,remoteVersion:comparison.remote
     });
     if(answer==='Pull Library'&&!dashboard){
-     // Native prompt fallback: the webview's branded Pull action is started
-     // directly by libraryUpdateDecision, not by this background checker.
      if(!getWorkspace())await uiInformation('Open an ATGV workspace to update the SDLC Library.');
      else await handleDashboardMessage({command:'catalogPull'});
     }
@@ -627,7 +618,7 @@ function scheduleSoftwareUpdates(){
  const prefs=updatePreferences();
  if(!prefs.autoCheckExtension&&!prefs.autoCheckLibrary)return;
  if(prefs.checkOnStartup){softwareStartupTimer=setTimeout(()=>{void checkSoftwareUpdates({prompt:true}).catch(e=>report('Startup update check: '+e.message));},15000);softwareStartupTimer.unref?.();}
- softwareUpdateTimer=setInterval(()=>{void checkSoftwareUpdates({prompt:true}).catch(e=>report('Scheduled update check: '+e.message));},6*60*60*1000);
+ softwareUpdateTimer=setInterval(()=>{void checkSoftwareUpdates({prompt:true}).catch(e=>report('Scheduled update check: '+e.message));},60*60*1000);
  softwareUpdateTimer.unref?.();
 }
 const aiRuntimeRoot=()=>path.join(context.globalStorageUri.fsPath,'ai-runtimes');
@@ -4109,31 +4100,6 @@ async function handleDashboardMessage(msg){
         await handleDashboardMessage({command:'catalogPull'});
         break;
       }
-      case 'saveSoftwareUpdateSources':{
-        try{
-          if(softwareCheckBusy||catalogBusy||activeExtensionUpgradeInstall?.running)throw Error('An update operation is running. Retry after it completes.');
-          // Validate BOTH sources before changing any saved configuration.
-          const release=releaseUpdater.parseRepositoryUrl(String(msg.releaseRepositoryUrl||'').trim());
-          const previous=catalogConfig();
-          const library=sdlcCatalog.normalizeConfig({...previous,repositoryUrl:String(msg.libraryRepositoryUrl||'').trim()});
-          if(!library.repositoryUrl)throw Error('Enter an SDLC Library GitHub repository URL.');
-          const previousRelease=context.globalState.get(RELEASE_REPOSITORY_SETTING,'');
-          await context.globalState.update('atgvAssist.sdlcCatalog',library);
-          try{await context.globalState.update(RELEASE_REPOSITORY_SETTING,release.url);}
-          catch(error){await context.globalState.update('atgvAssist.sdlcCatalog',previous);throw error;}
-          const changedLibrary=library.repositoryUrl!==previous.repositoryUrl;
-          if(changedLibrary){catalogRemote=null;catalogLastCheck='';catalogLastError='';libraryUpdateError='';scheduleCatalogChecks();}
-          extensionRelease=null;extensionUpdateChecked='';extensionUpdateError='';
-          await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});
-          await publishUpdateStatus();
-          await dashboard?.webview.postMessage({type:'softwareUpdateSourcesSaved',success:true,
-            releaseRepositoryUrl:release.url,libraryRepositoryUrl:library.repositoryUrl,
-            message:'Repository URLs saved. Check Updates to verify both sources.'});
-        }catch(error){
-          await dashboard?.webview.postMessage({type:'softwareUpdateSourcesSaved',success:false,message:String(error.message||error).slice(0,500)});
-        }
-        break;
-      }
       case 'checkSoftwareUpdates':{
         await checkSoftwareUpdates({prompt:true,interactive:true,force:true});break;
       }
@@ -6377,44 +6343,52 @@ async function handleDashboardMessage(msg){
           await progress('failed',0,'Library update cannot start','Another catalog operation is already running. Retry after it finishes.');
           throw Error('Catalog operation already running.');
         }
-        const config=catalogConfig();
-        if(!config.repositoryUrl){
-          await progress('failed',0,'Library repository missing','Save the SDLC Catalog configuration before pulling.');
-          throw Error('Save the SDLC Catalog configuration first.');
-        }
+        const config=sdlcCatalog.normalizeConfig({...catalogConfig(),repositoryUrl:FIXED_LIBRARY_REPOSITORY});
         catalogBusy=true;
-        await progress('running',5,'Preparing SDLC Library update…','Checking the configured GitHub repository and workspace.');
+        await progress('running',5,'Preparing SDLC Library update…','Checking the fixed GitHub release repository.');
         await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});
         try{
-          const token=await catalogToken(config,{interactive:true});
-          await progress('running',20,'GitHub access verified','Checking the local workspace catalog and available main-branch revision.');
-          if(!getWorkspace())throw Error('Open a workspace before pulling the SDLC Catalog.');
-          await ensureWorkspaceLibrary(getWorkspace().uri.fsPath);
-          await progress('running',35,'Checking library revision','Reading the pinned GitHub main snapshot and validated catalog version.');
-          const pinned=await sdlcCatalog.remoteVersion(config,token);
-          await progress('running',50,'Pulling library files…','Fetching GitHub main into the workspace SDLC Catalog checkout. This stage can take longer for large libraries.');
-          const snapshot=await sdlcCatalog.syncGitWorkspace(config,token,getWorkspace().uri.fsPath,context.globalStorageUri.fsPath,{
-            expectedSha:pinned.sha,
-            onProgress:async event=>progress('running',event.percent,event.title,event.message)
-          });
-          await progress('running',75,'Library files downloaded','Checking the active checkout, manifest version, and expected commit.');
-          const selected=await sdlcCatalog.activeRoot(getWorkspace().uri.fsPath);
-          libraryUpdateVersion.verifyActivatedPull(pinned,selected);
-          if(!selected.offline&&snapshot.sha!==selected.sha)throw Error('Library checkout changed after pulling GitHub main; refresh and retry.');
-          await progress('running',88,'Library verification passed','Refreshing catalog roles, technology stacks and active library information.');
-          catalogRemote={sha:pinned.sha,repository:pinned.repository,version:pinned.version};catalogLastError='';catalogLastCheck=new Date().toISOString();
-          const message=selected.offline?
-            'GitHub main v'+pinned.version+' was verified, but newer ZIP v'+selected.version+' remains active.':
-            'Installed Library v'+selected.version+' from GitHub main ('+selected.sha.slice(0,12)+'): '+snapshot.roleCount+' roles and '+snapshot.stackCount+' tech stacks.'+
-            (snapshot.backupPath?' Original modified catalog preserved at '+snapshot.backupPath+'.':'');
+          if(!getWorkspace())throw Error('Open a workspace before pulling the SDLC Library.');
+          const token=await releaseAccessToken({interactive:true});
+          await progress('running',20,'Checking GitHub Releases','Finding the latest trusted Library source ZIP and SHA-256 checksum.');
+          const release=await libraryReleaseUpdater.latest({token});
+          if(!release)throw Error('No verified SDLC Library release ZIP is available.');
+          libraryRelease=release;
+          const stage=path.join(context.globalStorageUri.fsPath,'updates','library-'+crypto.randomUUID());
+          let selected;
+          try{
+            await progress('running',45,'Downloading Library archive','Downloading the fixed GitHub release ZIP and checksum.');
+            const archive=await libraryReleaseUpdater.downloadVerified(release,{token,directory:stage});
+            await progress('running',65,'Verifying Library contents','Checking archive entries, VERSION and catalog.json metadata.');
+            const inspected=await offlineLibrary.inspectZip(archive);
+            if(inspected.version!==release.version)throw Error('Released Library ZIP version does not match GitHub release tag.');
+            selected=await offlineLibrary.importZip({file:archive,workspace:getWorkspace().uri.fsPath,repositoryUrl:FIXED_LIBRARY_REPOSITORY});
+          }finally{await fs.rm(stage,{recursive:true,force:true}).catch(()=>{});}
+          await context.globalState.update('atgvAssist.sdlcCatalog',config);
+          const active=await sdlcCatalog.activeManifest(getWorkspace().uri.fsPath);
+          if(active.version!==selected.version)throw Error('Imported Library manifest version does not match activated files.');
+          await progress('running',85,'Library verified','Activating the checksum-verified release and refreshing available roles and stacks.');
+          catalogRemote={sha:'',repository:release.repository,version:release.version};catalogLastError='';catalogLastCheck=new Date().toISOString();
+          const message='Verified Library v'+selected.version+' from GitHub Releases ('+release.tag+'). '+selected.roleCount+' roles and '+selected.stackCount+' tech stacks.';
+          // Install only checksum-pinned browser libraries from the verified
+          // Library snapshot. SortableJS remains optional: native Kanban works
+          // if a trusted asset is unavailable.
+          await prepareVendorAssets({syncIfMissing:false});
           await dashboard?.webview.postMessage({type:'catalogAction',action:'pull',success:true,message});
           if(activeProject&&getWorkspace()){
             const available=await sdlcCatalog.designFrameworkAvailability(getWorkspace().uri.fsPath);
             await dashboard?.webview.postMessage({type:'uxFrameworkCatalogChanged',projectId:activeProject.id,...available});
           }
-          await progress('running',96,'Refreshing workspace…','Finalizing the verified Library update and refreshing the interface.');
+          await progress('running',96,'Refreshing workspace…','Finalizing the verified Library release update.');
           await refreshDashboard();
           await progress('completed',100,'SDLC Library update complete',message);
+          if(installedVendorAssets&&dashboard&&webviewVendorDir!==installedVendorAssets.dir){
+            vendorBootRecoveryCount=0;vendorWebviewReady=false;webviewCoreReady=false;
+            dashboard.webview.options={...dashboard.webview.options,localResourceRoots:[
+              vscode.Uri.joinPath(context.extensionUri,'media'),vscode.Uri.file(installedVendorAssets.dir)]};
+            dashboard.webview.html=html(dashboard.webview,{resumeLibrary:true});
+            webviewVendorDir=installedVendorAssets.dir;
+          }
           activeLibraryUpdatePullRequestId=null;
         }catch(error){
           catalogLastError=String(error?.message||error).slice(0,600);

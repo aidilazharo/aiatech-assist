@@ -21,8 +21,8 @@ test('third party browser libraries are no longer shipped in VSIX; trusted lock 
  assert.match(read('test/generated/extension-source.txt'),/atgv-vendor-libs/);
 });
 test('repository bundle matches pinned trusted manifest, not just checksum claims from GitHub',async()=>{
- const manifest={schema:1,id:'atgv-approved-webview-libraries',version:'1.0.0',assets:source.files};
- assert.equal(source.verifyManifest(manifest).length,21);
+ const manifest={schema:1,id:'atgv-approved-webview-libraries',version:'1.0.1',assets:source.files};
+ assert.equal(source.verifyManifest(manifest).length,24);
  const forged={...manifest,assets:manifest.assets.map(x=>({...x}))};forged.assets[0].sha256='f'.repeat(64);
  assert.throws(()=>source.verifyManifest(forged),/not approved/);
 });
@@ -32,7 +32,7 @@ test('verified download installs once, survives offline, and rejects tampering i
  try{
   const first=await source.install({catalogRoot:catalog,storageRoot:tmp,commit});
   assert.equal(first.fromCache,false);
-  assert.equal((await source.cached({storageRoot:tmp})).version,'1.0.0');
+  assert.equal((await source.cached({storageRoot:tmp})).version,'1.0.1');
   const second=await source.install({catalogRoot:catalog,storageRoot:tmp,commit});
   assert.equal(second.fromCache,false);assert.equal(first.dir,second.dir);
   const target=path.join(first.dir,'codemirror','lib','codemirror.js');

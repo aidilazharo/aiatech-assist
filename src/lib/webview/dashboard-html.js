@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.4.11';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.4.13';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -20,7 +20,6 @@ function html(webview,{resumeLibrary=false}={}){
   const overviewSdlcJs=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','overview-sdlc-phases.js'));
   const pmDeliveryJs=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','pm-delivery.js'));
   const pmKanbanJs=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-kanban.js'));
-  const sortableJs=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','vendor','sortablejs-1.15.7.min.js'));
   const pmKanbanCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','pm-kanban.css'));
   const userRosterCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','my-work-users.css'));
   const apiSimulatorJs=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','api-simulator.js'));
@@ -37,6 +36,7 @@ function html(webview,{resumeLibrary=false}={}){
   const userGuideControllerJs=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','user-guide-controller.js'));
   const brand=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-mark.png'));
   const vendor=(folder,name)=>vendorAssets?webview.asWebviewUri(vscode.Uri.file(path.join(vendorAssets.dir,folder,name))):null;
+  const sortableJs=vendor('sortablejs','sortablejs-1.15.7.min.js');
   const quillJs=vendor('quill','quill.js'),quillCss=vendor('quill','quill.snow.css');
   const ganttJs=vendor('frappe-gantt','frappe-gantt.umd.js'),ganttCss=vendor('frappe-gantt','frappe-gantt.css');
   const diagramCanvas=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','diagram-canvas.js'));
@@ -265,12 +265,11 @@ function html(webview,{resumeLibrary=false}={}){
       <p id="localBackupStatus" class="muted" role="status" aria-live="polite">No backup or restore running.</p>
     </section></div></details>
     <details class="ext-settings-accordion" id="settingsSoftwareUpdateGroup" data-requirement="required"><summary><span>8. Extension &amp; SDLC Library Updates</span><span class="ext-settings-badge" data-state="required">Required</span></summary><div class="ext-settings-content"><section>
-      <p class="muted">Select separate GitHub repositories for verified extension Releases and the SDLC Library main branch. Save the URLs before checking or pulling updates.</p>
-      <div class="form-grid software-update-sources">
-        <div class="field"><label for="softwareReleaseRepositoryUrl">Extension Release Repository URL</label><input id="softwareReleaseRepositoryUrl" type="url" inputmode="url" maxlength="300" spellcheck="false" autocomplete="url" placeholder="https://github.com/aidilazharo/aiatech-assist/releases"></div>
-        <div class="field"><label for="softwareLibraryRepositoryUrl">SDLC Library Repository URL</label><input id="softwareLibraryRepositoryUrl" type="url" inputmode="url" maxlength="300" spellcheck="false" autocomplete="url" placeholder="https://github.com/aidilazharo/tech-stacks-skills"></div>
+      <p class="muted">Release sources are fixed and verified. GitHub's latest endpoint is checked first; same-repository prerelease builds are also supported. Both updates are checked automatically every hour while VS Code is running.</p>
+      <div class="software-update-sources" aria-label="Fixed GitHub release sources">
+        <p><strong>Extension release:</strong> https://github.com/aidilazharo/aiatech-assist/releases/latest</p>
+        <p><strong>SDLC Library release:</strong> https://github.com/aidilazharo/tech-stacks-skills/releases/latest</p>
       </div>
-      <div class="actions"><button type="button" id="saveSoftwareUpdateSources">Save Repository URLs</button><span id="softwareUpdateSourcesStatus" class="test-status muted" role="status" aria-live="polite"></span></div>
       <div class="software-update-toolbar" role="group" aria-label="Software update actions">
         <button type="button" id="checkSoftwareUpdates" class="secondary">Check Updates</button>
         <button type="button" id="pullLibraryFiles" class="secondary">Pull Library Files</button>
@@ -732,7 +731,7 @@ function html(webview,{resumeLibrary=false}={}){
   <div id="guideMenu" class="guide-menu-overlay hidden" aria-hidden="true"><div class="guide-menu-card" role="dialog" aria-modal="true" aria-labelledby="guideMenuTitle"><div class="guide-title-row"><div><span class="guide-kicker">ATGV HELP</span><h2 id="guideMenuTitle">Interactive User Guide</h2><p class="muted">Step-by-step guidance on real controls. No code, Jira, or approval action is performed by this guide.</p></div><button type="button" id="guideMenuClose" class="secondary" aria-label="Close guide">✕</button></div><div id="guideMenuTours" class="guide-tour-list" role="group" aria-label="Available walkthroughs"></div><fieldset class="guide-mode-control"><legend>Guidance mode</legend><label><input type="radio" name="guideMode" value="explain" checked> Explain steps</label><label><input type="radio" name="guideMode" value="practice"> Practice safe navigation</label></fieldset><div class="guide-menu-footer"><span id="guideMenuStatus" class="muted" role="status"></span><button type="button" id="guideMenuStart">Start Guide</button></div></div></div>
   <div id="guideOverlay" class="guide-overlay hidden" aria-hidden="true"><div class="guide-shade" data-edge="top"></div><div class="guide-shade" data-edge="left"></div><div class="guide-shade" data-edge="right"></div><div class="guide-shade" data-edge="bottom"></div><div id="guideSpotlight" class="guide-spotlight"></div><div id="guideCard" class="guide-card" role="dialog" aria-modal="true" aria-labelledby="guideStepTitle" tabindex="-1"><div class="guide-card-top"><span id="guideStepCounter" class="guide-counter">Step 1 of 1</span><button type="button" id="guideClose" class="guide-close" aria-label="Close tutorial">✕</button></div><h2 id="guideStepTitle"></h2><p id="guideStepDescription"></p><p id="guideStepNote" class="guide-step-note hidden" role="status"></p><button id="guideStepTokenLink" type="button" class="guide-step-token-link hidden">Open official token page ↗</button><div class="guide-progress" aria-label="Tutorial progress"><div id="guideProgressFill"></div></div><div class="guide-card-actions"><button type="button" id="guideSkip" class="guide-skip">Skip tour</button><button type="button" id="guideBack" class="secondary">Back</button><button type="button" id="guideNext">Next</button></div></div></div>
   <div id="status" class="status hidden" role="status" aria-live="polite"></div>
-  </div></div>${quillJs?`<script src="${quillJs}"></script>`:''}${ganttJs?`<script src="${ganttJs}"></script>`:''}<script src="${diagramCanvas}"></script><script src="${ownershipFilters}"></script><script src="${ownershipPresentation}"></script><script src="${userGuideJs}"></script><script src="${aiChangeResolutionJs}"></script><script src="${baStageFlowJs}"></script><script src="${baProgressJs}"></script><script src="${apiSimulatorJs}"></script><script src="${jiraOverviewJs}"></script><script src="${dataTablesJs}"></script><script src="${pmDeliveryJs}"></script><script src="${sortableJs}"></script><script src="${pmKanbanJs}"></script><script src="${jiraWorkflowTablesJs}"></script><script src="${completedBrHistoryJs}"></script><script src="${baJiraEpicsJs}"></script><script src="${overviewSdlcJs}"></script><script src="${js}"></script>${vendorAssets?cmFiles.map(file=>`<script src="${cmAsset(file)}"></script>`).join(''):''}<script src="${studioJs}"></script><script src="${userGuideControllerJs}"></script><script src="${assetBootJs}"></script></body></html>`;
+  </div></div>${quillJs?`<script src="${quillJs}"></script>`:''}${ganttJs?`<script src="${ganttJs}"></script>`:''}<script src="${diagramCanvas}"></script><script src="${ownershipFilters}"></script><script src="${ownershipPresentation}"></script><script src="${userGuideJs}"></script><script src="${aiChangeResolutionJs}"></script><script src="${baStageFlowJs}"></script><script src="${baProgressJs}"></script><script src="${apiSimulatorJs}"></script><script src="${jiraOverviewJs}"></script><script src="${dataTablesJs}"></script><script src="${pmDeliveryJs}"></script>${sortableJs?`<script src="${sortableJs}"></script`:''}<script src="${pmKanbanJs}"></script><script src="${jiraWorkflowTablesJs}"></script><script src="${completedBrHistoryJs}"></script><script src="${baJiraEpicsJs}"></script><script src="${overviewSdlcJs}"></script><script src="${js}"></script>${vendorAssets?cmFiles.map(file=>`<script src="${cmAsset(file)}"></script>`).join(''):''}<script src="${studioJs}"></script><script src="${userGuideControllerJs}"></script><script src="${assetBootJs}"></script></body></html>`;
 }
 return html;
 }

@@ -1,6 +1,6 @@
 'use strict';
-// Project Manager Kanban. SortableJS is bundled locally in the ATGV VSIX
-// (media/vendor/sortablejs-1.15.7.min.js); no user npm/CDN setup is needed.
+// Project Manager Kanban. Optional SortableJS comes from the verified SDLC Library
+// asset cache; native HTML drag-and-drop remains available without it.
 // Jira remains authoritative for issue workflow status and permitted transitions.
 (function(root){
   let sorters=[];

@@ -20,7 +20,7 @@ function createUiHarness(){
   }
   return nodes.get(id);
  };
- const first=script.indexOf('let latestSoftwareUpdateState=null,softwareLibraryPulling=false,softwareSourcesDirty=false,softwareSourcesSaving=false;');
+ const first=script.indexOf('let latestSoftwareUpdateState=null,softwareLibraryPulling=false;');
  const second=script.indexOf('function renderSoftwareUpdates(',first);
  const clickStart=script.indexOf("$('pullLibraryFiles').addEventListener('click',()=>{",second);
  const clickEnd=script.indexOf("$('viewExtensionRelease').addEventListener(",clickStart);
@@ -76,7 +76,7 @@ test('Settings and Catalog controls share real host catalog progress events',()=
  assert.ok(start>0&&end>start);
  const command=host.slice(start,end);
  assert.match(command,/type:'catalogPullProgress'/);
- assert.match(command,/syncGitWorkspace/);
- assert.match(command,/expectedSha:pinned\.sha/);
+ assert.match(command,/libraryReleaseUpdater\.downloadVerified/);
+ assert.match(command,/offlineLibrary\.importZip/);
  assert.match(command,/progress\('completed',100/);
 });

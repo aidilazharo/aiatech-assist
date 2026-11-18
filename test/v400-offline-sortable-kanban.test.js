@@ -24,36 +24,36 @@ function findList(container,status){
  return board.children.map(col=>col.children[1]).find(list=>list.dataset.status===status);
 }
 
-test('v400: shipped SortableJS is exactly the pinned MIT-licensed upstream build',()=>{
- const file=path.join(repoRoot,'media/vendor/sortablejs-1.15.7.min.js');
- const bytes=fs.readFileSync(file);
- assert.equal(bytes.length,45478);
- assert.match(bytes.toString('utf8',0,95),/Sortable 1\.15\.7 - MIT/);
- const hash=crypto.createHash('sha1').update('blob '+bytes.length).update(Buffer.from([0])).update(bytes).digest('hex');
- assert.equal(hash,'8148b9dda22424c300191fcd3fcff1648de41e2e');
- assert.match(read('media/vendor/sortablejs-LICENSE.txt'),/MIT License/);
- assert.match(read('media/vendor/SORTABLEJS-NOTICE.md'),/SortableJS/);
+test('v413: SortableJS is pinned in the verified SDLC Library and absent from VSIX',()=>{
+ const lock=require('../src/vendor-library-lock.json');
+ assert.equal(lock.version,'1.0.1');
+ const item=lock.assets.find(x=>x.path==='sortablejs/sortablejs-1.15.7.min.js');
+ assert.ok(item);
+ assert.equal(item.bytes,45478);
+ assert.equal(item.sha256,'bf4241bc73fef7f11c59a283a69fe8051cdd31c6d8ff5a2b9ba219e7831fcf76');
+ for(const name of ['sortablejs-1.15.7.min.js','sortablejs-LICENSE.txt','SORTABLEJS-NOTICE.md'])
+  assert.equal(fs.existsSync(path.join(repoRoot,'media/vendor',name)),false);
  assert.doesNotMatch(read('media/atgv-kanban.js'),/https?:\/\/|import\(['"]|require\(['"]sortablejs/);
 });
-
-test('v400: dashboard loads local browser build before Kanban and before start.js',()=>{
+test('v413: verified Library SortableJS loads before Kanban with an offline native fallback',()=>{
  const original=Module._load;let createDashboardHtml;
  try{
   Module._load=function(name,parent,isMain){
-   if(name==='vscode')return {Uri:{joinPath:(base,...parts)=>({fsPath:path.join(base.fsPath,...parts)})}};
+   if(name==='vscode')return {Uri:{joinPath:(base,...parts)=>({fsPath:path.join(base.fsPath,...parts)}),file:fsPath=>({fsPath})}};
    return original.call(this,name,parent,isMain);
   };
   ({createDashboardHtml}=require('../src/lib/webview/dashboard-html'));
  }finally{Module._load=original;}
- const html=createDashboardHtml(()=>({extensionUri:{fsPath:'/atgv-extension'}}),()=>null)({
-  asWebviewUri:uri=>uri.fsPath,cspSource:'vscode-resource:'
- });
- const vendor=html.indexOf('src="/atgv-extension/media/vendor/sortablejs-1.15.7.min.js"');
+ const ctx=()=>({extensionUri:{fsPath:'/atgv-extension'}});
+ const webview={asWebviewUri:uri=>uri.fsPath,cspSource:'vscode-resource:'};
+ const html=createDashboardHtml(ctx,()=>({dir:'/verified-sdlc-library'}))(webview);
+ const vendor=html.indexOf('src="/verified-sdlc-library/sortablejs/sortablejs-1.15.7.min.js"');
  const kanban=html.indexOf('src="/atgv-extension/media/atgv-kanban.js"');
- const boot=html.indexOf('src="/atgv-extension/media/webview-asset-boot.js"');
- assert.ok(vendor>html.indexOf('</head>')&&vendor<kanban,'vendored script must load first');
+ assert.ok(vendor>html.indexOf('</head>')&&vendor<kanban,'verified SortableJS must load before Kanban');
  assert.ok(kanban<html.indexOf('src="/atgv-extension/media/start.js"'));
- assert.ok(boot>kanban,'readiness check runs after controllers');
+ const missing=createDashboardHtml(ctx,()=>null)(webview);
+ assert.ok(!missing.includes('sortablejs-1.15.7.min.js'));
+ assert.ok(missing.includes('src="/atgv-extension/media/atgv-kanban.js"'));
  assert.doesNotMatch(html,/https?:\/\/(?:cdn|unpkg|jsdelivr)\./);
 });
 
@@ -128,12 +128,13 @@ test('v400: webview startup watches SortableJS failures and keeps permitted Jira
  const host=read('src/lib/runtime/extension-runtime.js');
  const ui=read('media/start.js');
  assert.match(loader,/sortablejs-1\\?\.15\\?\.7\\?\.min\\?\.js|sortablejs-1/);
- assert.match(readiness,/Bundled SortableJS could not initialize/);
+ assert.doesNotMatch(readiness,/Bundled SortableJS could not initialize/);
+ assert.match(readiness,/ATGV Kanban controller could not initialize/);
  assert.match(host,/case 'pmJiraTransition'/);
  assert.match(host,/jiraAvailableTransitions\(config,token,key\)/);
  assert.match(host,/jiraMove\(config,token,key,selected.id/);
  assert.match(ui,/queueMicrotask\(\(\)=>\{if\(pmKanbanPending\)renderPMDashboard\(\);\}\)/);
- assert.equal(require('../package.json').version,'0.4.11');
+ assert.equal(require('../package.json').version,'0.4.13');
 });
 
 

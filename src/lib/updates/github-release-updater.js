@@ -12,6 +12,7 @@ const {URL}=require('node:url');
 const REPO='aidilazharo/aiatech-assist';
 const DEFAULT_RELEASE_URL=`https://github.com/${REPO}/releases`;
 const API=`https://api.github.com/repos/${REPO}/releases?per_page=30`;
+const PINNED_RELEASE_URL=`https://github.com/${REPO}/releases/latest`;
 /** Accept only a GitHub repository or its Releases landing URL, never an arbitrary API endpoint. */
 function parseRepositoryUrl(input=DEFAULT_RELEASE_URL){
  if(typeof input!=='string'||input.length>300)throw Error('Enter a valid GitHub repository Releases URL.');
@@ -19,12 +20,13 @@ function parseRepositoryUrl(input=DEFAULT_RELEASE_URL){
  if(url.protocol!=='https:'||url.hostname!=='github.com'||url.username||url.password||url.port||url.search||url.hash){
   throw Error('Release URL must use https://github.com without credentials, ports or query parameters.');
  }
- const match=/^\/([a-zA-Z0-9-]{1,39})\/([a-zA-Z0-9_.-]{1,100})(?:\/releases)?\/?$/.exec(url.pathname);
+ const match=/^\/([a-zA-Z0-9-]{1,39})\/([a-zA-Z0-9_.-]{1,100})(?:\/releases(\/latest)?)?\/?$/.exec(url.pathname);
  if(!match||match[2]==='.'||match[2]==='..'||match[2].endsWith('.git')){
   throw Error('Use https://github.com/OWNER/REPOSITORY/releases.');
  }
  const repository=match[1]+'/'+match[2];
- return {repository,url:`https://github.com/${repository}/releases`,api:`https://api.github.com/repos/${repository}/releases?per_page=30`};
+ const latest=match[3]==='/latest';
+ return {repository,url:`https://github.com/${repository}/releases${latest?'/latest':''}`,api:`https://api.github.com/repos/${repository}/releases${latest?'/latest':'?per_page=30'}`,listApi:`https://api.github.com/repos/${repository}/releases?per_page=30`};
 }
 /** Derive trusted GitHub Releases URLs only from repository metadata. */
 function releaseUrlForRepository(repositoryUrl){
@@ -94,7 +96,17 @@ function getBytes(url,{token='',maxBytes=MAX_JSON,accept='application/vnd.github
 }
 async function latestRelease({version,token='',repositoryUrl=DEFAULT_RELEASE_URL,request=getBytes}={}){
  const repo=parseRepositoryUrl(repositoryUrl);
- const bytes=await request(repo.api,{token,maxBytes:MAX_JSON});
+ // GitHub /releases/latest excludes prereleases. Signed automated ATGV builds
+ // are prereleases; fall back to the same repository's verified releases list.
+ if(repo.api!==repo.listApi){
+  try{
+   const bytes=await request(repo.api,{token,maxBytes:MAX_JSON});
+   const data=JSON.parse(bytes.toString('utf8'));
+   const selected=selectRelease([data],version,repo.url);
+   if(selected)return selected;
+  }catch{/* No latest stable release; verified prereleases may still exist. */}
+ }
+ const bytes=await request(repo.listApi,{token,maxBytes:MAX_JSON});
  let data;try{data=JSON.parse(bytes.toString('utf8'));}catch{throw Error('Invalid GitHub Releases JSON.');}
  if(data&&data.message&&!Array.isArray(data))throw Error('GitHub Releases unavailable. Check connection and permissions.');
  return selectRelease(data,version,repo.url);
@@ -129,4 +141,4 @@ async function downloadVerified(release,{token='',directory,request=getBytes,onP
  await fs.writeFile(target+'.part',vsix,{mode:0o600});await fs.rename(target+'.part',target);
  return target;
 }
-module.exports={REPO,API,DEFAULT_RELEASE_URL,parseRepositoryUrl,releaseUrlForRepository,parseVersion,compareVersion,selectRelease,verifyChecksum,latestRelease,downloadVerified,getBytes};
+module.exports={REPO,API,DEFAULT_RELEASE_URL,PINNED_RELEASE_URL,parseRepositoryUrl,releaseUrlForRepository,parseVersion,compareVersion,selectRelease,verifyChecksum,latestRelease,downloadVerified,getBytes};
