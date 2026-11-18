@@ -25,14 +25,17 @@ test('SDLC Library update offers use the same ATGV branded modal as extension up
  assert.match(js,/event\.key==='Escape'/);
  assert.match(js,/libraryUpdatePriorFocus/);
 });
-test('only three update actions stay on one row without release URL controls',()=>{
+test('update actions stay on one row with two independently saved GitHub source URLs',()=>{
  const html=read('src/lib/webview/dashboard-html.js'),ui=read('media/start.js'),css=read('media/start.css');
  const section=html.slice(html.indexOf('id="settingsSoftwareUpdateGroup"'),html.indexOf('id="projectView"'));
  assert.match(section,/class="software-update-toolbar"/);
  for(const id of ['checkSoftwareUpdates','installExtensionRelease','viewExtensionRelease'])
   assert.ok(section.includes('id="'+id+'"'),id);
- for(const id of ['softwareReleaseRepositoryUrl','saveSoftwareUpdateSettings'])
-  assert.ok(!section.includes('id="'+id+'"'),id);
+ for(const id of ['softwareReleaseRepositoryUrl','softwareLibraryRepositoryUrl','saveSoftwareUpdateSources'])
+  assert.ok(section.includes('id="'+id+'"'),id);
+ assert.ok(section.indexOf('id="softwareReleaseRepositoryUrl"')<section.indexOf('id="softwareLibraryRepositoryUrl"'));
+ assert.match(ui,/softwareSourcesDirty/);
+ assert.match(ui,/type==='softwareUpdateSourcesSaved'/);
  for(const id of ['softwareAutoExtension','softwareAutoLibrary','softwarePromptUpdates','softwareCheckOnStartup']){
   assert.ok(!section.includes('id="'+id+'"'),id);
   assert.ok(!ui.includes("$('"+id+"')"),id);
