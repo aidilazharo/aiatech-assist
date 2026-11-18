@@ -69,6 +69,16 @@ test('Pull Library stays open while real host stages advance; only completion cl
  assert.equal(x.node('libraryUpdateModal').classList.contains('hidden'),true);
  assert.equal(x.messages.length,1,'completion must not send a duplicate decision');
 });
+test('update offer displays each library version once and explains a same-version build',()=>{
+ const x=fixture();
+ x.emit({type:'libraryUpdateOffer',requestId:'version',installedVersion:'1.1.15',remoteVersion:'1.1.17',remoteTag:'v1.1.17-source-build.11'});
+ assert.equal(x.node('libraryUpdateCurrent').textContent,'v1.1.15');
+ assert.equal(x.node('libraryUpdateNext').textContent,'v1.1.17');
+ x.emit({type:'libraryUpdateOffer',requestId:'build',installedVersion:'1.1.17',remoteVersion:'1.1.17',remoteTag:'v1.1.17-source-build.12',installedVersionWarning:'Check local changes.'});
+ assert.equal(x.node('libraryUpdateNext').textContent,'v1.1.17');
+ assert.match(x.node('libraryUpdateDescription').textContent,/build is available/);
+ assert.match(x.node('libraryUpdateDescription').textContent,/Check local changes/);
+});
 test('Failure keeps the dialog open with a Retry Pull action; Later works only afterward',()=>{
  const x=fixture(),id='offer-2';
  x.emit({type:'libraryUpdateOffer',requestId:id,remoteVersion:'1.1.15'});

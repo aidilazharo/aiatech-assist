@@ -1,3 +1,11 @@
+# ATGV AIATECH Assist v0.4.19
+
+- Show the installed workspace library version and latest library release version without repeating the GitHub build tag.
+- Recover stale installed-version metadata from a matching verified checkout or checksum-verified offline library, while preserving locally edited files.
+- Explain when a verified build is available for the same library version.
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.18
 
 - Check workspace trust, folder access and extension and SDLC Library installation permissions on Start.

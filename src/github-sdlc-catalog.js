@@ -797,6 +797,35 @@ async function gitInstalled(workspace, config) {
             await writeGitCatalogState(workspace, latest);
             return { ...latest, checkout: target };
         }
+        // Older metadata can contain a stale version even when the recorded
+        // commit is correct. Only repair it when the checked-out manifest and
+        // that commit agree; local edits must never be treated as a release.
+        for (const name of ['catalog.json', 'catalog.yaml']) {
+            const file = path.join(target, name);
+            const manifestStat = await fs.lstat(file).catch(error => error.code === 'ENOENT' ? null : Promise.reject(error));
+            if (!manifestStat) continue;
+            if (!manifestStat.isFile() || manifestStat.isSymbolicLink() || manifestStat.size > MAX_FILE_BYTES)
+                return { ...state, checkout:target, versionWarning:'The local library manifest could not be verified; the installed version is the last verified version.' };
+            try {
+                const readVersion = text => (name.endsWith('.yaml') ? parseSimpleYaml(text) : JSON.parse(text)).version;
+                const normalizeText = text => text.replace(/\r\n/g, '\n').trim();
+                const localText = await fs.readFile(file, 'utf8');
+                const localVersion = readVersion(localText);
+                if (localVersion !== state.version) {
+                    const committedText = await runCatalogGit(target, ['show', actualSha + ':' + name], process.env);
+                    if (normalizeText(localText) === normalizeText(committedText) && typeof localVersion === 'string') {
+                        const latest = await inspectGitCheckout(target, state.repository);
+                        try { await writeGitCatalogState(workspace, latest); }
+                        catch { return { ...latest, checkout:target, versionWarning:'The correct version was read, but the local library metadata could not be updated.' }; }
+                        return { ...latest, checkout: target };
+                    }
+                    return { ...state, checkout:target, versionWarning:'The local library manifest has changes; the installed version is the last verified version.' };
+                }
+            } catch {
+                return { ...state, checkout:target, versionWarning:'The local library manifest could not be verified; the installed version is the last verified version.' };
+            }
+            break;
+        }
         return { ...state, checkout:target };
     } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
 }

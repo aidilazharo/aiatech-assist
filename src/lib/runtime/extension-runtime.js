@@ -551,7 +551,7 @@ async function offerBrandedPrerequisiteInstall(plan){
  });
 }
 
-async function offerBrandedLibraryUpdate({repository,installedVersion,remoteVersion,installedTag='',remoteTag=''}){
+async function offerBrandedLibraryUpdate({repository,installedVersion,remoteVersion,installedTag='',remoteTag='',installedVersionWarning=''}){
  const comparison=libraryUpdateVersion.compareInstalledRelease({version:installedVersion,releaseTag:installedTag},{version:remoteVersion,tag:remoteTag});
  if(!comparison.available)throw Error('The remote library version is not newer than the installed library.');
  const message='SDLC Library v'+comparison.remote+(remoteTag?' ('+remoteTag+')':'')+' is available from '+repository+' '+(comparison.installed?'(installed v'+comparison.installed+')':'(not yet installed)')+'. Download the verified catalog? Active project files remain unchanged.';
@@ -571,7 +571,7 @@ async function offerBrandedLibraryUpdate({repository,installedVersion,remoteVers
   timer.unref?.();
   pendingLibraryUpdateOffers.set(requestId,{resolve,timer});
   Promise.resolve(dashboard.webview.postMessage({type:'libraryUpdateOffer',requestId,
-   repository,installedVersion:comparison.installed,remoteVersion:comparison.remote,installedTag,remoteTag}))
+   repository,installedVersion:comparison.installed,remoteVersion:comparison.remote,installedTag,remoteTag,installedVersionWarning}))
    .then(ok=>{
     if(!ok){const entry=pendingLibraryUpdateOffers.get(requestId);
      if(entry){clearTimeout(entry.timer);pendingLibraryUpdateOffers.delete(requestId);resolve('Later');}}
@@ -590,7 +590,7 @@ async function promptLibraryRelease(release,{force=false}={}){
  if(!force&&context.globalState.get(key)===promptId)return;
  await context.globalState.update(key,promptId);
  const answer=await offerBrandedLibraryUpdate({repository:release.repository||'tech-stacks-skills',installedVersion:comparison.installed,
-  remoteVersion:comparison.remote,installedTag:installedCatalog.releaseTag||'',remoteTag:release.tag||''});
+  remoteVersion:comparison.remote,installedTag:installedCatalog.releaseTag||'',remoteTag:release.tag||'',installedVersionWarning:installedCatalog.versionWarning||''});
  if(answer==='Pull Library'&&!dashboard){
   if(!getWorkspace())await uiInformation('Open an ATGV workspace to update the SDLC Library.');
   else await handleDashboardMessage({command:'catalogPull'});
