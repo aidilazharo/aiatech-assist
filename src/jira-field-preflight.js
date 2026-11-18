@@ -20,7 +20,8 @@ function availableText(field,item,{approvedBR={},discoveryAnswers={}}={}){
  return null;
 }
 function toRichText(text){
- return {type:'doc',version:1,content:String(text).split('\n').map(line=>({type:'paragraph',content:line?[{type:'text',text:line.slice(0,10000)}]:[]}))};
+ // Split oversized inline nodes but never omit evidence from the source.
+ return {type:'doc',version:1,content:String(text).split('\n').map(line=>({type:'paragraph',content:line?(line.match(/[\s\S]{1,10000}/g)||[]).map(part=>({type:'text',text:part})):[]}))};
 }
 function existingValueText(value){
  if(typeof value==='string'||typeof value==='number'||typeof value==='boolean')return String(value).slice(0,350);
@@ -53,7 +54,10 @@ function planFields(item, metadata, context={}){
    const mapped=availableText(raw,item,context);
    const writable=raw.writable!==false&&(!Array.isArray(raw.operations)||!raw.operations.length||raw.operations.includes('set'));
    const textual=type==='string'&&(/^customfield_\d+$/.test(id)||id==='environment');
-   if(textual&&writable&&mapped){
+   if(textual&&writable&&mapped&&mapped.text.length>(custom.includes('textarea')||id==='environment'?32000:250)){
+    display=MISSING;source=mapped.source;status='too-long';
+    blocking.push(name+' ('+id+') has '+mapped.text.length+' source characters, which exceeds the safe Jira text-field size. Review the complete BR evidence; no content was truncated.');
+   }else if(textual&&writable&&mapped){
     display=mapped.text;source=mapped.source;status='planned';
     value=custom.includes('textarea')||id==='environment'?toRichText(mapped.text):mapped.text;
    }else if(hasOld){
