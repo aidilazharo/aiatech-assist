@@ -49,7 +49,7 @@ test('v413: verified Library SortableJS loads before Kanban with an offline nati
  const html=createDashboardHtml(ctx,()=>({dir:'/verified-sdlc-library'}))(webview);
  const vendor=html.indexOf('src="/verified-sdlc-library/sortablejs/sortablejs-1.15.7.min.js"');
  const kanban=html.indexOf('src="/atgv-extension/media/atgv-kanban.js"');
- assert.ok(vendor>html.indexOf('</head>')&&vendor<kanban,'verified SortableJS must load before Kanban');
+ assert.ok(vendor>0&&vendor<kanban&&kanban<html.indexOf('</head>'),'verified SortableJS and Kanban controller must load in head');
  assert.ok(kanban<html.indexOf('src="/atgv-extension/media/start.js"'));
  const missing=createDashboardHtml(ctx,()=>null)(webview);
  assert.ok(!missing.includes('sortablejs-1.15.7.min.js'));
@@ -129,12 +129,14 @@ test('v400: webview startup watches SortableJS failures and keeps permitted Jira
  const ui=read('media/start.js');
  assert.match(loader,/sortablejs-1\\?\.15\\?\.7\\?\.min\\?\.js|sortablejs-1/);
  assert.doesNotMatch(readiness,/Bundled SortableJS could not initialize/);
- assert.match(readiness,/ATGV Kanban controller could not initialize/);
+ assert.doesNotMatch(readiness,/ATGV Kanban controller could not initialize/);
+ assert.match(readiness,/Optional Kanban controller unavailable/);
+ assert.match(readiness,/loadWarnings:warnings/);
  assert.match(host,/case 'pmJiraTransition'/);
  assert.match(host,/jiraAvailableTransitions\(config,token,key\)/);
  assert.match(host,/jiraMove\(config,token,key,selected.id/);
  assert.match(ui,/queueMicrotask\(\(\)=>\{if\(pmKanbanPending\)renderPMDashboard\(\);\}\)/);
- assert.equal(require('../package.json').version,'0.4.13');
+ assert.equal(require('../package.json').version,'0.4.14');
 });
 
 

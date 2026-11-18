@@ -92,8 +92,9 @@ test('Start connections are compact two-per-row without the introductory paragra
   'startupJiraUrl','startupConfluenceUrl',
   'startupEmail','startupAtlassianToken',
   'startupGithubUrl','startupGithubToken',
-  'startupProjectRepo','startupLibraryRepo',
  ]);
+ assert.ok(form.includes('id="startupLibraryZipUpload"'),'offline ZIP import remains available');
+ assert.doesNotMatch(form,/id="startupProjectRepo"|id="startupLibraryRepo"/);
  assert.doesNotMatch(form,/class="field full"/);
  assert.match(css,/#startupConnectionForm \.atgv-startup-connection-grid\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
  assert.match(css,/@media\(max-width:740px\)\{#startupConnectionForm \.atgv-startup-connection-grid\{grid-template-columns:minmax\(0,1fr\)/);

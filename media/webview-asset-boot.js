@@ -13,8 +13,10 @@
     const failures=[...new Set([
       ...(window.atgvCoreAssetFailures||[]),
       ...missing.map(name=>'Missing stylesheet '+name),
-      ...(!window.ATGVKanban||typeof window.ATGVKanban.render!=='function'?['ATGV Kanban controller could not initialize']:[])
     ])].slice(0,20);
+    const warnings=!window.ATGVKanban||typeof window.ATGVKanban.render!=='function'
+      ?['Optional Kanban controller unavailable; Jira DataTable remains functional']:[];
+    if(warnings.length)console.warn('ATGV:',warnings.join('; '));
     if(failures.length){
       const banner=document.createElement('div');
       banner.setAttribute('role','alert');
@@ -23,7 +25,7 @@
       document.body.prepend(banner);
     }
     try {
-      vscode.postMessage({command:'webviewReady',coreStylesLoaded:failures.length===0,loadErrors:failures});
+      vscode.postMessage({command:'webviewReady',coreStylesLoaded:failures.length===0,loadErrors:failures,loadWarnings:warnings});
     }catch(error){console.error('ATGV webview readiness notification failed',error);}
   }
   if(document.readyState==='complete')ready();

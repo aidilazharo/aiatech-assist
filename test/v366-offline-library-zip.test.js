@@ -39,12 +39,14 @@ function fixture(prefix=''){
  };
 }
 const repo='https://github.com/aia/test-library';
-test('Start-page ZIP icon appears next to SDLC Library URL and sends host picker command',async()=>{
+test('Start-page ZIP icon uses the fixed SDLC Library source with no editable URL',async()=>{
  const root=path.join(__dirname,'..');
  const [html,js,runtime]=await Promise.all(['src/lib/webview/dashboard-html.js','media/start.js','src/lib/runtime/extension-runtime.js']
   .map(p=>fs.readFile(path.join(root,p),'utf8')));
- const url=html.indexOf('id="startupLibraryRepo"'),upload=html.indexOf('id="startupLibraryZipUpload"');
- assert.ok(url>0&&upload>url&&upload-url<650);
+ const upload=html.indexOf('id="startupLibraryZipUpload"');
+ assert.ok(upload>0);
+ assert.ok(!html.includes('id="startupLibraryRepo"'));
+ assert.match(js,/STARTUP_LIBRARY_REPO='https:\/\/github\.com\/aidilazharo\/tech-stacks-skills'/);
  assert.match(js,/send\('importLibraryZip',\{repositoryUrl\}\)/);
  assert.match(runtime,/case 'importLibraryZip':/);
  assert.match(runtime,/offlineLibrary\.importZip/);

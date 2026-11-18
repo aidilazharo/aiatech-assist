@@ -141,7 +141,7 @@ test('webview includes independent global catalog settings, controls and update 
  const script=await fs.readFile(path.join(__dirname,'..','media','start.js'),'utf8');
  for(const id of ['sdlcCatalogSection','catalogRepoUrl','catalogRef','catalogAuth','catalogAutoCheck','catalogTest','catalogPull','catalogCheck'])assert.ok(html.includes(`id="${id}"`),`Missing ${id}`);
  for(const action of ['catalogSave','catalogTest','catalogPull','catalogCheck'])assert.ok(script.includes(`send('${action}'`));
- assert.ok(html.includes('SDLC Catalog (Main)'));assert.ok(html.includes('AIA repository URL is suggested below.'));
+ assert.ok(html.includes('SDLC Catalog (Main)'));assert.ok(html.includes('The SDLC Library repository is fixed to the verified ATGV source.'));
 });
 
 test('supports catalog.yaml with simple roles and technology-stack identifiers',()=>{

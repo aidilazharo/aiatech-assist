@@ -195,8 +195,8 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
     assert.equal(JSON.parse(await fs.readFile(path.join(root,'projects','claims','sdlc','local-ownership.json'),'utf8')).documents['claims/business-analyst--requirements'].ownerId,'first-secret');
     handler({command:'catalogSave',config:{repositoryUrl:'https://github.com/aia/catalog',ref:'main',authentication:'public',autoCheck:false}});
     await until(()=>globalState.has('atgvAssist.sdlcCatalog'));
-    assert.equal(globalState.get('atgvAssist.sdlcCatalog').repositoryUrl,'https://github.com/aia/catalog');
-    assert.ok(messages.some(m=>m.type==='catalogState'&&m.catalog?.config?.repositoryUrl==='https://github.com/aia/catalog'));
+    assert.equal(globalState.get('atgvAssist.sdlcCatalog').repositoryUrl,'https://github.com/aidilazharo/tech-stacks-skills');
+    assert.ok(messages.some(m=>m.type==='catalogState'&&m.catalog?.config?.repositoryUrl==='https://github.com/aidilazharo/tech-stacks-skills'));
     handler({command:'createJiraTicket',summary:'Must not create'});
     await until(()=>messages.some(m=>m.type==='notice'&&m.error&&/Jira writes require approved BRs/.test(m.message)));
     global.fetch=savedFetch;
@@ -248,7 +248,7 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
     assert.equal(secrets.size,2,'Reset must retain Atlassian and GitHub credentials');
     assert.equal(globalState.get('atgvAssist.extensionSettings').github.repo,'shared-docs');
     assert.equal(globalState.get('atgvAssist.extensionSettings').jira.projectKey,'FIN');
-    assert.equal(globalState.get('atgvAssist.sdlcCatalog').repositoryUrl,'https://github.com/aia/catalog');
+    assert.equal(globalState.get('atgvAssist.sdlcCatalog').repositoryUrl,'https://github.com/aidilazharo/tech-stacks-skills');
     assert.equal(globalState.get('atgvAssist.coordinationProvider'),'local');
     assert.deepEqual((await fs.readFile(path.join(root,'projects','claims','atgv.project.json'),'utf8').then(JSON.parse)).settings.jira.projectKey,'CLM');
     assert.equal(workspaceState.has('atgvAssist.activeProject'),false);

@@ -1,11 +1,10 @@
 'use strict';
+const FIXED_LIBRARY_REPOSITORY='https://github.com/aidilazharo/tech-stacks-skills';
 const DEFAULTS=Object.freeze({
  jiraUrl:'https://aiamy-jira-azure.atlassian.net',
  confluenceUrl:'https://aiamy-jira-azure.atlassian.net/wiki',
  email:'user.name@aia.com',
- githubUrl:'https://github.com/aiamalaysia',
- projectRepoUrl:'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-cockpit',
- libraryRepoUrl:'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills'
+ githubUrl:'https://github.com/aiamalaysia'
 });
 function githubRepo(input){
  const url=new URL(String(input||'').trim());
@@ -34,8 +33,8 @@ function validate(input){
  const organization=new URL(data.githubUrl);
  if(organization.protocol!=='https:'||organization.hostname!=='github.com'||organization.search||organization.hash||organization.username||organization.password||!/^\/[A-Za-z0-9_.-]+\/?$/.test(organization.pathname))throw Error('Enter a GitHub organization URL.');
  const owner=organization.pathname.split('/').filter(Boolean)[0];
- const project=githubRepo(data.projectRepoUrl),library=githubRepo(data.libraryRepoUrl);
- if(project.owner.toLowerCase()!==owner.toLowerCase()||library.owner.toLowerCase()!==owner.toLowerCase())throw Error('Project and library repositories must belong to the selected GitHub organization.');
- return {...data,owner,project,library};
+ // Library identity is fixed by ATGV, regardless of the configured account owner.
+ const library=githubRepo(FIXED_LIBRARY_REPOSITORY);
+ return {...data,owner,libraryRepoUrl:FIXED_LIBRARY_REPOSITORY,library};
 }
-module.exports={DEFAULTS,githubRepo,validate};
+module.exports={DEFAULTS,FIXED_LIBRARY_REPOSITORY,githubRepo,validate};

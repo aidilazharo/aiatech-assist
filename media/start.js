@@ -663,6 +663,7 @@ function openProject(id=null,source=null){
     const [group,key]=input.split('.');field(input,val(p,group,key));
   }
   field('github.branch','main');
+  $('projectGithubRepositoryUrl').value=read('github.owner')&&read('github.repo')?'https://github.com/'+read('github.owner')+'/'+read('github.repo'):'';
                                                                               
   if(p?.settings?.atlassian){field('jira.baseUrl',p.settings.atlassian.baseUrl||'');field('jira.email',p.settings.atlassian.email||'');}
   $('formTitle').textContent=p?'Project Settings: '+p.name:'New Project';
@@ -679,6 +680,10 @@ function openProject(id=null,source=null){
   setView('project');
 }
 function readProjectForm(){
+  const projectRepoUrl=$('projectGithubRepositoryUrl').value.trim();
+  const parsed=projectRepoUrl?parseGithubRepositoryUrl(projectRepoUrl):null;
+  if(projectRepoUrl&&!parsed)throw Error('Enter a valid https://github.com/OWNER/REPOSITORY project URL.');
+  field('github.owner',parsed?.owner||'');field('github.repo',parsed?.repo||'');
   const names=['confluence.spaceId','confluence.spaceKey','confluence.spaceName','confluence.baseUrl','confluence.parentPageId',
     'jira.baseUrl','jira.email','jira.projectKey','jira.jql','github.owner','github.repo','github.branch','github.pathPrefix','github.apiUrl'];
   const settings={jira:{},confluence:{},github:{},development:{previewWithoutTests:$('projectPreviewWithoutTests').checked}};
@@ -686,7 +691,7 @@ function readProjectForm(){
   settings.github.branch='main';
   return {id:read('id'),name:read('name'),techStackId:selectedTechStackId,schedule:{startDate:read('projectStartDate'),endDate:read('projectEndDate')},settings};
 }
-function catalogFormConfig(){return {repositoryUrl:read('catalogRepoUrl'),ref:read('catalogRef'),authentication:read('catalogAuth'),autoCheck:$('catalogAutoCheck').checked,offlineCache:true};}
+function catalogFormConfig(){return {repositoryUrl:'https://github.com/aidilazharo/tech-stacks-skills',ref:'main',authentication:read('catalogAuth'),autoCheck:$('catalogAutoCheck').checked,offlineCache:true};}
 // Show the actual configured Jira email, never a guessed full name.
 function updateHeaderUserName(email){
  const address=String(email||'').trim().toLowerCase();
@@ -1320,6 +1325,9 @@ function syncPMJiraView(){
 }
 function setPMJiraView(mode){
  if(!['table','kanban'].includes(mode)||pmJiraDisplayMode===mode)return;
+ if(mode==='kanban'&&(!window.ATGVKanban||typeof window.ATGVKanban.render!=='function')){
+   status('Kanban controller unavailable. Jira DataTable remains available; reload to retry.',true);return;
+ }
  pmJiraDisplayMode=mode;syncPMJiraView();renderPMDashboard();
 }
 $('pmShowTable').addEventListener('click',()=>setPMJiraView('table'));
@@ -4589,7 +4597,17 @@ $('catalogPull').addEventListener('click',()=>{$('catalogStatus').textContent='P
 $('catalogCheck').addEventListener('click',()=>{$('catalogStatus').textContent='Checking approved catalog version…';send('catalogCheck');});
 $('clearTechStack').addEventListener('click',()=>{selectedTechStackId='';renderTechStacks();});
 $('back').addEventListener('click',()=>{if(roleSettingsDirty){status('Save project role settings before leaving Project Settings.',true);return;}if(workspaceOpened)navigate('overview');else showGate();});
-$('projectForm').addEventListener('submit',e=>{e.preventDefault();send(editingId?'update':'create',{project:readProjectForm()});});
+$('projectGithubRepositoryUrl').addEventListener('input',()=>{
+ const value=$('projectGithubRepositoryUrl').value.trim();
+ const parsed=value?parseGithubRepositoryUrl(value):null;
+ $('projectGithubRepositoryUrl').setCustomValidity(!value||parsed?'':'Enter https://github.com/OWNER/REPOSITORY.');
+});
+$('projectForm').addEventListener('submit',e=>{
+ e.preventDefault();
+ if(!$('projectForm').reportValidity())return;
+ try{send(editingId?'update':'create',{project:readProjectForm()});}
+ catch(error){status(error.message,true);}
+});
 $('showFolder').addEventListener('click',()=>send('showFolder',{id:editingId}));
 $('atlassianToken').addEventListener('click',()=>send('token',{id:editingId,kind:'atlassian'}));
 $('githubToken').addEventListener('click',()=>send('token',{id:editingId,kind:'github'}));
@@ -7304,7 +7322,8 @@ window.addEventListener('message',event=>{
 // ATGV first-run setup lives on the Start page. The upgrade modal below is
 // reserved exclusively for VSIX releases, not catalog or setup notifications.
 const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluenceUrl',email:'startupEmail',
- githubUrl:'startupGithubUrl',projectRepoUrl:'startupProjectRepo',libraryRepoUrl:'startupLibraryRepo'};
+ githubUrl:'startupGithubUrl'};
+const STARTUP_LIBRARY_REPO='https://github.com/aidilazharo/tech-stacks-skills';
 let startupFormInitialized=false,startupPrereqRequested=false,startupConnectionVerified=false,startupSetupRequired=true,startupReturnToConnections=false;
 let startupVerifying=false,startupScanComplete=false,startupPage=0,startupInstallingModule='';
 let startupLastInstalledTool='';
@@ -7564,11 +7583,7 @@ $('startupPrevious').addEventListener('click',()=>{
 });
 $('startupEmail').addEventListener('input',()=>updateHeaderUserName(read('startupEmail')));
 $('startupLibraryZipUpload').addEventListener('click',()=>{
- const repositoryUrl=read('startupLibraryRepo');
- if(!/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?\/?$/i.test(repositoryUrl)){
-  $('startupLibraryZipStatus').textContent='Enter a valid GitHub SDLC Library repository URL first.';
-  return;
- }
+ const repositoryUrl=STARTUP_LIBRARY_REPO;
  $('startupLibraryZipStatus').textContent='Choose a SDLC Library ZIP file…';
  send('importLibraryZip',{repositoryUrl});
 });
@@ -7576,7 +7591,7 @@ $('startupConnectionForm').addEventListener('submit',event=>{
  event.preventDefault();if(startupVerifying||startupConnectionVerified)return;
  startupConnectionVerified=false;startupVerifying=true;
  renderStartupPage();
- $('startupConnectionMessage').textContent='Testing Jira, Confluence, GitHub account, project repository and library main branch…';
+ $('startupConnectionMessage').textContent='Testing Jira, Confluence, GitHub account and fixed SDLC Library…';
  send('startupTestConnections',{settings:startupPayload(),atlassianToken:read('startupAtlassianToken'),githubToken:read('startupGithubToken')});
 });
 $('startupProceed').addEventListener('click',()=>{
