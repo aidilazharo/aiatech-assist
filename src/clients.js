@@ -1,6 +1,37 @@
 'use strict';
 const { textFromAdf, htmlToText, validateUrl } = require('./utils');
 const { githubIpAllowlistHint } = require('./github-ip-allowlist');
+// Produce actionable, non-secret HTTP diagnostics. Jira often returns an
+// empty body, JSON null, or {errorMessages:[],errors:{}} for 404 responses.
+// Never echo request query strings (which can contain JQL and other private data).
+function responseErrorDetail(body) {
+    const raw = String(body || '').slice(0, 2000).trim();
+    if (!raw || raw === 'null') return '';
+    try {
+        const data = JSON.parse(raw);
+        if (typeof data === 'string') return data === 'null' ? '' : data.slice(0, 260);
+        if (!data || typeof data !== 'object') return '';
+        const messages = [
+            ...(Array.isArray(data.errorMessages) ? data.errorMessages : []),
+            ...(data.errors && typeof data.errors === 'object' && !Array.isArray(data.errors) ? Object.values(data.errors) : []),
+            data.message, data.error_description
+        ].filter(x => typeof x === 'string' && x.trim() && x.trim().toLowerCase() !== 'null');
+        return [...new Set(messages)].join('; ').slice(0, 260);
+    } catch {
+        return raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 260);
+    }
+}
+function jira404Hint(url) {
+    if (!url.hostname.endsWith('.atlassian.net')) return '';
+    const route = url.pathname;
+    if (/^\/rest\/api\/3\/issue\/[^/]+/.test(route))
+        return 'Jira issue not found or not visible. Check its issue key, Browse Projects permission and issue-security rules. A 404 does not prove deletion.';
+    if (/^\/rest\/api\/3\/project\/[^/]+/.test(route))
+        return 'Jira project not found or not accessible. Verify the Project Key and Browse Projects permission.';
+    if (route === '/rest/api/3/myself')
+        return 'Jira account endpoint not found. Verify that Jira Base URL is the correct Atlassian Cloud site (no /jira or /wiki suffix) and that the API token matches the account email.';
+    return 'Verify the configured Jira Base URL and the REST endpoint. For project-specific requests also check Browse Projects and API-token access.';
+}
 async function requestJson(url, options = {}) {
     const { token, basicEmail, method = 'GET', data, headers = {}, signal } = options;
     const auth = token ? (basicEmail ? 'Basic ' + Buffer.from(`${basicEmail}:${token}`).toString('base64') : 'Bearer ' + token) : undefined;
@@ -9,15 +40,17 @@ async function requestJson(url, options = {}) {
             ...(auth ? { 'Authorization': auth } : {}), ...headers
         }, body: data === undefined ? undefined : JSON.stringify(data), redirect: 'error', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(25000)]) : AbortSignal.timeout(25000) });
     if (!response.ok) {
-        let content = '';
-        try {
-            content = (await response.text()).slice(0, 260);
-        }
-        catch { }
-        const safeContent = content.replace(/<[^>]*>/g, '');
-        const hint = new URL(url).hostname === 'api.github.com'
-            ? githubIpAllowlistHint(response.status, safeContent) : '';
-        throw new Error(`HTTP ${response.status} from ${new URL(url).host}: ${safeContent}${hint ? ' ' + hint : ''}`);
+        let body = '';
+        try { body = (await response.text()).slice(0, 2000); } catch { /* Body may be absent. */ }
+        const destination = new URL(url);
+        const detail = responseErrorDetail(body);
+        const hint = destination.hostname === 'api.github.com'
+            ? githubIpAllowlistHint(response.status, detail)
+            : response.status === 404 ? jira404Hint(destination) : '';
+        // Do not include URL query parameters, Authorization headers or token values.
+        const context = `${String(method).toUpperCase()} ${destination.pathname}`;
+        const explanation = detail || (response.status === 404 ? 'No error details returned by the server.' : 'No response error details.');
+        throw new Error(`HTTP ${response.status} from ${destination.host} ${context}: ${explanation}${hint ? ' ' + hint : ''}`);
     }
     return response.status === 204 ? {} : response.json();
 }
