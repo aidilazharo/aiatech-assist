@@ -17,24 +17,19 @@ async function main() {
         assert.equal(extract.status, 0, extract.stderr || 'Failed to extract VSIX');
         const root = path.join(temp, 'extension');
         const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-        // The official SortableJS release is shipped inside the VSIX; no user npm
-        // install, CDN request, or external runtime download is permitted.
-        const sortablePath = path.join(root, 'media', 'vendor', 'sortablejs-1.15.7.min.js');
-        const sortableBytes = fs.readFileSync(sortablePath);
-        assert.equal(sortableBytes.length, 45478, 'Bundled SortableJS must exactly match the pinned release');
-        assert.match(sortableBytes.toString('utf8', 0, 110), /Sortable 1\.15\.7 - MIT/);
-        const gitBlobSha = crypto.createHash('sha1')
-            .update('blob ' + sortableBytes.length).update(Buffer.from([0]))
-            .update(sortableBytes)
-            .digest('hex');
-        assert.equal(gitBlobSha, '8148b9dda22424c300191fcd3fcff1648de41e2e', 'SortableJS must be the original tagged GitHub distribution');
-        assert.match(fs.readFileSync(path.join(root, 'media', 'vendor', 'sortablejs-LICENSE.txt'), 'utf8'), /MIT License/);
-        assert.ok(fs.existsSync(path.join(root, 'media', 'vendor', 'SORTABLEJS-NOTICE.md')));
-        const dashboardHtml = fs.readFileSync(path.join(root, 'src', 'lib', 'webview', 'dashboard-html.js'), 'utf8');
-        const vendorLoader = '<script src="${sortableJs}"></script>';
-        const boardLoader = '<script src="${pmKanbanJs}"></script>';
-        assert.ok(dashboardHtml.includes('sortablejs-1.15.7.min.js'), 'Local SortableJS URI is required');
-        assert.ok(dashboardHtml.indexOf(vendorLoader) >= 0 && dashboardHtml.indexOf(vendorLoader) < dashboardHtml.indexOf(boardLoader), 'SortableJS must load before Kanban');
+        // SortableJS is provided only by the SHA-256-pinned SDLC Library.
+        const lock=JSON.parse(fs.readFileSync(path.join(root,'src','vendor-library-lock.json'),'utf8'));
+        assert.equal(lock.version,'1.0.1');
+        const sortable=lock.assets.find(a=>a.path==='sortablejs/sortablejs-1.15.7.min.js');
+        assert.ok(sortable&&sortable.bytes===45478&&sortable.sha256==='bf4241bc73fef7f11c59a283a69fe8051cdd31c6d8ff5a2b9ba219e7831fcf76');
+        for(const name of ['sortablejs-1.15.7.min.js','sortablejs-LICENSE.txt','SORTABLEJS-NOTICE.md'])
+            assert.ok(!fs.existsSync(path.join(root,'media','vendor',name)),name+' must not be packaged in the extension VSIX');
+        const dashboardHtml=fs.readFileSync(path.join(root,'src','lib','webview','dashboard-html.js'),'utf8');
+        const vendorLoader='vendor(\'sortablejs\',\'sortablejs-1.15.7.min.js\')';
+        const boardLoader='<script src="${pmKanbanJs}"></script>';
+        assert.ok(dashboardHtml.includes(vendorLoader),'SortableJS must resolve from the verified Library cache');
+        assert.ok(dashboardHtml.includes('${sortableJs?')&&dashboardHtml.indexOf('sortableJs?')<dashboardHtml.indexOf(boardLoader));
+        assert.ok(!dashboardHtml.includes("'media','vendor','sortablejs-1.15.7.min.js'"));
 
         const packageXml = fs.readFileSync(path.join(temp, 'extension.vsixmanifest'), 'utf8');
         assert.ok(packageXml.includes('Version="' + manifest.version + '"'));
