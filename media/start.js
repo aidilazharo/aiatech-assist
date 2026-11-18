@@ -1269,15 +1269,6 @@ function renderBAJiraInventory(){
    const open=document.createElement('button');open.type='button';open.className='jira-issue-inline-link';open.textContent=ref.label;
    open.title=ref.kind==='local'?'View '+ref.label+' details':'View Jira-only Epic details';open.addEventListener('click',event=>{event.stopPropagation();openBARequirementModal(ref);});line.append(open);
    if(ref.kind==='jira'){const badge=document.createElement('small');badge.className='ba-jira-br-origin';badge.textContent='Jira only · no local BR evidence';line.append(badge);}
-   if(item._brRoots.includes(ref)){
-    const actions=document.createElement('div');actions.className='ba-jira-br-actions';
-    const answers=document.createElement('button');answers.type='button';answers.className='secondary';answers.textContent='View 12 Answers';answers.disabled=!ref.hasAnswers;
-    answers.title=ref.hasAnswers?'View saved discovery answers':'Discovery answers are unavailable in this project';answers.setAttribute('aria-label',answers.title+' for '+ref.label);
-    answers.addEventListener('click',event=>{event.stopPropagation();openBARequirementModal(ref,true);});actions.append(answers);
-    if(ref.keys.length){const jira=document.createElement('button');jira.type='button';jira.className='secondary';jira.textContent='View Jira · '+ref.linkedIssueCount+' linked';jira.title='Show linked Jira items for '+ref.label;
-     jira.addEventListener('click',event=>{event.stopPropagation();openBRJiraInventory(ref.scopeId);});actions.append(jira);}
-    line.append(actions);
-   }
    cell.append(line);
   }
   return cell;
@@ -4467,7 +4458,7 @@ function renderSoftwareUpdates(data,force=false){
  $('softwareLibraryStatus').textContent=data.libraryError?`Library: ${data.libraryError}`:data.libraryLatest?`Library release: v${data.libraryLatest}. Pull Library Files to install the verified source archive.`:'Library: no verified release yet.';
  const extensionText=data.extensionError?'Extension latest: unavailable':latestVersion?'Extension latest: v'+latestVersion+(data.latest?' · update available':' · up to date'):'Extension latest: checking…';
  const libraryText=data.libraryError?'Library latest: unavailable':data.libraryLatest?'Library latest: v'+data.libraryLatest:'Library latest: checking…';
- $('gateLatestVersions').textContent=extensionText+'  ·  '+libraryText;
+ $('gateLatestVersions').textContent=''; // Detailed release status remains in Check Updates and upgrade modals.
  $('viewExtensionRelease').disabled=!data.latest;
  $('installExtensionRelease').disabled=!data.latest;
  $('checkSoftwareUpdates').disabled=!!data.busy;
@@ -7061,7 +7052,19 @@ function renderMyWorkRoster(rows){
   const email=document.createElement('small');email.textContent=String(item.email||'');
   name.append(strong,email);
   roles.textContent=(Array.isArray(item.roles)?item.roles:[]).join(', ')||'—';
-  tasks.textContent=String(item.tasks||'No assigned task');
+  tasks.className='overview-roster-tasks';
+  const assigned=String(item.tasks||'No assigned task').split(/\s*;\s*/).map(s=>s.trim()).filter(Boolean);
+  if(!assigned.length)assigned.push('No assigned task');
+  for(const entry of assigned){
+   const matched=/^([A-Z][A-Z0-9_]*-\d+)\s+\(([^)]+)\)$/.exec(entry);
+   const chip=document.createElement('span');chip.className='overview-roster-task';
+   if(matched){
+    const key=document.createElement('strong');key.textContent=matched[1];
+    const state=document.createElement('small');state.textContent=matched[2];
+    chip.append(key,state);
+   }else{chip.textContent=entry;chip.classList.add('overview-roster-task-note');}
+   tasks.append(chip);
+  }
   tr.append(name,roles,tasks);target.append(tr);
  }
 }
@@ -7074,7 +7077,7 @@ window.addEventListener('message',event=>{
  if(!activeId||m.projectId!==activeId)return;
  if(m.type==='myWorkRoster'){
   renderMyWorkRoster(m.rows);
-  $('overviewUserStatus').textContent=(m.rows?.length||0)+' users · Confluence space '+(m.spaceKey||'')+(m.updatedAt?' · '+new Date(m.updatedAt).toLocaleString():'');
+  $('overviewUserStatus').textContent=(m.rows?.length||0)+' users · assigned Jira tasks refreshed'+(m.assignmentWarning?' · '+m.assignmentWarning:'')+' · Confluence space '+(m.spaceKey||'')+(m.updatedAt?' · '+new Date(m.updatedAt).toLocaleString():'');
  }else if(m.type==='myWorkRosterError'){
   $('overviewUserStatus').textContent='Confluence roster unavailable: '+(m.message||'Check space configuration and permissions.');
  }
@@ -7351,6 +7354,8 @@ function setStartupCopilotStatus(state,message){
  badge.textContent=startupCopilotBusy?'Setting up…':state==='ready'?'Installed':state==='unsupported'?'Update required':state==='error'?'Setup failed':'Needs setup';
  card.classList.toggle('is-ready',state==='ready');card.classList.toggle('is-missing',state==='error'||state==='unsupported'||state==='available');
  card.setAttribute('aria-label','GitHub Copilot SDK: '+badge.textContent);
+ if(!card._atgvProgress)startupRing(card);
+ paintStartupStack(card,{id:'copilot-sdk',name:'GitHub Copilot SDK',percent:state==='ready'?100:state==='working'?45:0,status:state==='ready'?'complete':state==='working'?'running':'error',message:badge.textContent});
 }
 function openStartupCopilotModal(){
  startupCopilotPriorFocus=document.activeElement;startupCopilotModalOpen=true;
@@ -7414,9 +7419,12 @@ function startupPayload(){return Object.fromEntries(Object.entries(startupFieldM
 function renderStartupPermissionRows(checks){
  const root=$('startupPermissionChecks');root.replaceChildren();
  for(const check of checks||[]){
-  const row=document.createElement('div');row.className='atgv-permission-row';row.dataset.state=check.ok?'ready':'error';
+  const row=document.createElement('div');row.className='atgv-permission-row atgv-permission-step';row.dataset.state=check.ok?'ready':'error';
+  startupRing(row);
+  paintStartupStack(row,{name:check.label||'Permission',status:check.ok?'complete':'error',percent:check.ok?100:0,message:check.detail||''});
+  const summary=document.createElement('div');summary.className='atgv-permission-copy';
   const title=document.createElement('strong');title.textContent=String(check.label||'Permission')+': '+(check.ok?'Ready':'Needs attention');
-  const detail=document.createElement('small');detail.textContent=String(check.detail||'');row.append(title,detail);root.append(row);
+  const detail=document.createElement('small');detail.textContent=String(check.detail||'');summary.append(title,detail);row.append(summary);root.append(row);
  }
 }
 function renderStartupPermissions(result){
@@ -7522,7 +7530,7 @@ function renderStartupStackReadiness(result){
  }
  startupStackData=result;startupScanComplete=true;
  if(result.copilotSdk)renderStartupCopilotReadiness(result.copilotSdk);
- startupScanPercent(100,'Completed prerequisite checks for all '+result.stacks.length+' technology stacks.');
+ startupScanPercent(100,'Completed prerequisite scans for all '+result.stacks.length+' technology stacks.');
  const ready=result.stacks.filter(s=>s.ready).length;
  $('startupToolMessage').textContent=`${ready} of ${result.stacks.length} technology stacks have their required host tools available. `+(result.catalog?.available?`Project modules loaded from ${result.catalog.source}${result.catalog.version?' v'+result.catalog.version:''}.`:'Project module lists are unavailable until the SDLC Library is connected.');
  for(const stack of result.stacks){

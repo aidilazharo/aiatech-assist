@@ -44,9 +44,44 @@ async function locate(config,token,projectKey){
    throw Error('A Confluence page with this name already exists and is not an ATGV register.');
  return {space,page,name};
 }
+// Refresh live Jira assignments for all recorded users; do not confuse task
+// creator with assignee, and never change the Confluence role register on read.
+async function assignedTasks(config,token,projectKey,{request=requestJson,maxPages=20}={}){
+ const key=validProjectKey(projectKey),auth={token,basicEmail:config.get('jira.email')};
+ const assignments=new Map();let nextPageToken='',truncated=false;
+ for(let page=0;page<maxPages;page++){
+  const data={jql:'project = "'+key+'" AND assignee IS NOT EMPTY ORDER BY updated DESC',
+   maxResults:100,fields:['status','assignee']};
+  if(nextPageToken)data.nextPageToken=nextPageToken;
+  const response=await request(baseAtlassian(config)+'/rest/api/3/search/jql',{...auth,method:'POST',data});
+  for(const issue of response.issues||[]){
+   const id=String(issue.fields?.assignee?.accountId||'');
+   if(!id||!new RegExp('^'+key+'-\\d+$').test(String(issue.key||'')))continue;
+   if(!assignments.has(id))assignments.set(id,[]);
+   const entries=assignments.get(id);
+   if(entries.length<100)entries.push(issue.key+' ('+clean(issue.fields?.status?.name||'Unknown',50)+')');
+  }
+  nextPageToken=String(response.nextPageToken||'');
+  if(!nextPageToken||response.isLast===true)break;
+  if(page===maxPages-1)truncated=true;
+ }
+ return {assignments,truncated};
+}
 async function snapshot(config,token,projectKey){
  const found=await locate(config,token,projectKey);
- return {rows:extractRows(found.page?.body?.storage?.value||''),pageId:String(found.page?.id||''),spaceKey:found.space.key,updatedAt:found.page?.version?.createdAt||''};
+ const rows=extractRows(found.page?.body?.storage?.value||'');
+ let assignmentWarning='';
+ if(rows.length){
+  try{
+   const {assignments,truncated}=await assignedTasks(config,token,projectKey);
+   for(const user of rows){
+    const tasks=assignments.get(user.id)||[];
+    user.tasks=tasks.length?tasks.join('; ')+(truncated?'; …':''):truncated?'Not found within scanned Jira items (partial results)':'No assigned task';
+   }
+   if(truncated)assignmentWarning='Jira task search stopped at the 2,000-issue safety limit.';
+  }catch(error){assignmentWarning='Live Jira assignments unavailable: '+clean(error.message,180);}
+ }
+ return {rows,pageId:String(found.page?.id||''),spaceKey:found.space.key,updatedAt:found.page?.version?.createdAt||'',assignmentWarning};
 }
 async function visit(config,token,{projectKey,roleId}){
  const role=ROLES[roleId];if(!role)throw Error('Unknown role cannot be added to the register.');
@@ -84,4 +119,4 @@ async function visit(config,token,{projectKey,roleId}){
  }
  throw Error('Concurrent Confluence edits prevented the register from being saved.');
 }
-module.exports={ROLES,displayName,title,extractRows,renderRows,locate,snapshot,visit};
+module.exports={ROLES,displayName,title,extractRows,renderRows,locate,assignedTasks,snapshot,visit};
