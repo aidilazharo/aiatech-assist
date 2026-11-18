@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.4.16';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.4.17';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -260,11 +260,6 @@ function html(webview,{resumeLibrary=false}={}){
       <p id="localBackupStatus" class="muted" role="status" aria-live="polite">No backup or restore running.</p>
     </section></div></details>
     <details class="ext-settings-accordion" id="settingsSoftwareUpdateGroup" data-requirement="required"><summary><span>8. Extension &amp; SDLC Library Updates</span><span class="ext-settings-badge" data-state="required">Required</span></summary><div class="ext-settings-content"><section>
-      <p class="muted">Release sources are fixed and verified. GitHub's latest endpoint is checked first; same-repository prerelease builds are also supported. Both updates are checked automatically every hour while VS Code is running.</p>
-      <div class="software-update-sources" aria-label="Fixed GitHub release sources">
-        <p><strong>Extension release:</strong> https://github.com/aidilazharo/aiatech-assist/releases/latest</p>
-        <p><strong>SDLC Library release:</strong> https://github.com/aidilazharo/tech-stacks-skills/releases/latest</p>
-      </div>
       <div class="software-update-toolbar" role="group" aria-label="Software update actions">
         <button type="button" id="checkSoftwareUpdates" class="secondary">Check Updates</button>
         <button type="button" id="pullLibraryFiles" class="secondary">Pull Library Files</button>
