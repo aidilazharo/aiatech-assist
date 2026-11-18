@@ -64,6 +64,18 @@ test('imports a GitHub-style ZIP offline, exposes catalog skills, and retains us
  assert.deepEqual(await fs.readFile(file),source);
  assert.equal(await offline.removeAfterVerifiedGit(workspace,repo),false);
 });
+test('offline library version comes from the verified files, not stale state metadata',async(t)=>{
+ const workspace=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-offline-version-'));
+ t.after(()=>fs.rm(workspace,{recursive:true,force:true}));
+ await fs.mkdir(path.join(workspace,'.atgv'));
+ const file=path.join(workspace,'library.zip');await fs.writeFile(file,zip(fixture()));
+ await offline.importZip({file,workspace,repositoryUrl:repo});
+ const stateFile=path.join(workspace,'.atgv','offline-sdlc-library','state.json');
+ const state=JSON.parse(await fs.readFile(stateFile,'utf8'));state.version='1.0.0';
+ await fs.writeFile(stateFile,JSON.stringify(state));
+ assert.equal((await offline.imported(workspace,repo)).version,'1.1.14');
+ assert.equal((await catalog.activeRoot(workspace)).version,'1.1.14');
+});
 test('rejects ZIP path traversal, bad manifest and mismatched repository, without removing import',async(t)=>{
  const workspace=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-offline-reject-'));t.after(()=>fs.rm(workspace,{recursive:true,force:true}));
  await fs.mkdir(path.join(workspace,'.atgv'));

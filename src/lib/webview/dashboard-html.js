@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.4.18';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.4.19';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -89,7 +89,7 @@ function html(webview,{resumeLibrary=false}={}){
     <div class="atgv-upgrade-brand"><img src="${brand}" alt="ATGV AIATECH Assist logo"><div><strong>AIATECH ASSIST</strong><span>VERIFIED SDLC LIBRARY UPDATE</span></div></div>
     <span class="atgv-upgrade-kicker">UPDATE AVAILABLE</span><h2 id="libraryUpdateTitle">An SDLC Library update is ready</h2>
     <p id="libraryUpdateDescription">Download the latest verified catalog from GitHub main.</p>
-    <div class="atgv-upgrade-versions"><div><small>INSTALLED CATALOG</small><strong id="libraryUpdateCurrent">—</strong></div><span aria-hidden="true">→</span><div><small>AVAILABLE ON MAIN</small><strong id="libraryUpdateNext">—</strong></div></div>
+    <div class="atgv-upgrade-versions"><div><small>INSTALLED IN THIS WORKSPACE</small><strong id="libraryUpdateCurrent">—</strong></div><span aria-hidden="true">→</span><div><small>LATEST LIBRARY VERSION</small><strong id="libraryUpdateNext">—</strong></div></div>
     <p id="libraryUpdateSource" class="muted"></p><p class="atgv-upgrade-assurance">The catalog will be downloaded and verified. Active project files stay unchanged; installation requires your confirmation.</p>
     <div id="libraryUpdateProgress" class="atgv-upgrade-progress atgv-library-update-progress hidden" role="status" aria-live="polite" aria-atomic="true" tabindex="-1">
       <div class="atgv-library-update-heading"><strong id="libraryUpdateProgressTitle">Preparing the SDLC Library update…</strong><span id="libraryUpdateProgressPercent">0%</span></div>

@@ -7857,8 +7857,10 @@ window.addEventListener('message',event=>{
  const installed=String(message.installedVersion||'');
  $('libraryUpdateCurrent').textContent=installed?'v'+installed:'Not installed';
  const latest=String(message.remoteVersion||'');
- $('libraryUpdateNext').textContent=latest?'v'+latest+(message.remoteTag?' · '+String(message.remoteTag):''):'Version unavailable';
- $('libraryUpdateDescription').textContent=latest?'A newer verified SDLC Library release is available.':'The remote SDLC Library version could not be verified.';
+ $('libraryUpdateNext').textContent=latest?'v'+latest:'Version unavailable';
+ const sameVersion=!!installed&&installed===latest;
+ $('libraryUpdateDescription').textContent=latest?(sameVersion?'A verified SDLC Library build is available for this version.':'A newer verified SDLC Library release is available.'):'The remote SDLC Library version could not be verified.';
+ if(message.installedVersionWarning)$('libraryUpdateDescription').textContent+=' '+String(message.installedVersionWarning);
  $('libraryUpdateSource').textContent='GitHub: '+String(message.repository||'tech-stacks-skills');
  const modal=$('libraryUpdateModal');modal.classList.remove('hidden');modal.setAttribute('aria-hidden','false');
  $('libraryUpdatePull').focus();

@@ -41,6 +41,29 @@ test('Git catalog uses one stable checkout, updates tracked files and never crea
   assert.equal((await catalog.syncGitCatalogCheckout(x.workspace,x.bare,'example/skills')).action,'already-current');
  }finally{await fs.rm(x.tmp,{force:true,recursive:true});}
 });
+test('installed version is recovered from the matching committed manifest without adopting local edits',async()=>{
+ const x=await harness();try{
+  const installed=await catalog.syncGitCatalogCheckout(x.workspace,x.bare,'example/skills');
+  const stateFile=catalog.gitCatalogState(x.workspace),state=JSON.parse(await fs.readFile(stateFile,'utf8'));
+  state.version='0.9.0';await fs.writeFile(stateFile,JSON.stringify(state));
+  const manifest=path.join(catalog.gitCatalogFolder(x.workspace),'catalog.json');
+  const original=await fs.readFile(manifest,'utf8'),changed=JSON.parse(original);changed.localOnly=true;
+  await fs.writeFile(manifest,JSON.stringify(changed));
+  const dirty=await catalog.gitInstalled(x.workspace,{repositoryUrl:'https://github.com/example/skills'});
+  assert.equal(dirty.version,'0.9.0');assert.match(dirty.versionWarning,/local library manifest has changes/i);
+  assert.equal(JSON.parse(await fs.readFile(stateFile,'utf8')).version,'0.9.0');
+  await fs.writeFile(manifest,original);
+  const corrected=await catalog.gitInstalled(x.workspace,{repositoryUrl:'https://github.com/example/skills'});
+  assert.equal(corrected.sha,installed.sha);assert.equal(corrected.version,'1.1.0');
+  assert.equal(JSON.parse(await fs.readFile(stateFile,'utf8')).version,'1.1.0');
+  const local=JSON.parse(await fs.readFile(manifest,'utf8'));local.version='9.9.9';
+  await fs.writeFile(manifest,JSON.stringify(local));
+  const modified=await catalog.gitInstalled(x.workspace,{repositoryUrl:'https://github.com/example/skills'});
+  assert.equal(modified.version,'1.1.0');assert.match(modified.versionWarning,/local library manifest has changes/i);
+  assert.equal(JSON.parse(await fs.readFile(manifest,'utf8')).version,'9.9.9');
+  assert.equal(JSON.parse(await fs.readFile(stateFile,'utf8')).version,'1.1.0');
+ }finally{await fs.rm(x.tmp,{force:true,recursive:true});}
+});
 test('Git catalog pull preserves all dirty tracked and untracked files in a separate backup',async()=>{
  const x=await harness();try{
   const original=await catalog.syncGitCatalogCheckout(x.workspace,x.bare,'example/skills');

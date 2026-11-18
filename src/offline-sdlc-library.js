@@ -120,7 +120,13 @@ async function imported(workspace,repositoryUrl){
  }
  await walk(root);
  if(seen.size!==Object.keys(state.assets).length)throw Error('Offline library is missing files. Existing data is retained.');
- return {...state,root,checkout:root,version:state.version,roles:state.roles,techStacks:state.techStacks,
+ let version;
+ try{
+  version=JSON.parse(await fs.readFile(path.join(root,'catalog.json'),'utf8')).version;
+  if(typeof version!=='string'||version!==String(await fs.readFile(path.join(root,'VERSION'),'utf8')).trim())throw Error();
+  compareVersions(version,version);
+ }catch{throw Error('Offline library VERSION and catalog manifest do not agree. Existing data is retained.');}
+ return {...state,root,checkout:root,version,roles:state.roles,techStacks:state.techStacks,
   roleCount:state.roles.length,stackCount:state.techStacks.length,sha:'',ref:'offline',offline:true};
 }
 async function inspectZip(file){
