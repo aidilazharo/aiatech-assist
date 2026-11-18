@@ -55,7 +55,7 @@ test('release token is stored only in SecretStorage, never supplied to issue or 
  assert.match(host,/case 'clearReleaseDownloadPat':/);
  assert.match(host,/context\.secrets\.store\(RELEASE_DOWNLOAD_PAT_SECRET,token\)/);
  assert.match(host,/context\.secrets\.delete\(RELEASE_DOWNLOAD_PAT_SECRET\)/);
- const read=host.slice(host.indexOf('async function releaseAccessToken('),host.indexOf('// Only the host can confirm'));
+ const read=host.slice(host.indexOf('async function releaseAccessToken('),host.indexOf('async function githubIssueAccessToken('));
  assert.match(read,/context\.secrets\.get\(RELEASE_DOWNLOAD_PAT_SECRET\)/);
  assert.doesNotMatch(read,/globalSecretKey\('github'\)/);
  assert.doesNotMatch(read,/vscode\.authentication\.getSession/);
