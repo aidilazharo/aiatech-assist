@@ -100,6 +100,6 @@ test('extension and library release sources are immutable; both check every hour
   assert.ok(!html.includes('id="'+id+'"'),id);
  assert.ok(!ui.includes('softwareSourcesDirty'));
  assert.ok(!runtime.includes("case 'saveSoftwareUpdateSources':"));
- assert.ok(html.includes(updater.PINNED_RELEASE_URL));
- assert.ok(html.includes(library.LATEST_URL));
+ assert.ok(!html.includes(updater.PINNED_RELEASE_URL),'extension release URL is hidden from settings');
+ assert.ok(!html.includes(library.LATEST_URL),'library release URL is hidden from settings');
 });
