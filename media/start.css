@@ -2109,3 +2109,10 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 #architectCustomStatus[data-state=complete]{color:var(--vscode-testing-iconPassed)}
 @media(max-width:940px){.architect-custom-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.architect-custom-controls label{grid-column:auto}.architect-custom-controls button{width:auto}}
 @media(max-width:490px){.architect-custom-controls{grid-template-columns:minmax(0,1fr)}}
+
+/* Export full AI document preflight findings without affecting source processing. */
+#discoveryView #baPreflightDownload{margin-left:auto;flex:0 0 auto;font-size:12px;padding:5px 10px}
+#discoveryView #baPreflightRetry{margin-left:0}
+#discoveryView .ba-source-preflight-header{flex-wrap:wrap;gap:8px}
+#discoveryView #baPreflightDownload.hidden{display:none!important}
+@media(max-width:550px){#discoveryView #baPreflightDownload{margin-left:0}#discoveryView .ba-source-preflight-header strong{flex:1 1 100%}}

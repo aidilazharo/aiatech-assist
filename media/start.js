@@ -4944,8 +4944,11 @@ function hasDedicatedPreflightRecovery(){
 function renderSourcePreflight(){
  const panel=$('baSourcePreflight');if(!panel)return;
  const saved=(brState?.mappingCompleted?.preflights||[])[0];
- const info=baPreflightInfo||(!discoveryImportBusy&&saved?{phase:'ready',sourceName:(brState?.sourceDocuments||[]).find(x=>x.digest===saved.digest)?.name||'',summary:saved.summary,applied:saved.applied,issues:saved.issues,resolutions:saved.resolutions}:null);
+ const savedCurrent=!discoveryImportBusy&&saved&&(brState?.sourceDocuments||[]).some(doc=>doc.digest===saved.digest);
+ const info=baPreflightInfo|| (savedCurrent?{phase:'ready',sourceName:(brState?.sourceDocuments||[]).find(x=>x.digest===saved.digest)?.name||'',summary:saved.summary,applied:saved.applied,issues:saved.issues,resolutions:saved.resolutions,reportAvailable:true}:null);
  panel.classList.toggle('hidden',!info);
+ const download=$('baPreflightDownload');
+ if(download){const available=!!(info?.reportAvailable||(savedCurrent&&!baPreflightInfo));download.classList.toggle('hidden',!info);download.disabled=!available||!activeId;}
  const retry=$('baPreflightRetry');
  if(retry){const showRetry=hasDedicatedPreflightRecovery();retry.classList.toggle('hidden',!showRetry);retry.disabled=!showRetry||!brState||!sourceSelectedDigests.size||selectedRole!=='business-analyst'||!activeId;}
  if(!info)return;
@@ -4968,6 +4971,12 @@ function renderSourcePreflight(){
   const li=document.createElement('li');li.textContent=(item.severity==='blocker'?'Unresolved business conflict: ':'AI observation: ')+item.detail+(item.suggestion?' — '+item.suggestion:'');detail.append(li);
  }
 }
+$('baPreflightDownload').addEventListener('click',()=>{
+ const button=$('baPreflightDownload');
+ if(button.disabled||!activeId)return;
+ button.disabled=true;
+ send('downloadDocumentPreflight',{projectId:activeId});
+});
 function renderSourceDocuments(){
  const root=$('sourceDocuments');root.replaceChildren();
  renderSourcePreflight();
@@ -6690,7 +6699,7 @@ window.addEventListener('message',event=>{
    setDiscoveryImportBusy(true,m.message||'Processing…');
   }
   if(m.type==='discoverySourcePreflight'){
-   baPreflightInfo={phase:m.phase||'checking',sourceName:m.sourceName,summary:m.summary||'',applied:m.applied||[],issues:m.issues||[],resolutions:m.resolutions||[]};renderSourcePreflight();
+   baPreflightInfo={phase:m.phase||'checking',sourceName:m.sourceName,sourceDigest:m.digest,section:m.section,totalSections:m.totalSections,summary:m.summary||'',applied:m.applied||[],issues:m.issues||[],resolutions:m.resolutions||[],reportAvailable:true};renderSourcePreflight();
   }
   if(m.type==='discoveryImportCancelled'){
    mappingRunPhase='';mappingRetryAvailable=!!m.mapping;mappingFailurePhase='';
@@ -6720,6 +6729,11 @@ window.addEventListener('message',event=>{
    // same message in the mapping recovery banner or a generic status notice.
    setDiscoveryImportBusy(false,isPreflight?'Document preflight needs attention. See the findings below.':(isMapping?'Document mapping needs attention: ':'Source upload failed: ')+mappingFailureMessage);
    renderSourcePreflight();renderDiscoverySummary();
+  }
+  if(m.type==='discoveryPreflightDownloadResult'&&m.projectId===activeId){
+   renderSourcePreflight();
+   if(m.error)status('Pre-flight report download failed: '+m.error,true);
+   else if(m.saved)status('AI document pre-flight report saved as '+(m.filename||'a text file')+'.');
   }
   if(m.type==='discoverySourceRemoveCancelled'){sourceRemoving=false;renderSourceDocuments();}
   if(m.type==='discoverySourceRemoved'){sourceRemoving=false;discoveryImportQueue=[];discoveryImportProposal=null;renderDiscoveryImportProposal();status(`${m.filename} ${m.action==='archived'?'archived':'deleted as unused upload'}. Approved BRs and Jira unchanged.${m.storedCleanupWarning?' Stored upload cleanup failed: '+m.storedCleanupWarning:''}`);}
