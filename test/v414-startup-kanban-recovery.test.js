@@ -15,7 +15,7 @@ test('v414: fixed Library source and project repository moves out of Start',()=>
  const html=read('src/lib/webview/dashboard-html.js');
  const start=html.slice(html.indexOf('<form id="startupConnectionForm"'),html.indexOf('</form>',html.indexOf('<form id="startupConnectionForm"')));
  assert.doesNotMatch(start,/id="startupProjectRepo"|id="startupLibraryRepo"/);
- assert.match(start,/id="startupLibraryZipUpload"/);
+ assert.doesNotMatch(start,/id="startupLibraryZipUpload"|id="startupLibraryZipStatus"|atgv-library-source-label/);
  assert.match(html,/id="projectGithubRepositoryUrl"/);
  const ui=read('media/start.js'),host=read('src/lib/runtime/extension-runtime.js');
  assert.match(ui,/projectGithubRepositoryUrl'\)\.value/);
