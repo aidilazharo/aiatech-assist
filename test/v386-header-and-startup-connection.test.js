@@ -33,7 +33,7 @@ function createPageHarness(){
   return nodes.get(id);
  };
  const create=new Function('$',[
-  "const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluenceUrl',email:'startupEmail',githubUrl:'startupGithubUrl',projectRepoUrl:'startupProjectRepo',libraryRepoUrl:'startupLibraryRepo'};",
+  "const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluenceUrl',email:'startupEmail',githubUrl:'startupGithubUrl'};",
   "let startupSetupRequired=true,startupPage=1,startupVerifying=false,startupInstallingModule='',startupScanComplete=true,startupConnectionVerified=true,startupOpenStackId='',startupCopilotModalOpen=false;",
   ui.slice(start,end),
   ui.slice(invalidateStart,invalidateEnd),
@@ -70,6 +70,5 @@ test('successful Test & Save hides and disables action, changes restore it, and 
  assert.equal(node('startupAtlassianToken').disabled,true);
  assert.equal(node('startupGithubToken').disabled,true);
  assert.equal(node('startupJiraUrl').disabled,true);
- assert.equal(node('startupProjectRepo').disabled,true);
  assert.equal(node('startupLibraryZipUpload').disabled,true);
 });
