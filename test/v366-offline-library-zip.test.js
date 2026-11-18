@@ -39,15 +39,13 @@ function fixture(prefix=''){
  };
 }
 const repo='https://github.com/aia/test-library';
-test('Start-page ZIP icon uses the fixed SDLC Library source with no editable URL',async()=>{
+test('Start hides the offline ZIP control while host retains verified import handling',async()=>{
  const root=path.join(__dirname,'..');
  const [html,js,runtime]=await Promise.all(['src/lib/webview/dashboard-html.js','media/start.js','src/lib/runtime/extension-runtime.js']
   .map(p=>fs.readFile(path.join(root,p),'utf8')));
- const upload=html.indexOf('id="startupLibraryZipUpload"');
- assert.ok(upload>0);
- assert.ok(!html.includes('id="startupLibraryRepo"'));
- assert.match(js,/STARTUP_LIBRARY_REPO='https:\/\/github\.com\/aidilazharo\/tech-stacks-skills'/);
- assert.match(js,/send\('importLibraryZip',\{repositoryUrl\}\)/);
+ assert.doesNotMatch(html,/id="startupLibraryZipUpload"|id="startupLibraryZipStatus"|id="startupLibraryRepo"/);
+ assert.doesNotMatch(js,/startupLibraryZipUpload|startupLibraryZipStatus|STARTUP_LIBRARY_REPO/);
+ assert.match(runtime,/startupSetup\.FIXED_LIBRARY_REPOSITORY/);
  assert.match(runtime,/case 'importLibraryZip':/);
  assert.match(runtime,/offlineLibrary\.importZip/);
 });

@@ -1,3 +1,12 @@
+# ATGV AIATECH Assist v0.4.15
+
+- Remove the entire SDLC Library panel from Start → Jira, Confluence & GitHub connections, including repository explanation, ZIP upload button, and offline ZIP status.
+- Drop unused Start-screen event handlers and CSS; preserve Library management, verification, offline Library imports through the host, and hourly update functionality.
+- Keep the trusted SDLC Library source pinned to aidilazharo/tech-stacks-skills and the existing project-repository setting unchanged.
+- Add regression checks that the Start screen has only Jira, Confluence, email, and GitHub account fields and initializes without missing-element listeners.
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.14
 
 - Load the dependency-free Kanban controller early; a missing optional controller no longer blocks the whole UI, and Jira DataTable remains available.

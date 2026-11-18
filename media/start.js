@@ -7323,7 +7323,6 @@ window.addEventListener('message',event=>{
 // reserved exclusively for VSIX releases, not catalog or setup notifications.
 const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluenceUrl',email:'startupEmail',
  githubUrl:'startupGithubUrl'};
-const STARTUP_LIBRARY_REPO='https://github.com/aidilazharo/tech-stacks-skills';
 let startupFormInitialized=false,startupPrereqRequested=false,startupConnectionVerified=false,startupSetupRequired=true,startupReturnToConnections=false;
 let startupVerifying=false,startupScanComplete=false,startupPage=0,startupInstallingModule='';
 let startupLastInstalledTool='';
@@ -7383,7 +7382,7 @@ function renderStartupPage(){
  // Reconfiguration is managed in Settings; an unverified saved state must be tested.
  $('startupTestConnections').disabled=startupVerifying||startupConnectionVerified;
  $('startupTestConnections').classList.toggle('hidden',startupConnectionVerified);
- for(const id of [...Object.values(startupFieldMap),'startupAtlassianToken','startupGithubToken','startupLibraryZipUpload'])
+ for(const id of [...Object.values(startupFieldMap),'startupAtlassianToken','startupGithubToken'])
   $(id).disabled=startupVerifying||startupConnectionVerified;
  $('startupComputerCard').classList.toggle('hidden',startupPage!==0);
  $('startupConnectionForm').classList.toggle('hidden',startupPage!==1);
@@ -7422,8 +7421,6 @@ function renderStartupConfig(config){
   $('startupConnectionMessage').textContent='Jira, Confluence and GitHub connections already verified and saved.';
   $('startupConnectionMessage').className='test-status success';
  }
- const offline=config.offlineLibrary;
- if(offline)$('startupLibraryZipStatus').textContent=`Offline ZIP v${offline.version} (${offline.filename}) active; retained while newer than GitHub main.`;
  showStartupStep(required||startupReturnToConnections);
  if(required&&!startupPrereqRequested){startupPrereqRequested=true;startupScanPercent(0,'Starting prerequisite scan…');renderStartupScanPlaceholders();send('startupReadiness');}
 }
@@ -7582,16 +7579,11 @@ $('startupPrevious').addEventListener('click',()=>{
  if(startupPage===1&&!startupVerifying&&!startupInstallingModule){startupPage=0;renderStartupPage();}
 });
 $('startupEmail').addEventListener('input',()=>updateHeaderUserName(read('startupEmail')));
-$('startupLibraryZipUpload').addEventListener('click',()=>{
- const repositoryUrl=STARTUP_LIBRARY_REPO;
- $('startupLibraryZipStatus').textContent='Choose a SDLC Library ZIP file…';
- send('importLibraryZip',{repositoryUrl});
-});
 $('startupConnectionForm').addEventListener('submit',event=>{
  event.preventDefault();if(startupVerifying||startupConnectionVerified)return;
  startupConnectionVerified=false;startupVerifying=true;
  renderStartupPage();
- $('startupConnectionMessage').textContent='Testing Jira, Confluence, GitHub account and fixed SDLC Library…';
+ $('startupConnectionMessage').textContent='Testing Jira, Confluence and GitHub account…';
  send('startupTestConnections',{settings:startupPayload(),atlassianToken:read('startupAtlassianToken'),githubToken:read('startupGithubToken')});
 });
 $('startupProceed').addEventListener('click',()=>{
@@ -7604,10 +7596,6 @@ $('startupProceed').addEventListener('click',()=>{
 window.addEventListener('message',event=>{
  const message=event.data||{};
  if(message.type==='state'&&message.startupSetup)renderStartupConfig(message.startupSetup);
- if(message.type==='offlineLibraryZipResult'){
-  $('startupLibraryZipStatus').textContent=message.message||'Offline ZIP import did not complete.';
-  $('startupLibraryZipStatus').className=message.success?'test-status success':'test-status error';
- }
  if(message.type==='startupReadinessProgress'){
   startupScanPercent(message.percent,message.message);
  }
