@@ -12,13 +12,15 @@ function setup({failCreate=false,approval='Publish Jira'}={}){
  let state={revision:1,brs:[{id:'BR-777',status:'approved'}],synced:{},pending:{},inboundJira:[]};
  const messages=[],writes=[];
  const config={get:key=>key==='jira.projectKey'?'TC':null};
- const binding=JSON.stringify({atgvProjectId:'test-project',site:'https://mock.atlassian.test',project:'TC',actor:'mock-actor',items:[item]});
+ const jiraPreviewFieldPlans={'BR-777':{fields:[{id:'summary',type:'string',required:true}],extraFields:{},existingDigest:null}};
+ const binding=JSON.stringify({atgvProjectId:'test-project',site:'https://mock.atlassian.test',project:'TC',actor:'mock-actor',items:[item],fields:jiraPreviewFieldPlans});
  const deps={
-  jiraSyncBusy:false,approvedJiraPreviewRevision:1,approvedJiraPreviewBinding:sha(binding),activeProject:{id:'test-project'},registry:{},
+  jiraSyncBusy:false,jiraPreviewFieldPlans,approvedJiraPreviewRevision:1,approvedJiraPreviewBinding:sha(binding),activeProject:{id:'test-project'},registry:{},
   requireOnline(){}, effectiveConfig(){return config;},getAtlassianToken:async()=> 'unused-token',
   verifiedBAActor:async()=> 'mock-actor',sha,baseAtlassian:()=> 'https://mock.atlassian.test',
-  prePublishIdentityGuard:async()=>({safe:true}),jiraPreflight:async()=>[],jiraIssueTypes:async()=>[{name:'Epic',subtask:false}],
-  jiraProtectionAssessment:async()=>({blocked:[]}),jiraScopedMarker:()=> 'atgv-'+'a'.repeat(24),
+  prePublishIdentityGuard:async()=>({safe:true}),jiraPreflight:async()=>[],jiraIssueTypes:async()=>[{id:'10001',name:'Epic',subtask:false}],
+  jiraIssueFieldMetadata:async()=>[{id:'summary',required:true,schema:{type:'string'}}],
+  jiraReadIssueAllFields:async()=>({fields:{}}),jiraProtectionAssessment:async()=>({blocked:[]}),jiraScopedMarker:()=> 'atgv-'+'a'.repeat(24),
   jiraFindIssueByMarker:async()=>null,
   jiraCreateIssue:async()=>{writes.push('create');if(failCreate)throw new Error('Injected Jira network failure');return {key:'TC-999'};},
   jiraReadIssue:async()=>({key:'TC-999',fields:{issuetype:{name:'Epic'},summary:item.title,description:item.description}}),
