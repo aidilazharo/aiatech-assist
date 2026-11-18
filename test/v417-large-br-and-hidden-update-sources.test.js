@@ -39,12 +39,13 @@ test('v417: mapping results from every section are combined without dropping lat
  assert.ok(Object.values(merged).every(x=>x.length<=MAX_ANSWER_LENGTH));
 });
 
-test('v417: duplicate mapping sections dedupe but overflow fails without silent truncation',()=>{
+test('v422: duplicate sections dedupe, and merged answers over 5k retain every character',()=>{
  const empty=()=>Object.fromEntries(QUESTIONS.map(([key])=>[key,'']));
  const result=importer.mergeMappingAnswers([{...empty(),scope:'Same scope'}, {...empty(),scope:'Same scope'}]);
  assert.equal(result.scope,'Same scope');
- assert.throws(()=>importer.mergeMappingAnswers([{...empty(),scope:'A'.repeat(3500)},{...empty(),scope:'B'.repeat(3500)}]),
-  /exceeding the 5,000-character answer limit.*No mapping was saved/);
+ const merged=importer.mergeMappingAnswers([{...empty(),scope:'A'.repeat(3500)},{...empty(),scope:'B'.repeat(3500)}]);
+ assert.equal(merged.scope,'A'.repeat(3500)+'\n\n'+'B'.repeat(3500));
+ assert.throws(()=>importer.mergeMappingAnswers([{...empty(),scope:'A'.repeat(60000)},{...empty(),scope:'B'.repeat(60000)}]),/100,000-character safety limit/);
 });
 
 test('v417: BA upload and mapping preserve source integrity and atomicity',()=>{
