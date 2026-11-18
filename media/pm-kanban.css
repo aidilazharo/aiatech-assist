@@ -1,4 +1,4 @@
-/* Lightweight offline Kanban using bundled SortableJS (MIT). */
+/* Lightweight Kanban using verified SDLC Library SortableJS (MIT), with native fallback. */
 #pmKanbanBoard{width:100%;overflow-x:auto}
 .atgv-kanban-board{display:grid;grid-auto-columns:minmax(220px,1fr);grid-auto-flow:column;gap:12px;overflow-x:auto;padding:7px 0}
 .atgv-kanban-column{min-width:220px;max-width:390px;background:var(--vscode-sideBar-background,var(--vscode-editor-background));border:1px solid var(--vscode-panel-border,#555);border-radius:9px;display:flex;flex-direction:column;min-height:180px}
