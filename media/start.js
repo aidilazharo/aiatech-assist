@@ -7451,8 +7451,8 @@ function setStartupCopilotStatus(state,message){
  badge.textContent=startupCopilotBusy?'Setting up…':state==='ready'?'Installed':state==='unsupported'?'Update required':state==='error'?'Setup failed':'Needs setup';
  card.classList.toggle('is-ready',state==='ready');card.classList.toggle('is-missing',state==='error'||state==='unsupported'||state==='available');
  card.setAttribute('aria-label','GitHub Copilot SDK: '+badge.textContent);
- if(!card._atgvProgress)startupRing(card);
- paintStartupStack(card,{id:'copilot-sdk',name:'GitHub Copilot SDK',percent:state==='ready'?100:state==='working'?45:0,status:state==='ready'?'complete':state==='working'?'running':'error',message:badge.textContent});
+ if(typeof startupRing==='function'&&!card._atgvProgress)startupRing(card);
+ if(typeof paintStartupStack==='function')paintStartupStack(card,{id:'copilot-sdk',name:'GitHub Copilot SDK',percent:state==='ready'?100:state==='working'?45:0,status:state==='ready'?'complete':state==='working'?'running':'error',message:badge.textContent});
 }
 function openStartupCopilotModal(){
  startupCopilotPriorFocus=document.activeElement;startupCopilotModalOpen=true;
