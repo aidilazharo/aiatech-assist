@@ -7237,12 +7237,12 @@ window.addEventListener('message',event=>{
  const m=event.data||{};
  if(!activeId||m.projectId!==activeId)return;
  if(m.type==='architectCustomScanResult'){
-  architectCustomBusy=false;architectCustomRunning=false;
+  architectCustomBusy=false;architectCustomRunning=!!m.value?.running;
   architectCustomInfo={...m.value,projectId:activeId,previewCustomized:false};
   architectCustomNotify(m.value?.ready?('Found '+m.value.recognized+' application target(s). Select the target and local preview URL, then Install & Run.'):'No runnable application was identified at the supported repository locations.',m.value?.ready?'complete':'error');
   renderArchitectCustomPanel();
  }
- if(m.type==='architectCustomError'){architectCustomBusy=false;architectCustomNotify(m.message||'Custom Stack operation failed.','error');renderArchitectCustomPanel();}
+ if(m.type==='architectCustomError'){architectCustomBusy=false;if(m.logAvailable)architectRecordErrorLog(m);architectCustomNotify(m.message||'Custom Stack operation failed.','error');renderArchitectCustomPanel();}
  if(m.type==='architectCustomProgress'){architectCustomNotify(m.message||'Working with custom application…');}
  if(m.type==='architectCustomRunResult'){
   architectCustomBusy=false;architectCustomRunning=!!m.value?.running;
