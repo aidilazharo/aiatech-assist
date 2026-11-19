@@ -123,6 +123,26 @@ function mergeForDiscovery(answers,units){
  }
  return merged;
 }
+function groups(proposals){
+ const ordered=[],byKey=new Map();
+ for(const proposal of proposals||[]){
+  for(const ref of proposal.units||[]){
+   if(!validRef(ref))throw Error('Invalid saved BR text reference.');
+   const key=ref.sourceDigest+':'+ref.brIndex;
+   if(!byKey.has(key)){
+    const group={sourceDigest:ref.sourceDigest,brIndex:ref.brIndex,sourceName:proposal.filename,units:[]};
+    byKey.set(key,group);ordered.push(group);
+   }
+   byKey.get(key).units.push(ref);
+  }
+ }
+ for(const group of ordered){
+  group.units.sort((a,b)=>a.partIndex-b.partIndex);
+  if(group.units.some((unit,i)=>unit.partIndex!==i+1||unit.parts!==group.units.length))
+   throw Error('Saved BR text parts are incomplete or out of order.');
+ }
+ return ordered;
+}
 async function removeForSource(registry,id,sourceDigest){
  if(!DIGEST.test(String(sourceDigest||'')))throw Error('Invalid source digest.');
  const dir=await directory(registry,id);if(!dir)return;
@@ -133,4 +153,4 @@ async function removeForSource(registry,id,sourceDigest){
   await fs.unlink(file);
  }
 }
-module.exports={MAX_UNITS,UNIT_CHARS,sha,split,prepare,read,validRef,mergeForDiscovery,removeForSource};
+module.exports={MAX_UNITS,UNIT_CHARS,sha,split,prepare,read,validRef,mergeForDiscovery,groups,removeForSource};
