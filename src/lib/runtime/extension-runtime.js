@@ -32,6 +32,7 @@ const discoveryImport=require('../../discovery-import');
 const baDocumentPreflight=require('../../ba-document-preflight');
 const baMappingCheckpoint=require('../../ba-mapping-checkpoint');
 const baLargeDocumentRecovery=require('../../ba-large-document-recovery');
+const baTimeoutSimplified=require('../../ba-timeout-simplified');
 const baPreflightReports=require('../../ba-preflight-report');
 const baProcessDiagnostics=require('../../ba-process-diagnostics');
 const baWorkingBr=require('../../ba-working-br');
@@ -2060,6 +2061,16 @@ async function requestSourceAI(target,prompt,run,{maxChars=20000,timeoutMs=SOURC
  try{return await Promise.race([aiAnswer(run.useRecovery&&run.recoveryTarget?run.recoveryTarget:target,prompt,maxChars,{json:true,signal:child.signal,timeoutMs}),cancelled]);}
  finally{clearTimeout(timer);parent.removeEventListener('abort',onStop);}
 }
+async function offerSimpleDraftAfterTimeout(run,error){
+ return baTimeoutSimplified.registerTimeout(run,error,async ({message,button})=>{
+  const answer=await uiWarning(message,{modal:true},button);
+  const approved=answer===button;
+  await recordBAProcess({stage:'ai-timeout',action:approved?'simplified-draft-opted-in':'simplified-draft-declined',
+   status:approved?'needs-review':'retry-available',details:'Three timeout failures; user choice recorded. Business approval and Jira safeguards remain required.'});
+  if(approved)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Simplified source-backed Jira draft selected. All remaining AI quality checks are unverified; BA approval remains required.'});
+  return approved;
+ });
+}
 async function requestSourcePreflight(target,prompt,run){
  return requestSourceAI(target,prompt,run,{maxChars:run.largeSource?11000:20000,timeoutMs:baLargeDocumentRecovery.timeout('preflight',!!run.largeSource)});
 }
@@ -2103,7 +2114,7 @@ async function processSelectedDiscoverySources(msg){
    await recordBAProcess({stage:'upload',action:'source-selected',status:'processing',
     details:'Sectioned source selected for AI mapping; document text not recorded.'});
    run.largeSource=baLargeDocumentRecovery.isLargeDocument(source.text.length);
-   run.preflightOffline=false;run.mappingOffline=false;run.sourceOnlyPreflight=false;
+   run.preflightOffline=!!run.skipAiChecks;run.mappingOffline=!!run.skipAiChecks;run.sourceOnlyPreflight=!!run.skipAiChecks;
    let sections=discoveryImport.splitDocumentText(source.text);
    const smallerSections=discoveryImport.splitDocumentText(source.text,12000);
    if(smallerSections.length<=25)sections=smallerSections;
@@ -2154,7 +2165,7 @@ async function processSelectedDiscoverySources(msg){
       }
       if(result)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Resuming: using saved '+(result.degraded?'source-only review':'AI preflight')+' for '+source.name+label+'…'});
      }
-     if(!result&&run.preflightOffline){
+     if(!result&&(run.preflightOffline||run.skipAiChecks)){
       result=baLargeDocumentRecovery.preflight(section.text);run.sourceOnlyPreflight=true;
       if(checkpoint){saveCheckpointEntry(checkpoint,'preflight',promptKey,baLargeDocumentRecovery.checkpointRecord('preflight'),60);await persistCheckpoint();}
      }
@@ -2167,7 +2178,13 @@ async function processSelectedDiscoverySources(msg){
        break;
       }catch(error){
        check();
-       const timedOut=error.code==='ATGV_SOURCE_AI_TIMEOUT'||error.name==='TimeoutError'||/\btimed?\s*out\b|\btimeout\b/i.test(String(error.message||error));
+       const timedOut=baTimeoutSimplified.timedOut(error);
+       if(timedOut&&await offerSimpleDraftAfterTimeout(run,error)){
+        run.preflightOffline=true;run.sourceOnlyPreflight=true;run.mappingOffline=true;
+        result=baLargeDocumentRecovery.preflight(section.text);
+        if(checkpoint){saveCheckpointEntry(checkpoint,'preflight',promptKey,baLargeDocumentRecovery.checkpointRecord('preflight'),60);await persistCheckpoint();}
+        break;
+       }
        if(!trySourceAIFallback(run,error))throw error;
        if(!run.largeSource&&networkAttempt===1&&attempt===1&&preflightSplitRecoveries===0&&section.text.length>4000){
         const parts=discoveryImport.splitDocumentText(section.text,Math.max(2000,Math.floor(section.text.length/2)));
@@ -2243,7 +2260,7 @@ async function processSelectedDiscoverySources(msg){
      }else{try{proposals=discoveryImport.parseMappingResponse(checkpoint.mapping[mappingKey]);}catch{}}
      if(proposals)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'Resuming: using completed '+(sourceOnlyMappingPart?'source-only extraction (BA review required)':'AI mapping')+' for '+doc.name+label+'…'});
     }
-    if(!proposals&&run.mappingOffline){
+    if(!proposals&&(run.mappingOffline||run.skipAiChecks)){
      proposals=baLargeDocumentRecovery.mapping(doc.text,{section:part+1,totalSections:sections.length});
      sourceOnlyMappingPart=true;
      if(checkpoint){saveCheckpointEntry(checkpoint,'mapping',mappingKey,baLargeDocumentRecovery.checkpointRecord('mapping'),30);await persistCheckpoint();}
@@ -2261,6 +2278,12 @@ async function processSelectedDiscoverySources(msg){
        break;
       }catch(error){
        check();
+       if(baTimeoutSimplified.timedOut(error)&&await offerSimpleDraftAfterTimeout(run,error)){
+        run.mappingOffline=true;sourceOnlyMappingPart=true;run.preflightOffline=true;run.sourceOnlyPreflight=true;
+        proposals=baLargeDocumentRecovery.mapping(doc.text,{section:part+1,totalSections:sections.length});
+        if(checkpoint){saveCheckpointEntry(checkpoint,'mapping',mappingKey,baLargeDocumentRecovery.checkpointRecord('mapping'),30);await persistCheckpoint();}
+        break;
+       }
        if(!trySourceAIFallback(run,error))throw error;
        if(attempt===maxMappingAttempts){
         if(!run.largeSource)throw Error(doc.name+label+': AI mapping could not recover safely after '+attempt+' attempt(s). '+String(error.message||error).slice(0,260)+' Completed sections remain saved for Resume AI Mapping.');
@@ -2309,14 +2332,18 @@ async function processSelectedDiscoverySources(msg){
       crossSectionChecked=true;crossError=null;break;
      }catch(error){
       check();
-      if(error.code==='ATGV_BUSINESS_CONFLICT'||!trySourceAIFallback(run,error))throw error;
+      if(error.code==='ATGV_BUSINESS_CONFLICT')throw error;
+      if(baTimeoutSimplified.timedOut(error)&&await offerSimpleDraftAfterTimeout(run,error)){
+       run.mappingOffline=true;run.sourceOnlyPreflight=true;crossError=error;break;
+      }
+      if(!trySourceAIFallback(run,error))throw error;
       crossError=error;
       if(attempt<maxCrossAttempts)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Cross-section AI review was interrupted. Retrying ('+attempt+'/'+maxCrossAttempts+')'+(run.useRecovery?' with Microsoft Copilot SDK':'')+' without restarting the document…'});
      }
     }
     }
     if(crossError){
-     if(!run.largeSource)throw Error(source.name+': cross-section review could not complete after recovery attempts. '+String(crossError.message||crossError).slice(0,240)+' Saved section mappings remain available for Resume AI Mapping.');
+     if(!run.largeSource&&!run.skipAiChecks)throw Error(source.name+': cross-section review could not complete after recovery attempts. '+String(crossError.message||crossError).slice(0,240)+' Saved section mappings remain available for Resume AI Mapping.');
      await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Cross-section AI review is NOT VERIFIED due to provider errors or request size. Draft mapping is retained and requires Business Analyst review.'});
     }
    }
@@ -2326,7 +2353,7 @@ async function processSelectedDiscoverySources(msg){
     details:'Cross-section AI check '+(crossSectionChecked?'completed':'not verified; BA review required')+'.'});
    const partialVerification=run.sourceOnlyPreflight||run.mappingOffline||(sections.length>1&&!crossSectionChecked);
    const reviewIssues=partialVerification?[{severity:'warning',category:'ai-verification',detail:'One or more AI analysis stages could not be verified. Source-only extraction and full original document are available; BA review is required before approval.',sourceExcerpt:'',suggestion:'Review all source-backed requirements and open decisions before approving or publishing.'}]:[];
-   const report={status:partialVerification?'needs-review':'ready',crossSectionChecked,summary:partialVerification?'Source-only recovery completed; AI validation is incomplete. The uploaded original and full working BR were preserved. BA review required.':sections.length>1?'All '+sections.length+' document sections and their mapped claims were reviewed; source remains unchanged.':reports[0].summary,
+   const report={status:partialVerification?'needs-review':'ready',crossSectionChecked,summary:run.skipAiChecks?baTimeoutSimplified.MARKER+'. Source-only recovery completed; all AI checks are unverified and BA review is required.':partialVerification?'Source-only recovery completed; AI validation is incomplete. The uploaded original and full working BR were preserved. BA review required.':sections.length>1?'All '+sections.length+' document sections and their mapped claims were reviewed; source remains unchanged.':reports[0].summary,
     applied:reports.flatMap(x=>x.applied).slice(0,12),
     skipped:reports.flatMap(x=>x.skipped||[]).slice(0,12),
     issues:[...reports.flatMap(x=>x.issues),...reviewIssues].slice(0,16),
