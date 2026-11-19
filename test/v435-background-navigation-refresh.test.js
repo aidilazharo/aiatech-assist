@@ -40,9 +40,9 @@ test('active BA mapping keeps its step and progress when navigating away or retu
 test('project switch is rejected during in-progress AI mapping to preserve authenticated checkpoints',()=>{
  const back=host.slice(host.indexOf("case 'openingBack':"),host.indexOf("case 'openingAuto':"));
  const open=host.slice(host.indexOf("case 'openingAuto':"),host.indexOf("case 'openingOffline':"));
- assert.match(back,/if\(activeDiscoveryMappingRun\?\.projectId===activeProject\?\.id\)/);
- assert.match(open,/if\(activeDiscoveryMappingRun\?\.projectId===activeProject\?\.id\)/);
- assert.ok(back.indexOf('activeDiscoveryMappingRun')<back.indexOf('openingFlow.reset()'));
+ assert.match(back,/if\(hasActiveProjectProcess\(activeProject\?\.id\)\)/);
+ assert.match(open,/if\(hasActiveProjectProcess\(activeProject\?\.id\)\)/);
+ assert.ok(back.indexOf('hasActiveProjectProcess')<back.indexOf('openingFlow.reset()'));
 });
 test('closing Jira inventory modal does not cancel running scan',()=>{
  const first=ui.indexOf('function closeJiraInventory()'),end=ui.indexOf("$('overviewJiraInventory').addEventListener",first);
