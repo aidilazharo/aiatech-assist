@@ -38,6 +38,7 @@ const baProcessDiagnostics=require('../../ba-process-diagnostics');
 const baWorkingBr=require('../../ba-working-br');
 const discoveryReview=require('../../discovery-review');
 const brWorkflow=require('../../br-workflow');
+const baSourceSelectionGuard=require('../../ba-source-selection-guard');
 const jiraPreviewDetails=require('../../jira-preview-details');
 const jiraRoleRepair=require('../../jira-role-task-repair');
 const brArtifactCleanup=require('../../br-artifact-cleanup');
@@ -1452,7 +1453,8 @@ async function dashboardState(){
   const brState=exportRecovery?.register||(openingFlow.phase==='open'&&activeProject?await brWorkflow.load(registry,activeProject.id):null);
   const baSelectedSources=brState?(context.workspaceState.get('atgvAssist.baSelectedSources.'+activeProject.id,[])||[]).filter(digest=>brState.sourceDocuments.some(source=>source.digest===digest)):[];
   const resumeMarker=brState?context.workspaceState.get('atgvAssist.baMappingResume.'+activeProject.id):null;
-  const baMappingResumeAvailable=!!(resumeMarker&&String(resumeMarker.revision)===String(brState?.revision)&&
+  const baMappingResumeAvailable=!!(resumeMarker&&
+   (!resumeMarker.sourceIdentity||resumeMarker.sourceIdentity===baSourceSelectionGuard.snapshot(brState).identity)&&
    Array.isArray(resumeMarker.digests)&&resumeMarker.digests.length&&resumeMarker.digests.every(digest=>brState.sourceDocuments.some(source=>source.digest===digest)));
   const jiraBrowseBaseUrl=openingFlow.phase==='open'&&activeProject?String(effectiveConfig(activeProject).get('jira.baseUrl')||'').replace(/\/$/,''):'';
   let flowState=discoveryState?continuityEvaluate(discoveryState.answers,{approved:!!brState?.brs?.some(br=>br.status==='approved'&&!br.needsRefresh&&br.approvedContent)}):null;
@@ -2088,9 +2090,15 @@ async function processSelectedDiscoverySources(msg){
   const selected=msg.digests;
   if(!Array.isArray(selected)||!selected.length||selected.length>10||new Set(selected).size!==selected.length)throw Error('Select at least one document.');
   const original=await brWorkflow.load(registry,run.projectId);check();
-  if(msg.revision!==original.revision)throw Error('Source selection changed. Refresh and retry.');
   const documents=selected.map(d=>original.sourceDocuments.find(x=>x.digest===d));
-  if(documents.some(x=>!x))throw Error('Source selection includes a missing document.');
+  if(documents.some(x=>!x))throw Error('Source selection includes a missing document. Refresh and retry.');
+  // UI revisions can become stale when background services or unrelated BR edits
+  // update the register. The selected source identities are authoritative.
+  const sourceSnapshot=baSourceSelectionGuard.snapshot(original);
+  if(msg.revision!==original.revision)await recordBAProcess({stage:'mapping',action:'stale-ui-register-revision',status:'source-verified',
+   details:'Accepted current active source documents despite an unrelated UI register revision change.'});
+  const sourceResumeMarker=context.workspaceState.get?.('atgvAssist.baMappingResume.'+run.projectId);
+  const resumeRevision=baSourceSelectionGuard.resumeRevision(original,selected,sourceResumeMarker);
   documentPreflightSessions.set(run.projectId,baPreflightReports.create(run.projectId,documents));
   // Retain at most ten active project reports in the extension process.
   if(documentPreflightSessions.size>10)documentPreflightSessions.delete(documentPreflightSessions.keys().next().value);
@@ -2118,7 +2126,7 @@ async function processSelectedDiscoverySources(msg){
    let sections=discoveryImport.splitDocumentText(source.text);
    const smallerSections=discoveryImport.splitDocumentText(source.text,12000);
    if(smallerSections.length<=25)sections=smallerSections;
-   const resumeMeta={sourceDigest:selected[i],textDigest:sha(source.text),modelDigest,revision:String(original.revision)};
+   const resumeMeta={sourceDigest:selected[i],textDigest:sha(source.text),modelDigest,revision:resumeRevision};
    let checkpoint=null;
    if(resumeKey){
     try{
@@ -2129,7 +2137,7 @@ async function processSelectedDiscoverySources(msg){
      }
      if(!checkpoint){
       const marker=context.workspaceState.get?.('atgvAssist.baMappingResume.'+run.projectId);
-      if(marker&&String(marker.revision)===String(original.revision)&&(marker.digests||[]).includes(selected[i]))
+      if(marker&&String(marker.revision)===resumeRevision&&(marker.digests||[]).includes(selected[i]))
        await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Saved AI progress does not match the current document or model. Starting the required checks again…'});
       checkpoint=baMappingCheckpoint.fresh(resumeMeta,sections);
      }
@@ -2140,7 +2148,7 @@ async function processSelectedDiscoverySources(msg){
     try{
      checkpoint.sectionLengths=sections.map(text=>text.length);
      await baMappingCheckpoint.save(registry,run.projectId,checkpoint,resumeKey);
-     await context.workspaceState.update('atgvAssist.baMappingResume.'+run.projectId,{revision:String(original.revision),digests:[...selected]});
+     await context.workspaceState.update('atgvAssist.baMappingResume.'+run.projectId,{revision:resumeRevision,digests:[...selected],sourceIdentity:sourceSnapshot.identity});
      await dashboard?.webview.postMessage({type:'discoveryMappingCheckpoint',projectId:run.projectId,resumeAvailable:true});
     }catch(error){checkpoint=null;report('AI resume checkpoint could not be saved: '+String(error.message||error));
      await dashboard?.webview.postMessage({type:'discoveryMappingCheckpoint',projectId:run.projectId,resumeAvailable:false,message:'AI progress could not be saved for a later resume. Check workspace storage permissions.'});}
@@ -2363,7 +2371,7 @@ async function processSelectedDiscoverySources(msg){
   }
   check();run.phase='committing';
   await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'committing',message:'Saving complete mapping atomically. Cancellation is disabled during this step…'});
-  const latest=await brWorkflow.commitSourceMapping(registry,run.projectId,original.revision,{digests:selected,proposals:mappedProposals,preflights});
+  const latest=await brWorkflow.commitSourceMapping(registry,run.projectId,original.revision,{digests:selected,proposals:mappedProposals,preflights,sourceSnapshot});
   await recordBAProcess({stage:'mapping',action:'save-mapping',status:'committed',
     details:'Mapped discovery and preflight evidence saved to requirements register.'});
   for(const digest of selected)try{await baMappingCheckpoint.remove(registry,run.projectId,digest);}catch(error){report('Completed AI checkpoint cleanup: '+String(error.message||error));}
