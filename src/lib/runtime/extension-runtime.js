@@ -31,6 +31,7 @@ const discovery=require('../../ba-discovery');
 const discoveryImport=require('../../discovery-import');
 const baDocumentPreflight=require('../../ba-document-preflight');
 const baMappingCheckpoint=require('../../ba-mapping-checkpoint');
+const baLargeDocumentRecovery=require('../../ba-large-document-recovery');
 const baPreflightReports=require('../../ba-preflight-report');
 const baWorkingBr=require('../../ba-working-br');
 const discoveryReview=require('../../discovery-review');
@@ -2025,7 +2026,7 @@ async function requestSourceAI(target,prompt,run,{maxChars=20000,timeoutMs=SOURC
  finally{clearTimeout(timer);parent.removeEventListener('abort',onStop);}
 }
 async function requestSourcePreflight(target,prompt,run){
- return requestSourceAI(target,prompt,run,{maxChars:20000,timeoutMs:SOURCE_PREFLIGHT_AI_TIMEOUT_MS});
+ return requestSourceAI(target,prompt,run,{maxChars:run.largeSource?11000:20000,timeoutMs:baLargeDocumentRecovery.timeout('preflight',!!run.largeSource)});
 }
 async function processSelectedDiscoverySources(msg){
  if(activeDiscoveryMappingRun)throw Error('Source mapping is already running. Stop it before starting another mapping.');
@@ -2064,6 +2065,8 @@ async function processSelectedDiscoverySources(msg){
   for(let i=0;i<readable.length;i++){
    check();
    const source=readable[i];
+   run.largeSource=baLargeDocumentRecovery.isLargeDocument(source.text.length);
+   run.preflightOffline=false;run.mappingOffline=false;run.sourceOnlyPreflight=false;
    let sections=discoveryImport.splitDocumentText(source.text);
    const smallerSections=discoveryImport.splitDocumentText(source.text,12000);
    if(smallerSections.length<=25)sections=smallerSections;
@@ -2107,10 +2110,19 @@ async function processSelectedDiscoverySources(msg){
      const prompt=baDocumentPreflight.prompt(section,{previous,attempt})+await roleSkillPrompt('business-analyst');
      const promptKey=sha(prompt),savedPreflight=checkpoint?.preflight?.[promptKey];
      if(savedPreflight){
-      try{const restored=baDocumentPreflight.parse(savedPreflight,section.text);if(restored.ready)result=restored;}catch{}
-      if(result)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Resuming: using the completed preflight for '+source.name+label+'…'});
+      if(baLargeDocumentRecovery.isCheckpointRecord(savedPreflight,'preflight')){
+       result=baLargeDocumentRecovery.preflight(section.text);run.preflightOffline=true;run.sourceOnlyPreflight=true;
+      }else{
+       try{const restored=baDocumentPreflight.parse(savedPreflight,section.text);if(restored.ready)result=restored;}catch{}
+      }
+      if(result)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Resuming: using saved '+(result.degraded?'source-only review':'AI preflight')+' for '+source.name+label+'…'});
      }
-     for(let networkAttempt=1;!result&&networkAttempt<=3;networkAttempt++){
+     if(!result&&run.preflightOffline){
+      result=baLargeDocumentRecovery.preflight(section.text);run.sourceOnlyPreflight=true;
+      if(checkpoint){saveCheckpointEntry(checkpoint,'preflight',promptKey,baLargeDocumentRecovery.checkpointRecord('preflight'),60);await persistCheckpoint();}
+     }
+     const maxNetworkAttempts=baLargeDocumentRecovery.attempts('preflight',!!run.largeSource,!!run.recoveryTarget);
+     for(let networkAttempt=1;!result&&networkAttempt<=maxNetworkAttempts;networkAttempt++){
       try{
        const ai=await requestSourcePreflight(target,prompt,run);
        check();result=baDocumentPreflight.parse(ai,section.text);
@@ -2120,7 +2132,7 @@ async function processSelectedDiscoverySources(msg){
        check();
        const timedOut=error.code==='ATGV_SOURCE_AI_TIMEOUT'||error.name==='TimeoutError'||/\btimed?\s*out\b|\btimeout\b/i.test(String(error.message||error));
        if(!trySourceAIFallback(run,error))throw error;
-       if(networkAttempt===1&&attempt===1&&preflightSplitRecoveries===0&&section.text.length>4000){
+       if(!run.largeSource&&networkAttempt===1&&attempt===1&&preflightSplitRecoveries===0&&section.text.length>4000){
         const parts=discoveryImport.splitDocumentText(section.text,Math.max(2000,Math.floor(section.text.length/2)));
         if(parts.length>1&&sections.length-1+parts.length<=25){
          sections.splice(part,1,...parts);preflightSplitRecoveries++;retrySmaller=true;
@@ -2131,11 +2143,18 @@ async function processSelectedDiscoverySources(msg){
          break;
         }
        }
-       if(networkAttempt<3){
-        await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Recovering from an incomplete or timed-out AI response ('+networkAttempt+'/3)'+(run.useRecovery?' using Microsoft Copilot SDK':'')+'. Reusing saved sections; original document unchanged…'});
+       if(networkAttempt<maxNetworkAttempts){
+        await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Recovering AI preflight ('+networkAttempt+'/'+maxNetworkAttempts+')'+(run.useRecovery?' using Microsoft Copilot SDK':'')+'. Saved sections remain unchanged…'});
         continue;
        }
-       throw Error(source.name+label+': AI preflight could not complete after three recovery attempts. '+String(error.message||error).slice(0,240)+' Saved sections remain available for Resume AI Mapping.');
+       if(run.largeSource){
+        run.preflightOffline=true;run.sourceOnlyPreflight=true;
+        result=baLargeDocumentRecovery.preflight(section.text);
+        if(checkpoint){saveCheckpointEntry(checkpoint,'preflight',promptKey,baLargeDocumentRecovery.checkpointRecord('preflight'),60);await persistCheckpoint();}
+        await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'AI preflight unavailable. Continuing with source-only review; AI quality checks are NOT verified and BA review is required.'});
+        break;
+       }
+       throw Error(source.name+label+': AI preflight could not complete after '+maxNetworkAttempts+' recovery attempts. '+String(error.message||error).slice(0,240)+' Saved sections remain available for Resume AI Mapping.');
       }
      }
      if(retrySmaller)break;
