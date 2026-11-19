@@ -137,7 +137,7 @@ test('evidence-backed cross-section conflicts are saved and never treated as a t
  let mappings=0;
  const t=mappingHarness(async(_target,prompt)=>{
   if(String(prompt).includes('Review mapped business claims')){
-   const claims=JSON.parse(String(prompt).split('CLAIMS:\\n').at(-1));
+   const claims=JSON.parse(String(prompt).split('CLAIMS:'+String.fromCharCode(10)).at(-1));
    const entries=claims.filter(x=>x.key==='problem');
    assert.ok(entries.length>=2,'different mapped source claims must be present');
    const [left,right]=entries;
