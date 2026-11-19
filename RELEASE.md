@@ -1,3 +1,15 @@
+# ATGV AIATECH Assist v0.4.30
+
+- Remove the green Uploaded Documents progress bar; keep the document count pill.
+- Recover preflight, AI mapping and cross-section reviews from timeouts or malformed responses without aborting the entire BA mapping run.
+- Retry transient AI failures up to three times, preserve completed source-section checkpoints and make Resume AI Mapping available.
+- Add an opt-in fallback to the already installed, authenticated Microsoft/GitHub Copilot SDK when the configured model cannot complete BA analysis.
+- Turn missing acceptance-test, RBAC and audit details into clearly marked provisional checklists, without fabricating approvals, security policies or retention requirements.
+- Show only unresolved findings as warnings while retaining the recommendations in the preflight report.
+- Keep genuine contradictory business rules visible for human resolution; never falsely report successful validation.
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.29
 
 - Align all collapsed prerequisite cards by removing inherited spacing from the permission checks.
