@@ -1,17 +1,15 @@
-# ATGV AIATECH Assist v0.4.44
+# ATGV AIATECH Assist v0.4.45
 
-## Business Requirements workflow: Next Step readiness
+## Fix: Resolve Discovery Questions navigation
 
-- Set **Next Step** to primary blue only when the actual next-stage action is available; otherwise render a solid dark-gray disabled button with legible text.
-- Use explicit milestone readiness, verified next-stage availability, and outstanding process prerequisites instead of painting based on completion alone.
-- From Generate Requirements, allow **Preview & Save** only when the draft-preview action is available.
-- From Preview & Save, keep **Approve Requirements** unavailable while Discovery Question 12 has unresolved decisions or outstanding BA review findings.
-- Preserve draft preview and editing even if final approval is blocked; acknowledge source and AI issues using the existing formal review gate.
-- Keep the navigation label, aria-disabled state, tooltip, mouse/keyboard behavior, and CSS visual status synchronized on every rerender.
-- Add regression tests for blocked/ready transitions, generated-draft preview, pending approvals, and primary/neutral styling.
+- BR approval prerequisite **Resolve Discovery Questions** now navigates to the visible Map & Save 12 milestone, opens the Discovery Questions panel and Question 12 group, and focuses the relevant answer.
+- The previous handler was expanding a hidden panel while the editor still displayed the Approve Requirements milestone.
+- The **Open AI Review** prerequisite uses the same reliable stage navigation, opening its own visible milestone.
+- Existing confirmation for unsaved BR edits and role-based read-only restrictions remain intact.
+- Show a useful error if stage navigation or the requested panel is unavailable.
+- Include regression tests for Question 12 focus, role/read-only status, hidden-panel recovery, and unsaved edit guard.
 
 ## Compatibility
 
-- Existing draft/approved BRs, workflow history, source documents, and Jira links are not modified.
-- No project register migration is needed. The update affects only UI navigation status and appearance.
-- A previously saved requirement may still be reviewed while the approval gate is unresolved.
+- No changes to existing BRs, mapped source documents, approved Jira work, or permissions.
+- Discovery Question 12 still requires a deliberate Business Analyst decision and save; clicking Resolve does not automatically change the answer to NONE.
