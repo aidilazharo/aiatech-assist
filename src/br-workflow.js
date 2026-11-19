@@ -1569,8 +1569,29 @@ function promptForGeneration(answers,existing=[],supplementalSources=[]){return 
  ].join('\n');}
 function parseGenerated(raw){
  let txt=String(raw||'').trim();if(txt.startsWith('```'))txt=txt.replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');
- const start=txt.indexOf('{'),end=txt.lastIndexOf('}');if(start<0||end<start)throw Error('AI did not return a JSON requirements object.');
- return validateProposal(JSON.parse(txt.slice(start,end+1)));
+ let data;
+ try{data=JSON.parse(txt);}catch{
+  // Models sometimes prefix an otherwise complete JSON object with commentary.
+  const starts=[txt.indexOf('{'),txt.indexOf('[')].filter(pos=>pos>=0);
+  const start=starts.length?Math.min(...starts):-1;
+  const end=txt.lastIndexOf(start>=0&&txt[start]==='['?']':'}');
+  if(start<0||end<start)throw Error('AI returned no complete JSON requirements payload.');
+  data=JSON.parse(txt.slice(start,end+1));
+ }
+ // Normalize harmless envelope variants without fabricating a requirement.
+ if(data&&!Array.isArray(data)&&typeof data==='object'){
+  if(!Array.isArray(data.requirements)){
+   const alias=data.businessRequirements??data.business_requirements??data.brs;
+   if(Array.isArray(alias))data={requirements:alias};
+   else if(['title','objective','scope','acceptanceCriteria'].every(key=>typeof data[key]==='string'&&data[key].trim()))data={requirements:[data]};
+  }
+ }
+ const values=Array.isArray(data)?data:data?.requirements;
+ if(Array.isArray(values)&&(values.length===0||values.length>MAX_BRS)){
+  const error=Error(values.length===0?'AI returned zero business requirements.':'AI returned '+values.length+' business requirements (maximum '+MAX_BRS+' per generation).');
+  error.code='ATGV_GENERATION_COUNT';error.requirementCount=values.length;throw error;
+ }
+ return validateProposal(data);
 }
 // Change Requests bind to the exact approved Jira change plan and cannot be reused after revisions.
 async function recordJiraWorkHistory(registry,id,revision,assessment){
