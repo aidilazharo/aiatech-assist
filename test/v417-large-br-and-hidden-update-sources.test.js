@@ -51,10 +51,10 @@ test('v422: duplicate sections dedupe, and merged answers over 5k retain every c
 test('v417: BA upload and mapping preserve source integrity and atomicity',()=>{
  const host=read('src/lib/runtime/extension-runtime.js');
  assert.ok(host.includes('if(doc.truncated)throw Error('));
- assert.match(host,/discoveryImport\.splitDocumentText\(source\.text\)/);
- assert.match(host,/discoveryImport\.mergeMappingAnswers\(partAnswers\)/);
+ assert.match(host,/baBrTextPipeline\.prepare\(registry,run\.projectId,source\)/);
+ assert.match(host,/baBrTextPipeline\.mergeForDiscovery\(partAnswers,preparedUnits\)/);
  assert.match(host,/await brWorkflow\.commitSourceMapping\(/);
- const before=host.indexOf('discoveryImport.mergeMappingAnswers(partAnswers)');
+ const before=host.indexOf('baBrTextPipeline.mergeForDiscovery(partAnswers,preparedUnits)');
  const after=host.indexOf('await brWorkflow.commitSourceMapping(',before);
  assert.ok(before>0&&after>before,'merge every section before committing the mapping');
  assert.match(read('src/source-store.js'),/if \(digest !== entry\.digest\)/);
