@@ -28,7 +28,7 @@ test('Solution Architect and UI/UX My Work show the circle progress section only
 });
 
 test('Business Analyst upload picker enforces one active document per BR cycle',()=>{
- assert.match(host,/title:'Upload one Word or PDF document for this Business Requirement',canSelectMany:false/);
+ assert.match(host,/title:replacementDigest\?'Select an updated Word or PDF to replace the current source':'Upload one Word or PDF document for this Business Requirement',canSelectMany:false/);
  assert.match(host,/if\(prospective\.length>1\)throw Error/);
  assert.match(ui,/Choose one Word or PDF document/);
  assert.match(host,/filters:\{'Word and PDF':\['docx','pdf'\]\}/);
