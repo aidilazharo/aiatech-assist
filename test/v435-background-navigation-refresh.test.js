@@ -30,7 +30,7 @@ test('host refreshes dashboard and remote sources without blocking or stopping o
 test('active BA mapping keeps its step and progress when navigating away or returning',()=>{
  const a=ui.indexOf('function setView(next)'),z=ui.indexOf('function cell(',a);
  const code=ui.slice(a,z);
- assert.match(code,/const baProcessRunning=discoveryImportBusy/);
+ assert.match(code,/const baProcessRunning=\(typeof discoveryImportBusy/);
  assert.match(code,/if\(!baProcessRunning\)\{baResumeCardReady=/);
  assert.match(code,/baResumeCardReady&&!baProcessRunning/);
  assert.match(ui,/m\.type==='navigationRefreshState'/);
