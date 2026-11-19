@@ -7710,8 +7710,21 @@ async function handleDashboardMessage(msg){
       case 'saveDiscovery':{
         requireOpened();await requireBAOwner('ba-discovery');
         const beforeDiscovery=await discovery.load(registry,activeProject.id);
-        const saved=await discovery.save(registry,activeProject.id,msg.answers,msg.revision);
+        // Manual Save is the sole write path. An earlier save may already have
+        // written discovery-12.json but failed to link its revision to the BR
+        // register. Reuse that identical file instead of writing a new one.
+        if(typeof msg.revision!=='string'||msg.revision!==beforeDiscovery.revision)
+          throw Error('Discovery answers changed on disk since this page was loaded. No edits were overwritten. Reopen the Discovery Questions and review the latest saved revision before retrying.');
+        const sameAnswers=discovery.QUESTIONS.every(([key])=>String(msg.answers?.[key]??'').trim()===beforeDiscovery.answers[key]);
+        const saved=sameAnswers?beforeDiscovery:await discovery.save(registry,activeProject.id,msg.answers,msg.revision);
         const register=await brWorkflow.load(registry,activeProject.id);
+        const alreadyLinked=register.discoveryRevision===saved.revision&&discovery.QUESTIONS.every(([key])=>String(register.discoveryAnswers?.[key]??'')===saved.answers[key]);
+        if(alreadyLinked){
+          await dashboard?.webview.postMessage({type:'discoverySaved',discovery:saved});
+          await dashboard?.webview.postMessage({type:'brUpdated',register});
+          await notice('All 12 Discovery answers are already saved and linked to this BR revision.');
+          break;
+        }
         const answerChanges=discovery.changesForRegistration(beforeDiscovery,saved,register);
         let updated;
         try{updated=await brWorkflow.discoverySaved(registry,activeProject.id,register.revision,saved.revision,{preserveReview:msg.preserveReview===true,answerChanges,answers:saved.answers});}
