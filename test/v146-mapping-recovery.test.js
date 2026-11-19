@@ -19,7 +19,7 @@ function mappingHarness(aiAnswer,opts={}){
   setTimeout:opts.setTimeout||setTimeout,clearTimeout,
   activeDiscoveryMappingRun:null,activeProject:{id:'tc'},registry:opts.registry||{},
   cfg:()=>({get:()=>false}),
-  requireOpened(){},async requireBAOwner(){},
+  requireOpened(){},async requireBAOwner(){},async recordBAProcess(){},
   brWorkflow:{async load(){return register;},async commitSourceMapping(_r,_id,revision,changes){
    assert.equal(revision,7);assert.deepEqual([...changes.digests],[digest]);commits++;
    if(opts.failFirstCommit&&commits===1)throw Error('Simulated commit interruption');
