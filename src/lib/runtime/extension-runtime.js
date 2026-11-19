@@ -1930,12 +1930,19 @@ async function ensureBAUploadRole(roleId){
  if(!actor)throw Error('A cached Jira identity is unavailable. Sign in to Jira + Confluence once while online before uploading offline.');
  return actor;
 }
-async function importDiscoveryDocument(roleId){
- requireOpened();const uploader=await ensureBAUploadRole(roleId);
- const picked=await vscode.window.showOpenDialog({title:'Upload one Word or PDF document for this Business Requirement',canSelectMany:false,canSelectFiles:true,canSelectFolders:false,filters:{'Word and PDF':['docx','pdf']}});
+async function importDiscoveryDocument(roleId,{replacementDigest='',expectedRevision=''}={}){
+ requireOpened();const projectId=activeProject.id;const uploader=await ensureBAUploadRole(roleId);
+ const picked=await vscode.window.showOpenDialog({title:replacementDigest?'Select an updated Word or PDF to replace the current source':'Upload one Word or PDF document for this Business Requirement',canSelectMany:false,canSelectFiles:true,canSelectFolders:false,filters:{'Word and PDF':['docx','pdf']}});
  if(!picked?.length){await dashboard?.webview.postMessage({type:'discoveryImportCancelled'});return;}
- const initial=await brWorkflow.load(registry,activeProject.id);
+ if(activeProject?.id!==projectId)throw Error('Project changed during upload. Select the correct project and retry.');
+ const initial=await brWorkflow.load(registry,projectId);
+ if(expectedRevision&&initial.revision!==expectedRevision)throw Error('Source revision changed. Refresh before selecting an updated document.');
  const existing=initial.sourceDocuments||[];
+ const replacementSource=replacementDigest?existing.find(source=>source.digest===replacementDigest):null;
+ if(replacementDigest){
+  if(!/^[a-f0-9]{64}$/.test(String(replacementDigest))||!replacementSource||existing.length!==1)throw Error('The source to replace is no longer current. Refresh and retry.');
+  if(Object.keys(initial.pending||{}).length)throw Error('Resolve pending Jira publication or reconciliation before replacing the document.');
+ }
  const documents=[];
  for(const selection of picked){
   await dashboard?.webview.postMessage({type:'discoveryImportProgress',message:`Reading ${path.basename(selection.fsPath)}…`});
@@ -1948,7 +1955,7 @@ async function importDiscoveryDocument(roleId){
  if(new Set(documents.map(d=>d.name.toLowerCase())).size!==documents.length||new Set(documents.map(d=>d.digest)).size!==documents.length)throw Error('Select unique filenames and document contents.');
  const previousVersions=[...existing,...(initial.archivedSources||[])];
  const changes=documents.map(doc=>{
-  const existingMatch=existing.find(x=>x.digest===doc.digest)||existing.find(x=>x.name.toLowerCase()===doc.name.toLowerCase())||previousVersions.find(x=>x.digest===doc.digest)||previousVersions.find(x=>x.name.toLowerCase()===doc.name.toLowerCase());
+  const existingMatch=replacementSource||existing.find(x=>x.digest===doc.digest)||existing.find(x=>x.name.toLowerCase()===doc.name.toLowerCase())||previousVersions.find(x=>x.digest===doc.digest)||previousVersions.find(x=>x.name.toLowerCase()===doc.name.toLowerCase());
   return {document:doc,previous:existingMatch,identical:!!existingMatch&&existingMatch.digest===doc.digest};
  });
  const unchanged=changes.filter(row=>row.identical&&existing.some(item=>item.digest===row.document.digest));
@@ -1971,19 +1978,20 @@ async function importDiscoveryDocument(roleId){
   await notice('No source changes: '+unchanged.map(x=>x.document.name).join(', ')+'. Existing Business Requirements and Jira remain unchanged.');
   return;
  }
- const prospective=[...existing];
+ const prospective=replacementSource?[]:[...existing];
  for(const row of [...modified,...fresh,...reactivated]){
   const doc=row.document;
   const same=prospective.findIndex(x=>x.name.toLowerCase()===doc.name.toLowerCase()||x.digest===doc.digest);
   if(same>=0)prospective.splice(same,1);
   prospective.push({name:doc.name,digest:doc.digest,characters:doc.characters});
  }
- if(prospective.length>1)throw Error('Only one active document is allowed per Business Requirement. Delete the current uploaded document or start a new BR cycle before uploading another. To revise the existing document, re-upload it using the same filename.');
+ if(prospective.length>1)throw Error('Only one active document is allowed per Business Requirement. Use Replace & Reprocess to upload an updated source under a new filename, or start a new independent BR cycle.');
  if(modified.length){
-  const summary='Source revision detected:\n'+modified.map(x=>'• '+x.document.name+' (replaces '+x.previous.name+')').join('\n')+
-   '\n\nRegister the modified file as a NEW VERSION of the same source? Previously approved Business Requirements, source history, and Jira keys remain intact. The current mapping and AI Review must be refreshed before revised requirements are approved. No Jira issues will be created, edited, or deleted by uploading.\n\nCancel keeps all data unchanged.';
-  const yes=await uiWarning(summary,{modal:true},'Create Source Revision');
-  if(yes!=='Create Source Revision'){await dashboard?.webview.postMessage({type:'discoveryImportCancelled'});return;}
+  const summary=(replacementSource?'Source replacement requested:\n':'Source revision detected:\n')+modified.map(x=>'• '+x.document.name+' (replaces '+x.previous.name+')').join('\n')+
+   '\n\nRegister this updated file as a NEW VERSION of the same source? The original is archived, and existing approved BR revisions and Jira keys are retained. AI mapping will rerun automatically. Only separately reviewed and approved BR/Jira changes may be published.\n\nCancel keeps all data unchanged.';
+  const action=replacementSource?'Replace & Reprocess':'Create Source Revision';
+  const yes=await uiWarning(summary,{modal:true},action);
+  if(yes!==action){await dashboard?.webview.postMessage({type:'discoveryImportCancelled'});return;}
  }
  const updatedDocuments=[...modified,...fresh,...reactivated];
  // Store verifies the selected original bytes against any existing copy and
@@ -2007,8 +2015,8 @@ async function importDiscoveryDocument(roleId){
   prospective[same]={name:doc.name,digest:doc.digest,byteDigest:doc.byteDigest,characters:doc.characters,storedName:doc.storedName,uploadedBy:uploader,uploadedAt:new Date().toISOString()};
  }
  const current=await brWorkflow.load(registry,activeProject.id);
- if(current.revision!==initial.revision)throw Error('Source document list changed during upload. Refresh and retry.');
- const register=await brWorkflow.addSources(registry,activeProject.id,current.revision,prospective,{actor:uploader,singleSourceCycle:true});
+ if(activeProject?.id!==projectId||current.revision!==initial.revision)throw Error('Source document list or project changed during upload. Refresh and retry.');
+ const register=await brWorkflow.addSources(registry,projectId,current.revision,prospective,{actor:uploader,singleSourceCycle:true,replacementDigest});
  // Persist the source-preserving Markdown files immediately after upload, even when no AI provider is configured.
  for(const {document:doc} of updatedDocuments){
   const units=await baBrTextPipeline.prepare(registry,activeProject.id,doc);
@@ -8395,6 +8403,13 @@ async function handleDashboardMessage(msg){
       }
       case 'updateSourceDocuments':{
         requireOpened();try{await importDiscoveryDocument('business-analyst');}catch(e){await dashboard?.webview.postMessage({type:'discoveryImportFailed',message:e.message});throw e;}break;
+      }
+      case 'replaceDiscoverySource':{
+        requireOpened();await requireBAOwner('ba-discovery');
+        await dashboard?.webview.postMessage({type:'discoveryImportProgress',message:'Select and verify updated source before replacing the old version…'});
+        try{await importDiscoveryDocument(msg.roleId,{replacementDigest:msg.digest,expectedRevision:msg.revision});}
+        catch(e){await dashboard?.webview.postMessage({type:'discoveryImportFailed',message:'Source replacement failed safely: '+String(e.message||e)});throw e;}
+        break;
       }
       case 'importDiscovery':{
         await dashboard?.webview.postMessage({type:'discoveryImportProgress',message:'Reading selected documents…'});
