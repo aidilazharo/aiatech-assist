@@ -884,7 +884,8 @@ function updateState(msg){
   opening=msg.opening||{phase:'search',candidate:null,warnings:[]};
   // Intermediate selected/tested/initialized states are still opening.
   // Only a completed project or an explicit reset clears progress.
-  if(opening.phase==='open'||(opening.phase==='search'&&prior!=='search')){gateBusy=false;gateOpeningTargetId='';}
+  if(opening.phase==='open'||(opening.phase==='search'&&prior!=='search'))gateBusy=false;
+  if(!gateBusy)gateOpeningTargetId='';
   if($('coordinationProvider')){
     $('coordinationProvider').value=msg.coordinationProvider||'jira-confluence';
     const provider=msg.coordinationProvider||'jira-confluence';
