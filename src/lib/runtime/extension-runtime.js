@@ -2195,29 +2195,49 @@ async function processSelectedDiscoverySources(msg){
     const cacheKey=run.projectId+'|'+selected[i]+'|'+doc.name+'|'+target.label+'|'+part+'|'+sections.length+'|'+sha(mappingPrompt);
     let proposals=successfulSourceMappings.get(cacheKey);
     const mappingKey=sha(mappingPrompt);
+    let sourceOnlyMappingPart=false;
     if(!proposals&&checkpoint?.mapping?.[mappingKey]){
-     try{proposals=discoveryImport.parseMappingResponse(checkpoint.mapping[mappingKey]);}catch{}
-     if(proposals)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'Resuming: using completed mapping for '+doc.name+label+'…'});
+     if(baLargeDocumentRecovery.isCheckpointRecord(checkpoint.mapping[mappingKey],'mapping')){
+      proposals=baLargeDocumentRecovery.mapping(doc.text,{section:part+1,totalSections:sections.length});
+      sourceOnlyMappingPart=true;run.mappingOffline=true;
+     }else{try{proposals=discoveryImport.parseMappingResponse(checkpoint.mapping[mappingKey]);}catch{}}
+     if(proposals)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'Resuming: using completed '+(sourceOnlyMappingPart?'source-only extraction (BA review required)':'AI mapping')+' for '+doc.name+label+'…'});
+    }
+    if(!proposals&&run.mappingOffline){
+     proposals=baLargeDocumentRecovery.mapping(doc.text,{section:part+1,totalSections:sections.length});
+     sourceOnlyMappingPart=true;
+     if(checkpoint){saveCheckpointEntry(checkpoint,'mapping',mappingKey,baLargeDocumentRecovery.checkpointRecord('mapping'),30);await persistCheckpoint();}
     }
     if(!proposals){
-     for(let attempt=1;attempt<=3;attempt++){
+     const maxMappingAttempts=baLargeDocumentRecovery.attempts('mapping',!!run.largeSource,!!run.recoveryTarget);
+     for(let attempt=1;attempt<=maxMappingAttempts;attempt++){
       check();
       try{
        const responsePrompt=mappingPrompt+(attempt>1?'\n\nRECOVERY: Your previous response was unavailable or invalid. Return exactly the 12-key JSON answers schema. Use empty strings where source evidence is absent; do not invent business policies.':'');
-       const answer=await requestSourceAI(target,responsePrompt,run,{maxChars:95000,timeoutMs:SOURCE_MAPPING_AI_TIMEOUT_MS});
+       const answer=await requestSourceAI(target,responsePrompt,run,{maxChars:run.largeSource?30000:95000,timeoutMs:baLargeDocumentRecovery.timeout('mapping',!!run.largeSource)});
        check();
        proposals=discoveryImport.parseMappingResponse(answer);
        if(checkpoint){saveCheckpointEntry(checkpoint,'mapping',mappingKey,answer,30);await persistCheckpoint();}
        break;
       }catch(error){
        check();
-       if(!trySourceAIFallback(run,error)||attempt===3)
-        throw Error(doc.name+label+': AI mapping could not recover safely after '+attempt+' attempt(s). '+String(error.message||error).slice(0,260)+' Completed sections remain saved for Resume AI Mapping.');
-       await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'Recovering incomplete AI mapping ('+attempt+'/3)'+(run.useRecovery?' with Microsoft Copilot SDK':'')+'. Completed sections remain saved…'});
+       if(!trySourceAIFallback(run,error))throw error;
+       if(attempt===maxMappingAttempts){
+        if(!run.largeSource)throw Error(doc.name+label+': AI mapping could not recover safely after '+attempt+' attempt(s). '+String(error.message||error).slice(0,260)+' Completed sections remain saved for Resume AI Mapping.');
+        run.mappingOffline=true;sourceOnlyMappingPart=true;
+        proposals=baLargeDocumentRecovery.mapping(doc.text,{section:part+1,totalSections:sections.length});
+        if(checkpoint){saveCheckpointEntry(checkpoint,'mapping',mappingKey,baLargeDocumentRecovery.checkpointRecord('mapping'),30);await persistCheckpoint();}
+        await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'AI mapping timed out. Continuing source-only extraction, with full source retained and BA review required.'});
+        break;
+       }
+       await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'Recovering AI mapping ('+attempt+'/'+maxMappingAttempts+')'+(run.useRecovery?' with Microsoft Copilot SDK':'')+'. Completed sections remain saved…'});
       }
      }
-     check();successfulSourceMappings.set(cacheKey,proposals);
-     if(successfulSourceMappings.size>50)successfulSourceMappings.delete(successfulSourceMappings.keys().next().value);
+     check();
+     if(!sourceOnlyMappingPart){
+      successfulSourceMappings.set(cacheKey,proposals);
+      if(successfulSourceMappings.size>50)successfulSourceMappings.delete(successfulSourceMappings.keys().next().value);
+     }
     }
     partAnswers.push(proposals);
     await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'Mapped '+(i+1)+'/'+readable.length+' document(s), section '+(part+1)+'/'+sections.length+'. Validating results…'});
