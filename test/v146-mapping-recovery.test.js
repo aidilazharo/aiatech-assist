@@ -158,7 +158,7 @@ test('repeated preflight timeouts stop safely after a bounded retry',async()=>{
  let calls=0;
  const t=mappingHarness(async()=>'{"problem":"Unexpected mapping"}',{sourceText:'short requirement',setTimeout:callback=>setTimeout(callback,15),preflightAnswer:()=>{calls++;return new Promise(()=>{});}});
  await assert.rejects(t.processMapping(t.request),/AI preflight could not complete after three recovery attempts/);
- assert.equal(calls,6);assert.equal(t.commits,0);
+ assert.equal(calls,3);assert.equal(t.commits,0);
  assert.ok(t.events.some(row=>/Recovering from an incomplete or timed-out AI response/.test(row.message||'')));
  assert.equal(t.events.some(row=>row.type==='discoveryImportResult'),false);
 });
