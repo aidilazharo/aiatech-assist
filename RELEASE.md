@@ -1,3 +1,14 @@
+# ATGV AIATECH Assist v0.4.36
+
+- After three actual AI request timeouts during BRD preflight, mapping or cross-section comparison, prompt the Business Analyst to choose a simplified source-backed Jira draft workflow or continue the existing AI recovery path.
+- **Skip AI Checks — Simple Jira Draft** skips remaining expensive AI validation while retaining the entire original source document and an explicit NOT VERIFIED/BA REVIEW REQUIRED status.
+- After the analyst selects Skip AI Review and confirms Create Simple Draft, deterministically extract literal source requirements into editable BR/Feature/Story/Task drafts without additional AI calls.
+- BR approval, Jira permission/field preflight, and explicit Publish Jira confirmation remain mandatory; no Jira issue is automatically created by skipping AI checks.
+- Preserve the Project Manager type filters (BR, Epic, User Stories, Task and Subtask), verified role-specific assignee selection, developer-only bulk assignment, and BA logs/navigation changes introduced in this release branch.
+- Add tests for three-timeout detection, opt-in, refusal, source evidence, role boundaries, Jira draft gating and rollback.
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.35
 
 - Add Jira Type filter for BR, Epic, User Stories, Task, and Subtask in Project Manager · Project Jira Work Items.
