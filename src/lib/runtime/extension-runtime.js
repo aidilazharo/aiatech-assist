@@ -2247,8 +2247,11 @@ async function processSelectedDiscoverySources(msg){
    if(sections.length>1&&!run.mappingOffline){
     check();run.phase='preflight';run.timeout=false;
     await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Comparing mapped requirements across all '+sections.length+' document sections…'});
-    const crossPrompt=baDocumentPreflight.crossSectionPrompt(partAnswers),crossKey=sha(crossPrompt);
-    let crossError;
+    let crossPrompt='',crossError;
+    try{crossPrompt=baDocumentPreflight.crossSectionPrompt(partAnswers);}
+    catch(error){if(!run.largeSource)throw error;crossError=error;}
+    const crossKey=crossPrompt?sha(crossPrompt):'';
+    if(crossPrompt){
     const maxCrossAttempts=baLargeDocumentRecovery.attempts('cross',!!run.largeSource,!!run.recoveryTarget);
     for(let attempt=1;attempt<=maxCrossAttempts;attempt++){
      check();
@@ -2268,9 +2271,10 @@ async function processSelectedDiscoverySources(msg){
       if(attempt<maxCrossAttempts)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Cross-section AI review was interrupted. Retrying ('+attempt+'/'+maxCrossAttempts+')'+(run.useRecovery?' with Microsoft Copilot SDK':'')+' without restarting the document…'});
      }
     }
+    }
     if(crossError){
      if(!run.largeSource)throw Error(source.name+': cross-section review could not complete after recovery attempts. '+String(crossError.message||crossError).slice(0,240)+' Saved section mappings remain available for Resume AI Mapping.');
-     await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Cross-section AI review is NOT VERIFIED due to provider errors. Draft mapping is retained and requires Business Analyst review.'});
+     await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Cross-section AI review is NOT VERIFIED due to provider errors or request size. Draft mapping is retained and requires Business Analyst review.'});
     }
    }
    // Aggregate evidence from every source section, with bounded UI/report
