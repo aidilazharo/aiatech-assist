@@ -5221,12 +5221,25 @@ function renderSourceDocuments(){
   const exactFileVerified=/^[a-f0-9]{64}$/.test(String(doc.byteDigest||''));
   const detail=document.createElement('small');detail.textContent=['Uploaded by '+(doc.uploadedBy||'Legacy source · uploader unavailable'),doc.uploadedAt?formatDateTime(doc.uploadedAt):doc.addedAt?formatDateTime(doc.addedAt):'',Number(doc.characters||0).toLocaleString()+' characters',doc.version?'Version '+doc.version:'Version 1',!doc.storedName?'Re-upload required to process':exactFileVerified?'Original file fingerprint recorded':'Legacy source: re-upload required to verify original bytes'].filter(Boolean).join(' · ');
   info.append(name,detail);
+  const actions=document.createElement('div');actions.className='source-document-actions';
+  const replace=document.createElement('button');replace.type='button';replace.className='secondary ba-process-btn';
+  replace.textContent='Replace & Reprocess';replace.title='Safely replace this source with an updated Word/PDF (even with a different filename). Old evidence, approved BR history and existing Jira keys are retained; remapping runs automatically.';
+  replace.disabled=!!baBusyTask||!!sourceRemoving||discoveryImportBusy||brDeletionBusy||!baCanEdit('ba-discovery')||Object.keys(brState?.pending||{}).length>0;
+  replace.addEventListener('click',()=>{
+    if(replace.disabled||discoveryImportBusy)return;
+    setDiscoveryImportBusy(true,'Select the updated document; old evidence and Jira remain unchanged until validation succeeds…');
+    send('replaceDiscoverySource',{roleId:selectedRole,digest:doc.digest,revision:brState.revision});
+  });
+  const archive=document.createElement('button');archive.type='button';archive.className='secondary ba-process-btn';
+  archive.textContent='Remove Source';archive.title='Remove this document from active sources and archive evidence. Existing approved BRs and all Jira issues remain unchanged.';
+  archive.disabled=!!baBusyTask||!!sourceRemoving||brDeletionBusy||!baCanEdit('ba-discovery')||Object.keys(brState?.pending||{}).length>0;
+  archive.addEventListener('click',()=>{if(archive.disabled)return;sourceRemoving=true;archive.disabled=true;send('archiveDiscoverySourceSafe',{digest:doc.digest,revision:brState.revision});});
   const remove=document.createElement('button');remove.type='button';remove.className='secondary ba-process-btn archive-remote-delete br-danger';
-  remove.textContent='Delete';remove.title='Delete Everywhere: remove verified linked Jira/Confluence and this uploaded document';
+  remove.textContent='Delete Everywhere';remove.title='Destructive: permanently delete this source and its linked BR/Jira/Confluence content, subject to separate confirmation. Use Remove Source or Replace & Reprocess instead to preserve Jira.';
   remove.dataset.brDeleteAction='true';
   remove.disabled=!!baBusyTask||!!sourceRemoving||brDeletionBusy||!baCanEdit('ba-discovery');
   remove.addEventListener('click',()=>{if(remove.disabled)return;requestBRDeletion({target:'active-source',digest:doc.digest,revision:brState.revision});});
-  item.append(selector,info,remove);root.append(item);
+  actions.append(replace,archive,remove);item.append(selector,info,actions);root.append(item);
  }
  renderArchivedSources();
  renderSourceSelection();
