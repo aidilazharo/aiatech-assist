@@ -49,4 +49,16 @@ function parseReviewResponse(raw) {
     }
     return { summary: summary || 'AI review completed.', readiness, suggestions };
 }
-module.exports = { createReviewPrompt, parseReviewResponse };
+// Missing evidence must remain visible even if the model incorrectly says Ready.
+// Never invent a replacement for an unanswered question.
+function includeMissingAnswers(review, answers) {
+    const missing = QUESTIONS.filter(([key]) => !String(answers?.[key] || '').trim());
+    if (!missing.length) return review;
+    const suggestions = [...review.suggestions];
+    const seen = new Set(suggestions.map(item => item.key));
+    for (const [key, label] of missing) {
+        if (!seen.has(key)) suggestions.push({ key, severity: 'High', issue: 'This discovery question has no saved answer.', suggestedAnswer: '', resolutionGuidance: `Confirm the evidence or decision for ${label}.` });
+    }
+    return { ...review, readiness: 'Needs attention', summary: `${missing.length} discovery question${missing.length === 1 ? '' : 's'} need an answer. ${review.summary}`, suggestions };
+}
+module.exports = { createReviewPrompt, parseReviewResponse, includeMissingAnswers };

@@ -1,3 +1,13 @@
+# ATGV AIATECH Assist v0.4.26
+
+- Recover interrupted source mapping and allow mapping to be stopped during document preflight.
+- Retry a malformed AI mapping response once, without saving partial results or inventing answers.
+- Open groups containing unanswered questions and allow AI Review of saved partial discovery answers.
+- Highlight unanswered questions in AI Review; require all 12 answers before generating requirements.
+- Repair out-of-sync discovery saves and preserve edits made while a save is in progress.
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.25
 
 - Check published BRs and linked Jira items after opening a project; remove unavailable records from active lists while preserving recoverable copies.

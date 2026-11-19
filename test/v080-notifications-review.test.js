@@ -16,7 +16,8 @@ test('review renders explicit no replacement message and exposes Generate BR wit
  const review=parseReviewResponse(JSON.stringify({readiness:'Needs attention',summary:'Manual review needed',suggestions:[{key:'problem',severity:'High',issue:'Ambiguous scope',suggestedAnswer:''}]}));
  assert.equal(review.suggestions[0].suggestedAnswer,'');
  assert.ok(ui.includes('Clarification required — no evidence-supported replacement is available.'));
- assert.ok(ui.includes('No evidence-supported replacements are available; Apply Answer Replacements is disabled by design.'));
+ assert.ok(ui.includes('No evidence-supported replacements are available.'));
+ assert.ok(ui.includes('complete the unanswered questions and save, then re-run AI Review'));
  assert.ok(ui.includes('const reviewGood=reviewCurrent&&baMappingComplete()&&baReviewFinalized();'));
  assert.ok(ui.includes('const reviewReady=!!(brState?.reviewRevision&&brState.reviewRevision===brState.discoveryRevision&&!discoveryDirty);'));
  assert.ok(host.includes("'Continue with Risks'"),'unresolved blockers should require an explicit acknowledgment');

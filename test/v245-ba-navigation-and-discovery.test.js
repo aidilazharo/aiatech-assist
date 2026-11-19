@@ -26,5 +26,5 @@ test('12 discovery answers count trimmed nonempty responses and identify the mis
  assert.deepEqual(state.missing,[{key:'measures',label:'Measurable success criteria'}]);
  assert.match(ui,/const missingQuestionDetails=missing\.slice\(0,2\)/);
  assert.match(ui,/`Q\$\{index\+1\}: \$\{item\.label\}`/);
- assert.match(ui,/discovery answer\$\{missing\.length===1\?'':'s'\} remaining/);
+ assert.match(ui,/\$\{missing\.length\} unanswered/);
 });

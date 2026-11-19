@@ -49,7 +49,7 @@ test('BA workflow hides future sections until prerequisites and groups saved ans
  assert.match(ui,/questionsPanel\.classList\.toggle\('hidden'/);
  assert.match(ui,/\.jira-publish-panel'\)\.classList\.toggle\('hidden',!showJira\)/);
  assert.match(ui,/\.jira-inbound-panel'\)\.classList\.toggle\('hidden',!status\.showJiraInbound\|\|!showJira\)/);
- assert.match(ui,/savedDiscovery\?'Ready'/);
+ assert.match(ui,/savedDiscovery&&filled===total\?'Ready'/);
  assert.match(ui,/node\.classList\.toggle\('current',!idleMilestones&&step\.key===displayed/);
  assert.match(ui,/renderBAButtons\(\);/);
 });

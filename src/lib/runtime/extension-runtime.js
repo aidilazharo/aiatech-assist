@@ -1919,15 +1919,24 @@ async function processSelectedDiscoverySources(msg){
     const cacheKey=run.projectId+'|'+selected[i]+'|'+doc.name+'|'+target.label+'|'+part+'|'+sections.length;
     let proposals=successfulSourceMappings.get(cacheKey);
     if(!proposals){
-     run.timeout=false;
-     const timer=setTimeout(()=>{run.timeout=true;run.controller.abort();},SOURCE_MAPPING_AI_TIMEOUT_MS);
-     try{
-      const answer=await aiAnswer(target,discoveryImport.createMappingPrompt(doc)+baDocumentPreflight.mappingGuidance(result)+'\n\nSource preflight preserved original business rules; label recommendations as provisional. Do not invent TDD test inputs, expected outputs, approvals or policy.'+await roleSkillPrompt('business-analyst'),95000,{json:true,signal:run.controller.signal});
-      check();proposals=discoveryImport.parseMappingResponse(answer);
-     }catch(error){
-      if(run.timeout)throw Error(doc.name+label+': AI mapping timed out after '+SOURCE_MAPPING_AI_TIMEOUT_MS/1000+' seconds. Check AI provider access in Settings, then use Retry Mapping. No results were saved.');
-      throw error;
-     }finally{clearTimeout(timer);}
+     const mappingPrompt=discoveryImport.createMappingPrompt(doc)+baDocumentPreflight.mappingGuidance(result)+'\n\nSource preflight preserved original business rules; label recommendations as provisional. Do not invent TDD test inputs, expected outputs, approvals or policy.'+await roleSkillPrompt('business-analyst');
+     for(let attempt=1;attempt<=2;attempt++){
+      run.timeout=false;
+      const timer=setTimeout(()=>{run.timeout=true;run.controller.abort();},SOURCE_MAPPING_AI_TIMEOUT_MS);
+      try{
+       const answer=await aiAnswer(target,mappingPrompt+(attempt===2?'\n\nThe previous response was invalid. Return the exact JSON schema with all 12 keys as strings, using empty strings when evidence is missing.':''),95000,{json:true,signal:run.controller.signal});
+       check();
+       try{proposals=discoveryImport.parseMappingResponse(answer);}
+       catch(error){
+        if(attempt===2)throw Error(doc.name+label+': AI mapping returned an invalid response twice. Retry Mapping or select another AI model. '+error.message);
+        await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'The AI response was incomplete. Retrying the mapping once…'});
+       }
+      }catch(error){
+       if(run.timeout)throw Error(doc.name+label+': AI mapping timed out after '+SOURCE_MAPPING_AI_TIMEOUT_MS/1000+' seconds. Check AI provider access in Settings, then use Retry Mapping. No results were saved.');
+       throw error;
+      }finally{clearTimeout(timer);}
+      check();if(proposals)break;
+     }
      check();successfulSourceMappings.set(cacheKey,proposals);
      if(successfulSourceMappings.size>50)successfulSourceMappings.delete(successfulSourceMappings.keys().next().value);
     }
@@ -2483,7 +2492,7 @@ async function aiDiscoverySuggestion(signal){
  const question=discoveryReview.createReviewPrompt(currentDiscovery.answers);
  const raw=await aiAnswer(target,question+await roleSkillPrompt('business-analyst'),28000,{json:true,signal});
  checkCancelled();
- const review={...discoveryReview.parseReviewResponse(raw),reviewedAt:new Date().toISOString(),modelLabel:String(target.label||'AI model').slice(0,120),sourceRevision:currentDiscovery.revision};
+ const review={...discoveryReview.includeMissingAnswers(discoveryReview.parseReviewResponse(raw),currentDiscovery.answers),reviewedAt:new Date().toISOString(),modelLabel:String(target.label||'AI model').slice(0,120),sourceRevision:currentDiscovery.revision};
  const saved=await discovery.load(registry,activeProject.id),previous=await brWorkflow.load(registry,activeProject.id);
  checkCancelled();
  if(saved.revision!==currentDiscovery.revision)throw Error('Discovery changed during AI Review. Run review again.');
@@ -2499,6 +2508,8 @@ async function generateBusinessRequirements(options={}){
  if(!register.sourceDocuments.length)throw Error('No active source documents. Upload or restore evidence before generating new BR drafts. Existing BRs and Jira are preserved.');
  if(!register.importEpoch||register.reviewRevision!==saved.revision||register.discoveryRevision!==saved.revision)
   throw Error('Import Word/PDF, save Discovery, and review it with an AI model before generating BR drafts.');
+ if(saved.readiness.filled!==saved.readiness.total)
+  throw Error('Complete and save all 12 discovery answers before generating Business Requirements.');
  let review={};try{review=JSON.parse(register.reviewText||'{}');}catch{}
  let riskAccepted=false;
  if(!review.skipped&&(review.readiness==='Needs attention'||(review.suggestions||[]).some(s=>s.severity==='Critical'))){
@@ -6931,8 +6942,15 @@ async function handleDashboardMessage(msg){
         const beforeDiscovery=await discovery.load(registry,activeProject.id);
         const saved=await discovery.save(registry,activeProject.id,msg.answers,msg.revision);
         const register=await brWorkflow.load(registry,activeProject.id);
-        const answerChanges=Object.keys(saved.answers).filter(k=>beforeDiscovery.answers[k]!==saved.answers[k]).map(key=>({key,before:beforeDiscovery.answers[key],after:saved.answers[key]}));
-        const updated=await brWorkflow.discoverySaved(registry,activeProject.id,register.revision,saved.revision,{preserveReview:msg.preserveReview===true,answerChanges,answers:saved.answers});
+        const answerChanges=discovery.changesForRegistration(beforeDiscovery,saved,register);
+        let updated;
+        try{updated=await brWorkflow.discoverySaved(registry,activeProject.id,register.revision,saved.revision,{preserveReview:msg.preserveReview===true,answerChanges,answers:saved.answers});}
+        catch(error){
+          // The answers were already written. Return their new revision so the
+          // analyst can safely retry linking them without losing later edits.
+          await dashboard?.webview.postMessage({type:'discoverySaved',discovery:saved,linkPending:true});
+          throw Error('Answers were saved, but the workflow could not be updated. Retry Save 12 Questions. '+error.message);
+        }
         approvedJiraPreviewRevision=null;
         await dashboard?.webview.postMessage({type:'discoverySaved',discovery:saved});
         await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
