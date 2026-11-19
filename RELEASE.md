@@ -1,3 +1,13 @@
+# ATGV AIATECH Assist v0.4.32
+
+- Add expandable Jira, Confluence and GitHub connection diagnostics to the Start connection setup screen.
+- Record each API check as an independently timestamped local diagnostic, including HTTP/network/permission failure descriptions, endpoint host, verification outcome, and elapsed time.
+- Retain a bounded log across VS Code restarts in the existing protected unified diagnostic file.
+- Add Refresh Log and Download Logs (.txt) controls without displaying or collecting API tokens, account email, authorization headers or raw responses.
+- Preserve current connection Test & Save workflow and verification safeguards.
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.31
 
 - Rename the in-progress Business Requirement action button from **Force Delete Everywhere** to **Delete**.
