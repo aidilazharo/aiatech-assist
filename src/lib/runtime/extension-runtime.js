@@ -7708,6 +7708,7 @@ async function handleDashboardMessage(msg){
         await refreshDashboard();await notice(enabled?'Auto-sync enabled for this VS Code session.':'Auto-sync disabled.');break;
       }
       case 'saveDiscovery':{
+        if(msg.autosave===true)throw Error('Automatic Discovery saving is disabled. Click Save 12 Questions to save manually.');
         requireOpened();await requireBAOwner('ba-discovery');
         const beforeDiscovery=await discovery.load(registry,activeProject.id);
         // Manual Save is the sole write path. An earlier save may already have
