@@ -8206,12 +8206,22 @@ async function handleDashboardMessage(msg){
           const parentKey=item.parent?state.synced?.[item.parent]?.key:null;
           if(item.parent&&!parentKey)throw Error('The Jira parent link is not verified. Repair the parent mapping first.');
           const roleMapping=state.roleTaskMappings?.[nodePath];
-          if(roleMapping){
-            if(item.kind!=='Role'||roleMapping.key!==remote.key||roleMapping.marker!==marker||roleMapping.roleLabel!==item.roleLabel)
+          // The role-task repair operation may have created the Jira subtask
+          // before its own local mapping was persisted. In that case require
+          // exact agreement with the repair plan's known description too.
+          let repairPlan=null;
+          if(item.kind==='Role'){
+            try{repairPlan=jiraRoleRepair.plan(state,nodePath.split('/')[0]).find(row=>row.path===nodePath)||null;}
+            catch{/* Missing historical parents: use the strict approved issue plan below. */}
+          }
+          const verifiedRepair=!!repairPlan&&repairPlan.parentKey===parentKey&&repairPlan.roleLabel===item.roleLabel&&
+            remoteFingerprint(remote)===sha(JSON.stringify({summary:repairPlan.title,description:repairPlan.description}));
+          if(roleMapping||verifiedRepair){
+            if(roleMapping&&(item.kind!=='Role'||roleMapping.key!==remote.key||roleMapping.marker!==marker||roleMapping.roleLabel!==item.roleLabel))
              throw Error('The saved role-task repair record differs from the Jira issue. No link was changed.');
-            // Legacy role-task repairs intentionally used a longer description than
-            // the current Jira publication plan. Adopt only an already-recorded,
-            // matching role task; never trust an unrelated issue by its title alone.
+            // Legacy repair tasks may have a longer description. Accept only a
+            // verified saved mapping OR exact legacy repair text, with all
+            // current issue identity, role and parent checks still enforced.
             jiraRoleRepair.validateRemote(remote,{parentKey,roleLabel:item.roleLabel,title:item.title},projectKey,marker,{strictContent:true});
             if(String(remote.fields?.issuetype?.name||'').toLowerCase()!==type.toLowerCase())
              throw Error('The Jira issue type no longer matches the approved plan.');
