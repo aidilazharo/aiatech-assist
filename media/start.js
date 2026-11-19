@@ -8402,6 +8402,70 @@ window.addEventListener('message',event=>{
  $('libraryUpdatePull').focus();
 });
 
+// ATGV durable workflows: the webview only displays durable host state.
+// Never replay remote writes from the UI, even after a VS Code restart.
+let atgvJobItems=[],atgvJobProject='';
+function atgvJobsModal(open){
+ const modal=$('atgvJobsDialog');
+ modal.classList.toggle('hidden',!open);
+ modal.setAttribute('aria-hidden',open?'false':'true');
+ if(open){send('getWorkflowJobs');$('atgvJobsClose').focus();}
+ else $('atgvJobsButton').focus();
+}
+function atgvJobRow(job){
+ const row=document.createElement('div');row.className='atgv-jobs-row';
+ const heading=document.createElement('div');heading.className='atgv-jobs-row-heading';
+ const label=document.createElement('strong');label.textContent=(job.role||'ATGV')+' · '+(job.command||'Operation');
+ const state=document.createElement('span');state.className='atgv-job-state';
+ state.dataset.status=job.status||'interrupted';state.textContent=job.status||'Unknown';
+ heading.append(label,state);row.append(heading);
+ const meta=document.createElement('p');meta.className='muted';
+ const stage=job.phase||'Unknown stage',progress=Number.isFinite(job.progress)?job.progress:0;
+ meta.textContent='Stage: '+stage+' · '+progress+'% · Last updated: '+(job.updatedAt?new Date(job.updatedAt).toLocaleString():'Unknown');row.append(meta);
+ const progressBar=document.createElement('progress');progressBar.max=100;progressBar.value=progress;
+ progressBar.setAttribute('aria-label','Completion for '+(job.command||'operation'));row.append(progressBar);
+ if(job.error){const error=document.createElement('p');error.className='atgv-job-error';error.textContent=job.error;row.append(error);}
+ if(job.status==='failed'||job.status==='interrupted'||job.status==='reconcile-required'){
+  const button=document.createElement('button');button.type='button';button.className='secondary';
+  if(job.kind==='write'||job.kind==='install'||!job.retryable){
+   button.textContent='Manual reconciliation required';button.disabled=true;
+   button.title='Check remote state and existing work before restarting this operation from its original role screen.';
+  }else{
+   button.textContent='Prepare Resume';button.addEventListener('click',()=>{
+    $('atgvJobsRecovery').textContent='Checking whether this job can be resumed safely…';
+    send('retryWorkflowJob',{jobId:job.id});
+   });
+  }
+  row.append(button);
+ }
+ return row;
+}
+function renderAtgvJobs(items=[],projectId=''){
+ const root=$('atgvJobsList');root.replaceChildren();
+ atgvJobItems=Array.isArray(items)?items:[];atgvJobProject=projectId;
+ $('atgvJobsSummary').textContent=!projectId?'Open an ATGV project to see job history.':
+  atgvJobItems.length+' recent job(s) · '+atgvJobItems.filter(job=>job.status==='running').length+' running';
+ if(!atgvJobItems.length){const text=document.createElement('p');text.className='muted';
+  text.textContent='No recorded jobs yet. Start a workflow in any role to see processing history.';root.append(text);return;}
+ for(const job of atgvJobItems.slice(0,30))root.append(atgvJobRow(job));
+}
+$('atgvJobsButton').addEventListener('click',()=>atgvJobsModal(true));
+$('atgvJobsClose').addEventListener('click',()=>atgvJobsModal(false));
+$('atgvJobsRefresh').addEventListener('click',()=>send('getWorkflowJobs'));
+$('atgvJobsDialog').addEventListener('click',event=>{if(event.target===$('atgvJobsDialog'))atgvJobsModal(false);});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('atgvJobsDialog').classList.contains('hidden')){event.preventDefault();atgvJobsModal(false);}});
+window.addEventListener('message',event=>{
+ const msg=event.data||{};
+ if(msg.type==='atgvWorkflowJobs'){
+  if(activeId&&msg.projectId!==activeId)return;
+  renderAtgvJobs(msg.jobs,msg.projectId);
+ }
+ if(msg.type==='atgvWorkflowRecovery'&&(!activeId||msg.projectId===activeId)){
+  $('atgvJobsRecovery').textContent=String(msg.message||'Resume available from the original role screen.').slice(0,500);
+  if(msg.command==='processDiscoverySources')navigate('discovery');
+ }
+});
+
 let displayedExtensionUpgrade=null;
 let extensionUpgradeInstallState='ready';
 function renderExtensionUpgradeInstallState(state,title='',description=''){
@@ -8484,69 +8548,4 @@ window.addEventListener('message',event=>{
  $('extensionUpgradeSource').textContent='GitHub: '+String(message.repository||'')+' · '+String(message.tag||'');
  const modal=$('extensionUpgradeModal');modal.classList.remove('hidden');modal.setAttribute('aria-hidden','false');
  $('extensionUpgradeInstall').focus();
-});
-
-
-// ATGV durable workflows: the webview only displays durable host state.
-// Never replay remote writes from the UI, even after a VS Code restart.
-let atgvJobItems=[],atgvJobProject='';
-function atgvJobsModal(open){
- const modal=$('atgvJobsDialog');
- modal.classList.toggle('hidden',!open);
- modal.setAttribute('aria-hidden',open?'false':'true');
- if(open){send('getWorkflowJobs');$('atgvJobsClose').focus();}
- else $('atgvJobsButton').focus();
-}
-function atgvJobRow(job){
- const row=document.createElement('div');row.className='atgv-jobs-row';
- const heading=document.createElement('div');heading.className='atgv-jobs-row-heading';
- const label=document.createElement('strong');label.textContent=(job.role||'ATGV')+' · '+(job.command||'Operation');
- const state=document.createElement('span');state.className='atgv-job-state';
- state.dataset.status=job.status||'interrupted';state.textContent=job.status||'Unknown';
- heading.append(label,state);row.append(heading);
- const meta=document.createElement('p');meta.className='muted';
- const stage=job.phase||'Unknown stage',progress=Number.isFinite(job.progress)?job.progress:0;
- meta.textContent='Stage: '+stage+' · '+progress+'% · Last updated: '+(job.updatedAt?new Date(job.updatedAt).toLocaleString():'Unknown');row.append(meta);
- const progressBar=document.createElement('progress');progressBar.max=100;progressBar.value=progress;
- progressBar.setAttribute('aria-label','Completion for '+(job.command||'operation'));row.append(progressBar);
- if(job.error){const error=document.createElement('p');error.className='atgv-job-error';error.textContent=job.error;row.append(error);}
- if(job.status==='failed'||job.status==='interrupted'||job.status==='reconcile-required'){
-  const button=document.createElement('button');button.type='button';button.className='secondary';
-  if(job.kind==='write'||job.kind==='install'||!job.retryable){
-   button.textContent='Manual reconciliation required';button.disabled=true;
-   button.title='Check remote state and existing work before restarting this operation from its original role screen.';
-  }else{
-   button.textContent='Prepare Resume';button.addEventListener('click',()=>{
-    $('atgvJobsRecovery').textContent='Checking whether this job can be resumed safely…';
-    send('retryWorkflowJob',{jobId:job.id});
-   });
-  }
-  row.append(button);
- }
- return row;
-}
-function renderAtgvJobs(items=[],projectId=''){
- const root=$('atgvJobsList');root.replaceChildren();
- atgvJobItems=Array.isArray(items)?items:[];atgvJobProject=projectId;
- $('atgvJobsSummary').textContent=!projectId?'Open an ATGV project to see job history.':
-  atgvJobItems.length+' recent job(s) · '+atgvJobItems.filter(job=>job.status==='running').length+' running';
- if(!atgvJobItems.length){const text=document.createElement('p');text.className='muted';
-  text.textContent='No recorded jobs yet. Start a workflow in any role to see processing history.';root.append(text);return;}
- for(const job of atgvJobItems.slice(0,30))root.append(atgvJobRow(job));
-}
-$('atgvJobsButton').addEventListener('click',()=>atgvJobsModal(true));
-$('atgvJobsClose').addEventListener('click',()=>atgvJobsModal(false));
-$('atgvJobsRefresh').addEventListener('click',()=>send('getWorkflowJobs'));
-$('atgvJobsDialog').addEventListener('click',event=>{if(event.target===$('atgvJobsDialog'))atgvJobsModal(false);});
-document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('atgvJobsDialog').classList.contains('hidden')){event.preventDefault();atgvJobsModal(false);}});
-window.addEventListener('message',event=>{
- const msg=event.data||{};
- if(msg.type==='atgvWorkflowJobs'){
-  if(activeId&&msg.projectId!==activeId)return;
-  renderAtgvJobs(msg.jobs,msg.projectId);
- }
- if(msg.type==='atgvWorkflowRecovery'&&(!activeId||msg.projectId===activeId)){
-  $('atgvJobsRecovery').textContent=String(msg.message||'Resume available from the original role screen.').slice(0,500);
-  if(msg.command==='processDiscoverySources')navigate('discovery');
- }
 });
