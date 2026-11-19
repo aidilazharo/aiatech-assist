@@ -3224,13 +3224,17 @@ async function jiraProtectionAssessment(reg,config,token,items,{approvedPlan=ite
  },{approvedPlan});
 }
 async function jiraPreflight(reg,config,token,items,onProgress){
- const conflicts=[];let checked=0;
+ const conflicts=[],linkCandidates=[];let checked=0;
  const assessment=await jiraProtectionAssessment(reg,config,token,items);
  for(const row of assessment.blocked)conflicts.push(`${row.path}: ${row.reason||'Started Jira work requires an approved Change Request'}. ${row.issues.map(x=>x.key).join(', ')}`);
  for(const item of items){
   if(item.action==='create'){
    const marker=jiraScopedMarker(reg,config,item.path),issue=await jiraFindIssueByMarker(config,token,marker);
-   if(issue&&reg.pending?.[item.path]?.action!=='create')conflicts.push(`${item.path}: issue ${issue.key} exists without a recorded operation`);
+   if(issue&&reg.pending?.[item.path]?.action!=='create'){
+    conflicts.push(`${item.path}: issue ${issue.key} exists without a recorded operation`);
+    // Structured recovery action: never depend on parsing user-visible text.
+    linkCandidates.push({path:item.path,key:issue.key});
+   }
   }else if(item.action==='update'){
    const previous=reg.synced[item.path];
    if(!previous?.remoteDigest){conflicts.push(`${item.path}: no trusted Jira baseline; reconcile manually`);continue;}
@@ -3246,7 +3250,7 @@ async function jiraPreflight(reg,config,token,items,onProgress){
   }
   checked++;if(onProgress&&(checked%5===0||checked===items.length))await onProgress(checked,items.length);
  }
- conflicts.assessment=assessment;return conflicts;
+ conflicts.assessment=assessment;conflicts.linkCandidates=linkCandidates;return conflicts;
 }
 async function prePublishIdentityGuard(reg,config,token,items){
  // Read-only check happens on every preview/publish, never invokes DELETE.
@@ -8214,15 +8218,17 @@ async function handleDashboardMessage(msg){
             try{repairPlan=jiraRoleRepair.plan(state,nodePath.split('/')[0]).find(row=>row.path===nodePath)||null;}
             catch{/* Missing historical parents: use the strict approved issue plan below. */}
           }
+          const remoteDigest=remoteFingerprint(remote);
+          const contentMatchesApproved=remoteDigest===sha(JSON.stringify({summary:item.title,description:item.description}));
           const verifiedRepair=!!repairPlan&&repairPlan.parentKey===parentKey&&repairPlan.roleLabel===item.roleLabel&&
-            remoteFingerprint(remote)===sha(JSON.stringify({summary:repairPlan.title,description:repairPlan.description}));
+            remoteDigest===sha(JSON.stringify({summary:repairPlan.title,description:repairPlan.description}));
           if(roleMapping||verifiedRepair){
             if(roleMapping&&(item.kind!=='Role'||roleMapping.key!==remote.key||roleMapping.marker!==marker||roleMapping.roleLabel!==item.roleLabel))
              throw Error('The saved role-task repair record differs from the Jira issue. No link was changed.');
             // Legacy repair tasks may have a longer description. Accept only a
             // verified saved mapping OR exact legacy repair text, with all
             // current issue identity, role and parent checks still enforced.
-            jiraRoleRepair.validateRemote(remote,{parentKey,roleLabel:item.roleLabel,title:item.title},projectKey,marker,{strictContent:true});
+            jiraRoleRepair.validateRemote(remote,{parentKey,roleLabel:item.roleLabel,title:verifiedRepair?repairPlan.title:item.title},projectKey,marker,{strictContent:verifiedRepair||contentMatchesApproved});
             if(String(remote.fields?.issuetype?.name||'').toLowerCase()!==type.toLowerCase())
              throw Error('The Jira issue type no longer matches the approved plan.');
           }else{
@@ -8233,12 +8239,16 @@ async function handleDashboardMessage(msg){
           const actor=await verifiedBAActor();
           const updated=await brWorkflow.reconcileExistingJira(registry,activeProject.id,state.revision,{
             path:nodePath,key:remote.key,hash:item.hash,kind:item.kind,title:item.title,
-            issueType:remote.fields?.issuetype?.name||type,remoteDigest:remoteFingerprint(remote),marker,actor
+            issueType:remote.fields?.issuetype?.name||type,remoteDigest,marker,actor,contentMatchesApproved
           });
           approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;jiraPreviewValidation=null;jiraPreviewFieldPlans={};
           await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
           await dashboard?.webview.postMessage({type:'brJiraLinkFixed',path:nodePath,key:remote.key});
           await handleDashboardMessage({command:'brJiraPreview'});
+        }catch(error){
+          // A failed click must restore the button and show an actionable reason.
+          // Never create, update or delete Jira issues from this recovery action.
+          await dashboard?.webview.postMessage({type:'brJiraLinkFixFailed',path:nodePath,key:expectedKey,message:String(error.message||error).slice(0,900)});
         }finally{jiraLinkRepairBusy=false;}
         break;
       }
@@ -8250,7 +8260,7 @@ async function handleDashboardMessage(msg){
         if((!currentRequirements.length&&!activeRetirements)||currentRequirements.some(item=>item.status!=='approved'||item.needsRefresh||item.externalReviewRequired||item.roleReviewRequired||item.dependencyReviewRequired))throw Error('Save and approve all current-cycle Business Requirements and complete outstanding reviews before creating a Jira preview. Archived approved requirements remain historical.');
         const changes=brWorkflow.plan(register);
         await dashboard?.webview.postMessage({type:'baProgress',task:'jiraPreview',message:'Checking JIRA project and changes…',percent:30});
-        let conflicts=[],previewTypes=[];
+        let conflicts=[],previewTypes=[],linkCandidates=[];
         if(changes.length){const target=await ensureJiraPreviewTarget(register);
           if(changes.some(item=>item.action==='create')){
             const targetKey=validProjectKey(target.config.get('jira.projectKey'));
@@ -8269,6 +8279,7 @@ async function handleDashboardMessage(msg){
           await dashboard?.webview.postMessage({type:'baProgress',task:'jiraPreview',message:'Verifying Jira issue identity and existing mappings…',percent:15});
           const duplicateGate=await prePublishIdentityGuard(register,target.config,target.token,changes);
           conflicts=await jiraPreflight(register,target.config,target.token,changes,async(checked,total)=>dashboard?.webview.postMessage({type:'baProgress',task:'jiraPreview',message:`Checking Jira issues ${checked}/${total}…`,percent:Math.min(95,Math.floor(25+checked/total*70))}));
+          linkCandidates=conflicts.linkCandidates||[];
           conflicts.push(...formatIdentityConflicts(duplicateGate));
           if(conflicts.assessment?.protection.some(x=>x.issues.length)){
             register=await brWorkflow.recordJiraWorkHistory(registry,activeProject.id,register.revision,conflicts.assessment);
@@ -8303,7 +8314,7 @@ async function handleDashboardMessage(msg){
         }
         jiraPreviewValidation=conflicts.length?null:{projectId:activeProject.id,revision:register.revision,planHash:sha(JSON.stringify(changes)),fieldPlansHash:sha(JSON.stringify(jiraPreviewFieldPlans)),verifiedAt:Date.now(),site:baseAtlassian(effectiveConfig(activeProject)),jiraProject:effectiveConfig(activeProject).get('jira.projectKey')};
         const jiraProject=changes.length?validProjectKey(effectiveConfig(activeProject).get('jira.projectKey')):'';
-        await dashboard?.webview.postMessage({type:'baProgress',task:'jiraPreview',message:'JIRA changes checked.',percent:100});await dashboard?.webview.postMessage({type:'brJiraPlan',changes,issueTypes,jiraProject,fieldPlans:jiraPreviewFieldPlans,conflicts,protection:conflicts.assessment?.protection||[],revision:register.revision});break;
+        await dashboard?.webview.postMessage({type:'baProgress',task:'jiraPreview',message:'JIRA changes checked.',percent:100});await dashboard?.webview.postMessage({type:'brJiraPlan',changes,issueTypes,jiraProject,fieldPlans:jiraPreviewFieldPlans,conflicts,linkCandidates,protection:conflicts.assessment?.protection||[],revision:register.revision});break;
       }
       case 'brJiraApprove':{
         requireOpened();const register=await brWorkflow.load(registry,activeProject.id);
