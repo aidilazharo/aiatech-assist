@@ -240,7 +240,7 @@ function baHasRecoverableBR(state){
 let jiraPublishState={phase:'idle',confirmed:0,total:0,message:'No Jira publication is running.',currentKey:'',error:''};
 let jiraPublicationPlan=[],jiraPublicationConfirmed=new Map();
 let jiraPreviewFieldsByPath={};
-let jiraPlanForCR=[],jiraLinkCandidates=[],jiraProtectionForCR=[],jiraPreviewIssueTypes={},jiraPreviewProject='',discoveryAutosaving=false,discoveryAutosaveSnapshot=null;
+let jiraPlanForCR=[],jiraLinkCandidates=[],jiraPreflightBlocked=false,jiraProtectionForCR=[],jiraPreviewIssueTypes={},jiraPreviewProject='',discoveryAutosaving=false,discoveryAutosaveSnapshot=null;
 let brRoleRepairPreview=null,brRoleRepairBusy=false;
 let mappingRunPhase='',mappingRetryAvailable=false,mappingFailureMessage='',mappingFailurePhase='',baPreflightInfo=null,reviewStopReason='',restoredMappingEpoch=null,sourceSelectedDigests=new Set(),jiraBrowseBaseUrl='',discoveryData=null,discoveryDirty=false,discoveryImportProposal=null,discoveryImportQueue=[],discoveryImportBusy=false,sourceRemoving=false,discoveryReviewProposal=null,preserveReviewOnSave=false,applyingAiReview=false,flowData=null,brState=null,brEditing=null,brPlanRevision=null,brJiraPreviewApproved=false,brQuill=null,brReadOnly=false,baOwnerState=null,baBusyTask='',brEditorDirty=false,brEditorSaving=false,brApprovePending=false,brJiraPlanChanges=0,brJiraPlanConflicts=0,pendingUploadAfterClaim=false,reviewApplyRetry=null,reviewApplyPhase='',reviewApplyRetryAvailable=false,reviewStageState=null;
 let mappingResumeAvailable=false;
@@ -1652,7 +1652,7 @@ window.addEventListener('message',event=>{
   if(pmJiraTableInstance)pmJiraTableInstance.setRows([]);
   // Also clear the previous Jira publication preview/progress cache; it can
   // otherwise show keys that are no longer present in the BR register.
-  jiraPublicationPlan=[];jiraPublicationConfirmed.clear();jiraPlanForCR=[];jiraLinkCandidates=[];jiraProtectionForCR=[];
+  jiraPublicationPlan=[];jiraPublicationConfirmed.clear();jiraPlanForCR=[];jiraLinkCandidates=[];jiraPreflightBlocked=false;jiraProtectionForCR=[];
   jiraPublishState={phase:'idle',confirmed:0,total:0,message:'No Jira publication is running.',currentKey:'',error:''};
   brPlanRevision=null;brJiraPreviewApproved=false;brJiraPlanChanges=0;brJiraPlanConflicts=0;
   $('jiraInventoryStatus').textContent='Jira links updated. Refreshing the remote Jira inventory…';
@@ -5101,7 +5101,7 @@ function renderJiraApprovalSummary(){
  const root=$('brJiraApprovalSummary');if(!root)return;
  const actions=jiraPlanForCR||[];
  const counts={create:0,update:0,retire:0};for(const item of actions)if(Object.hasOwn(counts,item.action))counts[item.action]++;
- const message=!brPlanRevision?'Generate and inspect a Jira preview before approval.':`${actions.length} changes in the current approved Business Requirements cycle · ${counts.create} CREATE · ${counts.update} UPDATE · ${counts.retire} RETIRE. ${brJiraPlanConflicts?'Resolve '+brJiraPlanConflicts+' conflict(s) before approval.':'No blocking conflicts in preview.'}`;
+ const message=jiraPreflightBlocked?`Jira Preflight blocked: ${brJiraPlanConflicts} issue(s) need resolution before preview. No Jira Preview has been created.`:!brPlanRevision?'Generate and inspect a Jira preview before approval.':`${actions.length} changes in the current approved Business Requirements cycle · ${counts.create} CREATE · ${counts.update} UPDATE · ${counts.retire} RETIRE. ${brJiraPlanConflicts?'Resolve '+brJiraPlanConflicts+' conflict(s) before approval.':'No blocking conflicts in preview.'}`;
  root.textContent=message+(brJiraPreviewApproved?' Preview approved; proceed to Step 10 to publish.':'');
 }
 function baBusy(task,message,percent){
@@ -6979,7 +6979,7 @@ window.addEventListener('message',event=>{
       if(previousSources>0)baViewedStep='start';
       $('baUncompletedPanel').classList.add('hidden');
     }
-    brPlanRevision=null;brJiraPreviewApproved=false;brJiraPlanChanges=0;brJiraPlanConflicts=0;jiraPlanForCR=[];jiraLinkCandidates=[];jiraProtectionForCR=[];
+    brPlanRevision=null;brJiraPreviewApproved=false;brJiraPlanChanges=0;brJiraPlanConflicts=0;jiraPlanForCR=[];jiraLinkCandidates=[];jiraPreflightBlocked=false;jiraProtectionForCR=[];
     closeJiraIssuePreview();for(const id of ['brJiraDetailsPanel','brJiraApprovalDetails']){$(id).classList.add('hidden');$(id).replaceChildren();}
     if(task==='jiraSync'||jiraPublishState.phase==='completed')renderJiraPublishedItems();
     $('brJiraChanges').classList.add('hidden');$('brJiraConflicts').classList.add('hidden');
@@ -7013,7 +7013,46 @@ window.addEventListener('message',event=>{
     for(const button of document.querySelectorAll('.jira-link-repair-action')){button.disabled=false;button.textContent='Fix Jira Link';}
     status('Fix Jira Link failed for '+String(m.key||m.path||'Jira issue')+': '+String(m.message||'Verification failed.').slice(0,900),true,{persistent:true});
   }
-  if(m.type==='brJiraPlan'){baFailedProcess='';baFailedMessage='';
+  if(m.type==='brJiraPreflight'){
+    baFailedProcess='';baFailedMessage='';
+    stageProgress('jiraPreview','Jira Preflight found '+(m.conflicts||[]).length+' blocker(s).',100);
+    baBusy('',null);
+    jiraPreflightBlocked=true;
+    brPlanRevision=m.revision;jiraPlanForCR=[];
+    jiraLinkCandidates=Array.isArray(m.linkCandidates)?m.linkCandidates.filter(row=>row&&typeof row.path==='string'&&/^[A-Z][A-Z0-9_]{1,20}-\d{1,12}$/.test(String(row.key||''))):[];
+    jiraProtectionForCR=m.protection||[];
+    brJiraPreviewApproved=false;brJiraPlanChanges=(m.changes||[]).length;brJiraPlanConflicts=(m.conflicts||[]).length;
+    jiraPublicationPlan=[];jiraPublicationConfirmed.clear();
+    $('brJiraApprovalTable')?.replaceChildren();
+    for(const id of ['brJiraDetailsPanel','brJiraApprovalDetails']){$(id)?.classList.add('hidden');$(id)?.replaceChildren();}
+    const box=$('brJiraChanges');
+    box.replaceChildren();box.classList.remove('hidden');
+    const checkCount=Number(m.checkedCount)||brJiraPlanChanges;
+    box.append(brElement('h3','','Jira Preflight · '+brJiraPlanConflicts+' issue(s) need attention'));
+    box.append(brElement('p','muted',checkCount+' planned Jira items checked. Jira Preview has NOT been created. Resolve the blockers below, then regenerate Jira Preview.'));
+    for(const candidate of jiraLinkCandidates){
+      const entry=(m.changes||[]).find(item=>item.path===candidate.path);
+      const row=brElement('div','jira-link-repair-row jira-preflight-recovery');
+      row.append(brElement('span','',candidate.path+' · '+candidate.key+(entry?.title?' · '+entry.title:'')));
+      row.append(jiraFixLinkButton(candidate.path,candidate.key));
+      box.append(row);
+    }
+    const conflicts=$('brJiraConflicts');
+    conflicts.replaceChildren();conflicts.classList.remove('hidden');
+    for(const message of m.conflicts||[]){
+      const row=brElement('div','jira-link-repair-row');
+      row.append(brElement('p','',message));
+      conflicts.append(row);
+    }
+    $('brApproveRetirements').classList.add('hidden');
+    $('brApproveRetirements').disabled=true;
+    $('brJiraApprove').disabled=true;$('brJiraSync').disabled=true;
+    renderDiscoverySummary();renderChangeRequests();
+    if(jiraProtectionForCR.some(row=>row.blocked))$('baCRPanel').open=true;
+    status('Jira Preflight found '+brJiraPlanConflicts+' blocker(s) across '+checkCount+' planned Jira items. No preview or Jira issue write was performed.',true,{persistent:true});
+    return;
+  }
+  if(m.type==='brJiraPlan'){baFailedProcess='';baFailedMessage='';jiraPreflightBlocked=false;
     stageProgress('jiraPreview','JIRA preview generated.',100);baBusy('',null);brPlanRevision=m.revision;jiraPlanForCR=m.changes||[];jiraLinkCandidates=Array.isArray(m.linkCandidates)?m.linkCandidates.filter(row=>row&&typeof row.path==='string'&&/^[A-Z][A-Z0-9_]{1,20}-\d{1,12}$/.test(String(row.key||''))):[];jiraPreviewIssueTypes=m.issueTypes||{};jiraPreviewProject=m.jiraProject||'';jiraPreviewFieldsByPath=m.fieldPlans||{};jiraProtectionForCR=m.protection||[];brJiraPreviewApproved=false;brJiraPlanChanges=(m.changes||[]).length;brJiraPlanConflicts=(m.conflicts||[]).length;
     jiraPublicationPlan=[];jiraPublicationConfirmed.clear();renderJiraApprovalTable();
     for(const id of ['brJiraDetailsPanel','brJiraApprovalDetails']){$(id).classList.add('hidden');$(id).replaceChildren();}
