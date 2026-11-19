@@ -71,3 +71,16 @@ test('Jira Preview displays a single recovery action and host never rewrites the
  assert.match(section,/brWorkflow\.reconcileExistingJira/);
  assert.doesNotMatch(section,/jiraCreateIssue|jiraUpdateIssue|jiraRetireIssue/);
 });
+
+
+test('Historical role-task content stays pending for explicit Jira UPDATE approval after relinking',()=>fixture(async({registry,register})=>{
+ const item=lookup(register);
+ const after=await brWorkflow.reconcileExistingJira(registry,'demo',register.revision,{...params(item),contentMatchesApproved:false});
+ assert.equal(after.synced[nodePath].key,'TC-715');
+ assert.notEqual(after.synced[nodePath].hash,item.hash);
+ assert.equal(after.synced[nodePath].remoteDigest,digest);
+ const pending=brWorkflow.plan(after).find(row=>row.path===nodePath);
+ assert.equal(pending?.action,'update');
+ assert.equal(pending?.key,'TC-715');
+ assert.equal(after.events.at(-1).requiresJiraReview,true);
+}));
