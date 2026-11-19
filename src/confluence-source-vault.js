@@ -270,8 +270,13 @@ class ConfluenceSourceVault{
   }
   const localHistory=await this.localHistory();
   const currentHistory=localHistory.spaceId===String(space.id)?localHistory:{};
+  // A truly new project may accept Confluence state. A project whose user
+  // intentionally deleted every BR is NOT empty for restore purposes.
   const localEmpty=!local.register?.brs?.length&&!local.register?.sourceDocuments?.length&&
-   !Object.keys(local.register?.synced||{}).length;
+   !local.register?.archivedSources?.length&&!local.register?.sourceHistory?.length&&
+   !local.register?.deletedRequirements?.length&&!local.register?.completedCycles?.length&&
+   !local.register?.events?.length&&!local.register?.importEpoch&&
+   !Object.keys(local.register?.synced||{}).length&&!(local.discovery||'').trim();
   let result={downloaded:0,uploaded:0,restored:false,conflicts:[],skipped:''};
   if(manifest&&mode!=='push'){
    const remoteChanged=!!currentHistory.remoteHash&&currentHistory.remoteHash!==remoteHash;
