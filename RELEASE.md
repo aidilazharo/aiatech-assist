@@ -1,3 +1,13 @@
+# ATGV AIATECH Assist v0.4.33
+
+- Fix `tech-cockpit` and other project-opening failures when a GitHub account owner is saved during onboarding but the project repository remains optional and unconfigured.
+- Validate project GitHub repository permissions only when a repository name is present; continue to require a valid owner for configured repos.
+- Preserve required Jira and Confluence authentication and checks, existing project settings, and account credentials.
+- Show a non-blocking notice and record an opening diagnostic when optional project GitHub configuration is skipped.
+- Add regression tests for the owner-only account, repo configured, missing owner, and no-GitHub cases.
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.32
 
 - Add expandable Jira, Confluence and GitHub connection diagnostics to the Start connection setup screen.
