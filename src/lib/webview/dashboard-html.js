@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.4.34';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.4.35';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -443,6 +443,7 @@ function html(webview,{resumeLibrary=false}={}){
         </div>
         <div id="pmJiraTableView" aria-label="Searchable Jira DataTable">
           <div class="pm-filters"><label>Search <input id="pmJiraFilter" type="search" placeholder="Issue key, summary or owner" autocomplete="off"></label>
+        <label>Type <select id="pmTypeFilter"><option value="">All types</option><option value="br">BR</option><option value="epic">Epic</option><option value="story">User Stories</option><option value="other">Other types</option></select></label>
         <label>Assignee <select id="pmAssigneeFilter"><option value="">All assignees</option></select></label>
         <label>Status <select id="pmStatusFilter"><option value="">All statuses</option></select></label>
         <label>Priority <select id="pmPriorityFilter"><option value="">All priorities</option></select></label>
