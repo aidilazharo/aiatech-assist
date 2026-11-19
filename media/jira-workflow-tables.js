@@ -6,6 +6,11 @@
   if(index<0||!progress[index].complete||index>=progress.length-1)return null;
   const next=progress[index+1];return next?.selectable?{key:next.key,label:next.label,index:index+1}:null;
  }
+ // Visual readiness follows the actual next action, not only the completed
+ // milestone. The confirm-review action can stand alone without a next step.
+ function nextActionReady({next=null,complete=false,canConfirm=false,previewReady=true,approvalReady=true}={}){
+  return !!canConfirm||!!(next&&complete&&previewReady&&approvalReady);
+ }
  function publishedRows({plan=[],confirmed={},synced={},activeIds=[],completed=false}={}){
   const rootIds=new Set(activeIds);
   const source=plan.length?plan.map(item=>({path:item.path,action:item.action||'create',kind:item.kind,title:item.title,key:item.key||'',fromPlan:true})):
@@ -17,5 +22,5 @@
    return {path:item.path||'',action:String(item.action||'').toUpperCase(),type:item.kind||'Issue',title:item.title||persisted?.title||'',key:confirmedKey||item.key||'—',status:confirmedStatus};
   });
  }
- return {getNextStep,publishedRows};
+ return {getNextStep,nextActionReady,publishedRows};
 });
