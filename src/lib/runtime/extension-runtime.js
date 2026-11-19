@@ -7604,6 +7604,7 @@ async function handleDashboardMessage(msg){
         await dashboard?.webview.postMessage({type:'brUpdated',register:updated});break;
       }
       case 'confirmDiscoveryReview':{
+        try{
         requireOpened();await requireBAOwner('ba-discovery');
         const saved=await discovery.load(registry,activeProject.id),register=await brWorkflow.load(registry,activeProject.id);
         if(saved.readiness.filled!==saved.readiness.total||register.discoveryRevision!==saved.revision||register.reviewRevision!==saved.revision)
@@ -7613,10 +7614,22 @@ async function handleDashboardMessage(msg){
         if(unresolved){
           const count=(review.suggestions||[]).length;
           const decision=await uiWarning(`AI Review has ${count} outstanding finding(s), including potentially undefined business rules. Acknowledging does NOT resolve these findings or automatically approve the Business Requirements. Confirm that you have reviewed the source evidence and accept responsibility for the documented risks. You must still resolve any open Discovery decisions and obtain required Business Owner approval.`,{modal:true},'Acknowledge Findings');
-          if(decision!=='Acknowledge Findings'){await dashboard?.webview.postMessage({type:'baProgress',done:true});break;}
+          if(decision!=='Acknowledge Findings'){
+            await dashboard?.webview.postMessage({type:'baReviewConfirmResult',success:false,cancelled:true,
+              message:'AI findings acknowledgement cancelled. No BR or Jira changes were saved.'});
+            break;
+          }
         }
         const updated=await brWorkflow.confirmReview(registry,activeProject.id,register.revision,{discoveryRevision:saved.revision,actor:await verifiedBAActor(),acknowledgeRisks:unresolved});
-        await dashboard?.webview.postMessage({type:'brUpdated',register:updated});break;
+        await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
+        await dashboard?.webview.postMessage({type:'baReviewConfirmResult',success:true,
+          message:'AI Review confirmed. Generate Business Requirements Documents is now available.'});
+        }catch(error){
+          await dashboard?.webview.postMessage({type:'baReviewConfirmResult',success:false,
+            message:'Unable to confirm AI Review: '+String(error.message||error).slice(0,350)});
+          throw error;
+        }
+        break;
       }
       case 'applyDiscoveryReview':{
         if(activeDiscoveryApplyRun)throw Error('An AI suggestions save is already in progress.');
