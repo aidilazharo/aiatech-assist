@@ -4618,7 +4618,7 @@ function renderSoftwareUpdates(data,force=false){
  const latestVersion=data.extensionLatest?.version||data.latest?.version||'';
  // A public mirror can lag behind an installed private-source build. Never
  // present an older public artifact as an available upgrade or 'latest' ATGV.
- const semverParts=value=>{const m=/^(\\d+)\\.(\\d+)\\.(\\d+)$/.exec(String(value||''));return m?m.slice(1).map(Number):null;};
+ const semverParts=value=>{const parts=String(value||'').split('.');return parts.length===3&&parts.every(part=>/^[0-9]+$/.test(part))?parts.map(Number):null;};
  const publishedParts=semverParts(latestVersion),installedParts=semverParts(version);
  const publicBehind=!!publishedParts&&!!installedParts&&publishedParts.some((part,index)=>part!==installedParts[index])&&
   publishedParts.findIndex((part,index)=>part!==installedParts[index])>=0&&
