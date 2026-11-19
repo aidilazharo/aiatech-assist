@@ -144,7 +144,7 @@ let startupSessionProceedApproved=false;
 let startupVerifiedSignature='';
 let startupPermissionsState=null,startupReadinessState=null,startupReadinessSequence=0;
 function isBAProcessCommand(command){
- return /^(?:br[A-Z]|ba[A-Z]|discovery[A-Z]|importDiscovery|processDiscoverySources|updateSourceDocuments|downloadWorkingBR|downloadDocumentPreflight|deleteBREverywhere|stopDiscoverySourceMapping|restartUncompletedBusinessRequirement|startOrRestartBusinessRequirements)/.test(String(command||''))&&
+ return /^(?:br[A-Z]|ba[A-Z]|discovery[A-Z]|importDiscovery|saveDiscovery|processDiscoverySources|updateSourceDocuments|downloadWorkingBR|downloadDocumentPreflight|deleteBREverywhere|stopDiscoverySourceMapping|restartUncompletedBusinessRequirement|startOrRestartBusinessRequirements)/.test(String(command||''))&&
   command!=='baDownloadProcessLog';
 }
 async function recordBAProcess(event){
