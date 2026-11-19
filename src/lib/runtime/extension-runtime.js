@@ -1348,7 +1348,7 @@ function startupConnectionFailure(error){
  return 'Could not verify the response. Check the service URL and account access.';
 }
 async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{}}={}){
- if(save){startupSessionVerified=false;startupVerifiedSignature='';startupUiVerificationCache.at=0;}
+ if(save){startupSessionVerified=false;startupVerifiedSignature='';}
  const data=startupSetup.validate(message.settings);
  const enteredAtlassian=String(message.atlassianToken||'').trim();
  const enteredGithub=String(message.githubToken||'').trim();
@@ -4821,6 +4821,7 @@ async function handleDashboardMessage(msg){
         break;
       }
       case 'startupTestConnections':{
+        startupUiVerificationCache.at=0;
         const started=Date.now();
         await recordStartupDiagnostic({stage:'connection-result',tool:'Jira, Confluence & GitHub',status:'started',detail:'Test & Save Connections requested.'});
         try{
