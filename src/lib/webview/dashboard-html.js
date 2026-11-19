@@ -149,7 +149,7 @@ function html(webview,{resumeLibrary=false}={}){
       </div><div class="atgv-startup-actions"><button type="submit" id="startupTestConnections">Test &amp; Save Connections</button><span id="startupConnectionMessage" role="status" aria-live="polite">Verify Jira, Confluence, and your GitHub account to continue.</span></div>
       <details id="startupConnectionLogPanel" class="atgv-connection-log-panel">
         <summary>Connection diagnostics <span id="startupConnectionLogCount" class="muted">Open to view saved checks and errors</span></summary>
-        <div class="atgv-connection-log-toolbar"><p class="muted">Local diagnostic history for Jira, Confluence, GitHub, and the SDLC Library. Tokens, account emails, request headers and response bodies are never logged.</p>
+        <div class="atgv-connection-log-toolbar"><p class="muted">Local diagnostic history for Jira, Confluence, GitHub, and the catalog API. Tokens, account emails, request headers and response bodies are never logged.</p>
           <div class="stack"><button id="startupConnectionLogRefresh" type="button" class="secondary">Refresh Log</button><button id="startupConnectionLogDownload" type="button" class="secondary">Download Logs (.txt)</button></div></div>
         <div id="startupConnectionLogList" class="atgv-connection-log-list" role="log" aria-label="Connection check history" aria-live="polite"><p class="muted">Open to load saved connection events.</p></div>
         <p id="startupConnectionLogMessage" class="muted" role="status" aria-live="polite"></p>
