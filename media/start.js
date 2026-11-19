@@ -483,10 +483,12 @@ function setView(next){
   }
   // Show the in-progress BR summary only after leaving this page and returning.
   // An empty upload placeholder has no recoverable content and needs no card.
+  // Navigation never stops an active host-side mapping, Jira publication or
+  // another long-running process. Preserve the active BR step across screens.
+  const baProcessRunning=discoveryImportBusy||!!baBusyTask||['preparing','preflight','repair','mapping','committing'].includes(mappingRunPhase);
   if(view==='discovery'&&next!=='discovery'){
-    baResumeCardReady=baHasRecoverableBR(brState);
-    baViewedStep=null;
-  }else if(next==='discovery'&&view!=='discovery'&&baResumeCardReady){
+    if(!baProcessRunning){baResumeCardReady=baHasRecoverableBR(brState);baViewedStep=null;}
+  }else if(next==='discovery'&&view!=='discovery'&&baResumeCardReady&&!baProcessRunning){
     baViewedStep='start';
   }
   for(const page of pages)page.classList.toggle('hidden',page!==target);
@@ -892,6 +894,17 @@ function updateState(msg){
   else if(!workspaceOpened)document.body.classList.add('gate-mode');
   renderGate();
 }
+let navigationRefreshRequestId=0;
+function requestNavigationRefresh(destination){
+ if(!workspaceOpened||!activeId)return;
+ // A menu refresh updates the existing webview and must never reload the
+ // document, abort a host process or discard the selected workflow step.
+ queueMicrotask(()=>{
+  if(!workspaceOpened||!activeId)return;
+  send('viewNavigateRefresh',{projectId:activeId,destination,view,roleId:selectedRole,
+   requestId:++navigationRefreshRequestId});
+ });
+}
 function navigate(destination){
   if(roleSettingsDirty&&view==='project'&&destination!=='project-settings'&&destination!=='tech'){status('Save project role settings before leaving Project Settings.',true);return;}
   if(view==='discovery'&&discoveryDirty){status('Save your discovery answers before leaving this screen.',true);return;}
@@ -907,6 +920,7 @@ function navigate(destination){
   if(!workspaceOpened&&!['settings'].includes(destination)){
     showGate();return;
   }
+  requestNavigationRefresh(destination);
   const isRole=visibleRoles().some(role=>role.id===destination);
   if(isRole&&activeId){usedRoleIds.add(destination);send('markRoleUsed',{roleId:destination});}
   selectedNav=isRole||destination==='discovery'?'sdlc-roles':destination==='project-settings'||destination==='tech'?'settings':destination;
@@ -1518,11 +1532,8 @@ function openJiraInventory(){
 }
 function closeJiraInventory(){
  $('jiraInventoryModal').classList.add('hidden');$('jiraInventoryModal').setAttribute('aria-hidden','true');
- // The BA DataTable may still need this shared project scan; do not cancel it on modal close.
- if(view!=='work'||!['business-analyst','project-manager'].includes(selectedRole)){
-  jiraInventoryRequest++;jiraInventoryRunning=false;jiraInventoryLoaded=false;
-  send('cancelProjectJiraInventory');
- }
+ // Jira inventory scans remain active in the host even when the modal closes.
+ // Keep request IDs and partial pages so returning to the page resumes live data.
  $('overviewJiraInventory').focus();
 }
 $('overviewJiraInventory').addEventListener('click',openJiraInventory);
