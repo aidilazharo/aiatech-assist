@@ -30,6 +30,7 @@ function mappingHarness(aiAnswer,opts={}){
   sourceStore:{async read(){return {name:'visitor.pdf',digest,text:opts.sourceText||'Requirements'}}},
   discoveryImport:{...discoveryModule,createMappingPrompt(doc){return opts.realPrompt?discoveryModule.createMappingPrompt(doc):'Map'},parseMappingResponse(answer){return JSON.parse(answer)}},
   baDocumentPreflight,
+  baLargeDocumentRecovery:require('../src/ba-large-document-recovery'),
   baPreflightReports:require('../src/ba-preflight-report'),
   baWorkingBr:{...require('../src/ba-working-br'),async store(_registry,_project,sourceDigest){return {filename:'test.md',digest:'f'.repeat(64),sourceDigest}}},
   documentPreflightSessions:new Map(),
@@ -159,7 +160,7 @@ test('repeated preflight timeouts stop safely after a bounded retry',async()=>{
  const t=mappingHarness(async()=>'{"problem":"Unexpected mapping"}',{sourceText:'short requirement',setTimeout:callback=>setTimeout(callback,15),preflightAnswer:()=>{calls++;return new Promise(()=>{});}});
  await assert.rejects(t.processMapping(t.request),/AI preflight could not complete after three recovery attempts/);
  assert.equal(calls,3);assert.equal(t.commits,0);
- assert.ok(t.events.some(row=>/Recovering from an incomplete or timed-out AI response/.test(row.message||'')));
+ assert.ok(t.events.some(row=>/Recovering AI preflight/.test(row.message||'')));
  assert.equal(t.events.some(row=>row.type==='discoveryImportResult'),false);
 });
 test('stopping during preflight aborts without retrying or saving',async()=>{
@@ -181,7 +182,7 @@ test('completed preflight sections resume after a later timeout and extension re
  let resumedPreflights=0;
  const second=mappingHarness(async(_target,prompt)=>String(prompt).includes('Review mapped business claims')?'{"status":"consistent","conflicts":[]}':'{"problem":"A requirement"}',{checkpoints,sourceText:text,preflightAnswer:()=>{resumedPreflights++;return Promise.resolve('{"status":"ready","summary":"Checked","edits":[],"issues":[]}');}});
  await second.processMapping(second.request);
- assert.equal(second.commits,1);assert.ok(second.events.some(row=>/Resuming: using the completed preflight/.test(row.message||'')));
+ assert.equal(second.commits,1);assert.ok(second.events.some(row=>/Resuming: using saved AI preflight/.test(row.message||'')));
  assert.ok(resumedPreflights>0);assert.equal(checkpoints.size,0);
 });
 test('a fully processed section resumes after a commit interruption without another AI request',async()=>{
