@@ -4772,7 +4772,27 @@ async function handleDashboardMessage(msg){
          }
          break;
        }
-       case 'refresh':if(!webviewCoreReady)break;await refreshLiveRemoteData({reason:'manual-refresh',force:true});await refreshDashboard();break;
+       case 'viewNavigateRefresh':{
+        requireOpened();
+        if(msg.projectId!==activeProject?.id||!webviewCoreReady)break;
+        // A screen/menu refresh is READ-ONLY. Do not replace the webview,
+        // invoke a stop handler, reset selected workflow data, or cancel jobs.
+        // The state snapshot completes without waiting on remote providers.
+        const navigationProject=activeProject.id;
+        await refreshDashboard();
+        if(navigationProject===activeProject?.id){
+          const mapping=activeDiscoveryMappingRun?.projectId===navigationProject
+            ?{running:true,phase:activeDiscoveryMappingRun.phase||'preparing'}:{running:false};
+          await dashboard?.webview.postMessage({type:'navigationRefreshState',projectId:navigationProject,
+            requestId:msg.requestId,roleId:String(msg.roleId||''),view:String(msg.view||''),mapping});
+          // Revalidate external content asynchronously. The existing throttling
+          // prevents a new remote scan for every rapid menu click.
+          void refreshLiveRemoteData({reason:'menu-navigation',force:false}).catch(error=>
+            report('Menu data refresh: '+String(error.message||error).slice(0,200)));
+        }
+        break;
+      }
+      case 'refresh':if(!webviewCoreReady)break;await refreshLiveRemoteData({reason:'manual-refresh',force:true});await refreshDashboard();break;
       case 'refreshConnectedSources':{
         requireOpened();
         await refreshLiveRemoteData({reason:'view-open'});
@@ -7183,12 +7203,16 @@ async function handleDashboardMessage(msg){
         await refreshDashboard();break;
       }
       case 'openingBack':{
+        if(activeDiscoveryMappingRun?.projectId===activeProject?.id)
+          throw Error('AI document mapping is still running. It will continue while you switch screens within this project. Finish or explicitly stop it before switching projects.');
         ++startupSequence;
         if(openingLocked)throw new Error('Wait for the current step to complete.');
         openingGeneration++;openingFlow.reset();openingOffline=false;++activationEpoch;activeProject=undefined;store=undefined;tree?.refresh();
         await refreshDashboard();break;
       }
       case 'openingAuto':{
+        if(activeDiscoveryMappingRun?.projectId===activeProject?.id)
+          throw Error('Current project AI mapping is running. Switch screens without interrupting it; finish before opening another project.');
         ++startupSequence;
         try{
           if(msg.autoResume){if(!startupSessionProceedApproved||!await storedStartupVerification())throw Error('Saved connections require verification.');await requireAutomaticStartup(String(msg.projectId||''));}
