@@ -37,3 +37,12 @@ test('Failed Jira link repair is retryable; historical content forces separately
  assert.match(host,/contentMatchesApproved\}\);/);
  assert.match(workflow,/contentMatchesApproved===false\?digest\(\{recoveredRemoteDigest:remoteDigest\}\):hash/);
 });
+
+test('No Jira Preview is rendered before all mandatory checks pass',()=>{
+ const ui=source('media/start.js'),host=source('src/lib/runtime/extension-runtime.js');
+ assert.match(host,/preflightBlocked\?'brJiraPreflight':'brJiraPlan'/);
+ assert.match(ui,/if\(m\.type==='brJiraPreflight'\)/);
+ assert.match(ui,/Jira Preview has NOT been created/);
+ assert.match(ui,/\$\('brJiraApprove'\)\.disabled=true;\$\('brJiraSync'\)\.disabled=true/);
+ assert.match(ui,/jiraPreflightBlocked\?\x60Jira Preflight blocked:/);
+});
