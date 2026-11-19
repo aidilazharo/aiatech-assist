@@ -20,6 +20,16 @@ function capture(session,{digest,sourceName,section,totalSections,attempt,report
  session.entries.push(item);
  return session;
 }
+function captureCrossSection(session,{digest,sourceName,issues,totalSections}){
+ if(!session||!session.documents.some(x=>x.digest===digest))throw Error('Unrecognized cross-section source.');
+ if(session.entries.length>=500)throw Error('Preflight report has exceeded the per-run section limit.');
+ const findings=trimList(issues,12);
+ session.entries.push({digest,sourceName:clean(sourceName,180),section:null,reviewKind:'cross-section',
+  totalSections:Number(totalSections)||1,attempt:null,at:new Date().toISOString(),status:'needs-review',
+  summary:findings.length+' evidence-backed cross-section conflict(s) require BA review.',
+  applied:[],skipped:[],issues:findings,resolutions:[]});
+ return session;
+}
 function finish(session,{state='completed',error='',crossSectionChecked=false}={}){
  if(!session)throw Error('Missing preflight report.');
  session.state=state;session.error=clean(error,3000);session.crossSectionChecked=crossSectionChecked===true;return session;
@@ -42,6 +52,8 @@ function fromSaved(projectId,documents,saved){
   for(const [index,part] of parts.entries())session.entries.push({digest:entry.digest,sourceName:session.documents.find(x=>x.digest===entry.digest)?.name||'',section:parts[0]===entry?null:index+1,totalSections:parts[0]===entry?null:parts.length,attempt:null,
    at:clean(entry.checkedAt,60),status:clean(part.status,50)||'ready',summary:clean(part.summary,1000),
    applied:trimList(part.applied,12),skipped:trimList(part.skipped,12),issues:trimList(part.issues,20),resolutions:trimList(part.resolutions,12)});
+  if(entry.crossSectionFindings?.length)captureCrossSection(session,{digest:entry.digest,
+   sourceName:session.documents.find(x=>x.digest===entry.digest)?.name||'',issues:entry.crossSectionFindings,totalSections:parts.length});
  }
  return session;
 }
@@ -71,7 +83,7 @@ function format(session,{generatedAt=new Date().toISOString()}={}){
   write('CORRECTIONS AND CHANGES BASED ON THE ORIGINAL DOCUMENT',
    'Original uploaded file: UNCHANGED. Any text corrections below apply only to preflight working text.',
    'Unapplied suggestions and provisional mapping guidance are not approved requirements.','');
-  const locations=entries.map(part=>part.section==null?'Saved aggregate summary':'Section '+part.section+'/'+part.totalSections+(part.attempt==null?' - Final check':' - Attempt '+part.attempt+'/2'));
+  const locations=entries.map(part=>part.reviewKind==='cross-section'?'Cross-section consistency review':part.section==null?'Saved aggregate summary':'Section '+part.section+'/'+part.totalSections+(part.attempt==null?' - Final check':' - Attempt '+part.attempt+'/2'));
   const corrections=entries.flatMap((part,index)=>trimList(part.applied,12).map(item=>({item,where:locations[index],ready:part.status==='ready'})));
   write('RECORDED WORKING-TEXT CORRECTIONS: '+corrections.length);
   if(!corrections.length)write('  None. No automatic source text correction was recorded.');
@@ -132,4 +144,4 @@ function format(session,{generatedAt=new Date().toISOString()}={}){
  }
  return line.join('\n').replace(/\n*$/,'\n');
 }
-module.exports={create,capture,attachWorkingBR,finish,fromSaved,filename,format};
+module.exports={create,capture,captureCrossSection,attachWorkingBR,finish,fromSaved,filename,format};
