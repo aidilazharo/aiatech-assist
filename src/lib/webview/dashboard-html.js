@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.4.30';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.4.31';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -355,7 +355,7 @@ function html(webview,{resumeLibrary=false}={}){
       <div class="ba-incomplete-actions" role="group" aria-label="Uncompleted requirement actions">
         <button id="baResumeIncomplete" type="button">Resume</button>
         <button id="baRestartIncomplete" class="secondary" type="button">Restart</button>
-        <button id="baDeleteIncomplete" class="danger" type="button" data-br-delete-action>Force Delete Everywhere</button>
+        <button id="baDeleteIncomplete" class="danger" type="button" data-br-delete-action>Delete</button>
       </div>
     </section>
     <!-- Step 1 is retained in the milestone tracker. Its only content is the
