@@ -4478,70 +4478,31 @@ function renderSoftwareUpdates(data,force=false){
  latestSoftwareUpdateState=data;
  const version=data.installedVersion||'?';
  const latestVersion=data.extensionLatest?.version||data.latest?.version||'';
- $('softwareExtensionStatus').textContent=data.extensionError?`Extension: ${data.extensionError}`:data.latest?`Extension v${data.latest.version} available (installed v${version}). Release: ${data.latest.tag}.`:data.extensionLastCheck?`Extension v${version} is up to date${latestVersion?' · latest v'+latestVersion:''} (checked ${new Date(data.extensionLastCheck).toLocaleString()}).`:`Installed extension: v${version}; not checked yet.`;
- $('softwareLibraryStatus').textContent=data.libraryError?`Library: ${data.libraryError}`:data.libraryLatest?`Library release: v${data.libraryLatest}. Pull Library Files to install the verified source archive.`:'Library: no verified release yet.';
- const extensionText=data.extensionError?'Extension latest: unavailable':latestVersion?'Extension latest: v'+latestVersion+(data.latest?' · update available':' · up to date'):'Extension latest: checking…';
- const libraryText=data.libraryError?'Library latest: unavailable':data.libraryLatest?'Library latest: v'+data.libraryLatest:'Library latest: checking…';
- $('gateLatestVersions').textContent=''; // Detailed release status remains in Check Updates and upgrade modals.
- $('viewExtensionRelease').disabled=!data.latest;
+ $('softwareExtensionStatus').textContent=data.extensionError?`Extension: ${data.extensionError}`:latestVersion&&!data.extensionLatest.installable?`Latest extension v${latestVersion}: verified VSIX or checksum not available.`:data.latest?`Extension v${data.latest.version} available (installed v${version}). Release: ${data.latest.tag}.`:data.extensionLastCheck?`Installed extension v${version}${latestVersion?' · latest v'+latestVersion:' · no public release found'} (checked ${new Date(data.extensionLastCheck).toLocaleString()}).`:`Installed extension: v${version}; not checked yet.`;
+ $('softwareLibraryStatus').textContent=data.libraryError?`Library: ${data.libraryError}`:data.libraryLatest?`Library release: v${data.libraryLatest}${data.libraryLatestAvailable?'. Pull Library Files to install the verified source archive.':'; verified ZIP or checksum not available.'}`:'Library: no public release yet.';
+ const extensionText=data.extensionError?'Extension latest: unavailable':latestVersion?'Extension latest: v'+latestVersion+(!data.extensionLatest.installable?' · package unavailable':data.latest?' · update available':''):(data.extensionLastCheck?'Extension latest: no release':'Extension latest: checking…');
+ const libraryText=data.libraryError?'Library latest: unavailable':data.libraryLatest?'Library latest: v'+data.libraryLatest+(data.libraryLatestAvailable?'':' · package unavailable'):'Library latest: checking…';
+ $('gateLatestVersions').textContent=extensionText+(data.extensionReleaseWarnings?.length?' · some sources unavailable':'')+' | '+libraryText+(data.libraryReleaseWarnings?.length?' · some sources unavailable':'');
+ $('viewExtensionRelease').disabled=!data.extensionLatest;
  $('installExtensionRelease').disabled=!data.latest;
  $('checkSoftwareUpdates').disabled=!!data.busy;
  $('pullLibraryFiles').disabled=softwareLibraryPulling||!!catalogBusyUI||!!catalogState?.busy;
- const patStatus=$('releaseDownloadPatStatus');
- if(patStatus&&!releaseDownloadPatBusy){
-  patStatus.textContent=data.releasePatSaved?'Release-only PAT is securely saved in VS Code.':'No release-only PAT saved. Public releases work without authentication.';
-  patStatus.dataset.state='';
- }
- const clearPat=$('clearReleaseDownloadPat');
- if(clearPat)clearPat.disabled=releaseDownloadPatBusy||!data.releasePatSaved;
-}
-let releaseDownloadPatBusy=false;
-function setReleaseDownloadPatBusy(busy){
- releaseDownloadPatBusy=!!busy;
- $('saveReleaseDownloadPat').disabled=releaseDownloadPatBusy;
- $('clearReleaseDownloadPat').disabled=releaseDownloadPatBusy||!latestSoftwareUpdateState?.releasePatSaved;
 }
 window.addEventListener('message',event=>{
  const m=event.data||{};
  if(m.type==='state'&&m.updates)renderSoftwareUpdates(m.updates);
  if(m.type==='softwareUpdateState')renderSoftwareUpdates(m.value);
- if(m.type==='releaseDownloadPatResult'){
-  setReleaseDownloadPatBusy(false);
-  $('releaseDownloadPat').value='';
-  const statusNode=$('releaseDownloadPatStatus');
-  statusNode.textContent=String(m.message||'Release PAT operation finished.');
-  statusNode.dataset.state=m.success?'success':m.cancelled?'':'error';
- }
-});
-$('saveReleaseDownloadPat').addEventListener('click',()=>{
- if(releaseDownloadPatBusy)return;
- const input=$('releaseDownloadPat'),token=input.value.trim();
- input.value='';
- if(!token){
-  $('releaseDownloadPatStatus').textContent='Enter a GitHub PAT to save, or leave empty for public release downloads.';
-  $('releaseDownloadPatStatus').dataset.state='error';
-  return;
- }
- setReleaseDownloadPatBusy(true);
- $('releaseDownloadPatStatus').textContent='Testing read access to the two fixed ATGV release repositories…';
- $('releaseDownloadPatStatus').dataset.state='';
- send('saveReleaseDownloadPat',{token});
-});
-$('clearReleaseDownloadPat').addEventListener('click',()=>{
- if(releaseDownloadPatBusy)return;
- setReleaseDownloadPatBusy(true);
- send('clearReleaseDownloadPat');
 });
 $('checkSoftwareUpdates').addEventListener('click',()=>{
- $('softwareExtensionStatus').textContent='Checking fixed extension release source…';
- $('softwareLibraryStatus').textContent='Checking fixed SDLC Library release source…';
+ $('softwareExtensionStatus').textContent='Checking public extension releases…';
+ $('softwareLibraryStatus').textContent='Checking public SDLC Library releases…';
  send('checkSoftwareUpdates');
 });
 $('pullLibraryFiles').addEventListener('click',()=>{
  if(softwareLibraryPulling||!!catalogBusyUI||!!catalogState?.busy)return;
  renderSoftwareLibraryPullProgress({stage:'running',percent:0,
   title:'Starting verified library release download…',
-  message:'Requesting the fixed SDLC Library GitHub Releases source. The ZIP and SHA-256 checksum must both pass verification.'});
+  message:'Requesting public SDLC Library releases. The ZIP and SHA-256 checksum must both pass verification.'});
  send('catalogPull');
 });
 $('viewExtensionRelease').addEventListener('click',()=>send('viewExtensionRelease'));

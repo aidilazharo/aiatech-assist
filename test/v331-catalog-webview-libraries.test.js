@@ -38,7 +38,11 @@ test('verified download installs once, survives offline, and rejects tampering i
   const target=path.join(first.dir,'codemirror','lib','codemirror.js');
   await fsp.appendFile(target,'\n// altered');
   assert.equal(await source.cached({storageRoot:tmp}),null);
-  await assert.rejects(source.install({catalogRoot:catalog,storageRoot:tmp,commit}),/unverified/);
+  const repaired=await source.install({catalogRoot:catalog,storageRoot:tmp,commit});
+  assert.equal(repaired.dir,first.dir);
+  assert.equal((await source.cached({storageRoot:tmp})).dir,first.dir);
+  const names=await fsp.readdir(path.join(tmp,'verified-webview-libraries'));
+  assert.ok(names.some(name=>name.startsWith('.invalid-'+commit+'-')),'tampered cache is quarantined');
  }finally{await fsp.rm(tmp,{recursive:true,force:true});}
 });
 test('cached libraries without an approved git checkout are unavailable to new installations',async()=>{

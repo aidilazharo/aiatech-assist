@@ -138,8 +138,10 @@ async function inspectZip(file){
 function releaseIdentity(release,repository,version){
  if(!release)return null;
  const match=/^v?(\d+\.\d+\.\d+)(?:-source-build\.(\d+))?$/.exec(String(release.tag||''));
- if(!match||match[1]!==version||String(release.repository||'').toLowerCase()!==repository.toLowerCase())throw Error('Invalid verified Library release identity.');
- return {tag:release.tag,build:Number(match[2]||0)};
+ const source=String(release.repository||'').toLowerCase(),canonical=repository.toLowerCase();
+ const permitted=source===canonical||(canonical==='aidilazharo/tech-stacks-skills'&&source==='aidilazharo/library');
+ if(!match||match[1]!==version||!permitted)throw Error('Invalid verified Library release identity.');
+ return {tag:release.tag,build:Number(match[2]||0),repository:source};
 }
 async function importZip({file,workspace,repositoryUrl,verifiedRelease=null}){
  const catalog=require('./github-sdlc-catalog'),p=catalog.parseRepository(repositoryUrl||'');
@@ -164,17 +166,17 @@ async function importZip({file,workspace,repositoryUrl,verifiedRelease=null}){
   const comparison=compareVersions(existing.version,archive.info.version);
   if(comparison>0||comparison===0&&!release)return {...existing,selectedSource:'zip',unchanged:true};
   if(comparison===0&&release){
-   const previous=existing.releaseTag?releaseIdentity({tag:existing.releaseTag,repository:existing.repository},existing.repository,existing.version):null;
+   const previous=existing.releaseTag?releaseIdentity({tag:existing.releaseTag,repository:existing.releaseRepository||existing.repository},existing.repository,existing.version):null;
    if(previous&&previous.build>release.build)return {...existing,selectedSource:'zip',unchanged:true};
    if(previous&&previous.tag===release.tag&&existing.archiveHash!==archiveHash)throw Error('The installed Library release tag has different archive bytes. Update stopped.');
    if(existing.archiveHash===archiveHash){
-    if(existing.releaseTag!==release.tag){
+    if(existing.releaseTag!==release.tag||existing.releaseRepository!==release.repository){
      const statePath=path.join(base(workspace),'state.json'),state=JSON.parse(await fs.readFile(statePath,'utf8'));
-     state.releaseTag=release.tag;state.releaseBuild=release.build;
+     state.releaseTag=release.tag;state.releaseBuild=release.build;state.releaseRepository=release.repository;
      const tmp=statePath+'.'+crypto.randomUUID()+'.tmp';
      try{await fs.writeFile(tmp,JSON.stringify(state,null,2)+'\n',{flag:'wx',mode:0o600});await fs.rename(tmp,statePath);}finally{await fs.rm(tmp,{force:true});}
     }
-    return {...existing,releaseTag:release.tag,releaseBuild:release.build,selectedSource:'zip',unchanged:true};
+    return {...existing,releaseTag:release.tag,releaseBuild:release.build,releaseRepository:release.repository,selectedSource:'zip',unchanged:true};
    }
   }
  }
@@ -193,7 +195,7 @@ async function importZip({file,workspace,repositoryUrl,verifiedRelease=null}){
    assets[relative]=hash(contents);
   }
   const state={schema:1,source:'zip',repository:p.owner+'/'+p.repo,archiveHash,filename:path.basename(file),
-   ...(release?{releaseTag:release.tag,releaseBuild:release.build}:{}),
+   ...(release?{releaseTag:release.tag,releaseBuild:release.build,releaseRepository:release.repository}:{}),
    version:archive.info.version,roles:archive.info.roles,techStacks:archive.info.techStacks,
    workflows:archive.info.workflows,templates:archive.info.templates,assets,installedAt:new Date().toISOString()};
   await fs.writeFile(path.join(staging,'state.json'),JSON.stringify(state,null,2)+'\n',{flag:'wx',mode:0o600});
