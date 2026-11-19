@@ -136,11 +136,17 @@ test('material preflight contradictions are retained as BA review findings witho
 test('evidence-backed cross-section conflicts are saved and never treated as a technical failure',async()=>{
  let mappings=0;
  const t=mappingHarness(async(_target,prompt)=>{
-  if(String(prompt).includes('Review mapped business claims'))return JSON.stringify({status:'needs-input',conflicts:[{
-   detail:'Approval flow cannot be both sequential and parallel',
-   first:{section:1,key:'problem',quote:'Approval must be sequential'},
-   second:{section:2,key:'problem',quote:'Approval can run in parallel'}
-  }]});
+  if(String(prompt).includes('Review mapped business claims')){
+   const claims=JSON.parse(String(prompt).split('CLAIMS:\\n').at(-1));
+   const entries=claims.filter(x=>x.key==='problem');
+   assert.ok(entries.length>=2,'different mapped source claims must be present');
+   const [left,right]=entries;
+   return JSON.stringify({status:'needs-input',conflicts:[{
+    detail:'Approval flow cannot be both sequential and parallel',
+    first:{section:left.sections[0],key:left.key,quote:left.text.slice(0,28)},
+    second:{section:right.sections[0],key:right.key,quote:right.text.slice(0,28)}
+   }]});
+  }
   return JSON.stringify({problem:++mappings===1?'Approval must be sequential':'Approval can run in parallel'});
  },{sourceText:'Document section. '.repeat(1800)});
  await t.processMapping(t.request);
