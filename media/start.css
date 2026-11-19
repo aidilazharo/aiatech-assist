@@ -2218,3 +2218,14 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
  opacity:1!important;
  cursor:not-allowed;
 }
+
+/* v0.4.47: calm prerequisite status, uncluttered footer, unambiguous project launch. */
+#startupPrerequisiteDetails>.atgv-tool-scan-status:hover,
+#startupPrerequisiteDetails>.atgv-tool-scan-status:active,
+#startupPrerequisiteDetails>.atgv-tool-scan-status:focus,
+#startupPrerequisiteDetails>.atgv-tool-scan-status:focus-visible {background:transparent!important;box-shadow:none!important;}
+#startupPermissionChecks,#startupCopilotCard {display:none!important;}
+#startupSetup .atgv-startup-footer,#gateFinder .gate-search-footer {border-top:0!important;margin-top:12px!important;padding-top:0!important;}
+#gateFinder .gate-search-footer #gateAutoMessage:empty {display:none!important;}
+#gateFinder.is-opening .gate-result button:disabled {background:#383b42!important;color:#c8cbd1!important;border:1px solid #50535b!important;opacity:1!important;cursor:not-allowed;}
+#gateFinder.is-opening .gate-result button:disabled:focus-visible {outline-color:var(--vscode-focusBorder);}
