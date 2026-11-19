@@ -25,10 +25,14 @@ test('working BR follows the BA template and contains the validated text used fo
  assert.ok(draft.checks.every(item=>item.status==='PASS'));
  assert.equal(source.text,original);
 });
-test('working BR rejects missing sections, blockers, invented edits and unverified guidance',()=>{
+test('working BR rejects malformed evidence but retains reviewable source blockers',()=>{
  const r=result();
  assert.throws(()=>working.prepare(source,['incomplete'],[r]),/coverage/);
- assert.throws(()=>working.prepare(source,[original],[{...r,ready:false}]),/blocker/);
+ assert.throws(()=>working.prepare(source,[original],[{...r,ready:false}]),/incomplete or invalid/);
+ const contradiction=preflight.parse(JSON.stringify({status:'needs-input',summary:'Conflicting approval policy',edits:[],issues:[{severity:'blocker',category:'contradiction',detail:'The same approval must be both accepted and rejected.'}]}),original);
+ const draft=working.prepare(source,[original],[contradiction]);
+ assert.match(draft.sections[0].guidance,/UNRESOLVED BA SOURCE FINDINGS/);
+ assert.equal(draft.checks[3].status,'FINDINGS — BA REVIEW REQUIRED');
  assert.throws(()=>working.prepare(source,[original],[{...r,effectiveText:'changed without evidence'}]),/outside the validated corrections/);
  assert.throws(()=>working.prepare(source,[original],[{...r,resolutions:[{...r.resolutions[0],resolution:'invented'}]}]),/Unrecognized/);
  assert.throws(()=>working.prepare(source,[original],[{...r,resolutions:[{...r.resolutions[0],sourceExcerpt:'invented quotation'}]}]),/unverified source excerpt/);

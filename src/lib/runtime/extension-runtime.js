@@ -2188,7 +2188,7 @@ async function processSelectedDiscoverySources(msg){
       if(baLargeDocumentRecovery.isCheckpointRecord(savedPreflight,'preflight')){
        result=baLargeDocumentRecovery.preflight(section.text);run.preflightOffline=true;run.sourceOnlyPreflight=true;
       }else{
-       try{const restored=baDocumentPreflight.parse(savedPreflight,section.text);if(restored.ready)result=restored;}catch{}
+       try{const restored=baDocumentPreflight.parse(savedPreflight,section.text);if(restored&&Array.isArray(restored.issues))result=restored;}catch{}
       }
       if(result)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Resuming: using saved '+(result.degraded?'source-only review':'AI preflight')+' for '+source.name+label+'…'});
      }
@@ -2201,7 +2201,7 @@ async function processSelectedDiscoverySources(msg){
       try{
        const ai=await requestSourcePreflight(target,prompt,run);
        check();result=baDocumentPreflight.parse(ai,section.text);
-       if(result.ready&&checkpoint){saveCheckpointEntry(checkpoint,'preflight',promptKey,ai,100);await persistCheckpoint();}
+       if(checkpoint){saveCheckpointEntry(checkpoint,'preflight',promptKey,ai,100);await persistCheckpoint();}
        break;
       }catch(error){
        check();
@@ -2241,9 +2241,14 @@ async function processSelectedDiscoverySources(msg){
     }
     if(retrySmaller){part--;continue;}
     if(!result?.ready){
-     const blockers=(result?.blockers||[]).map(x=>x.detail).slice(0,3).join(' | ');
-     const problem=blockers||'AI could not safely resolve all document testability concerns.';
-     throw Error(source.name+label+': document needs Business Analyst clarification before mapping. '+problem+' Original document preserved; no unsupported requirements invented.');
+     // Valid AI findings are BA review items, not a technical mapping failure.
+     // Keep the original evidence and continue producing an UNAPPROVED draft.
+     if(!result||!Array.isArray(result.blockers)||!result.blockers.length)
+      throw Error(source.name+label+': AI preflight did not produce reviewable evidence. Retry or resume mapping.');
+     await recordBAProcess({stage:'preflight',action:'section-'+(part+1)+'-review-required',status:'needs-review',
+      details:'Business-rule findings retained for BA review; original source unchanged.'});
+     await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',
+      message:'Business-rule finding in '+source.name+label+'. Mapping continues as a draft; BA acknowledgement is required before approval.'});
     }
     reports.push(result);
     await recordBAProcess({stage:'preflight',action:'section-'+(part+1)+'-of-'+sections.length,
@@ -2332,6 +2337,7 @@ async function processSelectedDiscoverySources(msg){
    if(workingSession)baPreflightReports.attachWorkingBR(workingSession,{digest:selected[i],ref:workingRef,checks:working.checks});
    const proposals=baBrTextPipeline.mergeForDiscovery(partAnswers,preparedUnits);
    let crossSectionChecked=false;
+   const crossConflicts=[];
    if(sections.length>1&&!run.mappingOffline){
     check();run.phase='preflight';run.timeout=false;
     await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Comparing mapped requirements across all '+sections.length+' document sections…'});
@@ -2349,12 +2355,21 @@ async function processSelectedDiscoverySources(msg){
       else answer=await requestSourceAI(target,crossPrompt+(attempt>1?'\n\nRECOVERY: Return valid evidence-backed JSON only. Missing details are not contradictions.':''),run,{maxChars:12000,timeoutMs:baLargeDocumentRecovery.timeout('cross',!!run.largeSource)});
       check();
       const review=baDocumentPreflight.parseCrossSection(answer,partAnswers);
-      if(review.conflicts.length)throw Object.assign(Error(source.name+': conflicting business requirements need BA clarification: '+review.conflicts.map(item=>String(item.detail).slice(0,250)).slice(0,3).join(' | ')),{code:'ATGV_BUSINESS_CONFLICT'});
+      // Conflicts must carry quotes validated against BOTH mapped sections.
+      // Preserve them as approval-blocking BA findings, not fatal AI errors.
+      for(const item of review.conflicts){
+       const first=item.first,second=item.second;
+       crossConflicts.push({severity:'blocker',category:'contradiction',
+        detail:String(item.detail).slice(0,400),
+        sourceExcerpt:'Section '+first.section+' ('+first.key+'): '+String(first.quote).slice(0,240),
+        suggestion:'Compare section '+first.section+' ('+first.key+') with section '+second.section+' ('+second.key+'): '+String(second.quote).slice(0,240)+'. Resolve or explicitly acknowledge before BR approval.'});
+      }
+      if(crossConflicts.length)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',
+       message:crossConflicts.length+' cross-section conflict(s) recorded for BA review. Completed mappings are retained; no Jira changes are made.'});
       if(checkpoint){saveCheckpointEntry(checkpoint,'cross',crossKey,answer,5);await persistCheckpoint();}
       crossSectionChecked=true;crossError=null;break;
      }catch(error){
       check();
-      if(error.code==='ATGV_BUSINESS_CONFLICT')throw error;
       if(baTimeoutSimplified.timedOut(error)&&await offerSimpleDraftAfterTimeout(run,error)){
        run.mappingOffline=true;run.sourceOnlyPreflight=true;crossError=error;break;
       }
@@ -2374,12 +2389,20 @@ async function processSelectedDiscoverySources(msg){
    await recordBAProcess({stage:'cross-section',action:'consistency-review',status:crossSectionChecked?'verified':'not-verified',
     details:'Cross-section AI check '+(crossSectionChecked?'completed':'not verified; BA review required')+'.'});
    const partialVerification=run.sourceOnlyPreflight||run.mappingOffline||(sections.length>1&&!crossSectionChecked);
+   const needsAnalystReview=partialVerification||crossConflicts.length>0||reports.some(x=>!x.ready);
    const reviewIssues=partialVerification?[{severity:'warning',category:'ai-verification',detail:'One or more AI analysis stages could not be verified. Source-only extraction and full original document are available; BA review is required before approval.',sourceExcerpt:'',suggestion:'Review all source-backed requirements and open decisions before approving or publishing.'}]:[];
-   const report={status:partialVerification?'needs-review':'ready',crossSectionChecked,summary:run.skipAiChecks?baTimeoutSimplified.MARKER+'. Source-only recovery completed; all AI checks are unverified and BA review is required.':partialVerification?'Source-only recovery completed; AI validation is incomplete. The uploaded original and full working BR were preserved. BA review required.':sections.length>1?'All '+sections.length+' document sections and their mapped claims were reviewed; source remains unchanged.':reports[0].summary,
+   const report={status:needsAnalystReview?'needs-review':'ready',crossSectionChecked,summary:run.skipAiChecks?baTimeoutSimplified.MARKER+'. Source-only recovery completed; all AI checks are unverified and BA review is required.':crossConflicts.length?'Found '+crossConflicts.length+' evidence-backed cross-section conflict(s). Draft mapping saved for Business Analyst review; original unchanged.':needsAnalystReview?'Draft mapping saved with unresolved BA findings. Review the evidence before approval.':sections.length>1?'All '+sections.length+' document sections and their mapped claims were reviewed; source remains unchanged.':reports[0].summary,
     applied:reports.flatMap(x=>x.applied).slice(0,12),
     skipped:reports.flatMap(x=>x.skipped||[]).slice(0,12),
-    issues:[...reports.flatMap(x=>x.issues),...reviewIssues].slice(0,16),
-    resolutions:reports.flatMap(x=>x.resolutions||[]).slice(0,12),sections:reports,workingBR:workingRef,checks:working.checks};
+    issues:[...crossConflicts,...reports.flatMap(x=>x.issues),...reviewIssues].slice(0,16),
+    resolutions:reports.flatMap(x=>x.resolutions||[]).slice(0,12),sections:reports,workingBR:workingRef,checks:working.checks,crossSectionFindings:crossConflicts};
+   if(crossConflicts.length){
+    const session=documentPreflightSessions.get(run.projectId);
+    if(session)baPreflightReports.captureCrossSection(session,{digest:selected[i],sourceName:source.name,issues:crossConflicts,totalSections:sections.length});
+    await dashboard?.webview.postMessage({type:'discoverySourcePreflight',sourceName:source.name,digest:selected[i],
+     phase:'needs-review',status:'needs-review',summary:report.summary,applied:[],issues:crossConflicts,resolutions:[],
+     section:sections.length,totalSections:sections.length,attempt:1});
+   }
    preflights.push(baDocumentPreflight.evidence(report,selected[i]));
    mappedProposals.push({filename:source.name,answers:proposals,units:preparedUnits.map((unit,index)=>({sourceDigest:unit.sourceDigest,filename:unit.filename,digest:unit.digest,brIndex:unit.brIndex,partIndex:unit.partIndex,parts:unit.parts,characters:unit.characters,answers:partAnswers[index]}))});
   }
@@ -7714,7 +7737,12 @@ async function handleDashboardMessage(msg){
         const saved=await discovery.load(registry,activeProject.id),register=await brWorkflow.load(registry,activeProject.id);
         if(saved.readiness.filled!==saved.readiness.total||register.discoveryRevision!==saved.revision||!register.importEpoch)throw Error('Save all 12 discovery answers before skipping AI Review.');
         if(register.reviewText){let prior;try{prior=JSON.parse(register.reviewText);}catch{}if(prior?.applied)throw Error('Applied suggestions have already been saved. You cannot skip an applied review.');}
-        const actor=await verifiedBAActor();const updated=await brWorkflow.skipReview(registry,activeProject.id,register.revision,{discoveryRevision:saved.revision,actor});
+        const sourceFindings=brWorkflow.sourceReviewFindings(register);
+        if(sourceFindings.length){
+         const decision=await uiWarning('Source mapping has '+sourceFindings.length+' unresolved Business Analyst finding(s). Skipping AI Review does not resolve these requirements or approve Jira changes. Review the documented evidence before continuing.',{modal:true},'Acknowledge Source Findings');
+         if(decision!=='Acknowledge Source Findings')break;
+        }
+        const actor=await verifiedBAActor();const updated=await brWorkflow.skipReview(registry,activeProject.id,register.revision,{discoveryRevision:saved.revision,actor,acknowledgeSourceFindings:sourceFindings.length>0});
         await dashboard?.webview.postMessage({type:'brUpdated',register:updated});break;
       }
       case 'confirmDiscoveryReview':{
@@ -7724,10 +7752,11 @@ async function handleDashboardMessage(msg){
         if(saved.readiness.filled!==saved.readiness.total||register.discoveryRevision!==saved.revision||register.reviewRevision!==saved.revision)
           throw Error('Complete and save discovery, then run AI Review before continuing.');
         let review;try{review=JSON.parse(register.reviewText||'{}');}catch{throw Error('AI Review data is invalid. Re-run AI Review.');}
-        const unresolved=review.readiness==='Needs attention'||(review.suggestions||[]).some(item=>item.severity==='Critical');
+        const sourceFindings=brWorkflow.sourceReviewFindings(register);
+        const unresolved=review.readiness==='Needs attention'||(review.suggestions||[]).some(item=>item.severity==='Critical')||sourceFindings.length>0;
         if(unresolved){
-          const count=(review.suggestions||[]).length;
-          const decision=await uiWarning(`AI Review has ${count} outstanding finding(s), including potentially undefined business rules. Acknowledging does NOT resolve these findings or automatically approve the Business Requirements. Confirm that you have reviewed the source evidence and accept responsibility for the documented risks. You must still resolve any open Discovery decisions and obtain required Business Owner approval.`,{modal:true},'Acknowledge Findings');
+          const count=(review.suggestions||[]).length+sourceFindings.length;
+          const decision=await uiWarning(`AI Review and source-document validation have ${count} outstanding finding(s), including ${sourceFindings.length} source finding(s). Acknowledging records BA review of the evidence, NOT resolution of conflicting business policies or automatic approval of the BR/Jira work. Confirm that you understand the documented risks, and resolve open business decisions before final approval.`,{modal:true},'Acknowledge Findings');
           if(decision!=='Acknowledge Findings'){
             await dashboard?.webview.postMessage({type:'baReviewConfirmResult',success:false,cancelled:true,
               message:'AI findings acknowledgement cancelled. No BR or Jira changes were saved.'});

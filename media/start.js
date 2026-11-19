@@ -6070,9 +6070,12 @@ function openBRComparison(id){
 $('brCompareClose').addEventListener('click',()=>{$('brCompareModal').classList.add('hidden');$('brCompareModal').setAttribute('aria-hidden','true');});
 $('brCompareModal').addEventListener('click',e=>{if(e.target===e.currentTarget)$('brCompareClose').click();});
 function discoveryHasReviewBlockers(){
- let result;try{result=JSON.parse(brState?.reviewText||'');}catch{return false;}
- const issues=result.readiness==='Needs attention'||(result.suggestions||[]).some(x=>x.severity==='Critical');
- return !!issues&&brState?.reviewRiskAccepted?.revision!==brState?.discoveryRevision;
+ let result={};try{result=JSON.parse(brState?.reviewText||'{}');}catch{}
+ const sourceFindings=(brState?.mappingCompleted?.preflights||[]).some(item=>item?.status==='needs-review');
+ const issues=sourceFindings||result.readiness==='Needs attention'||(result.suggestions||[]).some(x=>x.severity==='Critical');
+ const accepted=brState?.reviewRiskAccepted?.revision===brState?.discoveryRevision&&
+  brState?.reviewRiskAccepted?.sourceFingerprint===brState?.importDigest;
+ return !!issues&&!accepted;
 }
 function renderPublishedJira(){
  $('brOpenDelivery').classList.toggle('hidden',!Object.keys(brState?.synced||{}).length);

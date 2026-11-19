@@ -1,19 +1,17 @@
-# ATGV AIATECH Assist v0.4.42
+# ATGV AIATECH Assist v0.4.43
 
-## Shared durable Workflow Jobs engine — cross-role foundation
+## Fix: BA mapping conflicts remain reviewable
 
-- Introduce `src/atgv-job-engine.js`, a persistent, centralized workflow journal with SQLite storage where supported by the VS Code extension host (Node.js 22.13+) and an atomic, permission-restricted JSON fallback.
-- Track long-running Business Analyst, Solution Architect, UI/UX Designer, Developer, Project Manager, startup, library and remote integration operations using the same job IDs, state model, metadata and diagnostic controls.
-- Record verified section checkpoints for Business Requirements AI mapping while preserving existing authenticated AI mapping checkpoints, original DOCX/PDF files, saved reviews, and approval gates.
-- Store metadata and SHA-256 hashes only; never persist AI prompts, source document text, GitHub PATs, Jira tokens, or other credentials in workflow histories.
-- After a host interruption, classify uncompleted AI/read operations as interrupted and remote writes/installations as needing reconciliation. Never automatically resubmit Jira, Confluence, GitHub writes or server installs.
-- Add a global **Workflow Jobs** icon, per-job status, phase, progress, sanitized failure information, and an explicit Prepare Resume action for eligible AI/read operations. Actual retries are initiated from existing role workflows after input and permission verification.
-- Provide reusable bounded exponential-backoff retry logic for AI/read calls. Remote writes and installs are prohibited from automatic retry.
-- Add regression tests for crash recovery, SQLite/fallback storage, identity checks, stage checkpoints, retry boundaries, symlink protection and UI/host integration.
+- Process every extracted Markdown BR section in order, preserving resumable AI preflight and mapping checkpoints.
+- Do not discard completed mappings when a validated preflight or cross-section check reports potentially conflicting business rules.
+- Record unresolved source and cross-section findings in the saved requirements mapping and downloadable BA preflight report, including section and evidence excerpts.
+- Display findings for Business Analyst review instead of returning a fatal `processDiscoverySources` error.
+- Require explicit source-revision-linked BA acknowledgement when confirming or skipping AI Review. Acknowledgement does not modify the original source or automatically approve any Jira issue.
+- Preserve existing approval, source-integrity, and Jira publication safeguards. AI failure without reviewable evidence remains a technical error.
+- Add regressions for preflight contradictions, cross-section contradictions, acknowledgement detection and the former fatal-error behaviour.
 
-## Rollout and compatibility
+## Compatibility
 
-- All existing BA, SA, UX, Developer, PM, library and Jira actions remain in place; the shared journal wraps their existing operation handlers rather than migrating all business logic at once.
-- The BA source-mapping pipeline still uses its existing integrity-protected per-section AI resume mechanism; new shared job checkpoints augment rather than replace that domain-specific state.
-- Future stages can attach role-specific recovery adapters. Generic Prepare Resume never runs arbitrary old commands because permissions, remote work and source revisions may have changed.
-- Project approval, Jira preview, publication and external updates retain independent confirmations and reconciliation gates.
+- No project-register schema migration is required. Previously approved BRs and linked Jira items are not modified by the update.
+- A changed uploaded document or fresh discovery revision invalidates the previous acknowledgement and must be reviewed again.
+- The original uploaded document remains unchanged. Cross-section warnings remain open business decisions until the BA resolves or accepts their documented risk.

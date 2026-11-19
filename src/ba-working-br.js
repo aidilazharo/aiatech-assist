@@ -14,10 +14,10 @@ function prepare(source,sections,reports){
  if(!Array.isArray(sections)||!sections.length||sections.length>64||sections.some(text=>typeof text!=='string')||sections.join('')!==source.text)throw Error('Working BR source coverage validation failed.');
  if(!Array.isArray(reports)||reports.length!==sections.length)throw Error('All document sections must finish preflight before mapping.');
  const workingSections=[],guidance=[];let correctionCount=0;
- const verificationIncomplete=reports.some(x=>x.degraded===true||x.status==='needs-review');
+ const verificationIncomplete=reports.some(x=>x.degraded===true||x.status==='needs-review'||x.ready===false);
  for(let i=0;i<sections.length;i++){
   const report=reports[i];
-  if(!report||report.ready!==true||!Array.isArray(report.blockers)||report.blockers.length)throw Error('A preflight blocker must be resolved before mapping.');
+  if(!report||typeof report.ready!=='boolean'||!Array.isArray(report.blockers)||!Array.isArray(report.issues)||!Array.isArray(report.applied)||!Array.isArray(report.resolutions)||!report.ready&&!report.blockers.length)throw Error('Preflight results are incomplete or invalid for source-backed mapping.');
   let text=sections[i];
   for(const edit of report.applied||[]){
    if(!preflight.safeEdit(edit.before,edit.after,text))throw Error('Working BR correction validation failed.');
@@ -29,13 +29,15 @@ function prepare(source,sections,reports){
    if(item.sourceExcerpt&&!sections[i].includes(item.sourceExcerpt))throw Error('Working BR contains an unverified source excerpt.');
    guidance.push({section:i+1,...item});
   }
-  workingSections.push({text,guidance:preflight.mappingGuidance(report)});
+  const openQuestions=report.blockers.map(item=>String(item.detail||'').trim()).filter(Boolean).slice(0,12);
+  const reviewNotice=openQuestions.length?'\n\nUNRESOLVED BA SOURCE FINDINGS (not approved policies; preserve uncertainty in open questions):\n'+openQuestions.map((item,index)=>(index+1)+'. '+item.slice(0,400)).join('\n'):'';
+  workingSections.push({text,guidance:preflight.mappingGuidance(report)+reviewNotice});
  }
  const checks=[
   {label:'Complete extracted source coverage',status:'PASS'},
   {label:'Working-copy spelling corrections validated',status:'PASS'},
   {label:'Curated guidance identified as provisional',status:'PASS'},
-  {label:'AI preflight quality and contradiction review',status:verificationIncomplete?'NOT VERIFIED — BA REVIEW REQUIRED':'PASS'}
+  {label:'AI preflight quality and contradiction review',status:reports.some(x=>x.ready===false)?'FINDINGS — BA REVIEW REQUIRED':verificationIncomplete?'NOT VERIFIED — BA REVIEW REQUIRED':'PASS'}
  ];
  let maxFence=3;for(const match of source.text.matchAll(/~+/g))maxFence=Math.max(maxFence,match[0].length+1);
  const fence='~'.repeat(maxFence);

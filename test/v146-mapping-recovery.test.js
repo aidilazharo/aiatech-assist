@@ -23,7 +23,7 @@ function mappingHarness(aiAnswer,opts={}){
   brWorkflow:{async load(){return register;},async commitSourceMapping(_r,_id,revision,changes){
    assert.equal(revision,7);assert.deepEqual([...changes.digests],[digest]);commits++;
    if(opts.failFirstCommit&&commits===1)throw Error('Simulated commit interruption');
-   events.push({type:'commit'});return {revision:8,mappingCompleted:{proposals:changes.proposals}};
+   events.push({type:'commit',preflights:changes.preflights});return {revision:8,mappingCompleted:{proposals:changes.proposals}};
   }},
   async activeAiTarget(){return {label:'Test model'};},
   async roleSkillPrompt(){return opts.roleSkill||'';},
@@ -119,15 +119,43 @@ test('retry does not reuse mapping from a different AI-updated working copy',asy
  assert.match(prompts[0],/Please add name once\./);
  assert.match(prompts[1],/Please add namme once\./);
 });
-test('mapping completes each Markdown unit before the next and never commits a later blocked unit',async()=>{
+test('material preflight contradictions are retained as BA review findings without losing mapped sections',async()=>{
  let mappingCalls=0;
- const opts={sourceText:'A'.repeat(30000)+'\nSECOND SECTION: permissions conflict.',preflightResponse:prompt=>prompt.includes('SECOND SECTION')?
+ const opts={sourceText:'A'.repeat(30000)+'\nSECOND SECTION: permissions conflict.',realPrompt:true,preflightResponse:prompt=>prompt.includes('SECOND SECTION')?
   {status:'needs-input',summary:'Conflict',edits:[],issues:[{severity:'blocker',category:'contradiction',detail:'Permissions conflict over access',suggestion:'Ask the owner'}]}:
   {status:'ready',summary:'Checked',edits:[],issues:[]}};
- const t=mappingHarness(async()=>{mappingCalls++;return '{"problem":"A"}';},opts);
- await assert.rejects(t.processMapping(t.request),/clarification before mapping/);
- assert.ok(mappingCalls>=1,'earlier verified Markdown units may map but no partial result is committed');
- assert.equal(t.commits,0);
+ const t=mappingHarness(async(_target,prompt)=>String(prompt).includes('Review mapped business claims')?'{"status":"consistent","conflicts":[]}':(mappingCalls++,'{"problem":"A"}'),opts);
+ await t.processMapping(t.request);
+ assert.ok(mappingCalls>=2,'all Markdown units must still be mapped');
+ assert.equal(t.commits,1);
+ const evidence=t.events.find(x=>x.type==='commit').preflights[0];
+ assert.equal(evidence.status,'needs-review');
+ assert.ok(evidence.issues.some(x=>x.category==='contradiction'&&x.severity==='blocker'));
+ assert.ok(t.events.some(x=>x.type==='discoveryImportDone'));
+});
+test('evidence-backed cross-section conflicts are saved and never treated as a technical failure',async()=>{
+ let mappings=0;
+ const t=mappingHarness(async(_target,prompt)=>{
+  if(String(prompt).includes('Review mapped business claims')){
+   const claims=JSON.parse(String(prompt).split('CLAIMS:'+String.fromCharCode(10)).at(-1));
+   const entries=claims.filter(x=>x.key==='problem');
+   assert.ok(entries.length>=2,'different mapped source claims must be present');
+   const [left,right]=entries;
+   return JSON.stringify({status:'needs-input',conflicts:[{
+    detail:'Approval flow cannot be both sequential and parallel',
+    first:{section:left.sections[0],key:left.key,quote:left.text.slice(0,28)},
+    second:{section:right.sections[0],key:right.key,quote:right.text.slice(0,28)}
+   }]});
+  }
+  return JSON.stringify({problem:++mappings===1?'Approval must be sequential':'Approval can run in parallel'});
+ },{sourceText:'Document section. '.repeat(1800),realPrompt:true});
+ await t.processMapping(t.request);
+ assert.ok(mappings>=2);
+ assert.equal(t.commits,1);
+ const saved=t.events.find(x=>x.type==='commit').preflights[0];
+ assert.equal(saved.status,'needs-review');
+ assert.equal(saved.crossSectionChecked,true);
+ assert.ok(saved.issues.some(x=>x.category==='contradiction'&&x.sourceExcerpt.includes('Section 1')));
 });
 test('invalid AI mapping is retried once before a complete proposal is committed',async()=>{
  let calls=0;
@@ -248,4 +276,15 @@ test('completed history appears only on Start and mapping exposes Stop/Retry',()
  assert.match(ui,/send\('stopDiscoverySourceMapping'\)/);
  assert.match(host,/case 'stopDiscoverySourceMapping'/);
  assert.doesNotMatch(ui,/topNoticeQueue=topNoticeQueue\.filter\(/);
+});
+
+// Source review findings must remain independently detectable after mapping.
+test('saved mapping blockers require explicit source-revision review',()=>{
+ const workflow=require('../src/br-workflow');
+ const unresolved={mappingCompleted:{preflights:[{digest:'a'.repeat(64),status:'needs-review',issues:[
+  {severity:'blocker',category:'contradiction',detail:'Conflicting EXCO approval sequencing'}]}]}};
+ const findings=workflow.sourceReviewFindings(unresolved);
+ assert.equal(findings.length,1);
+ assert.match(findings[0].issue,/EXCO approval/);
+ assert.equal(workflow.sourceReviewFindings({mappingCompleted:{preflights:[{status:'ready',issues:[]}]}}).length,0);
 });
