@@ -6456,6 +6456,7 @@ function brApprovalPrerequisites(br){
  const add=(key,message)=>blockers.push({key,message});
  const independent=!!roleSettings?.enabled?.includes('business-owner');
  if(!br||br.status!=='draft')add('draft','Only a draft Business Requirement can be approved.');
+ if(br?.status==='draft'&&!br.draftSavedAt)add('draftSaved','Open Preview & Save and save this exact draft before approving it.');
  if(brReadOnly)add('ownership','The document is read-only. Use Assign to Me in Business Requirements Documents, or request a transfer from its owner.');
  if(baBusyTask||brEditorSaving)add('busy','Wait for the current operation to complete.');
  if(!baReviewCurrent())add('review','Run AI Review against the latest saved Discovery answers.');
@@ -6503,6 +6504,7 @@ function updateBREditorActions(){
  guidance.classList.toggle('hidden',!draft||!blockers.length);list.replaceChildren();
  const resolutionButtons={
   discovery:['Resolve Discovery Questions','brApprovalEditDiscovery'],
+  draftSaved:['Open Preview & Save','previewSave'],
   review:['Open AI Review','brApprovalReviewAI'],
   ownership:['Open Document Ownership','ownership'],
   businessOwner:['Open Business Owner Role','businessOwner'],
@@ -6523,6 +6525,7 @@ function updateBREditorActions(){
     if(action==='brApprovalEditDiscovery'){openDiscoveryQuestionsFromApproval();return;}
     if(action==='brApprovalReviewAI'){openAIReviewFromApproval();return;}
     if(!closeBREditor())return;
+    if(action==='previewSave'){openBAWorkflowStep('save');return;}
     if(action==='ownership'){
      baReopenDocuments=true;renderDiscoverySummary();
      const card=[...document.querySelectorAll('#brCards .br-card')].find(item=>item.textContent.includes(br.id+' · '));
