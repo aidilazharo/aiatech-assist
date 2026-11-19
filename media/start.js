@@ -4964,16 +4964,8 @@ function baReviewFinalized(){
  return !!(review.skipped||review.applied||review.confirmed||(brState?.brs||[]).some(br=>br.status!=='retired'&&br.source?.discoveryRevision===brState.discoveryRevision));
 }
 function refreshBAHeadingProgress(){
- const sources=brState?.sourceDocuments||[];
- const sourceTrack=$('sourceCapacityProgress');
- const sourceFill=$('sourceCapacityProgressFill');
- if(sourceTrack&&sourceFill){
-  const loading=discoveryImportBusy||baBusyTask==='import';
-  sourceTrack.classList.toggle('is-running',loading);
-  sourceFill.style.width=loading?'35%':Math.min(100,sources.length*100)+'%';
-  sourceTrack.setAttribute('aria-label',loading?'Uploading or processing source documents':`${sources.length} of 1 document uploaded`);
-  if(loading)sourceTrack.removeAttribute('aria-valuenow');else sourceTrack.setAttribute('aria-valuenow',String(sources.length));
- }
+ // The document count pill replaces the redundant full-width capacity bar.
+ // Keep the hook for older view controllers without creating a progress element.
 }
 function sourceLifecycleForUI(doc){
  const selected=brState?.processedSources||[];
@@ -5008,8 +5000,11 @@ function renderSourcePreflight(){
  $('baSourcePreflightTitle').textContent=running?'AI document preflight · checking…':phase==='ready'?'AI document preflight · ready':phase==='blocked'?'AI document preflight · needs attention':'AI document preflight';
  $('baSourcePreflightMessage').textContent=info.summary||'Checking source quality and potential Developer RED/GREEN test blockers without changing the original uploaded file.';
  const fixes=Array.isArray(info.applied)?info.applied.length:0;
- const risks=(info.issues||[]).filter(x=>x.severity==='warning').length;
- $('baSourcePreflightCounts').textContent=`${fixes} safe text correction(s) · ${(info.resolutions||[]).length} industry-standard recommendation(s) · ${risks} warning(s) · Original unchanged`;
+ const resolvedIssues=new Set((info.resolutions||[]).map(x=>String(x.issue||'').trim().toLowerCase()));
+ const unresolvedIssues=(info.issues||[]).filter(x=>!resolvedIssues.has(String(x.detail||'').trim().toLowerCase()));
+ const risks=unresolvedIssues.filter(x=>x.severity==='warning').length;
+ const blockers=unresolvedIssues.filter(x=>x.severity==='blocker').length;
+ $('baSourcePreflightCounts').textContent=`${fixes} safe text correction(s) · ${(info.resolutions||[]).length} industry-standard recommendation(s) (provisional) · ${risks} unresolved warning(s) · ${blockers} business blocker(s) · Original unchanged`;
  const detail=$('baSourcePreflightFindings');detail.replaceChildren();
  for(const fix of (info.applied||[]).slice(0,5)){
   const li=document.createElement('li');li.textContent=`Working BR: “${String(fix.before||'').slice(0,90)}” → “${String(fix.after||'').slice(0,90)}”`;detail.append(li);
@@ -5017,8 +5012,7 @@ function renderSourcePreflight(){
  for(const item of (info.resolutions||[]).slice(0,8)){
   const li=document.createElement('li');li.textContent='AI default ('+item.standard+', provisional): '+item.resolution;detail.append(li);
  }
- const resolvedIssues=new Set((info.resolutions||[]).map(x=>String(x.issue||'').trim().toLowerCase()));
- for(const item of (info.issues||[]).filter(x=>!resolvedIssues.has(String(x.detail||'').trim().toLowerCase())).slice(0,8)){
+ for(const item of unresolvedIssues.slice(0,8)){
   const li=document.createElement('li');li.textContent=(item.severity==='blocker'?'Unresolved business conflict: ':'AI observation: ')+item.detail+(item.suggestion?' — '+item.suggestion:'');detail.append(li);
  }
 }

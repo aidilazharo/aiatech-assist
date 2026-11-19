@@ -18,6 +18,7 @@ function mappingHarness(aiAnswer,opts={}){
   AbortController,Map,Set,Error,Array,JSON,Number,Object,String,Date,crypto:require('node:crypto'),
   setTimeout:opts.setTimeout||setTimeout,clearTimeout,
   activeDiscoveryMappingRun:null,activeProject:{id:'tc'},registry:opts.registry||{},
+  cfg:()=>({get:()=>false}),
   requireOpened(){},async requireBAOwner(){},
   brWorkflow:{async load(){return register;},async commitSourceMapping(_r,_id,revision,changes){
    assert.equal(revision,7);assert.deepEqual([...changes.digests],[digest]);commits++;
@@ -121,13 +122,13 @@ test('invalid AI mapping is retried once before a complete proposal is committed
  await t.processMapping(t.request);
  assert.equal(calls,2);
  assert.equal(t.commits,1);
- assert.ok(t.events.some(row=>row.phase==='mapping'&&/Retrying/.test(row.message)));
+ assert.ok(t.events.some(row=>row.phase==='mapping'&&/Recovering|Retrying/.test(row.message)));
 });
-test('two invalid mappings leave the register unchanged and report a retryable error',async()=>{
+test('three invalid mappings leave the register unchanged after bounded automatic recovery',async()=>{
  let calls=0;
  const t=mappingHarness(async()=>{calls++;return 'not JSON';});
- await assert.rejects(t.processMapping(t.request),/invalid response twice/);
- assert.equal(calls,2);
+ await assert.rejects(t.processMapping(t.request),/could not recover safely after 3 attempt/);
+ assert.equal(calls,3);
  assert.equal(t.commits,0);
  assert.equal(t.events.some(row=>row.type==='discoveryImportResult'),false);
 });
@@ -135,7 +136,7 @@ test('per-source AI timeouts do not commit partial discovery or Jira changes',as
  const t=mappingHarness((_target,_prompt,_limit,{signal})=>new Promise((_resolve,reject)=>{
   signal.addEventListener('abort',()=>reject(Object.assign(Error('aborted'),{name:'AbortError'})),{once:true});
  }),{setTimeout:(callback)=>setTimeout(callback,20)});
- await assert.rejects(t.processMapping(t.request),/timed out after 180 seconds/);
+ await assert.rejects(t.processMapping(t.request),/could not recover safely after 3 attempt/);
  assert.equal(t.commits,0);
  assert.equal(t.events.some(x=>x.type==='discoveryImportResult'),false);
 });
@@ -156,9 +157,9 @@ test('slow preflight retries in smaller sections, covers the full source and the
 test('repeated preflight timeouts stop safely after a bounded retry',async()=>{
  let calls=0;
  const t=mappingHarness(async()=>'{"problem":"Unexpected mapping"}',{sourceText:'short requirement',setTimeout:callback=>setTimeout(callback,15),preflightAnswer:()=>{calls++;return new Promise(()=>{});}});
- await assert.rejects(t.processMapping(t.request),/preflight timed out twice/);
- assert.equal(calls,2);assert.equal(t.commits,0);
- assert.ok(t.events.some(row=>/Retrying this section once/.test(row.message||'')));
+ await assert.rejects(t.processMapping(t.request),/AI preflight could not complete after three recovery attempts/);
+ assert.equal(calls,3);assert.equal(t.commits,0);
+ assert.ok(t.events.some(row=>/Recovering from an incomplete or timed-out AI response/.test(row.message||'')));
  assert.equal(t.events.some(row=>row.type==='discoveryImportResult'),false);
 });
 test('stopping during preflight aborts without retrying or saving',async()=>{
@@ -175,7 +176,7 @@ test('completed preflight sections resume after a later timeout and extension re
  const first=mappingHarness(async()=>'{"problem":"unexpected"}',{checkpoints,sourceText:text,setTimeout:callback=>setTimeout(callback,10),preflightAnswer:()=>{
   firstCalls++;return firstCalls===1?Promise.resolve('{"status":"ready","summary":"Checked","edits":[],"issues":[]}'):new Promise(()=>{});
  }});
- await assert.rejects(first.processMapping(first.request),/timed out twice/);
+ await assert.rejects(first.processMapping(first.request),/AI preflight could not complete after three recovery attempts/);
  assert.ok(checkpoints.size);assert.equal(first.commits,0);
  let resumedPreflights=0;
  const second=mappingHarness(async(_target,prompt)=>String(prompt).includes('Review mapped business claims')?'{"status":"consistent","conflicts":[]}':'{"problem":"A requirement"}',{checkpoints,sourceText:text,preflightAnswer:()=>{resumedPreflights++;return Promise.resolve('{"status":"ready","summary":"Checked","edits":[],"issues":[]}');}});

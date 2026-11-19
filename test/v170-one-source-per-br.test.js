@@ -86,7 +86,8 @@ test('active-source Delete control, confirmation, and one-document counter are w
  const ui=await fs.readFile(path.join(__dirname,'../media/start.js'),'utf8');
  const host=await fs.readFile(path.join(__dirname,'../test/generated/extension-source.txt'),'utf8');
  assert.match(ui,/\$\('sourceDocumentCount'\)\.textContent=`\$\{files\.length\} \/ 1`/);
- assert.match(host,/aria-valuemax="1"/);
+ assert.match(host,/id="sourceDocumentCount"/);
+ assert.doesNotMatch(host,/id="sourceCapacityProgress"/);
  assert.match(host,/if\(prospective\.length>1\)throw Error/);
  assert.match(ui,/requestBRDeletion\(\{target:'active-source',digest:doc\.digest,revision:brState\.revision\}\)/);
  assert.match(host,/case 'deleteUploadedDiscoverySource'/);

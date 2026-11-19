@@ -35,6 +35,9 @@ function safeEdit(before,after,source){
 // business decisions, approval, data handling policy, or acceptance thresholds.
 // The model identifies issues; only this curated catalogue supplies defaults.
 const INDUSTRY_DEFAULTS=Object.freeze({
+ acceptance:{standard:'ISO/IEC/IEEE 29148 requirements verification; Given/When/Then acceptance scenarios',resolution:'For each behavior EXPLICITLY supported by the source, draft Given/When/Then tests covering permitted and denied paths, state transitions, and observable outcomes. Label these as proposed criteria for BA review. Record unstated actors, thresholds, and approval decisions as OPEN QUESTIONS rather than inventing them.',rationale:'Testability can be improved without creating new authorization rules or acceptance thresholds.'},
+ rbac:{standard:'NIST role-based access-control review and least-privilege analysis',resolution:'Prepare a role-by-action permission matrix using ONLY source-named roles and granted permissions. Highlight unassigned actions, overlapping assignments, authorization precedence and segregation-of-duty questions for BA decision. Propose deny-by-default as a security recommendation, NOT as an approved access policy. Never invent roles or privileges.',rationale:'Incomplete access policy cannot be authorized by an AI-generated default.'},
+ audit:{standard:'NIST SP 800-53 AU family; auditability review',resolution:'For each audit event explicitly required in the source, propose test coverage for actor, action, subject, timestamp and outcome, including failure and access-revocation paths. Leave log retention, immutability, visibility and data-handling requirements as OPEN POLICY DECISIONS unless specified in the source.',rationale:'Audit implementation guidance must not invent retention or compliance policy.'},
  design:{standard:'Requirements/design separation; WCAG 2.2 AA',resolution:'Treat a referenced but not-yet-approved UI/UX design or framework as a downstream design handoff. During BA mapping, specify responsive, semantic, accessible UI behavior without claiming a design approval or selecting an unapproved framework. At the UI/UX stage, use the configured, version-pinned design system and its formal approval before developer handoff.',rationale:'A BR can be mapped before a UI/UX artifact exists; approval cannot be invented.'},
  unicode:{standard:'Unicode Standard Annex #29, extended grapheme clusters',resolution:'Interpret the existing character limits as user-perceived Unicode grapheme clusters; use a Unicode-aware counter and apply the same limit in frontend and backend validation. Keep every numeric limit exactly as stated in the BR.',rationale:'Surrogate pairs, combining marks and emoji should not produce inconsistent character-count behavior.'},
  keyboard:{standard:'Native HTML semantics; WCAG 2.2 AA keyboard access and focus order',resolution:'Use semantic forms, buttons and accessible labels. Tab and Shift+Tab follow logical document order; Enter submits a form; Enter or Space activates a native button. Restore focus to the relevant control after save, move focus to the next logical control after deletion, and focus the first invalid input when validation fails.',rationale:'Native keyboard patterns are predictable, accessible and testable without inventing a new business rule.'},
@@ -47,10 +50,13 @@ function classifyStandard(issue){
  const detail=String(issue.detail||'')+' '+String(issue.suggestion||'');
  const lower=detail.toLowerCase();
  if(/design.system|design framework|approved (?:ui|ux|design)|ui\/ux design|framework.*approv|approv.*framework|design artifact|selected.*design/.test(lower))return 'design';
+ if(/\brbac\b|role.?based|roles?.*permissions?|permissions?.*roles?|independently granted access|authorization precedence|access assignments?/.test(lower))return 'rbac';
+ if(/audit (?:trail|record|log|event)|auditing|audit fields|auditability/.test(lower)&&!/persist|stored? state|transaction/.test(lower))return 'audit';
+ if(/acceptance criteria|acceptance threshold|given.when.then|measurable (?:criteria|outcomes?)|testable acceptance/.test(lower))return 'acceptance';
  if(/unicode|grapheme|code.?point|character length|length.*count|count.*character|user.perceived character/.test(lower))return 'unicode';
  if(/keyboard|tab order|focus behavio|activation key|keypress|tabbing|key sequence/.test(lower))return 'keyboard';
  if(/success.*error|error.*success|feedback|error presentation|status message|error message|report success|show error/.test(lower))return 'feedback';
- if(/persist.*refresh|saved.*refresh|data persistence|data stored/.test(lower))return 'persistence';
+ if(/persist|saved.*refresh|data stored|transaction timing|transaction state|state after access/.test(lower))return 'persistence';
  if(/validation|whitespace|required field|input error/.test(lower))return 'validation';
  return 'other';
 }
@@ -60,7 +66,10 @@ function industryStandardResolution(issue){
  // Unresolvable business-policy contradictions must never become "approved"
  // merely because a language model suggested a convenient default.
  if(kind==='design'&&issue.category==='contradiction'&&!/\b(?:missing|not provided|not supplied|does not provide|not yet approved|no evidence|no (?:approved |design |framework |approval |ui\/ux |artifact|reference)|without (?:an? )?(?:approved|design|framework|artifact))\b/i.test(issue.detail))return null;
- if(kind!=='design'&&(BUSINESS_CRITICAL.test(issue.detail)||issue.category==='contradiction'))return null;
+ const missingPolicy=/\b(?:missing|undefined|not (?:provided|specified|defined)|does not (?:provide|specify|define)|no measurable|unclear|unspecified)\b/i.test(issue.detail);
+ const reviewOnly=['acceptance','rbac','audit','persistence'].includes(kind)&&missingPolicy&&issue.category!=='contradiction';
+ // A review checklist is safe; selecting a role, threshold, or policy for the BA is not.
+ if(kind!=='design'&&!reviewOnly&&(BUSINESS_CRITICAL.test(issue.detail)||issue.category==='contradiction'))return null;
  const rule=INDUSTRY_DEFAULTS[kind];
  return {category:kind,issue:clean(issue.detail,400),sourceExcerpt:clean(issue.sourceExcerpt,300),resolution:rule.resolution,standard:rule.standard,rationale:rule.rationale,provisional:true};
 }
@@ -70,7 +79,7 @@ function isCuratedGuidance(item){
 }
 function mappingGuidance(report){
  if(!report?.resolutions?.length)return '';
- return '\n\nAI-ASSISTED INDUSTRY-STANDARD RECOMMENDATIONS (working guidance, NOT part of the uploaded source):\n'+report.resolutions.map((item,i)=>`${i+1}. Gap category: ${item.category}\n   Proposed industry default: ${item.resolution}\n   Basis: ${item.standard}. Status: PROVISIONAL, not a BA decision or an approved design.`).join('\n')+'\nMap these only as explicitly marked implementation recommendations, never as source-authored facts, approved artifacts, new business rules or permission changes. Do not mark these as open business decisions when they merely defer UI/UX or technical design to the appropriate SDLC role. Any genuine contradictory business rule remains unresolved.';
+ return '\n\nAI-ASSISTED INDUSTRY-STANDARD RECOMMENDATIONS (working guidance, NOT part of the uploaded source):\n'+report.resolutions.map((item,i)=>`${i+1}. Gap category: ${item.category}\n   Proposed industry default: ${item.resolution}\n   Basis: ${item.standard}. Status: PROVISIONAL, not a BA decision or an approved design.`).join('\n')+'\nMap these only as explicitly marked implementation recommendations or DRAFT acceptance scenarios, never as source-authored facts, approved artifacts, new business rules or permission changes. Preserve unconfirmed role permissions, approval thresholds and audit-retention rules as OPEN BA DECISIONS. Do not block mapping for routine UI/UX implementation advice; genuine contradictory business rules remain unresolved.';
 }
 function prompt(document,{previous='',attempt=1}={}){
  const text=clean(document?.text,155000);
