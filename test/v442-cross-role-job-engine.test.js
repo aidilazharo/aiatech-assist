@@ -149,3 +149,17 @@ test('v442: changed source evidence blocks replay and modified stored artifact f
  const [failed]=await engine.list('tech-cockpit');
  assert.equal(failed.status,'failed');
 });
+
+test('v442: ATGV Workspace runs independent resumable source reviews and non-replayable PR publication',()=>{
+ const fsSync=require('node:fs'),root=path.resolve(__dirname,'..');
+ const source=fsSync.readFileSync(path.join(root,'src/repo-sync-workspace.js'),'utf8');
+ const runtime=fsSync.readFileSync(path.join(root,'src/lib/runtime/extension-runtime.js'),'utf8');
+ assert.match(source,/onWorkflowEvent=async\(\)=>null/);
+ assert.match(source,/workspacePrepareSync/);
+ assert.match(source,/workspacePublishSync/);
+ assert.match(source,/if\(workflowJobId\)try\{await onWorkflowEvent\(\{type:'finish'/);
+ assert.match(runtime,/const workspaceJournalContexts=new Map\(\)/);
+ assert.match(runtime,/onWorkflowEvent:async event=>/);
+ assert.equal(category('workspacePrepareSync').kind,'read');
+ assert.equal(category('workspacePublishSync').kind,'write');
+});
