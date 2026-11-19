@@ -240,7 +240,7 @@ function baHasRecoverableBR(state){
 let jiraPublishState={phase:'idle',confirmed:0,total:0,message:'No Jira publication is running.',currentKey:'',error:''};
 let jiraPublicationPlan=[],jiraPublicationConfirmed=new Map();
 let jiraPreviewFieldsByPath={};
-let jiraPlanForCR=[],jiraProtectionForCR=[],jiraPreviewIssueTypes={},jiraPreviewProject='',discoveryAutosaving=false,discoveryAutosaveSnapshot=null;
+let jiraPlanForCR=[],jiraLinkCandidates=[],jiraPreflightBlocked=false,jiraProtectionForCR=[],jiraPreviewIssueTypes={},jiraPreviewProject='',discoveryAutosaving=false,discoveryAutosaveSnapshot=null;
 let brRoleRepairPreview=null,brRoleRepairBusy=false;
 let mappingRunPhase='',mappingRetryAvailable=false,mappingFailureMessage='',mappingFailurePhase='',baPreflightInfo=null,reviewStopReason='',restoredMappingEpoch=null,sourceSelectedDigests=new Set(),jiraBrowseBaseUrl='',discoveryData=null,discoveryDirty=false,discoveryImportProposal=null,discoveryImportQueue=[],discoveryImportBusy=false,sourceRemoving=false,discoveryReviewProposal=null,preserveReviewOnSave=false,applyingAiReview=false,flowData=null,brState=null,brEditing=null,brPlanRevision=null,brJiraPreviewApproved=false,brQuill=null,brReadOnly=false,baOwnerState=null,baBusyTask='',brEditorDirty=false,brEditorSaving=false,brApprovePending=false,brJiraPlanChanges=0,brJiraPlanConflicts=0,pendingUploadAfterClaim=false,reviewApplyRetry=null,reviewApplyPhase='',reviewApplyRetryAvailable=false,reviewStageState=null;
 let mappingResumeAvailable=false;
@@ -1652,7 +1652,7 @@ window.addEventListener('message',event=>{
   if(pmJiraTableInstance)pmJiraTableInstance.setRows([]);
   // Also clear the previous Jira publication preview/progress cache; it can
   // otherwise show keys that are no longer present in the BR register.
-  jiraPublicationPlan=[];jiraPublicationConfirmed.clear();jiraPlanForCR=[];jiraProtectionForCR=[];
+  jiraPublicationPlan=[];jiraPublicationConfirmed.clear();jiraPlanForCR=[];jiraLinkCandidates=[];jiraPreflightBlocked=false;jiraProtectionForCR=[];
   jiraPublishState={phase:'idle',confirmed:0,total:0,message:'No Jira publication is running.',currentKey:'',error:''};
   brPlanRevision=null;brJiraPreviewApproved=false;brJiraPlanChanges=0;brJiraPlanConflicts=0;
   $('jiraInventoryStatus').textContent='Jira links updated. Refreshing the remote Jira inventory…';
@@ -4958,13 +4958,35 @@ function jiraKeyNode(key){
  if(linked){node.href=base+'/browse/'+encodeURIComponent(value);node.target='_blank';node.rel='noopener noreferrer';node.title='Open Jira issue '+value;}
  return node;
 }
+function jiraLinkCandidate(entry){
+ return entry?.action==='create'?jiraLinkCandidates.find(item=>item.path===entry.path):null;
+}
+function jiraFixLinkButton(path,key){
+ const fix=brElement('button','secondary jira-link-repair-action','Fix Jira Link');
+ fix.type='button';fix.title='Verify the existing Jira issue and restore its ATGV link without creating, changing or deleting an issue.';
+ fix.setAttribute('aria-label','Fix Jira link for '+key+' · '+path);
+ fix.addEventListener('click',()=>{
+  if(!brPlanRevision||baBusyTask||fix.disabled)return;
+  fix.disabled=true;fix.textContent='Verifying…';
+  baBusy('jiraFixLink','Verifying Jira link '+key+'…');
+  send('brJiraFixLink',{revision:brPlanRevision,path,key});
+ });
+ return fix;
+}
+function jiraDetailsActions(entry,readOnly=false){
+ const group=document.createElement('div');group.className='jira-preview-row-actions';
+ group.append(jiraDetailsButton(entry,readOnly));
+ const candidate=jiraLinkCandidate(entry);
+ if(candidate)group.append(jiraFixLinkButton(entry.path,candidate.key));
+ return group;
+}
 function renderJiraApprovalTable(){
  const root=$('brJiraApprovalTable');if(!root)return;
  const rows=jiraPlanForCR.map(entry=>({action:String(entry.action||'').toUpperCase(),kind:entry.kind||'Issue',type:jiraPreviewIssueTypes[entry.path]||'Not verified',path:entry.path||'',title:entry.title||'',key:entry.key||'—',approval:entry.requiresApproval?'Approval required':'Standard',entry}));
  ATGVDataTables.mount(root,rows,[
   {key:'action',label:'Action'},{key:'kind',label:'ATGV type'},{key:'type',label:'Jira type'},{key:'path',label:'BR path'},{key:'title',label:'Summary'},{key:'key',label:'Existing Jira key',render:row=>jiraKeyNode(row.key)},{key:'approval',label:'Approval'},
-  {key:'details',label:'Details',sortable:false,render:row=>jiraDetailsButton(row.entry,true)}
- ],{label:'Jira preview items awaiting approval',pageSize:5});
+  {key:'details',label:'Details',sortable:false,render:row=>jiraDetailsActions(row.entry,true)}
+ ],{label:'Jira preview items awaiting approval',pageSize:5,pinFirst:row=>!!jiraLinkCandidate(row.entry)});
 }
 function closeJiraIssuePreview(){
  const dialog=$('brJiraIssueModal');if(!dialog)return;
@@ -5079,7 +5101,7 @@ function renderJiraApprovalSummary(){
  const root=$('brJiraApprovalSummary');if(!root)return;
  const actions=jiraPlanForCR||[];
  const counts={create:0,update:0,retire:0};for(const item of actions)if(Object.hasOwn(counts,item.action))counts[item.action]++;
- const message=!brPlanRevision?'Generate and inspect a Jira preview before approval.':`${actions.length} changes in the current approved Business Requirements cycle · ${counts.create} CREATE · ${counts.update} UPDATE · ${counts.retire} RETIRE. ${brJiraPlanConflicts?'Resolve '+brJiraPlanConflicts+' conflict(s) before approval.':'No blocking conflicts in preview.'}`;
+ const message=jiraPreflightBlocked?`Jira Preflight blocked: ${brJiraPlanConflicts} issue(s) need resolution before preview. No Jira Preview has been created.`:!brPlanRevision?'Generate and inspect a Jira preview before approval.':`${actions.length} changes in the current approved Business Requirements cycle · ${counts.create} CREATE · ${counts.update} UPDATE · ${counts.retire} RETIRE. ${brJiraPlanConflicts?'Resolve '+brJiraPlanConflicts+' conflict(s) before approval.':'No blocking conflicts in preview.'}`;
  root.textContent=message+(brJiraPreviewApproved?' Preview approved; proceed to Step 10 to publish.':'');
 }
 function baBusy(task,message,percent){
@@ -6957,7 +6979,7 @@ window.addEventListener('message',event=>{
       if(previousSources>0)baViewedStep='start';
       $('baUncompletedPanel').classList.add('hidden');
     }
-    brPlanRevision=null;brJiraPreviewApproved=false;brJiraPlanChanges=0;brJiraPlanConflicts=0;jiraPlanForCR=[];jiraProtectionForCR=[];
+    brPlanRevision=null;brJiraPreviewApproved=false;brJiraPlanChanges=0;brJiraPlanConflicts=0;jiraPlanForCR=[];jiraLinkCandidates=[];jiraPreflightBlocked=false;jiraProtectionForCR=[];
     closeJiraIssuePreview();for(const id of ['brJiraDetailsPanel','brJiraApprovalDetails']){$(id).classList.add('hidden');$(id).replaceChildren();}
     if(task==='jiraSync'||jiraPublishState.phase==='completed')renderJiraPublishedItems();
     $('brJiraChanges').classList.add('hidden');$('brJiraConflicts').classList.add('hidden');
@@ -6986,8 +7008,52 @@ window.addEventListener('message',event=>{
     baBusy('',null);
     status('Existing Jira '+m.key+' linked to '+m.path+'. No Jira issue was created or changed.');
   }
-  if(m.type==='brJiraPlan'){baFailedProcess='';baFailedMessage='';
-    stageProgress('jiraPreview','JIRA preview generated.',100);baBusy('',null);brPlanRevision=m.revision;jiraPlanForCR=m.changes||[];jiraPreviewIssueTypes=m.issueTypes||{};jiraPreviewProject=m.jiraProject||'';jiraPreviewFieldsByPath=m.fieldPlans||{};jiraProtectionForCR=m.protection||[];brJiraPreviewApproved=false;brJiraPlanChanges=(m.changes||[]).length;brJiraPlanConflicts=(m.conflicts||[]).length;
+  if(m.type==='brJiraLinkFixFailed'){
+    baBusy('',null);
+    for(const button of document.querySelectorAll('.jira-link-repair-action')){button.disabled=false;button.textContent='Fix Jira Link';}
+    status('Fix Jira Link failed for '+String(m.key||m.path||'Jira issue')+': '+String(m.message||'Verification failed.').slice(0,900),true,{persistent:true});
+  }
+  if(m.type==='brJiraPreflight'){
+    baFailedProcess='';baFailedMessage='';
+    stageProgress('jiraPreview','Jira Preflight found '+(m.conflicts||[]).length+' blocker(s).',100);
+    baBusy('',null);
+    jiraPreflightBlocked=true;
+    brPlanRevision=m.revision;jiraPlanForCR=[];
+    jiraLinkCandidates=Array.isArray(m.linkCandidates)?m.linkCandidates.filter(row=>row&&typeof row.path==='string'&&/^[A-Z][A-Z0-9_]{1,20}-\d{1,12}$/.test(String(row.key||''))):[];
+    jiraProtectionForCR=m.protection||[];
+    brJiraPreviewApproved=false;brJiraPlanChanges=(m.changes||[]).length;brJiraPlanConflicts=(m.conflicts||[]).length;
+    jiraPublicationPlan=[];jiraPublicationConfirmed.clear();
+    $('brJiraApprovalTable')?.replaceChildren();
+    for(const id of ['brJiraDetailsPanel','brJiraApprovalDetails']){$(id)?.classList.add('hidden');$(id)?.replaceChildren();}
+    const box=$('brJiraChanges');
+    box.replaceChildren();box.classList.remove('hidden');
+    const checkCount=Number(m.checkedCount)||brJiraPlanChanges;
+    box.append(brElement('h3','','Jira Preflight · '+brJiraPlanConflicts+' issue(s) need attention'));
+    box.append(brElement('p','muted',checkCount+' planned Jira items checked. Jira Preview has NOT been created. Resolve the blockers below, then regenerate Jira Preview.'));
+    for(const candidate of jiraLinkCandidates){
+      const entry=(m.changes||[]).find(item=>item.path===candidate.path);
+      const row=brElement('div','jira-link-repair-row jira-preflight-recovery');
+      row.append(brElement('span','',candidate.path+' · '+candidate.key+(entry?.title?' · '+entry.title:'')));
+      row.append(jiraFixLinkButton(candidate.path,candidate.key));
+      box.append(row);
+    }
+    const conflicts=$('brJiraConflicts');
+    conflicts.replaceChildren();conflicts.classList.remove('hidden');
+    for(const message of m.conflicts||[]){
+      const row=brElement('div','jira-link-repair-row');
+      row.append(brElement('p','',message));
+      conflicts.append(row);
+    }
+    $('brApproveRetirements').classList.add('hidden');
+    $('brApproveRetirements').disabled=true;
+    $('brJiraApprove').disabled=true;$('brJiraSync').disabled=true;
+    renderDiscoverySummary();renderChangeRequests();
+    if(jiraProtectionForCR.some(row=>row.blocked))$('baCRPanel').open=true;
+    status('Jira Preflight found '+brJiraPlanConflicts+' blocker(s) across '+checkCount+' planned Jira items. No preview or Jira issue write was performed.',true,{persistent:true});
+    return;
+  }
+  if(m.type==='brJiraPlan'){baFailedProcess='';baFailedMessage='';jiraPreflightBlocked=false;
+    stageProgress('jiraPreview','JIRA preview generated.',100);baBusy('',null);brPlanRevision=m.revision;jiraPlanForCR=m.changes||[];jiraLinkCandidates=Array.isArray(m.linkCandidates)?m.linkCandidates.filter(row=>row&&typeof row.path==='string'&&/^[A-Z][A-Z0-9_]{1,20}-\d{1,12}$/.test(String(row.key||''))):[];jiraPreviewIssueTypes=m.issueTypes||{};jiraPreviewProject=m.jiraProject||'';jiraPreviewFieldsByPath=m.fieldPlans||{};jiraProtectionForCR=m.protection||[];brJiraPreviewApproved=false;brJiraPlanChanges=(m.changes||[]).length;brJiraPlanConflicts=(m.conflicts||[]).length;
     jiraPublicationPlan=[];jiraPublicationConfirmed.clear();renderJiraApprovalTable();
     for(const id of ['brJiraDetailsPanel','brJiraApprovalDetails']){$(id).classList.add('hidden');$(id).replaceChildren();}
     const box=$('brJiraChanges');box.replaceChildren();box.classList.remove('hidden');
@@ -6995,8 +7061,8 @@ window.addEventListener('message',event=>{
     box.append(brElement('h3','',count+' Jira changes'));
     ATGVDataTables.mount(box,(m.changes||[]).map(entry=>({action:String(entry.action||'').toUpperCase(),kind:entry.kind||'Issue',type:jiraPreviewIssueTypes[entry.path]||'Not verified',path:entry.path||'',title:entry.title||'',key:entry.key||'—',approval:entry.requiresApproval?'Approval required':'Standard',entry})),[
      {key:'action',label:'Action'},{key:'kind',label:'ATGV type'},{key:'type',label:'Jira type'},{key:'path',label:'BR path'},{key:'title',label:'Summary'},{key:'key',label:'Existing Jira key',render:row=>jiraKeyNode(row.key)},{key:'approval',label:'Approval'},
-     {key:'details',label:'Details',sortable:false,render:row=>jiraDetailsButton(row.entry)}
-    ],{label:'Jira change preview',pageSize:5});
+     {key:'details',label:'Details',sortable:false,render:row=>jiraDetailsActions(row.entry)}
+    ],{label:'Jira change preview',pageSize:5,pinFirst:row=>!!jiraLinkCandidate(row.entry)});
     const conflicts=$('brJiraConflicts');conflicts.replaceChildren();conflicts.classList.toggle('hidden',!(m.conflicts||[]).length);
     for(const message of m.conflicts||[]){
       const row=brElement('div','jira-link-repair-row');
@@ -7004,16 +7070,9 @@ window.addEventListener('message',event=>{
       const found=/^([^:\s]+): issue ([A-Z][A-Z0-9_]{1,20}-\d{1,12}) exists without a recorded operation$/.exec(message);
       const item=found?(m.changes||[]).find(x=>x.path===found[1]&&x.action==='create'):null;
       if(item){
-        const fix=brElement('button','secondary jira-link-repair-action','Fix Jira Link');
-        fix.type='button';fix.title='Verify the existing Jira issue and restore its local ATGV link. No Jira issue is created, modified or deleted.';
-        fix.setAttribute('aria-label','Fix Jira link for '+found[2]+' · '+found[1]);
-        fix.addEventListener('click',()=>{
-          if(!brPlanRevision||baBusyTask)return;
-          fix.disabled=true;
-          baBusy('jiraFixLink','Verifying and restoring Jira link '+found[2]+'…');
-          send('brJiraFixLink',{revision:brPlanRevision,path:found[1],key:found[2]});
-        });
-        row.append(fix);
+        if(jiraLinkCandidates.some(candidate=>candidate.path===found[1]&&candidate.key===found[2]))
+          row.append(brElement('small','muted','Use Fix Jira Link in the Jira preview row above.'));
+        else row.append(jiraFixLinkButton(found[1],found[2])); // Older host versions
       }
       conflicts.append(row);
     }

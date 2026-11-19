@@ -1,21 +1,22 @@
-# ATGV AIATECH Assist v0.4.48
+# ATGV AIATECH Assist v0.4.49
 
-## Public release reliability
+## Jira Preflight — before preview
 
-- Identify when the public extension mirror (`aidilazharo/extension`) is older than the locally installed extension.
-- Display `Public release mirror is behind` rather than misleading `latest v...` wording; do not offer older VSIX packages as updates.
-- Preserve public-only release discovery (`aidilazharo/extension` and `aidilazharo/library`). Private development repositories remain outside update discovery.
-- Public mirror workflow preflight and credential setup documentation are maintained separately in `aidilazharo/extension`. The mirror cannot read private source assets until the repository Actions secret `ATGV_SOURCE_READ_TOKEN` has permission.
+- Check every planned Jira issue and its existing remote identity before generating an approvable Jira Preview.
+- Validate parent references, issue types, project, duplicate matches, edit/create field metadata, required fields, and remote changes.
+- Collect blocking findings in a dedicated **Jira Preflight** view; the actual Jira Preview is not rendered until preflight passes.
+- Show count of checked items, all identified blocking findings, and a **Fix Jira Link** action for verified recovery candidates.
+- Rerun preflight after repairing an existing link. Fail closed for mismatched issue identities and unexpected Jira updates.
 
-## Jira workflow
+## Jira link repair
 
-- Include the one-click **Fix Jira Link** recovery for Jira issues that already exist but lack a local recorded create operation.
-- Verify source identity, Jira project, parent, issue type, role label, and exact approved or authorized role-repair content before restoring the local link.
-- Never create, delete or modify remote Jira issues as part of link recovery; record recovery in the local audit log and regenerate Jira Preview.
+- Use structured Jira issue keys and BR paths instead of relying solely on error-message text.
+- Correct the 8-column Jira preview DataTable layout to stop header and row-action overlap in narrow VS Code panels.
+- If an existing role subtask is verified but does not match the current approved BR wording, link it without rewriting Jira and retain an explicit UPDATE pending approval.
+- Show recoverable errors and restore the **Fix Jira Link** button for another attempt.
 
-## Verification
+## Verification and release
 
-- Add regression tests for an out-of-date public mirror, no-downgrade behavior and public-only release discovery.
-- Run the full extension regression suite, Windows checks and VSIX packaging through GitHub Actions before publishing the release.
-
-**Operational note:** Configuring `ATGV_SOURCE_READ_TOKEN` on the public mirror is a required repository-owner action. Publishing the private-source release alone cannot make newer releases appear in the public mirror.
+- Added regression checks for preflight gating, Jira link recovery, historical role-task content and table layout.
+- GitHub Actions must pass the full regression suite, theme validation and VSIX packaging before this release is promoted.
+- The public release mirror requires its own credentials and update workflow; a private source release does not automatically update the public VSIX download.
