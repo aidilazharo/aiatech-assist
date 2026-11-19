@@ -137,7 +137,8 @@ function evidence(report,digest){
   skipped:(part.skipped||[]).slice(0,MAX_EDITS).map(e=>({before:clean(e.before,300),after:clean(e.after,300),reason:clean(e.reason,300),sourceVerified:e.sourceVerified===true})),
   issues:(part.issues||[]).slice(0,18),resolutions:(part.resolutions||[]).slice(0,MAX_DEFAULTS)});
  return {digest:String(digest||''),...summarize(report),sections:(report.sections||[]).slice(0,64).map((part,index)=>({section:index+1,...summarize(part)})),
-  workingBR:report.workingBR||null,checks:(report.checks||[]).slice(0,12),crossSectionChecked:report.crossSectionChecked===true,checkedAt:new Date().toISOString(),originalPreserved:true};
+  workingBR:report.workingBR||null,checks:(report.checks||[]).slice(0,12),crossSectionChecked:report.crossSectionChecked===true,
+  crossSectionFindings:(report.crossSectionFindings||[]).slice(0,12),checkedAt:new Date().toISOString(),originalPreserved:true};
 }
 // Compare all mapped section claims before commit. Exact duplicate claims are
 // deduplicated but retain their source section numbers. Oversize input fails
