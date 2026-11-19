@@ -13,16 +13,15 @@ test('Gantt explanatory sentence is removed and existing timeline remains availa
  assert.match(html,/id="overviewGanttDetails"/);
  assert.match(html,/id="ganttChart"/);
 });
-test('Uploaded Documents uses an accessible progress track beneath its heading',()=>{
+test('Uploaded Documents uses the count pill without a redundant green progress track',()=>{
  const start=html.indexOf('class="source-documents-panel"');
  const end=html.indexOf('id="sourceDocuments"',start);
  const section=html.slice(start,end);
  assert.ok(start>=0&&end>start);
  assert.match(section,/Uploaded documents/);
- assert.match(section,/id="sourceCapacityProgress"[^>]*role="progressbar"/);
- assert.match(section,/aria-valuemax="1"/);
- assert.match(ui,/sourceTrack\.setAttribute\('aria-valuenow',String\(sources\.length\)\)/);
- assert.match(ui,/Math\.min\(100,sources\.length\*100\)/);
+ assert.match(section,/id="sourceDocumentCount"/);
+ assert.doesNotMatch(section,/sourceCapacityProgress|ba-heading-progress/);
+ assert.doesNotMatch(ui,/sourceCapacityProgressFill|sourceTrack\.setAttribute/);
 });
 test('AI Review uses only the shared header progress and retains status messaging',()=>{
  assert.doesNotMatch(html,/id="reviewHeadingProgress"/);
