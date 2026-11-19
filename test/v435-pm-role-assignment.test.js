@@ -33,7 +33,7 @@ const items=[
 ];
 test('Type filter supports BR, Epic, User Stories, Task, Subtask',()=>{
  assert.equal(pm.group('BR'),'br');assert.equal(pm.group('Epic'),'epic');
- assert.equal(pm.group('User Story'),'story');assert.equal(pm.group('Subtask'),'other');
+ assert.equal(pm.group('User Story'),'story');assert.equal(pm.group('Subtask'),'subtask');
  for(const type of ['br','epic','story','task','subtask'])assert.match(html,new RegExp('value="'+type+'"'));
  assert.match(ui,/id==='pmJiraFilter'\?'input':'change'/);
  assert.match(ui,/pmJiraIssueType\(item\.type\)/);
