@@ -121,10 +121,10 @@ test('retry does not reuse mapping from a different AI-updated working copy',asy
 });
 test('material preflight contradictions are retained as BA review findings without losing mapped sections',async()=>{
  let mappingCalls=0;
- const opts={sourceText:'A'.repeat(30000)+'\nSECOND SECTION: permissions conflict.',preflightResponse:prompt=>prompt.includes('SECOND SECTION')?
+ const opts={sourceText:'A'.repeat(30000)+'\nSECOND SECTION: permissions conflict.',realPrompt:true,preflightResponse:prompt=>prompt.includes('SECOND SECTION')?
   {status:'needs-input',summary:'Conflict',edits:[],issues:[{severity:'blocker',category:'contradiction',detail:'Permissions conflict over access',suggestion:'Ask the owner'}]}:
   {status:'ready',summary:'Checked',edits:[],issues:[]}};
- const t=mappingHarness(async()=>{mappingCalls++;return '{"problem":"A"}';},opts);
+ const t=mappingHarness(async(_target,prompt)=>String(prompt).includes('Review mapped business claims')?'{"status":"consistent","conflicts":[]}':(mappingCalls++,'{"problem":"A"}'),opts);
  await t.processMapping(t.request);
  assert.ok(mappingCalls>=2,'all Markdown units must still be mapped');
  assert.equal(t.commits,1);
@@ -148,7 +148,7 @@ test('evidence-backed cross-section conflicts are saved and never treated as a t
    }]});
   }
   return JSON.stringify({problem:++mappings===1?'Approval must be sequential':'Approval can run in parallel'});
- },{sourceText:'Document section. '.repeat(1800)});
+ },{sourceText:'Document section. '.repeat(1800),realPrompt:true});
  await t.processMapping(t.request);
  assert.ok(mappings>=2);
  assert.equal(t.commits,1);
