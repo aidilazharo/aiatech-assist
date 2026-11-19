@@ -184,7 +184,7 @@ class ConfluenceSourceVault{
   if(expected&&sha(bytes)!==expected)throw Error('Confluence attachment checksum differs from the original bytes; local documents were preserved.');
   return bytes;
  }
- async restore(manifest,remoteHash,space,pageId,attachments,{allowRegister=false}={}){
+ async restore(manifest,remoteHash,space,pageId,attachments,{allowRegister=false,allowUpdate=false,expectedLocalHash=''}={}){
   const result={downloaded:0,restored:false,conflicts:[],uploaded:0};
   const restoreFile=async(file,item,expected)=>{
    const existing=await fs.lstat(file).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
@@ -214,28 +214,43 @@ class ConfluenceSourceVault{
    const current=await brWorkflow.load(this.registry,this.projectId);
    const blank=!current.brs.length&&!current.sourceDocuments.length&&
     !Object.keys(current.synced||{}).length&&!Object.keys(current.pending||{}).length;
-   if(!blank)throw Error('Local BR project changed during Confluence restore. Local changes were preserved.');
+   if(!blank&&!allowUpdate)throw Error('Local BR project changed during Confluence restore. Local changes were preserved.');
+   if(!blank){
+    const latest=await snapshot(this.registry,this.projectId);
+    if(!expectedLocalHash||snapshotHash(latest)!==expectedLocalHash||Object.keys(current.pending||{}).length)
+     throw Error('Local BR project changed during remote synchronization. Preserved local work.');
+   }
    const remote=structuredClone(manifest.register);
    if(remote.brs.some(b=>!/^BR-[0-9]+$/.test(String(b.id||'')))||
      remote.sourceDocuments?.some(x=>!validDocument(x))||
      remote.archivedSources?.some(x=>!validDocument(x))||
      Object.values(remote.synced||{}).some(x=>x?.key&&!/^[A-Z][A-Z0-9_]{1,20}-\d{1,12}$/.test(String(x.key))))
     throw Error('Untrusted Confluence BR/Jira identity detected. Manual reconciliation required.');
-   // A verified empty local project can adopt the remote snapshot. Never
-   // revive in-flight remote updates after switching computers.
+   // Only a verified empty or unchanged local project can adopt remote state.
+   // Never revive in-flight Jira updates after switching computers.
    await brWorkflow.write(this.registry,this.projectId,current.revision,next=>{
     Object.assign(next,remote,{pending:{},roleTaskPending:{},exportJobs:{},restartRecovery:null});
     next.events=(next.events||[]).concat({at:new Date().toISOString(),action:'confluence-source-vault-restored',remotePage:String(pageId),remotePendingSkipped:true}).slice(-200);
    });
    const discoveryPath=path.join(this.root,'documents','requirements','discovery-12.json');
    const existing=await fs.readFile(discoveryPath,'utf8').catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
-   if(!existing&&manifest.discovery){
-    JSON.parse(manifest.discovery); // Reject malformed remote data.
-    await fs.writeFile(discoveryPath,manifest.discovery,{flag:'wx',mode:0o600});
+   if(manifest.discovery&&existing!==manifest.discovery){
+    const parsed=JSON.parse(manifest.discovery);
+    if(!plain(parsed)||!plain(parsed.answers))throw Error('Confluence discovery snapshot is invalid.');
+    if(existing&&!allowUpdate)throw Error('Existing Discovery differs from Confluence. Preserved local answers.');
+    const tmp=discoveryPath+'.'+crypto.randomBytes(8).toString('hex')+'.tmp';
+    try{
+     await fs.writeFile(tmp,manifest.discovery,{flag:'wx',mode:0o600});
+     if(existing){
+      const currentText=await fs.readFile(discoveryPath,'utf8');
+      if(currentText!==existing)throw Error('Discovery changed during Confluence restore. Local answers preserved.');
+     }
+     await fs.rename(tmp,discoveryPath);
+    }finally{await fs.rm(tmp,{force:true});}
    }
    result.restored=true;
   }
-  if(!result.conflicts.length)await this.recordHistory(space.id,remoteHash);
+  if(allowRegister&&!result.conflicts.length)await this.recordHistory(space.id,remoteHash);
   return result;
  }
  async sync({mode='both'}={}){
@@ -259,20 +274,21 @@ class ConfluenceSourceVault{
    !Object.keys(local.register?.synced||{}).length;
   let result={downloaded:0,uploaded:0,restored:false,conflicts:[],skipped:''};
   if(manifest&&mode!=='push'){
-   const allowRegister=localEmpty||(currentHistory.localHash===localHash&&currentHistory.remoteHash!==remoteHash);
-   if(allowRegister){
-    // Restoring a changed remote snapshot into an existing project requires
-    // an explicit empty/unmodified local baseline; never replace divergent work.
-    if(!localEmpty){
-     result.conflicts.push('Remote BR metadata changed. Existing local BR work requires manual reconciliation.');
-    }else{
-     result=await this.restore(manifest,remoteHash,space,pageId,items,{allowRegister:true});
-     if(result.restored)return result;
-    }
+   const remoteChanged=!!currentHistory.remoteHash&&currentHistory.remoteHash!==remoteHash;
+   const localUnchanged=!!currentHistory.localHash&&currentHistory.localHash===localHash;
+   if(localEmpty||remoteChanged&&localUnchanged){
+    result=await this.restore(manifest,remoteHash,space,pageId,items,{
+     allowRegister:true,allowUpdate:!localEmpty,expectedLocalHash:localHash});
+    if(result.restored)return result;
    }else{
     result=await this.restore(manifest,remoteHash,space,pageId,items,{allowRegister:false});
-    if(currentHistory.remoteHash&&currentHistory.remoteHash!==remoteHash)
-     result.conflicts.push('Remote project revisions changed; preserved current local BR data for manual reconciliation.');
+    if(remoteChanged)result.conflicts.push('Remote project revisions changed while this machine also has local edits. Local BR data is preserved for reconciliation.');
+    else if(!currentHistory.remoteHash){
+     const same=JSON.stringify(cleanRecord(local.register))===JSON.stringify(cleanRecord(manifest.register))&&
+      (local.discovery||'')===(manifest.discovery||'');
+     if(same&&!result.conflicts.length)await this.recordHistory(space.id,remoteHash);
+     else result.conflicts.push('This local project has no verified common Confluence baseline. Preserve both versions for manual reconciliation.');
+    }
    }
   }
   if(mode==='pull'||result.conflicts.length)return result;
