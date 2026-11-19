@@ -8576,6 +8576,11 @@ async function handleDashboardMessage(msg){
         await dashboard?.webview.postMessage({type:'discoveryRestarted',discovery:cleared,digests:[]});
         await dashboard?.webview.postMessage({type:'brUpdated',register:updated});break;
        }
+      case 'archiveDiscoverySourceSafe':{
+        try{await removeDiscoverySource(msg);}
+        catch(e){await dashboard?.webview.postMessage({type:'discoverySourceRemoveCancelled'});throw e;}
+        break;
+      }
       case 'removeDiscoverySource':throw Error('Delete now means Delete Everywhere. Refresh Business Requirements and use the verified Delete button.');
       case 'deleteUploadedDiscoverySource':throw Error('Delete now means Delete Everywhere. Refresh Business Requirements and use the verified Delete button.');
       case 'restoreDiscoverySource':await restoreDiscoverySource(msg);break;
