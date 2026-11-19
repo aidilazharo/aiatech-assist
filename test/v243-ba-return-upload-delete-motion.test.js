@@ -15,8 +15,8 @@ function recoverable(state){
  return vm.runInNewContext(`${section[0]};baHasRecoverableBR(state)`,{state});
 }
 test('in-progress visibility is deferred until leaving and returning to Business Requirements Start',()=>{
- assert.match(ui,/if\(view==='discovery'&&next!=='discovery'\)\{\s*baResumeCardReady=baHasRecoverableBR\(brState\)/);
- assert.match(ui,/else if\(next==='discovery'&&view!=='discovery'&&baResumeCardReady\)\{\s*baViewedStep='start'/);
+ assert.match(ui,/if\(view==='discovery'&&next!=='discovery'\)\{\s*if\(!baProcessRunning\)\{baResumeCardReady=baHasRecoverableBR\(brState\)/);
+ assert.match(ui,/else if\(next==='discovery'&&view!=='discovery'&&baResumeCardReady&&!baProcessRunning\)\{\s*baViewedStep='start'/);
  assert.match(ui,/const unfinished=baResumeCardReady&&started&&baHasRecoverableBR\(brState\)/);
  assert.match(ui,/panel\.classList\.toggle\('hidden',!unfinished\|\|displayed!=='start'\)/);
  assert.match(ui,/if\(m\.type==='discoveryRestarted'\)\{baPreflightInfo=null;mappingFailurePhase='';baResumeCardReady=false/);
