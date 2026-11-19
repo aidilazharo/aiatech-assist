@@ -66,6 +66,7 @@ const jiraControl=require('../../jira-change-control');
 const jiraDuplicates=require('../../jira-duplicate-cleanup');
 const jiraFieldPreflight=require('../../jira-field-preflight');
 const jiraProjectInventory=require('../../jira-project-inventory');
+const pmJiraAssignment=require('../../pm-jira-assignment');
 const jiraItemEditor=require('../../jira-item-editor');
 const sourceStore=require('../../source-store');
 const {evaluate:continuityEvaluate}=require('../../continuity');
@@ -5143,6 +5144,83 @@ async function handleDashboardMessage(msg){
         if(!/^https:\/\/[^\s]+$/.test(requested)||!requested.startsWith(site+'/browse/'))throw Error('Only the configured Jira browse URL can be opened.');
         await vscode.env.openExternal(vscode.Uri.parse(requested));break;
       }
+      case 'pmJiraAssignableUsers':
+      case 'pmJiraSetAssignee':{
+        const projectId=activeProject?.id||'',issueKey=String(msg.key||'').toUpperCase(),requestId=msg.requestId;
+        const writing=msg.command==='pmJiraSetAssignee';
+        try{
+          requireOpened();requireOnline();
+          if(!projectId||msg.projectId!==projectId)throw Error('Project changed. Reopen the Jira issue.');
+          const key=developerGit.jiraKey(issueKey),config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
+          if(!token)throw Error('Jira credentials are not connected.');
+          const projectKey=validProjectKey(config.get('jira.projectKey'));
+          const auth={token,basicEmail:String(config.get('jira.email')||'').trim()};
+          const base=baseAtlassian(config);
+          const permissions=await requestJson(base+'/rest/api/3/mypermissions?projectKey='+encodeURIComponent(projectKey)+'&permissions=ASSIGN_ISSUES',auth);
+          if(!pmJiraAssignment.canAssign(permissions))throw Error('Your Jira account needs Assign Issues permission for this project.');
+          const [issue,register,found,self]=await Promise.all([
+            jiraReadIssue(config,token,key),
+            brWorkflow.load(registry,projectId),
+            myWorkPresence.locate(config,token,projectKey),
+            requestJson(base+'/rest/api/3/myself',auth)
+          ]);
+          if(issue?.fields?.project?.key!==projectKey||!self?.accountId)throw Error('Jira issue or connected account belongs to a different project.');
+          const roster=myWorkPresence.extractRows(found.page?.body?.storage?.value||'');
+          const pm=roster.find(row=>row.id===self.accountId&&row.roles?.includes('Project Manager'));
+          if(!pm)throw Error('Project Manager role is not recorded for the connected Jira account. Open Project Manager · My Work and refresh the team roster.');
+          const item=jiraProjectInventory.normalizeIssue(issue,projectKey);
+          if(!item)throw Error('Jira issue is not accessible in this project.');
+          const role=pmJiraAssignment.roleForIssue(item,register);
+          if(!role)throw Error('This Jira Task/Subtask has no unambiguous SDLC role. Add the correct ATGV role label or repair its role mapping before assigning.');
+          let scope=null;
+          if(['br','epic'].includes(pmJiraAssignment.group(item.type))){
+            const snapshot=pmLatestSnapshot;
+            if(!snapshot||snapshot.projectId!==projectId||snapshot.projectKey!==projectKey||Date.now()-snapshot.at>600000)throw Error('Refresh the complete Project Jira Work Items table before assigning an entire BR/Epic.');
+            scope=pmJiraAssignment.plan({rootKey:key,projectKey,items:snapshot.items,register});
+          }
+          const candidates=pmJiraAssignment.rosterCandidates(roster,role);
+          if(!candidates.length&&msg.command==='pmJiraAssignableUsers')
+            throw Error('No '+role+' users are recorded in the project roster. Ask a team member to open My Work using the correct role.');
+          const targetId=writing?(msg.accountId===null?null:String(msg.accountId||'')):null;
+          if(writing&&targetId&&!candidates.some(user=>user.accountId===targetId))throw Error('Selected Jira user does not have the required '+role+' role in the project roster.');
+          // Jira explicitly verifies assignability. A roster role alone does not
+          // grant the permission to assign or make a user assignable.
+          const assignable=await requestJson(base+'/rest/api/3/user/assignable/search?issueKey='+encodeURIComponent(key)+'&maxResults=1000',auth);
+          if(!Array.isArray(assignable))throw Error('Jira did not return a valid assignable-user list.');
+          const validIds=new Set(assignable.filter(x=>x?.active!==false).map(x=>String(x.accountId||'')));
+          const eligible=candidates.filter(x=>validIds.has(x.accountId));
+          if(!writing){
+            await dashboard?.webview.postMessage({type:'pmJiraAssignableUsersResult',projectId,key,requestId,role,
+              assigneeId:item.assigneeId,users:eligible,scope:scope?{count:scope.count,excludedCount:scope.excludedCount}:null,
+              message:eligible.length?'Only role-matched, Jira-assignable team members are shown.':'No '+role+' team members are assignable in Jira. Confirm project permissions and role registration.'});
+            break;
+          }
+          if(targetId&&!eligible.some(x=>x.accountId===targetId))throw Error('Selected user is no longer Jira-assignable for this ticket. Refresh the assignee list.');
+          if(String(issue.fields?.updated||'')!==String(msg.expectedUpdated||''))throw Error('Jira issue changed. Refresh it before assigning.');
+          const targets=scope?.targets||[{key,updated:String(issue.fields.updated||''),owner:String(issue.fields.assignee?.accountId||''),type:item.type}];
+          const user=targetId?eligible.find(x=>x.accountId===targetId):null;
+          const targetLabel=targetId?user.name:'Unassigned';
+          const description=scope?'Assign '+targets.length+' development issue(s) under '+key+' to '+targetLabel+'? '+scope.excludedCount+' other-role ticket(s) will remain unchanged.':
+            'Set '+key+' ('+role+') assignee to '+targetLabel+' in Jira?';
+          const decision=await uiWarning(description+'\n\nJira will validate all selected issues and revert completed changes if an update fails.',{modal:true},'Confirm Assignment');
+          if(decision!=='Confirm Assignment'){
+            await dashboard?.webview.postMessage({type:'pmJiraAssigned',projectId,key,requestId,cancelled:true});break;
+          }
+          const result=await pmJiraAssignment.change({targets,projectKey,accountId:targetId,expectedUpdated:msg.expectedUpdated,
+            readIssue:key=>jiraReadIssue(config,token,key),
+            setAssignee:(key,accountId)=>requestJson(base+'/rest/api/3/issue/'+encodeURIComponent(key)+'/assignee',{...auth,method:'PUT',data:{accountId}})
+          });
+          pmLatestSnapshot=null; // Stale assignee state must never be trusted.
+          await recordStartupDiagnostic({stage:'pm-jira-assignment',projectId,status:'complete',tool:'Jira',detail:
+            'PM updated '+result.changed+' of '+result.count+' development/role-matched issue assignments for '+key+'; role '+role+'.'});
+          await dashboard?.webview.postMessage({type:'pmJiraAssigned',projectId,key,requestId,success:true,...result,role,excludedCount:scope?.excludedCount||0});
+        }catch(error){
+          report('PM Jira assignment failed: '+String(error.message||error).slice(0,300));
+          await dashboard?.webview.postMessage({type:writing?'pmJiraAssignmentError':'pmJiraAssignableUsersError',
+            projectId,key:issueKey,requestId,message:String(error.message||error).slice(0,450)});
+        }
+        break;
+      }
       case 'roleJiraIssueDetails':{
         requireOpened();requireOnline();
         const key=developerGit.jiraKey(msg.key),config=effectiveConfig(activeProject);
@@ -5157,7 +5235,7 @@ async function handleDashboardMessage(msg){
           const registered=await brWorkflow.load(registry,activeProject.id);
           const matched=Object.entries(registered.synced||{}).find(([,row])=>row?.key===key);
           const linkedBrId=matched?matched[0].split('/')[0]:'';
-          const value={key,linkedBrId,transitions,summary:String(fields.summary||''),description:textFromAdf(fields.description).slice(0,20000),type:String(fields.issuetype?.name||''),status:String(fields.status?.name||''),priority:String(fields.priority?.name||'Unspecified'),assignee:String(fields.assignee?.displayName||'Unassigned'),reporter:String(fields.reporter?.displayName||'Unknown'),parent:fields.parent?{key:String(fields.parent.key||''),summary:String(fields.parent.fields?.summary||'')}:null,subtasks:(fields.subtasks||[]).slice(0,150).map(sub=>({key:String(sub.key||''),summary:String(sub.fields?.summary||''),status:String(sub.fields?.status?.name||'')})),labels:(fields.labels||[]).slice(0,35).filter(x=>typeof x==='string'),created:fields.created||'',updated:fields.updated||'',dueDate:fields.duedate||'',components:(fields.components||[]).map(x=>x.name).filter(Boolean).slice(0,30),fixVersions:(fields.fixVersions||[]).map(x=>x.name).filter(Boolean).slice(0,30),url:baseAtlassian(config)+'/browse/'+encodeURIComponent(key)};
+          const value={key,linkedBrId,transitions,summary:String(fields.summary||''),description:textFromAdf(fields.description).slice(0,20000),type:String(fields.issuetype?.name||''),status:String(fields.status?.name||''),priority:String(fields.priority?.name||'Unspecified'),assignee:String(fields.assignee?.displayName||'Unassigned'),assigneeId:String(fields.assignee?.accountId||''),reporter:String(fields.reporter?.displayName||'Unknown'),parent:fields.parent?{key:String(fields.parent.key||''),summary:String(fields.parent.fields?.summary||'')}:null,subtasks:(fields.subtasks||[]).slice(0,150).map(sub=>({key:String(sub.key||''),summary:String(sub.fields?.summary||''),status:String(sub.fields?.status?.name||'')})),labels:(fields.labels||[]).slice(0,35).filter(x=>typeof x==='string'),created:fields.created||'',updated:fields.updated||'',dueDate:fields.duedate||'',components:(fields.components||[]).map(x=>x.name).filter(Boolean).slice(0,30),fixVersions:(fields.fixVersions||[]).map(x=>x.name).filter(Boolean).slice(0,30),url:baseAtlassian(config)+'/browse/'+encodeURIComponent(key)};
           await dashboard?.webview.postMessage({type:'roleJiraIssueDetails',key,requestId:msg.requestId,value});
         }catch(error){await dashboard?.webview.postMessage({type:'roleJiraIssueDetailsError',key,requestId:msg.requestId,message:String(error.message||error).slice(0,500)});}
         break;
