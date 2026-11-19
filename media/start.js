@@ -5004,7 +5004,7 @@ function renderSourcePreflight(){
  const unresolvedIssues=(info.issues||[]).filter(x=>!resolvedIssues.has(String(x.detail||'').trim().toLowerCase()));
  const risks=unresolvedIssues.filter(x=>x.severity==='warning').length;
  const blockers=unresolvedIssues.filter(x=>x.severity==='blocker').length;
- $('baSourcePreflightCounts').textContent=`${fixes} safe text correction(s) · ${(info.resolutions||[]).length} provisional recommendation(s) · ${risks} unresolved warning(s) · ${blockers} business blocker(s) · Original unchanged`;
+ $('baSourcePreflightCounts').textContent=`${fixes} safe text correction(s) · ${(info.resolutions||[]).length} industry-standard recommendation(s) (provisional) · ${risks} unresolved warning(s) · ${blockers} business blocker(s) · Original unchanged`;
  const detail=$('baSourcePreflightFindings');detail.replaceChildren();
  for(const fix of (info.applied||[]).slice(0,5)){
   const li=document.createElement('li');li.textContent=`Working BR: “${String(fix.before||'').slice(0,90)}” → “${String(fix.after||'').slice(0,90)}”`;detail.append(li);
