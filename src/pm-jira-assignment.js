@@ -39,6 +39,7 @@ function roleForIssue(issue,register){
   if(role==='uat'||role==='uat-tester'||path.endsWith('/ROLE-UAT'))return 'UAT Tester';
   if(role==='developer'||role==='software-developer'||path.endsWith('/ROLE-DEVELOPER'))return 'Developer';
   if(/\/ROLE-/.test(path))return '';
+  if(/^(?:feature|features)$/i.test(String(issue.type||'')))return 'Developer';
  }
  const summary=String(issue.summary||'');
  if(/^\s*(?:UI\/UX Design|UI Design|UX Design|Wireframe|Mockup)\s*(?:[-—:|]|$)/i.test(summary))return 'UI/UX Designer';
