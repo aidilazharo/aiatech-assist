@@ -2099,7 +2099,7 @@ async function importDiscoveryDocument(roleId,{replacementDigest='',expectedRevi
  if(updatedDocuments.length||legacyBaselines.length||missingActive.length){
   // Upload is locally durable first; Confluence retry is non-blocking and
   // reports failures without erasing the accepted original source.
-  void syncConfluenceSourceVault(projectId,'uploaded-source').catch(async error=>{
+  if(typeof syncConfluenceSourceVault==='function')void syncConfluenceSourceVault(projectId,'uploaded-source').catch(async error=>{
    report('Confluence original upload queued for retry: '+String(error.message||error));
    if(activeProject?.id===projectId)await dashboard?.webview.postMessage({type:'confluenceSourceVault',error:'Confluence sync pending; original file is safe locally. '+String(error.message||error).slice(0,240)});
   });
