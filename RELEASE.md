@@ -1,17 +1,17 @@
-# ATGV AIATECH Assist v0.4.43
+# ATGV AIATECH Assist v0.4.44
 
-## Fix: BA mapping conflicts remain reviewable
+## Business Requirements workflow: Next Step readiness
 
-- Process every extracted Markdown BR section in order, preserving resumable AI preflight and mapping checkpoints.
-- Do not discard completed mappings when a validated preflight or cross-section check reports potentially conflicting business rules.
-- Record unresolved source and cross-section findings in the saved requirements mapping and downloadable BA preflight report, including section and evidence excerpts.
-- Display findings for Business Analyst review instead of returning a fatal `processDiscoverySources` error.
-- Require explicit source-revision-linked BA acknowledgement when confirming or skipping AI Review. Acknowledgement does not modify the original source or automatically approve any Jira issue.
-- Preserve existing approval, source-integrity, and Jira publication safeguards. AI failure without reviewable evidence remains a technical error.
-- Add regressions for preflight contradictions, cross-section contradictions, acknowledgement detection and the former fatal-error behaviour.
+- Set **Next Step** to primary blue only when the actual next-stage action is available; otherwise render a solid dark-gray disabled button with legible text.
+- Use explicit milestone readiness, verified next-stage availability, and outstanding process prerequisites instead of painting based on completion alone.
+- From Generate Requirements, allow **Preview & Save** only when the draft-preview action is available.
+- From Preview & Save, keep **Approve Requirements** unavailable while Discovery Question 12 has unresolved decisions or outstanding BA review findings.
+- Preserve draft preview and editing even if final approval is blocked; acknowledge source and AI issues using the existing formal review gate.
+- Keep the navigation label, aria-disabled state, tooltip, mouse/keyboard behavior, and CSS visual status synchronized on every rerender.
+- Add regression tests for blocked/ready transitions, generated-draft preview, pending approvals, and primary/neutral styling.
 
 ## Compatibility
 
-- No project-register schema migration is required. Previously approved BRs and linked Jira items are not modified by the update.
-- A changed uploaded document or fresh discovery revision invalidates the previous acknowledgement and must be reviewed again.
-- The original uploaded document remains unchanged. Cross-section warnings remain open business decisions until the BA resolves or accepts their documented risk.
+- Existing draft/approved BRs, workflow history, source documents, and Jira links are not modified.
+- No project register migration is needed. The update affects only UI navigation status and appearance.
+- A previously saved requirement may still be reviewed while the approval gate is unresolved.

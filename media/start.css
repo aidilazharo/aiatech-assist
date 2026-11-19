@@ -2196,3 +2196,25 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 .atgv-job-error{color:var(--vscode-errorForeground,#db6666);font-size:12px}
 .atgv-jobs-row>button{justify-self:start}
 @media(max-width:520px){.atgv-jobs-dialog{width:calc(100vw - 18px);padding:12px}.atgv-jobs-row{padding:9px}}
+
+/* v0.4.44: the standalone BA Next Step uses the action's actual readiness.
+   Ready = primary blue, blocked or busy = solid dark gray.  Never use the
+   destination milestone's pending state to paint a disabled action blue. */
+#discoveryView #baStepNavigation #baNextStep[data-milestone-state="ready"]:not(:disabled){
+ background:var(--vscode-button-background,#0e639c)!important;
+ color:var(--vscode-button-foreground,#ffffff)!important;
+ border:1px solid var(--vscode-button-background,#0e639c)!important;
+ opacity:1!important;
+ cursor:pointer;
+}
+#discoveryView #baStepNavigation #baNextStep[data-milestone-state="ready"]:not(:disabled):hover{
+ background:var(--vscode-button-hoverBackground,#1779c6)!important;
+}
+#discoveryView #baStepNavigation #baNextStep[data-milestone-state="blocked"],
+#discoveryView #baStepNavigation #baNextStep:disabled{
+ background:#383b42!important;
+ color:#c8cbd1!important;
+ border:1px solid #50535b!important;
+ opacity:1!important;
+ cursor:not-allowed;
+}

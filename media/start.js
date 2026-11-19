@@ -5948,15 +5948,25 @@ function renderDiscoverySummary(){
   nextButton.dataset.stage=displayed;
   // An unfinished AI Review can use Next to confirm its already-saved findings.
   const canConfirm=displayed==='review'&&reviewReady&&!reviewFinalized&&!navigatingBusy&&savedDiscovery;
-  const ready=(!!next&&!!currentDefinition?.complete)||canConfirm;
+  // A completed milestone alone does not guarantee its NEXT action can run.
+  // Generation must have an eligible draft preview; saved BRs must resolve
+  // outstanding Discovery decisions before entering the approval milestone.
+  // Keep the Preview & Save stage accessible while approval is pending.
+  const previewActionReady=displayed!=='generate'||!$('brNextPreviewSave').disabled;
+  const approvalActionReady=displayed!=='save'||(!readiness.needsDecision&&!discoveryHasReviewBlockers());
+  const ready=ATGVJiraWorkflowTables.nextActionReady({next,complete:!!currentDefinition?.complete,canConfirm,previewReady:previewActionReady,approvalReady:approvalActionReady});
   nextButton.dataset.confirmReview=canConfirm?'true':'false';
   nextButton.dataset.milestoneState=ready?'ready':'blocked';
   nextButton.classList.toggle('secondary',!ready);
   nextButton.disabled=!ready;
+  nextButton.setAttribute('aria-disabled',String(!ready));
   nextButton.classList.toggle('ba-step-next-complete',ready);
   nextButton.textContent=nextDefinition?'Next Step · '+nextDefinition.label:'Workflow Complete';
   if(canConfirm)nextButton.textContent=discoveryHasReviewBlockers()?'Review & Acknowledge Findings':'Confirm AI Review & Continue';
-  nextButton.title=!nextDefinition?'The final Business Requirements milestone.':ready?'Continue to '+nextDefinition.label:currentDefinition?.complete?'Next step is unavailable until its prerequisites are satisfied.':'Complete this milestone before continuing.';
+  nextButton.title=!nextDefinition?'The final Business Requirements milestone.':ready?'Continue to '+nextDefinition.label:
+   !approvalActionReady?'Resolve Discovery Question 12 and outstanding BA findings before proceeding to approval.':
+   !previewActionReady?'Finish generating the BR drafts before opening Preview & Save.':
+   currentDefinition?.complete?'Next step is unavailable until its prerequisites are satisfied.':'Complete this milestone before continuing.';
   document.querySelector('.jira-inbound-panel').classList.toggle('hidden',!status.showJiraInbound||!showJira);
   $('discoveryImportStatus').classList.toggle('hidden',!showSources&&!showMapping);
   $('baPostPublishActions').classList.toggle('hidden',!baPublishedCurrent());
