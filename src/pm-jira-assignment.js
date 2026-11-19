@@ -14,6 +14,49 @@ function group(type){
  return 'other';
 }
 const DEV_LABEL='atgv-role-software-developer';
+const ROLE_LABELS=Object.freeze({
+ 'atgv-role-software-developer':'Developer',
+ 'atgv-role-ux-designer':'UI/UX Designer',
+ 'atgv-role-qa-engineer':'QA Engineer',
+ 'atgv-role-uat-tester':'UAT Tester',
+ 'atgv-role-business-analyst':'Business Analyst',
+ 'atgv-role-solution-architect':'Solution Architect',
+ 'atgv-role-project-manager':'Project Manager'
+});
+function roleForIssue(issue,register){
+ if(!issue)return '';
+ const labels=(Array.isArray(issue.labels)?issue.labels:[]).map(s=>String(s).toLowerCase()).filter(s=>s.startsWith('atgv-role-'));
+ if(new Set(labels).size>1)return '';
+ if(labels.length)return ROLE_LABELS[labels[0]]||'';
+ const key=String(issue.key||'').toUpperCase();
+ const mapped=[...Object.entries(register?.roleTaskMappings||{}),...Object.entries(register?.synced||{})].find(([,row])=>String(row?.key||'').toUpperCase()===key);
+ if(mapped){
+  const role=String(mapped[1].roleId||'').toLowerCase(),path=mapped[0].toUpperCase();
+  if(role==='uiux'||role==='ux-designer'||path.endsWith('/ROLE-UIUX'))return 'UI/UX Designer';
+  if(role==='qa'||role==='qa-engineer'||path.endsWith('/ROLE-QA'))return 'QA Engineer';
+  if(role==='uat'||role==='uat-tester'||path.endsWith('/ROLE-UAT'))return 'UAT Tester';
+  if(role==='developer'||role==='software-developer'||path.endsWith('/ROLE-DEVELOPER'))return 'Developer';
+  if(/\/ROLE-/.test(path))return '';
+ }
+ const summary=String(issue.summary||'');
+ if(/^\s*(?:UI\/UX Design|UI Design|UX Design|Wireframe|Mockup)\s*(?:[-—:|]|$)/i.test(summary))return 'UI/UX Designer';
+ if(/^\s*(?:QA Verification|Quality Assurance|QA Testing)\s*(?:[-—:|]|$)/i.test(summary))return 'QA Engineer';
+ if(/^\s*(?:User Acceptance Testing|UAT)\s*(?:[-—:|]|$)/i.test(summary))return 'UAT Tester';
+ if(/^\s*(?:Business Analyst|Requirements Analysis|BA Review)\s*(?:[-—:|]|$)/i.test(summary))return 'Business Analyst';
+ if(/^\s*(?:Solution Architect|Architecture Review)\s*(?:[-—:|]|$)/i.test(summary))return 'Solution Architect';
+ if(/^\s*(?:Project Manager|PMO)\s*(?:[-—:|]|$)/i.test(summary))return 'Project Manager';
+ if(['br','epic','story'].includes(group(issue.type)))return 'Developer';
+ // Generic Jira Tasks are development work only if their role is known;
+ // unlabeled Subtasks must be explicitly classified, not guessed.
+ if(String(issue.type||'').toLowerCase()==='task'&&mapped&&/\/task\//i.test(mapped[0]))return 'Developer';
+ return '';
+}
+function rosterCandidates(rows,role){
+ if(!role)return [];
+ return (Array.isArray(rows)?rows:[]).filter(row=>typeof row.id==='string'&&ACCOUNT.test(row.id)&&
+  Array.isArray(row.roles)&&row.roles.some(value=>String(value).trim().toLowerCase()===role.toLowerCase()))
+  .map(row=>({accountId:row.id,name:String(row.name||'Jira user').slice(0,140)})).slice(0,400);
+}
 function excludedRole(issue){
  const labels=(Array.isArray(issue?.labels)?issue.labels:[]).map(v=>String(v).toLowerCase());
  const other=labels.find(s=>s.startsWith('atgv-role-')&&s!==DEV_LABEL);
@@ -23,9 +66,8 @@ function excludedRole(issue){
   return 'role-specific: '+summary.slice(0,45);
  return '';
 }
-function developable(issue){
- if(!issue||excludedRole(issue))return false;
- return true; // Explicit developer role and unlabelled development hierarchy.
+function developable(issue,register){
+ return !!issue&&roleForIssue(issue,register)==='Developer';
 }
 function linkedDevelopmentKeys(register,rootKey){
  const synced=register?.synced||{},roleMappings=register?.roleTaskMappings||{};
@@ -70,7 +112,7 @@ function plan({rootKey,items,projectKey,register}){
    current=map.get(parent);
   }
   if(!owned&&!linked.keys.includes(item.key))continue;
-  if(item.key!==root&&excludedRole(item)){excluded.push({key:item.key,reason:excludedRole(item)});continue;}
+  if(item.key!==root&&!developable(item,register)){excluded.push({key:item.key,reason:excludedRole(item)||'No verified Developer role'});continue;}
   targets.push({key:item.key,updated:String(item.updated||''),owner:String(item.assigneeId||''),type:item.type});
  }
  for(const key of linked.keys)if(!map.has(key))orphaned.push(key);
@@ -122,4 +164,4 @@ async function change({targets,projectKey,accountId,expectedUpdated,readIssue,se
  return {count:original.length,changed:applied.length,accountId:accountId||null};
 }
 function canAssign(permissionResponse){return permissionResponse?.permissions?.ASSIGN_ISSUES?.havePermission===true;}
-module.exports={group,excludedRole,developable,linkedDevelopmentKeys,plan,change,canAssign};
+module.exports={group,roleForIssue,rosterCandidates,excludedRole,developable,linkedDevelopmentKeys,plan,change,canAssign};
