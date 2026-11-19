@@ -57,7 +57,7 @@ test('runtime includes explicit opt-in recovery but never bypasses BR approval a
  assert.match(host,/if\(!review\.skipped\)throw Error/);
  assert.match(host,/brWorkflow\.generated\(registry,activeProject\.id,register\.revision/);
  assert.match(host,/Create Simple Draft/);
- assert.match(host,/No tests were run/);
- assert.match(host,/case 'publishJira'/);
+ assert.match(host,/no tests were run/i);
+ assert.match(host,/Publish Jira/);
  assert.equal(recovery.attempts('mapping',true,false),3);
 });
