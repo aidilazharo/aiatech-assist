@@ -2,8 +2,8 @@
   "name": "atgv-aiatech-assist",
   "displayName": "ATGV AIATECH Assist",
   "description": "Webview-based SDLC work with ownership handoffs, Jira/GitHub actions, Confluence document sync and approved AI draft orchestration.",
-  "version": "0.4.40",
-  "atgvDisplayVersion": "0.4.40",
+  "version": "0.4.41",
+  "atgvDisplayVersion": "0.4.41",
   "publisher": "aia-my",
   "private": true,
   "license": "UNLICENSED",
@@ -180,6 +180,10 @@
         }
       }
     }
+  },
+  "devDependencies": {
+    "clean-css": "5.3.3",
+    "terser": "5.31.6"
   },
   "scripts": {
     "test": "node scripts/generate-source-test-index.js && node --test test/*.test.js",
