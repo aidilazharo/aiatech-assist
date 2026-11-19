@@ -1928,6 +1928,8 @@ async function importDiscoveryDocument(roleId){
   await dashboard?.webview.postMessage({type:'discoveryImportProgress',message:`Reading ${path.basename(selection.fsPath)}…`});
   const doc=await discoveryImport.importDocumentText(selection.fsPath);
   if(doc.truncated)throw Error(`${doc.name}: extracted text exceeds ${discoveryImport.MAX_EXTRACTED.toLocaleString('en-US')} characters. Split the source into smaller documents or reduce non-requirement appendices; no text was silently discarded.`);
+  // Validate TXT splitting before accepting source bytes, to avoid partially imported oversized BR cycles.
+  baBrTextPipeline.split(doc.text);
   documents.push({...doc,digest:sha(doc.text),originalPath:selection.fsPath});
  }
  if(new Set(documents.map(d=>d.name.toLowerCase())).size!==documents.length||new Set(documents.map(d=>d.digest)).size!==documents.length)throw Error('Select unique filenames and document contents.');
@@ -1994,6 +1996,11 @@ async function importDiscoveryDocument(roleId){
  const current=await brWorkflow.load(registry,activeProject.id);
  if(current.revision!==initial.revision)throw Error('Source document list changed during upload. Refresh and retry.');
  const register=await brWorkflow.addSources(registry,activeProject.id,current.revision,prospective,{actor:uploader,singleSourceCycle:true});
+ // Persist the source-preserving TXT files immediately after upload, even when no AI provider is configured.
+ for(const {document:doc} of updatedDocuments){
+  const units=await baBrTextPipeline.prepare(registry,activeProject.id,doc);
+  await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preparing',message:'Prepared '+units.length+' verified BR .txt file(s) for '+doc.name+'.'});
+ }
  if(updatedDocuments.length)documentPreflightSessions.delete(activeProject.id); // Invalidate stale results after a source revision.
  if(modified.length||fresh.length&&!!initial.mappingCompleted){
   approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;jiraPreviewValidation=null;
