@@ -1296,7 +1296,10 @@ async function storedStartupVerification(){
  }catch{return null;}
 }
 async function startupStatus(projects=[]){
- const verified=await storedStartupVerification();
+ // Cache already-verified OS keychain credentials during an opened session.
+ const alreadyOpened=openingLocked||openingFlow.phase!=='search'||!!activeProject;
+ const verified=alreadyOpened&&startupSessionVerified&&startupVerifiedSignature?
+  {signature:startupVerifiedSignature}:await storedStartupVerification();
  startupSessionVerified=!!verified;
  startupVerifiedSignature=verified?.signature||'';
  const workspace=getWorkspace()?.uri.fsPath;
@@ -1535,6 +1538,8 @@ async function focusAtgvWorkspace(){
 async function finishManualProjectDiscovery(sequence){
  if(sequence!==startupSequence||!webviewCoreReady)return;
  startupScan={status:'complete',percent:100,message:'Review technology stack prerequisites and test Jira, Confluence and GitHub connections first. Choose a project only after setup is verified.'};
+ // Hydrate saved (non-secret) fields before heavier dashboard state is loaded.
+ await dashboard?.webview.postMessage({type:'startupSavedFields',saved:startupSavedConnectionFields()});
  await dashboard?.webview.postMessage({type:'startupScan',...startupScan});
  await refreshDashboard();
 }
@@ -1784,10 +1789,12 @@ async function testOpeningProject(){
     openingFlow.tested(cached.warnings);
     return 'Recent connection check reused.';
   }
-  await openingProgress('connection','Authenticating Jira…',17);
-  const account=await testJiraConnection(config,token);
-  await openingProgress('connection','Verifying Confluence space…',26);
-  const space=await getConfluenceSpace(config,token);
+  await openingProgress('connection','Checking Jira and Confluence in parallel…',17);
+  // These independent read-only connection checks can run concurrently.
+  const [account,space]=await Promise.all([
+   testJiraConnection(config,token),getConfluenceSpace(config,token)
+  ]);
+  await openingProgress('connection','Jira and Confluence connected.',26);
   const projectKey=config.get('jira.projectKey');
   const warnings=[];
   if(projectKey){
@@ -1850,7 +1857,6 @@ async function openVerifiedProject(){
    throw error;
   }
   await recordStartupDiagnostic({stage:'project-opening',projectId:p.id,status:'opened'});
-  await rememberOpened(p.id);
   await focusAtgvWorkspace();
   return `Opened ${p.name}. SDLC navigation is now available.`;
 }
@@ -1881,7 +1887,6 @@ async function launchProject(msg){
   await openingProgress('workspaceReady','Project workspace prepared.');
   await openingProgress('workspace','Opening project…');
   await openVerifiedProject();
-  await rememberOpened(openingFlow.candidate.id);
   await openingProgress('done','Project ready');
 }
                                                                                  
@@ -1901,7 +1906,6 @@ async function launchLocalOffline(){
   openingFlow.initialized();
   await openingProgress('workspace','Loading local project…');
   await openVerifiedProject();
-  await rememberOpened(project.id);
   await openingProgress('done','Local workspace ready');
 }
 function requireOnline(){
