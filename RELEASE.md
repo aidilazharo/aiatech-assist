@@ -1,3 +1,14 @@
+# ATGV AIATECH Assist v0.4.35
+
+- Add Jira Type filter for BR, Epic, User Stories, Task, and Subtask in Project Manager · Project Jira Work Items.
+- Add an editable Jira Assignee card directly below Reporter in the ticket details modal. Eligible users must have the matching SDLC role in the verified project roster AND be assignable in Jira; PM must have Jira Assign Issues permission.
+- Assign entire BR/Epic development hierarchy to the chosen developer while leaving non-development role tickets (UI/UX, BA, SA, QA, UAT, PM) unchanged. Permit role-matched individual Task/Subtask assignment with explicit confirmation, state checks and rollback.
+- Add project-scoped, persistent, redacted Business Requirements process diagnostics covering uploads, preflight, AI mapping, approvals, Jira actions, and failures, with a small Download Logs icon beside Previous Step.
+- Refresh the existing webview's content each time users navigate the sidebar or role menu; continue long-running host processes when changing screens and show current mapping progress when returning. Preserve process state and defer cross-project switching during active operations.
+- Include comprehensive regressions for correct role scope, redaction, rollback, navigation and background activity preservation.
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.34
 
 - Fix recurring Business Analyst document timeouts for large, structured BRDs (60,000+ extracted characters), including GATE MVP1a v2.0.
