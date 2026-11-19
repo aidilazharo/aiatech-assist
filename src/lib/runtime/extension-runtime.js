@@ -75,6 +75,7 @@ const jiraItemEditor=require('../../jira-item-editor');
 const sourceStore=require('../../source-store');
 const {evaluate:continuityEvaluate}=require('../../continuity');
 const {WorkflowEngine}=require('../../workflow-engine');
+const {DurableWorkflowEngine,fingerprint:atgvJobHash,safeError:atgvJobSafeError}=require('../../atgv-job-engine');
 const {DocumentSync}=require('../../confluence-docsync');
 const {validProjectKey,jiraIssueTypes,jiraCreateIssue,jiraUpdateIssue,jiraRetireIssue,jiraFindIssueByMarker,jiraReadIssue,jiraReadIssueChangelog,jiraIssueFieldMetadata,jiraReadIssueAllFields,jiraMarker,remoteFingerprint,githubBranch,githubPullRequest,jiraAssignCurrentUser,jiraAssignRoleCurrentUser,jiraUnassignCurrentUser,jiraAvailableTransitions,jiraMove}=require('../../remote-actions');
 const companion=require('../../companion-client');
@@ -935,6 +936,14 @@ async function activateProject(id){
   try{const mem=new aiMemory.ProjectMemory(path.dirname(registry.fileFor(project.id)));mem.close();}catch(e){report('AI SQLite memory unavailable: '+e.message);}
   if(epoch!==activationEpoch)return project;
   activeProject=project;store=nextStore;
+  if(!atgvRecoveredProjects.has(project.id)){
+   try{
+    const recovered=await atgvJobJournal().recover(project.id);
+    atgvRecoveredProjects.add(project.id);
+    const stopped=recovered.filter(job=>['interrupted','reconcile-required'].includes(job.status));
+    if(stopped.length)report('ATGV workflow recovery: '+stopped.length+' previously interrupted job(s) await review; no remote write was replayed.');
+   }catch(error){report('Workflow recovery unavailable: '+atgvJobSafeError(error));}
+  }
   liveRemoteState={projectId:project.id,phase:openingOffline?'offline':'idle',lastAttempt:'',lastSuccess:'',results:{},errors:{}};
   await context.workspaceState.update('atgvAssist.activeProject',project.id);
   // Persist the open-project navigation state before the first dashboard update:
@@ -1516,7 +1525,7 @@ function queueMyWorkPresence(roleId){
   if(activeProject?.id===projectId)await dashboard?.webview.postMessage({type:'myWorkRosterError',projectId,message:String(error.message||error).slice(0,280)});
  });
 }
-async function refreshDashboard(){if(dashboard){if(activeProject)await dashboard.webview.postMessage({type:'jiraMonitorState',enabled:context.workspaceState.get('atgvAssist.monitorJira.'+activeProject.id,false)});await dashboard.webview.postMessage(await dashboardState());}}
+async function refreshDashboard(){if(dashboard){if(activeProject)await dashboard.webview.postMessage({type:'jiraMonitorState',enabled:context.workspaceState.get('atgvAssist.monitorJira.'+activeProject.id,false)});await dashboard.webview.postMessage(await dashboardState());if(activeProject)await atgvPostJobs(activeProject.id);}}
 async function focusAtgvWorkspace(){
                                                                            
   for(const id of ['workbench.action.closeSidebar','workbench.action.closePanel','workbench.action.closeAuxiliaryBar']){
@@ -2303,6 +2312,12 @@ async function processSelectedDiscoverySources(msg){
      }
     }
     partAnswers.push(proposals);
+    if(typeof atgvJobCheckpoint==='function')await atgvJobCheckpoint(run.projectId,'processDiscoverySources',{
+     step:'mapped_section_'+String(part+1),
+     inputHash:sha(sections[part]),
+     outputHash:sha(JSON.stringify(proposals)),
+     percent:Math.max(1,Math.min(95,Math.round((part+1)/sections.length*90)))
+    });
     await recordBAProcess({stage:'mapping',action:'section-'+(part+1)+'-of-'+sections.length,
      status:sourceOnlyMappingPart?'source-only-review-required':'mapped',
      details:sourceOnlyMappingPart?'AI mapping unavailable; literal source extraction used.':'AI mapping completed.'});
@@ -4510,9 +4525,34 @@ async function startupStackCatalog(){
 // Host processes survive screen navigation. Keep their project identity until
 // the original command settles. A project switch is deferred while mutation is
 // active because project-scoped references cannot safely be rebound mid-run.
+// One durable metadata journal across all role workspaces. Sources, tokens,
+// prompts and approval bodies are never recorded in this journal.
 const activeHostProcesses=new Map();
+let atgvDurableJobs=null;
+const atgvRecoveredProjects=new Set();
+function atgvJobJournal(){
+ if(!context?.globalStorageUri?.fsPath)throw Error('ATGV storage is not ready.');
+ if(!atgvDurableJobs)atgvDurableJobs=new DurableWorkflowEngine({root:path.join(context.globalStorageUri.fsPath,'workflow-jobs')});
+ return atgvDurableJobs;
+}
+async function atgvPostJobs(id=activeProject?.id){
+ if(!id||!dashboard)return;
+ try{
+  const jobs=await atgvJobJournal().list(id);
+  if(activeProject?.id===id)await dashboard.webview.postMessage({type:'atgvWorkflowJobs',projectId:id,jobs});
+ }catch(e){report('Workflow job status: '+atgvJobSafeError(e));}
+}
+async function atgvJobCheckpoint(projectId,command,{step,inputHash,outputHash,percent}){
+ const job=[...activeHostProcesses.values()].find(value=>value.projectId===projectId&&value.command===command&&value.journalId);
+ if(!job)return;
+ try{
+  await atgvJobJournal().checkpoint(projectId,job.journalId,{step,inputHash,outputHash,percent});
+  await atgvPostJobs(projectId);
+ }catch(error){report('Workflow checkpoint unavailable: '+atgvJobSafeError(error));}
+}
+
 function isLongRunningHostProcess(command){
- return /^(?:processDiscoverySources|generateBusinessRequirements|generateDrafts|applyDiscoveryReview|brJiraSync|brJiraPreview|brRoleTaskRepairPublish|developerBrRun|developerBrPreviewDraft|developerBrStartServer|devCopilotStart|designGenerate|designRegenerateAffected|architectCustomRun|architectRunServer|architectTestStack|architectBootstrap|architectCommit|architectPublish|architectSaveStack|catalogPull|syncDocuments|startupInstallModule|sync)$/.test(String(command||''));
+ return /^(?:processDiscoverySources|generateBusinessRequirements|generateDrafts|applyDiscoveryReview|brJiraSync|brJiraPreview|brJiraApprove|brJiraScanExternal|brJiraRefreshWorkStates|brRoleTaskRepairPublish|developerBrRun|developerBrPreviewDraft|developerBrStartServer|devCopilotStart|designGenerate|designRegenerateAffected|uxPipelineGenerate|uxDesignGenerate|uxPublishFrontend|uxFrameworkSync|architectCustomRun|architectCustomScan|architectRecommend|architectValidate|architectRunServer|architectTestStack|architectBootstrap|architectCommit|architectPublish|architectSaveStack|architectCheckStackUpdates|architectPullStackUpdates|catalogPull|catalogCheck|catalogTest|syncDocuments|startupInstallModule|refreshConnectedSources|checkSoftwareUpdates|aiServiceRun|aiServiceInstall|pmJiraAssignableUsers|pmJiraSetAssignee|pmJiraTransition|pmApproveEffortBaseline|sync)$/.test(String(command||''));
 }
 function hasActiveProjectProcess(id){
  return !!id&&([...activeHostProcesses.values()].some(job=>job.projectId===id)||activeDiscoveryMappingRun?.projectId===id);
@@ -4522,11 +4562,42 @@ async function handleDashboardMessage(msg){
   const hostJob=activeProject?.id&&isLongRunningHostProcess(msg.command)?Symbol(msg.command):null;
   if(hostJob)activeHostProcesses.set(hostJob,{projectId:activeProject.id,command:msg.command,startedAt:Date.now()});
   const baAction=isBAProcessCommand(msg.command),baStarted=Date.now(),baCommand=String(msg.command);
+  let atgvJobError=null;
   let baFailure='';
   try{
     await ready;
+    if(hostJob&&activeProject){
+     try{
+      // Only stable non-secret identifiers enter job input hashes.
+      const inputHash=atgvJobHash({command:msg.command,projectId:activeProject.id,
+       revision:String(msg.revision||''),brId:String(msg.brId||''),
+       digests:Array.isArray(msg.digests)?msg.digests.filter(x=>/^[a-f0-9]{64}$/.test(x)).slice(0,10):[]});
+      const created=await atgvJobJournal().begin(activeProject.id,{command:msg.command,inputHash,
+       metadata:/^BR-\d+$/.test(String(msg.brId||''))?{brId:msg.brId}:{}});
+      const tracking=activeHostProcesses.get(hostJob);
+      if(tracking)tracking.journalId=created.id;
+      await atgvPostJobs(activeProject.id);
+     }catch(error){report('Workflow journal start unavailable: '+atgvJobSafeError(error));}
+    }
     if(baAction)await recordBAProcess({stage:'action',action:baCommand,status:'started',key:/^BR-\d+$/.test(String(msg.brId||''))?msg.brId:''});
     switch(msg.command){
+      case 'getWorkflowJobs':{
+        requireOpened();await atgvPostJobs(activeProject.id);break;
+      }
+      case 'retryWorkflowJob':{
+        requireOpened();
+        const id=String(msg.jobId||'');
+        if(!/^[a-f0-9-]{36}$/.test(id))throw Error('Invalid job reference.');
+        // No stored webview request is replayed. A retry enables the original
+        // role's existing resume button after fresh source and permission checks.
+        const job=await atgvJobJournal().requestRetry(activeProject.id,id,{});
+        await atgvPostJobs(activeProject.id);
+        await dashboard?.webview.postMessage({type:'atgvWorkflowRecovery',projectId:activeProject.id,
+          command:job.command,message:job.command==='processDiscoverySources'
+           ?'Use Business Requirements → Resume AI Mapping to continue from verified source checkpoints.'
+           :'Resume this read-only or AI operation through its original ATGV role screen. Check current inputs before starting.'});
+        break;
+      }
       case 'baDownloadProcessLog':{
         const projectId=activeProject?.id||'';
         try{
@@ -8715,6 +8786,7 @@ async function handleDashboardMessage(msg){
       default:throw new Error('Unsupported webview action.');
     }
   }catch(e){
+    atgvJobError=e;
     if(baAction)baFailure=String(e.message||e);
     captureLocalIssue(msg.command,e);
     if(msg._fromDesignTab)throw e;
@@ -8771,7 +8843,14 @@ async function handleDashboardMessage(msg){
       }catch{}
     }
   }finally{
-    if(hostJob)activeHostProcesses.delete(hostJob);
+    if(hostJob){
+      const tracked=activeHostProcesses.get(hostJob);
+      activeHostProcesses.delete(hostJob);
+      if(tracked?.journalId){
+       try{await atgvJobJournal().finish(tracked.projectId,tracked.journalId,atgvJobError);await atgvPostJobs(tracked.projectId);}
+       catch(error){report('Workflow journal finish unavailable: '+atgvJobSafeError(error));}
+      }
+    }
     if(baAction)await recordBAProcess({stage:'action',action:baCommand,status:baFailure?'failed':'finished',
       details:baFailure?baFailure.slice(0,400):'',durationMs:Date.now()-baStarted});
   }
@@ -9198,7 +9277,29 @@ function activate(ctx){
    await uiInformation(`Shared project artifacts updated for all SDLC roles: ${refreshed.manifest.files.length} indexed files in ${refreshed.root}.`);
    return refreshed.root;
   };
+  const workspaceJournalContexts=new Map();
   const workspace=()=>repoSyncWorkspace.open(vscode,{
+   onWorkflowEvent:async event=>{
+    if(event.type==='begin'){
+     const projectId=activeProject?.id||'workspace';
+     const writing=event.command==='workspacePublishSync';
+     const created=await atgvJobJournal().begin(projectId,{command:event.command,inputHash:event.inputHash,
+      role:'Workspace',kind:writing?'write':'read',retryable:!writing});
+     workspaceJournalContexts.set(created.id,projectId);
+     await atgvPostJobs(projectId);
+     return created.id;
+    }
+    const projectId=workspaceJournalContexts.get(event.jobId);
+    if(!projectId)return;
+    if(event.type==='stage'){
+     await atgvJobJournal().update(projectId,event.jobId,{phase:String(event.stage||'processing')});
+    }
+    if(event.type==='finish'){
+     await atgvJobJournal().finish(projectId,event.jobId,event.error||null);
+     workspaceJournalContexts.delete(event.jobId);
+    }
+    await atgvPostJobs(projectId);
+   },
    version:require('../../../package.json').version,onLog:report,
    secrets:context.secrets,preferences:context.globalState,workspaceRoot:getWorkspace()?.uri.fsPath||'',
    planSync:async facts=>{
