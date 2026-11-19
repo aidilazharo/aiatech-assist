@@ -53,6 +53,27 @@ test('public mirror verifies the source and publishes only the requested extensi
  assert.equal(args.some(x=>String(x).endsWith('Source.zip')),false);
  assert.ok(calls.every(url=>url.startsWith('https://')));
 });
+test('release mirror uses its Actions token only for the GitHub API',async()=>{
+ const calls=[];
+ const fetchImpl=async(url,options)=>{
+  calls.push({url,headers:options.headers});
+  return {ok:true,status:200,headers:{get:()=>null},arrayBuffer:async()=>Buffer.from('ok')};
+ };
+ for(const url of ['https://api.github.com/repos/aidilazharo/extension/releases',
+  'https://github.com/aidilazharo/extension/releases/download/v1/file.vsix',
+  'https://api.github.com.example.org/repos/attacker/repo'])
+  await mirror.fetchBytes(url,{fetchImpl,token:'temporary-actions-token'});
+ assert.equal(calls[0].headers.Authorization,'Bearer temporary-actions-token');
+ assert.equal(calls[1].headers.Authorization,undefined);
+ assert.equal(calls[2].headers.Authorization,undefined);
+});
+test('mirror reports the failing API endpoint and rate limit without leaking the token',async()=>{
+ const fetchImpl=async()=>({ok:false,status:403,headers:{get:name=>name==='x-ratelimit-remaining'?'0':null}});
+ await assert.rejects(mirror.fetchBytes('https://api.github.com/repos/aidilazharo/extension/releases?access_token=private',{fetchImpl,token:'temporary-actions-token'}),error=>{
+  assert.match(error.message,/api\.github\.com\/repos\/aidilazharo\/extension\/releases: HTTP 403/);
+  assert.match(error.message,/rate limit/);assert.doesNotMatch(error.message,/temporary-actions-token|private/);return true;
+ });
+});
 test('mirror rejects checksum mismatches, foreign repositories and conflicting target releases',async()=>{
  assert.throws(()=>mirror.verifyChecksum(Buffer.from('changed'),Buffer.from('0'.repeat(64)+'  a.vsix\n'),'a.vsix'),/SHA-256/);
  await assert.rejects(mirror.mirror({kind:'extension',target:'attacker/extension'}),/Unexpected/);
@@ -62,7 +83,8 @@ test('mirror rejects checksum mismatches, foreign repositories and conflicting t
  assert.doesNotMatch(manifest,/releaseDownloadPat/);assert.doesNotMatch(ui,/releaseDownloadPat/);
  assert.doesNotMatch(host,/releaseAccessToken|case 'saveReleaseDownloadPat'/);
  assert.match(host,/secrets\.delete\(LEGACY_RELEASE_DOWNLOAD_PAT_SECRET\)/);
- assert.match(ui,/gateLatestVersions'\)\.textContent=extensionText/);
+ assert.doesNotMatch(manifest,/id="gateLatestVersions"/);
+ assert.match(ui,/softwareExtensionStatus/);assert.match(ui,/softwareLibraryStatus/);
 });
 test('the release mirror never overwrites a target tag with an unrelated source',async()=>{
  const artifact=Buffer.from('vsix'),name='atgv-aiatech-assist-0.4.25.vsix',checksum=Buffer.from(digest(artifact)+'  '+name+'\n');

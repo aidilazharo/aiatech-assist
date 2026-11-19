@@ -97,7 +97,7 @@ function webviewFixture(){
  const source=[
   "const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluenceUrl',email:'startupEmail',githubUrl:'startupGithubUrl'};",
   "let startupSetupRequired=true,startupPage=0,startupVerifying=false,startupInstallingModule='',startupConnectionVerified=false,startupConnectionEditSnapshot=null,startupScanComplete=true,startupFormInitialized=false,startupReturnToConnections=false,startupPrereqRequested=false,startupOpenStackId='',startupCopilotModalOpen=false; let gateBusy=false,gateError='',workspaceOpened=false,opening={phase:'search'};",
-  "let startupAutoNotice='',startupAutoEnabled=false,startupAutoProject=null,startupAutoStage='',startupConnectionHealthStarted=false,startupConnectionHealthError=false,startupConnectionCheckPending=false; function beginStartupAuto(){} function checkSavedStartupConnections(){startupConnectionHealthStarted=true;}",
+  "let startupAutoNotice='',startupAutoEnabled=false,startupAutoProject=null,startupAutoStage='',startupConnectionHealthStarted=false,startupConnectionHealthError=false,startupConnectionCheckPending=false; function beginStartupAuto(){} function resetStartupConnectionChecks(){} function checkSavedStartupConnections(){startupConnectionHealthStarted=true;}",
   ui.slice(a,z),
   "return {renderStartupConfig,renderStartupPage,getPage:()=>startupPage,isVerified:()=>startupConnectionVerified,setOpening:p=>opening={phase:p},setGateBusy:v=>gateBusy=v,setGateError:v=>gateError=v};"
  ].join('\n');

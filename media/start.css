@@ -1786,10 +1786,7 @@ button:focus-visible{outline:2px solid var(--vscode-focusBorder,#649ed2);outline
 #startupConnectionForm .atgv-startup-connection-grid label{margin:0;font-size:11px;}
 #startupConnectionForm .atgv-startup-connection-grid input{min-width:0;max-width:100%;height:34px;min-height:34px;padding:6px 9px;font-size:12px;}
 #startupEditConnections{align-self:flex-end;margin-top:4px;padding:4px 10px;font-size:11px;}
-#startupConnectionChecks{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:6px 14px;margin:12px 0 0;padding:0;list-style:none;font-size:11px;}
-#startupConnectionChecks li{color:var(--vscode-descriptionForeground);overflow-wrap:anywhere;}
-#startupConnectionChecks li[data-state="ok"]{color:var(--vscode-testing-iconPassed);}
-#startupConnectionChecks li[data-state="error"],#startupConnectionChecks li[data-state="offline"]{color:var(--vscode-editorWarning-foreground);}
+#startupConnectionChecks{display:contents;}
 #startupConnectionForm .atgv-startup-actions{margin-top:14px;}
 @media(max-width:740px){#startupConnectionForm .atgv-startup-connection-grid{grid-template-columns:minmax(0,1fr);gap:10px;}#startupConnectionForm{padding:16px;}}
 
@@ -2060,7 +2057,6 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 #discoveryView .ba-requirement-modal-heading h2{margin:0;font-size:18px;overflow-wrap:anywhere}
 
 /* Responsive circular startup checks and permission summaries. */
-.atgv-startup-latest{margin:6px 0 12px;color:var(--vscode-descriptionForeground);font-size:12px;overflow-wrap:anywhere}
 .atgv-tool-scan-status{align-items:center;justify-content:flex-start;gap:12px}
 .atgv-scan-ring,.atgv-stack-ring{position:relative;display:grid;place-items:center;flex:none;width:clamp(44px,6vw,56px);aspect-ratio:1;border-radius:50%;font-size:11px;font-weight:700}
 .atgv-scan-ring-fill,.atgv-stack-ring-fill{position:absolute;inset:0;border-radius:50%;background:conic-gradient(var(--atgv-accent) 0%,var(--vscode-panel-border) 0)}
@@ -2113,7 +2109,9 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 .atgv-startup-prerequisites .atgv-startup-stack-grid{margin:12px 0 4px}
 .atgv-startup-permissions{display:contents}
 .atgv-permission-row{box-sizing:border-box;padding:0;background:var(--vscode-sideBar-background);border-radius:9px;overflow:hidden}
+.atgv-startup-stack-grid details.atgv-permission-row{margin:0}
 .atgv-permission-step{box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;min-height:92px;padding:10px;text-align:center;cursor:pointer;list-style:none}
+.atgv-permission-row:not([open])>.atgv-permission-step{height:100%}
 .atgv-permission-step .atgv-stack-ring{width:clamp(44px,6vw,56px)}
 .atgv-permission-step .atgv-permission-label{font-weight:650;overflow-wrap:anywhere}
 .atgv-permission-step .atgv-permission-status{font-size:11px;padding:3px 6px;border-radius:5px;background:var(--vscode-editorWidget-background)}

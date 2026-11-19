@@ -11,12 +11,13 @@ const ui=fs.readFileSync(path.join(__dirname,'../media/start.js'),'utf8');
 const html=host;
 function mappingHarness(aiAnswer,opts={}){
  const events=[];let commits=0;
+ const checkpoints=opts.checkpoints||new Map(),secrets=opts.secrets||new Map();
  const digest='a'.repeat(64);
  const register={revision:7,sourceDocuments:[{name:'visitor.pdf',digest}]};
  const sandbox={
-  AbortController,Map,Set,Error,Array,JSON,Number,Object,String,Date,
+  AbortController,Map,Set,Error,Array,JSON,Number,Object,String,Date,crypto:require('node:crypto'),
   setTimeout:opts.setTimeout||setTimeout,clearTimeout,
-  activeDiscoveryMappingRun:null,activeProject:{id:'tc'},registry:{},
+  activeDiscoveryMappingRun:null,activeProject:{id:'tc'},registry:opts.registry||{},
   requireOpened(){},async requireBAOwner(){},
   brWorkflow:{async load(){return register;},async commitSourceMapping(_r,_id,revision,changes){
    assert.equal(revision,7);assert.deepEqual([...changes.digests],[digest]);commits++;
@@ -24,7 +25,7 @@ function mappingHarness(aiAnswer,opts={}){
    events.push({type:'commit'});return {revision:8,mappingCompleted:{proposals:changes.proposals}};
   }},
   async activeAiTarget(){return {label:'Test model'};},
-  async roleSkillPrompt(){return '';},
+  async roleSkillPrompt(){return opts.roleSkill||'';},
   sourceStore:{async read(){return {name:'visitor.pdf',digest,text:opts.sourceText||'Requirements'}}},
   discoveryImport:{...discoveryModule,createMappingPrompt(doc){return opts.realPrompt?discoveryModule.createMappingPrompt(doc):'Map'},parseMappingResponse(answer){return JSON.parse(answer)}},
   baDocumentPreflight,
@@ -32,6 +33,13 @@ function mappingHarness(aiAnswer,opts={}){
   baWorkingBr:{...require('../src/ba-working-br'),async store(_registry,_project,sourceDigest){return {filename:'test.md',digest:'f'.repeat(64),sourceDigest}}},
   documentPreflightSessions:new Map(),
   successfulSourceMappings:new Map(),
+  report(){},context:{secrets:{get:async key=>secrets.get(key),store:async(key,value)=>secrets.set(key,value)},workspaceState:{update:async()=>{}}},
+  baMappingCheckpoint:opts.checkpointBackend||{
+   fresh:(meta,sections)=>({schema:1,...meta,sectionLengths:sections.map(x=>x.length),preflight:{},mapping:{},cross:{}}),
+   load:async(_registry,_project,meta)=>{const value=checkpoints.get(meta.sourceDigest);return value&&value.revision===meta.revision&&value.textDigest===meta.textDigest&&value.modelDigest===meta.modelDigest?JSON.parse(JSON.stringify(value)):null;},
+   save:async(_registry,_project,value)=>checkpoints.set(value.sourceDigest,JSON.parse(JSON.stringify(value))),
+   remove:async(_registry,_project,digest)=>checkpoints.delete(digest)
+  },
   sha:require('../src/utils').sha,
   aiAnswer:(target,prompt,limit,settings)=>{
    if(String(prompt).includes('automated Business Analyst source-document quality checker')){
@@ -91,6 +99,7 @@ test('retry does not reuse mapping from a different AI-updated working copy',asy
  const prompts=[];const t=mappingHarness(async(_target,prompt)=>{prompts.push(prompt);return '{"problem":"Add name"}';},opts);
  await assert.rejects(t.processMapping(t.request),/Simulated commit interruption/);
  opts.preflightResponse={status:'ready',summary:'Checked',edits:[],issues:[]};
+ opts.roleSkill='Updated Business Analyst guidance';
  await t.processMapping(t.request);
  assert.equal(prompts.length,2);
  assert.match(prompts[0],/Please add name once\./);
@@ -159,6 +168,46 @@ test('stopping during preflight aborts without retrying or saving',async()=>{
  await waitFor(()=>calls===1);t.sandbox.activeDiscoveryMappingRun.controller.abort();
  await assert.rejects(completion,{name:'AbortError'});
  assert.equal(calls,1);assert.equal(t.commits,0);
+});
+test('completed preflight sections resume after a later timeout and extension restart',async()=>{
+ const checkpoints=new Map();let firstCalls=0;
+ const text='A'.repeat(12000)+'B'.repeat(8000);
+ const first=mappingHarness(async()=>'{"problem":"unexpected"}',{checkpoints,sourceText:text,setTimeout:callback=>setTimeout(callback,10),preflightAnswer:()=>{
+  firstCalls++;return firstCalls===1?Promise.resolve('{"status":"ready","summary":"Checked","edits":[],"issues":[]}'):new Promise(()=>{});
+ }});
+ await assert.rejects(first.processMapping(first.request),/timed out twice/);
+ assert.ok(checkpoints.size);assert.equal(first.commits,0);
+ let resumedPreflights=0;
+ const second=mappingHarness(async(_target,prompt)=>String(prompt).includes('Review mapped business claims')?'{"status":"consistent","conflicts":[]}':'{"problem":"A requirement"}',{checkpoints,sourceText:text,preflightAnswer:()=>{resumedPreflights++;return Promise.resolve('{"status":"ready","summary":"Checked","edits":[],"issues":[]}');}});
+ await second.processMapping(second.request);
+ assert.equal(second.commits,1);assert.ok(second.events.some(row=>/Resuming: using the completed preflight/.test(row.message||'')));
+ assert.ok(resumedPreflights>0);assert.equal(checkpoints.size,0);
+});
+test('a fully processed section resumes after a commit interruption without another AI request',async()=>{
+ const checkpoints=new Map();let firstMappings=0;
+ const first=mappingHarness(async()=>{firstMappings++;return '{"problem":"Register visitors"}';},{checkpoints,failFirstCommit:true});
+ await assert.rejects(first.processMapping(first.request),/Simulated commit interruption/);
+ assert.equal(firstMappings,1);assert.ok(checkpoints.size);
+ let calls=0;
+ const second=mappingHarness(async()=>{calls++;throw Error('Mapping should have resumed');},{checkpoints,preflightAnswer:()=>{calls++;throw Error('Preflight should have resumed');}});
+ await second.processMapping(second.request);
+ assert.equal(calls,0);assert.equal(second.commits,1);assert.equal(checkpoints.size,0);
+ assert.ok(second.events.some(row=>/Resuming: using completed mapping/.test(row.message||'')));
+});
+test('authenticated on-disk checkpoints resume across fresh extension sessions',async()=>{
+ const fsAsync=require('node:fs/promises'),os=require('node:os');
+ const dir=await fsAsync.mkdtemp(path.join(os.tmpdir(),'atgv-mapping-resume-integration-'));
+ try{
+  const {ProjectRegistry}=require('../src/projects'),registry=new ProjectRegistry(dir);
+  await registry.create({id:'tc',name:'Test'});
+  const backend=require('../src/ba-mapping-checkpoint'),secrets=new Map();
+  const first=mappingHarness(async()=>'{"problem":"Visitor registration"}',{registry,secrets,checkpointBackend:backend,failFirstCommit:true});
+  await assert.rejects(first.processMapping(first.request),/Simulated commit interruption/);
+  let calls=0;
+  const second=mappingHarness(async()=>{calls++;throw Error('Unexpected AI mapping');},{registry,secrets,checkpointBackend:backend,preflightAnswer:()=>{calls++;throw Error('Unexpected AI preflight');}});
+  await second.processMapping(second.request);
+  assert.equal(calls,0);assert.equal(second.commits,1);
+ }finally{await fsAsync.rm(dir,{recursive:true,force:true});}
 });
 test('restart notice dismissal works with const queue and the exact screenshot message',()=>{
  const begin=ui.indexOf('function dismissObsoleteBARestartNotice(){');
