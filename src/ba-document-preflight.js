@@ -67,7 +67,7 @@ function industryStandardResolution(issue){
  // merely because a language model suggested a convenient default.
  if(kind==='design'&&issue.category==='contradiction'&&!/\b(?:missing|not provided|not supplied|does not provide|not yet approved|no evidence|no (?:approved |design |framework |approval |ui\/ux |artifact|reference)|without (?:an? )?(?:approved|design|framework|artifact))\b/i.test(issue.detail))return null;
  const missingPolicy=/\b(?:missing|undefined|not (?:provided|specified|defined)|does not (?:provide|specify|define)|no measurable|unclear|unspecified)\b/i.test(issue.detail);
- const reviewOnly=['acceptance','rbac','audit'].includes(kind)&&missingPolicy&&issue.category!=='contradiction';
+ const reviewOnly=['acceptance','rbac','audit','persistence'].includes(kind)&&missingPolicy&&issue.category!=='contradiction';
  // A review checklist is safe; selecting a role, threshold, or policy for the BA is not.
  if(kind!=='design'&&!reviewOnly&&(BUSINESS_CRITICAL.test(issue.detail)||issue.category==='contradiction'))return null;
  const rule=INDUSTRY_DEFAULTS[kind];
