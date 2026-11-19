@@ -8314,7 +8314,11 @@ async function handleDashboardMessage(msg){
         }
         jiraPreviewValidation=conflicts.length?null:{projectId:activeProject.id,revision:register.revision,planHash:sha(JSON.stringify(changes)),fieldPlansHash:sha(JSON.stringify(jiraPreviewFieldPlans)),verifiedAt:Date.now(),site:baseAtlassian(effectiveConfig(activeProject)),jiraProject:effectiveConfig(activeProject).get('jira.projectKey')};
         const jiraProject=changes.length?validProjectKey(effectiveConfig(activeProject).get('jira.projectKey')):'';
-        await dashboard?.webview.postMessage({type:'baProgress',task:'jiraPreview',message:'JIRA changes checked.',percent:100});await dashboard?.webview.postMessage({type:'brJiraPlan',changes,issueTypes,jiraProject,fieldPlans:jiraPreviewFieldPlans,conflicts,linkCandidates,protection:conflicts.assessment?.protection||[],revision:register.revision});break;
+        const preflightBlocked=conflicts.length>0;
+        await dashboard?.webview.postMessage({type:'baProgress',task:'jiraPreview',message:preflightBlocked?`Jira Preflight checked ${changes.length} planned issues and found ${conflicts.length} blocker(s). Resolve them before generating Jira Preview.`:`Jira Preflight passed for all ${changes.length} planned issues. Jira Preview ready.`,percent:100});
+        // Validation and issue/link recovery must precede any approvable preview.
+        // Blocked plans expose only diagnostics and safe repair actions, never a Jira Preview.
+        await dashboard?.webview.postMessage({type:preflightBlocked?'brJiraPreflight':'brJiraPlan',changes,issueTypes,jiraProject,fieldPlans:jiraPreviewFieldPlans,conflicts,linkCandidates,protection:conflicts.assessment?.protection||[],revision:register.revision,checkedCount:changes.length});break;
       }
       case 'brJiraApprove':{
         requireOpened();const register=await brWorkflow.load(registry,activeProject.id);
