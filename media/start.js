@@ -577,8 +577,10 @@ function gateOpeningPercent(percent,message){
  $('gateOpenTrack').setAttribute('aria-valuetext',String(message||'Opening project'));
  $('gateProgressText').textContent=message||'Opening project…';
 }
+let gateOpeningTargetId='';
 function launchFromGate(selection={}){
   if(gateBusy)return;
+  gateOpeningTargetId=String(selection.projectId||'');
   if(!selection.autoResume&&startupAutoEnabled)stopStartupAuto('Automatic opening paused for your project selection.');
   gateError='';gateOfflineAvailable=false;gateBusy=true;
   $('gateProgress').classList.remove('hidden');
@@ -589,6 +591,7 @@ function launchFromGate(selection={}){
 function renderGate(){
   // Project row actions already launch the complete opening sequence.
   $('gateFinder').classList.toggle('hidden',startupSetupRequired);
+  $('gateFinder').classList.toggle('is-opening',gateBusy);
   $('gateProgress').classList.toggle('hidden',!gateBusy);
   $('gateOpeningError').textContent=gateError;
   $('gateOpeningError').classList.toggle('hidden',!gateError);
@@ -602,8 +605,10 @@ function gateProjectRow(root,project,{recent=false}={}){
   const title=document.createElement('strong');title.textContent=project.name;
   const meta=document.createElement('small');meta.textContent=[project.settings?.confluence?.spaceKey||'Local project',projectReadiness[project.id]?'Ready':'Setup required'].join('  ·  ');
   text.append(title,meta);
-  const action=document.createElement('button');action.type='button';action.textContent=projectReadiness[project.id]?'Open Project':'Set Up & Open';
-  action.disabled=gateBusy;action.addEventListener('click',()=>launchFromGate({projectId:project.id}));
+  const action=document.createElement('button');action.type='button';action.textContent=gateBusy&&project.id===gateOpeningTargetId?'Opening…':projectReadiness[project.id]?'Open Project':'Set Up & Open';
+  action.className='atgv-open-project-button';
+  action.disabled=gateBusy;action.setAttribute('aria-disabled',String(gateBusy));
+  action.addEventListener('click',()=>launchFromGate({projectId:project.id}));
   row.append(text,action);root.append(row);
 }
 function renderGateResults(){
@@ -879,7 +884,7 @@ function updateState(msg){
   opening=msg.opening||{phase:'search',candidate:null,warnings:[]};
   // Intermediate selected/tested/initialized states are still opening.
   // Only a completed project or an explicit reset clears progress.
-  if(opening.phase==='open'||(opening.phase==='search'&&prior!=='search'))gateBusy=false;
+  if(opening.phase==='open'||(opening.phase==='search'&&prior!=='search')){gateBusy=false;gateOpeningTargetId='';}
   if($('coordinationProvider')){
     $('coordinationProvider').value=msg.coordinationProvider||'jira-confluence';
     const provider=msg.coordinationProvider||'jira-confluence';
@@ -7188,7 +7193,7 @@ window.addEventListener('message',event=>{
   if(m.type==='startupScan')renderWorkspaceSearch(m);
   if(m.type==='openingStart'){gateError='';gateOfflineAvailable=false;spaces=[];jiraProjects=[];gateSearchId=null;settingsSearchId=null;gateSearched=false;$('gateSearchMessage').textContent='';showGate();status('');}
   if(m.type==='openingProgress'){gateOpeningPercent(m.percent,m.message);$('gateProgress').classList.toggle('hidden',m.stage==='done');}
-  if(m.type==='openingError'){gateBusy=false;gateError=m.message||'Could not open project.';gateOfflineAvailable=!!m.canOffline;gateOpeningPercent(0,'Project opening failed: '+gateError);renderGate();}
+  if(m.type==='openingError'){gateBusy=false;gateOpeningTargetId='';gateError=m.message||'Could not open project.';gateOfflineAvailable=!!m.canOffline;gateOpeningPercent(0,'Project opening failed: '+gateError);renderGate();}
   if(m.type==='navigationRefreshState'&&m.projectId===activeId&&m.requestId===navigationRefreshRequestId){
     if(m.mapping?.running){
       mappingRunPhase=String(m.mapping.phase||'preparing');
@@ -7853,9 +7858,9 @@ function updateStartupIssueSummary(){
  const checks=startupPermissions?.checks||[...startupPermissionProgress.values()];
  const permissionIssues=checks.filter(check=>check.ok===false).length;
  const stackIssues=startupScanComplete?(startupStackData?.stacks||[]).filter(stack=>!stack.ready).length:0;
- const copilotIssue=startupScanComplete&&$('startupCopilotCard')?.dataset?.progressState==='error'?1:0;
+ // Copilot is optional and hidden; do not count it as a missing prerequisite.
  const connectionIssues=[...startupConnectionCheckResults.values()].filter(check=>check.state==='error'||check.state==='offline').length;
- const count=permissionIssues+stackIssues+copilotIssue+connectionIssues;
+ const count=permissionIssues+stackIssues+connectionIssues;
  node.textContent=count?`${count} ${count===1?'check needs':'checks need'} attention`:'';
 }
 function startupRing(card){
@@ -8302,6 +8307,22 @@ $('startupProceed').addEventListener('click',()=>{
 });
 window.addEventListener('message',event=>{
  const message=event.data||{};
+ if(message.type==='startupQuickStart'){
+  // Restore saved nonsecret fields immediately, before dashboard hydration.
+  if(!startupFormInitialized){
+   for(const [key,id] of Object.entries(startupFieldMap))$(id).value=message.saved?.[key]||message.defaults?.[key]||'';
+   updateHeaderUserName($('startupEmail').value);
+  }
+  if(!startupPrereqRequested){
+   startupPrereqRequested=true;
+   startupScanPercent(0,'Scanning technology stack prerequisites…');
+   renderStartupScanPlaceholders();
+   $('startupPrerequisiteDetails').open=true;
+   $('startupToolMessage').textContent='Checking installed runtimes and required host tools…';
+   $('startupRefresh').disabled=true;
+   send('startupReadiness');
+  }
+ }
  if(message.type==='state'&&message.startupSetup)renderStartupConfig(message.startupSetup);
  if(message.type==='startupReadinessProgress'){
   startupScanPercent(message.percent,message.message);
