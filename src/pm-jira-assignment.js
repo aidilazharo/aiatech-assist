@@ -48,7 +48,8 @@ function roleForIssue(issue,register){
  if(['br','epic','story'].includes(group(issue.type)))return 'Developer';
  // Generic Jira Tasks are development work only if their role is known;
  // unlabeled Subtasks must be explicitly classified, not guessed.
- if(String(issue.type||'').toLowerCase()==='task'&&mapped&&/\/task\//i.test(mapped[0]))return 'Developer';
+ if(mapped&&!/\/ROLE-/i.test(mapped[0])&&
+  /^(?:task|subtask|sub-task)$/i.test(String(mapped[1].kind||mapped[1].issueType||issue.type||'')))return 'Developer';
  return '';
 }
 function rosterCandidates(rows,role){
