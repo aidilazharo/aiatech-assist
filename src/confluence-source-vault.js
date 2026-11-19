@@ -79,10 +79,10 @@ async function snapshot(registry,projectId){
 function snapshotHash(snapshot){return sha(Buffer.from(JSON.stringify(snapshot)));}
 async function safeWrite(file,bytes,expected){
  if(!DIGEST.test(expected)||sha(bytes)!==expected)throw Error('Confluence download checksum mismatch. Original upload was not restored.');
- const dest=path.resolve(file),parts=path.dirname(dest).split(path.sep);
- let current=path.parse(dest).root;
- for(const part of parts.filter(Boolean)){
-  if(current===path.parse(dest).root&&part===path.parse(dest).root)continue;
+ const dest=path.resolve(file),root=path.parse(dest).root;
+ const parts=path.relative(root,path.dirname(dest)).split(path.sep).filter(Boolean);
+ let current=root;
+ for(const part of parts){
   current=path.join(current,part);
   const st=await fs.lstat(current).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
   if(st&&(st.isSymbolicLink()||!st.isDirectory()))throw Error('Unsafe source restoration directory.');
@@ -186,19 +186,28 @@ class ConfluenceSourceVault{
  }
  async restore(manifest,remoteHash,space,pageId,attachments,{allowRegister=false}={}){
   const result={downloaded:0,restored:false,conflicts:[],uploaded:0};
+  const restoreFile=async(file,item,expected)=>{
+   const existing=await fs.lstat(file).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
+   if(existing){
+    if(!existing.isFile()||existing.isSymbolicLink())throw Error('Unsafe local file or symbolic link.');
+    if(sha(await fs.readFile(file))===expected)return false;
+    throw Error('Local bytes differ from verified Confluence source; preserve existing file.');
+   }
+   return safeWrite(file,await this.download(pageId,item,expected),expected);
+  };
   const byName=new Map(attachments.map(x=>[x.title,x]));
   for(const doc of manifest.documents){
    const file=path.join(this.root,'documents','requirements','sources',doc.storedName);
    const item=byName.get(doc.storedName);
    if(!item){result.conflicts.push('Missing Confluence original: '+doc.name);continue;}
-   try{if(await safeWrite(file,await this.download(pageId,item,doc.byteDigest),doc.byteDigest))result.downloaded++;}
+   try{if(await restoreFile(file,item,doc.byteDigest))result.downloaded++;}
    catch(e){result.conflicts.push(doc.name+': '+message(e));}
   }
   for(const doc of manifest.files){
    const file=path.join(this.root,'documents',...doc.relative.split('/'));
    const item=byName.get(doc.attachment);
    if(!item){result.conflicts.push('Missing Confluence document: '+doc.relative);continue;}
-   try{if(await safeWrite(file,await this.download(pageId,item,doc.byteDigest),doc.byteDigest))result.downloaded++;}
+   try{if(await restoreFile(file,item,doc.byteDigest))result.downloaded++;}
    catch(e){result.conflicts.push(doc.relative+': '+message(e));}
   }
   if(allowRegister&&!result.conflicts.length){
