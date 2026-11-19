@@ -1507,7 +1507,7 @@ async function recorded(registry,id,revision,{path:nodePath,action,key,hash,kind
  * The host must verify Jira marker, type, parent, role and content BEFORE calling.
  * No Jira mutation or synthetic CREATE operation is performed here.
  */
-async function reconcileExistingJira(registry,id,revision,{path:nodePath,key,hash,kind,title,issueType,remoteDigest,marker,actor='Business Analyst'}={}){
+async function reconcileExistingJira(registry,id,revision,{path:nodePath,key,hash,kind,title,issueType,remoteDigest,marker,actor='Business Analyst',contentMatchesApproved=true}={}){
  return write(registry,id,revision,next=>{
   const item=plan(next).find(row=>row.path===nodePath&&row.action==='create'&&row.hash===hash);
   if(!item||item.staleJiraDetails)throw Error('The approved Jira preview changed. Generate a new preview.');
@@ -1524,8 +1524,13 @@ async function reconcileExistingJira(registry,id,revision,{path:nodePath,key,has
   }
   const role=next.roleTaskMappings?.[nodePath];
   if(role&&(role.key!==key||role.marker!==marker))throw Error('Existing role-task repair mapping does not match this Jira issue.');
-  next.synced[nodePath]={key,hash,kind:kind||item.kind,issueType:issueType||item.kind,title:title||item.title,remoteDigest,marker};
-  event(next,'jira-existing-link-recovered',{path:nodePath,key,actor:String(actor).slice(0,120),source:role?'verified-role-task-repair':'verified-remote-marker'});
+  if(contentMatchesApproved===false&&item.kind!=='Role')throw Error('Only a verified role task can be linked with changes awaiting Jira review.');
+  // A previously published role subtask may have the historical repair text,
+  // not the current approved BR text. Do not claim it is synchronized until
+  // a separate, explicitly approved Jira UPDATE reconciles those differences.
+  const recordedHash=contentMatchesApproved===false?digest({recoveredRemoteDigest:remoteDigest}):hash;
+  next.synced[nodePath]={key,hash:recordedHash,kind:kind||item.kind,issueType:issueType||item.kind,title:title||item.title,remoteDigest,marker};
+  event(next,'jira-existing-link-recovered',{path:nodePath,key,actor:String(actor).slice(0,120),source:role?'verified-role-task-repair':'verified-remote-marker',requiresJiraReview:contentMatchesApproved===false});
  });
 }
 function promptForGeneration(answers,existing=[],supplementalSources=[]){return [
