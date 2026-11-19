@@ -1,3 +1,18 @@
+# ATGV AIATECH Assist v0.4.37
+
+- Add confirmed Skip AI Preflight · Source-Only recovery for blocked AI checks, preserving the original source, marking AI verification unverified and retaining human BR/Jira approval gates.
+- Let Next Step confirm a completed AI Review, acknowledge findings where required, and navigate to Generate Requirements after confirmation.
+- Disable automatic webview refresh on navigation, minute-timer model polling and background Jira/Confluence synchronization; retain manual Refresh and explicit workflow updates.
+- Repair the release-version fallback and existing regression harnesses.
+
+- Fix Business Requirements mapping failure when the UI's BR register revision becomes stale without changing the selected uploaded document.
+- Validate a stable snapshot of active source identities and mapping epoch; never commit AI output if the source was replaced, archived, deleted or reselected.
+- Rebase the final atomic mapping commit onto the latest register revision after unrelated edits, with bounded optimistic-concurrency retries under the existing file lock.
+- Keep authenticated AI preflight/mapping checkpoints across unrelated register updates, including compatible previous-version resume markers; clean up checkpoints only after a successful commit.
+- Add regression coverage for stale UI revisions, near-complete AI commits, real source replacement, source-selection conflicts and legacy strict callers.
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.36
 
 - After three actual AI request timeouts during BRD preflight, mapping or cross-section comparison, prompt the Business Analyst to choose a simplified source-backed Jira draft workflow or continue the existing AI recovery path.

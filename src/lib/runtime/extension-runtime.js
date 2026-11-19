@@ -38,6 +38,7 @@ const baProcessDiagnostics=require('../../ba-process-diagnostics');
 const baWorkingBr=require('../../ba-working-br');
 const discoveryReview=require('../../discovery-review');
 const brWorkflow=require('../../br-workflow');
+const baSourceSelectionGuard=require('../../ba-source-selection-guard');
 const jiraPreviewDetails=require('../../jira-preview-details');
 const jiraRoleRepair=require('../../jira-role-task-repair');
 const brArtifactCleanup=require('../../br-artifact-cleanup');
@@ -1452,7 +1453,8 @@ async function dashboardState(){
   const brState=exportRecovery?.register||(openingFlow.phase==='open'&&activeProject?await brWorkflow.load(registry,activeProject.id):null);
   const baSelectedSources=brState?(context.workspaceState.get('atgvAssist.baSelectedSources.'+activeProject.id,[])||[]).filter(digest=>brState.sourceDocuments.some(source=>source.digest===digest)):[];
   const resumeMarker=brState?context.workspaceState.get('atgvAssist.baMappingResume.'+activeProject.id):null;
-  const baMappingResumeAvailable=!!(resumeMarker&&String(resumeMarker.revision)===String(brState?.revision)&&
+  const baMappingResumeAvailable=!!(resumeMarker&&
+   (!resumeMarker.sourceIdentity||resumeMarker.sourceIdentity===baSourceSelectionGuard.snapshot(brState).identity)&&
    Array.isArray(resumeMarker.digests)&&resumeMarker.digests.length&&resumeMarker.digests.every(digest=>brState.sourceDocuments.some(source=>source.digest===digest)));
   const jiraBrowseBaseUrl=openingFlow.phase==='open'&&activeProject?String(effectiveConfig(activeProject).get('jira.baseUrl')||'').replace(/\/$/,''):'';
   let flowState=discoveryState?continuityEvaluate(discoveryState.answers,{approved:!!brState?.brs?.some(br=>br.status==='approved'&&!br.needsRefresh&&br.approvedContent)}):null;
@@ -1577,8 +1579,8 @@ async function start(options={}){
   dashboard.webview.html=html(dashboard.webview);webviewVendorDir=installedVendorAssets?.dir||null;
   dashboard.onDidDispose(()=>{for(const [key,item] of pendingHostDialogs){clearTimeout(item.timer);item.resolve(undefined);pendingHostDialogs.delete(key);}for(const [key,item] of pendingExtensionUpgradeOffers){clearTimeout(item.timer);item.resolve('Later');pendingExtensionUpgradeOffers.delete(key);}for(const [key,item] of pendingLibraryUpdateOffers){clearTimeout(item.timer);item.resolve('Later');pendingLibraryUpdateOffers.delete(key);}for(const [key,item] of pendingPrerequisiteInstallOffers){item.resolve(undefined);}activeLibraryUpdatePullRequestId=null;dashboard=undefined;pendingTests={jira:null,github:null};if(modelStatusPoll){clearInterval(modelStatusPoll);modelStatusPoll=null;}});
   if(modelStatusPoll)clearInterval(modelStatusPoll);
-  modelStatusPoll=setInterval(()=>{invalidateModelStatus();if(dashboard)refreshDashboard().catch(e=>report('Model badge refresh: '+e.message));},60000);
-  modelStatusPoll.unref?.();
+  // No automatic webview refresh: preserve active fields and workflow stage.
+  modelStatusPoll=null;
   await finishManualProjectDiscovery(sequence);
 }
 async function notice(message,error=false){if(dashboard)await dashboard.webview.postMessage({type:'notice',message,error});}
@@ -2077,7 +2079,7 @@ async function requestSourcePreflight(target,prompt,run){
 async function processSelectedDiscoverySources(msg){
  if(activeDiscoveryMappingRun)throw Error('Source mapping is already running. Stop it before starting another mapping.');
  requireOpened();
- const run={controller:new AbortController(),phase:'preparing',projectId:activeProject.id,timeout:false};
+ const run={controller:new AbortController(),phase:'preparing',projectId:activeProject.id,timeout:false,skipAiChecks:msg.skipAiChecks===true};
  activeDiscoveryMappingRun=run;
  const check=()=>{
   if(run.controller.signal.aborted){const error=Error('Source mapping stopped before saving. No discovery answers were changed.');error.name='AbortError';throw error;}
@@ -2088,14 +2090,20 @@ async function processSelectedDiscoverySources(msg){
   const selected=msg.digests;
   if(!Array.isArray(selected)||!selected.length||selected.length>10||new Set(selected).size!==selected.length)throw Error('Select at least one document.');
   const original=await brWorkflow.load(registry,run.projectId);check();
-  if(msg.revision!==original.revision)throw Error('Source selection changed. Refresh and retry.');
   const documents=selected.map(d=>original.sourceDocuments.find(x=>x.digest===d));
-  if(documents.some(x=>!x))throw Error('Source selection includes a missing document.');
+  if(documents.some(x=>!x))throw Error('Source selection includes a missing document. Refresh and retry.');
+  // UI revisions can become stale when background services or unrelated BR edits
+  // update the register. The selected source identities are authoritative.
+  const sourceSnapshot=baSourceSelectionGuard.snapshot(original);
+  if(msg.revision!==original.revision)await recordBAProcess({stage:'mapping',action:'stale-ui-register-revision',status:'source-verified',
+   details:'Accepted current active source documents despite an unrelated UI register revision change.'});
+  const sourceResumeMarker=context.workspaceState.get?.('atgvAssist.baMappingResume.'+run.projectId);
+  const resumeRevision=baSourceSelectionGuard.resumeRevision(original,selected,sourceResumeMarker);
   documentPreflightSessions.set(run.projectId,baPreflightReports.create(run.projectId,documents));
   // Retain at most ten active project reports in the extension process.
   if(documentPreflightSessions.size>10)documentPreflightSessions.delete(documentPreflightSessions.keys().next().value);
   await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preparing',message:'Checking the selected documents and AI model…'});
-  const target=await activeAiTarget();check();
+  const target=run.skipAiChecks?{kind:'source-only',label:'ATGV Source-Only Recovery',modelId:'none'}:await activeAiTarget();check();
   // External Copilot receives BR content only after an explicit opt-in in VS
   // Code Settings, and only when its SDK is already locally installed.
   if(target.kind!=='copilot-sdk'&&cfg().get('ai.useCopilotSdkForBaRecovery',false)&&await copilotRepairSdk.installed(context.globalStorageUri.fsPath)){
@@ -2118,7 +2126,7 @@ async function processSelectedDiscoverySources(msg){
    let sections=discoveryImport.splitDocumentText(source.text);
    const smallerSections=discoveryImport.splitDocumentText(source.text,12000);
    if(smallerSections.length<=25)sections=smallerSections;
-   const resumeMeta={sourceDigest:selected[i],textDigest:sha(source.text),modelDigest,revision:String(original.revision)};
+   const resumeMeta={sourceDigest:selected[i],textDigest:sha(source.text),modelDigest,revision:resumeRevision};
    let checkpoint=null;
    if(resumeKey){
     try{
@@ -2129,7 +2137,7 @@ async function processSelectedDiscoverySources(msg){
      }
      if(!checkpoint){
       const marker=context.workspaceState.get?.('atgvAssist.baMappingResume.'+run.projectId);
-      if(marker&&String(marker.revision)===String(original.revision)&&(marker.digests||[]).includes(selected[i]))
+      if(marker&&String(marker.revision)===resumeRevision&&(marker.digests||[]).includes(selected[i]))
        await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Saved AI progress does not match the current document or model. Starting the required checks again…'});
       checkpoint=baMappingCheckpoint.fresh(resumeMeta,sections);
      }
@@ -2140,7 +2148,7 @@ async function processSelectedDiscoverySources(msg){
     try{
      checkpoint.sectionLengths=sections.map(text=>text.length);
      await baMappingCheckpoint.save(registry,run.projectId,checkpoint,resumeKey);
-     await context.workspaceState.update('atgvAssist.baMappingResume.'+run.projectId,{revision:String(original.revision),digests:[...selected]});
+     await context.workspaceState.update('atgvAssist.baMappingResume.'+run.projectId,{revision:resumeRevision,digests:[...selected],sourceIdentity:sourceSnapshot.identity});
      await dashboard?.webview.postMessage({type:'discoveryMappingCheckpoint',projectId:run.projectId,resumeAvailable:true});
     }catch(error){checkpoint=null;report('AI resume checkpoint could not be saved: '+String(error.message||error));
      await dashboard?.webview.postMessage({type:'discoveryMappingCheckpoint',projectId:run.projectId,resumeAvailable:false,message:'AI progress could not be saved for a later resume. Check workspace storage permissions.'});}
@@ -2363,7 +2371,7 @@ async function processSelectedDiscoverySources(msg){
   }
   check();run.phase='committing';
   await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'committing',message:'Saving complete mapping atomically. Cancellation is disabled during this step…'});
-  const latest=await brWorkflow.commitSourceMapping(registry,run.projectId,original.revision,{digests:selected,proposals:mappedProposals,preflights});
+  const latest=await brWorkflow.commitSourceMapping(registry,run.projectId,original.revision,{digests:selected,proposals:mappedProposals,preflights,sourceSnapshot});
   await recordBAProcess({stage:'mapping',action:'save-mapping',status:'committed',
     details:'Mapped discovery and preflight evidence saved to requirements register.'});
   for(const digest of selected)try{await baMappingCheckpoint.remove(registry,run.projectId,digest);}catch(error){report('Completed AI checkpoint cleanup: '+String(error.message||error));}
@@ -3072,7 +3080,7 @@ async function scanExternalJira({quiet=false}={}){
         }
         approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;
         await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
-        if(observations.length){await refreshDashboard();const fresh=observations.filter(x=>!known.has(x.path+'|'+x.remoteDigest));if(fresh.length){if(!quiet)await uiWarning(`${fresh.length} externally changed JIRA issues require BA review. Affected downstream handoffs are blocked pending reconciliation.`);else uiWarning(`${fresh.length} externally changed JIRA issues need review in ${activeProject.name}.`);}}
+        if(observations.length){if(!quiet)await refreshDashboard();const fresh=observations.filter(x=>!known.has(x.path+'|'+x.remoteDigest));if(fresh.length){if(!quiet)await uiWarning(`${fresh.length} externally changed JIRA issues require BA review. Affected downstream handoffs are blocked pending reconciliation.`);else uiWarning(`${fresh.length} externally changed JIRA issues need review in ${activeProject.name}.`);}}
         else if(!quiet)await notice('All linked JIRA issues match the trusted synchronization baseline.');
 
  }finally{jiraMonitorBusy=false;}
@@ -8194,6 +8202,29 @@ async function handleDashboardMessage(msg){
         }
         break;
       }
+      case 'skipDiscoveryPreflight':{
+        requireOpened();await requireBAOwner('ba-discovery');
+        if(activeDiscoveryMappingRun)throw Error('Stop active AI mapping before using source-only recovery.');
+        const selected=msg.digests;
+        if(!Array.isArray(selected)||!selected.length||selected.length>10||new Set(selected).size!==selected.length)
+          throw Error('Select the uploaded document before source-only recovery.');
+        const current=await brWorkflow.load(registry,activeProject.id);
+        if(selected.some(d=>!current.sourceDocuments.some(source=>source.digest===d)))
+          throw Error('The source document changed. Refresh source selection before recovery.');
+        const accepted=await uiWarning('Continue without AI preflight and mapping quality checks? ATGV will extract literal source evidence, mark AI verification NOT VERIFIED and require Business Analyst review plus normal BR/Jira approval. The original document will be preserved.',{modal:true},'Continue Source-Only');
+        if(accepted!=='Continue Source-Only'){
+          await dashboard?.webview.postMessage({type:'discoveryPreflightSkipCancelled'});break;
+        }
+        await recordBAProcess({stage:'preflight',action:'skip-ai-preflight-confirmed',status:'ai-unverified',
+          details:'BA explicitly selected source-only recovery; no AI validation or business approval is inferred.'});
+        try{await processSelectedDiscoverySources({...msg,revision:current.revision,skipAiChecks:true});}
+        catch(e){
+          await recordBAProcess({stage:'mapping',action:'source-only-recovery',status:'failed',details:String(e.message||e).slice(0,400)});
+          await dashboard?.webview.postMessage({type:e.name==='AbortError'?'discoveryImportCancelled':'discoveryImportFailed',
+            phase:e.phase||'preflight',mapping:true,message:String(e.message||e)});
+        }
+        break;
+      }
       case 'processDiscoverySources':{
         try{await processSelectedDiscoverySources(msg);}
         catch(e){
@@ -8783,7 +8814,8 @@ async function refreshLiveRemoteData({reason='scheduled',force=false}={}){
   liveRemoteState={projectId,phase:Object.keys(errors).length?'partial':'ready',lastAttempt:started,
    lastSuccess:Object.keys(results).length?new Date().toISOString():liveRemoteState.lastSuccess||'',results,errors};
   await dashboard?.webview.postMessage({type:'liveRemoteState',value:liveRemoteState});
-  if(Object.keys(results).length)await refreshDashboard();
+  // Background synchronization must not automatically rerender the webview.
+  // Manual Refresh still publishes a new dashboard snapshot.
   return {results,errors};
  }finally{
   liveRemoteBusy=false;

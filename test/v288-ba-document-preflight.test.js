@@ -81,7 +81,7 @@ test('upload starts automatic preflight, bounded repair and mapping; UI continue
  assert.match(importFn,/await processSelectedDiscoverySources\(/);
  assert.match(mappingFn,/baDocumentPreflight\.prompt/);
  assert.match(mappingFn,/if\(!result\?\.ready\)/);
- assert.match(mappingFn,/commitSourceMapping\(registry,run\.projectId,original\.revision,\{digests:selected,proposals:mappedProposals,preflights\}\)/);
+ assert.match(mappingFn,/commitSourceMapping\(registry,run\.projectId,original\.revision,\{digests:selected,proposals:mappedProposals,preflights,sourceSnapshot\}\)/);
  assert.match(ui,/m\.automatic&&view==='discovery'/);
  assert.match(ui,/openBAWorkflowStep\('mapping'\)/);
  assert.match(host,/id="baSourcePreflight"/);

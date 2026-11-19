@@ -6,16 +6,16 @@ const path=require('node:path');
 const root=path.join(__dirname,'..');
 const ui=fs.readFileSync(path.join(root,'media/start.js'),'utf8');
 const host=fs.readFileSync(path.join(root,'src/lib/runtime/extension-runtime.js'),'utf8');
-test('every accepted sidebar or role menu navigation requests fresh page state without reloading webview',()=>{
+test('sidebar and role navigation no longer automatically refresh webview state',()=>{
  assert.match(ui,/function navigate\(destination\)/);
  assert.match(ui,/function requestNavigationRefresh\(destination\)/);
- assert.match(ui,/requestNavigationRefresh\(destination\);\s*const isRole=/);
+ assert.doesNotMatch(ui,/requestNavigationRefresh\(destination\);\s*const isRole=/);
  assert.match(ui,/for\(const nav of document\.querySelectorAll\('\.sidebar \[data-nav\]'\)\)/);
  assert.match(ui,/send\('viewNavigateRefresh'/);
  assert.match(ui,/queueMicrotask\(/);
  assert.doesNotMatch(ui,/function requestNavigationRefresh\([\s\S]{0,550}location\.reload\(/);
 });
-test('host refreshes dashboard and remote sources without blocking or stopping ongoing processes',()=>{
+test('legacy host navigation refresh remains read-only when invoked explicitly',()=>{
  assert.match(host,/case 'viewNavigateRefresh':\{/);
  const start=host.indexOf("case 'viewNavigateRefresh':");
  const end=host.indexOf("case 'refresh':",start);

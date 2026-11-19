@@ -3,6 +3,7 @@
 const fs=require('node:fs/promises');
 const path=require('node:path');
 const crypto=require('node:crypto');
+const baSourceSelectionGuard=require('./ba-source-selection-guard');
 const {withLock}=require('./file-lock');
 const {checksum}=require('./document-editor');
 const changeEngine=require('./change-engine');
@@ -634,10 +635,13 @@ async function completeSourceMapping(registry,id,revision,{digests,proposals=[]}
 }
 // Commit source selection and every AI mapping in one register write. A failed or
 // interrupted model call cannot invalidate the last completed discovery/approval.
-async function commitSourceMapping(registry,id,revision,{digests,proposals=[],preflights=[]}={}){
+async function commitSourceMapping(registry,id,revision,{digests,proposals=[],preflights=[],sourceSnapshot=null}={}){
  if(!Array.isArray(digests)||digests.length<1||digests.length>10||new Set(digests).size!==digests.length)throw Error('Select 1–10 unique documents.');
  if(!Array.isArray(proposals)||proposals.length!==digests.length)throw Error('Every selected document must finish AI mapping before committing.');
- return write(registry,id,revision,next=>{
+ const commitAt=expectedRevision=>write(registry,id,expectedRevision,next=>{
+  // Verify under the file lock, not only before the AI requests. Never commit
+  // answers against an uploaded source that was replaced, archived or deleted.
+  if(sourceSnapshot)baSourceSelectionGuard.assertUnchanged(sourceSnapshot,next);
   const documents=digests.map(d=>next.sourceDocuments.find(x=>x.digest===d));
   if(documents.some(x=>!x))throw Error('Selected documents changed while AI mapping ran. No changes saved.');
   const answers=proposals.map((proposal,i)=>{
@@ -655,6 +659,19 @@ async function commitSourceMapping(registry,id,revision,{digests,proposals=[],pr
   for(const revision of next.sourceRevisionHistory||[])if(revision.review==='awaiting-discovery-and-requirement-approval'&&digests.includes(revision.toDigest))revision.mappingReviewedAt=new Date().toISOString();
   event(next,'source-mapping-completed',{epoch:next.importEpoch,count:digests.length,atomic:true});
  });
+ // Preserve the old strict CAS contract for callers without an authenticated
+ // source snapshot. Mapping runs may rebase only when every source is unchanged.
+ if(!sourceSnapshot)return commitAt(revision);
+ for(let attempt=0;attempt<4;attempt++){
+  const current=await load(registry,id);
+  baSourceSelectionGuard.assertUnchanged(sourceSnapshot,current);
+  try{return await commitAt(current.revision);}
+  catch(error){
+   const message=String(error.message||error);
+   if(attempt===3||!/^BR register changed(?: while saving)?\./.test(message))throw error;
+  }
+ }
+ throw Error('BR register was busy. Saved AI checkpoints remain available; retry the final commit.');
 }
 const proposalFields={problem:'objective',scope:'scope',acceptance:'acceptanceCriteria'};
 function targetRecord(next,nodePath){
