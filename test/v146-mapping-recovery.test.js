@@ -32,7 +32,7 @@ function mappingHarness(aiAnswer,opts={}){
   baBrTextPipeline:{
    async prepare(_registry,_id,source){
     const parts=discoveryModule.splitDocumentText(source.text,12000);
-    return parts.map((text,i)=>({text,filename:'BR001-P'+(i+1)+'.txt',digest:require('../src/ba-br-txt-pipeline').sha(text),
+    return parts.map((text,i)=>({text,filename:'BR001-P'+(i+1)+'.md',digest:require('../src/ba-br-md-pipeline').sha(text),
       sourceDigest:source.digest,brIndex:1,partIndex:i+1,parts:parts.length,characters:text.length}));
    },
    mergeForDiscovery(parts){return discoveryModule.mergeMappingAnswers(parts);}
@@ -119,14 +119,14 @@ test('retry does not reuse mapping from a different AI-updated working copy',asy
  assert.match(prompts[0],/Please add name once\./);
  assert.match(prompts[1],/Please add namme once\./);
 });
-test('mapping completes each TXT unit before the next and never commits a later blocked unit',async()=>{
+test('mapping completes each Markdown unit before the next and never commits a later blocked unit',async()=>{
  let mappingCalls=0;
  const opts={sourceText:'A'.repeat(30000)+'\nSECOND SECTION: permissions conflict.',preflightResponse:prompt=>prompt.includes('SECOND SECTION')?
   {status:'needs-input',summary:'Conflict',edits:[],issues:[{severity:'blocker',category:'contradiction',detail:'Permissions conflict over access',suggestion:'Ask the owner'}]}:
   {status:'ready',summary:'Checked',edits:[],issues:[]}};
  const t=mappingHarness(async()=>{mappingCalls++;return '{"problem":"A"}';},opts);
  await assert.rejects(t.processMapping(t.request),/clarification before mapping/);
- assert.ok(mappingCalls>=1,'earlier verified TXT units may map but no partial result is committed');
+ assert.ok(mappingCalls>=1,'earlier verified Markdown units may map but no partial result is committed');
  assert.equal(t.commits,0);
 });
 test('invalid AI mapping is retried once before a complete proposal is committed',async()=>{
@@ -153,7 +153,7 @@ test('per-source AI timeouts do not commit partial discovery or Jira changes',as
  assert.equal(t.commits,0);
  assert.equal(t.events.some(x=>x.type==='discoveryImportResult'),false);
 });
-test('slow preflight retries the same immutable TXT unit without changing source coverage',async()=>{
+test('slow preflight retries the same immutable Markdown unit without changing source coverage',async()=>{
  let preflightCalls=0;const sourceText='A'.repeat(8000)+' end';
  const opts={sourceText,setTimeout:callback=>setTimeout(callback,15),preflightAnswer:()=>{
   if(++preflightCalls===1)return new Promise(()=>{}); // Simulate a provider that ignores cancellation.
