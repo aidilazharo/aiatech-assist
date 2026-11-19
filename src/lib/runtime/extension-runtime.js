@@ -3126,13 +3126,33 @@ async function generateBusinessRequirements(options={}){
    proposed.push(...current);
   }
  }else{
+ let initialFailure=null;
  for(let attempt=1;attempt<=2;attempt++){
-  const prompt=attempt===1?question:question+'\n\nIMPORTANT: Previous response was not valid requirements JSON. Return ONLY one complete JSON object matching the specified schema, without code fences or explanation. Limit the response to essential requirements; do not truncate JSON.';
+  let prompt=question;
+  if(attempt===2){
+   // A mapped single BR has source-preserving Markdown evidence. Retry with
+   // the specific group instead of resending an oversized programme-wide prompt.
+   if(initialFailure?.requirementCount===0&&mappedGroups.length===1&&activeRequirements.length<=1){
+    const group=mappedGroups[0];
+    const unitAnswers=baBrTextPipeline.mergeForDiscovery(group.units.map(ref=>ref.answers),group.units);
+    const sources=[];
+    for(const ref of group.units)sources.push(await baBrTextPipeline.read(registry,activeProject.id,ref));
+    prompt=brWorkflow.promptForGeneration(unitAnswers,activeRequirements,[{name:group.sourceName+' / BR '+group.brIndex,excerpt:sources.join('').slice(0,6500)}])+
+     '\\n\\nSOURCE-SCOPED JSON RECOVERY: Return exactly ONE complete source-backed Business Requirement with the required fields and nested feature/story/task arrays. Preserve the existing BR ID if appropriate. The verified Markdown mapping represents this single BR.';
+   }else{
+    const problem=initialFailure?.code==='ATGV_GENERATION_COUNT'?(initialFailure.requirementCount>25?'Previous model output exceeded 25 BRs. Preserve every unique requirement by grouping related rules under features and stories. Never silently omit a rule.':'Previous model output contained no BRs; return at least one source-backed complete BR.'):'Previous output could not be parsed as valid requirements JSON.';
+    prompt=question+'\\n\\nSTRICT JSON RECOVERY: '+problem+' Return ONLY a complete JSON object {"requirements":[{"title":"...","objective":"...","scope":"...","acceptanceCriteria":"...","features":[]}]}. Include 1–25 complete business requirements; no Markdown or commentary.';
+   }
+   await dashboard?.webview.postMessage({type:'baProgress',task:'generate',message:'Retrying with '+(initialFailure?.requirementCount===0&&mappedGroups.length===1&&activeRequirements.length<=1?'source-scoped Markdown':'validated JSON')+' evidence and explicit requirement-count checks…'});
+  }
   const result=await aiAnswer(target,prompt+await roleSkillPrompt('business-analyst'),125000,{json:true});
   try{proposed=brWorkflow.parseGenerated(result);break;}
   catch(error){
-   if(attempt===2)throw Error('AI generation failed validation twice: '+error.message+' No Business Requirements were changed. Retry with smaller source documents or a different AI model.');
-   await dashboard?.webview.postMessage({type:'baProgress',task:'generate',message:'AI output was invalid. Retrying generation with stricter JSON instructions…'});
+   initialFailure=error;
+   if(attempt===2){
+    const explanation=error.code==='ATGV_GENERATION_COUNT'?(error.requirementCount===0?'AI returned zero requirements; confirm the mapped document contains business requirements.':'AI returned '+error.requirementCount+' separate requirements, above the 25-per-generation safety limit. Split the BR into smaller source-backed groups.'):error.message;
+    throw Error('AI generation failed validation twice: '+explanation+' No Business Requirements or Jira issues were changed. The verified source and Discovery answers are preserved for retry.');
+   }
   }
  }
  }
