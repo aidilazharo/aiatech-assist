@@ -2395,7 +2395,14 @@ async function processSelectedDiscoverySources(msg){
     applied:reports.flatMap(x=>x.applied).slice(0,12),
     skipped:reports.flatMap(x=>x.skipped||[]).slice(0,12),
     issues:[...crossConflicts,...reports.flatMap(x=>x.issues),...reviewIssues].slice(0,16),
-    resolutions:reports.flatMap(x=>x.resolutions||[]).slice(0,12),sections:reports,workingBR:workingRef,checks:working.checks};
+    resolutions:reports.flatMap(x=>x.resolutions||[]).slice(0,12),sections:reports,workingBR:workingRef,checks:working.checks,crossSectionFindings:crossConflicts};
+   if(crossConflicts.length){
+    const session=documentPreflightSessions.get(run.projectId);
+    if(session)baPreflightReports.captureCrossSection(session,{digest:selected[i],sourceName:source.name,issues:crossConflicts,totalSections:sections.length});
+    await dashboard?.webview.postMessage({type:'discoverySourcePreflight',sourceName:source.name,digest:selected[i],
+     phase:'needs-review',status:'needs-review',summary:report.summary,applied:[],issues:crossConflicts,resolutions:[],
+     section:sections.length,totalSections:sections.length,attempt:1});
+   }
    preflights.push(baDocumentPreflight.evidence(report,selected[i]));
    mappedProposals.push({filename:source.name,answers:proposals,units:preparedUnits.map((unit,index)=>({sourceDigest:unit.sourceDigest,filename:unit.filename,digest:unit.digest,brIndex:unit.brIndex,partIndex:unit.partIndex,parts:unit.parts,characters:unit.characters,answers:partAnswers[index]}))});
   }
