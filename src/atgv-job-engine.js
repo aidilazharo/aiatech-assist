@@ -29,13 +29,14 @@ function category(command){
   /^(?:ux|design)/.test(command)?'UI/UX Designer':
   /^(?:developer|devCopilot)/.test(command)?'Developer':
   /^pm/.test(command)?'Project Manager':
+  /^workspace/.test(command)?'Workspace':
   /^(?:catalog|startup|checkSoftware)/.test(command)?'Setup':
   /^(?:sync|refreshConnected)/.test(command)?'Workspace':'ATGV';
- if(/^(?:brJiraSync|brJiraApprove|brRoleTaskRepairPublish|architectPublish|architectCommit|architectApproveStack|architectResetStack|pmJiraSetAssignee|pmJiraTransition|pmApproveEffortBaseline|uxPublishFrontend|uxPipelineDecide|designApprove|syncDocuments|sync|aiServiceProposalDecision)$/.test(command))
+ if(/^(?:brJiraSync|brJiraApprove|brRoleTaskRepairPublish|architectPublish|architectCommit|architectApproveStack|architectResetStack|pmJiraSetAssignee|pmJiraTransition|pmApproveEffortBaseline|workspacePublishSync|uxPublishFrontend|uxPipelineDecide|designApprove|syncDocuments|sync|aiServiceProposalDecision)$/.test(command))
   return {role,kind:'write',retryable:false};
  if(/^(?:catalogPull|startupInstallModule|architectBootstrap|architectCustomRun|architectSaveStack|architectRunServer|developerBrRun|developerBrStartServer|architectTestStack|aiServiceInstall|architectPullStackUpdates|uxFrameworkSync)$/.test(command))
   return {role,kind:'install',retryable:false};
- if(/^(?:brJiraPreview|brJiraScanExternal|brJiraRefreshWorkStates|pmJiraAssignableUsers|architectCheckStackUpdates|architectCustomScan|catalogCheck|catalogTest|refreshConnectedSources|checkSoftwareUpdates|aiServiceRefresh)$/.test(command))
+ if(/^(?:workspacePrepareSync|brJiraPreview|brJiraScanExternal|brJiraRefreshWorkStates|pmJiraAssignableUsers|architectCheckStackUpdates|architectCustomScan|catalogCheck|catalogTest|refreshConnectedSources|checkSoftwareUpdates|aiServiceRefresh)$/.test(command))
   return {role,kind:'read',retryable:true};
  if(/^(?:processDiscoverySources|generateBusinessRequirements|generateDrafts|applyDiscoveryReview|devCopilotStart|developerBrPreviewDraft|designGenerate|designRegenerateAffected|uxPipelineGenerate|uxDesignGenerate|aiServiceRun|architectRecommend|architectValidate)$/.test(command))
   return {role,kind:'ai',retryable:true};
