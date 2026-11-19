@@ -26,5 +26,6 @@ test('Next Step completes an already reviewed AI Review and then enables Generat
  assert.match(ui,/nextButton\.dataset\.confirmReview=canConfirm\?'true':'false'/);
  assert.match(ui,/if\(\$\('baNextStep'\)\.dataset\.confirmReview==='true'\)/);
  assert.match(ui,/\$\('baReviewFinish'\)\.click\(\)/);
- assert.match(ui,/\['skipReview','confirmReview'\]\.includes\(task\)/);
+ assert.match(ui,/if\(task==='skipReview'&&view==='discovery'\)/);
+ assert.match(ui,/if\(task==='confirmReview'&&view==='discovery'\)/);
 });
