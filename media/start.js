@@ -7134,6 +7134,14 @@ window.addEventListener('message',event=>{
     status(m.freshStart?'New Business Requirements cycle ready. Upload source documents to begin.':`New Business Requirements cycle ready. ${m.archivedCount||0} earlier source document(s) moved to history. Approved Business Requirements and Jira links are preserved.`);
     {navigate('discovery');requestAnimationFrame(()=>document.querySelector('.source-documents-panel')?.scrollIntoView({block:'nearest',behavior:'smooth'}));}
   }
+  if(m.type==='confluenceSourceVault'){
+    if(m.error)status('Confluence source sync pending: '+String(m.error).slice(0,300),true,{persistent:true});
+    else if(m.result?.conflicts?.length)status('Confluence source sync needs review: '+m.result.conflicts.slice(0,3).join('; '),true,{persistent:true});
+    else if(m.result?.restored||m.result?.downloaded||m.result?.uploaded){
+      status('Confluence: '+(m.result.downloaded||0)+' document(s) downloaded, '+(m.result.uploaded||0)+' upload(s) synced'+(m.result.restored?'; project BR state restored':'')+'.');
+      if(m.result.restored){sourceSelectedDigests=new Set();mappingResumeAvailable=false;baPreflightInfo=null;renderDiscoverySummary();}
+    }
+  }
   if(m.type==='discoverySourceRevised'){baPreflightInfo=null;mappingResumeAvailable=false;mappingFailurePhase='';sourceSelectedDigests=new Set(m.digests||[]);baReopenQuestions=false;baReopenDocuments=false;renderDiscoverySummary();status(m.count+' new or revised source(s) saved. Existing approved requirements and Jira keys preserved. Re-map documents, review changes, and approve before updating Jira.');}
   if(m.type==='discoveryUploadDone'){
     mappingResumeAvailable=false;
