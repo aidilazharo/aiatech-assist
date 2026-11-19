@@ -5003,7 +5003,9 @@ function renderJiraIssueDetails(entry,readOnly=false){
  if(fieldPlan){
   const section=document.createElement('section');section.className='jira-preview-field-list';
   const title=document.createElement('h3');title.textContent='All available Jira fields ('+(fieldPlan.fields||[]).length+')';section.append(title);
-  const explanation=document.createElement('p');explanation.className='muted';explanation.textContent='Field names and types are verified against the selected Jira issue type. Unsupported structured values are not fabricated. Existing Jira values remain unchanged unless supported by approved requirements.';section.append(explanation);
+  const explanation=document.createElement('p');explanation.className='muted';explanation.textContent='ATGV automatically fills all supported writable text fields from the approved BR, and inserts a clear missing-information placeholder where text evidence is unavailable. Non-text fields (users, dates, numbers and selections) display a preview-only placeholder when no valid value exists; Jira will not accept arbitrary text in these fields. Existing unsupported values are preserved.';section.append(explanation);
+  const totals=fieldPlan.autofillSummary;
+  if(totals){const summary=document.createElement('p');summary.className='muted';summary.textContent='Auto-filled: '+totals.mapped+' · Text placeholders: '+totals.textPlaceholders+' · Existing Jira values: '+totals.preserved+' · Jira defaults: '+totals.jiraDefaults+' · Preview-only / needs valid Jira value: '+totals.previewOnly;section.append(summary);}
   for(const field of fieldPlan.fields||[]){
    const row=document.createElement('div');row.className='jira-preview-field';
    const caption=document.createElement('strong');caption.textContent=field.name+(field.required?' · Required':'');
