@@ -6556,9 +6556,7 @@ async function handleDashboardMessage(msg){
                 deadline:project.schedule?.endDate,overrides:baseline.projectKey===key?baseline.estimates:{}});
               forecast.baseline={revision:baseline.revision,approvedAt:baseline.approvedAt,approvedBy:baseline.approvedBy};
               forecast.provisional=!!result.truncated||!!result.cancelled;
-             }catch(e){
-    if(baAction)baFailure=String(e.message||e);
-forecast={error:String(e.message||e)};}
+             }catch(e){forecast={error:String(e.message||e)};}
             await dashboard?.webview.postMessage({type:'projectDeliveryForecast',projectId,requestId,forecast});
             await dashboard?.webview.postMessage({type:'jiraInventoryCompleted',projectId,requestId,...result});
           }
@@ -8530,6 +8528,7 @@ forecast={error:String(e.message||e)};}
       default:throw new Error('Unsupported webview action.');
     }
   }catch(e){
+    if(baAction)baFailure=String(e.message||e);
     captureLocalIssue(msg.command,e);
     if(msg._fromDesignTab)throw e;
     if(String(msg.command||'').startsWith('brRoleTaskRepair')){roleRepairBusy=false;await dashboard?.webview.postMessage({type:'brRoleTaskRepairError',brId:String(msg.brId||''),message:e.message});}
