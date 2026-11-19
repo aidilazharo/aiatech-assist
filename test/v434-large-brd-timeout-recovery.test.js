@@ -82,7 +82,7 @@ test('runtime budgets per request; no false cross-section certification and no a
  assert.match(host,/run\.largeSource=baLargeDocumentRecovery\.isLargeDocument\(source\.text\.length\)/);
  assert.match(host,/run\.preflightOffline=true;run\.sourceOnlyPreflight=true/);
  assert.match(host,/run\.mappingOffline=true;sourceOnlyMappingPart=true/);
- assert.match(host,/status:partialVerification\?'needs-review':'ready'/);
+ assert.match(host,/status:needsAnalystReview\?'needs-review':'ready'/);
  assert.match(host,/sections\.length>1&&!run\.mappingOffline/);
  assert.match(host,/baLargeDocumentRecovery\.timeout\('cross',!!run\.largeSource\)/);
  assert.match(host,/source-only extraction, with full source retained and BA review required/);
