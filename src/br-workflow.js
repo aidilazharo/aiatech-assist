@@ -4,7 +4,7 @@ const fs=require('node:fs/promises');
 const path=require('node:path');
 const crypto=require('node:crypto');
 const baSourceSelectionGuard=require('./ba-source-selection-guard');
-const baBrTextPipeline=require('./ba-br-txt-pipeline');
+const baBrTextPipeline=require('./ba-br-md-pipeline');
 const {withLock}=require('./file-lock');
 const {checksum}=require('./document-editor');
 const changeEngine=require('./change-engine');
@@ -649,19 +649,19 @@ async function commitSourceMapping(registry,id,revision,{digests,proposals=[],pr
    if(!proposal||proposal.filename!==documents[i].name||!proposal.answers||typeof proposal.answers!=='object'||Array.isArray(proposal.answers))throw Error('Invalid AI mapping for '+documents[i].name);
    const entries=Object.entries(proposal.answers);
    if(!entries.length||entries.some(([k,v])=>!changeEngine.QUESTION_KEYS.includes(k)||typeof v!=='string'||v.length>MAX_ANSWER_LENGTH))throw Error('Invalid Discovery answers for '+documents[i].name);
-   // Store full per-TXT results, not only the combined discovery summary.
+   // Store full per-Markdown results, not only the combined discovery summary.
    // Validate the immutable source reference before committing any result.
    const units=Array.isArray(proposal.units)?proposal.units:[];
-   if(units.length>baBrTextPipeline.MAX_UNITS)throw Error('Too many BR text units.');
+   if(units.length>baBrTextPipeline.MAX_UNITS)throw Error('Too many BR Markdown units.');
    const seenUnits=new Set();
    const mappedUnits=units.map(unit=>{
     if(!baBrTextPipeline.validRef(unit)||unit.sourceDigest!==documents[i].digest||
        !Number.isInteger(unit.characters)||unit.characters<1||unit.characters>baBrTextPipeline.UNIT_CHARS||
-       seenUnits.has(unit.filename))throw Error('Invalid BR text identity for '+documents[i].name);
+       seenUnits.has(unit.filename))throw Error('Invalid BR Markdown identity for '+documents[i].name);
     seenUnits.add(unit.filename);
     const values=Object.entries(unit.answers||{});
     if(values.length!==changeEngine.QUESTION_KEYS.length||values.some(([key,value])=>!changeEngine.QUESTION_KEYS.includes(key)||typeof value!=='string'||value.length>5000))
-     throw Error('Incomplete or invalid BR text mapping for '+unit.filename);
+     throw Error('Incomplete or invalid BR Markdown mapping for '+unit.filename);
     return {sourceDigest:unit.sourceDigest,filename:unit.filename,digest:unit.digest,brIndex:unit.brIndex,
      partIndex:unit.partIndex,parts:unit.parts,characters:unit.characters,answers:Object.fromEntries(values)};
    });

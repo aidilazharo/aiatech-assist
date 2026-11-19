@@ -5,7 +5,7 @@ const crypto = require('node:crypto');
 const { importDocumentText } = require('./discovery-import');
 const { extractLegacyDocx } = require('./docx-extractor');
 const workingBr = require('./ba-working-br');
-const brTxt = require('./ba-br-txt-pipeline');
+const brTxt = require('./ba-br-md-pipeline');
 const mappingCheckpoint = require('./ba-mapping-checkpoint');
 const DIGEST = /^[a-f0-9]{64}$/;
 function sourceDirectory(registry, id) { return path.join(path.dirname(registry.fileFor(id)), 'documents', 'requirements', 'sources'); }

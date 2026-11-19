@@ -36,7 +36,7 @@ const baTimeoutSimplified=require('../../ba-timeout-simplified');
 const baPreflightReports=require('../../ba-preflight-report');
 const baProcessDiagnostics=require('../../ba-process-diagnostics');
 const baWorkingBr=require('../../ba-working-br');
-const baBrTextPipeline=require('../../ba-br-txt-pipeline');
+const baBrTextPipeline=require('../../ba-br-md-pipeline');
 const discoveryReview=require('../../discovery-review');
 const brWorkflow=require('../../br-workflow');
 const baSourceSelectionGuard=require('../../ba-source-selection-guard');
@@ -1928,7 +1928,7 @@ async function importDiscoveryDocument(roleId){
   await dashboard?.webview.postMessage({type:'discoveryImportProgress',message:`Reading ${path.basename(selection.fsPath)}…`});
   const doc=await discoveryImport.importDocumentText(selection.fsPath);
   if(doc.truncated)throw Error(`${doc.name}: extracted text exceeds ${discoveryImport.MAX_EXTRACTED.toLocaleString('en-US')} characters. Split the source into smaller documents or reduce non-requirement appendices; no text was silently discarded.`);
-  // Validate TXT splitting before accepting source bytes, to avoid partially imported oversized BR cycles.
+  // Validate Markdown splitting before accepting source bytes, to avoid partially imported oversized BR cycles.
   baBrTextPipeline.split(doc.text);
   documents.push({...doc,digest:sha(doc.text),originalPath:selection.fsPath});
  }
@@ -1996,10 +1996,10 @@ async function importDiscoveryDocument(roleId){
  const current=await brWorkflow.load(registry,activeProject.id);
  if(current.revision!==initial.revision)throw Error('Source document list changed during upload. Refresh and retry.');
  const register=await brWorkflow.addSources(registry,activeProject.id,current.revision,prospective,{actor:uploader,singleSourceCycle:true});
- // Persist the source-preserving TXT files immediately after upload, even when no AI provider is configured.
+ // Persist the source-preserving Markdown files immediately after upload, even when no AI provider is configured.
  for(const {document:doc} of updatedDocuments){
   const units=await baBrTextPipeline.prepare(registry,activeProject.id,doc);
-  await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preparing',message:'Prepared '+units.length+' verified BR .txt file(s) for '+doc.name+'.'});
+  await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preparing',message:'Prepared '+units.length+' verified BR .md file(s) for '+doc.name+'.'});
  }
  if(updatedDocuments.length)documentPreflightSessions.delete(activeProject.id); // Invalidate stale results after a source revision.
  if(modified.length||fresh.length&&!!initial.mappingCompleted){
@@ -2131,12 +2131,12 @@ async function processSelectedDiscoverySources(msg){
     details:'Sectioned source selected for AI mapping; document text not recorded.'});
    run.largeSource=baLargeDocumentRecovery.isLargeDocument(source.text.length);
    run.preflightOffline=!!run.skipAiChecks;run.mappingOffline=!!run.skipAiChecks;run.sourceOnlyPreflight=!!run.skipAiChecks;
-   // Every text unit is an immutable, checksum-verified local .txt file.
+   // Every text unit is an immutable, checksum-verified local .md file.
    // Boundaries are stable across retries and each unit is processed in order.
    const preparedUnits=await baBrTextPipeline.prepare(registry,run.projectId,source);
    let sections=preparedUnits.map(unit=>unit.text);
    await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preparing',
-    message:'Extracted '+preparedUnits.length+' verified BR .txt file(s) from '+source.name+'. Processing each file in order; original upload unchanged.'});
+    message:'Extracted '+preparedUnits.length+' verified BR .md file(s) from '+source.name+'. Processing each file in order; original upload unchanged.'});
    const resumeMeta={sourceDigest:selected[i],textDigest:sha(source.text),modelDigest,revision:resumeRevision};
    let checkpoint=null;
    if(resumeKey){
@@ -2204,7 +2204,7 @@ async function processSelectedDiscoverySources(msg){
         break;
        }
        if(!trySourceAIFallback(run,error))throw error;
-       // Preserve persisted .txt boundaries on retries; checkpoint resumes the same BR text unit.
+       // Preserve persisted Markdown boundaries on retries; checkpoint resumes the same BR text unit.
        if(networkAttempt<maxNetworkAttempts){
         await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Recovering AI preflight ('+networkAttempt+'/'+maxNetworkAttempts+')'+(run.useRecovery?' using Microsoft Copilot SDK':'')+'. Saved sections remain unchanged…'});
         continue;
@@ -3043,11 +3043,11 @@ async function generateBusinessRequirements(options={}){
    const scopedPrompt=brWorkflow.promptForGeneration(unitAnswers,activeRequirements,
     [{name:group.sourceName+' / BR '+group.brIndex,excerpt}])+
     '\n\nSOURCE-SCOPED GENERATION: This is logical BR '+(index+1)+' of '+mappedGroups.length+
-    '. Return exactly ONE business requirement for THIS BR text group. Do not repeat other groups, claim AI tests passed, invent approvals or omit source-backed rules. Keep any existing matching BR ID when supported.'+
+    '. Return exactly ONE business requirement for THIS BR Markdown group. Do not repeat other groups, claim AI tests passed, invent approvals or omit source-backed rules. Keep any existing matching BR ID when supported.'+
     (historic.length?'\nHistorical requirements are READ ONLY: '+JSON.stringify(historic.slice(0,100))+'.':'');
    let current;
    await dashboard?.webview.postMessage({type:'baProgress',task:'generate',
-    message:'Generating BR '+(index+1)+'/'+mappedGroups.length+' from verified text files; completed BR drafts are accumulated until final save…'});
+    message:'Generating BR '+(index+1)+'/'+mappedGroups.length+' from verified Markdown files; completed BR drafts are accumulated until final save…'});
    for(let attempt=1;attempt<=2;attempt++){
     const prompt=scopedPrompt+(attempt>1?'\nRETRY: Return ONLY a valid JSON object with one requirement and the expected feature/story/task structure.':'');
     const result=await aiAnswer(target,prompt+await roleSkillPrompt('business-analyst'),125000,{json:true});

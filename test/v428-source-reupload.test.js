@@ -10,7 +10,7 @@ const {ProjectRegistry}=require('../src/projects');
 const brWorkflow=require('../src/br-workflow');
 const discoveryImport=require('../src/discovery-import');
 const sourceStore=require('../src/source-store');
-const baBrTextPipeline=require('../src/ba-br-txt-pipeline');
+const baBrTextPipeline=require('../src/ba-br-md-pipeline');
 const source= require('node:fs').readFileSync(path.join(__dirname,'../src/lib/runtime/extension-runtime.js'),'utf8');
 const fixtureFile=path.join(__dirname,'fixtures/br-synthetic-integration.pdf');
 const sha=data=>crypto.createHash('sha256').update(data).digest('hex');
