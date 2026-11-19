@@ -6454,6 +6454,12 @@ $('brNextPreviewSave').addEventListener('click',()=>{
 });
 $('baJiraRefreshStatus').addEventListener('click',()=>send('brJiraRefreshWorkStates'));
 $('brJiraPreview').addEventListener('click',()=>{if($('brJiraPreview').disabled)return;baBusy('jiraPreview','Checking JIRA changes and conflicts…');send('brJiraPreview');});
+$('baDownloadProcessLog').addEventListener('click',()=>{
+ if(!activeId)return;
+ const button=$('baDownloadProcessLog');button.disabled=true;
+ $('baProcessLogStatus').textContent='Preparing troubleshooting log…';
+ send('baDownloadProcessLog',{projectId:activeId});
+});
 $('baPreviousStep').addEventListener('click',()=>{
  if($('baPreviousStep').disabled)return;
  const key=$('baPreviousStep').dataset.previousStep;
@@ -6781,6 +6787,10 @@ window.addEventListener('message',event=>{
   if(m.type==='brJiraPlanApproved'){baFailedProcess='';stageProgress('jiraApprove','JIRA preview approved.',100);brJiraPreviewApproved=true;baBusy('',null);status(`${m.count} Jira preview change${m.count===1?'':'s'} approved for publishing.`);renderDiscoverySummary();}
   if(m.type==='brRetirementsApproved'){brPlanRevision=null;brJiraPreviewApproved=false;brJiraPlanChanges=0;brJiraPlanConflicts=0;$('brJiraChanges').classList.add('hidden');$('brJiraConflicts').classList.add('hidden');baBusy('',null);stageProgress('jiraRetire','Jira retirement review complete (100%). Preview regeneration is ready.',100);status('Jira retirements approved. Regenerate the preview.',false,{persistent:true});return;}
   if(m.type==='brRevisionCreated'&&m.brId){openBREditor(m.brId);}
+ if(m.type==='baProcessLogResult'&&m.projectId===activeId){
+   $('baDownloadProcessLog').disabled=false;
+   $('baProcessLogStatus').textContent=m.error?'Log unavailable: '+m.error:m.cancelled?'Log download cancelled.':m.saved?'Troubleshooting log saved: '+m.filename:'Log export finished.';
+ }
  if(m.type==='brJiraDone'){stageProgress('jiraSync',`${m.count} JIRA changes published.`,100);baBusy('',null);jiraPublishState={...jiraPublishState,phase:'completed',confirmed:m.count,total:m.count,message:`Successfully published and recorded ${m.count} Jira changes.`};baViewedStep='publish';baPreviousStage='complete';renderPublishedJira();renderJiraPublishedItems();brPlanRevision=null;brJiraPlanChanges=0;brJiraPreviewApproved=false;$('brJiraApprove').disabled=true;$('brJiraSync').disabled=true;$('brJiraChanges').classList.add('hidden');renderDiscoverySummary();}
   if(m.type==='discoveryRestarted'){baPreflightInfo=null;mappingFailurePhase='';baResumeCardReady=false;mappingResumeAvailable=false;jiraPublicationPlan=[];jiraPublicationConfirmed.clear();baLastActiveStep='';mappingRunPhase='';mappingRetryAvailable=false;mappingFailureMessage='';baViewedStep=null;baPreviousStage='';baFailedProcess='';
     baReopenQuestions=false;baReopenDocuments=false;discoveryData=m.discovery;discoveryDirty=false;discoveryReviewProposal=null;discoveryImportProposal=null;discoveryImportQueue=[];restoredMappingEpoch=null;preserveReviewOnSave=false;
