@@ -9,7 +9,7 @@ const milestones=require('../media/ba-progress');
 
 function harness({decision=true,canClose=true,canNavigate=true,readonly=false,missing=[]}={}){
  const calls=[],panel={open:false,classList:{contains:()=>false},scrollIntoView:()=>calls.push('panel-scroll')};
- const group={open:false};
+ const group={open:false,toggleAttribute(name,value){if(name==='open')this.open=!!value;}};
  const answer={readOnly:readonly,closest:()=>group,
   scrollIntoView:()=>calls.push('answer-scroll'),focus:()=>calls.push('answer-focus')};
  const el=id=>id==='discoveryQuestionsPanel'||id==='discoveryReviewPanel'?panel:id==='ba-questions'?answer:null;
