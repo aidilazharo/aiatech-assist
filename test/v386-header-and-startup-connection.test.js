@@ -27,15 +27,15 @@ function createPageHarness(){
    const hidden=new Set();
    nodes.set(id,{
     disabled:false,textContent:'',hiddenClasses:hidden,
-    classList:{toggle:(name,active)=>active?hidden.add(name):hidden.delete(name)}
+    classList:{toggle:(name,active)=>active?hidden.add(name):hidden.delete(name)},setAttribute(){},addEventListener(){}
    });
   }
   return nodes.get(id);
  };
  const create=new Function('$',[
   "const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluenceUrl',email:'startupEmail',githubUrl:'startupGithubUrl'};",
-  "let startupSetupRequired=true,startupPage=1,startupVerifying=false,startupInstallingModule='',startupScanComplete=true,startupConnectionVerified=true,startupOpenStackId='',startupCopilotModalOpen=false;",
-  "let startupAutoNotice='',startupAutoEnabled=false;",
+  "let startupSetupRequired=true,startupPage=1,startupVerifying=false,startupInstallingModule='',startupScanComplete=true,startupConnectionVerified=true,startupConnectionEditSnapshot=null,startupOpenStackId='',startupCopilotModalOpen=false;",
+  "let startupAutoNotice='',startupAutoEnabled=false,startupConnectionCheckPending=false,startupConnectionHealthError=false;",
   ui.slice(start,end),
   ui.slice(invalidateStart,invalidateEnd),
   'return {renderStartupPage,invalidateStartupConnection,setVerifying:v=>startupVerifying=v,setVerified:v=>startupConnectionVerified=v};'

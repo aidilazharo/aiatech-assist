@@ -1214,8 +1214,20 @@ async function requireAutomaticStartup(projectId){
  if(!startupReadinessState?.catalog?.available||!ids.length||ids.some(id=>!startupReadinessState?.stacks?.some(stack=>stack.id===id&&stack.ready)))throw Error('The selected project technology stack or SDLC Library is not ready. Review its prerequisites.');
  return project;
 }
-async function testAndSaveStartupConnections(message){
- startupSessionVerified=false;startupVerifiedSignature='';
+function startupConnectionFailure(error){
+ const text=String(error?.message||error||''),status=/\bHTTP\s+(\d{3})\b/i.exec(text)?.[1];
+ if(status){
+  const advice=status==='401'||status==='403'?'Check the account, token and permissions.':status==='404'?'Check the service URL and account access.':status==='429'?'The service is rate limiting requests; retry later.':'Check the service and retry.';
+  return `Server responded (HTTP ${status}). ${advice}`;
+ }
+ const cause=String(error?.cause?.code||error?.code||'');
+ if(/timeout|timed out/i.test(text+' '+String(error?.name||'')+' '+cause))return 'Connection timed out. Check the network, DNS, proxy or firewall.';
+ if(/fetch failed|network|connection|certificate|ENOTFOUND|EAI_AGAIN|ECONNRESET|ECONNREFUSED|EHOSTUNREACH|ENETUNREACH/i.test(text+' '+cause))return 'Cannot connect. Check the network, DNS, proxy or firewall.';
+ if(/token|credential|account has changed/i.test(text))return 'Enter a valid token for the selected account and test again.';
+ return 'Could not verify the response. Check the service URL and account access.';
+}
+async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{}}={}){
+ if(save){startupSessionVerified=false;startupVerifiedSignature='';}
  const data=startupSetup.validate(message.settings);
  const enteredAtlassian=String(message.atlassianToken||'').trim();
  const enteredGithub=String(message.githubToken||'').trim();
@@ -1228,32 +1240,62 @@ async function testAndSaveStartupConnections(message){
  const config=projectConfig(null,settings,cfg());
  const atlIdentity={endpoint:validateUrl(data.jiraUrl),email:data.email};
  const gitIdentity={endpoint:validateUrl(config.get('github.apiUrl')),email:''};
- const atlassian=enteredAtlassian||await readToken(globalSecretKey('atlassian'),atlIdentity);
- if(!atlassian)throw Error('Enter an Atlassian API token to verify Jira and Confluence.');
- const github=enteredGithub||await readToken(globalSecretKey('github'),gitIdentity);
- if(!github)throw Error('Enter a GitHub personal access token to verify your account and the fixed SDLC Library repository.');
- // Read-only checks run before saving anything. This prevents an invalid
- // onboarding form from overwriting working credentials and saved defaults.
- await testJiraConnection(config,atlassian);
- const spaces=await requestJson(data.confluenceUrl.replace(/\/$/,'')+'/api/v2/spaces?limit=1',
-  {token:atlassian,basicEmail:data.email});
- if(!Array.isArray(spaces?.results))throw Error('Confluence did not return an accessible spaces list. Check the URL and token scopes.');
- await requestJson('https://api.github.com/user',{token:github});
+ const [atlassian,github]=await Promise.all([
+  enteredAtlassian?Promise.resolve(enteredAtlassian):readToken(globalSecretKey('atlassian'),atlIdentity).catch(()=>undefined),
+  enteredGithub?Promise.resolve(enteredGithub):readToken(globalSecretKey('github'),gitIdentity).catch(()=>undefined)
+ ]);
  const gitHeaders={Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'};
  const libraryConf=sdlcCatalog.normalizeConfig({repositoryUrl:data.libraryRepoUrl,ref:'main',authentication:'token',autoCheck:true,offlineCache:true});
  let library,offlineFallback=null;
- try{
-  const detail=await requestJson(`https://api.github.com/repos/${encodeURIComponent(data.library.owner)}/${encodeURIComponent(data.library.repo)}`,{token:github,headers:gitHeaders});
-  if(String(detail.full_name||'').toLowerCase()!==(data.library.owner+'/'+data.library.repo).toLowerCase())throw Error('Unexpected SDLC Library repository identity.');
-  library=await sdlcCatalog.remoteInfo(libraryConf,github);
-  if(!library?.sha)throw Error('SDLC Library main branch was not accessible.');
- }catch(error){
-  // Preflight test harnesses may run without a VS Code workspace.
-  const workspace=typeof getWorkspace==='function'?getWorkspace()?.uri.fsPath:null;
-  if(workspace)offlineFallback=await offlineLibrary.imported(workspace,data.libraryRepoUrl);
-  if(!offlineFallback)throw error;
-  library={offline:true};
- }
+ const jiraApi=data.jiraUrl.replace(/\/$/,'')+'/rest/api/3/myself';
+ const confluenceApi=data.confluenceUrl.replace(/\/$/,'')+'/api/v2/spaces';
+ const accountApi='https://api.github.com/user';
+ const organizationApi=`https://api.github.com/users/${encodeURIComponent(data.owner)}`;
+ const libraryApi=`https://api.github.com/repos/${encodeURIComponent(data.library.owner)}/${encodeURIComponent(data.library.repo)}`;
+ const specifications=[
+  ['jira','Jira API',jiraApi,async()=>{
+   if(!atlassian){await requestJson(jiraApi);throw Error('Atlassian token required');}
+   await testJiraConnection(config,atlassian);
+  }],
+  ['confluence','Confluence API',confluenceApi,async()=>{
+   const spaces=await requestJson(confluenceApi+'?limit=1',{token:atlassian,basicEmail:data.email});
+   if(!atlassian)throw Error('Atlassian token required');
+   if(!Array.isArray(spaces?.results))throw Error('Unexpected Confluence response');
+  }],
+  ['github','GitHub API',accountApi,async()=>{
+   const user=await requestJson(accountApi,{token:github,headers:gitHeaders});
+   if(!github)throw Error('GitHub token required');
+   if(!user?.login)throw Error('Unexpected GitHub account response');
+  }],
+  ['organization','GitHub organization',organizationApi,async()=>{
+   const org=await requestJson(organizationApi,{token:github,headers:gitHeaders});
+   if(String(org?.login||'').toLowerCase()!==data.owner.toLowerCase())throw Error('Unexpected GitHub organization response');
+  }],
+  ['library','SDLC Library',libraryApi,async()=>{
+   try{
+    const detail=await requestJson(libraryApi,{token:github,headers:gitHeaders});
+    if(String(detail.full_name||'').toLowerCase()!==(data.library.owner+'/'+data.library.repo).toLowerCase())throw Error('Unexpected SDLC Library repository identity.');
+    library=await sdlcCatalog.remoteInfo(libraryConf,github);
+    if(!library?.sha)throw Error('SDLC Library main branch was not accessible.');
+   }catch(error){
+    const workspace=typeof getWorkspace==='function'?getWorkspace()?.uri.fsPath:null;
+    if(workspace)offlineFallback=await offlineLibrary.imported(workspace,data.libraryRepoUrl);
+    if(!offlineFallback)throw error;
+    library={offline:true};return {offline:true};
+   }
+  }]
+ ];
+ // Every service is checked even when another one fails. No settings or tokens
+ // are changed until all required checks have completed successfully.
+ const checks=await Promise.all(specifications.map(async([id,label,url,check])=>{
+  let result;
+  try{const value=await check();result={id,label,url,state:value?.offline?'offline':'ok',message:value?.offline?'Remote unavailable; verified offline Library available.':'Reachable and verified.'};}
+  catch(error){result={id,label,url,state:'error',message:startupConnectionFailure(error)};}
+  try{Promise.resolve(onProgress(result)).catch(()=>{});}catch{}
+  return result;
+ }));
+ if(checks.some(check=>check.state==='error'))return {success:false,checks,message:'Some connections need attention. No changes were saved.'};
+ if(!save)return {success:true,checks,message:offlineFallback?'Connections checked. The Library is available offline.':'Jira, Confluence and GitHub API connections verified.'};
  // Do not store raw tokens in extension settings or send them to the webview.
  await context.globalState.update('atgvAssist.extensionSettings',settings);
  if(enteredAtlassian)await storeToken(globalSecretKey('atlassian'),atlIdentity,atlassian);
@@ -1269,7 +1311,7 @@ async function testAndSaveStartupConnections(message){
  await context.secrets.store(STARTUP_VERIFIED_SECRET,JSON.stringify({
   signature:persistedSignature,tokenDigest:sha(atlassian+'\\0'+github)
  }));
- return {success:true,librarySha:library.sha?.slice(0,12)||'offline',
+ return {success:true,checks,librarySha:library.sha?.slice(0,12)||'offline',
   message:offlineFallback?'Jira, Confluence and GitHub account verified. The fixed SDLC Library is available from validated ZIP v'+offlineFallback.version+'. Settings saved.':'Jira and Confluence authenticated; GitHub account and fixed SDLC Library verified. Configure a project repository later in Project Settings.'};
 }
 async function dashboardState(){
@@ -1781,22 +1823,31 @@ async function importDiscoveryDocument(roleId){
  if(new Set(documents.map(d=>d.name.toLowerCase())).size!==documents.length||new Set(documents.map(d=>d.digest)).size!==documents.length)throw Error('Select unique filenames and document contents.');
  const previousVersions=[...existing,...(initial.archivedSources||[])];
  const changes=documents.map(doc=>{
-  const existingMatch=previousVersions.find(x=>x.digest===doc.digest)||previousVersions.find(x=>x.name.toLowerCase()===doc.name.toLowerCase());
+  const existingMatch=existing.find(x=>x.digest===doc.digest)||existing.find(x=>x.name.toLowerCase()===doc.name.toLowerCase())||previousVersions.find(x=>x.digest===doc.digest)||previousVersions.find(x=>x.name.toLowerCase()===doc.name.toLowerCase());
   return {document:doc,previous:existingMatch,identical:!!existingMatch&&existingMatch.digest===doc.digest};
  });
- const unchanged=changes.filter(row=>row.identical);
+ const unchanged=changes.filter(row=>row.identical&&existing.some(item=>item.digest===row.document.digest));
+ const reactivated=changes.filter(row=>row.identical&&!existing.some(item=>item.digest===row.document.digest));
  const modified=changes.filter(row=>row.previous&&!row.identical);
  const fresh=changes.filter(row=>!row.previous);
  // A byte-identical explicit re-upload can repair missing legacy source metadata.
  // Never infer original-byte checksums from extracted text or stored bytes alone.
- const legacyBaselines=unchanged.filter(row=>existing.some(entry=>entry.name.toLowerCase()===row.document.name.toLowerCase()&&entry.digest===row.document.digest&&!/^[a-f0-9]{64}$/.test(String(entry.byteDigest||''))));
- if(unchanged.length===documents.length&&!legacyBaselines.length){
+ const legacyBaselines=unchanged.filter(row=>existing.some(entry=>entry.digest===row.document.digest&&!/^[a-f0-9]{64}$/.test(String(entry.byteDigest||''))));
+ const missingActive=[];
+ for(const row of unchanged.filter(item=>!legacyBaselines.includes(item))){
+  try{await sourceStore.originalBytes(registry,activeProject.id,row.previous);}
+  catch(error){
+   if(/Original (?:uploaded )?source document (?:is not stored locally|is unavailable)/i.test(String(error.message)))missingActive.push(row);
+   else throw error;
+  }
+ }
+ if(unchanged.length===documents.length&&!legacyBaselines.length&&!missingActive.length){
   await dashboard?.webview.postMessage({type:'discoveryImportCancelled'});
   await notice('No source changes: '+unchanged.map(x=>x.document.name).join(', ')+'. Existing Business Requirements and Jira remain unchanged.');
   return;
  }
  const prospective=[...existing];
- for(const row of [...modified,...fresh]){
+ for(const row of [...modified,...fresh,...reactivated]){
   const doc=row.document;
   const same=prospective.findIndex(x=>x.name.toLowerCase()===doc.name.toLowerCase()||x.digest===doc.digest);
   if(same>=0)prospective.splice(same,1);
@@ -1809,17 +1860,24 @@ async function importDiscoveryDocument(roleId){
   const yes=await uiWarning(summary,{modal:true},'Create Source Revision');
   if(yes!=='Create Source Revision'){await dashboard?.webview.postMessage({type:'discoveryImportCancelled'});return;}
  }
- const updatedDocuments=[...modified,...fresh];
+ const updatedDocuments=[...modified,...fresh,...reactivated];
  // Store verifies the selected original bytes against any existing copy and
  // refuses different PDF/Word bytes with the same extracted-text digest.
  for(const {document:doc} of legacyBaselines){
   doc.storedName=await sourceStore.store(registry,activeProject.id,doc,doc.originalPath);
-  const same=prospective.findIndex(entry=>entry.name.toLowerCase()===doc.name.toLowerCase()&&entry.digest===doc.digest);
+  const same=prospective.findIndex(entry=>entry.digest===doc.digest);
   if(same<0||prospective[same].storedName!==doc.storedName)throw Error('Legacy source changed while verifying its original bytes. Refresh and retry.');
   prospective[same]={...prospective[same],byteDigest:doc.byteDigest};
  }
- for(const {document:doc} of updatedDocuments){
-  doc.storedName=await sourceStore.store(registry,activeProject.id,doc,doc.originalPath);
+ for(const {document:doc,previous} of missingActive){
+  doc.storedName=await sourceStore.store(registry,activeProject.id,doc,doc.originalPath,{expectedByteDigest:previous.byteDigest});
+  const same=prospective.findIndex(entry=>entry.digest===doc.digest);
+  if(same<0)throw Error('Source changed while restoring its original bytes. Refresh and retry.');
+  prospective[same]={...prospective[same],storedName:doc.storedName,byteDigest:doc.byteDigest};
+ }
+ for(const {document:doc,previous} of updatedDocuments){
+  const expectedByteDigest=reactivated.some(row=>row.document===doc)?String(previous.byteDigest||''):'';
+  doc.storedName=await sourceStore.store(registry,activeProject.id,doc,doc.originalPath,{expectedByteDigest});
   const same=prospective.findIndex(x=>x.name.toLowerCase()===doc.name.toLowerCase()||x.digest===doc.digest);
   prospective[same]={name:doc.name,digest:doc.digest,byteDigest:doc.byteDigest,characters:doc.characters,storedName:doc.storedName,uploadedBy:uploader,uploadedAt:new Date().toISOString()};
  }
@@ -1837,7 +1895,7 @@ async function importDiscoveryDocument(roleId){
  await dashboard?.webview.postMessage({type:'brUpdated',register});
  const autoMap=updatedDocuments.length>0;
  if(autoMap)await context.workspaceState.update('atgvAssist.baSelectedSources.'+activeProject.id,register.sourceDocuments.map(doc=>doc.digest));
- await dashboard?.webview.postMessage({type:'discoveryUploadDone',count:updatedDocuments.length,revised:modified.length,newDocuments:fresh.length,reverified:legacyBaselines.length,autoPreflight:autoMap});
+ await dashboard?.webview.postMessage({type:'discoveryUploadDone',count:updatedDocuments.length,revised:modified.length,newDocuments:fresh.length,restored:reactivated.length,reverified:legacyBaselines.length+missingActive.length,autoPreflight:autoMap});
  if(autoMap){
   await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Document uploaded. Automatically checking source for TDD RED/GREEN risks…'});
   try{await processSelectedDiscoverySources({digests:register.sourceDocuments.map(doc=>doc.digest),revision:register.revision,automatic:true});}
@@ -1852,6 +1910,21 @@ const documentPreflightSessions=new Map(); // Project-scoped, in-memory section/
 // Mapping is cancellable until the atomic register write starts. No partial mapping
 // updates may reach the active discovery record, even after a timeout or Stop.
 const SOURCE_MAPPING_AI_TIMEOUT_MS=180000;
+const SOURCE_PREFLIGHT_AI_TIMEOUT_MS=120000;
+// A timeout cancels only this AI request, not the user's mapping run. Race the
+// cancellation explicitly because some providers do not settle when cancelled.
+async function requestSourcePreflight(target,prompt,run){
+ const child=new AbortController(),parent=run.controller.signal;
+ if(parent.aborted){const error=Error('Source mapping stopped before saving.');error.name='AbortError';throw error;}
+ let timer,onStop;
+ const stopped=new Promise((_,reject)=>{
+  onStop=()=>{const error=Error('Source mapping stopped before saving.');error.name='AbortError';reject(error);child.abort();};
+  parent.addEventListener('abort',onStop,{once:true});
+  timer=setTimeout(()=>{const error=Error('AI document preflight timed out.');error.code='ATGV_PREFLIGHT_TIMEOUT';reject(error);child.abort();},SOURCE_PREFLIGHT_AI_TIMEOUT_MS);
+ });
+ try{return await Promise.race([aiAnswer(target,prompt,20000,{json:true,signal:child.signal,timeoutMs:SOURCE_PREFLIGHT_AI_TIMEOUT_MS}),stopped]);}
+ finally{clearTimeout(timer);parent.removeEventListener('abort',onStop);}
+}
 async function processSelectedDiscoverySources(msg){
  if(activeDiscoveryMappingRun)throw Error('Source mapping is already running. Stop it before starting another mapping.');
  requireOpened();
@@ -1880,24 +1953,46 @@ async function processSelectedDiscoverySources(msg){
   for(let i=0;i<readable.length;i++){
    check();
    const source=readable[i];
-   const sections=discoveryImport.splitDocumentText(source.text);
+   let sections=discoveryImport.splitDocumentText(source.text);
+   const smallerSections=discoveryImport.splitDocumentText(source.text,12000);
+   if(smallerSections.length<=25)sections=smallerSections;
+   let preflightSplitRecoveries=0;
    const reports=[],partAnswers=[];
    for(let part=0;part<sections.length;part++){
     check();run.phase='preflight';
     const section={...source,text:sections[part]};
     const label=sections.length>1?' (section '+(part+1)+'/'+sections.length+')':'';
     await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'AI document preflight '+(i+1)+'/'+readable.length+label+': checking acceptance criteria and contradictions in '+source.name+'…'});
-    let result,previous='';
+    let result,previous='',retrySmaller=false;
     for(let attempt=1;attempt<=2;attempt++){
-     check();run.timeout=false;
-     const timer=setTimeout(()=>{run.timeout=true;run.controller.abort();},SOURCE_MAPPING_AI_TIMEOUT_MS);
-     try{
-      const ai=await aiAnswer(target,baDocumentPreflight.prompt(section,{previous,attempt})+await roleSkillPrompt('business-analyst'),20000,{json:true,signal:run.controller.signal});
-      check();result=baDocumentPreflight.parse(ai,section.text);
-     }catch(error){
-      if(run.timeout)throw Error(source.name+label+': AI document preflight timed out. The original uploaded file is preserved; retry mapping.');
-      throw error;
-     }finally{clearTimeout(timer);}
+     check();
+     const prompt=baDocumentPreflight.prompt(section,{previous,attempt})+await roleSkillPrompt('business-analyst');
+     for(let networkAttempt=1;networkAttempt<=2;networkAttempt++){
+      try{
+       const ai=await requestSourcePreflight(target,prompt,run);
+       check();result=baDocumentPreflight.parse(ai,section.text);break;
+      }catch(error){
+       check();
+       const timedOut=error.code==='ATGV_PREFLIGHT_TIMEOUT'||error.name==='TimeoutError'||/\btimed?\s*out\b|\btimeout\b/i.test(String(error.message||error));
+       if(!timedOut)throw error;
+       if(networkAttempt===1&&attempt===1&&preflightSplitRecoveries===0&&section.text.length>4000){
+        const parts=discoveryImport.splitDocumentText(section.text,Math.max(2000,Math.floor(section.text.length/2)));
+        if(parts.length>1&&sections.length-1+parts.length<=25){
+         sections.splice(part,1,...parts);preflightSplitRecoveries++;retrySmaller=true;
+         const session=documentPreflightSessions.get(run.projectId);
+         if(session)for(const entry of session.entries)if(entry.digest===selected[i])entry.totalSections=sections.length;
+         await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'The AI response was slow. Retrying this section in smaller parts; the complete original document remains included…'});
+         break;
+        }
+       }
+       if(networkAttempt===1){
+        await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'The AI response timed out. Retrying this section once…'});
+        continue;
+       }
+       throw Error(source.name+label+': AI document preflight timed out twice. Check the selected AI model and network access, then select Retry Mapping. The original document and existing BRs remain unchanged.');
+      }
+     }
+     if(retrySmaller)break;
      check();
      const reportSession=documentPreflightSessions.get(run.projectId);
      if(reportSession)baPreflightReports.capture(reportSession,{digest:selected[i],sourceName:source.name,section:part+1,totalSections:sections.length,attempt,report:result});
@@ -1908,6 +2003,7 @@ async function processSelectedDiscoverySources(msg){
       await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'repair',message:'Rechecking '+source.name+label+': attempting safe document corrections ('+attempt+'/2). Original file unchanged…'});
      }
     }
+    if(retrySmaller){part--;continue;}
     if(!result?.ready){
      const blockers=(result?.blockers||[]).map(x=>x.detail).slice(0,3).join(' | ');
      const problem=blockers||'AI could not safely resolve all document testability concerns.';
@@ -1938,7 +2034,7 @@ async function processSelectedDiscoverySources(msg){
       run.timeout=false;
       const timer=setTimeout(()=>{run.timeout=true;run.controller.abort();},SOURCE_MAPPING_AI_TIMEOUT_MS);
       try{
-       const answer=await aiAnswer(target,mappingPrompt+(attempt===2?'\n\nThe previous response was invalid. Return the exact JSON schema with all 12 keys as strings, using empty strings when evidence is missing.':''),95000,{json:true,signal:run.controller.signal});
+       const answer=await aiAnswer(target,mappingPrompt+(attempt===2?'\n\nThe previous response was invalid. Return the exact JSON schema with all 12 keys as strings, using empty strings when evidence is missing.':''),95000,{json:true,signal:run.controller.signal,timeoutMs:SOURCE_MAPPING_AI_TIMEOUT_MS});
        check();
        try{proposals=discoveryImport.parseMappingResponse(answer);}
        catch(error){
@@ -1964,7 +2060,7 @@ async function processSelectedDiscoverySources(msg){
     await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Comparing mapped requirements across all '+sections.length+' document sections…'});
     const timer=setTimeout(()=>{run.timeout=true;run.controller.abort();},SOURCE_MAPPING_AI_TIMEOUT_MS);
     try{
-     const answer=await aiAnswer(target,baDocumentPreflight.crossSectionPrompt(partAnswers),12000,{json:true,signal:run.controller.signal});
+     const answer=await aiAnswer(target,baDocumentPreflight.crossSectionPrompt(partAnswers),12000,{json:true,signal:run.controller.signal,timeoutMs:SOURCE_MAPPING_AI_TIMEOUT_MS});
      check();const review=baDocumentPreflight.parseCrossSection(answer,partAnswers);
      if(review.conflicts.length)throw Error(source.name+': conflicting requirements across document sections need Business Analyst clarification: '+review.conflicts.map(item=>String(item.detail).slice(0,250)).slice(0,3).join(' | ')+' No mapping was saved.');
      crossSectionChecked=true;
@@ -4178,10 +4274,16 @@ async function handleDashboardMessage(msg){
         break;
       }
       case 'startupTestConnections':{
-        try{const result=await testAndSaveStartupConnections(msg);
-          await dashboard?.webview.postMessage({type:'startupConnectionsResult',...result});
-          await refreshDashboard();}
-        catch(error){startupSessionVerified=false;await dashboard?.webview.postMessage({type:'startupConnectionsResult',success:false,message:error.message});}
+        try{const result=await testAndSaveStartupConnections(msg,{onProgress:check=>dashboard?.webview.postMessage({type:'startupConnectionCheck',requestId:msg.requestId,check})});
+          await dashboard?.webview.postMessage({type:'startupConnectionsResult',requestId:msg.requestId,...result});
+          if(result.success)await refreshDashboard();}
+        catch(error){startupSessionVerified=false;await dashboard?.webview.postMessage({type:'startupConnectionsResult',requestId:msg.requestId,success:false,message:error.message});}
+        break;
+      }
+      case 'startupCheckConnections':{
+        try{const result=await testAndSaveStartupConnections(msg,{save:false,onProgress:check=>dashboard?.webview.postMessage({type:'startupConnectionCheck',requestId:msg.requestId,check})});
+          await dashboard?.webview.postMessage({type:'startupConnectionHealthResult',requestId:msg.requestId,...result});}
+        catch(error){await dashboard?.webview.postMessage({type:'startupConnectionHealthResult',requestId:msg.requestId,success:false,message:String(error.message||error)});}
         break;
       }
       case 'startupProceed':{

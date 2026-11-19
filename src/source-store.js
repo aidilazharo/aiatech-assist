@@ -19,7 +19,7 @@ async function checkedDirectory(registry, id) {
     }
     return parts.at(-1);
 }
-async function store(registry, id, document, originalPath) {
+async function store(registry, id, document, originalPath, { expectedByteDigest = '' } = {}) {
     if (!DIGEST.test(document.digest))
         throw Error('Invalid source document digest.');
     const extension = path.extname(document.name).toLowerCase();
@@ -29,6 +29,8 @@ async function store(registry, id, document, originalPath) {
     const target = path.join(folder, storedName), st = await fs.lstat(target).catch(e => e.code === 'ENOENT' ? null : Promise.reject(e));
     const bytes = await fs.readFile(originalPath);
     const byteDigest = crypto.createHash('sha256').update(bytes).digest('hex');
+    if (expectedByteDigest && (!DIGEST.test(expectedByteDigest) || byteDigest !== expectedByteDigest))
+        throw Error('The selected file does not match the original document checksum. Upload the original file to restore it.');
     document.byteDigest = byteDigest;
     if (st && (!st.isFile() || st.isSymbolicLink()))
         throw Error('Unsafe stored source document.');

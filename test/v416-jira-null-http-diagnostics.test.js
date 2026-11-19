@@ -59,3 +59,11 @@ test('v416: non-Atlassian 404 does not carry incorrect Jira hint',async()=>{
   return true;
  });
 });
+test('Confluence 404 identifies Confluence URL and access, without a misleading Jira hint',async()=>{
+ await assert.rejects(withFetch(fail(404,'null'),()=>requestJson('https://example.atlassian.net/wiki/api/v2/spaces?limit=1')),
+ error=>{
+  assert.match(error.message,/Confluence API endpoint not found or not accessible/);
+  assert.doesNotMatch(error.message,/Jira Base URL|Browse Projects/);
+  return true;
+ });
+});

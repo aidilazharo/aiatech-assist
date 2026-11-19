@@ -28,6 +28,20 @@ test('Cloud providers return actionable errors without leaking keys',async()=>{
  const target=await resolveAiTarget({config:{provider:'openai',model:'approved-model'},secret:'do-not-print'});
  await assert.rejects(sendAiText({target,prompt:'hi',request:async()=>({output:[]})}),e=>/empty text response/.test(e.message)&&!e.message.includes('do-not-print'));
 });
+test('document AI requests pass the requested timeout through every HTTP provider',async()=>{
+ const targets=[
+  [{kind:'openai',endpoint:'https://api.openai.com/v1/responses',modelId:'test',secret:'test'},{output_text:'READY'}],
+  [{kind:'anthropic',endpoint:'https://api.anthropic.com/v1/messages',modelId:'test',secret:'test'},{content:[{type:'text',text:'READY'}]}],
+  [{kind:'azure-openai',endpoint:'https://example.openai.azure.com/chat',modelId:'test',secret:'test'},{choices:[{message:{content:'READY'}}]}],
+  [{kind:'ollama',endpoint:'http://localhost:11434',modelId:'test'},{message:{content:'READY'}}],
+  [{kind:'openai-compatible',endpoint:'https://example.com/v1/chat/completions',modelId:'test',secret:'test'},{choices:[{message:{content:'READY'}}]}]
+ ];
+ for(const [target,response] of targets){
+  let received;
+  assert.equal(await sendAiText({target,prompt:'test',timeoutMs:120000,request:async(_url,options)=>{received=options.timeoutMs;return response;}}),'READY');
+  assert.equal(received,120000,target.kind);
+ }
+});
 test('Codex JSONL final answer parser rejects failures and skips tool output',()=>{
  const example=[{type:'item.completed',item:{type:'command_execution',aggregated_output:'SECRET'}},{type:'item.completed',item:{type:'agent_message',text:'READY'}}].map(JSON.stringify).join('\n');
  assert.equal(codexText(example),'READY');

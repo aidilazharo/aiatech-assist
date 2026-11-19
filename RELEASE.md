@@ -1,3 +1,14 @@
+# ATGV AIATECH Assist v0.4.28
+
+- Add Edit and Cancel controls for saved Jira, Confluence and GitHub connection details on Start.
+- Check Jira, Confluence, the GitHub account and organization, and SDLC Library access independently at startup and while saving credentials.
+- Report HTTP responses separately from connection failures, and pause automatic opening when checks need attention.
+- Preserve saved credentials if re-verification fails and correct misleading Confluence 404 guidance.
+- Allow an archived document to be uploaded again for a new mapping cycle, and restore a missing active source only when its original checksum matches.
+- Reduce preflight section sizes and automatically retry a slow AI response without discarding the document or bypassing validation.
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.27
 
 - Show a centered, collapsed prerequisite summary that expands all permission, stack and Copilot checks in one responsive grid.
