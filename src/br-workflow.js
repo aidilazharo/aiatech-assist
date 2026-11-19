@@ -896,12 +896,14 @@ async function confirmReview(registry,id,revision,{discoveryRevision,actor,ackno
   if(next.discoveryRevision!==discoveryRevision||next.reviewRevision!==discoveryRevision)throw Error('AI Review has changed. Review it again.');
   let review;try{review=JSON.parse(next.reviewText||'{}');}catch{throw Error('Run AI Review before continuing.');}
   if(!review||typeof review!=='object'||review.skipped)throw Error('No active AI Review to finish.');
-  const findings=(review.suggestions||[]).filter(item=>item.severity==='Critical'||item.severity==='High'||!item.suggestedAnswer);
-  const unresolved=review.readiness==='Needs attention'||(review.suggestions||[]).some(item=>item.severity==='Critical');
+  const sourceFindings=sourceReviewFindings(next);
+  const findings=[...(review.suggestions||[]).filter(item=>item.severity==='Critical'||item.severity==='High'||!item.suggestedAnswer)
+   .map(item=>({key:String(item.key||''),severity:String(item.severity||''),issue:String(item.issue||'').slice(0,500)})),...sourceFindings].slice(0,24);
+  const unresolved=review.readiness==='Needs attention'||(review.suggestions||[]).some(item=>item.severity==='Critical')||sourceFindings.length>0;
   if(unresolved&&acknowledgeRisks!==true)throw Error('The AI Review has unresolved findings. Explicitly acknowledge them before confirming.');
   if(acknowledgeRisks===true){
    if(!unresolved)throw Error('No unresolved review risks require acknowledgment.');
-   next.reviewRiskAccepted={revision:discoveryRevision,at:new Date().toISOString(),by:String(actor||'').slice(0,120),decision:'Review & Acknowledge',sourceFingerprint:String(next.importDigest||''),findings:findings.map(item=>({key:String(item.key||''),severity:String(item.severity||''),issue:String(item.issue||'').slice(0,500)}))};
+   next.reviewRiskAccepted={revision:discoveryRevision,at:new Date().toISOString(),by:String(actor||'').slice(0,120),decision:'Review & Acknowledge',sourceFingerprint:String(next.importDigest||''),findings};
    event(next,'ai-review-risks-acknowledged',{discoveryRevision,actor:String(actor||'').slice(0,120),count:findings.length,sourceFingerprint:String(next.importDigest||'')});
   }
   review.confirmed=true;review.confirmedAt=new Date().toISOString();review.confirmedBy=String(actor||'').slice(0,120);
@@ -909,8 +911,17 @@ async function confirmReview(registry,id,revision,{discoveryRevision,actor,ackno
   next.reviewText=text;event(next,'discovery-review-confirmed',{discoveryRevision});
  });
 }
-async function skipReview(registry,id,revision,{discoveryRevision,actor}){
- return reviewed(registry,id,revision,{discoveryRevision,text:JSON.stringify({readiness:'Skipped',summary:'AI review skipped by the assigned Business Analyst.',suggestions:[],skipped:true,actor:String(actor||'').slice(0,100),at:new Date().toISOString()})});
+async function skipReview(registry,id,revision,{discoveryRevision,actor,acknowledgeSourceFindings=false}){
+ const initial=await load(registry,id),sourceFindings=sourceReviewFindings(initial);
+ if(sourceFindings.length&&!acknowledgeSourceFindings)throw Error('Source findings require BA acknowledgement before skipping AI Review.');
+ const updated=await reviewed(registry,id,revision,{discoveryRevision,text:JSON.stringify({readiness:'Skipped',summary:'AI review skipped by the assigned Business Analyst.',suggestions:[],skipped:true,actor:String(actor||'').slice(0,100),at:new Date().toISOString()})});
+ if(!sourceFindings.length)return updated;
+ return write(registry,id,updated.revision,next=>{
+  const pending=sourceReviewFindings(next);
+  if(next.discoveryRevision!==discoveryRevision||pending.length!==sourceFindings.length)throw Error('Source findings changed; review again.');
+  next.reviewRiskAccepted={revision:discoveryRevision,at:new Date().toISOString(),by:String(actor||'').slice(0,120),decision:'Skip AI Review, acknowledge source findings',sourceFingerprint:String(next.importDigest||''),findings:pending};
+  event(next,'source-findings-acknowledged',{discoveryRevision,count:pending.length,sourceFingerprint:String(next.importDigest||'')});
+ });
 }
 function normalizedContent(value){
  const c=contentOf(value);
@@ -981,15 +992,29 @@ function stableProposal(candidate,existing){
  for(const f of features){all.add(f.id);for(const s of f.stories||[]){all.add(f.id+'/'+s.id);for(const t of s.tasks||[])all.add(f.id+'/'+s.id+'/'+t.id);}}
  return {...candidate,features,identityLedger:[...all]};
 }
+// Source findings are distinct from AI-review suggestions. They must survive
+// mapping and be explicitly acknowledged against the SAME source revision.
+function sourceReviewFindings(next){
+ const preflights=next.mappingCompleted?.preflights||[];
+ if(!Array.isArray(preflights))return [];
+ return preflights.filter(item=>item?.status==='needs-review').flatMap(item=>{
+  const issues=(item.issues||[]).filter(issue=>issue?.severity==='blocker'||issue?.category==='ai-verification').slice(0,16);
+  if(!issues.length)issues.push({severity:'blocker',detail:'Source preflight needs BA review but has no detailed verified finding.'});
+  return issues.map(issue=>({key:'source:'+String(item.digest||'').slice(0,16),severity:'Critical',issue:String(issue.detail||'Unresolved source finding').slice(0,500)}));
+ }).slice(0,20);
+}
 function reviewGate(next,{allowRiskAcknowledgement=false,actor='Business Analyst'}={}){
- let value;try{value=JSON.parse(next.reviewText||'');}catch{return;}
+ let value;try{value=JSON.parse(next.reviewText||'{}');}catch{value={};}
  const critical=(value.suggestions||[]).filter(x=>x.severity==='Critical');
- const warnings=critical.length||value.readiness==='Needs attention';
+ const sourceFindings=sourceReviewFindings(next);
+ const warnings=critical.length||value.readiness==='Needs attention'||sourceFindings.length;
  if(!warnings)return;
- if(next.reviewRiskAccepted?.revision===next.discoveryRevision&&next.reviewRevision===next.discoveryRevision)return;
- if(!allowRiskAcknowledgement)throw Error('AI review findings require explicit risk acknowledgment before BR generation or approval.');
- const findings=(value.suggestions||[]).filter(item=>item.severity==='Critical'||item.severity==='High'||!item.suggestedAnswer);
- next.reviewRiskAccepted={revision:next.discoveryRevision,at:new Date().toISOString(),by:String(actor||'Business Analyst').slice(0,120),decision:'Continue with Risks',sourceFingerprint:String(next.importDigest||''),findings:findings.map(item=>({key:String(item.key||''),severity:String(item.severity||''),issue:String(item.issue||'').slice(0,500)}))};
+ if(next.reviewRiskAccepted?.revision===next.discoveryRevision&&next.reviewRevision===next.discoveryRevision&&
+    next.reviewRiskAccepted.sourceFingerprint===String(next.importDigest||''))return;
+ if(!allowRiskAcknowledgement)throw Error('AI or source-document findings require explicit Business Analyst acknowledgment before BR generation or approval.');
+ const findings=[...(value.suggestions||[]).filter(item=>item.severity==='Critical'||item.severity==='High'||!item.suggestedAnswer)
+  .map(item=>({key:String(item.key||''),severity:String(item.severity||''),issue:String(item.issue||'').slice(0,500)})),...sourceFindings].slice(0,24);
+ next.reviewRiskAccepted={revision:next.discoveryRevision,at:new Date().toISOString(),by:String(actor||'Business Analyst').slice(0,120),decision:'Continue with Risks',sourceFingerprint:String(next.importDigest||''),findings};
  event(next,'ai-review-risks-acknowledged',{discoveryRevision:next.discoveryRevision,actor:String(actor||'Business Analyst').slice(0,120),critical:critical.length,count:findings.length,sourceFingerprint:String(next.importDigest||'')});
 }
 
@@ -1570,4 +1595,4 @@ async function finishChangeRequest(registry,id,revision,{paths,actor}){
   }
  });
 }
-module.exports={discoveryTargetScope,reconcileDiscoveryTargets,startOrRestart,repairRestart,linkJiraChangeRequest,recordAIChangeImpact,recordJiraWorkHistory,createChangeRequest,decideChangeRequest,finishChangeRequest,write,sourceLifecycle,archiveSource,restoreSource,forceDeleteArchivedSource,forceDeleteActiveSource,forceDeleteBusinessRequirement,exclusiveBRSourceEntries,discardEmptyIncompleteCycle,inProgressDeletionImpact,forceDeleteInProgressCycle,sourceDeletionImpact,activeSourceDeletionImpact,removeBRExports,sourceRemovalImpact,reviewSourceConflict,resolveDiscoveryProposal,recordRoleDocumentImpact,decideRoleDocumentImpact,endorse,clearDependencyImpact,changeEngine,propose,decideProposal,rejectConflictingProposals,proposalConflicts,recordLinkedJiraStatus,recordInboundJira,reviewInboundJira,reconcileRevertedJira,reconcileApprovedJira,load,imported,addSources,removeSource,selectSources,completeSourceMapping,commitSourceMapping,repairPendingExports,discoverySaved,reviewed,skipReview,confirmReview,generated,beginRevision,edit,approve,retire,keep,plan,saveJiraIssueDetails,approveRetirements,beginOperation,markAttempt,recorded,parseGenerated,promptForGeneration,validateProposal,flattenApproved,asMarkdown,normalizedContent,matchScore};
+module.exports={sourceReviewFindings,discoveryTargetScope,reconcileDiscoveryTargets,startOrRestart,repairRestart,linkJiraChangeRequest,recordAIChangeImpact,recordJiraWorkHistory,createChangeRequest,decideChangeRequest,finishChangeRequest,write,sourceLifecycle,archiveSource,restoreSource,forceDeleteArchivedSource,forceDeleteActiveSource,forceDeleteBusinessRequirement,exclusiveBRSourceEntries,discardEmptyIncompleteCycle,inProgressDeletionImpact,forceDeleteInProgressCycle,sourceDeletionImpact,activeSourceDeletionImpact,removeBRExports,sourceRemovalImpact,reviewSourceConflict,resolveDiscoveryProposal,recordRoleDocumentImpact,decideRoleDocumentImpact,endorse,clearDependencyImpact,changeEngine,propose,decideProposal,rejectConflictingProposals,proposalConflicts,recordLinkedJiraStatus,recordInboundJira,reviewInboundJira,reconcileRevertedJira,reconcileApprovedJira,load,imported,addSources,removeSource,selectSources,completeSourceMapping,commitSourceMapping,repairPendingExports,discoverySaved,reviewed,skipReview,confirmReview,generated,beginRevision,edit,approve,retire,keep,plan,saveJiraIssueDetails,approveRetirements,beginOperation,markAttempt,recorded,parseGenerated,promptForGeneration,validateProposal,flattenApproved,asMarkdown,normalizedContent,matchScore};
