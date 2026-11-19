@@ -2238,3 +2238,6 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 .br-workflow-panel[data-step="generate"] #brImpactSummary{display:none!important}
 .br-workflow-panel #brStageDescription{margin:5px 0 0}
 .br-workflow-panel #brGenerateSummary{margin:13px 0;padding:11px 13px;border:1px solid var(--vscode-panel-border);border-radius:8px}
+
+/* Remove redundant divider above Start wizard footer navigation. */
+#startupSetup .atgv-startup-footer{border-top:0!important}
