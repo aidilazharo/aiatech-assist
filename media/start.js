@@ -6572,7 +6572,7 @@ function openApprovalPrerequisiteStep(step,panelId,answerKey=''){
  const answer=answerKey?$('ba-'+answerKey):null;
  if(answer){
   const section=answer.closest('.discovery-group');
-  if(section)section.open=true;
+  if(section)section.toggleAttribute('open',true);
  }
  requestAnimationFrame(()=>{
   if(panel.classList.contains('hidden'))return;
