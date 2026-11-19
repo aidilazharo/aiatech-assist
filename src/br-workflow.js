@@ -131,14 +131,14 @@ async function addSources(registry,id,revision,documents,{restart=false,actor='B
   const previous=next.sourceDocuments||[];
   // Explicit replacement is the only way to rename a processed BR source while
   // retaining its document identity and existing approved BR / Jira mappings.
-  const replacement=replacementDigest?previous.find(item=>item.digest===replacementDigest):null;
+  const replacement=replacementDigest?(previous.find(item=>item.digest===replacementDigest)||(!previous.length&&(next.archivedSources||[]).find(item=>item.digest===replacementDigest))):null;
   if(replacementDigest){
    if(!/^[a-f0-9]{64}$/.test(String(replacementDigest))||!replacement)throw Error('Source version changed. Refresh before replacing the document.');
-   if(restart||sources.length!==1||previous.length!==1)throw Error('Replace & Reprocess requires exactly one active source and one updated file.');
+   if(restart||sources.length!==1||previous.length>1||(previous.length===1&&previous[0].digest!==replacementDigest))throw Error('Replace & Reprocess requires one current or archived source and one updated file.');
    if(sources[0].digest===replacement.digest)throw Error('The updated document has the same extracted contents; no source revision is necessary.');
    if(Object.keys(next.pending||{}).length)throw Error('Resolve pending Jira publication before replacing the source.');
   }
-  const impactedBrIds=replacement?new Set(sourceLifecycle(next,replacement.digest).dependencies):new Set();
+  const impactedBrIds=replacement?new Set(linkedBRsForSource(next,replacement).map(br=>br.id)):new Set();
   if(singleSourceCycle&&!restart&&sources.length>1)throw Error('Only one active source document is allowed per Business Requirement. Delete the existing upload or create a new BR cycle.');
   const previouslyKnown=[...previous,...(next.archivedSources||[])];
   // A source document's identity is independent of its content hash. A matching
@@ -151,6 +151,7 @@ async function addSources(registry,id,revision,documents,{restart=false,actor='B
    source.previousDigest=prior?.digest!==source.digest?prior?.digest||null:prior?.previousDigest||null;
   }
   const replaced=previous.filter(item=>item.digest===replacementDigest||sources.some(x=>x.name.toLowerCase()===item.name.toLowerCase()&&x.digest!==item.digest));
+  if(replacement&&!replaced.some(old=>old.digest===replacement.digest))replaced.push(replacement);
   const reverifiedLegacy=sources.filter(source=>previous.some(old=>old.name.toLowerCase()===source.name.toLowerCase()&&old.digest===source.digest&&old.storedName===source.storedName&&!/^[a-f0-9]{64}$/.test(String(old.byteDigest||''))&&/^[a-f0-9]{64}$/.test(source.byteDigest)));
   const changedProcessed=!!replacement||replaced.some(item=>sourceLifecycle(next,item.digest).processed)||!!next.mappingCompleted&&sources.some(item=>!previous.some(old=>old.digest===item.digest));
   for(const old of replaced){
