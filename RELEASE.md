@@ -1,26 +1,21 @@
-# ATGV AIATECH Assist v0.4.47
+# ATGV AIATECH Assist v0.4.48
 
-## Startup and performance
+## Public release reliability
 
-- Begin local technology-stack prerequisite checks as soon as the Start webview is ready, without waiting for full project state.
-- Hide the optional GitHub Copilot SDK card and the initial Checking permissions placeholder; exclude hidden optional SDK from startup readiness issues.
-- Remove hover shading from the prerequisite scan summary and redundant Start navigation dividers and project-picker guidance.
-- Restore saved non-secret Jira, Confluence and GitHub fields early. Reuse verified credential state during an open session instead of rereading the OS keychain at every dashboard refresh.
-- Run independent Jira and Confluence opening checks concurrently and remove redundant recent-project persistence writes.
-- Disable Open Project during launch, use a dark-gray disabled appearance and retain the existing live opening-progress bar.
+- Identify when the public extension mirror (`aidilazharo/extension`) is older than the locally installed extension.
+- Display `Public release mirror is behind` rather than misleading `latest v...` wording; do not offer older VSIX packages as updates.
+- Preserve public-only release discovery (`aidilazharo/extension` and `aidilazharo/library`). Private development repositories remain outside update discovery.
+- Public mirror workflow preflight and credential setup documentation are maintained separately in `aidilazharo/extension`. The mirror cannot read private source assets until the repository Actions secret `ATGV_SOURCE_READ_TOKEN` has permission.
 
-## Business Analyst requirements workflow
+## Jira workflow
 
-- Display AI Review findings in discovery-question order (1–12), retaining their original severity indicators.
-- Give Generate Requirements, Preview & Save, and Approval separate visual stages with distinct instructions and actions. The generated documents remain under the same durable BR register.
-- Require an explicitly saved BR draft before approval; preserve the source revision, editing safeguards and human approval checks.
-
-## Public release discovery
-
-- Query only `aidilazharo/extension` and `aidilazharo/library` when searching for public release artifacts.
-- Exclude `aidilazharo/aiatech-assist` and `aidilazharo/tech-stacks-skills` from public release repository discovery without changing fixed source/catalog update URLs.
+- Include the one-click **Fix Jira Link** recovery for Jira issues that already exist but lack a local recorded create operation.
+- Verify source identity, Jira project, parent, issue type, role label, and exact approved or authorized role-repair content before restoring the local link.
+- Never create, delete or modify remote Jira issues as part of link recovery; record recovery in the local audit log and regenerate Jira Preview.
 
 ## Verification
 
-- Add regression assertions for the release repository list, startup scan trigger, Jira/Confluence parallel checks, discovery question ordering, and separate BR stages.
-- No existing BR, Jira issue, approval, project repository, or catalog file is modified by an application data migration.
+- Add regression tests for an out-of-date public mirror, no-downgrade behavior and public-only release discovery.
+- Run the full extension regression suite, Windows checks and VSIX packaging through GitHub Actions before publishing the release.
+
+**Operational note:** Configuring `ATGV_SOURCE_READ_TOKEN` on the public mirror is a required repository-owner action. Publishing the private-source release alone cannot make newer releases appear in the public mirror.
