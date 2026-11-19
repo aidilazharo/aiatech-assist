@@ -750,7 +750,22 @@ async function setSelectedModel(choice){
 
 const maxItems=()=>cfg().get('sync.maxItems',100);
 const maxBytes=()=>cfg().get('sync.maxFileKb',256)*1024;
-const report=text=>output?.appendLine(`[${new Date().toISOString()}] ${text}`);
+const report=text=>{
+ output?.appendLine(`[${new Date().toISOString()}] ${text}`);
+ // Also retain safe connection-related incidents after the setup wizard closes.
+ // Do not store raw requests, user details, tokens or API response bodies.
+ const note=String(text||'');
+ const service=/confluence|atlassian.*wiki/i.test(note)?'Confluence':
+  /jira|atlassian/i.test(note)?'Jira':
+  /github|sdlc catalog|library .*pull/i.test(note)?'GitHub':'';
+ if(service&&/\b(?:error|fail(?:ed|ure)?|denied|unauthoriz|forbidden|timed? out|timeout|offline|rate limit|HTTP\s+[45]\d\d|connect(?:ion|ivity) (?:refused|lost))\b/i.test(note)&&
+    !/Startup diagnostic write failed/i.test(note)&&context?.globalStorageUri?.fsPath){
+  void startupDiagnostics.append(context.globalStorageUri.fsPath,{
+   stage:'connection-error',tool:service+' runtime',status:'failed',
+   detail:startupConnectionFailure({message:note})
+  }).catch(()=>{});
+ }
+};
 const getWorkspace=()=>workspaceOverridePath?{uri:vscode.Uri.file(workspaceOverridePath)}:vscode.workspace.workspaceFolders?.[0];
 function current(){
   if(!activeProject||!store)throw new Error('No active ATGV project. Run "ATGV: Start" and create or select a project.');
