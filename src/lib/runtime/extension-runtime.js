@@ -4412,8 +4412,20 @@ async function startupStackCatalog(){
  const token=await catalogToken(config,{interactive:false});
  return startupCatalogInventory.remote({config,token});
 }
+// Host processes survive screen navigation. Keep their project identity until
+// the original command settles. A project switch is deferred while mutation is
+// active because project-scoped references cannot safely be rebound mid-run.
+const activeHostProcesses=new Map();
+function isLongRunningHostProcess(command){
+ return /^(?:processDiscoverySources|generateBusinessRequirements|generateDrafts|applyDiscoveryReview|brJiraSync|brJiraPreview|brRoleTaskRepairPublish|developerBrRun|developerBrPreviewDraft|developerBrStartServer|devCopilotStart|designGenerate|designRegenerateAffected|architectCustomRun|architectRunServer|architectTestStack|architectBootstrap|architectCommit|architectPublish|architectSaveStack|catalogPull|syncDocuments|startupInstallModule|sync)$/.test(String(command||''));
+}
+function hasActiveProjectProcess(id){
+ return !!id&&([...activeHostProcesses.values()].some(job=>job.projectId===id)||activeDiscoveryMappingRun?.projectId===id);
+}
 async function handleDashboardMessage(msg){
   if(!msg||typeof msg.command!=='string')return;
+  const hostJob=activeProject?.id&&isLongRunningHostProcess(msg.command)?Symbol(msg.command):null;
+  if(hostJob)activeHostProcesses.set(hostJob,{projectId:activeProject.id,command:msg.command,startedAt:Date.now()});
   const baAction=isBAProcessCommand(msg.command),baStarted=Date.now(),baCommand=String(msg.command);
   let baFailure='';
   try{
@@ -4784,7 +4796,8 @@ async function handleDashboardMessage(msg){
           const mapping=activeDiscoveryMappingRun?.projectId===navigationProject
             ?{running:true,phase:activeDiscoveryMappingRun.phase||'preparing'}:{running:false};
           await dashboard?.webview.postMessage({type:'navigationRefreshState',projectId:navigationProject,
-            requestId:msg.requestId,roleId:String(msg.roleId||''),view:String(msg.view||''),mapping});
+            requestId:msg.requestId,roleId:String(msg.roleId||''),view:String(msg.view||''),mapping,
+            activeJobs:[...activeHostProcesses.values()].filter(job=>job.projectId===navigationProject).map(job=>job.command)});
           // Revalidate external content asynchronously. The existing throttling
           // prevents a new remote scan for every rapid menu click.
           void refreshLiveRemoteData({reason:'menu-navigation',force:false}).catch(error=>
@@ -7203,16 +7216,16 @@ async function handleDashboardMessage(msg){
         await refreshDashboard();break;
       }
       case 'openingBack':{
-        if(activeDiscoveryMappingRun?.projectId===activeProject?.id)
-          throw Error('AI document mapping is still running. It will continue while you switch screens within this project. Finish or explicitly stop it before switching projects.');
+        if(hasActiveProjectProcess(activeProject?.id))
+          throw Error('An ATGV process is still running. It continues while you switch screens within this project. Finish or explicitly stop it before switching projects.');
         ++startupSequence;
         if(openingLocked)throw new Error('Wait for the current step to complete.');
         openingGeneration++;openingFlow.reset();openingOffline=false;++activationEpoch;activeProject=undefined;store=undefined;tree?.refresh();
         await refreshDashboard();break;
       }
       case 'openingAuto':{
-        if(activeDiscoveryMappingRun?.projectId===activeProject?.id)
-          throw Error('Current project AI mapping is running. Switch screens without interrupting it; finish before opening another project.');
+        if(hasActiveProjectProcess(activeProject?.id))
+          throw Error('A current-project process is running. Switch screens without interrupting it; finish before opening another project.');
         ++startupSequence;
         try{
           if(msg.autoResume){if(!startupSessionProceedApproved||!await storedStartupVerification())throw Error('Saved connections require verification.');await requireAutomaticStartup(String(msg.projectId||''));}
@@ -8627,6 +8640,7 @@ async function handleDashboardMessage(msg){
       }catch{}
     }
   }finally{
+    if(hostJob)activeHostProcesses.delete(hostJob);
     if(baAction)await recordBAProcess({stage:'action',action:baCommand,status:baFailure?'failed':'finished',
       details:baFailure?baFailure.slice(0,400):'',durationMs:Date.now()-baStarted});
   }
