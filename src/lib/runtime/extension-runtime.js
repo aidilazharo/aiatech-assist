@@ -1579,8 +1579,8 @@ async function start(options={}){
   dashboard.webview.html=html(dashboard.webview);webviewVendorDir=installedVendorAssets?.dir||null;
   dashboard.onDidDispose(()=>{for(const [key,item] of pendingHostDialogs){clearTimeout(item.timer);item.resolve(undefined);pendingHostDialogs.delete(key);}for(const [key,item] of pendingExtensionUpgradeOffers){clearTimeout(item.timer);item.resolve('Later');pendingExtensionUpgradeOffers.delete(key);}for(const [key,item] of pendingLibraryUpdateOffers){clearTimeout(item.timer);item.resolve('Later');pendingLibraryUpdateOffers.delete(key);}for(const [key,item] of pendingPrerequisiteInstallOffers){item.resolve(undefined);}activeLibraryUpdatePullRequestId=null;dashboard=undefined;pendingTests={jira:null,github:null};if(modelStatusPoll){clearInterval(modelStatusPoll);modelStatusPoll=null;}});
   if(modelStatusPoll)clearInterval(modelStatusPoll);
-  modelStatusPoll=setInterval(()=>{invalidateModelStatus();if(dashboard)refreshDashboard().catch(e=>report('Model badge refresh: '+e.message));},60000);
-  modelStatusPoll.unref?.();
+  // No automatic webview refresh: preserve active fields and workflow stage.
+  modelStatusPoll=null;
   await finishManualProjectDiscovery(sequence);
 }
 async function notice(message,error=false){if(dashboard)await dashboard.webview.postMessage({type:'notice',message,error});}
@@ -2079,7 +2079,7 @@ async function requestSourcePreflight(target,prompt,run){
 async function processSelectedDiscoverySources(msg){
  if(activeDiscoveryMappingRun)throw Error('Source mapping is already running. Stop it before starting another mapping.');
  requireOpened();
- const run={controller:new AbortController(),phase:'preparing',projectId:activeProject.id,timeout:false};
+ const run={controller:new AbortController(),phase:'preparing',projectId:activeProject.id,timeout:false,skipAiChecks:msg.skipAiChecks===true};
  activeDiscoveryMappingRun=run;
  const check=()=>{
   if(run.controller.signal.aborted){const error=Error('Source mapping stopped before saving. No discovery answers were changed.');error.name='AbortError';throw error;}
@@ -3080,7 +3080,7 @@ async function scanExternalJira({quiet=false}={}){
         }
         approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;
         await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
-        if(observations.length){await refreshDashboard();const fresh=observations.filter(x=>!known.has(x.path+'|'+x.remoteDigest));if(fresh.length){if(!quiet)await uiWarning(`${fresh.length} externally changed JIRA issues require BA review. Affected downstream handoffs are blocked pending reconciliation.`);else uiWarning(`${fresh.length} externally changed JIRA issues need review in ${activeProject.name}.`);}}
+        if(observations.length){if(!quiet)await refreshDashboard();const fresh=observations.filter(x=>!known.has(x.path+'|'+x.remoteDigest));if(fresh.length){if(!quiet)await uiWarning(`${fresh.length} externally changed JIRA issues require BA review. Affected downstream handoffs are blocked pending reconciliation.`);else uiWarning(`${fresh.length} externally changed JIRA issues need review in ${activeProject.name}.`);}}
         else if(!quiet)await notice('All linked JIRA issues match the trusted synchronization baseline.');
 
  }finally{jiraMonitorBusy=false;}
@@ -8202,6 +8202,29 @@ async function handleDashboardMessage(msg){
         }
         break;
       }
+      case 'skipDiscoveryPreflight':{
+        requireOpened();await requireBAOwner('ba-discovery');
+        if(activeDiscoveryMappingRun)throw Error('Stop active AI mapping before using source-only recovery.');
+        const selected=msg.digests;
+        if(!Array.isArray(selected)||!selected.length||selected.length>10||new Set(selected).size!==selected.length)
+          throw Error('Select the uploaded document before source-only recovery.');
+        const current=await brWorkflow.load(registry,activeProject.id);
+        if(selected.some(d=>!current.sourceDocuments.some(source=>source.digest===d)))
+          throw Error('The source document changed. Refresh source selection before recovery.');
+        const accepted=await uiWarning('Continue without AI preflight and mapping quality checks? ATGV will extract literal source evidence, mark AI verification NOT VERIFIED and require Business Analyst review plus normal BR/Jira approval. The original document will be preserved.',{modal:true},'Continue Source-Only');
+        if(accepted!=='Continue Source-Only'){
+          await dashboard?.webview.postMessage({type:'discoveryPreflightSkipCancelled'});break;
+        }
+        await recordBAProcess({stage:'preflight',action:'skip-ai-preflight-confirmed',status:'ai-unverified',
+          details:'BA explicitly selected source-only recovery; no AI validation or business approval is inferred.'});
+        try{await processSelectedDiscoverySources({...msg,revision:current.revision,skipAiChecks:true});}
+        catch(e){
+          await recordBAProcess({stage:'mapping',action:'source-only-recovery',status:'failed',details:String(e.message||e).slice(0,400)});
+          await dashboard?.webview.postMessage({type:e.name==='AbortError'?'discoveryImportCancelled':'discoveryImportFailed',
+            phase:e.phase||'preflight',mapping:true,message:String(e.message||e)});
+        }
+        break;
+      }
       case 'processDiscoverySources':{
         try{await processSelectedDiscoverySources(msg);}
         catch(e){
@@ -8791,7 +8814,8 @@ async function refreshLiveRemoteData({reason='scheduled',force=false}={}){
   liveRemoteState={projectId,phase:Object.keys(errors).length?'partial':'ready',lastAttempt:started,
    lastSuccess:Object.keys(results).length?new Date().toISOString():liveRemoteState.lastSuccess||'',results,errors};
   await dashboard?.webview.postMessage({type:'liveRemoteState',value:liveRemoteState});
-  if(Object.keys(results).length)await refreshDashboard();
+  // Background synchronization must not automatically rerender the webview.
+  // Manual Refresh still publishes a new dashboard snapshot.
   return {results,errors};
  }finally{
   liveRemoteBusy=false;

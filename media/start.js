@@ -922,7 +922,7 @@ function navigate(destination){
   if(!workspaceOpened&&!['settings'].includes(destination)){
     showGate();return;
   }
-  requestNavigationRefresh(destination);
+  // Navigate locally without an automatic dashboard/webview refresh.
   const isRole=visibleRoles().some(role=>role.id===destination);
   if(isRole&&activeId){usedRoleIds.add(destination);send('markRoleUsed',{roleId:destination});}
   selectedNav=isRole||destination==='discovery'?'sdlc-roles':destination==='project-settings'||destination==='tech'?'settings':destination;
@@ -5058,6 +5058,10 @@ function renderSourcePreflight(){
  if(workingDownload){const available=!!(savedCurrent&&saved?.workingBR);workingDownload.classList.toggle('hidden',!available);workingDownload.disabled=!available||!activeId;}
  const retry=$('baPreflightRetry');
  if(retry){const showRetry=hasDedicatedPreflightRecovery();retry.textContent=mappingResumeAvailable?'Resume AI Mapping':'Retry Mapping';retry.classList.toggle('hidden',!showRetry);retry.disabled=!showRetry||!brState||!sourceSelectedDigests.size||selectedRole!=='business-analyst'||!activeId;}
+ const skip=$('baPreflightSkip');if(skip){
+  const available=hasDedicatedPreflightRecovery();skip.classList.toggle('hidden',!available);
+  skip.disabled=!available||!!baBusyTask||!brState||!sourceSelectedDigests.size||selectedRole!=='business-analyst'||!activeId;
+ }
  if(!info)return;
  const phase=info.phase||'checking',running=['preflight','repair','checking'].includes(phase);
  panel.dataset.phase=running?'running':phase;
@@ -5565,7 +5569,7 @@ function renderBAButtons(){
  $('baReviewSkip').disabled=tasks.baReviewSkip||baReviewLocked();
  const reviewComplete=baReviewFinalized();
  for(const name of ['discoveryCopilot','discoveryReviewApply','baReviewSkip']){
-  const item=$(name);const hide=reviewComplete&&!running;item.classList.toggle('hidden',hide);item.setAttribute('aria-hidden',hide?'true':'false');
+  const item=$(name);const hide=reviewComplete&&!running&&name!=='discoveryCopilot';item.classList.toggle('hidden',hide);item.setAttribute('aria-hidden',hide?'true':'false');
  }
  const finish=$('baReviewFinish');
  const unresolvedFindings=discoveryHasReviewBlockers();
@@ -5840,11 +5844,14 @@ function renderDiscoverySummary(){
   nextButton.dataset.nextStep=next?.key||'';
   nextButton.dataset.stage=displayed;
   const ready=!!next&&!!currentDefinition?.complete;
-  nextButton.dataset.milestoneState=ready?'ready':'blocked';
-  nextButton.classList.toggle('secondary',!ready);
-  nextButton.disabled=!ready;
-  nextButton.classList.toggle('ba-step-next-complete',ready);
-  nextButton.textContent=nextDefinition?'Next Step · '+nextDefinition.label:'Workflow Complete';
+  // Explicitly confirm saved AI Review using Next rather than trapping the BA.
+  const canConfirm=displayed==='review'&&reviewReady&&!reviewFinalized&&!navigatingBusy&&savedDiscovery;
+  nextButton.dataset.confirmReview=canConfirm?'true':'false';
+  nextButton.dataset.milestoneState=ready||canConfirm?'ready':'blocked';
+  nextButton.classList.toggle('secondary',!(ready||canConfirm));
+  nextButton.disabled=!(ready||canConfirm);
+  nextButton.classList.toggle('ba-step-next-complete',ready||canConfirm);
+  nextButton.textContent=canConfirm?(discoveryHasReviewBlockers()?'Review & Acknowledge Findings':'Confirm AI Review & Continue'):nextDefinition?'Next Step · '+nextDefinition.label:'Workflow Complete';
   nextButton.title=!nextDefinition?'The final Business Requirements milestone.':ready?'Continue to '+nextDefinition.label:currentDefinition?.complete?'Next step is unavailable until its prerequisites are satisfied.':'Complete this milestone before continuing.';
   document.querySelector('.jira-inbound-panel').classList.toggle('hidden',!status.showJiraInbound||!showJira);
   $('discoveryImportStatus').classList.toggle('hidden',!showSources&&!showMapping);
@@ -6480,6 +6487,10 @@ $('baPreviousStep').addEventListener('click',()=>{
 });
 $('baNextStep').addEventListener('click',()=>{
  if($('baNextStep').disabled)return;
+ if($('baNextStep').dataset.confirmReview==='true'){
+  if(!$('baReviewFinish').disabled)$('baReviewFinish').click();
+  return;
+ }
  const key=$('baNextStep').dataset.nextStep;
  if(!key)return;
  // Generate -> Preview & Save also opens the first eligible draft editor.
@@ -6645,6 +6656,13 @@ $('baStopMapping').addEventListener('click',()=>{
 });
 $('baMappingRetry').addEventListener('click',retryDiscoveryMapping);
 $('baPreflightRetry').addEventListener('click',retryDiscoveryMapping);
+$('baPreflightSkip').addEventListener('click',()=>{
+ const button=$('baPreflightSkip');
+ if(button.disabled||!brState||!sourceSelectedDigests.size||discoveryImportBusy)return;
+ mappingRunPhase='preparing';mappingFailurePhase='';mappingRetryAvailable=false;
+ setDiscoveryImportBusy(true,'Confirming source-only recovery…');
+ send('skipDiscoveryPreflight',{projectId:activeId,digests:[...sourceSelectedDigests],revision:brState.revision});
+});
 $('baRetryMapping').addEventListener('click',retryDiscoveryMapping);
 function triggerDiscoveryImport(){
  if(discoveryImportBusy||baBusyTask||selectedRole!=='business-analyst')return;
@@ -6772,7 +6790,8 @@ window.addEventListener('message',event=>{
     }
     brApprovePending=false;renderOverviewJira();renderDiscoveryReview();renderBRs();renderDocumentGroups();if(!discoveryImportBusy)baBusy('',null);if(brEditing)updateBREditorActions();
     if(task==='approveBR')baReopenDocuments=false;
-    if(task==='skipReview'&&view==='discovery')requestAnimationFrame(()=>$('brGenerate').scrollIntoView({block:'nearest',behavior:'smooth'}));
+    if(['skipReview','confirmReview'].includes(task)&&view==='discovery'&&!discoveryDirty)
+      requestAnimationFrame(()=>{if(baReviewFinalized())openBAWorkflowStep('generate');});
   }
   if(m.type==='brJiraPlan'){baFailedProcess='';baFailedMessage='';
     stageProgress('jiraPreview','JIRA preview generated.',100);baBusy('',null);brPlanRevision=m.revision;jiraPlanForCR=m.changes||[];jiraPreviewIssueTypes=m.issueTypes||{};jiraPreviewProject=m.jiraProject||'';jiraPreviewFieldsByPath=m.fieldPlans||{};jiraProtectionForCR=m.protection||[];brJiraPreviewApproved=false;brJiraPlanChanges=(m.changes||[]).length;brJiraPlanConflicts=(m.conflicts||[]).length;
@@ -6840,6 +6859,11 @@ window.addEventListener('message',event=>{
   }
   if(m.type==='discoverySourcePreflight'){
    baPreflightInfo={phase:m.phase||'checking',sourceName:m.sourceName,sourceDigest:m.digest,section:m.section,totalSections:m.totalSections,summary:m.summary||'',applied:m.applied||[],issues:m.issues||[],resolutions:m.resolutions||[],reportAvailable:true};renderSourcePreflight();
+  }
+  if(m.type==='discoveryPreflightSkipCancelled'){
+   mappingRunPhase='';mappingRetryAvailable=true;mappingFailurePhase='preflight';
+   setDiscoveryImportBusy(false,'Source-only recovery cancelled. Retry AI or continue with source-only recovery.');
+   renderSourcePreflight();
   }
   if(m.type==='discoveryImportCancelled'){
    mappingRunPhase='';mappingRetryAvailable=!!m.mapping;mappingFailurePhase='';

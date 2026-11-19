@@ -30,6 +30,7 @@ function mappingHarness(aiAnswer,opts={}){
   sourceStore:{async read(){return {name:'visitor.pdf',digest,text:opts.sourceText||'Requirements'}}},
   discoveryImport:{...discoveryModule,createMappingPrompt(doc){return opts.realPrompt?discoveryModule.createMappingPrompt(doc):'Map'},parseMappingResponse(answer){return JSON.parse(answer)}},
   baDocumentPreflight,
+  baSourceSelectionGuard:require('../src/ba-source-selection-guard'),
   baLargeDocumentRecovery:require('../src/ba-large-document-recovery'),
   baTimeoutSimplified:require('../src/ba-timeout-simplified'),
   async uiWarning(){return undefined;},
