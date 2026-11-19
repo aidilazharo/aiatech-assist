@@ -1539,7 +1539,7 @@ async function finishManualProjectDiscovery(sequence){
  if(sequence!==startupSequence||!webviewCoreReady)return;
  startupScan={status:'complete',percent:100,message:'Review technology stack prerequisites and test Jira, Confluence and GitHub connections first. Choose a project only after setup is verified.'};
  // Hydrate saved (non-secret) fields before heavier dashboard state is loaded.
- await dashboard?.webview.postMessage({type:'startupSavedFields',saved:startupSavedConnectionFields()});
+ await dashboard?.webview.postMessage({type:'startupSavedFields',saved:typeof startupSavedConnectionFields==='function'?startupSavedConnectionFields():{}});
  await dashboard?.webview.postMessage({type:'startupScan',...startupScan});
  await refreshDashboard();
 }
