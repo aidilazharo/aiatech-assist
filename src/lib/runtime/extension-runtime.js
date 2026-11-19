@@ -3299,6 +3299,7 @@ async function roleRepairPreviewFor(brId,register,config,token){
   existing:rows.filter(r=>r.status==='existing').length,conflicts:rows.filter(r=>r.status==='conflict').length};
 }
 let jiraPreviewFieldPlans={};
+let jiraLinkRepairBusy=false;
 async function syncApprovedBRs(expectedRevision){
  requireOnline();if(jiraSyncBusy)throw Error('Jira synchronization is already running.');
  if(approvedJiraPreviewRevision!==expectedRevision||!approvedJiraPreviewBinding)throw Error('Approve the current Jira preview before publishing.');
@@ -8180,6 +8181,65 @@ async function handleDashboardMessage(msg){
         approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;jiraPreviewValidation=null;
         await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
         await handleDashboardMessage({command:'brJiraPreview'});
+        break;
+      }
+      case 'brJiraFixLink':{
+        requireOpened();requireOnline();
+        if(jiraSyncBusy||jiraLinkRepairBusy)throw Error('A Jira publication or link recovery is already running.');
+        const nodePath=String(msg.path||''),expectedKey=String(msg.key||'');
+        const state=await brWorkflow.load(registry,activeProject.id);
+        if(state.revision!==msg.revision)throw Error('The Jira preview has changed. Generate a new preview before fixing the link.');
+        const item=brWorkflow.plan(state).find(row=>row.path===nodePath&&row.action==='create');
+        if(!item||item.staleJiraDetails||state.synced?.[nodePath]||state.pending?.[nodePath])
+         throw Error('This path is not eligible for automatic Jira link recovery. Regenerate the preview.');
+        await requireBAOwner('ba-br-'+nodePath.split('/')[0]);
+        jiraLinkRepairBusy=true;
+        try{
+          const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
+          const projectKey=validProjectKey(config.get('jira.projectKey'));
+          const marker=jiraScopedMarker(state,config,nodePath);
+          const remote=await jiraFindIssueByMarker(config,token,marker);
+          if(!remote||remote.key!==expectedKey)throw Error('The existing Jira issue changed or disappeared. Regenerate Jira Preview.');
+          const types=await jiraIssueTypes(config,token);
+          const type=jiraPreviewDetails.issueType(item,types,state.synced?.[nodePath]);
+          if(!type)throw Error('Cannot verify the Jira issue type for this Business Requirement.');
+          const parentKey=item.parent?state.synced?.[item.parent]?.key:null;
+          if(item.parent&&!parentKey)throw Error('The Jira parent link is not verified. Repair the parent mapping first.');
+          const roleMapping=state.roleTaskMappings?.[nodePath];
+          // The role-task repair operation may have created the Jira subtask
+          // before its own local mapping was persisted. In that case require
+          // exact agreement with the repair plan's known description too.
+          let repairPlan=null;
+          if(item.kind==='Role'){
+            try{repairPlan=jiraRoleRepair.plan(state,nodePath.split('/')[0]).find(row=>row.path===nodePath)||null;}
+            catch{/* Missing historical parents: use the strict approved issue plan below. */}
+          }
+          const verifiedRepair=!!repairPlan&&repairPlan.parentKey===parentKey&&repairPlan.roleLabel===item.roleLabel&&
+            remoteFingerprint(remote)===sha(JSON.stringify({summary:repairPlan.title,description:repairPlan.description}));
+          if(roleMapping||verifiedRepair){
+            if(roleMapping&&(item.kind!=='Role'||roleMapping.key!==remote.key||roleMapping.marker!==marker||roleMapping.roleLabel!==item.roleLabel))
+             throw Error('The saved role-task repair record differs from the Jira issue. No link was changed.');
+            // Legacy repair tasks may have a longer description. Accept only a
+            // verified saved mapping OR exact legacy repair text, with all
+            // current issue identity, role and parent checks still enforced.
+            jiraRoleRepair.validateRemote(remote,{parentKey,roleLabel:item.roleLabel,title:item.title},projectKey,marker,{strictContent:true});
+            if(String(remote.fields?.issuetype?.name||'').toLowerCase()!==type.toLowerCase())
+             throw Error('The Jira issue type no longer matches the approved plan.');
+          }else{
+            verifyRecoveredJiraIssue(remote,item,{marker,projectKey,issueType:type,parentKey});
+            if(item.roleLabel&&!remote.fields?.labels?.includes(item.roleLabel))
+             throw Error('The Jira role label does not match the approved Developer task.');
+          }
+          const actor=await verifiedBAActor();
+          const updated=await brWorkflow.reconcileExistingJira(registry,activeProject.id,state.revision,{
+            path:nodePath,key:remote.key,hash:item.hash,kind:item.kind,title:item.title,
+            issueType:remote.fields?.issuetype?.name||type,remoteDigest:remoteFingerprint(remote),marker,actor
+          });
+          approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;jiraPreviewValidation=null;jiraPreviewFieldPlans={};
+          await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
+          await dashboard?.webview.postMessage({type:'brJiraLinkFixed',path:nodePath,key:remote.key});
+          await handleDashboardMessage({command:'brJiraPreview'});
+        }finally{jiraLinkRepairBusy=false;}
         break;
       }
       case 'brJiraPreview':{
