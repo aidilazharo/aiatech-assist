@@ -20,13 +20,14 @@ test('missing BA policies receive only provisional, evidence-conscious guidance'
  const issues=[
   {category:'ambiguity',severity:'warning',detail:'The document does not provide measurable acceptance criteria for project initiation and approval.'},
   {category:'ambiguity',severity:'warning',detail:'RBAC roles, permissions, and authorization precedence are undefined.'},
-  {category:'ambiguity',severity:'warning',detail:'The document does not specify audit records for project approval.'}
+  {category:'ambiguity',severity:'warning',detail:'The document does not specify audit records for project approval.'},
+  {category:'ambiguity',severity:'warning',detail:'The document does not specify persistence behavior for team membership, project authorization, inactive accounts, or audit records.'}
  ];
  const source='Project initiation and project approval are in scope.';
  const result=preflight.parse(JSON.stringify({status:'needs-input',summary:'Review details',edits:[],issues}),source);
  assert.equal(result.ready,true);
  assert.equal(result.effectiveText,source);
- for(const kind of ['acceptance','rbac','audit'])assert.ok(result.resolutions.some(x=>x.category===kind&&x.provisional===true),kind);
+ for(const kind of ['acceptance','rbac','audit','persistence'])assert.ok(result.resolutions.some(x=>x.category===kind&&x.provisional===true),kind);
  assert.ok(result.resolutions.every(x=>/propos|draft|open|source|decision|policy/i.test(x.resolution)));
  assert.equal(preflight.industryStandardResolution({category:'contradiction',detail:'RBAC permission rules conflict for approvers.'}),null);
  assert.equal(preflight.industryStandardResolution({category:'contradiction',detail:'The BR contradicts retention obligations.'}),null);
