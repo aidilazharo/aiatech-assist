@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.4.31';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.4.32';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -146,7 +146,14 @@ function html(webview,{resumeLibrary=false}={}){
        <div class="field"><label for="startupAtlassianToken">Atlassian API token</label><input type="password" id="startupAtlassianToken" autocomplete="new-password" placeholder="Enter token or retain securely saved token"></div>
        <div class="field"><label for="startupGithubUrl">GitHub organization URL</label><input type="url" id="startupGithubUrl" placeholder="https://github.com/aiamalaysia" required></div>
        <div class="field"><label for="startupGithubToken">GitHub personal access token</label><input type="password" id="startupGithubToken" autocomplete="new-password" placeholder="Enter PAT or retain securely saved token"><button type="button" id="startupEditConnections" class="secondary hidden" aria-label="Edit Jira, Confluence and GitHub connections">Edit</button></div>
-      </div><div class="atgv-startup-actions"><button type="submit" id="startupTestConnections">Test &amp; Save Connections</button><span id="startupConnectionMessage" role="status" aria-live="polite">Verify Jira, Confluence, and your GitHub account to continue.</span></div></form>
+      </div><div class="atgv-startup-actions"><button type="submit" id="startupTestConnections">Test &amp; Save Connections</button><span id="startupConnectionMessage" role="status" aria-live="polite">Verify Jira, Confluence, and your GitHub account to continue.</span></div>
+      <details id="startupConnectionLogPanel" class="atgv-connection-log-panel">
+        <summary>Connection diagnostics <span id="startupConnectionLogCount" class="muted">Open to view saved checks and errors</span></summary>
+        <div class="atgv-connection-log-toolbar"><p class="muted">Local diagnostic history for Jira, Confluence, GitHub, and the SDLC Library. Tokens, account emails, request headers and response bodies are never logged.</p>
+          <div class="stack"><button id="startupConnectionLogRefresh" type="button" class="secondary">Refresh Log</button><button id="startupConnectionLogDownload" type="button" class="secondary">Download Logs (.txt)</button></div></div>
+        <div id="startupConnectionLogList" class="atgv-connection-log-list" role="log" aria-label="Connection check history" aria-live="polite"><p class="muted">Open to load saved connection events.</p></div>
+        <p id="startupConnectionLogMessage" class="muted" role="status" aria-live="polite"></p>
+      </details></form>
       <div class="atgv-startup-footer"><button type="button" id="startupUnifiedLog" class="secondary atgv-icon-only" aria-label="Download unified error log" title="Download unified error log (startup, prerequisite and project errors)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m-4-4 4 4 4-4M5 17v4h14v-4"/></svg></button><button type="button" id="startupPrevious" class="secondary hidden" disabled>← Previous</button><button type="button" id="startupAutoPause" class="secondary hidden">Pause automatic opening</button><p id="startupProceedInfo" role="status">Checking computer prerequisites…</p><button type="button" id="startupProceed" disabled>Next →</button></div>
     </section>
     <section id="gateFinder" class="gate-finder hidden">
