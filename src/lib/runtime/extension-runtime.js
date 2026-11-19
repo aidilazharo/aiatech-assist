@@ -2977,6 +2977,7 @@ async function generateBusinessRequirements(options={}){
   if(decision!==action){await dashboard?.webview.postMessage({type:'baProgress',done:true});return;}
  }
  const focused=options.selective===true?staleDrafts.map(b=>b.id):null;
+ const mappedGroups=baBrTextPipeline.groups(register.mappingCompleted?.proposals||[]);
  if(options.selective&&!focused?.length)throw Error('No outdated Business Requirements drafts are eligible for selective regeneration.');
  if(baTimeoutSimplified.isSimplifiedEvidence(register)){
   if(!review.skipped)throw Error('Simplified Jira drafts require the Business Analyst to select Skip AI Review and acknowledge that AI verification was incomplete.');
@@ -2986,7 +2987,19 @@ async function generateBusinessRequirements(options={}){
   const source=register.sourceDocuments.find(row=>(register.processedSources||[]).includes(row.digest));
   if(!source)throw Error('Verified source document is required for simplified BR generation.');
   const verified=await sourceStore.read(registry,activeProject.id,source);
-  const proposal=baTimeoutSimplified.simpleProposal({name:source.name,text:verified.text,answers:saved.answers});
+  let proposal;
+  if(mappedGroups.length>1){
+   proposal=[];
+   if(mappedGroups.length>25)throw Error('More than 25 separate Business Requirements detected. Divide into smaller BR cycles before generating drafts.');
+   for(const [index,group] of mappedGroups.entries()){
+    const parts=[];
+    for(const ref of group.units)parts.push(await baBrTextPipeline.read(registry,activeProject.id,ref));
+    const unitAnswers=baBrTextPipeline.mergeForDiscovery(group.units.map(ref=>ref.answers),group.units);
+    proposal.push(...baTimeoutSimplified.simpleProposal({name:source.name+' BR '+group.brIndex,
+     text:parts.join(''),answers:unitAnswers}));
+    await dashboard?.webview.postMessage({type:'baProgress',task:'generate',message:'Prepared source-only draft '+(index+1)+'/'+mappedGroups.length+'; BA review required.'});
+   }
+  }else proposal=baTimeoutSimplified.simpleProposal({name:source.name,text:verified.text,answers:saved.answers});
   const currentSaved=await discovery.load(registry,activeProject.id);
   if(currentSaved.revision!==saved.revision)throw Error('Discovery changed during simplified BR generation.');
   const updated=await brWorkflow.generated(registry,activeProject.id,register.revision,{discoveryRevision:saved.revision,requirements:proposal,riskAccepted:false,actor:await verifiedBAActor()});
@@ -3013,6 +3026,36 @@ async function generateBusinessRequirements(options={}){
   (focused?'\nSELECTIVE UPDATE: Return ONLY these existing Business Requirements using their current titles. Do not create, remove, or revise unrelated requirements. Targets: '+JSON.stringify(activeRequirements.filter(x=>focused.includes(x.id)).map(x=>({id:x.id,title:x.title}))) : '')+
   (historic.length?'\nPREVIOUSLY COMPLETED BUSINESS REQUIREMENTS (READ ONLY): '+JSON.stringify(historic.slice(0,100))+'. These requirements belong to earlier published cycles. Do not regenerate, modify, remove, or return their IDs. For new independent source documents, return only genuinely new requirements. Overlap must be reconciled separately, not duplicated.':'');
  let proposed;
+ if(mappedGroups.length>1&&!options.selective){
+  if(mappedGroups.length>25)throw Error('More than 25 separate Business Requirements detected. Split the original document into smaller BR cycles.');
+  proposed=[];
+  for(const [index,group] of mappedGroups.entries()){
+   const sourcePartTexts=[];
+   for(const ref of group.units)sourcePartTexts.push(await baBrTextPipeline.read(registry,activeProject.id,ref));
+   const unitAnswers=baBrTextPipeline.mergeForDiscovery(group.units.map(ref=>ref.answers),group.units);
+   const excerpt=sourcePartTexts.join('').slice(0,6500);
+   const scopedPrompt=brWorkflow.promptForGeneration(unitAnswers,activeRequirements,
+    [{name:group.sourceName+' / BR '+group.brIndex,excerpt}])+
+    '\n\nSOURCE-SCOPED GENERATION: This is logical BR '+(index+1)+' of '+mappedGroups.length+
+    '. Return exactly ONE business requirement for THIS BR text group. Do not repeat other groups, claim AI tests passed, invent approvals or omit source-backed rules. Keep any existing matching BR ID when supported.'+
+    (historic.length?'\nHistorical requirements are READ ONLY: '+JSON.stringify(historic.slice(0,100))+'.':'');
+   let current;
+   await dashboard?.webview.postMessage({type:'baProgress',task:'generate',
+    message:'Generating BR '+(index+1)+'/'+mappedGroups.length+' from verified text files; completed BR drafts are accumulated until final save…'});
+   for(let attempt=1;attempt<=2;attempt++){
+    const prompt=scopedPrompt+(attempt>1?'\nRETRY: Return ONLY a valid JSON object with one requirement and the expected feature/story/task structure.':'');
+    const result=await aiAnswer(target,prompt+await roleSkillPrompt('business-analyst'),125000,{json:true});
+    try{
+     current=brWorkflow.parseGenerated(result);
+     if(current.length!==1)throw Error('Expected exactly one source-scoped BR from this text group.');
+     break;
+    }catch(error){
+     if(attempt===2)throw Error('BR '+(index+1)+'/'+mappedGroups.length+' generation failed: '+error.message+' No BR draft changes were saved. Retry the generation step.');
+    }
+   }
+   proposed.push(...current);
+  }
+ }else{
  for(let attempt=1;attempt<=2;attempt++){
   const prompt=attempt===1?question:question+'\n\nIMPORTANT: Previous response was not valid requirements JSON. Return ONLY one complete JSON object matching the specified schema, without code fences or explanation. Limit the response to essential requirements; do not truncate JSON.';
   const result=await aiAnswer(target,prompt+await roleSkillPrompt('business-analyst'),125000,{json:true});
@@ -3021,6 +3064,7 @@ async function generateBusinessRequirements(options={}){
    if(attempt===2)throw Error('AI generation failed validation twice: '+error.message+' No Business Requirements were changed. Retry with smaller source documents or a different AI model.');
    await dashboard?.webview.postMessage({type:'baProgress',task:'generate',message:'AI output was invalid. Retrying generation with stricter JSON instructions…'});
   }
+ }
  }
  if(!proposed?.length)throw Error('AI generated no valid Business Requirements. No changes were saved. Check the 12 discovery answers and retry.');
  const currentSaved=await discovery.load(registry,activeProject.id);if(currentSaved.revision!==saved.revision)throw Error('Discovery changed while generating BRs. Retry.');
