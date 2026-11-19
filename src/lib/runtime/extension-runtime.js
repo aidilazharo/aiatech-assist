@@ -77,6 +77,7 @@ const {evaluate:continuityEvaluate}=require('../../continuity');
 const {WorkflowEngine}=require('../../workflow-engine');
 const {DurableWorkflowEngine,fingerprint:atgvJobHash,safeError:atgvJobSafeError}=require('../../atgv-job-engine');
 const {DocumentSync}=require('../../confluence-docsync');
+const {ConfluenceSourceVault}=require('../../confluence-source-vault');
 const {validProjectKey,jiraIssueTypes,jiraCreateIssue,jiraUpdateIssue,jiraRetireIssue,jiraFindIssueByMarker,jiraReadIssue,jiraReadIssueChangelog,jiraIssueFieldMetadata,jiraReadIssueAllFields,jiraMarker,remoteFingerprint,githubBranch,githubPullRequest,jiraAssignCurrentUser,jiraAssignRoleCurrentUser,jiraUnassignCurrentUser,jiraAvailableTransitions,jiraMove}=require('../../remote-actions');
 const companion=require('../../companion-client');
 const {OwnershipRegistry}=require('../../ownership');
@@ -285,7 +286,7 @@ async function askAiSendConsent(_message,{signal}={}){
 
 let developerBrRun=null,developerBrLast=null;
 let workspaceOverridePath=null,startupScan={status:'idle',percent:0,message:''},startupSequence=0;
-let ownershipRetryTimer=null,ownershipOfflineUntil=0,aiServiceTimer=null,aiServiceBusy=false,autoSyncTimer=null,jiraMonitorTimer=null,jiraMonitorBusy=false,autoSyncBusy=false,context,output,tree,registry,activeProject,store,dashboard,ready=Promise.resolve(),activationEpoch=0,extensionSettings={},pendingTests={jira:null,github:null},openingFlow=new OpeningFlow(),discoveredSpaces=[],discoveredJiraProjects=[],openingLocked=false,openingGeneration=0,openingOffline=false,verifiedConnections=new Map(),approvedJiraPreviewRevision=null,approvedJiraPreviewBinding=null,jiraSyncBusy=false,jiraPreviewValidation=null,roleRepairPreviewContext=null,roleRepairBusy=false;
+let ownershipRetryTimer=null,ownershipOfflineUntil=0,aiServiceTimer=null,aiServiceBusy=false,autoSyncTimer=null,sourceVaultTimer=null,sourceVaultBusy=false,jiraMonitorTimer=null,jiraMonitorBusy=false,autoSyncBusy=false,context,output,tree,registry,activeProject,store,dashboard,ready=Promise.resolve(),activationEpoch=0,extensionSettings={},pendingTests={jira:null,github:null},openingFlow=new OpeningFlow(),discoveredSpaces=[],discoveredJiraProjects=[],openingLocked=false,openingGeneration=0,openingOffline=false,verifiedConnections=new Map(),approvedJiraPreviewRevision=null,approvedJiraPreviewBinding=null,jiraSyncBusy=false,jiraPreviewValidation=null,roleRepairPreviewContext=null,roleRepairBusy=false;
 const cfg=()=>vscode.workspace.getConfiguration('atgvAssist');
 let liveRemoteTimer=null,liveRemoteBusy=false,liveRemoteState={projectId:'',phase:'idle',lastAttempt:'',lastSuccess:'',results:{},errors:{}};
 let catalogRemote=null,catalogLastCheck='',catalogLastError='',catalogBusy=false,catalogWatch=null,installedVendorAssets=null,webviewVendorDir=null,vendorLibraryLastError='',vendorBootRecoveryCount=0,vendorWebviewReady=false,webviewCoreReady=false,webviewCssRetry=0;
@@ -902,7 +903,7 @@ async function guarded(fn){try{return await fn();}catch(e){captureLocalIssue('AT
 const withProgress=(title,fn)=>dashboard?fn():vscode.window.withProgress({location:vscode.ProgressLocation.Notification,title,cancellable:false},fn);
 async function initialize(){
   if(ownershipRetryTimer){clearInterval(ownershipRetryTimer);ownershipRetryTimer=null;}ownershipOfflineUntil=0;
-  if(aiServiceTimer){clearInterval(aiServiceTimer);aiServiceTimer=null;}if(autoSyncTimer){clearInterval(autoSyncTimer);autoSyncTimer=null;}if(jiraMonitorTimer){clearInterval(jiraMonitorTimer);jiraMonitorTimer=null;}
+  if(aiServiceTimer){clearInterval(aiServiceTimer);aiServiceTimer=null;}if(autoSyncTimer){clearInterval(autoSyncTimer);autoSyncTimer=null;}if(sourceVaultTimer){clearInterval(sourceVaultTimer);sourceVaultTimer=null;}if(jiraMonitorTimer){clearInterval(jiraMonitorTimer);jiraMonitorTimer=null;}
   if(liveRemoteTimer){clearInterval(liveRemoteTimer);liveRemoteTimer=null;}
   approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;++activationEpoch;activeProject=undefined;store=undefined;pendingTests={jira:null,github:null};verifiedConnections.clear();extensionSettings=normalizeExtensionSettings(context.globalState.get('atgvAssist.extensionSettings',{}));
   await context.secrets.delete(LEGACY_RELEASE_DOWNLOAD_PAT_SECRET).catch(error=>report('Could not remove obsolete release credential: '+error.message));
@@ -922,11 +923,34 @@ async function aiSharedClient(){const {project,config}=current();const token=awa
 async function aiPull(){if(!activeProject)return;const epoch=activationEpoch,projectId=activeProject.id;try{const shared=await aiSharedClient(),remote=await shared.read();if(epoch!==activationEpoch||activeProject?.id!==projectId)return;const memory=new aiMemory.ProjectMemory(aiRoot());try{memory.importShared(remote.value.manifest,projectId);}finally{memory.close();}report('Confluence AI memory loaded for '+activeProject.id);}catch(e){report('Confluence AI memory deferred: '+e.message);}}
 async function aiRunOnce(){if(aiServiceBusy||!activeProject)return {status:'busy'};aiServiceBusy=true;try{const root=aiRoot(),shared=await aiSharedClient(),provider=cfg().get('rag.provider','auto');if(!['ollama','openai-compatible'].includes(provider))throw Error('Unattended generation needs an approved Ollama or OpenAI-compatible endpoint, not interactive Copilot Auto. Configure RAG Provider.');const model=await activeAiTarget();const result=await aiOrchestrator.run({root,shared,model,onProgress:(message,percent)=>{dashboard?.webview.postMessage({type:'aiServiceProgress',message,percent});}});const memory=new aiMemory.ProjectMemory(root);try{const merged=await shared.mergeManifest(memory.manifest(activeProject.id),memory.get('shared-manifest',{}));memory.set('shared-manifest',merged);memory.set('shared-sync',new Date().toISOString());}catch(e){memory.queueOperation('manifest',memory.manifest(activeProject.id));report('AI memory sync queued: '+e.message);}finally{memory.close();}await dashboard?.webview.postMessage({type:'aiServiceProgress',message:'Completed: '+result.status,percent:100});return result;}finally{aiServiceBusy=false;await refreshDashboard().catch(()=>{});}}
 async function aiSchedule(){if(aiServiceTimer){clearInterval(aiServiceTimer);aiServiceTimer=null;}if(!activeProject)return;const settings=await aiServiceConfig.read(aiRoot());if(settings.enabled&&settings.mode==='vscode'){aiServiceTimer=setInterval(()=>{if(!aiServiceBusy)aiRunOnce().catch(e=>report('AI hourly service: '+e.message));},settings.interval*60000);aiServiceTimer.unref?.();}}
+async function syncConfluenceSourceVault(projectId,reason='scheduled'){
+ if(sourceVaultBusy||openingOffline||!registry||activeProject?.id!==projectId)return {skipped:'busy, offline, or project changed'};
+ sourceVaultBusy=true;
+ try{
+  const project=await registry.read(projectId),config=effectiveConfig(project);
+  if(!config.get('confluence.spaceKey'))return {skipped:'Confluence space not configured'};
+  const token=await getAtlassianToken(project);
+  const vault=new ConfluenceSourceVault({registry,projectId,config,token});
+  const result=await vault.sync({mode:'both'});
+  const note='Confluence source vault: '+result.downloaded+' document(s) downloaded, '+result.uploaded+' upload(s) synchronized'+(result.restored?', project BR state restored from Confluence':'')+'.';
+  report('['+projectId+'] '+note+(result.conflicts?.length?' Conflicts: '+result.conflicts.join('; ').slice(0,600):''));
+  if(activeProject?.id===projectId){
+   await dashboard?.webview.postMessage({type:'confluenceSourceVault',result,reason});
+   if(result.restored){
+    approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;jiraPreviewValidation=null;
+    await refreshDashboard();
+   }
+   if(result.conflicts?.length)await notice('Confluence source synchronization needs review: '+result.conflicts.slice(0,3).join('; ').slice(0,400),true);
+   else if(result.restored||result.downloaded||result.uploaded)await notice(note);
+  }
+  return result;
+ }finally{sourceVaultBusy=false;}
+}
 async function activateProject(id){
   pendingProjectMappingTests.clear();
   approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;
   if(ownershipRetryTimer){clearInterval(ownershipRetryTimer);ownershipRetryTimer=null;}ownershipOfflineUntil=0;
-  if(aiServiceTimer){clearInterval(aiServiceTimer);aiServiceTimer=null;}if(autoSyncTimer){clearInterval(autoSyncTimer);autoSyncTimer=null;}if(jiraMonitorTimer){clearInterval(jiraMonitorTimer);jiraMonitorTimer=null;}
+  if(aiServiceTimer){clearInterval(aiServiceTimer);aiServiceTimer=null;}if(autoSyncTimer){clearInterval(autoSyncTimer);autoSyncTimer=null;}if(sourceVaultTimer){clearInterval(sourceVaultTimer);sourceVaultTimer=null;}if(jiraMonitorTimer){clearInterval(jiraMonitorTimer);jiraMonitorTimer=null;}
   if(liveRemoteTimer){clearInterval(liveRemoteTimer);liveRemoteTimer=null;}
   if(!registry)throw new Error('Open a workspace folder in VS Code before creating projects.');
   const epoch=++activationEpoch;
@@ -962,6 +986,16 @@ async function activateProject(id){
   report(`Active project: ${project.id} (${store.docs.length} indexed documents)`);
   if(!openingOffline&&context.workspaceState.get('atgvAssist.monitorJira.'+project.id,false))jiraMonitorTimer=setInterval(()=>{if(!jiraMonitorBusy&&activeProject?.id===project.id)scanExternalJira({quiet:true}).catch(e=>report('Background Jira monitor: '+e.message));},120000);
   if(!openingOffline&&context.workspaceState.get('atgvAssist.autoSync.'+project.id,false)){autoSyncTimer=setInterval(()=>{if(!autoSyncBusy&&activeProject?.id===project.id)syncManagedDocuments().catch(e=>report('Auto document sync: '+e.message));},60000);}
+  // Uploaded source originals and their project recovery manifest always sync
+  // with the configured Confluence space, independent of Markdown auto-sync.
+  if(!openingOffline){
+   sourceVaultTimer=setInterval(()=>{if(activeProject?.id===project.id)void syncConfluenceSourceVault(project.id,'periodic').catch(e=>report('Confluence source vault retry: '+e.message));},300000);
+   sourceVaultTimer.unref?.();
+   void syncConfluenceSourceVault(project.id,'project-open').catch(async error=>{
+    report('Confluence source recovery deferred: '+String(error.message||error));
+    if(activeProject?.id===project.id)await dashboard?.webview.postMessage({type:'confluenceSourceVault',error:String(error.message||error).slice(0,350)});
+   });
+  }
   // Always fetch current remote Jira and Confluence data on a verified project open,
   // and every five minutes while the same project stays open. This is read-only
   // against Atlassian; publishing and approval are never triggered here.
@@ -2048,6 +2082,14 @@ async function importDiscoveryDocument(roleId,{replacementDigest='',expectedRevi
  const autoMap=updatedDocuments.length>0;
  if(autoMap)await context.workspaceState.update('atgvAssist.baSelectedSources.'+activeProject.id,register.sourceDocuments.map(doc=>doc.digest));
  await dashboard?.webview.postMessage({type:'discoveryUploadDone',count:updatedDocuments.length,revised:modified.length,newDocuments:fresh.length,restored:reactivated.length,reverified:legacyBaselines.length+missingActive.length,autoPreflight:autoMap});
+ if(updatedDocuments.length||legacyBaselines.length||missingActive.length){
+  // Upload is locally durable first; Confluence retry is non-blocking and
+  // reports failures without erasing the accepted original source.
+  void syncConfluenceSourceVault(projectId,'uploaded-source').catch(async error=>{
+   report('Confluence original upload queued for retry: '+String(error.message||error));
+   if(activeProject?.id===projectId)await dashboard?.webview.postMessage({type:'confluenceSourceVault',error:'Confluence sync pending; original file is safe locally. '+String(error.message||error).slice(0,240)});
+  });
+ }
  if(autoMap){
   await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Document uploaded. Automatically checking source for TDD RED/GREEN risks…'});
   try{await processSelectedDiscoverySources({digests:register.sourceDocuments.map(doc=>doc.digest),revision:register.revision,automatic:true});}
