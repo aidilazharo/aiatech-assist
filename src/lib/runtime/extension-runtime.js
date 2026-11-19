@@ -9277,7 +9277,29 @@ function activate(ctx){
    await uiInformation(`Shared project artifacts updated for all SDLC roles: ${refreshed.manifest.files.length} indexed files in ${refreshed.root}.`);
    return refreshed.root;
   };
+  const workspaceJournalContexts=new Map();
   const workspace=()=>repoSyncWorkspace.open(vscode,{
+   onWorkflowEvent:async event=>{
+    if(event.type==='begin'){
+     const projectId=activeProject?.id||'workspace';
+     const writing=event.command==='workspacePublishSync';
+     const created=await atgvJobJournal().begin(projectId,{command:event.command,inputHash:event.inputHash,
+      role:'Workspace',kind:writing?'write':'read',retryable:!writing});
+     workspaceJournalContexts.set(created.id,projectId);
+     await atgvPostJobs(projectId);
+     return created.id;
+    }
+    const projectId=workspaceJournalContexts.get(event.jobId);
+    if(!projectId)return;
+    if(event.type==='stage'){
+     await atgvJobJournal().update(projectId,event.jobId,{phase:String(event.stage||'processing')});
+    }
+    if(event.type==='finish'){
+     await atgvJobJournal().finish(projectId,event.jobId,event.error||null);
+     workspaceJournalContexts.delete(event.jobId);
+    }
+    await atgvPostJobs(projectId);
+   },
    version:require('../../../package.json').version,onLog:report,
    secrets:context.secrets,preferences:context.globalState,workspaceRoot:getWorkspace()?.uri.fsPath||'',
    planSync:async facts=>{
