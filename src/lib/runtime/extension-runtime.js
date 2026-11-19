@@ -7730,7 +7730,12 @@ async function handleDashboardMessage(msg){
         const saved=await discovery.load(registry,activeProject.id),register=await brWorkflow.load(registry,activeProject.id);
         if(saved.readiness.filled!==saved.readiness.total||register.discoveryRevision!==saved.revision||!register.importEpoch)throw Error('Save all 12 discovery answers before skipping AI Review.');
         if(register.reviewText){let prior;try{prior=JSON.parse(register.reviewText);}catch{}if(prior?.applied)throw Error('Applied suggestions have already been saved. You cannot skip an applied review.');}
-        const actor=await verifiedBAActor();const updated=await brWorkflow.skipReview(registry,activeProject.id,register.revision,{discoveryRevision:saved.revision,actor});
+        const sourceFindings=brWorkflow.sourceReviewFindings(register);
+        if(sourceFindings.length){
+         const decision=await uiWarning('Source mapping has '+sourceFindings.length+' unresolved Business Analyst finding(s). Skipping AI Review does not resolve these requirements or approve Jira changes. Review the documented evidence before continuing.',{modal:true},'Acknowledge Source Findings');
+         if(decision!=='Acknowledge Source Findings')break;
+        }
+        const actor=await verifiedBAActor();const updated=await brWorkflow.skipReview(registry,activeProject.id,register.revision,{discoveryRevision:saved.revision,actor,acknowledgeSourceFindings:sourceFindings.length>0});
         await dashboard?.webview.postMessage({type:'brUpdated',register:updated});break;
       }
       case 'confirmDiscoveryReview':{
@@ -7740,10 +7745,11 @@ async function handleDashboardMessage(msg){
         if(saved.readiness.filled!==saved.readiness.total||register.discoveryRevision!==saved.revision||register.reviewRevision!==saved.revision)
           throw Error('Complete and save discovery, then run AI Review before continuing.');
         let review;try{review=JSON.parse(register.reviewText||'{}');}catch{throw Error('AI Review data is invalid. Re-run AI Review.');}
-        const unresolved=review.readiness==='Needs attention'||(review.suggestions||[]).some(item=>item.severity==='Critical');
+        const sourceFindings=brWorkflow.sourceReviewFindings(register);
+        const unresolved=review.readiness==='Needs attention'||(review.suggestions||[]).some(item=>item.severity==='Critical')||sourceFindings.length>0;
         if(unresolved){
-          const count=(review.suggestions||[]).length;
-          const decision=await uiWarning(`AI Review has ${count} outstanding finding(s), including potentially undefined business rules. Acknowledging does NOT resolve these findings or automatically approve the Business Requirements. Confirm that you have reviewed the source evidence and accept responsibility for the documented risks. You must still resolve any open Discovery decisions and obtain required Business Owner approval.`,{modal:true},'Acknowledge Findings');
+          const count=(review.suggestions||[]).length+sourceFindings.length;
+          const decision=await uiWarning(`AI Review and source-document validation have ${count} outstanding finding(s), including ${sourceFindings.length} source finding(s). Acknowledging records BA review of the evidence, NOT resolution of conflicting business policies or automatic approval of the BR/Jira work. Confirm that you understand the documented risks, and resolve open business decisions before final approval.`,{modal:true},'Acknowledge Findings');
           if(decision!=='Acknowledge Findings'){
             await dashboard?.webview.postMessage({type:'baReviewConfirmResult',success:false,cancelled:true,
               message:'AI findings acknowledgement cancelled. No BR or Jira changes were saved.'});
