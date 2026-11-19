@@ -2000,7 +2000,7 @@ function saveCheckpointEntry(checkpoint,kind,key,value,limit){
 function recoverableSourceAIError(error){
  const message=String(error?.message||error);
  return error?.code==='ATGV_SOURCE_AI_TIMEOUT'||error?.name==='TimeoutError'||error?.name==='SyntaxError'||
-  /(?:time.?out|invalid json|invalid response|not valid json|unexpected token|missing required|missing the answers|invalid .* answer|incomplete|connection reset|econnreset|network error|rate limit|\b429\b|\b502\b|\b503\b|\b504\b|temporarily unavailable|empty response|no repair proposal)/i.test(message);
+  /(?:time.?out|invalid json|invalid response|not valid json|unexpected token|missing required|missing the answers|invalid .* answer|incomplete|connection reset|econnreset|network error|rate limit|\b429\b|\b502\b|\b503\b|\b504\b|temporarily unavailable|empty response|no repair proposal|context length|maximum context|prompt too long|token limit|payload too large|request too large|\b413\b)/i.test(message);
 }
 function trySourceAIFallback(run,error){
  if(error?.name==='AbortError')return false;
