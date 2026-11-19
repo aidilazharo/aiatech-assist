@@ -1295,20 +1295,33 @@ async function storedStartupVerification(){
   return {signature};
  }catch{return null;}
 }
+let startupUiVerificationCache={signature:'',verified:null,at:0};
 async function startupStatus(projects=[]){
- const verified=await storedStartupVerification();
+ // A dashboard refresh must not re-read four secure-store entries repeatedly.
+ // UI-only cache: authorization in startupProceed ALWAYS checks the live proof.
+ const fields=startupSavedConnectionFields();
+ const signature=sha(JSON.stringify(fields));
+ let verified;
+ if(startupUiVerificationCache.signature===signature&&Date.now()-startupUiVerificationCache.at<30000)
+  verified=startupUiVerificationCache.verified;
+ else{
+  verified=await storedStartupVerification();
+  startupUiVerificationCache={signature,verified,at:Date.now()};
+ }
  startupSessionVerified=!!verified;
  startupVerifiedSignature=verified?.signature||'';
+ const openingActive=openingLocked||openingFlow.phase!=='search'||!!activeProject;
  const workspace=getWorkspace()?.uri.fsPath;
  let offline=null;
- try{if(workspace){const installed=await sdlcCatalog.activeRoot(workspace);offline=installed.offline?installed:null;}}catch(e){if(!/not activated/.test(e.message))report('Offline Library startup status: '+e.message);}
+ if(!openingActive)try{
+  if(workspace){const installed=await sdlcCatalog.activeRoot(workspace);offline=installed.offline?installed:null;}
+ }catch(e){if(!/not activated/.test(e.message))report('Offline Library startup status: '+e.message);}
  const selectedId=context.workspaceState?.get('atgvAssist.activeProject','')||'';
  const selected=Array.isArray(projects)?projects.find(project=>project.id===selectedId&&project.techStackId):null;
  // An in-flight or already-open project must not be replaced by the startup
  // credential wizard during an unrelated dashboard refresh. The setup gate is
  // only for the unselected Start screen; credential errors stay in the project
  // opening error panel so the user can retry or explicitly go back.
- const openingActive=openingLocked||openingFlow.phase!=='search'||!!activeProject;
  return {required:!startupSessionProceedApproved&&!openingActive,defaults:startupSetup.DEFAULTS,
   selectedProject:selected?{id:selected.id,name:selected.name,techStackId:selected.techStackId,techStackCompanionId:selected.techStackCompanionId||''}:null,
   verified:!!verified,offlineLibrary:offline?{version:offline.version,filename:offline.filename,repository:offline.repository}:null,
@@ -1335,7 +1348,7 @@ function startupConnectionFailure(error){
  return 'Could not verify the response. Check the service URL and account access.';
 }
 async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{}}={}){
- if(save){startupSessionVerified=false;startupVerifiedSignature='';}
+ if(save){startupSessionVerified=false;startupVerifiedSignature='';startupUiVerificationCache.at=0;}
  const data=startupSetup.validate(message.settings);
  const enteredAtlassian=String(message.atlassianToken||'').trim();
  const enteredGithub=String(message.githubToken||'').trim();
@@ -4966,6 +4979,10 @@ async function handleDashboardMessage(msg){
            report('ATGV core CSS unavailable: '+detail);
            await recordStartupDiagnostic({stage:'webview-assets',status:'failed',detail});
          }
+         // Start prerequisites and show saved nonsecret connection fields
+         // without waiting for the heavy full project state snapshot.
+         await dashboard?.webview.postMessage({type:'startupQuickStart',
+          saved:startupSavedConnectionFields(),defaults:startupSetup.DEFAULTS});
          await finishManualProjectDiscovery(startupSequence);
          if(startupUpdateSessionChecked!==startupSessionId){
           startupUpdateSessionChecked=startupSessionId;
