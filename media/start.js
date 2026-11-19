@@ -5954,7 +5954,7 @@ function renderDiscoverySummary(){
   // Keep the Preview & Save stage accessible while approval is pending.
   const previewActionReady=displayed!=='generate'||!$('brNextPreviewSave').disabled;
   const approvalActionReady=displayed!=='save'||(!readiness.needsDecision&&!discoveryHasReviewBlockers());
-  const ready=((!!next&&!!currentDefinition?.complete&&previewActionReady&&approvalActionReady)||canConfirm);
+  const ready=ATGVJiraWorkflowTables.nextActionReady({next,complete:!!currentDefinition?.complete,canConfirm,previewReady:previewActionReady,approvalReady:approvalActionReady});
   nextButton.dataset.confirmReview=canConfirm?'true':'false';
   nextButton.dataset.milestoneState=ready?'ready':'blocked';
   nextButton.classList.toggle('secondary',!ready);
