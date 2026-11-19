@@ -10,7 +10,7 @@ const execFileAsync = promisify(execFile);
 const MAX_FILE_BYTES = 12 * 1024 * 1024;
 // Keep the complete text for normal long BA requirements. AI requests are
 // bounded separately with splitDocumentText; never silently use only a prefix.
-const MAX_EXTRACTED = 300000;
+const MAX_EXTRACTED = 600000;
 const MAX_MAPPING_CHUNK = 28000;
 const MAX_SECTION_ANSWER_LENGTH = 5000;
 const { extractDocx } = require('./docx-extractor');

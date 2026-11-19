@@ -202,7 +202,7 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
     handler({command:'catalogSave',config:{repositoryUrl:'https://github.com/aia/catalog',ref:'main',authentication:'public',autoCheck:false}});
     await until(()=>globalState.has('atgvAssist.sdlcCatalog'));
     assert.equal(globalState.get('atgvAssist.sdlcCatalog').repositoryUrl,'https://github.com/aidilazharo/tech-stacks-skills');
-    assert.ok(messages.some(m=>m.type==='catalogState'&&m.catalog?.config?.repositoryUrl==='https://github.com/aidilazharo/tech-stacks-skills'));
+    await until(()=>messages.some(m=>m.type==='catalogState'&&m.catalog?.config?.repositoryUrl==='https://github.com/aidilazharo/tech-stacks-skills'));
     handler({command:'createJiraTicket',summary:'Must not create'});
     await until(()=>messages.some(m=>m.type==='notice'&&m.error&&/Jira writes require approved BRs/.test(m.message)));
     global.fetch=savedFetch;

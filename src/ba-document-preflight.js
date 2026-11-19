@@ -136,14 +136,14 @@ function evidence(report,digest){
   applied:(part.applied||[]).slice(0,MAX_EDITS).map(e=>({before:clean(e.before,300),after:clean(e.after,300),reason:clean(e.reason,300)})),
   skipped:(part.skipped||[]).slice(0,MAX_EDITS).map(e=>({before:clean(e.before,300),after:clean(e.after,300),reason:clean(e.reason,300),sourceVerified:e.sourceVerified===true})),
   issues:(part.issues||[]).slice(0,18),resolutions:(part.resolutions||[]).slice(0,MAX_DEFAULTS)});
- return {digest:String(digest||''),...summarize(report),sections:(report.sections||[]).slice(0,25).map((part,index)=>({section:index+1,...summarize(part)})),
+ return {digest:String(digest||''),...summarize(report),sections:(report.sections||[]).slice(0,64).map((part,index)=>({section:index+1,...summarize(part)})),
   workingBR:report.workingBR||null,checks:(report.checks||[]).slice(0,12),crossSectionChecked:report.crossSectionChecked===true,checkedAt:new Date().toISOString(),originalPreserved:true};
 }
 // Compare all mapped section claims before commit. Exact duplicate claims are
 // deduplicated but retain their source section numbers. Oversize input fails
 // explicitly rather than silently dropping a section.
 function crossSectionClaims(parts){
- if(!Array.isArray(parts)||parts.length<2||parts.length>25)throw Error('Invalid document section count for reconciliation.');
+ if(!Array.isArray(parts)||parts.length<2||parts.length>64)throw Error('Invalid document section count for reconciliation.');
  const claims=[];
  for(const [key] of QUESTIONS){
   const seen=new Map();

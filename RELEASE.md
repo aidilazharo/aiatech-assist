@@ -1,3 +1,18 @@
+# ATGV AIATECH Assist v0.4.39
+
+## Business Requirements — audited multi-BR TXT pipeline
+
+- After a single DOCX/PDF upload, extract complete readable text and persist numbered, source-identical `.txt` units inside `documents/requirements/br-text/`, with SHA-256 integrity checks. Keep the original upload unchanged.
+- Detect independently numbered BR headings conservatively. Split oversized individual BRs into bounded continuation parts without fabricating new requirement identities or discarding characters.
+- Process verified text units in sequence, retain completed preflight/mapping AI checkpoints, and accumulate the complete mapping for every unit in one atomic source-identity-checked register commit.
+- Keep per-unit mapped answers alongside the aggregate 12-question discovery view; explicitly label any bounded aggregate summary rather than silently omitting source evidence.
+- Generate separate draft BRs one-by-one for clearly separated source BR groups, then validate and save all generated BR drafts together. Preserve approvals, AI Review and Jira publication gates.
+- Increase extraction capacity to 600,000 readable characters and the verified unit/checkpoint capacity to 64; documents beyond safe bounds fail clearly without truncated silent imports.
+- Preserve review-required source-only AI evidence instead of filtering it out, and clean up derived TXT files when their verified original source is deleted.
+- Add regression tests covering lossless coverage, source-tamper detection, stable resumed files, group boundaries, bounded aggregation, deletion, and sequential draft generation.
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.38
 
 - Fix the visible “Review & Acknowledge Findings” button remaining unclickable after AI Review is recorded. Stale client ownership and readiness state no longer silently disable it.

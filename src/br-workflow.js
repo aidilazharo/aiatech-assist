@@ -4,6 +4,7 @@ const fs=require('node:fs/promises');
 const path=require('node:path');
 const crypto=require('node:crypto');
 const baSourceSelectionGuard=require('./ba-source-selection-guard');
+const baBrTextPipeline=require('./ba-br-txt-pipeline');
 const {withLock}=require('./file-lock');
 const {checksum}=require('./document-editor');
 const changeEngine=require('./change-engine');
@@ -648,14 +649,30 @@ async function commitSourceMapping(registry,id,revision,{digests,proposals=[],pr
    if(!proposal||proposal.filename!==documents[i].name||!proposal.answers||typeof proposal.answers!=='object'||Array.isArray(proposal.answers))throw Error('Invalid AI mapping for '+documents[i].name);
    const entries=Object.entries(proposal.answers);
    if(!entries.length||entries.some(([k,v])=>!changeEngine.QUESTION_KEYS.includes(k)||typeof v!=='string'||v.length>MAX_ANSWER_LENGTH))throw Error('Invalid Discovery answers for '+documents[i].name);
-   return {filename:documents[i].name,answers:Object.fromEntries(entries)};
+   // Store full per-TXT results, not only the combined discovery summary.
+   // Validate the immutable source reference before committing any result.
+   const units=Array.isArray(proposal.units)?proposal.units:[];
+   if(units.length>baBrTextPipeline.MAX_UNITS)throw Error('Too many BR text units.');
+   const seenUnits=new Set();
+   const mappedUnits=units.map(unit=>{
+    if(!baBrTextPipeline.validRef(unit)||unit.sourceDigest!==documents[i].digest||
+       !Number.isInteger(unit.characters)||unit.characters<1||unit.characters>baBrTextPipeline.UNIT_CHARS||
+       seenUnits.has(unit.filename))throw Error('Invalid BR text identity for '+documents[i].name);
+    seenUnits.add(unit.filename);
+    const values=Object.entries(unit.answers||{});
+    if(values.length!==changeEngine.QUESTION_KEYS.length||values.some(([key,value])=>!changeEngine.QUESTION_KEYS.includes(key)||typeof value!=='string'||value.length>5000))
+     throw Error('Incomplete or invalid BR text mapping for '+unit.filename);
+    return {sourceDigest:unit.sourceDigest,filename:unit.filename,digest:unit.digest,brIndex:unit.brIndex,
+     partIndex:unit.partIndex,parts:unit.parts,characters:unit.characters,answers:Object.fromEntries(values)};
+   });
+   return {filename:documents[i].name,answers:Object.fromEntries(entries),units:mappedUnits};
   });
   next.processedSources=[...digests];
   next.importName=documents.map(x=>x.name).join(' + ').slice(0,220);
   next.importDigest=crypto.createHash('sha256').update('selected:v1:'+JSON.stringify(documents.map(x=>[x.name,x.digest]))).digest('hex');
   next.importEpoch=Math.max(1,Number(next.importEpoch||0)+1);
   next.discoveryRevision='';invalidate(next,'New source mapping completed');
-  next.mappingCompleted={epoch:next.importEpoch,digests:[...digests],sourceDigests:next.sourceDocuments.map(x=>x.digest).sort(),at:new Date().toISOString(),proposals:answers,preflights:(Array.isArray(preflights)?preflights:[]).filter(item=>digests.includes(item?.digest)&&item?.status==='ready'&&item?.originalPreserved===true).slice(0,10)};
+  next.mappingCompleted={epoch:next.importEpoch,digests:[...digests],sourceDigests:next.sourceDocuments.map(x=>x.digest).sort(),at:new Date().toISOString(),proposals:answers,preflights:(Array.isArray(preflights)?preflights:[]).filter(item=>digests.includes(item?.digest)&&['ready','needs-review'].includes(item?.status)&&item?.originalPreserved===true).slice(0,10)};
   for(const revision of next.sourceRevisionHistory||[])if(revision.review==='awaiting-discovery-and-requirement-approval'&&digests.includes(revision.toDigest))revision.mappingReviewedAt=new Date().toISOString();
   event(next,'source-mapping-completed',{epoch:next.importEpoch,count:digests.length,atomic:true});
  });

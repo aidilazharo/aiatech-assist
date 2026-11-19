@@ -11,7 +11,7 @@ const clean=value=>String(value||'').replace(/[\x00-\x1f\x7f]/g,' ').trim().slic
 
 function prepare(source,sections,reports){
  if(!source||typeof source.text!=='string'||!source.text.trim()||!DIGEST.test(String(source.digest||'')))throw Error('A verified source is required for the working BR.');
- if(!Array.isArray(sections)||!sections.length||sections.length>25||sections.some(text=>typeof text!=='string')||sections.join('')!==source.text)throw Error('Working BR source coverage validation failed.');
+ if(!Array.isArray(sections)||!sections.length||sections.length>64||sections.some(text=>typeof text!=='string')||sections.join('')!==source.text)throw Error('Working BR source coverage validation failed.');
  if(!Array.isArray(reports)||reports.length!==sections.length)throw Error('All document sections must finish preflight before mapping.');
  const workingSections=[],guidance=[];let correctionCount=0;
  const verificationIncomplete=reports.some(x=>x.degraded===true||x.status==='needs-review');

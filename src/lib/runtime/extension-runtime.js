@@ -36,6 +36,7 @@ const baTimeoutSimplified=require('../../ba-timeout-simplified');
 const baPreflightReports=require('../../ba-preflight-report');
 const baProcessDiagnostics=require('../../ba-process-diagnostics');
 const baWorkingBr=require('../../ba-working-br');
+const baBrTextPipeline=require('../../ba-br-txt-pipeline');
 const discoveryReview=require('../../discovery-review');
 const brWorkflow=require('../../br-workflow');
 const baSourceSelectionGuard=require('../../ba-source-selection-guard');
@@ -1927,6 +1928,8 @@ async function importDiscoveryDocument(roleId){
   await dashboard?.webview.postMessage({type:'discoveryImportProgress',message:`Reading ${path.basename(selection.fsPath)}…`});
   const doc=await discoveryImport.importDocumentText(selection.fsPath);
   if(doc.truncated)throw Error(`${doc.name}: extracted text exceeds ${discoveryImport.MAX_EXTRACTED.toLocaleString('en-US')} characters. Split the source into smaller documents or reduce non-requirement appendices; no text was silently discarded.`);
+  // Validate TXT splitting before accepting source bytes, to avoid partially imported oversized BR cycles.
+  baBrTextPipeline.split(doc.text);
   documents.push({...doc,digest:sha(doc.text),originalPath:selection.fsPath});
  }
  if(new Set(documents.map(d=>d.name.toLowerCase())).size!==documents.length||new Set(documents.map(d=>d.digest)).size!==documents.length)throw Error('Select unique filenames and document contents.');
@@ -1993,6 +1996,11 @@ async function importDiscoveryDocument(roleId){
  const current=await brWorkflow.load(registry,activeProject.id);
  if(current.revision!==initial.revision)throw Error('Source document list changed during upload. Refresh and retry.');
  const register=await brWorkflow.addSources(registry,activeProject.id,current.revision,prospective,{actor:uploader,singleSourceCycle:true});
+ // Persist the source-preserving TXT files immediately after upload, even when no AI provider is configured.
+ for(const {document:doc} of updatedDocuments){
+  const units=await baBrTextPipeline.prepare(registry,activeProject.id,doc);
+  await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preparing',message:'Prepared '+units.length+' verified BR .txt file(s) for '+doc.name+'.'});
+ }
  if(updatedDocuments.length)documentPreflightSessions.delete(activeProject.id); // Invalidate stale results after a source revision.
  if(modified.length||fresh.length&&!!initial.mappingCompleted){
   approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;jiraPreviewValidation=null;
@@ -2123,9 +2131,12 @@ async function processSelectedDiscoverySources(msg){
     details:'Sectioned source selected for AI mapping; document text not recorded.'});
    run.largeSource=baLargeDocumentRecovery.isLargeDocument(source.text.length);
    run.preflightOffline=!!run.skipAiChecks;run.mappingOffline=!!run.skipAiChecks;run.sourceOnlyPreflight=!!run.skipAiChecks;
-   let sections=discoveryImport.splitDocumentText(source.text);
-   const smallerSections=discoveryImport.splitDocumentText(source.text,12000);
-   if(smallerSections.length<=25)sections=smallerSections;
+   // Every text unit is an immutable, checksum-verified local .txt file.
+   // Boundaries are stable across retries and each unit is processed in order.
+   const preparedUnits=await baBrTextPipeline.prepare(registry,run.projectId,source);
+   let sections=preparedUnits.map(unit=>unit.text);
+   await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preparing',
+    message:'Extracted '+preparedUnits.length+' verified BR .txt file(s) from '+source.name+'. Processing each file in order; original upload unchanged.'});
    const resumeMeta={sourceDigest:selected[i],textDigest:sha(source.text),modelDigest,revision:resumeRevision};
    let checkpoint=null;
    if(resumeKey){
@@ -2133,7 +2144,7 @@ async function processSelectedDiscoverySources(msg){
      checkpoint=await baMappingCheckpoint.load(registry,run.projectId,resumeMeta,resumeKey);
      if(checkpoint){
       let offset=0;const restored=checkpoint.sectionLengths.map(length=>{const part=source.text.slice(offset,offset+length);offset+=length;return part;});
-      if(offset===source.text.length&&restored.every(Boolean))sections=restored;else checkpoint=null;
+      if(offset===source.text.length&&restored.length===preparedUnits.length&&restored.every((part,index)=>part&&sha(part)===preparedUnits[index].digest))sections=restored;else checkpoint=null;
      }
      if(!checkpoint){
       const marker=context.workspaceState.get?.('atgvAssist.baMappingResume.'+run.projectId);
@@ -2153,11 +2164,10 @@ async function processSelectedDiscoverySources(msg){
     }catch(error){checkpoint=null;report('AI resume checkpoint could not be saved: '+String(error.message||error));
      await dashboard?.webview.postMessage({type:'discoveryMappingCheckpoint',projectId:run.projectId,resumeAvailable:false,message:'AI progress could not be saved for a later resume. Check workspace storage permissions.'});}
    };
-   let preflightSplitRecoveries=0;
    const reports=[],partAnswers=[];
    for(let part=0;part<sections.length;part++){
     check();run.phase='preflight';
-    const section={...source,text:sections[part]};
+    const section={...source,name:preparedUnits[part].filename,text:sections[part]};
     const label=sections.length>1?' (section '+(part+1)+'/'+sections.length+')':'';
     await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'AI document preflight '+(i+1)+'/'+readable.length+label+': checking acceptance criteria and contradictions in '+source.name+'…'});
     let result,previous='',retrySmaller=false;
@@ -2175,14 +2185,14 @@ async function processSelectedDiscoverySources(msg){
      }
      if(!result&&(run.preflightOffline||run.skipAiChecks)){
       result=baLargeDocumentRecovery.preflight(section.text);run.sourceOnlyPreflight=true;
-      if(checkpoint){saveCheckpointEntry(checkpoint,'preflight',promptKey,baLargeDocumentRecovery.checkpointRecord('preflight'),60);await persistCheckpoint();}
+      if(checkpoint){saveCheckpointEntry(checkpoint,'preflight',promptKey,baLargeDocumentRecovery.checkpointRecord('preflight'),100);await persistCheckpoint();}
      }
      const maxNetworkAttempts=baLargeDocumentRecovery.attempts('preflight',!!run.largeSource,!!run.recoveryTarget);
      for(let networkAttempt=1;!result&&networkAttempt<=maxNetworkAttempts;networkAttempt++){
       try{
        const ai=await requestSourcePreflight(target,prompt,run);
        check();result=baDocumentPreflight.parse(ai,section.text);
-       if(result.ready&&checkpoint){saveCheckpointEntry(checkpoint,'preflight',promptKey,ai,60);await persistCheckpoint();}
+       if(result.ready&&checkpoint){saveCheckpointEntry(checkpoint,'preflight',promptKey,ai,100);await persistCheckpoint();}
        break;
       }catch(error){
        check();
@@ -2190,21 +2200,11 @@ async function processSelectedDiscoverySources(msg){
        if(timedOut&&await offerSimpleDraftAfterTimeout(run,error)){
         run.preflightOffline=true;run.sourceOnlyPreflight=true;run.mappingOffline=true;
         result=baLargeDocumentRecovery.preflight(section.text);
-        if(checkpoint){saveCheckpointEntry(checkpoint,'preflight',promptKey,baLargeDocumentRecovery.checkpointRecord('preflight'),60);await persistCheckpoint();}
+        if(checkpoint){saveCheckpointEntry(checkpoint,'preflight',promptKey,baLargeDocumentRecovery.checkpointRecord('preflight'),100);await persistCheckpoint();}
         break;
        }
        if(!trySourceAIFallback(run,error))throw error;
-       if(!run.largeSource&&networkAttempt===1&&attempt===1&&preflightSplitRecoveries===0&&section.text.length>4000){
-        const parts=discoveryImport.splitDocumentText(section.text,Math.max(2000,Math.floor(section.text.length/2)));
-        if(parts.length>1&&sections.length-1+parts.length<=25){
-         sections.splice(part,1,...parts);preflightSplitRecoveries++;retrySmaller=true;
-         const session=documentPreflightSessions.get(run.projectId);
-         if(session)for(const entry of session.entries)if(entry.digest===selected[i])entry.totalSections=sections.length;
-         if(checkpoint&&Object.keys(checkpoint.preflight).length)await persistCheckpoint();
-         await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'The AI response was slow. Retrying this section in smaller parts; the complete original document remains included…'});
-         break;
-        }
-       }
+       // Preserve persisted .txt boundaries on retries; checkpoint resumes the same BR text unit.
        if(networkAttempt<maxNetworkAttempts){
         await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Recovering AI preflight ('+networkAttempt+'/'+maxNetworkAttempts+')'+(run.useRecovery?' using Microsoft Copilot SDK':'')+'. Saved sections remain unchanged…'});
         continue;
@@ -2212,7 +2212,7 @@ async function processSelectedDiscoverySources(msg){
        if(run.largeSource){
         run.preflightOffline=true;run.sourceOnlyPreflight=true;
         result=baLargeDocumentRecovery.preflight(section.text);
-        if(checkpoint){saveCheckpointEntry(checkpoint,'preflight',promptKey,baLargeDocumentRecovery.checkpointRecord('preflight'),60);await persistCheckpoint();}
+        if(checkpoint){saveCheckpointEntry(checkpoint,'preflight',promptKey,baLargeDocumentRecovery.checkpointRecord('preflight'),100);await persistCheckpoint();}
         await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'AI preflight unavailable. Continuing with source-only review; AI quality checks are NOT verified and BA review is required.'});
         break;
        }
@@ -2240,20 +2240,12 @@ async function processSelectedDiscoverySources(msg){
     await recordBAProcess({stage:'preflight',action:'section-'+(part+1)+'-of-'+sections.length,
      status:result.degraded?'ai-unverified':result.ready?'passed':'needs-review',
      details:'Preflight section '+(result.degraded?'used source-only recovery':'processed')+'.'});
-   }
-   // Complete and validate every section before using the working BR for mapping.
-   check();run.phase='preflight';
-   const working=baWorkingBr.prepare(source,sections,reports);
-   const workingRef=await baWorkingBr.store(registry,run.projectId,source.digest,working.content);
-   check();
-   const workingSession=documentPreflightSessions.get(run.projectId);
-   if(workingSession)baPreflightReports.attachWorkingBR(workingSession,{digest:selected[i],ref:workingRef,checks:working.checks});
-   for(let part=0;part<sections.length;part++){
-    const result=reports[part],label=sections.length>1?' (section '+(part+1)+'/'+sections.length+')':'';
+    // Complete both AI stages for this immutable TXT unit before starting the next.
+    const singleWorking=baWorkingBr.prepare({...source,text:sections[part]},[sections[part]],[result]);
     check();run.phase='mapping';
-    const doc={...source,text:working.sections[part].text};
+    const doc={...source,name:preparedUnits[part].filename,text:singleWorking.sections[0].text};
     await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'Mapping AI-updated working BR '+(i+1)+'/'+readable.length+': '+doc.name+label+'… (Stop Mapping is available)'});
-    const mappingPrompt=discoveryImport.createMappingPrompt(doc)+working.sections[part].guidance+'\n\nThe document above is the AI-updated working BR, with verified spelling corrections. Preflight preserved the original business rules; label recommendations as provisional. Do not invent TDD test inputs, expected outputs, approvals or policy.'+await roleSkillPrompt('business-analyst');
+    const mappingPrompt=discoveryImport.createMappingPrompt(doc)+singleWorking.sections[0].guidance+'\n\nThe document above is the AI-updated working BR, with verified spelling corrections. Preflight preserved the original business rules; label recommendations as provisional. Do not invent TDD test inputs, expected outputs, approvals or policy.'+await roleSkillPrompt('business-analyst');
     check();
     // A retry may obtain different preflight corrections or guidance. Never
     // reuse a mapping generated from a different working BR or prompt.
@@ -2271,7 +2263,7 @@ async function processSelectedDiscoverySources(msg){
     if(!proposals&&(run.mappingOffline||run.skipAiChecks)){
      proposals=baLargeDocumentRecovery.mapping(doc.text,{section:part+1,totalSections:sections.length});
      sourceOnlyMappingPart=true;
-     if(checkpoint){saveCheckpointEntry(checkpoint,'mapping',mappingKey,baLargeDocumentRecovery.checkpointRecord('mapping'),30);await persistCheckpoint();}
+     if(checkpoint){saveCheckpointEntry(checkpoint,'mapping',mappingKey,baLargeDocumentRecovery.checkpointRecord('mapping'),80);await persistCheckpoint();}
     }
     if(!proposals){
      const maxMappingAttempts=baLargeDocumentRecovery.attempts('mapping',!!run.largeSource,!!run.recoveryTarget);
@@ -2282,14 +2274,14 @@ async function processSelectedDiscoverySources(msg){
        const answer=await requestSourceAI(target,responsePrompt,run,{maxChars:run.largeSource?30000:95000,timeoutMs:baLargeDocumentRecovery.timeout('mapping',!!run.largeSource)});
        check();
        proposals=discoveryImport.parseMappingResponse(answer);
-       if(checkpoint){saveCheckpointEntry(checkpoint,'mapping',mappingKey,answer,30);await persistCheckpoint();}
+       if(checkpoint){saveCheckpointEntry(checkpoint,'mapping',mappingKey,answer,80);await persistCheckpoint();}
        break;
       }catch(error){
        check();
        if(baTimeoutSimplified.timedOut(error)&&await offerSimpleDraftAfterTimeout(run,error)){
         run.mappingOffline=true;sourceOnlyMappingPart=true;run.preflightOffline=true;run.sourceOnlyPreflight=true;
         proposals=baLargeDocumentRecovery.mapping(doc.text,{section:part+1,totalSections:sections.length});
-        if(checkpoint){saveCheckpointEntry(checkpoint,'mapping',mappingKey,baLargeDocumentRecovery.checkpointRecord('mapping'),30);await persistCheckpoint();}
+        if(checkpoint){saveCheckpointEntry(checkpoint,'mapping',mappingKey,baLargeDocumentRecovery.checkpointRecord('mapping'),80);await persistCheckpoint();}
         break;
        }
        if(!trySourceAIFallback(run,error))throw error;
@@ -2297,7 +2289,7 @@ async function processSelectedDiscoverySources(msg){
         if(!run.largeSource)throw Error(doc.name+label+': AI mapping could not recover safely after '+attempt+' attempt(s). '+String(error.message||error).slice(0,260)+' Completed sections remain saved for Resume AI Mapping.');
         run.mappingOffline=true;sourceOnlyMappingPart=true;
         proposals=baLargeDocumentRecovery.mapping(doc.text,{section:part+1,totalSections:sections.length});
-        if(checkpoint){saveCheckpointEntry(checkpoint,'mapping',mappingKey,baLargeDocumentRecovery.checkpointRecord('mapping'),30);await persistCheckpoint();}
+        if(checkpoint){saveCheckpointEntry(checkpoint,'mapping',mappingKey,baLargeDocumentRecovery.checkpointRecord('mapping'),80);await persistCheckpoint();}
         await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'AI mapping timed out. Continuing source-only extraction, with full source retained and BA review required.'});
         break;
        }
@@ -2316,7 +2308,14 @@ async function processSelectedDiscoverySources(msg){
      details:sourceOnlyMappingPart?'AI mapping unavailable; literal source extraction used.':'AI mapping completed.'});
     await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'Mapped '+(i+1)+'/'+readable.length+' document(s), section '+(part+1)+'/'+sections.length+'. Validating results…'});
    }
-   const proposals=discoveryImport.mergeMappingAnswers(partAnswers);
+   // Finalize source-preserving working copy after each TXT unit completed preflight and mapping.
+   check();run.phase='preflight';
+   const working=baWorkingBr.prepare(source,sections,reports);
+   const workingRef=await baWorkingBr.store(registry,run.projectId,source.digest,working.content);
+   check();
+   const workingSession=documentPreflightSessions.get(run.projectId);
+   if(workingSession)baPreflightReports.attachWorkingBR(workingSession,{digest:selected[i],ref:workingRef,checks:working.checks});
+   const proposals=baBrTextPipeline.mergeForDiscovery(partAnswers,preparedUnits);
    let crossSectionChecked=false;
    if(sections.length>1&&!run.mappingOffline){
     check();run.phase='preflight';run.timeout=false;
@@ -2367,7 +2366,7 @@ async function processSelectedDiscoverySources(msg){
     issues:[...reports.flatMap(x=>x.issues),...reviewIssues].slice(0,16),
     resolutions:reports.flatMap(x=>x.resolutions||[]).slice(0,12),sections:reports,workingBR:workingRef,checks:working.checks};
    preflights.push(baDocumentPreflight.evidence(report,selected[i]));
-   mappedProposals.push({filename:source.name,answers:proposals});
+   mappedProposals.push({filename:source.name,answers:proposals,units:preparedUnits.map((unit,index)=>({sourceDigest:unit.sourceDigest,filename:unit.filename,digest:unit.digest,brIndex:unit.brIndex,partIndex:unit.partIndex,parts:unit.parts,characters:unit.characters,answers:partAnswers[index]}))});
   }
   check();run.phase='committing';
   await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'committing',message:'Saving complete mapping atomically. Cancellation is disabled during this step…'});
@@ -2984,6 +2983,7 @@ async function generateBusinessRequirements(options={}){
   if(decision!==action){await dashboard?.webview.postMessage({type:'baProgress',done:true});return;}
  }
  const focused=options.selective===true?staleDrafts.map(b=>b.id):null;
+ const mappedGroups=baBrTextPipeline.groups(register.mappingCompleted?.proposals||[]);
  if(options.selective&&!focused?.length)throw Error('No outdated Business Requirements drafts are eligible for selective regeneration.');
  if(baTimeoutSimplified.isSimplifiedEvidence(register)){
   if(!review.skipped)throw Error('Simplified Jira drafts require the Business Analyst to select Skip AI Review and acknowledge that AI verification was incomplete.');
@@ -2993,7 +2993,19 @@ async function generateBusinessRequirements(options={}){
   const source=register.sourceDocuments.find(row=>(register.processedSources||[]).includes(row.digest));
   if(!source)throw Error('Verified source document is required for simplified BR generation.');
   const verified=await sourceStore.read(registry,activeProject.id,source);
-  const proposal=baTimeoutSimplified.simpleProposal({name:source.name,text:verified.text,answers:saved.answers});
+  let proposal;
+  if(mappedGroups.length>1){
+   proposal=[];
+   if(mappedGroups.length>25)throw Error('More than 25 separate Business Requirements detected. Divide into smaller BR cycles before generating drafts.');
+   for(const [index,group] of mappedGroups.entries()){
+    const parts=[];
+    for(const ref of group.units)parts.push(await baBrTextPipeline.read(registry,activeProject.id,ref));
+    const unitAnswers=baBrTextPipeline.mergeForDiscovery(group.units.map(ref=>ref.answers),group.units);
+    proposal.push(...baTimeoutSimplified.simpleProposal({name:source.name+' BR '+group.brIndex,
+     text:parts.join(''),answers:unitAnswers}));
+    await dashboard?.webview.postMessage({type:'baProgress',task:'generate',message:'Prepared source-only draft '+(index+1)+'/'+mappedGroups.length+'; BA review required.'});
+   }
+  }else proposal=baTimeoutSimplified.simpleProposal({name:source.name,text:verified.text,answers:saved.answers});
   const currentSaved=await discovery.load(registry,activeProject.id);
   if(currentSaved.revision!==saved.revision)throw Error('Discovery changed during simplified BR generation.');
   const updated=await brWorkflow.generated(registry,activeProject.id,register.revision,{discoveryRevision:saved.revision,requirements:proposal,riskAccepted:false,actor:await verifiedBAActor()});
@@ -3020,6 +3032,36 @@ async function generateBusinessRequirements(options={}){
   (focused?'\nSELECTIVE UPDATE: Return ONLY these existing Business Requirements using their current titles. Do not create, remove, or revise unrelated requirements. Targets: '+JSON.stringify(activeRequirements.filter(x=>focused.includes(x.id)).map(x=>({id:x.id,title:x.title}))) : '')+
   (historic.length?'\nPREVIOUSLY COMPLETED BUSINESS REQUIREMENTS (READ ONLY): '+JSON.stringify(historic.slice(0,100))+'. These requirements belong to earlier published cycles. Do not regenerate, modify, remove, or return their IDs. For new independent source documents, return only genuinely new requirements. Overlap must be reconciled separately, not duplicated.':'');
  let proposed;
+ if(mappedGroups.length>1&&!options.selective){
+  if(mappedGroups.length>25)throw Error('More than 25 separate Business Requirements detected. Split the original document into smaller BR cycles.');
+  proposed=[];
+  for(const [index,group] of mappedGroups.entries()){
+   const sourcePartTexts=[];
+   for(const ref of group.units)sourcePartTexts.push(await baBrTextPipeline.read(registry,activeProject.id,ref));
+   const unitAnswers=baBrTextPipeline.mergeForDiscovery(group.units.map(ref=>ref.answers),group.units);
+   const excerpt=sourcePartTexts.join('').slice(0,6500);
+   const scopedPrompt=brWorkflow.promptForGeneration(unitAnswers,activeRequirements,
+    [{name:group.sourceName+' / BR '+group.brIndex,excerpt}])+
+    '\n\nSOURCE-SCOPED GENERATION: This is logical BR '+(index+1)+' of '+mappedGroups.length+
+    '. Return exactly ONE business requirement for THIS BR text group. Do not repeat other groups, claim AI tests passed, invent approvals or omit source-backed rules. Keep any existing matching BR ID when supported.'+
+    (historic.length?'\nHistorical requirements are READ ONLY: '+JSON.stringify(historic.slice(0,100))+'.':'');
+   let current;
+   await dashboard?.webview.postMessage({type:'baProgress',task:'generate',
+    message:'Generating BR '+(index+1)+'/'+mappedGroups.length+' from verified text files; completed BR drafts are accumulated until final save…'});
+   for(let attempt=1;attempt<=2;attempt++){
+    const prompt=scopedPrompt+(attempt>1?'\nRETRY: Return ONLY a valid JSON object with one requirement and the expected feature/story/task structure.':'');
+    const result=await aiAnswer(target,prompt+await roleSkillPrompt('business-analyst'),125000,{json:true});
+    try{
+     current=brWorkflow.parseGenerated(result);
+     if(current.length!==1)throw Error('Expected exactly one source-scoped BR from this text group.');
+     break;
+    }catch(error){
+     if(attempt===2)throw Error('BR '+(index+1)+'/'+mappedGroups.length+' generation failed: '+error.message+' No BR draft changes were saved. Retry the generation step.');
+    }
+   }
+   proposed.push(...current);
+  }
+ }else{
  for(let attempt=1;attempt<=2;attempt++){
   const prompt=attempt===1?question:question+'\n\nIMPORTANT: Previous response was not valid requirements JSON. Return ONLY one complete JSON object matching the specified schema, without code fences or explanation. Limit the response to essential requirements; do not truncate JSON.';
   const result=await aiAnswer(target,prompt+await roleSkillPrompt('business-analyst'),125000,{json:true});
@@ -3028,6 +3070,7 @@ async function generateBusinessRequirements(options={}){
    if(attempt===2)throw Error('AI generation failed validation twice: '+error.message+' No Business Requirements were changed. Retry with smaller source documents or a different AI model.');
    await dashboard?.webview.postMessage({type:'baProgress',task:'generate',message:'AI output was invalid. Retrying generation with stricter JSON instructions…'});
   }
+ }
  }
  if(!proposed?.length)throw Error('AI generated no valid Business Requirements. No changes were saved. Check the 12 discovery answers and retry.');
  const currentSaved=await discovery.load(registry,activeProject.id);if(currentSaved.revision!==saved.revision)throw Error('Discovery changed while generating BRs. Retry.');
