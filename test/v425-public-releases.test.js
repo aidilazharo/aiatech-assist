@@ -30,10 +30,15 @@ test('public extension and Library update checks select the newest release acros
  assert.equal(library.latest.version,'1.1.18');assert.equal(library.release.repository,'aidilazharo/library');
  assert.ok(calls.some(url=>url.includes('aidilazharo/extension'))&&calls.some(url=>url.includes('aidilazharo/library')));
 });
-test('an empty or unavailable additional repository does not hide an existing release',async()=>{
- const source=release('aidilazharo/aiatech-assist','v0.4.24-build.1',['atgv-aiatech-assist-0.4.24.vsix','vsix.sha256']);
- const result=await ext.latestAcrossRepositories({version:'0.4.20',request:apiRequest({'aidilazharo/aiatech-assist':[source],'aidilazharo/extension':new Error('offline')},[])});
- assert.equal(result.release.version,'0.4.24');assert.equal(result.errors.length,1);
+test('only dedicated public release mirrors are queried, never their source repositories',async()=>{
+ const calls=[];
+ const extension=await ext.latestAcrossRepositories({version:'0.4.20',request:apiRequest({'aidilazharo/extension':[release('aidilazharo/extension','v0.4.25-build.2',['atgv-aiatech-assist-0.4.25.vsix','vsix.sha256'])]},calls)});
+ const library=await lib.latestAcrossRepositories({request:apiRequest({'aidilazharo/library':[release('aidilazharo/library','v1.1.18-source-build.2',['tech-stacks-skills-1.1.18-source.zip','library-source.sha256'])]},calls)});
+ assert.deepEqual(ext.RELEASE_REPOSITORIES,['aidilazharo/extension']);
+ assert.deepEqual(lib.RELEASE_REPOSITORIES,['aidilazharo/library']);
+ assert.equal(extension.release.repository,'aidilazharo/extension');
+ assert.equal(library.release.repository,'aidilazharo/library');
+ assert.ok(calls.every(url=>!url.includes('/aiatech-assist/')&&!url.includes('/tech-stacks-skills/')));
 });
 test('a newer release without a verified package is shown but cannot silently downgrade installation',async()=>{
  const repos={'aidilazharo/aiatech-assist':[release('aidilazharo/aiatech-assist','v0.4.24-build.1',['atgv-aiatech-assist-0.4.24.vsix','vsix.sha256'])],
