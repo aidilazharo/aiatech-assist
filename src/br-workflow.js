@@ -672,7 +672,7 @@ async function commitSourceMapping(registry,id,revision,{digests,proposals=[],pr
   next.importDigest=crypto.createHash('sha256').update('selected:v1:'+JSON.stringify(documents.map(x=>[x.name,x.digest]))).digest('hex');
   next.importEpoch=Math.max(1,Number(next.importEpoch||0)+1);
   next.discoveryRevision='';invalidate(next,'New source mapping completed');
-  next.mappingCompleted={epoch:next.importEpoch,digests:[...digests],sourceDigests:next.sourceDocuments.map(x=>x.digest).sort(),at:new Date().toISOString(),proposals:answers,preflights:(Array.isArray(preflights)?preflights:[]).filter(item=>digests.includes(item?.digest)&&item?.status==='ready'&&item?.originalPreserved===true).slice(0,10)};
+  next.mappingCompleted={epoch:next.importEpoch,digests:[...digests],sourceDigests:next.sourceDocuments.map(x=>x.digest).sort(),at:new Date().toISOString(),proposals:answers,preflights:(Array.isArray(preflights)?preflights:[]).filter(item=>digests.includes(item?.digest)&&['ready','needs-review'].includes(item?.status)&&item?.originalPreserved===true).slice(0,10)};
   for(const revision of next.sourceRevisionHistory||[])if(revision.review==='awaiting-discovery-and-requirement-approval'&&digests.includes(revision.toDigest))revision.mappingReviewedAt=new Date().toISOString();
   event(next,'source-mapping-completed',{epoch:next.importEpoch,count:digests.length,atomic:true});
  });
