@@ -2312,7 +2312,7 @@ async function processSelectedDiscoverySources(msg){
      }
     }
     partAnswers.push(proposals);
-    await atgvJobCheckpoint(run.projectId,'processDiscoverySources',{
+    if(typeof atgvJobCheckpoint==='function')await atgvJobCheckpoint(run.projectId,'processDiscoverySources',{
      step:'mapped_section_'+String(part+1),
      inputHash:sha(sections[part]),
      outputHash:sha(JSON.stringify(proposals)),
