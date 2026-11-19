@@ -1315,7 +1315,7 @@ async function startupStatus(projects=[]){
  return {required:!startupSessionProceedApproved&&!openingActive,defaults:startupSetup.DEFAULTS,
   selectedProject:selected?{id:selected.id,name:selected.name,techStackId:selected.techStackId,techStackCompanionId:selected.techStackCompanionId||''}:null,
   verified:!!verified,offlineLibrary:offline?{version:offline.version,filename:offline.filename,repository:offline.repository}:null,
-  saved:startupSavedConnectionFields()};
+  saved:typeof startupSavedConnectionFields==='function'?startupSavedConnectionFields():{}};
 }
 async function requireAutomaticStartup(projectId){
  if(!registry||!getWorkspace()||!projectId||context.workspaceState.get('atgvAssist.activeProject','')!==projectId)throw Error('Previously selected project is unavailable. Select a project manually.');
