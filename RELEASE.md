@@ -1,16 +1,16 @@
-# ATGV AIATECH Assist v0.4.40
+# ATGV AIATECH Assist v0.4.41
 
-## Business Requirements — Markdown-only intermediate files
+## VSIX production-size optimization and reporting
 
-- Preserve the original DOCX/PDF unchanged and authoritative; create verified `.md` source units under `documents/requirements/br-markdown/`, with no newly generated TXT intermediates.
-- Add a Markdown BR heading, SHA-256 provenance, continuation number, and verbatim extracted source content to each unit. AI mapping reads exactly the extracted source characters, not the Markdown wrapper.
-- Keep logical multiple-BR grouping, continuation-part grouping, 12-question discovery, sequential preflight/mapping, cumulative results, human review, Jira publication gates and authenticated resume checkpoints.
-- Migrate v0.4.39 saved TXT references to verified Markdown on demand, preserving SHA-256 source identity and prior mapped answers. Retire legacy TXT only after Markdown integrity verification.
-- Delete both Markdown intermediates and obsolete legacy TXT units when deleting the original document.
-- Extend tests for Markdown exact round-trips, tampering detection, migration and source cleanup.
+- Minify production JavaScript at packaging time with pinned Terser 5.31.6 (no compression transformations or identifier mangling) and CSS with pinned clean-css 5.3.3. Original tracked files remain unchanged, and build-only dependencies are excluded from the VSIX.
+- Keep critical runtime modules, offline parsers, assets, license files, original document handling, UI design system, extension command activation and SDLC Library integration intact; no speculative removal of modules that may be loaded dynamically.
+- Generate dist/vsix-size-report.json and dist/vsix-size-report.md with exact ZIP member sizes, original and optimized bytes, biggest files, folder breakdown and duplicate asset candidates.
+- Enforce a hard 1,400,000-byte VSIX size budget against the verified v0.4.40 1,327,153-byte baseline; fail packaging and block release if exceeded.
+- Include the size reports in CI summaries, build artifacts and GitHub Releases so future version growth can be audited.
+- Add regression coverage for minified JS/CSS syntax, original source immutability, release packaging checks and version alignment.
 
-## Fidelity limitations
+## Notes
 
-- Markdown preserves the *extracted* source without inventing missing tables, figures, approvals or requirements. A conversion cannot reconstruct DOCX/PDF information not captured by the existing extractor.
-- Split logic is conservative and based on numbered BR headings. Large individual BRs remain grouped as continuation parts.
-- More than 64 processing units or an oversized extraction fails safely; no content is silently truncated.
+- Source ZIP remains complete and unminified, preserving development and auditing capability.
+- The identical icon/branding files are retained because existing runtime paths need both until a verified migration is available; they are listed in the size report rather than removed unsafely.
+- Minifiers are build-time devDependencies only. End users need no additional npm installation to install the released VSIX.

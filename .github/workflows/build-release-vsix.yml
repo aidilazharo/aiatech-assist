@@ -71,6 +71,10 @@ jobs:
             'source_filename=ATGV-AIATECH-Assist-v' + pkg.version + '-Source.zip\n');
           NODE
 
+      - name: Install pinned build-only minifiers
+        if: steps.source.outputs.ready == 'true'
+        run: npm install --ignore-scripts --no-save --no-package-lock --no-audit --no-fund
+
       - name: Verify the Copilot SDK runtime
         if: steps.source.outputs.ready == 'true'
         run: node scripts/verify-copilot-sdk.js
@@ -94,6 +98,8 @@ jobs:
           FILE: ${{ steps.meta.outputs.filename }}
         run: |
           test -s "../$FILE"
+          test -s dist/vsix-size-report.json
+          test -s dist/vsix-size-report.md
           mkdir -p dist
           cp "../$FILE" "dist/$FILE"
           (cd dist && sha256sum "$FILE" > vsix.sha256)
@@ -103,6 +109,7 @@ jobs:
             echo 'Tests and VSIX activation verification passed.'
             echo 'SHA-256:'
             cat dist/vsix.sha256
+            cat dist/vsix-size-report.md
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Archive committed source and verify ZIP
@@ -127,6 +134,8 @@ jobs:
           path: |
             dist/${{ steps.meta.outputs.filename }}
             dist/vsix.sha256
+            dist/vsix-size-report.json
+            dist/vsix-size-report.md
             dist/${{ steps.meta.outputs.source_filename }}
             dist/source.sha256
           if-no-files-found: error
@@ -181,13 +190,13 @@ jobs:
           test -s "dist/${FILE}"
           test -s "dist/${SOURCE_FILE}"
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" "dist/${FILE}" "dist/vsix.sha256" "dist/${SOURCE_FILE}" "dist/source.sha256" \
+            gh release create "$tag" "dist/${FILE}" "dist/vsix.sha256" "dist/vsix-size-report.json" "dist/vsix-size-report.md" "dist/${SOURCE_FILE}" "dist/source.sha256" \
               --target "$SOURCE_SHA" \
               --title "ATGV v${VERSION} (build ${BUILD_NUMBER})" \
               --notes "Automated main-branch VSIX build. Source commit: ${SOURCE_SHA}. Regression suite and package verification passed." \
               --prerelease \
               --latest=false
           else
-            gh release upload "$tag" "dist/${FILE}" "dist/vsix.sha256" "dist/${SOURCE_FILE}" "dist/source.sha256" --clobber
+            gh release upload "$tag" "dist/${FILE}" "dist/vsix.sha256" "dist/vsix-size-report.json" "dist/vsix-size-report.md" "dist/${SOURCE_FILE}" "dist/source.sha256" --clobber
           fi
           echo "GitHub prerelease: $tag" >> "$GITHUB_STEP_SUMMARY"

@@ -1,6 +1,6 @@
 from pathlib import Path
 from xml.sax.saxutils import escape, quoteattr
-import json, zipfile, re
+import json, zipfile, re, subprocess, tempfile, hashlib
 
 root=Path(__file__).resolve().parent.parent
 pkg=json.loads((root/'package.json').read_text())
@@ -81,8 +81,89 @@ for name in files:
 content_types.append('</Types>')
 types='\n'.join(content_types)+'\n'
 output=root.parent/f'{pkg["name"]}-{semver}.vsix'
-with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as z:
-    z.writestr('[Content_Types].xml',types)
-    z.writestr('extension.vsixmanifest',xml)
-    for name in files:z.write(root/name,'extension/'+name)
-print(f'Created: {output} ({output.stat().st_size:,} bytes) as {identifier}')
+# Keep source files untouched. The build-only optimizers emit only modified
+# production assets to this isolated staging folder; all others are packaged
+# byte-for-byte from source. Node packages never enter the VSIX.
+with tempfile.TemporaryDirectory(prefix='atgv-vsix-stage-') as staging:
+    stage=Path(staging)
+    subprocess.run(['node',str(root/'scripts'/'optimize-vsix-assets.js'),str(stage)],
+                   cwd=root,check=True,timeout=180)
+    audit=json.loads((stage/'optimization-manifest.json').read_text(encoding='utf-8'))
+    modified=set(entry['path'] for entry in audit['files'])
+    if not modified.issubset(set(files)):
+        raise SystemExit('Optimizer attempted to stage an unexpected VSIX path.')
+    for name in files:
+        if (root/name).is_symlink():
+            raise SystemExit('Symlink cannot be packaged: '+name)
+        if name in modified and not (stage/name).is_file():
+            raise SystemExit('Optimized VSIX asset missing: '+name)
+    with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as z:
+        z.writestr('[Content_Types].xml',types)
+        z.writestr('extension.vsixmanifest',xml)
+        for name in files:
+            z.write(stage/name if name in modified else root/name,'extension/'+name)
+
+    # Measure the actual compressed ZIP members, not estimated source bytes.
+    with zipfile.ZipFile(output,'r') as z:
+        members=[entry for entry in z.infolist() if entry.filename.startswith('extension/')]
+        details=[{'path':entry.filename[len('extension/'):],
+                  'sourceBytes':(root/entry.filename[len('extension/'):]).stat().st_size,
+                  'packagedBytes':entry.file_size,
+                  'compressedBytes':entry.compress_size}
+                 for entry in members]
+    budget=json.loads((root/'scripts'/'vsix-size-budget.json').read_text(encoding='utf-8'))
+    limit=budget['maxCompressedBytes']
+    if not isinstance(limit,int) or limit<500000 or limit>10000000:
+        raise SystemExit('Invalid VSIX size budget.')
+    zippedBytes=output.stat().st_size
+    groups={}
+    for item in details:
+        name=item['path'].split('/')[0]
+        group=groups.setdefault(name,{'files':0,'sourceBytes':0,'packagedBytes':0,'compressedBytes':0})
+        group['files']+=1
+        for key in ('sourceBytes','packagedBytes','compressedBytes'):
+            group[key]+=item[key]
+    seen={}
+    for item in details:
+        p=item['path']
+        if item['sourceBytes']>1024:
+            digest=hashlib.sha256((root/p).read_bytes()).hexdigest()
+            seen.setdefault(digest,[]).append(p)
+    duplicates=[{'paths':paths,'sourceBytes':(root/paths[0]).stat().st_size}
+                for paths in seen.values() if len(paths)>1]
+    report={'schema':1,'version':pkg['version'],
+            'vsixBytes':zippedBytes,'sizeBudgetBytes':limit,
+            'baselineVersion':budget['baselineVersion'],
+            'baselineBytes':budget['baselineBytes'],
+            'deltaFromBaselineBytes':zippedBytes-budget['baselineBytes'],
+            'sourceFileCount':len(details),
+            'originalSourceBytes':sum(d['sourceBytes'] for d in details),
+            'packagedSourceBytes':sum(d['packagedBytes'] for d in details),
+            'minification':audit,'groups':groups,'duplicates':duplicates,
+            'files':sorted(details,key=lambda d:d['compressedBytes'],reverse=True)}
+    dist=root/'dist'
+    dist.mkdir(exist_ok=True)
+    (dist/'vsix-size-report.json').write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
+    markdown=['### VSIX size audit — v'+pkg['version'],'',
+              '- Final VSIX: **'+f'{zippedBytes:,}'+' bytes**',
+              '- Baseline v'+budget['baselineVersion']+': '+f'{budget["baselineBytes"]:,}'+' bytes',
+              '- Change from baseline: '+f'{zippedBytes-budget["baselineBytes"]:+,}'+' bytes',
+              '- Maximum budget: '+f'{limit:,}'+' bytes',
+              '- Packaged source files: '+str(len(details)),
+              '- Build-only minified files: '+str(len(audit['files'])),'',
+              '| Folder | Compressed bytes | Source bytes | Files |',
+              '|---|---:|---:|---:|']
+    for name,group in sorted(groups.items(),key=lambda kv:kv[1]['compressedBytes'],reverse=True):
+        markdown.append('| '+name+' | '+f'{group["compressedBytes"]:,}'+' | '+f'{group["sourceBytes"]:,}'+' | '+str(group['files'])+' |')
+    markdown.extend(['','#### Largest compressed files','','| Path | Compressed bytes |','|---|---:|'])
+    for item in report['files'][:12]:
+        markdown.append('| '+item['path']+' | '+f'{item["compressedBytes"]:,}'+' |')
+    if duplicates:
+        markdown.extend(['','#### Identical retained assets',''])
+        for duplicate in duplicates:
+            markdown.append('- '+', '.join(duplicate['paths'])+' ('+str(duplicate['sourceBytes'])+' bytes each; retained for compatibility)')
+    (dist/'vsix-size-report.md').write_text('\n'.join(markdown)+'\n',encoding='utf-8')
+    print('Created: '+str(output)+' ('+f'{zippedBytes:,}'+' bytes) as '+identifier)
+    print('Size audit: '+str(dist/'vsix-size-report.json'))
+    if zippedBytes>limit:
+        raise SystemExit('VSIX '+f'{zippedBytes:,}'+' exceeds the '+f'{limit:,}'+'-byte size budget. Review dist/vsix-size-report.md before publishing.')
