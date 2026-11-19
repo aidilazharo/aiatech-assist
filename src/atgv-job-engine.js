@@ -22,11 +22,24 @@ function safeError(error){
 }
 function category(command){
  if(!SAFE_COMMAND.test(String(command||'')))throw Error('Invalid workflow command.');
- if(/^(?:processDiscoverySources|generateBusinessRequirements|generateDrafts|applyDiscoveryReview|devCopilotStart|developerBrPreviewDraft|designGenerate|designRegenerateAffected)$/i.test(command))return {role:/^(?:processDiscoverySources|generateBusinessRequirements|applyDiscoveryReview)/.test(command)?'BA':/^dev|^developer/.test(command)?'Developer':'UI/UX',kind:'ai',retryable:true};
- if(/^(?:brJiraSync|brRoleTaskRepairPublish|architectPublish|architectCommit|syncDocuments|sync|uxPublishFrontend)$/i.test(command))return {role:command.startsWith('br')?'BA':command.startsWith('architect')?'SA':command.startsWith('ux')?'UI/UX':'Integration',kind:'write',retryable:false};
- if(/^(?:catalogPull|startupInstallModule|architectBootstrap|architectCustomRun|architectSaveStack|architectRunServer|developerBrRun|developerBrStartServer|architectTestStack)$/i.test(command))return {role:command.startsWith('architect')?'SA':command.startsWith('developer')?'Developer':'Setup',kind:'install',retryable:false};
- if(/^(?:brJiraPreview|architectCheckStackUpdates|.*Refresh|.*Check|.*List)$/i.test(command))return {role:command.startsWith('br')?'BA':command.startsWith('architect')?'SA':'PM',kind:'read',retryable:true};
- return {role:'ATGV',kind:'local',retryable:false};
+ // Read-only checks can be retried; mutating API requests, Git actions, and
+ // installation/development processes require a fresh state inspection.
+ const role=/^(?:processDiscoverySources|generateBusinessRequirements|generateDrafts|applyDiscoveryReview|brJira|brRoleTask)/.test(command)?'BA':
+  /^architect/.test(command)?'Solution Architect':
+  /^(?:ux|design)/.test(command)?'UI/UX Designer':
+  /^(?:developer|devCopilot)/.test(command)?'Developer':
+  /^pm/.test(command)?'Project Manager':
+  /^(?:catalog|startup|checkSoftware)/.test(command)?'Setup':
+  /^(?:sync|refreshConnected)/.test(command)?'Workspace':'ATGV';
+ if(/^(?:brJiraSync|brJiraApprove|brRoleTaskRepairPublish|architectPublish|architectCommit|architectApproveStack|architectResetStack|pmJiraSetAssignee|pmJiraTransition|pmApproveEffortBaseline|uxPublishFrontend|uxPipelineDecide|designApprove|syncDocuments|sync|aiServiceProposalDecision)$/.test(command))
+  return {role,kind:'write',retryable:false};
+ if(/^(?:catalogPull|startupInstallModule|architectBootstrap|architectCustomRun|architectSaveStack|architectRunServer|developerBrRun|developerBrStartServer|architectTestStack|aiServiceInstall|architectPullStackUpdates|uxFrameworkSync)$/.test(command))
+  return {role,kind:'install',retryable:false};
+ if(/^(?:brJiraPreview|brJiraScanExternal|brJiraRefreshWorkStates|pmJiraAssignableUsers|architectCheckStackUpdates|architectCustomScan|catalogCheck|catalogTest|refreshConnectedSources|checkSoftwareUpdates|aiServiceRefresh)$/.test(command))
+  return {role,kind:'read',retryable:true};
+ if(/^(?:processDiscoverySources|generateBusinessRequirements|generateDrafts|applyDiscoveryReview|devCopilotStart|developerBrPreviewDraft|designGenerate|designRegenerateAffected|uxPipelineGenerate|uxDesignGenerate|aiServiceRun|architectRecommend|architectValidate)$/.test(command))
+  return {role,kind:'ai',retryable:true};
+ return {role,kind:'local',retryable:false};
 }
 async function secureFolder(root){
  const resolved=path.resolve(root);
