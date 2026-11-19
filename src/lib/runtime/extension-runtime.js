@@ -1797,30 +1797,29 @@ async function testOpeningProject(){
     openingFlow.tested(cached.warnings);
     return 'Recent connection check reused.';
   }
-  await openingProgress('connection','Authenticating Jira…',17);
-  const account=await testJiraConnection(config,token);
-  await openingProgress('connection','Verifying Confluence space…',26);
-  const space=await getConfluenceSpace(config,token);
+  await openingProgress('connection','Verifying Jira, Confluence and optional GitHub in parallel…',17);
   const projectKey=config.get('jira.projectKey');
   const warnings=[];
-  if(projectKey){
-    await requestJson(`${baseAtlassian(config)}/rest/api/3/project/${encodeURIComponent(projectKey)}`,{token,basicEmail:config.get('jira.email')});
-    try { await jiraIssueTypes(config, token); }
-    catch (error) { warnings.push('Jira issue creation is unavailable: ' + String(error.message || error).slice(0, 440)); }
-  }
-                                                                                 
-  // Startup onboarding verifies the GitHub ACCOUNT and stores its owner even
-  // when no project repository exists. Never treat an account-only owner as an
-  // incomplete project repo or prevent access to the main SDLC interface.
-  // A repository name (not the account owner) opts into project GitHub checks.
+  // Parallel independent read-only checks; all required checks still must
+  // succeed and no project is activated before the verification barrier.
+  const accountTask=testJiraConnection(config,token);
+  const spaceTask=getConfluenceSpace(config,token);
+  const jiraProjectTask=projectKey?(async()=>{
+   await requestJson(`${baseAtlassian(config)}/rest/api/3/project/${encodeURIComponent(projectKey)}`,{token,basicEmail:config.get('jira.email')});
+   try{await jiraIssueTypes(config,token);}
+   catch(error){warnings.push('Jira issue creation is unavailable: '+String(error.message||error).slice(0,440));}
+  })():Promise.resolve();
+  let githubTask=Promise.resolve();
+  // A GitHub account owner without a project repo is valid and nonblocking.
   if(gRepo){
-    if(!gOwner)throw new Error('This project specifies a GitHub repository without an owner. Set the owner in Project Settings or clear the repository.');
-    await openingProgress('connection','Checking GitHub repository permissions…',33);
-    await testGithubConnection(config,gToken);
+   if(!gOwner)throw Error('This project specifies a GitHub repository without an owner. Set the owner in Project Settings or clear the repository.');
+   githubTask=testGithubConnection(config,gToken);
   }else{
-    warnings.push('Project GitHub repository not configured (optional). Connect a repository later in Project Settings.');
-    await recordStartupDiagnostic({stage:'project-opening',projectId:project.id,status:'optional-github-skipped',detail:'GitHub account owner may be saved independently of a project repository; project opening is allowed.'});
+   warnings.push('Project GitHub repository not configured (optional). Connect a repository later in Project Settings.');
+   githubTask=recordStartupDiagnostic({stage:'project-opening',projectId:project.id,status:'optional-github-skipped',
+    detail:'GitHub account owner may be saved independently of a project repository; project opening is allowed.'});
   }
+  const [account,space]=await Promise.all([accountTask,spaceTask,jiraProjectTask,githubTask]).then(results=>[results[0],results[1]]);
   openingFlow.tested(warnings);
   verifiedConnections.set(project.id,{key:verifyKey,at:Date.now(),warnings});
   return `Jira authenticated as ${account.displayName}; Confluence space ${space.name||space.key} verified.${warnings.length?' '+warnings.join(' '):' GitHub verified.'}`;
