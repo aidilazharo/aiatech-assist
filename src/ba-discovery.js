@@ -19,7 +19,7 @@ const QUESTIONS = Object.freeze([
     ['dependencies', 'Systems, teams, vendors and dependencies'],
     ['constraints', 'Constraints and non-functional requirements'],
     ['measures', 'Measurable success criteria'],
-    ['questions', 'Open decisions and unresolved questions (NONE if none)']
+    ['questions', 'Open decisions and unresolved questions']
 ]);
 function folder(registry, id) { return path.join(path.dirname(registry.fileFor(id)), 'documents', 'requirements'); }
 async function safeLocation(registry, id) {
@@ -53,11 +53,16 @@ function normalize(answers = {}, options = {}) {
     }
     return result;
 }
+// Legacy NONE and explicit plain-language no-decision confirmations remain compatible.
+// Any actual unresolved decisions are valuable BA evidence, not a reason to block AI Review.
+const NO_OPEN_DECISIONS = /^(?:none|no (?:open|outstanding|unresolved) (?:decisions|questions|issues)|n\/a)[.!]?$/i;
+function noOpenDecisions(value) { return NO_OPEN_DECISIONS.test(String(value || '').trim()); }
 function assess(answers) {
     const filled = QUESTIONS.filter(([k]) => answers[k]?.trim()).length;
     const unresolved = String(answers.questions || '').trim();
-    const canReview = filled === QUESTIONS.length && /^none[.!]?$/i.test(unresolved);
-    return { filled, total: QUESTIONS.length, canReview, missing: QUESTIONS.filter(([k]) => !answers[k]?.trim()).map(([key, label]) => ({ key, label })), needsDecision: !!unresolved && !/^none[.!]?$/i.test(unresolved) };
+    const needsDecision = !!unresolved && !noOpenDecisions(unresolved);
+    const canReview = filled === QUESTIONS.length;
+    return { filled, total: QUESTIONS.length, canReview, canApprove: canReview && !needsDecision, missing: QUESTIONS.filter(([k]) => !answers[k]?.trim()).map(([key, label]) => ({ key, label })), needsDecision };
 }
 // If a prior save wrote the answers but failed to update the workflow record,
 // compare against that record's last linked answers on retry. Otherwise the
@@ -105,4 +110,4 @@ async function save(registry, id, answers, baseRevision) {
         return load(registry, id);
     });
 }
-module.exports = { QUESTIONS, MAX_ANSWER_LENGTH, assess, changesForRegistration, load, save, asMarkdown };
+module.exports = { QUESTIONS, MAX_ANSWER_LENGTH, assess, noOpenDecisions, changesForRegistration, load, save, asMarkdown };
