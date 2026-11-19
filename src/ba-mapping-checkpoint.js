@@ -17,9 +17,9 @@ function validateMeta(meta){
 }
 function validatePayload(payload){
  const meta=validateMeta(payload);
- if(payload.schema!==1||!Array.isArray(payload.sectionLengths)||!payload.sectionLengths.length||payload.sectionLengths.length>25||
+ if(payload.schema!==1||!Array.isArray(payload.sectionLengths)||!payload.sectionLengths.length||payload.sectionLengths.length>64||
     payload.sectionLengths.some(n=>!Number.isSafeInteger(n)||n<1||n>300000))throw Error('Invalid AI resume sections.');
- for(const [name,limit,maxLength] of [['preflight',60,20000],['mapping',30,95000],['cross',5,12000]]){
+ for(const [name,limit,maxLength] of [['preflight',100,20000],['mapping',80,95000],['cross',5,12000]]){
   const entries=payload[name];
   if(!entries||typeof entries!=='object'||Array.isArray(entries)||Object.keys(entries).length>limit||
      Object.entries(entries).some(([key,value])=>!DIGEST.test(key)||typeof value!=='string'||value.length>maxLength))
