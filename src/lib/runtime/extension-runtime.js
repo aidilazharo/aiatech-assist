@@ -1800,6 +1800,7 @@ async function testOpeningProject(){
   await openingProgress('connection','Verifying Jira, Confluence and optional GitHub in parallel…',17);
   const projectKey=config.get('jira.projectKey');
   const warnings=[];
+  if(gRepo&&!gOwner)throw Error('This project specifies a GitHub repository without an owner. Set the owner in Project Settings or clear the repository.');
   // Parallel independent read-only checks; all required checks still must
   // succeed and no project is activated before the verification barrier.
   const accountTask=testJiraConnection(config,token);
@@ -1812,7 +1813,6 @@ async function testOpeningProject(){
   let githubTask=Promise.resolve();
   // A GitHub account owner without a project repo is valid and nonblocking.
   if(gRepo){
-   if(!gOwner)throw Error('This project specifies a GitHub repository without an owner. Set the owner in Project Settings or clear the repository.');
    githubTask=testGithubConnection(config,gToken);
   }else{
    warnings.push('Project GitHub repository not configured (optional). Connect a repository later in Project Settings.');
@@ -1862,7 +1862,8 @@ async function openVerifiedProject(){
    throw error;
   }
   await recordStartupDiagnostic({stage:'project-opening',projectId:p.id,status:'opened'});
-  await rememberOpened(p.id);
+  // activateProject already persists the most recent project before its
+  // dashboard refresh. Avoid a redundant synchronous storage write here.
   await focusAtgvWorkspace();
   return `Opened ${p.name}. SDLC navigation is now available.`;
 }
@@ -1893,7 +1894,6 @@ async function launchProject(msg){
   await openingProgress('workspaceReady','Project workspace prepared.');
   await openingProgress('workspace','Opening project…');
   await openVerifiedProject();
-  await rememberOpened(openingFlow.candidate.id);
   await openingProgress('done','Project ready');
 }
                                                                                  
@@ -1913,7 +1913,6 @@ async function launchLocalOffline(){
   openingFlow.initialized();
   await openingProgress('workspace','Loading local project…');
   await openVerifiedProject();
-  await rememberOpened(project.id);
   await openingProgress('done','Local workspace ready');
 }
 function requireOnline(){
@@ -7434,8 +7433,9 @@ async function handleDashboardMessage(msg){
         ++startupSequence;
         try{
           if(msg.autoResume){if(!startupSessionProceedApproved||!await storedStartupVerification())throw Error('Saved connections require verification.');await requireAutomaticStartup(String(msg.projectId||''));}
+          // activateProject already refreshed the dashboard after committing
+          // the opened state; a duplicate refresh delayed the finished UI.
           await guardedOpeningStep(()=>launchProject(msg));
-          await refreshDashboard();
         }catch(e){
           report('Project launch: '+e.message);
           await recordStartupDiagnostic({stage:'project-opening',status:'failed',projectId:openingFlow.candidate?.id||'',detail:e.message});
