@@ -1,25 +1,26 @@
-# ATGV AIATECH Assist v0.4.46
+# ATGV AIATECH Assist v0.4.47
 
-## Business Analyst: explicit Discovery Save and reliable partial-save recovery
+## Startup and performance
 
-- Disabled automatic saves of the 12 Discovery questions. Edits remain unsaved until **Save 12 Questions** is clicked.
-- Reject legacy webview autosave commands at the host boundary, preventing race conditions with user-initiated writes.
-- Keep an immutable snapshot of the answers during manual Save; preserve any typing made while the write is in progress for explicit further saving.
-- When the Discovery JSON file was already written but BR-register linking failed, permit a manual retry against the persisted revision without rewriting the Discovery file.
-- Detect already-linked identical answers to avoid redundant revisions or unnecessarily invalidating an AI Review.
-- Report specific save errors in the Discovery UI, retain user edits and allow manual retry. Stale on-disk revisions cannot be overwritten silently.
-- Add **saveDiscovery** to the downloadable BR troubleshooting log's tracked operations. The log now records attempts, errors and completion without storing answers.
+- Begin local technology-stack prerequisite checks as soon as the Start webview is ready, without waiting for full project state.
+- Hide the optional GitHub Copilot SDK card and the initial Checking permissions placeholder; exclude hidden optional SDK from startup readiness issues.
+- Remove hover shading from the prerequisite scan summary and redundant Start navigation dividers and project-picker guidance.
+- Restore saved non-secret Jira, Confluence and GitHub fields early. Reuse verified credential state during an open session instead of rereading the OS keychain at every dashboard refresh.
+- Run independent Jira and Confluence opening checks concurrently and remove redundant recent-project persistence writes.
+- Disable Open Project during launch, use a dark-gray disabled appearance and retain the existing live opening-progress bar.
 
-## Jira Preview: automatic field population
+## Business Analyst requirements workflow
 
-- Show all Jira metadata fields with source-backed auto-filled values, Jira defaults, existing values or explicit missing-evidence placeholders.
-- Populate every supported writable Jira text/custom text field with approved-BR evidence or a clearly labelled text placeholder.
-- For non-text fields (assignee, priority, date, number, option and similar), show a preview-only placeholder when evidence is missing, without sending invalid placeholder strings to Jira.
-- Keep existing unsupported Jira values intact; required fields without valid values still block publication instead of inventing information.
-- Add per-issue summary counts for mapped fields, text placeholders, Jira defaults, existing values and preview-only values.
+- Display AI Review findings in discovery-question order (1–12), retaining their original severity indicators.
+- Give Generate Requirements, Preview & Save, and Approval separate visual stages with distinct instructions and actions. The generated documents remain under the same durable BR register.
+- Require an explicitly saved BR draft before approval; preserve the source revision, editing safeguards and human approval checks.
 
-## Tests and compatibility
+## Public release discovery
 
-- Added tests covering manual-only saving, stale revisions, partial-save retry, idempotent saves and Jira field-type safety.
-- Existing BR documents, source evidence, approved changes, Jira work items and role permissions are not modified by this update.
-- Missing values in typed mandatory Jira fields still require Jira-valid data before approval or publication.
+- Query only `aidilazharo/extension` and `aidilazharo/library` when searching for public release artifacts.
+- Exclude `aidilazharo/aiatech-assist` and `aidilazharo/tech-stacks-skills` from public release repository discovery without changing fixed source/catalog update URLs.
+
+## Verification
+
+- Add regression assertions for the release repository list, startup scan trigger, Jira/Confluence parallel checks, discovery question ordering, and separate BR stages.
+- No existing BR, Jira issue, approval, project repository, or catalog file is modified by an application data migration.

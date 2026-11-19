@@ -10,7 +10,9 @@ const path=require('node:path');
 const {URL}=require('node:url');
 
 const REPO='aidilazharo/aiatech-assist';
-const RELEASE_REPOSITORIES=Object.freeze(['aidilazharo/extension',REPO]);
+// Public release discovery uses only the dedicated distribution repository.
+// The source repository remains the fixed source-of-truth for signed update metadata.
+const RELEASE_REPOSITORIES=Object.freeze(['aidilazharo/extension']);
 const DEFAULT_RELEASE_URL=`https://github.com/${REPO}/releases`;
 const API=`https://api.github.com/repos/${REPO}/releases?per_page=30`;
 const PINNED_RELEASE_URL=`https://github.com/${REPO}/releases/latest`;

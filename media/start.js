@@ -603,7 +603,7 @@ function gateProjectRow(root,project,{recent=false}={}){
   const meta=document.createElement('small');meta.textContent=[project.settings?.confluence?.spaceKey||'Local project',projectReadiness[project.id]?'Ready':'Setup required'].join('  ·  ');
   text.append(title,meta);
   const action=document.createElement('button');action.type='button';action.textContent=projectReadiness[project.id]?'Open Project':'Set Up & Open';
-  action.disabled=gateBusy;action.addEventListener('click',()=>launchFromGate({projectId:project.id}));
+  action.disabled=gateBusy;action.setAttribute('aria-busy',String(gateBusy));action.addEventListener('click',()=>launchFromGate({projectId:project.id}));
   row.append(text,action);root.append(row);
 }
 function renderGateResults(){
@@ -5917,7 +5917,20 @@ function renderDiscoverySummary(){
   const reviewPanel=$('discoveryReviewPanel');
   reviewPanel.classList.toggle('hidden',!showReview);
   if(showReview)reviewPanel.open=true;
-  document.querySelector('.br-workflow-panel').classList.toggle('hidden',!showDocuments);
+  const documentsPanel=document.querySelector('.br-workflow-panel');
+  documentsPanel.classList.toggle('hidden',!showDocuments);
+  documentsPanel.dataset.step=displayed;
+  const documentStageCopy={
+   generate:['Generate Requirements','Create or update Business Requirements drafts from the reviewed discovery answers. No document is saved or approved automatically.'],
+   save:['Preview & Save','Review each generated document, make edits, and explicitly save its draft. Approval is a separate milestone.'],
+   approve:['Approve Requirements','Review saved draft revisions and record explicit approval. This milestone does not regenerate or silently edit requirements.']
+  };
+  const stageCopy=documentStageCopy[displayed]||['Business Requirements Documents',''];
+  $('brStageTitle').textContent=stageCopy[0];
+  $('brStageDescription').textContent=stageCopy[1];
+  $('brGenerateSummary').classList.toggle('hidden',displayed!=='generate');
+  $('brGenerateSummary').textContent=!activeBrs.length?'No Business Requirements generated yet. Use Generate Business Requirements Documents.':
+   activeBrs.length+' Business Requirements generated · '+savedBrs+' saved draft(s) · '+approved+' approved. Select Next Step to open the separate Preview & Save screen.';
   document.querySelector('.change-proposal-panel').classList.toggle('hidden',!showDocuments||!generated||!baShowChangeProposal);
   $('baOpenChangeProposal').classList.toggle('hidden',!showDocuments||!generated);
   $('baOpenChangeProposal').textContent=baShowChangeProposal?'Close Change Proposal':'Propose Requirement Change';
@@ -6443,6 +6456,7 @@ function brApprovalPrerequisites(br){
  const add=(key,message)=>blockers.push({key,message});
  const independent=!!roleSettings?.enabled?.includes('business-owner');
  if(!br||br.status!=='draft')add('draft','Only a draft Business Requirement can be approved.');
+ if(br?.status==='draft'&&!br.draftSavedAt)add('draftSaved','Open Preview & Save and save this exact draft before approving it.');
  if(brReadOnly)add('ownership','The document is read-only. Use Assign to Me in Business Requirements Documents, or request a transfer from its owner.');
  if(baBusyTask||brEditorSaving)add('busy','Wait for the current operation to complete.');
  if(!baReviewCurrent())add('review','Run AI Review against the latest saved Discovery answers.');
@@ -6470,13 +6484,14 @@ function updateBREditorActions(){
  const canEdit=!!br&&draft&&!brReadOnly&&!baBusyTask&&!brEditorSaving;
  const independent=!!roleSettings?.enabled?.includes('business-owner');
  const isBusinessOwner=$('sidebarRole')?.value==='business-owner';
- $('brEditEndorse').classList.toggle('hidden',!independent||!draft);
+ const editorMilestone=baViewedStep||window.baLastGuideProgress?.find(step=>step.current)?.key||'';
+ $('brEditEndorse').classList.toggle('hidden',!independent||!draft||editorMilestone==='save');
  $('brEditEndorse').disabled=!independent||!draft||!br?.draftSavedAt||brEditorDirty||!!baBusyTask||!isBusinessOwner;
  const blockers=brApprovalPrerequisites(br);
  const canApprove=!!br&&!blockers.length;
- $('brEditSave').classList.toggle('hidden',brReadOnly);
+ $('brEditSave').classList.toggle('hidden',brReadOnly||editorMilestone==='approve');
  $('brEditSave').disabled=!canEdit||!!br?.draftSavedAt&&!brEditorDirty;
- $('brEditApprove').classList.toggle('hidden',!draft&&!approved);
+ $('brEditApprove').classList.toggle('hidden',(!draft&&!approved)||editorMilestone==='save');
  $('brEditApprove').textContent=approved?'✓ Approved':independent?'Final Approve Business Requirements':'Approve Business Requirements';
  $('brEditApprove').disabled=!canApprove;
  $('brEditApprove').title=blockers.length?blockers.map(x=>x.message).join(' '):'Approve this reviewed Business Requirements draft as an immutable revision.';
@@ -6489,6 +6504,7 @@ function updateBREditorActions(){
  guidance.classList.toggle('hidden',!draft||!blockers.length);list.replaceChildren();
  const resolutionButtons={
   discovery:['Resolve Discovery Questions','brApprovalEditDiscovery'],
+  draftSaved:['Open Preview & Save','previewSave'],
   review:['Open AI Review','brApprovalReviewAI'],
   ownership:['Open Document Ownership','ownership'],
   businessOwner:['Open Business Owner Role','businessOwner'],
@@ -6509,6 +6525,7 @@ function updateBREditorActions(){
     if(action==='brApprovalEditDiscovery'){openDiscoveryQuestionsFromApproval();return;}
     if(action==='brApprovalReviewAI'){openAIReviewFromApproval();return;}
     if(!closeBREditor())return;
+    if(action==='previewSave'){openBAWorkflowStep('save');return;}
     if(action==='ownership'){
      baReopenDocuments=true;renderDiscoverySummary();
      const card=[...document.querySelectorAll('#brCards .br-card')].find(item=>item.textContent.includes(br.id+' · '));
@@ -6537,9 +6554,10 @@ function updateBREditorActions(){
 function openBREditor(id){
  const br=brState?.brs?.find(item=>item.id===id);if(!br||br.status==='retired'||br.status==='retire-proposed')return;
  brEditing=id;brReadOnly=br.status!=='draft'||!baCanEdit('ba-br-'+id);brEditorDirty=false;brEditorSaving=false;
- $('brEditTitle').textContent=(brReadOnly?'Preview ':'Preview / Edit ')+id;
+ const editorMilestone=baViewedStep||window.baLastGuideProgress?.find(step=>step.current)?.key||'';
+ $('brEditTitle').textContent=(editorMilestone==='approve'?'Review for Approval ':brReadOnly?'Preview ':'Preview / Edit ')+id;
  $('brEditError').textContent='';
- $('brEditModal').classList.remove('hidden');$('brEditModal').setAttribute('aria-hidden','false');rebuildBRQuill(br,brReadOnly);updateBREditorActions();
+ $('brEditModal').classList.remove('hidden');$('brEditModal').setAttribute('aria-hidden','false');rebuildBRQuill(br,brReadOnly||editorMilestone==='approve');updateBREditorActions();
 }
 let brCloseAfterSave=false;
 function closeBREditor(force=false){
@@ -6740,7 +6758,10 @@ function renderDiscoveryReview(){
  renderSavedReviewEvidence(review,current);
  if(!review){$('discoveryReviewSummary').textContent='No AI review yet.';renderBAButtons();return;}
  $('discoveryReviewSummary').textContent=`${review.readiness} · ${review.summary}${review.confirmed?' · Human confirmed':review.skipped?' · Skipped':review.applied?' · Suggestions applied':' · Human verification recommended'}`;
- for(const item of review.suggestions||[]){
+ // Preserve the 1–12 discovery order even when AI ranks severity differently.
+ const questionIndex=key=>{const index=BA_QUESTIONS.findIndex(([id])=>id===key);return index<0?BA_QUESTIONS.length:index;};
+ const sortedFindings=[...(review.suggestions||[])].sort((a,b)=>questionIndex(a.key)-questionIndex(b.key));
+ for(const item of sortedFindings){
   const card=document.createElement('div');card.className='ai-review-item';
   const top=document.createElement('div');top.className='ai-review-item-head';
   const question=BA_QUESTIONS.find(([key])=>key===item.key);const label=document.createElement('strong');label.textContent=question?`${BA_QUESTIONS.indexOf(question)+1}. ${question[1]}`:item.key;
@@ -7853,7 +7874,7 @@ function updateStartupIssueSummary(){
  const checks=startupPermissions?.checks||[...startupPermissionProgress.values()];
  const permissionIssues=checks.filter(check=>check.ok===false).length;
  const stackIssues=startupScanComplete?(startupStackData?.stacks||[]).filter(stack=>!stack.ready).length:0;
- const copilotIssue=startupScanComplete&&$('startupCopilotCard')?.dataset?.progressState==='error'?1:0;
+ const copilotIssue=0; // Optional hidden SDK must not count as a blocking startup issue.
  const connectionIssues=[...startupConnectionCheckResults.values()].filter(check=>check.state==='error'||check.state==='offline').length;
  const count=permissionIssues+stackIssues+copilotIssue+connectionIssues;
  node.textContent=count?`${count} ${count===1?'check needs':'checks need'} attention`:'';
@@ -8302,6 +8323,21 @@ $('startupProceed').addEventListener('click',()=>{
 });
 window.addEventListener('message',event=>{
  const message=event.data||{};
+ if(message.type==='startupSavedFields'){
+  if(!startupFormInitialized){
+   const saved=message.saved||{};
+   for(const [key,id] of Object.entries(startupFieldMap))if(!$(id).value)$(id).value=saved[key]||'';
+   updateHeaderUserName(saved.email);
+  }
+  // Start scanning as soon as the host confirms the webview is ready,
+  // without waiting for the larger project and credential state payload.
+  if(!startupPrereqRequested){
+   startupPrereqRequested=true;
+   renderStartupScanPlaceholders();
+   startupScanPercent(0,'Starting prerequisite scan…');
+   send('startupReadiness');
+  }
+ }
  if(message.type==='state'&&message.startupSetup)renderStartupConfig(message.startupSetup);
  if(message.type==='startupReadinessProgress'){
   startupScanPercent(message.percent,message.message);

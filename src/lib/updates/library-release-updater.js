@@ -6,7 +6,9 @@ const fs=require('node:fs/promises');
 const path=require('node:path');
 const updater=require('./github-release-updater');
 const REPO='aidilazharo/tech-stacks-skills';
-const RELEASE_REPOSITORIES=Object.freeze(['aidilazharo/library',REPO]);
+// Only the public distribution mirror appears in release discovery.
+// The source repository remains available for the pinned catalogue and legacy verification.
+const RELEASE_REPOSITORIES=Object.freeze(['aidilazharo/library']);
 const LATEST_URL='https://github.com/'+REPO+'/releases/latest';
 const API_LATEST='https://api.github.com/repos/'+REPO+'/releases/latest';
 const API_LIST='https://api.github.com/repos/'+REPO+'/releases?per_page=30';
@@ -17,12 +19,12 @@ function tagged(value){
 }
 function trustedAsset(asset,name,repository=REPO){
  return !!asset&&asset.name===name&&Number.isSafeInteger(asset.size)&&asset.size>0&&asset.size<=MAX_ZIP&&
- RELEASE_REPOSITORIES.includes(repository)&&typeof asset.url==='string'&&asset.url.startsWith('https://api.github.com/repos/'+repository+'/releases/assets/')&&
+ (RELEASE_REPOSITORIES.includes(repository)||repository===REPO)&&typeof asset.url==='string'&&asset.url.startsWith('https://api.github.com/repos/'+repository+'/releases/assets/')&&
  /^https:\/\/api\.github\.com\/repos\/[^/]+\/[^/]+\/releases\/assets\/\d+$/.test(asset.url);
 }
 function select(releases,repository=REPO){
  if(!Array.isArray(releases))throw Error('Invalid Library Releases response.');
- if(!RELEASE_REPOSITORIES.includes(repository))throw Error('Untrusted Library release repository.');
+ if(!RELEASE_REPOSITORIES.includes(repository)&&repository!==REPO)throw Error('Untrusted Library release repository.');
  const candidates=[];
  for(const release of releases){
   const version=tagged(release?.tag_name);
@@ -36,7 +38,7 @@ function select(releases,repository=REPO){
  return candidates[0]||null;
 }
 async function fetchReleaseList({repository=REPO,request=updater.getBytes}={}){
- if(!RELEASE_REPOSITORIES.includes(repository))throw Error('Untrusted Library release repository.');
+ if(!RELEASE_REPOSITORIES.includes(repository)&&repository!==REPO)throw Error('Untrusted Library release repository.');
  const fetch=async url=>JSON.parse((await request(url,{maxBytes:1024*1024})).toString('utf8'));
  const api='https://api.github.com/repos/'+repository+'/releases';
  let stable=null;try{stable=await fetch(api+'/latest');}catch{/* Verify same-repository prereleases below. */}
