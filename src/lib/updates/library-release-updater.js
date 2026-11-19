@@ -38,7 +38,7 @@ function select(releases,repository=REPO){
  return candidates[0]||null;
 }
 async function fetchReleaseList({repository=REPO,request=updater.getBytes}={}){
- if(!RELEASE_REPOSITORIES.includes(repository))throw Error('Untrusted Library release repository.');
+ if(!RELEASE_REPOSITORIES.includes(repository)&&repository!==REPO)throw Error('Untrusted Library release repository.');
  const fetch=async url=>JSON.parse((await request(url,{maxBytes:1024*1024})).toString('utf8'));
  const api='https://api.github.com/repos/'+repository+'/releases';
  let stable=null;try{stable=await fetch(api+'/latest');}catch{/* Verify same-repository prereleases below. */}
