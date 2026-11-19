@@ -62,7 +62,7 @@ test('v439: source deletion removes only matching generated text units',async t=
  const [a]=await pipeline.prepare(registry,'project',src1);
  const [b]=await pipeline.prepare(registry,'project',src2);
  await pipeline.removeForSource(registry,'project',src1.digest);
- await assert.rejects(pipeline.read(registry,'project',a),/not found/);
+ await assert.rejects(pipeline.read(registry,'project',a),/missing BR text file/);
  assert.equal(await pipeline.read(registry,'project',b),src2.text);
 });
 
