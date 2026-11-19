@@ -1,21 +1,39 @@
-# ATGV AIATECH Assist v0.4.50
+# ATGV AIATECH Assist v0.4.51
 
-## Discovery Question 12: No forced "NONE"
+## Safely replace, remove and reprocess BR source documents
 
-- Accept a saved, non-empty answer to all twelve Discovery questions before AI Review. Actual unresolved decisions no longer block AI Review or the review-acknowledgement action.
-- Display the Question 12 label as **Open decisions and unresolved questions** without requiring a special word or punctuation.
-- Add an explicit **No open decisions (confirmed)** checkbox; it writes an editable plain-language answer only when the field is empty or already a no-decisions confirmation. It never silently overwrites actual listed decisions.
-- Retain manual **Save 12 Questions**. Checkbox selection is not automatic saving; changed answers still invalidate the previous AI Review until re-run.
-- Preserve existing NONE/NONE. answers and accept "No open decisions", "No unresolved decisions", "No outstanding decisions" and N/A as equivalent explicit confirmations.
+- Add **Replace & Reprocess** beside each active PDF/DOCX source: accepts renamed updated source documents while preserving the original source identity and version lineage.
+- Add **Remove Source** for non-destructive archive, keeping approved Business Requirements, published Jira keys, original source evidence, and audit history.
+- Keep **Delete Everywhere** separately labeled for destructive deletion, with its existing verified confirmation and remote-deletion gate.
+- When a document is archived and an updated file is uploaded, explicitly offer to **Reupload as Updated Source**. Preserve the old BR identity and Jira mappings instead of duplicating them.
+- Validate source fingerprint, project identity, revision, original bytes, and pending Jira operations before registering a replacement.
+- Archive prior versions, invalidate stale mapping and AI Review, and mark affected BRs as requiring regeneration and human approval. Automatically run source preflight and mapping after a successful replacement.
+- Never modify existing Jira issues during source replacement. Only publish newly approved BR changes after complete Jira Preflight, approval, and existing conflict/work-in-progress protections.
 
-## Approval safeguard
+## Generate Requirements recovery
 
-- Keep real open decisions visible in discovery review and draft generation, with a **needsDecision** state.
-- Block both host-level final BR approval routes while Question 12 contains unresolved business decisions, even if AI Review findings have been acknowledged. Do not block review or draft preparation.
-- Keep independent Business Owner review, source integrity, and Jira publication protections unchanged.
-- Normalize no-decision statements consistently when merging evidence across document sections; never discard real unresolved decisions in other sections.
+- Accept complete AI BR JSON in the supported `requirements`, `businessRequirements`, `business_requirements`, `brs` envelopes, a valid top-level array, or a complete single BR object.
+- Diagnose zero returned requirements versus responses exceeding the explicit 25-per-generation cap; never silently truncate or fabricate BRs.
+- Retry a zero-BR response against verified single-group source Markdown when appropriate, with an explicit one-BR schema.
+- Preserve Discovery and previous BR/Jira records when both attempts fail, and give a specific message explaining the cause.
 
-## Verification and packaging
+## Unlimited BR batches and human confirmation
 
-- Add regression tests for blank Q12, 12/12 review with real open decisions, explicit no-decisions confirmation, UI synchronization, and the separate host approval gates.
-- GitHub Actions runs the regression suite, Windows checks, UI theme check, and VSIX packaging before release is merged.
+- Remove the fixed **25 Business Requirements** generation limit and the old hidden 100-BR register load limit.
+- Generate multiple source-backed BR groups sequentially and accumulate all validated requirements.
+- Show the validated BR count and require explicit **Continue / Cancel** before saving any draft batch.
+- Cancel preserves current BR revisions and all existing Jira issues. Zero-item AI responses still fail safely; source-backed retries remain available.
+
+## Confluence upload synchronization and cross-computer recovery
+
+- Automatically synchronize original PDF/DOCX uploads and supported project document/image attachments to the selected **Confluence space**.
+- Use one project-scoped Confluence source vault page with immutable original attachments and a versioned metadata manifest for active and archived sources, approved BR snapshots and existing Jira identity mappings.
+- Synchronize immediately after a successful upload and retry every five minutes while online. Offline or unsuccessful sync never discards a valid local upload.
+- On opening a project from another computer, discover its original project ID from Confluence, automatically download missing files, verify every SHA-256 checksum, and restore BR metadata only into a new or unchanged local baseline.
+- Never overwrite divergent local files or BR changes. Conflicts appear in the extension and require manual reconciliation; cloud downloads never create or publish Jira issues.
+- Use the current account's configured Confluence credentials and normal space/page permissions. Confluence storage quotas and attachment permissions still apply.
+
+## Verification
+
+- Regression tests cover safe archive and reupload, preserved Jira mappings, stale revisions, source identity, model-response schema repair and count limits.
+- Full GitHub Actions CI, Windows checks, theme validation and packaged VSIX verification are required before merging this release.

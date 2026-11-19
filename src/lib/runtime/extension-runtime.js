@@ -77,6 +77,7 @@ const {evaluate:continuityEvaluate}=require('../../continuity');
 const {WorkflowEngine}=require('../../workflow-engine');
 const {DurableWorkflowEngine,fingerprint:atgvJobHash,safeError:atgvJobSafeError}=require('../../atgv-job-engine');
 const {DocumentSync}=require('../../confluence-docsync');
+const {ConfluenceSourceVault}=require('../../confluence-source-vault');
 const {validProjectKey,jiraIssueTypes,jiraCreateIssue,jiraUpdateIssue,jiraRetireIssue,jiraFindIssueByMarker,jiraReadIssue,jiraReadIssueChangelog,jiraIssueFieldMetadata,jiraReadIssueAllFields,jiraMarker,remoteFingerprint,githubBranch,githubPullRequest,jiraAssignCurrentUser,jiraAssignRoleCurrentUser,jiraUnassignCurrentUser,jiraAvailableTransitions,jiraMove}=require('../../remote-actions');
 const companion=require('../../companion-client');
 const {OwnershipRegistry}=require('../../ownership');
@@ -285,7 +286,7 @@ async function askAiSendConsent(_message,{signal}={}){
 
 let developerBrRun=null,developerBrLast=null;
 let workspaceOverridePath=null,startupScan={status:'idle',percent:0,message:''},startupSequence=0;
-let ownershipRetryTimer=null,ownershipOfflineUntil=0,aiServiceTimer=null,aiServiceBusy=false,autoSyncTimer=null,jiraMonitorTimer=null,jiraMonitorBusy=false,autoSyncBusy=false,context,output,tree,registry,activeProject,store,dashboard,ready=Promise.resolve(),activationEpoch=0,extensionSettings={},pendingTests={jira:null,github:null},openingFlow=new OpeningFlow(),discoveredSpaces=[],discoveredJiraProjects=[],openingLocked=false,openingGeneration=0,openingOffline=false,verifiedConnections=new Map(),approvedJiraPreviewRevision=null,approvedJiraPreviewBinding=null,jiraSyncBusy=false,jiraPreviewValidation=null,roleRepairPreviewContext=null,roleRepairBusy=false;
+let ownershipRetryTimer=null,ownershipOfflineUntil=0,aiServiceTimer=null,aiServiceBusy=false,autoSyncTimer=null,sourceVaultTimer=null,sourceVaultBusy=false,jiraMonitorTimer=null,jiraMonitorBusy=false,autoSyncBusy=false,context,output,tree,registry,activeProject,store,dashboard,ready=Promise.resolve(),activationEpoch=0,extensionSettings={},pendingTests={jira:null,github:null},openingFlow=new OpeningFlow(),discoveredSpaces=[],discoveredJiraProjects=[],openingLocked=false,openingGeneration=0,openingOffline=false,verifiedConnections=new Map(),approvedJiraPreviewRevision=null,approvedJiraPreviewBinding=null,jiraSyncBusy=false,jiraPreviewValidation=null,roleRepairPreviewContext=null,roleRepairBusy=false;
 const cfg=()=>vscode.workspace.getConfiguration('atgvAssist');
 let liveRemoteTimer=null,liveRemoteBusy=false,liveRemoteState={projectId:'',phase:'idle',lastAttempt:'',lastSuccess:'',results:{},errors:{}};
 let catalogRemote=null,catalogLastCheck='',catalogLastError='',catalogBusy=false,catalogWatch=null,installedVendorAssets=null,webviewVendorDir=null,vendorLibraryLastError='',vendorBootRecoveryCount=0,vendorWebviewReady=false,webviewCoreReady=false,webviewCssRetry=0;
@@ -902,7 +903,7 @@ async function guarded(fn){try{return await fn();}catch(e){captureLocalIssue('AT
 const withProgress=(title,fn)=>dashboard?fn():vscode.window.withProgress({location:vscode.ProgressLocation.Notification,title,cancellable:false},fn);
 async function initialize(){
   if(ownershipRetryTimer){clearInterval(ownershipRetryTimer);ownershipRetryTimer=null;}ownershipOfflineUntil=0;
-  if(aiServiceTimer){clearInterval(aiServiceTimer);aiServiceTimer=null;}if(autoSyncTimer){clearInterval(autoSyncTimer);autoSyncTimer=null;}if(jiraMonitorTimer){clearInterval(jiraMonitorTimer);jiraMonitorTimer=null;}
+  if(aiServiceTimer){clearInterval(aiServiceTimer);aiServiceTimer=null;}if(autoSyncTimer){clearInterval(autoSyncTimer);autoSyncTimer=null;}if(sourceVaultTimer){clearInterval(sourceVaultTimer);sourceVaultTimer=null;}if(jiraMonitorTimer){clearInterval(jiraMonitorTimer);jiraMonitorTimer=null;}
   if(liveRemoteTimer){clearInterval(liveRemoteTimer);liveRemoteTimer=null;}
   approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;++activationEpoch;activeProject=undefined;store=undefined;pendingTests={jira:null,github:null};verifiedConnections.clear();extensionSettings=normalizeExtensionSettings(context.globalState.get('atgvAssist.extensionSettings',{}));
   await context.secrets.delete(LEGACY_RELEASE_DOWNLOAD_PAT_SECRET).catch(error=>report('Could not remove obsolete release credential: '+error.message));
@@ -922,11 +923,34 @@ async function aiSharedClient(){const {project,config}=current();const token=awa
 async function aiPull(){if(!activeProject)return;const epoch=activationEpoch,projectId=activeProject.id;try{const shared=await aiSharedClient(),remote=await shared.read();if(epoch!==activationEpoch||activeProject?.id!==projectId)return;const memory=new aiMemory.ProjectMemory(aiRoot());try{memory.importShared(remote.value.manifest,projectId);}finally{memory.close();}report('Confluence AI memory loaded for '+activeProject.id);}catch(e){report('Confluence AI memory deferred: '+e.message);}}
 async function aiRunOnce(){if(aiServiceBusy||!activeProject)return {status:'busy'};aiServiceBusy=true;try{const root=aiRoot(),shared=await aiSharedClient(),provider=cfg().get('rag.provider','auto');if(!['ollama','openai-compatible'].includes(provider))throw Error('Unattended generation needs an approved Ollama or OpenAI-compatible endpoint, not interactive Copilot Auto. Configure RAG Provider.');const model=await activeAiTarget();const result=await aiOrchestrator.run({root,shared,model,onProgress:(message,percent)=>{dashboard?.webview.postMessage({type:'aiServiceProgress',message,percent});}});const memory=new aiMemory.ProjectMemory(root);try{const merged=await shared.mergeManifest(memory.manifest(activeProject.id),memory.get('shared-manifest',{}));memory.set('shared-manifest',merged);memory.set('shared-sync',new Date().toISOString());}catch(e){memory.queueOperation('manifest',memory.manifest(activeProject.id));report('AI memory sync queued: '+e.message);}finally{memory.close();}await dashboard?.webview.postMessage({type:'aiServiceProgress',message:'Completed: '+result.status,percent:100});return result;}finally{aiServiceBusy=false;await refreshDashboard().catch(()=>{});}}
 async function aiSchedule(){if(aiServiceTimer){clearInterval(aiServiceTimer);aiServiceTimer=null;}if(!activeProject)return;const settings=await aiServiceConfig.read(aiRoot());if(settings.enabled&&settings.mode==='vscode'){aiServiceTimer=setInterval(()=>{if(!aiServiceBusy)aiRunOnce().catch(e=>report('AI hourly service: '+e.message));},settings.interval*60000);aiServiceTimer.unref?.();}}
+async function syncConfluenceSourceVault(projectId,reason='scheduled'){
+ if(sourceVaultBusy||openingOffline||!registry||activeProject?.id!==projectId)return {skipped:'busy, offline, or project changed'};
+ sourceVaultBusy=true;
+ try{
+  const project=await registry.read(projectId),config=effectiveConfig(project);
+  if(!config.get('confluence.spaceKey'))return {skipped:'Confluence space not configured'};
+  const token=await getAtlassianToken(project);
+  const vault=new ConfluenceSourceVault({registry,projectId,config,token});
+  const result=await vault.sync({mode:'both'});
+  const note='Confluence source vault: '+result.downloaded+' document(s) downloaded, '+result.uploaded+' upload(s) synchronized'+(result.restored?', project BR state restored from Confluence':'')+'.';
+  report('['+projectId+'] '+note+(result.conflicts?.length?' Conflicts: '+result.conflicts.join('; ').slice(0,600):''));
+  if(activeProject?.id===projectId){
+   await dashboard?.webview.postMessage({type:'confluenceSourceVault',result,reason});
+   if(result.restored){
+    approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;jiraPreviewValidation=null;
+    await refreshDashboard();
+   }
+   if(result.conflicts?.length)await notice('Confluence source synchronization needs review: '+result.conflicts.slice(0,3).join('; ').slice(0,400),true);
+   else if(result.restored||result.downloaded||result.uploaded)await notice(note);
+  }
+  return result;
+ }finally{sourceVaultBusy=false;}
+}
 async function activateProject(id){
   pendingProjectMappingTests.clear();
   approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;
   if(ownershipRetryTimer){clearInterval(ownershipRetryTimer);ownershipRetryTimer=null;}ownershipOfflineUntil=0;
-  if(aiServiceTimer){clearInterval(aiServiceTimer);aiServiceTimer=null;}if(autoSyncTimer){clearInterval(autoSyncTimer);autoSyncTimer=null;}if(jiraMonitorTimer){clearInterval(jiraMonitorTimer);jiraMonitorTimer=null;}
+  if(aiServiceTimer){clearInterval(aiServiceTimer);aiServiceTimer=null;}if(autoSyncTimer){clearInterval(autoSyncTimer);autoSyncTimer=null;}if(sourceVaultTimer){clearInterval(sourceVaultTimer);sourceVaultTimer=null;}if(jiraMonitorTimer){clearInterval(jiraMonitorTimer);jiraMonitorTimer=null;}
   if(liveRemoteTimer){clearInterval(liveRemoteTimer);liveRemoteTimer=null;}
   if(!registry)throw new Error('Open a workspace folder in VS Code before creating projects.');
   const epoch=++activationEpoch;
@@ -962,6 +986,16 @@ async function activateProject(id){
   report(`Active project: ${project.id} (${store.docs.length} indexed documents)`);
   if(!openingOffline&&context.workspaceState.get('atgvAssist.monitorJira.'+project.id,false))jiraMonitorTimer=setInterval(()=>{if(!jiraMonitorBusy&&activeProject?.id===project.id)scanExternalJira({quiet:true}).catch(e=>report('Background Jira monitor: '+e.message));},120000);
   if(!openingOffline&&context.workspaceState.get('atgvAssist.autoSync.'+project.id,false)){autoSyncTimer=setInterval(()=>{if(!autoSyncBusy&&activeProject?.id===project.id)syncManagedDocuments().catch(e=>report('Auto document sync: '+e.message));},60000);}
+  // Uploaded source originals and their project recovery manifest always sync
+  // with the configured Confluence space, independent of Markdown auto-sync.
+  if(!openingOffline){
+   sourceVaultTimer=setInterval(()=>{if(activeProject?.id===project.id)void syncConfluenceSourceVault(project.id,'periodic').catch(e=>report('Confluence source vault retry: '+e.message));},300000);
+   sourceVaultTimer.unref?.();
+   void syncConfluenceSourceVault(project.id,'project-open').catch(async error=>{
+    report('Confluence source recovery deferred: '+String(error.message||error));
+    if(activeProject?.id===project.id)await dashboard?.webview.postMessage({type:'confluenceSourceVault',error:String(error.message||error).slice(0,350)});
+   });
+  }
   // Always fetch current remote Jira and Confluence data on a verified project open,
   // and every five minutes while the same project stays open. This is read-only
   // against Atlassian; publishing and approval are never triggered here.
@@ -1770,9 +1804,23 @@ async function resolveOpeningProject(msg){
     (p.settings?.confluence?.spaceKey===space.key&&
      effectiveConfig(p).get('confluence.baseUrl')===space.baseUrl));
   if(matching)return matching;
-  const id=projectSlug(space.name),colliding=local.find(p=>p.id===id);
-  if(colliding)throw new Error(`Folder projects/${id} already belongs to a different project. Choose or rename it manually.`);
   const jiraKey=discoveredJiraProjects.find(p=>p.key.toLowerCase()===space.key.toLowerCase())?.key||'';
+  let id=projectSlug(space.name);
+  // On a different computer, a Confluence space may already have a project
+  // source vault under an explicitly selected non-default project ID.
+  // Recover that identity rather than inventing a second local project.
+  try{
+   const temporary=normalizeProjectInput({name:space.name,id,settings:{jira:{projectKey:jiraKey},confluence:{spaceId:space.id,spaceKey:space.key,spaceName:space.name,baseUrl:space.baseUrl}}});
+   const config=effectiveConfig(temporary),token=await getAtlassianToken(temporary);
+   const catalog=await requestJson(baseConfluence(config)+'/api/v2/spaces/'+encodeURIComponent(space.id)+'/pages?limit=100',
+    {token,basicEmail:config.get('jira.email'),timeoutMs:10000});
+   const prefix='ATGV · Source Vault · '+space.key+' · ';
+   const candidates=new Set((catalog.results||[]).filter(p=>p.title?.startsWith(prefix)).map(p=>p.title.slice(prefix.length))
+    .filter(value=>/^[a-z][a-z0-9-]{0,48}$/.test(value)));
+   if(candidates.size===1)id=[...candidates][0];
+  }catch(error){report('Confluence project identity discovery deferred: '+String(error.message||error).slice(0,220));}
+  const colliding=local.find(p=>p.id===id);
+  if(colliding)throw new Error(`Folder projects/${id} already belongs to a different project. Choose or rename it manually.`);
   return normalizeProjectInput({name:space.name,id,settings:{jira:{projectKey:jiraKey},confluence:{spaceId:space.id,spaceKey:space.key,spaceName:space.name,baseUrl:space.baseUrl}}});
 }
 async function testOpeningProject(){
@@ -1930,12 +1978,20 @@ async function ensureBAUploadRole(roleId){
  if(!actor)throw Error('A cached Jira identity is unavailable. Sign in to Jira + Confluence once while online before uploading offline.');
  return actor;
 }
-async function importDiscoveryDocument(roleId){
- requireOpened();const uploader=await ensureBAUploadRole(roleId);
- const picked=await vscode.window.showOpenDialog({title:'Upload one Word or PDF document for this Business Requirement',canSelectMany:false,canSelectFiles:true,canSelectFolders:false,filters:{'Word and PDF':['docx','pdf']}});
+async function importDiscoveryDocument(roleId,{replacementDigest='',expectedRevision=''}={}){
+ requireOpened();const projectId=activeProject.id;const uploader=await ensureBAUploadRole(roleId);
+ const picked=await vscode.window.showOpenDialog({title:replacementDigest?'Select an updated Word or PDF to replace the current source':'Upload one Word or PDF document for this Business Requirement',canSelectMany:false,canSelectFiles:true,canSelectFolders:false,filters:{'Word and PDF':['docx','pdf']}});
  if(!picked?.length){await dashboard?.webview.postMessage({type:'discoveryImportCancelled'});return;}
- const initial=await brWorkflow.load(registry,activeProject.id);
+ if(activeProject?.id!==projectId)throw Error('Project changed during upload. Select the correct project and retry.');
+ const initial=await brWorkflow.load(registry,projectId);
+ if(expectedRevision&&initial.revision!==expectedRevision)throw Error('Source revision changed. Refresh before selecting an updated document.');
  const existing=initial.sourceDocuments||[];
+ let selectedReplacementDigest=replacementDigest;
+ let replacementSource=replacementDigest?existing.find(source=>source.digest===replacementDigest):null;
+ if(replacementDigest){
+  if(!/^[a-f0-9]{64}$/.test(String(replacementDigest))||!replacementSource||existing.length!==1)throw Error('The source to replace is no longer current. Refresh and retry.');
+  if(Object.keys(initial.pending||{}).length)throw Error('Resolve pending Jira publication or reconciliation before replacing the document.');
+ }
  const documents=[];
  for(const selection of picked){
   await dashboard?.webview.postMessage({type:'discoveryImportProgress',message:`Reading ${path.basename(selection.fsPath)}…`});
@@ -1946,9 +2002,22 @@ async function importDiscoveryDocument(roleId){
   documents.push({...doc,digest:sha(doc.text),originalPath:selection.fsPath});
  }
  if(new Set(documents.map(d=>d.name.toLowerCase())).size!==documents.length||new Set(documents.map(d=>d.digest)).size!==documents.length)throw Error('Select unique filenames and document contents.');
+ // When the BA removed an active source but kept its approved Jira work, offer
+ // reupload as a new revision instead of silently creating a duplicate BR.
+ if(!replacementSource&&!existing.length&&documents.length===1){
+  const archived=[...(initial.archivedSources||[])].filter(row=>(initial.brs||[]).some(br=>br.status!=='retired'&&!br.archivedFromRestart&&(
+   (br.evidence||[]).some(ev=>ev.digest===row.digest)||br.source?.name===row.name)));
+  const latest=archived.at(-1);
+  if(latest){
+   const action='Reupload as Updated Source';
+   const yes=await uiWarning('The source '+latest.name+' was removed while its approved Business Requirements and Jira links were retained.\n\nUse the new document '+documents[0].name+' as the next version of that source? This will preserve the existing BR/Jira identities, rerun mapping and require explicit approval before updating Jira.\n\nCancel leaves the existing records unchanged.',{modal:true},action);
+   if(yes!==action){await dashboard?.webview.postMessage({type:'discoveryImportCancelled'});return;}
+   selectedReplacementDigest=latest.digest;replacementSource=latest;
+  }
+ }
  const previousVersions=[...existing,...(initial.archivedSources||[])];
  const changes=documents.map(doc=>{
-  const existingMatch=existing.find(x=>x.digest===doc.digest)||existing.find(x=>x.name.toLowerCase()===doc.name.toLowerCase())||previousVersions.find(x=>x.digest===doc.digest)||previousVersions.find(x=>x.name.toLowerCase()===doc.name.toLowerCase());
+  const existingMatch=replacementSource||existing.find(x=>x.digest===doc.digest)||existing.find(x=>x.name.toLowerCase()===doc.name.toLowerCase())||previousVersions.find(x=>x.digest===doc.digest)||previousVersions.find(x=>x.name.toLowerCase()===doc.name.toLowerCase());
   return {document:doc,previous:existingMatch,identical:!!existingMatch&&existingMatch.digest===doc.digest};
  });
  const unchanged=changes.filter(row=>row.identical&&existing.some(item=>item.digest===row.document.digest));
@@ -1971,19 +2040,20 @@ async function importDiscoveryDocument(roleId){
   await notice('No source changes: '+unchanged.map(x=>x.document.name).join(', ')+'. Existing Business Requirements and Jira remain unchanged.');
   return;
  }
- const prospective=[...existing];
+ const prospective=replacementSource?[]:[...existing];
  for(const row of [...modified,...fresh,...reactivated]){
   const doc=row.document;
   const same=prospective.findIndex(x=>x.name.toLowerCase()===doc.name.toLowerCase()||x.digest===doc.digest);
   if(same>=0)prospective.splice(same,1);
   prospective.push({name:doc.name,digest:doc.digest,characters:doc.characters});
  }
- if(prospective.length>1)throw Error('Only one active document is allowed per Business Requirement. Delete the current uploaded document or start a new BR cycle before uploading another. To revise the existing document, re-upload it using the same filename.');
+ if(prospective.length>1)throw Error('Only one active document is allowed per Business Requirement. Use Replace & Reprocess to upload an updated source under a new filename, or start a new independent BR cycle.');
  if(modified.length){
-  const summary='Source revision detected:\n'+modified.map(x=>'• '+x.document.name+' (replaces '+x.previous.name+')').join('\n')+
-   '\n\nRegister the modified file as a NEW VERSION of the same source? Previously approved Business Requirements, source history, and Jira keys remain intact. The current mapping and AI Review must be refreshed before revised requirements are approved. No Jira issues will be created, edited, or deleted by uploading.\n\nCancel keeps all data unchanged.';
-  const yes=await uiWarning(summary,{modal:true},'Create Source Revision');
-  if(yes!=='Create Source Revision'){await dashboard?.webview.postMessage({type:'discoveryImportCancelled'});return;}
+  const summary=(replacementSource?'Source replacement requested:\n':'Source revision detected:\n')+modified.map(x=>'• '+x.document.name+' (replaces '+x.previous.name+')').join('\n')+
+   '\n\nRegister this updated file as a NEW VERSION of the same source? The original is archived, and existing approved BR revisions and Jira keys are retained. AI mapping will rerun automatically. Only separately reviewed and approved BR/Jira changes may be published.\n\nCancel keeps all data unchanged.';
+  const action=replacementSource?'Replace & Reprocess':'Create Source Revision';
+  const yes=await uiWarning(summary,{modal:true},action);
+  if(yes!==action){await dashboard?.webview.postMessage({type:'discoveryImportCancelled'});return;}
  }
  const updatedDocuments=[...modified,...fresh,...reactivated];
  // Store verifies the selected original bytes against any existing copy and
@@ -2007,8 +2077,8 @@ async function importDiscoveryDocument(roleId){
   prospective[same]={name:doc.name,digest:doc.digest,byteDigest:doc.byteDigest,characters:doc.characters,storedName:doc.storedName,uploadedBy:uploader,uploadedAt:new Date().toISOString()};
  }
  const current=await brWorkflow.load(registry,activeProject.id);
- if(current.revision!==initial.revision)throw Error('Source document list changed during upload. Refresh and retry.');
- const register=await brWorkflow.addSources(registry,activeProject.id,current.revision,prospective,{actor:uploader,singleSourceCycle:true});
+ if(activeProject?.id!==projectId||current.revision!==initial.revision)throw Error('Source document list or project changed during upload. Refresh and retry.');
+ const register=await brWorkflow.addSources(registry,projectId,current.revision,prospective,{actor:uploader,singleSourceCycle:true,replacementDigest:selectedReplacementDigest});
  // Persist the source-preserving Markdown files immediately after upload, even when no AI provider is configured.
  for(const {document:doc} of updatedDocuments){
   const units=await baBrTextPipeline.prepare(registry,activeProject.id,doc);
@@ -2026,6 +2096,14 @@ async function importDiscoveryDocument(roleId){
  const autoMap=updatedDocuments.length>0;
  if(autoMap)await context.workspaceState.update('atgvAssist.baSelectedSources.'+activeProject.id,register.sourceDocuments.map(doc=>doc.digest));
  await dashboard?.webview.postMessage({type:'discoveryUploadDone',count:updatedDocuments.length,revised:modified.length,newDocuments:fresh.length,restored:reactivated.length,reverified:legacyBaselines.length+missingActive.length,autoPreflight:autoMap});
+ if(updatedDocuments.length||legacyBaselines.length||missingActive.length){
+  // Upload is locally durable first; Confluence retry is non-blocking and
+  // reports failures without erasing the accepted original source.
+  if(typeof syncConfluenceSourceVault==='function')void syncConfluenceSourceVault(projectId,'uploaded-source').catch(async error=>{
+   report('Confluence original upload queued for retry: '+String(error.message||error));
+   if(activeProject?.id===projectId)await dashboard?.webview.postMessage({type:'confluenceSourceVault',error:'Confluence sync pending; original file is safe locally. '+String(error.message||error).slice(0,240)});
+  });
+ }
  if(autoMap){
   await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Document uploaded. Automatically checking source for TDD RED/GREEN risks…'});
   try{await processSelectedDiscoverySources({digests:register.sourceDocuments.map(doc=>doc.digest),revision:register.revision,automatic:true});}
@@ -3038,7 +3116,7 @@ async function generateBusinessRequirements(options={}){
   let proposal;
   if(mappedGroups.length>1){
    proposal=[];
-   if(mappedGroups.length>25)throw Error('More than 25 separate Business Requirements detected. Divide into smaller BR cycles before generating drafts.');
+   // Each source-backed BR group is built independently, then accumulated for one approved save.
    for(const [index,group] of mappedGroups.entries()){
     const parts=[];
     for(const ref of group.units)parts.push(await baBrTextPipeline.read(registry,activeProject.id,ref));
@@ -3050,6 +3128,9 @@ async function generateBusinessRequirements(options={}){
   }else proposal=baTimeoutSimplified.simpleProposal({name:source.name,text:verified.text,answers:saved.answers});
   const currentSaved=await discovery.load(registry,activeProject.id);
   if(currentSaved.revision!==saved.revision)throw Error('Discovery changed during simplified BR generation.');
+  const action='Continue';
+  const approval=await uiWarning('AI prepared '+proposal.length.toLocaleString('en-US')+' source-backed Business Requirements.\\n\\nContinue to save these as editable drafts for Business Analyst review? Cancel leaves the existing BRs and Jira untouched. Acceptance criteria and AI checks are NOT VERIFIED.',{modal:true,detail:'No Jira issues will be created or updated by generating drafts. Final Jira publication remains subject to explicit BR approval and Jira Preflight.'},action);
+  if(approval!==action){await dashboard?.webview.postMessage({type:'baProgress',task:'generate',done:true,message:'Generation cancelled. Existing Business Requirements and Jira unchanged.'});return;}
   const updated=await brWorkflow.generated(registry,activeProject.id,register.revision,{discoveryRevision:saved.revision,requirements:proposal,riskAccepted:false,actor:await verifiedBAActor()});
   await recordBAProcess({stage:'generate',action:'source-only-simple-br',status:'needs-review',details:'Deterministic source-only draft generated; acceptance criteria not verified. Jira publication still requires BR approval.'});
   await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
@@ -3075,7 +3156,7 @@ async function generateBusinessRequirements(options={}){
   (historic.length?'\nPREVIOUSLY COMPLETED BUSINESS REQUIREMENTS (READ ONLY): '+JSON.stringify(historic.slice(0,100))+'. These requirements belong to earlier published cycles. Do not regenerate, modify, remove, or return their IDs. For new independent source documents, return only genuinely new requirements. Overlap must be reconciled separately, not duplicated.':'');
  let proposed;
  if(mappedGroups.length>1&&!options.selective){
-  if(mappedGroups.length>25)throw Error('More than 25 separate Business Requirements detected. Split the original document into smaller BR cycles.');
+  // Process source-backed groups sequentially; no fixed cap on the total BR count.
   proposed=[];
   for(const [index,group] of mappedGroups.entries()){
    const sourcePartTexts=[];
@@ -3104,17 +3185,43 @@ async function generateBusinessRequirements(options={}){
    proposed.push(...current);
   }
  }else{
+ let initialFailure=null;
  for(let attempt=1;attempt<=2;attempt++){
-  const prompt=attempt===1?question:question+'\n\nIMPORTANT: Previous response was not valid requirements JSON. Return ONLY one complete JSON object matching the specified schema, without code fences or explanation. Limit the response to essential requirements; do not truncate JSON.';
+  let prompt=question;
+  if(attempt===2){
+   // A mapped single BR has source-preserving Markdown evidence. Retry with
+   // the specific group instead of resending an oversized programme-wide prompt.
+   if(initialFailure?.requirementCount===0&&mappedGroups.length===1&&activeRequirements.length<=1){
+    const group=mappedGroups[0];
+    const unitAnswers=baBrTextPipeline.mergeForDiscovery(group.units.map(ref=>ref.answers),group.units);
+    const sources=[];
+    for(const ref of group.units)sources.push(await baBrTextPipeline.read(registry,activeProject.id,ref));
+    prompt=brWorkflow.promptForGeneration(unitAnswers,activeRequirements,[{name:group.sourceName+' / BR '+group.brIndex,excerpt:sources.join('').slice(0,6500)}])+
+     '\\n\\nSOURCE-SCOPED JSON RECOVERY: Return exactly ONE complete source-backed Business Requirement with the required fields and nested feature/story/task arrays. Preserve the existing BR ID if appropriate. The verified Markdown mapping represents this single BR.';
+   }else{
+    const problem=initialFailure?.code==='ATGV_GENERATION_COUNT'?'Previous model output contained no BRs; return at least one source-backed complete BR.':'Previous output could not be parsed as valid requirements JSON.';
+    prompt=question+'\\n\\nSTRICT JSON RECOVERY: '+problem+' Return ONLY a complete JSON object {"requirements":[{"title":"...","objective":"...","scope":"...","acceptanceCriteria":"...","features":[]}]}. Include every valid evidence-backed business requirement, without a fixed number limit; no Markdown or commentary.';
+   }
+   await dashboard?.webview.postMessage({type:'baProgress',task:'generate',message:'Retrying with '+(initialFailure?.requirementCount===0&&mappedGroups.length===1&&activeRequirements.length<=1?'source-scoped Markdown':'validated JSON')+' evidence and explicit requirement-count checks…'});
+  }
   const result=await aiAnswer(target,prompt+await roleSkillPrompt('business-analyst'),125000,{json:true});
   try{proposed=brWorkflow.parseGenerated(result);break;}
   catch(error){
-   if(attempt===2)throw Error('AI generation failed validation twice: '+error.message+' No Business Requirements were changed. Retry with smaller source documents or a different AI model.');
-   await dashboard?.webview.postMessage({type:'baProgress',task:'generate',message:'AI output was invalid. Retrying generation with stricter JSON instructions…'});
+   initialFailure=error;
+   if(attempt===2){
+    const explanation=error.code==='ATGV_GENERATION_COUNT'?'AI returned zero requirements; confirm the mapped document contains business requirements.':error.message;
+    throw Error('AI generation failed validation twice: '+explanation+' No Business Requirements or Jira issues were changed. The verified source and Discovery answers are preserved for retry.');
+   }
   }
  }
  }
  if(!proposed?.length)throw Error('AI generated no valid Business Requirements. No changes were saved. Check the 12 discovery answers and retry.');
+ // Human approval occurs before any BR registry mutation. The reported count is
+ // the actual validated array length (including accumulated Markdown groups).
+ const proceed='Continue';
+ const count=proposed.length;
+ const confirmed=await uiWarning('AI generated '+count.toLocaleString('en-US')+' valid Business Requirement'+(count===1?'':'s')+'.\\n\\nContinue to save these as editable draft requirements for review?\\n\\nCancel keeps all existing approved BR revisions, drafts, Jira identities, and source documents unchanged.',{modal:true,detail:'Large sets are generated in source-backed groups to avoid model response limits. No Jira writes occur until the revised BRs are reviewed, approved, and pass Jira Preflight.'},proceed);
+ if(confirmed!==proceed){await dashboard?.webview.postMessage({type:'baProgress',task:'generate',done:true,message:'Cancelled before saving '+count+' generated BRs. Existing BR and Jira data unchanged.'});return;}
  const currentSaved=await discovery.load(registry,activeProject.id);if(currentSaved.revision!==saved.revision)throw Error('Discovery changed while generating BRs. Retry.');
  const updated=await brWorkflow.generated(registry,activeProject.id,register.revision,{discoveryRevision:saved.revision,requirements:proposed,riskAccepted,targetBrIds:focused,actor:await verifiedBAActor()});
  await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
@@ -8396,6 +8503,13 @@ async function handleDashboardMessage(msg){
       case 'updateSourceDocuments':{
         requireOpened();try{await importDiscoveryDocument('business-analyst');}catch(e){await dashboard?.webview.postMessage({type:'discoveryImportFailed',message:e.message});throw e;}break;
       }
+      case 'replaceDiscoverySource':{
+        requireOpened();await requireBAOwner('ba-discovery');
+        await dashboard?.webview.postMessage({type:'discoveryImportProgress',message:'Select and verify updated source before replacing the old version…'});
+        try{await importDiscoveryDocument(msg.roleId,{replacementDigest:msg.digest,expectedRevision:msg.revision});}
+        catch(e){await dashboard?.webview.postMessage({type:'discoveryImportFailed',message:'Source replacement failed safely: '+String(e.message||e)});throw e;}
+        break;
+      }
       case 'importDiscovery':{
         await dashboard?.webview.postMessage({type:'discoveryImportProgress',message:'Reading selected documents…'});
         try{await importDiscoveryDocument(msg.roleId);}catch(e){await dashboard?.webview.postMessage({type:'discoveryImportFailed',message:e.message});throw e;}
@@ -8561,6 +8675,11 @@ async function handleDashboardMessage(msg){
         await dashboard?.webview.postMessage({type:'discoveryRestarted',discovery:cleared,digests:[]});
         await dashboard?.webview.postMessage({type:'brUpdated',register:updated});break;
        }
+      case 'archiveDiscoverySourceSafe':{
+        try{await removeDiscoverySource(msg);}
+        catch(e){await dashboard?.webview.postMessage({type:'discoverySourceRemoveCancelled'});throw e;}
+        break;
+      }
       case 'removeDiscoverySource':throw Error('Delete now means Delete Everywhere. Refresh Business Requirements and use the verified Delete button.');
       case 'deleteUploadedDiscoverySource':throw Error('Delete now means Delete Everywhere. Refresh Business Requirements and use the verified Delete button.');
       case 'restoreDiscoverySource':await restoreDiscoverySource(msg);break;
