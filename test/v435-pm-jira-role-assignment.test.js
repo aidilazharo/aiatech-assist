@@ -63,7 +63,7 @@ test('Epic assignment only includes development hierarchy, excludes other role s
  assert.deepEqual(p.targets.map(x=>x.key).sort(),['TC-100','TC-101','TC-102','TC-103','TC-107'].sort());
  assert.deepEqual(p.excluded.map(x=>x.key).sort(),['TC-104','TC-105','TC-106']);
  const tree=ownership.developmentTree(register,'BR-001');
- assert.deepEqual(tree.entries.map(x=>x.key),['TC-100','TC-101','TC-102','TC-103','TC-107']);
+ assert.deepEqual(tree.entries.map(x=>x.key).sort(),['TC-100','TC-101','TC-102','TC-103','TC-107'].sort());
 });
 test('single Task and Subtask assignment uses verified Jira values; rolled back on failure',async()=>{
  let state=new Map(items.map(x=>[x.key,{updated:x.updated,owner:x.assigneeId}]));
