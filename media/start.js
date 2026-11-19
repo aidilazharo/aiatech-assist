@@ -4616,7 +4616,20 @@ function renderSoftwareUpdates(data,force=false){
  latestSoftwareUpdateState=data;
  const version=data.installedVersion||'?';
  const latestVersion=data.extensionLatest?.version||data.latest?.version||'';
- $('softwareExtensionStatus').textContent=data.extensionError?`Extension: ${data.extensionError}`:latestVersion&&!data.extensionLatest.installable?`Latest extension v${latestVersion}: verified VSIX or checksum not available.`:data.latest?`Extension v${data.latest.version} available (installed v${version}). Release: ${data.latest.tag}.`:data.extensionLastCheck?`Installed extension v${version}${latestVersion?' · latest v'+latestVersion:' · no public release found'} (checked ${new Date(data.extensionLastCheck).toLocaleString()}).`:`Installed extension: v${version}; not checked yet.`;
+ // A public mirror can lag behind an installed private-source build. Never
+ // present an older public artifact as an available upgrade or 'latest' ATGV.
+ const semverParts=value=>{const parts=String(value||'').split('.');return parts.length===3&&parts.every(part=>/^[0-9]+$/.test(part))?parts.map(Number):null;};
+ const publishedParts=semverParts(latestVersion),installedParts=semverParts(version);
+ const publicBehind=!!publishedParts&&!!installedParts&&publishedParts.some((part,index)=>part!==installedParts[index])&&
+  publishedParts.findIndex((part,index)=>part!==installedParts[index])>=0&&
+  publishedParts[publishedParts.findIndex((part,index)=>part!==installedParts[index])]<installedParts[publishedParts.findIndex((part,index)=>part!==installedParts[index])];
+ const checked=data.extensionLastCheck?' (checked '+new Date(data.extensionLastCheck).toLocaleString()+').':'';
+ $('softwareExtensionStatus').textContent=data.extensionError?`Extension: ${data.extensionError}`:
+  publicBehind?`Installed extension v${version} · public release mirror is behind (v${latestVersion}). No downgrade available${checked}`:
+  latestVersion&&!data.extensionLatest?.installable&&!data.latest?`Public release v${latestVersion}: verified VSIX or checksum not available.`:
+  data.latest?`Extension v${data.latest.version} available (installed v${version}). Release: ${data.latest.tag}.`:
+  data.extensionLastCheck?`Installed extension v${version}${latestVersion?' · latest public release v'+latestVersion:' · no public release found'}${checked}`:
+  `Installed extension: v${version}; not checked yet.`;
  $('softwareLibraryStatus').textContent=data.libraryError?`Library: ${data.libraryError}`:data.libraryLatest?`Library release: v${data.libraryLatest}${data.libraryLatestAvailable?'. Pull Library Files to install the verified source archive.':'; verified ZIP or checksum not available.'}`:'Library: no public release yet.';
  $('viewExtensionRelease').disabled=!data.extensionLatest;
  $('installExtensionRelease').disabled=!data.latest;
