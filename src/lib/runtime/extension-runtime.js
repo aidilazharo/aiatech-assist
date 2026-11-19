@@ -2977,6 +2977,23 @@ async function generateBusinessRequirements(options={}){
  }
  const focused=options.selective===true?staleDrafts.map(b=>b.id):null;
  if(options.selective&&!focused?.length)throw Error('No outdated Business Requirements drafts are eligible for selective regeneration.');
+ if(baTimeoutSimplified.isSimplifiedEvidence(register)){
+  if(!review.skipped)throw Error('Simplified Jira drafts require the Business Analyst to select Skip AI Review and acknowledge that AI verification was incomplete.');
+  if(options.selective)throw Error('Simplified draft generation does not support selective regeneration. Review the complete source.');
+  const proceed=await uiWarning('Create a simplified source-only BR draft for subsequent Jira Epic, Stories and Tasks?\n\nAcceptance criteria and AI quality checks will be marked NOT VERIFIED. This does not publish Jira or bypass mandatory BR approval. Review all source statements and approve the draft before publishing.',{modal:true},'Create Simple Draft');
+  if(proceed!=='Create Simple Draft')return;
+  const source=register.sourceDocuments.find(row=>(register.processedSources||[]).includes(row.digest));
+  if(!source)throw Error('Verified source document is required for simplified BR generation.');
+  const verified=await sourceStore.read(registry,activeProject.id,source);
+  const proposal=baTimeoutSimplified.simpleProposal({name:source.name,text:verified.text,answers:saved.answers});
+  const currentSaved=await discovery.load(registry,activeProject.id);
+  if(currentSaved.revision!==saved.revision)throw Error('Discovery changed during simplified BR generation.');
+  const updated=await brWorkflow.generated(registry,activeProject.id,register.revision,{discoveryRevision:saved.revision,requirements:proposal,riskAccepted:false,actor:await verifiedBAActor()});
+  await recordBAProcess({stage:'generate',action:'source-only-simple-br',status:'needs-review',details:'Deterministic source-only draft generated; acceptance criteria not verified. Jira publication still requires BR approval.'});
+  await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
+  await notice('Simple BR draft created. Review and approve before publishing Jira Epic, Stories and Tasks. AI checks were skipped; no tests were run.');
+  return;
+ }
  const target=await activeAiTarget();
  // Generate Requirements is a user-initiated AI action; approval and publishing remain separate gates.
  await dashboard?.webview.postMessage({type:'baProgress',task:'generate',message:'Generating Business Requirement documents…'});
