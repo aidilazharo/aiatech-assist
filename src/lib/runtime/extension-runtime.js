@@ -1938,7 +1938,8 @@ async function importDiscoveryDocument(roleId,{replacementDigest='',expectedRevi
  const initial=await brWorkflow.load(registry,projectId);
  if(expectedRevision&&initial.revision!==expectedRevision)throw Error('Source revision changed. Refresh before selecting an updated document.');
  const existing=initial.sourceDocuments||[];
- const replacementSource=replacementDigest?existing.find(source=>source.digest===replacementDigest):null;
+ let selectedReplacementDigest=replacementDigest;
+ let replacementSource=replacementDigest?existing.find(source=>source.digest===replacementDigest):null;
  if(replacementDigest){
   if(!/^[a-f0-9]{64}$/.test(String(replacementDigest))||!replacementSource||existing.length!==1)throw Error('The source to replace is no longer current. Refresh and retry.');
   if(Object.keys(initial.pending||{}).length)throw Error('Resolve pending Jira publication or reconciliation before replacing the document.');
@@ -1953,6 +1954,19 @@ async function importDiscoveryDocument(roleId,{replacementDigest='',expectedRevi
   documents.push({...doc,digest:sha(doc.text),originalPath:selection.fsPath});
  }
  if(new Set(documents.map(d=>d.name.toLowerCase())).size!==documents.length||new Set(documents.map(d=>d.digest)).size!==documents.length)throw Error('Select unique filenames and document contents.');
+ // When the BA removed an active source but kept its approved Jira work, offer
+ // reupload as a new revision instead of silently creating a duplicate BR.
+ if(!replacementSource&&!existing.length&&documents.length===1){
+  const archived=[...(initial.archivedSources||[])].filter(row=>(initial.brs||[]).some(br=>br.status!=='retired'&&!br.archivedFromRestart&&(
+   (br.evidence||[]).some(ev=>ev.digest===row.digest)||br.source?.name===row.name)));
+  const latest=archived.at(-1);
+  if(latest){
+   const action='Reupload as Updated Source';
+   const yes=await uiWarning('The source '+latest.name+' was removed while its approved Business Requirements and Jira links were retained.\n\nUse the new document '+documents[0].name+' as the next version of that source? This will preserve the existing BR/Jira identities, rerun mapping and require explicit approval before updating Jira.\n\nCancel leaves the existing records unchanged.',{modal:true},action);
+   if(yes!==action){await dashboard?.webview.postMessage({type:'discoveryImportCancelled'});return;}
+   selectedReplacementDigest=latest.digest;replacementSource=latest;
+  }
+ }
  const previousVersions=[...existing,...(initial.archivedSources||[])];
  const changes=documents.map(doc=>{
   const existingMatch=replacementSource||existing.find(x=>x.digest===doc.digest)||existing.find(x=>x.name.toLowerCase()===doc.name.toLowerCase())||previousVersions.find(x=>x.digest===doc.digest)||previousVersions.find(x=>x.name.toLowerCase()===doc.name.toLowerCase());
@@ -2016,7 +2030,7 @@ async function importDiscoveryDocument(roleId,{replacementDigest='',expectedRevi
  }
  const current=await brWorkflow.load(registry,activeProject.id);
  if(activeProject?.id!==projectId||current.revision!==initial.revision)throw Error('Source document list or project changed during upload. Refresh and retry.');
- const register=await brWorkflow.addSources(registry,projectId,current.revision,prospective,{actor:uploader,singleSourceCycle:true,replacementDigest});
+ const register=await brWorkflow.addSources(registry,projectId,current.revision,prospective,{actor:uploader,singleSourceCycle:true,replacementDigest:selectedReplacementDigest});
  // Persist the source-preserving Markdown files immediately after upload, even when no AI provider is configured.
  for(const {document:doc} of updatedDocuments){
   const units=await baBrTextPipeline.prepare(registry,activeProject.id,doc);
