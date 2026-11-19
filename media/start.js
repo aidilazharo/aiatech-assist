@@ -1321,6 +1321,13 @@ function pmOptionList(id,values,defaultText){
  for(const entry of entries){const item=document.createElement('option');item.value=entry;item.textContent=entry;node.append(item);}
  node.value=entries.includes(selection)?selection:'';
 }
+function pmJiraIssueType(type){
+ const t=String(type||'').trim().toLowerCase().replace(/[\s_-]+/g,' ');
+ if(['br','business requirement','business requirements'].includes(t))return 'br';
+ if(t==='epic')return 'epic';
+ if(['story','stories','user story','user stories'].includes(t))return 'story';
+ return 'other';
+}
 function pmToday(){const now=new Date();return [now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-');}
 function pmText(tag,text,className=''){const node=document.createElement(tag);node.textContent=String(text??'');if(className)node.className=className;return node;}
 function pmJiraLink(item){const link=document.createElement('button');link.type='button';link.className='jira-issue-inline-link';link.textContent=item.key;link.addEventListener('click',()=>openJiraIssueModal(item.key));return link;}
@@ -1451,8 +1458,8 @@ function renderPMDashboard(){
  pmOptionList('pmAssigneeFilter',items.map(x=>x.assignee||'Unassigned'),'All assignees');
  pmOptionList('pmStatusFilter',items.map(x=>x.status),'All statuses');
  pmOptionList('pmPriorityFilter',items.map(x=>x.priority),'All priorities');
- const assignee=$('pmAssigneeFilter').value,status=$('pmStatusFilter').value,priority=$('pmPriorityFilter').value,due=$('pmDueFilter').value,term=$('pmJiraFilter').value.trim().toLowerCase();
- const matches=summary.items.filter(item=>(!assignee||(item.assignee||'Unassigned')===assignee)&&(!status||item.status===status)&&(!priority||item.priority===priority)&&
+ const typeFilter=$('pmTypeFilter').value,assignee=$('pmAssigneeFilter').value,status=$('pmStatusFilter').value,priority=$('pmPriorityFilter').value,due=$('pmDueFilter').value,term=$('pmJiraFilter').value.trim().toLowerCase();
+ const matches=summary.items.filter(item=>(!typeFilter||pmJiraIssueType(item.type)===typeFilter)&&(!assignee||(item.assignee||'Unassigned')===assignee)&&(!status||item.status===status)&&(!priority||item.priority===priority)&&
  (!due||(due==='overdue'&&item.pmState.overdue)||(due==='soon'&&item.pmState.dueSoon)||(due==='none'&&!item.dueDate))&&
  (!term||[item.key,item.summary,item.assignee,item.status,item.priority].some(v=>String(v||'').toLowerCase().includes(term))));
  // Default: explicit blocker first, overdue second, due-soon third, then Jira's created-descending order.
@@ -1477,7 +1484,7 @@ function ensurePMJiraInventory(force=false){
 }
 $('pmRefreshJira').addEventListener('click',searchJiraInventory);
 $('pmApproveEstimates').addEventListener('click',()=>send('pmApproveEffortBaseline',{projectId:activeId,overrides:pmEffortEdits}));
-for(const id of ['pmJiraFilter','pmAssigneeFilter','pmStatusFilter','pmPriorityFilter','pmDueFilter'])$(id).addEventListener(id==='pmJiraFilter'?'input':'change',renderPMDashboard);
+for(const id of ['pmJiraFilter','pmTypeFilter','pmAssigneeFilter','pmStatusFilter','pmPriorityFilter','pmDueFilter'])$(id).addEventListener(id==='pmJiraFilter'?'input':'change',renderPMDashboard);
 $('pmOpenDocuments').addEventListener('click',()=>navigate('documents'));
 $('pmOpenApprovals').addEventListener('click',()=>navigate('operations'));
 $('pmOpenGantt').addEventListener('click',()=>{navigate('overview');$('overviewGanttDetails').open=true;send('loadPlanning');});
