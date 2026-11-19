@@ -31,9 +31,10 @@ function existingValueText(value){
  if(value&&typeof value==='object')return 'Existing Jira value preserved';
  return '';
 }
-/** Read-only preview of all edit/create metadata. Only field values directly
- * supported by an approved BR, or safe text placeholders, are publishable.
- * Nontext fields never receive fabricated strings. */
+/** Every Jira metadata field receives a source-backed value or visible
+ * missing-evidence placeholder. Only writable text fields accept placeholder
+ * writes; typed values cannot accept fabricated strings and are preview-only.
+ * Required typed fields without a valid default block publication. */
 function planFields(item, metadata, context={}){
  if(!Array.isArray(metadata))throw Error('Jira did not return valid issue field metadata.');
  const fields=[],extraFields={},blocking=[],seen=new Set();
@@ -48,11 +49,11 @@ function planFields(item, metadata, context={}){
   let display='',source='',status='not-available',value;
   if(core.has(id)){
    if(id==='summary'){display=item.title||'';source='Approved BR';status='planned';}
-   else if(id==='description'){display=String(item.description||'').slice(0,350);source='Approved BR';status='planned';}
+   else if(id==='description'){display=String(item.description||'').slice(0,350)||MISSING;source=item.description?'Approved BR':'Missing BR evidence';status=item.description?'planned':'placeholder';}
    else if(id==='project'||id==='issuetype'||id==='parent'||id==='labels'){display='ATGV managed Jira field';source='Jira project and issue hierarchy';status='planned';}
    else if(hasOld){display=existingValueText(old);source='Existing Jira';status='preserved';}
    else if(hasDefault){display='Jira default';source='Jira';status='default';}
-   else {display=MISSING;source='Not in BR';}
+   else {display=MISSING;source='Missing BR evidence · preview-only for non-text fields';}
   }else{
    const mapped=availableText(raw,item,context);
    const writable=raw.writable!==false&&(!Array.isArray(raw.operations)||!raw.operations.length||raw.operations.includes('set'));
@@ -70,12 +71,20 @@ function planFields(item, metadata, context={}){
     value=custom.includes('textarea')||id==='environment'?toRichText(MISSING):MISSING;
    }else if(hasDefault){
     display='Jira default';source='Jira';status='default';
-   }else{display=MISSING;source='Not available in BR';status='not-available';}
+   }else{display=MISSING;source='Missing BR evidence or supported Jira value · preview-only';status='not-available';}
    if(value!==undefined)extraFields[id]=value;
   }
   if(required&&status==='not-available'&&!hasOld&&!hasDefault)blocking.push(name+' ('+id+') requires a valid Jira value that the approved BR does not provide.');
-  fields.push({id,name,type,required,status,source,display:display.slice(0,800)});
+  fields.push({id,name,type,required,status,source,display:display.slice(0,800),
+   publishable:status==='planned'||status==='placeholder'&&value!==undefined||status==='preserved'||status==='default'});
  }
- return {fields,extraFields,blocking};
+ const autofillSummary={total:fields.length,
+  mapped:fields.filter(field=>field.status==='planned').length,
+  textPlaceholders:fields.filter(field=>field.status==='placeholder'&&field.publishable).length,
+  previewOnly:fields.filter(field=>!field.publishable).length,
+  preserved:fields.filter(field=>field.status==='preserved').length,
+  jiraDefaults:fields.filter(field=>field.status==='default').length,
+  blocking:blocking.length};
+ return {fields,extraFields,blocking,autofillSummary};
 }
 module.exports={MISSING,planFields,toRichText};
