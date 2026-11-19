@@ -2153,3 +2153,21 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 .jira-issue-modal-content .jira-preview-field{border:1px solid var(--vscode-panel-border, #6666);border-radius:6px;padding:10px}
 .jira-issue-modal-content .jira-preview-field strong{display:block;margin-bottom:4px}
 .jira-issue-modal-content .jira-preview-field small{display:block;color:var(--vscode-descriptionForeground, #888);margin-top:4px}
+
+
+/* v0.4.32: persistent, read-only setup connection diagnostics. */
+#startupConnectionLogPanel{margin-top:18px;border:1px solid var(--vscode-panel-border,#555);border-radius:10px;padding:12px 14px;background:var(--vscode-editor-background)}
+#startupConnectionLogPanel>summary{cursor:pointer;font-weight:600;display:flex;gap:12px;align-items:center;justify-content:space-between;list-style-position:inside}
+#startupConnectionLogCount{font-size:12px;font-weight:400}
+.atgv-connection-log-toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:12px 0}
+.atgv-connection-log-toolbar p{margin:0;max-width:70ch;font-size:12px}
+.atgv-connection-log-toolbar .stack{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.atgv-connection-log-list{max-height:260px;overflow:auto;border-top:1px solid var(--vscode-panel-border,#555);margin-top:4px}
+.atgv-connection-log-entry{padding:10px 4px;border-bottom:1px solid var(--vscode-panel-border,#555);overflow-wrap:anywhere}
+.atgv-connection-log-heading{display:flex;align-items:center;flex-wrap:wrap;gap:10px;font-size:12px}
+.atgv-connection-log-heading time{margin-left:auto;font-size:11px}
+.atgv-connection-log-status{border:1px solid var(--vscode-panel-border,#666);border-radius:999px;padding:1px 8px;font-size:11px}
+.atgv-connection-log-entry[data-status="error"] .atgv-connection-log-status,.atgv-connection-log-entry[data-status="failed"] .atgv-connection-log-status,.atgv-connection-log-entry[data-status="not-saved"] .atgv-connection-log-status,.atgv-connection-log-entry[data-status="needs-attention"] .atgv-connection-log-status{color:var(--vscode-errorForeground,#f17070)}
+.atgv-connection-log-entry[data-status="ok"] .atgv-connection-log-status,.atgv-connection-log-entry[data-status="verified"] .atgv-connection-log-status{color:var(--vscode-testing-iconPassed,#6abb80)}
+.atgv-connection-log-entry p{font-size:12px;line-height:1.5;margin:5px 0 2px}
+.atgv-connection-log-entry small{font-size:11px}

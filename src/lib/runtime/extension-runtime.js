@@ -151,6 +151,50 @@ async function exportStartupDiagnostics(){
   await dashboard?.webview.postMessage({type:'startupDiagnosticSaved',message:'Unified error log saved to '+uri.fsPath});
  }
 }
+async function publishStartupConnectionDiagnostics(){
+ const entries=await startupDiagnostics.connectionEvents(context.globalStorageUri.fsPath,{limit:80});
+ await dashboard?.webview.postMessage({type:'startupConnectionLogResult',entries});
+}
+async function recordStartupConnectionResults(result,{mode='check',elapsedMs=0}={}){
+ // Persist a separate event for every endpoint, even when another service
+ // fails. Generic error explanations come from startupConnectionFailure;
+ // raw HTTP bodies, emails, headers and tokens never enter this log.
+ for(const check of result?.checks||[]){
+  let host='';
+  try{host=new URL(String(check.url||'')).hostname;}catch{}
+  await recordStartupDiagnostic({
+   stage:'connection-check',tool:String(check.label||check.id||'Connection'),
+   status:String(check.state||'unknown'),detectionSource:host,
+   detail:String(check.message||'Connection check finished').slice(0,450)
+  });
+ }
+ await recordStartupDiagnostic({
+  stage:'connection-result',tool:'Jira, Confluence & GitHub',
+  status:result?.success?'verified':mode==='check'?'needs-attention':'not-saved',
+  durationMs:elapsedMs,
+  detail:result?.success?'All required connection checks completed; credentials are not logged.':
+   'One or more endpoints could not be verified. See the individual connection-check entries.'
+ });
+ await publishStartupConnectionDiagnostics();
+}
+async function recordStartupConnectionError(error,mode){
+ const detail=startupConnectionFailure(error);
+ await recordStartupDiagnostic({stage:'connection-error',
+  tool:mode==='check'?'Saved connection health check':'Test & Save connections',
+  status:'failed',detail});
+ await publishStartupConnectionDiagnostics();
+}
+async function exportStartupConnectionDiagnostics(){
+ const content=await startupDiagnostics.connectionReport(context.globalStorageUri.fsPath);
+ const uri=await vscode.window.showSaveDialog({
+  title:'Save Jira, Confluence & GitHub Connection Log',
+  defaultUri:vscode.Uri.file(path.join(require('node:os').homedir(),'atgv-connection-diagnostics.txt')),
+  filters:{'Text logs':['txt','log']},saveLabel:'Save Connection Log'
+ });
+ if(!uri)return;
+ await vscode.workspace.fs.writeFile(uri,Buffer.from(content,'utf8'));
+ await dashboard?.webview.postMessage({type:'startupConnectionLogSaved',message:'Connection diagnostics exported.'});
+}
 async function askHostDialog(type,message,opts={}){
  if(!dashboard){
   if(type==='confirm'){
@@ -706,7 +750,22 @@ async function setSelectedModel(choice){
 
 const maxItems=()=>cfg().get('sync.maxItems',100);
 const maxBytes=()=>cfg().get('sync.maxFileKb',256)*1024;
-const report=text=>output?.appendLine(`[${new Date().toISOString()}] ${text}`);
+const report=text=>{
+ output?.appendLine(`[${new Date().toISOString()}] ${text}`);
+ // Also retain safe connection-related incidents after the setup wizard closes.
+ // Do not store raw requests, user details, tokens or API response bodies.
+ const note=String(text||'');
+ const service=/confluence|atlassian.*wiki/i.test(note)?'Confluence':
+  /jira|atlassian/i.test(note)?'Jira':
+  /github|sdlc catalog|library .*pull/i.test(note)?'GitHub':'';
+ if(service&&/\b(?:error|fail(?:ed|ure)?|denied|unauthoriz|forbidden|timed? out|timeout|offline|rate limit|HTTP\s+[45]\d\d|connect(?:ion|ivity) (?:refused|lost))\b/i.test(note)&&
+    !/Startup diagnostic write failed/i.test(note)&&context?.globalStorageUri?.fsPath){
+  void startupDiagnostics.append(context.globalStorageUri.fsPath,{
+   stage:'connection-error',tool:service+' runtime',status:'failed',
+   detail:startupConnectionFailure({message:note})
+  }).catch(()=>{});
+ }
+};
 const getWorkspace=()=>workspaceOverridePath?{uri:vscode.Uri.file(workspaceOverridePath)}:vscode.workspace.workspaceFolders?.[0];
 function current(){
   if(!activeProject||!store)throw new Error('No active ATGV project. Run "ATGV: Start" and create or select a project.');
@@ -4423,17 +4482,42 @@ async function handleDashboardMessage(msg){
         }
         break;
       }
+      case 'startupGetConnectionLogs':{
+        try{await publishStartupConnectionDiagnostics();}
+        catch(error){await dashboard?.webview.postMessage({type:'startupConnectionLogError',message:'Unable to load local connection diagnostics: '+startupConnectionFailure(error)});}
+        break;
+      }
+      case 'startupDownloadConnectionLogs':{
+        try{await exportStartupConnectionDiagnostics();}
+        catch(error){await dashboard?.webview.postMessage({type:'startupConnectionLogError',message:'Unable to export connection diagnostics: '+startupConnectionFailure(error)});}
+        break;
+      }
       case 'startupTestConnections':{
-        try{const result=await testAndSaveStartupConnections(msg,{onProgress:check=>dashboard?.webview.postMessage({type:'startupConnectionCheck',requestId:msg.requestId,check})});
+        const started=Date.now();
+        await recordStartupDiagnostic({stage:'connection-result',tool:'Jira, Confluence & GitHub',status:'started',detail:'Test & Save Connections requested.'});
+        try{
+          const result=await testAndSaveStartupConnections(msg,{onProgress:check=>dashboard?.webview.postMessage({type:'startupConnectionCheck',requestId:msg.requestId,check})});
+          await recordStartupConnectionResults(result,{mode:'save',elapsedMs:Date.now()-started});
           await dashboard?.webview.postMessage({type:'startupConnectionsResult',requestId:msg.requestId,...result});
-          if(result.success)await refreshDashboard();}
-        catch(error){startupSessionVerified=false;await dashboard?.webview.postMessage({type:'startupConnectionsResult',requestId:msg.requestId,success:false,message:error.message});}
+          if(result.success)await refreshDashboard();
+        }catch(error){
+          startupSessionVerified=false;
+          await recordStartupConnectionError(error,'save');
+          await dashboard?.webview.postMessage({type:'startupConnectionsResult',requestId:msg.requestId,success:false,message:startupConnectionFailure(error)});
+        }
         break;
       }
       case 'startupCheckConnections':{
-        try{const result=await testAndSaveStartupConnections(msg,{save:false,onProgress:check=>dashboard?.webview.postMessage({type:'startupConnectionCheck',requestId:msg.requestId,check})});
-          await dashboard?.webview.postMessage({type:'startupConnectionHealthResult',requestId:msg.requestId,...result});}
-        catch(error){await dashboard?.webview.postMessage({type:'startupConnectionHealthResult',requestId:msg.requestId,success:false,message:String(error.message||error)});}
+        const started=Date.now();
+        await recordStartupDiagnostic({stage:'connection-result',tool:'Jira, Confluence & GitHub',status:'started',detail:'Saved connection health check requested.'});
+        try{
+          const result=await testAndSaveStartupConnections(msg,{save:false,onProgress:check=>dashboard?.webview.postMessage({type:'startupConnectionCheck',requestId:msg.requestId,check})});
+          await recordStartupConnectionResults(result,{mode:'check',elapsedMs:Date.now()-started});
+          await dashboard?.webview.postMessage({type:'startupConnectionHealthResult',requestId:msg.requestId,...result});
+        }catch(error){
+          await recordStartupConnectionError(error,'check');
+          await dashboard?.webview.postMessage({type:'startupConnectionHealthResult',requestId:msg.requestId,success:false,message:startupConnectionFailure(error)});
+        }
         break;
       }
       case 'startupProceed':{
