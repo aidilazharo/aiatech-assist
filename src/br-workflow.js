@@ -52,7 +52,7 @@ async function load(registry,id){
  const file=await safeFile(registry,id);
  const raw=await fs.readFile(file,'utf8').catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
  const value=raw?JSON.parse(raw):empty();
- if(value.schema!==1||!Array.isArray(value.brs)||value.brs.length>100||!value.links||typeof value.links!=='object'||!value.synced||typeof value.synced!=='object')throw Error('BR register is invalid.');
+ if(value.schema!==1||!Array.isArray(value.brs)||!value.links||typeof value.links!=='object'||!value.synced||typeof value.synced!=='object')throw Error('BR register is invalid.');
  const current={...empty(),...value,revision:checksum(raw||'')};
  // Only legacy registers without a sourceDocuments field need migration.
  // An explicitly empty list is authoritative after a user deletes a cycle.
@@ -1053,7 +1053,7 @@ async function generated(registry,id,revision,{discoveryRevision,requirements,ri
   const seen=new Set(),used=new Set(),impact=[];next.retirementApprovals={};
   const selective=targetBrIds!==null;
   const selected=selective?new Set(targetBrIds):null;
-  if(selective&&(!Array.isArray(targetBrIds)||!targetBrIds.length||targetBrIds.length>25||targetBrIds.some(x=>!next.brs.some(b=>b.id===x))))throw Error('Invalid selective regeneration target.');
+  if(selective&&(!Array.isArray(targetBrIds)||!targetBrIds.length||targetBrIds.some(x=>!next.brs.some(b=>b.id===x))))throw Error('Invalid selective regeneration target.');
   for(const [proposalIndex,proposal] of proposals.entries()){
    const verified=evidence[proposalIndex]||[];
    const questionRefs=changeEngine.QUESTION_KEYS.filter(key=>{const answer=next.discoveryAnswers?.[key]||'';return answer&&overlap(answer,[proposal.title,proposal.objective,proposal.scope,proposal.acceptanceCriteria].join(' '))>=.2;});
