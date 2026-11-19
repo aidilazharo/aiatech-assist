@@ -154,7 +154,13 @@ async function exportBAProcessLog(projectId){
  if(projectId!==activeProject?.id)throw Error('The project changed. Reopen its Business Requirements page.');
  const register=await brWorkflow.load(registry,projectId);
  const events=await baProcessDiagnostics.read(context.globalStorageUri.fsPath,projectId);
- const checkpoint=await baMappingCheckpoint.load?.(registry,projectId).catch?.(()=>null)||null;
+ let checkpoint=null;
+ try{
+  const folder=path.join(path.dirname(registry.fileFor(projectId)),'documents','requirements','ai-resume');
+  const pending=await fs.readdir(folder);
+  const digests=new Set((register.sourceDocuments||[]).map(source=>source.digest));
+  if(pending.some(name=>/^[a-f0-9]{64}\.json$/.test(name)&&digests.has(name.slice(0,64))))checkpoint={present:true};
+ }catch(error){if(error.code!=='ENOENT')report('BA checkpoint listing unavailable: '+String(error.code||error.message).slice(0,100));}
  const content=baProcessDiagnostics.exportText({projectId,events,register,checkpoint});
  const target=await vscode.window.showSaveDialog({
   title:'Save Complete Business Requirements Troubleshooting Log',
@@ -2094,6 +2100,8 @@ async function processSelectedDiscoverySources(msg){
   for(let i=0;i<readable.length;i++){
    check();
    const source=readable[i];
+   await recordBAProcess({stage:'upload',action:'source-selected',status:'processing',
+    details:'Sectioned source selected for AI mapping; document text not recorded.'});
    run.largeSource=baLargeDocumentRecovery.isLargeDocument(source.text.length);
    run.preflightOffline=false;run.mappingOffline=false;run.sourceOnlyPreflight=false;
    let sections=discoveryImport.splitDocumentText(source.text);
@@ -2204,6 +2212,9 @@ async function processSelectedDiscoverySources(msg){
      throw Error(source.name+label+': document needs Business Analyst clarification before mapping. '+problem+' Original document preserved; no unsupported requirements invented.');
     }
     reports.push(result);
+    await recordBAProcess({stage:'preflight',action:'section-'+(part+1)+'-of-'+sections.length,
+     status:result.degraded?'ai-unverified':result.ready?'passed':'needs-review',
+     details:'Preflight section '+(result.degraded?'used source-only recovery':'processed')+'.'});
    }
    // Complete and validate every section before using the working BR for mapping.
    check();run.phase='preflight';
@@ -2269,6 +2280,9 @@ async function processSelectedDiscoverySources(msg){
      }
     }
     partAnswers.push(proposals);
+    await recordBAProcess({stage:'mapping',action:'section-'+(part+1)+'-of-'+sections.length,
+     status:sourceOnlyMappingPart?'source-only-review-required':'mapped',
+     details:sourceOnlyMappingPart?'AI mapping unavailable; literal source extraction used.':'AI mapping completed.'});
     await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'Mapped '+(i+1)+'/'+readable.length+' document(s), section '+(part+1)+'/'+sections.length+'. Validating results…'});
    }
    const proposals=discoveryImport.mergeMappingAnswers(partAnswers);
@@ -2308,6 +2322,8 @@ async function processSelectedDiscoverySources(msg){
    }
    // Aggregate evidence from every source section, with bounded UI/report
    // metadata. All sections must pass before the atomic mapping commit.
+   await recordBAProcess({stage:'cross-section',action:'consistency-review',status:crossSectionChecked?'verified':'not-verified',
+    details:'Cross-section AI check '+(crossSectionChecked?'completed':'not verified; BA review required')+'.'});
    const partialVerification=run.sourceOnlyPreflight||run.mappingOffline||(sections.length>1&&!crossSectionChecked);
    const reviewIssues=partialVerification?[{severity:'warning',category:'ai-verification',detail:'One or more AI analysis stages could not be verified. Source-only extraction and full original document are available; BA review is required before approval.',sourceExcerpt:'',suggestion:'Review all source-backed requirements and open decisions before approving or publishing.'}]:[];
    const report={status:partialVerification?'needs-review':'ready',crossSectionChecked,summary:partialVerification?'Source-only recovery completed; AI validation is incomplete. The uploaded original and full working BR were preserved. BA review required.':sections.length>1?'All '+sections.length+' document sections and their mapped claims were reviewed; source remains unchanged.':reports[0].summary,
@@ -2321,6 +2337,8 @@ async function processSelectedDiscoverySources(msg){
   check();run.phase='committing';
   await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'committing',message:'Saving complete mapping atomically. Cancellation is disabled during this step…'});
   const latest=await brWorkflow.commitSourceMapping(registry,run.projectId,original.revision,{digests:selected,proposals:mappedProposals,preflights});
+  await recordBAProcess({stage:'mapping',action:'save-mapping',status:'committed',
+    details:'Mapped discovery and preflight evidence saved to requirements register.'});
   for(const digest of selected)try{await baMappingCheckpoint.remove(registry,run.projectId,digest);}catch(error){report('Completed AI checkpoint cleanup: '+String(error.message||error));}
   try{await context.workspaceState.update('atgvAssist.baMappingResume.'+run.projectId,undefined);}catch(error){report('Completed AI resume marker cleanup: '+String(error.message||error));}
   for(const key of successfulSourceMappings.keys())if(key.startsWith(run.projectId+'|'))successfulSourceMappings.delete(key);
@@ -8098,6 +8116,7 @@ async function handleDashboardMessage(msg){
       case 'processDiscoverySources':{
         try{await processSelectedDiscoverySources(msg);}
         catch(e){
+          await recordBAProcess({stage:'mapping',action:'processDiscoverySources',status:e.name==='AbortError'?'cancelled':'failed',details:String(e.message||e).slice(0,400)});
           if(e.name==='AbortError')await dashboard?.webview.postMessage({type:'discoveryImportCancelled',mapping:true,message:'Mapping stopped before saving. Retry Mapping is available.'});
           else{
             const phase=e.phase||'';
