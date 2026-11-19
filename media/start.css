@@ -2218,3 +2218,24 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
  opacity:1!important;
  cursor:not-allowed;
 }
+
+
+/* ATGV startup + BA milestone separation (2026-11-19). */
+#startupCopilotCard{display:none!important}
+.atgv-startup-prerequisites>.atgv-tool-scan-status:hover{background:transparent!important}
+.atgv-startup-prerequisites>.atgv-tool-scan-status{background:transparent}
+#gateFinder .gate-search-footer{border-top:0!important;padding-top:0!important;min-height:0}
+#gateFinder .gate-search-footer #gateSearchPrevious,
+#gateFinder .gate-search-footer #gateAutoMessage{display:none!important}
+#gateFinder .gate-result button:disabled{
+ background:var(--vscode-button-secondaryBackground,#3b3b3b)!important;
+ border-color:var(--vscode-panel-border,#4b4b4b)!important;
+ color:var(--vscode-disabledForeground,#989898)!important;
+ cursor:not-allowed;opacity:1
+}
+#startupSetup.atgv-connection-step .atgv-startup-footer{display:none!important}
+.br-workflow-panel[data-step="generate"] .br-toolbar,
+.br-workflow-panel[data-step="generate"] #brCards,
+.br-workflow-panel[data-step="generate"] #brImpactSummary{display:none!important}
+.br-workflow-panel #brStageDescription{margin:5px 0 0}
+.br-workflow-panel #brGenerateSummary{margin:13px 0;padding:11px 13px;border:1px solid var(--vscode-panel-border);border-radius:8px}
