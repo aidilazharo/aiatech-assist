@@ -266,7 +266,7 @@ vscode.postMessage({command:'getRepoSyncSaved'});
 </script></body></html>`;
  return html.replaceAll('__CSP__',escapeHtml(csp).replaceAll('&#39;',"'")).replaceAll('__NONCE__',escapeHtml(nonce)).replaceAll('__VERSION__',escapeHtml(version));
 }
-function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null,workspaceRoot='',describePr=async()=>'',planSync=async()=>null,testConnection=repoCredentials.verifyConnection}={}){
+function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null,workspaceRoot='',describePr=async()=>'',planSync=async()=>null,testConnection=repoCredentials.verifyConnection,onWorkflowEvent=async()=>null}={}){
  if(panel){panel.reveal();return panel;}
  const current=vscode.window.createWebviewPanel('atgvAssist.workspace','ATGV: Workspace',vscode.ViewColumn.One,{enableScripts:true,retainContextWhenHidden:true});
  panel=current;
@@ -407,6 +407,7 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
   busy=true;createdPr='';
   if(isPrepare)pendingReview=null;
   let sourcePat='',destPat='',source=null,destination=null;
+  let workflowJobId=null,workflowFailure=null;
   try{
    if(!selectedFolder)throw Error('Choose a Destination Git folder outside ATGV workspace first.');
    if(isPublish&&(!pendingReview||pendingReview.folder!==selectedFolder))
@@ -432,6 +433,15 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
    if(response!==(isPrepare?'Prepare Source Review':isPublish?'Publish Reviewed PR':'Create Sync PR')){
     await post({type:'repoSyncResult',success:false,message:'Cancelled. No files were changed.'});return;
    }
+   try{
+    // Source and destination fingerprints only; credentials and URLs are never
+    // written to the persistent Workflow Jobs journal.
+    const inputHash=crypto.createHash('sha256').update(JSON.stringify({
+     source:source.name,destination:destination.name,scope,sourceBranch,sourcePrNumber,base,prepare:isPrepare
+    })).digest('hex');
+    workflowJobId=await onWorkflowEvent({type:'begin',
+     command:isPrepare?'workspacePrepareSync':'workspacePublishSync',inputHash})||null;
+   }catch(error){onLog('ATGV Workspace journal unavailable: '+String(error.message||error).slice(0,160));}
    await post({type:'repoSyncProgress',message:'Testing both GitHub PAT permissions…'});
    const sourceCredentials=await verifiedPat('Source',source);sourcePat=sourceCredentials.token;
    await rememberRepo('Source',source);
@@ -443,7 +453,11 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
     sourceUrl:source.url,sourceBranch,sourcePrNumber,destinationFolder:selectedFolder,copyScope:scope,baseBranch:base,
     sourcePat,destPat,workspaceRoot,destinationUrl:destination.url,
     planSync,describePr,previewOnly:isPrepare,approvedReview:reviewed,
-    onProgress:event=>post({type:'repoSyncProgress',stage:event.stage,message:event.message})
+    onProgress:async event=>{
+     await post({type:'repoSyncProgress',stage:event.stage,message:event.message});
+     if(workflowJobId)try{await onWorkflowEvent({type:'stage',jobId:workflowJobId,stage:event.stage||'processing'});}
+      catch(error){onLog('ATGV Workspace stage journal: '+String(error.message||error).slice(0,160));}
+    }
    });
    if(isPrepare){
     if(!outcome.preview||!outcome.review)throw Error('No source review generated.');
@@ -463,10 +477,15 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
    await post({type:'repoSyncResult',success:true,prUrl:createdPr,message:summary});
    onLog('Repo Sync: '+summary);
   }catch(error){
+   workflowFailure=error;
    const reason=sanitize(error,[sourcePat,destPat,source?.token,destination?.token]);
    onLog('Repo Sync failed: '+reason);
    await post({type:'repoSyncResult',success:false,message:reason});
-  }finally{busy=false;}
+  }finally{
+   if(workflowJobId)try{await onWorkflowEvent({type:'finish',jobId:workflowJobId,error:workflowFailure});}
+    catch(error){onLog('ATGV Workspace finish journal: '+String(error.message||error).slice(0,160));}
+   busy=false;
+  }
  });
  current.webview.html=workspaceHtml({nonce:crypto.randomBytes(18).toString('base64'),version,cspSource:current.webview.cspSource});
  return current;
