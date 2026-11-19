@@ -1935,6 +1935,17 @@ function recoverableSourceAIError(error){
  return error?.code==='ATGV_SOURCE_AI_TIMEOUT'||error?.name==='TimeoutError'||
   /(?:time.?out|invalid json|invalid response|incomplete|connection reset|econnreset|network error|rate limit|\b429\b|\b502\b|\b503\b|\b504\b|temporarily unavailable|empty response|no repair proposal)/i.test(message);
 }
+function trySourceAIFallback(run,error){
+ if(error?.name==='AbortError')return false;
+ // If Copilot authentication/setup fails, resume with the originally selected
+ // provider rather than looping on the same unavailable SDK.
+ if(run.useRecovery&&!recoverableSourceAIError(error)){
+  run.useRecovery=false;run.recoveryTarget=null;return true;
+ }
+ if(!recoverableSourceAIError(error))return false;
+ if(run.recoveryTarget&&!run.useRecovery)run.useRecovery=true;
+ return true;
+}
 async function requestSourceAI(target,prompt,run,{maxChars=20000,timeoutMs=SOURCE_PREFLIGHT_AI_TIMEOUT_MS}={}){
  const parent=run.controller.signal,child=new AbortController();
  if(parent.aborted){const error=Error('Source mapping stopped before saving.');error.name='AbortError';throw error;}
@@ -1944,7 +1955,7 @@ async function requestSourceAI(target,prompt,run,{maxChars=20000,timeoutMs=SOURC
   parent.addEventListener('abort',onStop,{once:true});
   timer=setTimeout(()=>{const error=Error('AI request timed out; the section can be retried.');error.code='ATGV_SOURCE_AI_TIMEOUT';child.abort();reject(error);},timeoutMs);
  });
- try{return await Promise.race([aiAnswer(target,prompt,maxChars,{json:true,signal:child.signal,timeoutMs}),cancelled]);}
+ try{return await Promise.race([aiAnswer(run.useRecovery&&run.recoveryTarget?run.recoveryTarget:target,prompt,maxChars,{json:true,signal:child.signal,timeoutMs}),cancelled]);}
  finally{clearTimeout(timer);parent.removeEventListener('abort',onStop);}
 }
 async function requestSourcePreflight(target,prompt,run){
@@ -1972,11 +1983,17 @@ async function processSelectedDiscoverySources(msg){
   if(documentPreflightSessions.size>10)documentPreflightSessions.delete(documentPreflightSessions.keys().next().value);
   await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preparing',message:'Checking the selected documents and AI model…'});
   const target=await activeAiTarget();check();
+  // External Copilot receives BR content only after an explicit opt-in in VS
+  // Code Settings, and only when its SDK is already locally installed.
+  if(target.kind!=='copilot-sdk'&&cfg().get('ai.useCopilotSdkForBaRecovery',false)&&await copilotRepairSdk.installed(context.globalStorageUri.fsPath)){
+   run.recoveryTarget={kind:'copilot-sdk',name:'Copilot SDK recovery',vendor:'Microsoft',label:'Microsoft Copilot SDK (recovery)',runtimeRoot:aiRuntimeRoot(),projectDirectory:getWorkspace()?.uri.fsPath||context.globalStorageUri.fsPath};
+  }
+  run.useRecovery=false;
   const readable=[];
   for(const source of documents){readable.push(await sourceStore.read(registry,run.projectId,source));check();}
   let resumeKey='';
   try{resumeKey=await aiMappingResumeKey();}catch(error){report('AI resume storage unavailable: '+String(error.message||error));}
-  const modelDigest=sha(JSON.stringify({kind:String(target.kind||''),label:String(target.label||''),modelId:String(target.modelId||target.model?.id||''),endpoint:String(target.endpoint||'')}));
+  const modelDigest=sha(JSON.stringify({kind:String(target.kind||''),label:String(target.label||''),modelId:String(target.modelId||target.model?.id||''),endpoint:String(target.endpoint||''),copilotRecovery:!!run.recoveryTarget}));
   const mappedProposals=[],preflights=[];
   for(let i=0;i<readable.length;i++){
    check();
@@ -2036,7 +2053,7 @@ async function processSelectedDiscoverySources(msg){
       }catch(error){
        check();
        const timedOut=error.code==='ATGV_SOURCE_AI_TIMEOUT'||error.name==='TimeoutError'||/\btimed?\s*out\b|\btimeout\b/i.test(String(error.message||error));
-       if(!recoverableSourceAIError(error))throw error;
+       if(!trySourceAIFallback(run,error))throw error;
        if(networkAttempt===1&&attempt===1&&preflightSplitRecoveries===0&&section.text.length>4000){
         const parts=discoveryImport.splitDocumentText(section.text,Math.max(2000,Math.floor(section.text.length/2)));
         if(parts.length>1&&sections.length-1+parts.length<=25){
@@ -2049,7 +2066,7 @@ async function processSelectedDiscoverySources(msg){
         }
        }
        if(networkAttempt<3){
-        await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Recovering from an incomplete or timed-out AI response ('+networkAttempt+'/3). Reusing saved sections; original document unchanged…'});
+        await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Recovering from an incomplete or timed-out AI response ('+networkAttempt+'/3)'+(run.useRecovery?' using Microsoft Copilot SDK':'')+'. Reusing saved sections; original document unchanged…'});
         continue;
        }
        throw Error(source.name+label+': AI preflight could not complete after three recovery attempts. '+String(error.message||error).slice(0,240)+' Saved sections remain available for Resume AI Mapping.');
@@ -2109,9 +2126,9 @@ async function processSelectedDiscoverySources(msg){
        break;
       }catch(error){
        check();
-       if(!recoverableSourceAIError(error)||attempt===3)
+       if(!trySourceAIFallback(run,error)||attempt===3)
         throw Error(doc.name+label+': AI mapping could not recover safely after '+attempt+' attempt(s). '+String(error.message||error).slice(0,260)+' Completed sections remain saved for Resume AI Mapping.');
-       await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'Recovering incomplete AI mapping ('+attempt+'/3). Completed sections remain saved…'});
+       await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'Recovering incomplete AI mapping ('+attempt+'/3)'+(run.useRecovery?' with Microsoft Copilot SDK':'')+'. Completed sections remain saved…'});
       }
      }
      check();successfulSourceMappings.set(cacheKey,proposals);
@@ -2140,9 +2157,9 @@ async function processSelectedDiscoverySources(msg){
       crossSectionChecked=true;crossError=null;break;
      }catch(error){
       check();
-      if(error.code==='ATGV_BUSINESS_CONFLICT'||!recoverableSourceAIError(error))throw error;
+      if(error.code==='ATGV_BUSINESS_CONFLICT'||!trySourceAIFallback(run,error))throw error;
       crossError=error;
-      if(attempt<3)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Cross-section AI review was interrupted. Retrying ('+attempt+'/3) without restarting the document…'});
+      if(attempt<3)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Cross-section AI review was interrupted. Retrying ('+attempt+'/3)'+(run.useRecovery?' with Microsoft Copilot SDK':'')+' without restarting the document…'});
      }
     }
     if(crossError)throw Error(source.name+': cross-section review could not complete after recovery attempts. '+String(crossError.message||crossError).slice(0,240)+' Saved section mappings remain available for Resume AI Mapping.');
