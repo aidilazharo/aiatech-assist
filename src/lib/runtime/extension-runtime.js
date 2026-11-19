@@ -1804,9 +1804,23 @@ async function resolveOpeningProject(msg){
     (p.settings?.confluence?.spaceKey===space.key&&
      effectiveConfig(p).get('confluence.baseUrl')===space.baseUrl));
   if(matching)return matching;
-  const id=projectSlug(space.name),colliding=local.find(p=>p.id===id);
-  if(colliding)throw new Error(`Folder projects/${id} already belongs to a different project. Choose or rename it manually.`);
   const jiraKey=discoveredJiraProjects.find(p=>p.key.toLowerCase()===space.key.toLowerCase())?.key||'';
+  let id=projectSlug(space.name);
+  // On a different computer, a Confluence space may already have a project
+  // source vault under an explicitly selected non-default project ID.
+  // Recover that identity rather than inventing a second local project.
+  try{
+   const temporary=normalizeProjectInput({name:space.name,id,settings:{jira:{projectKey:jiraKey},confluence:{spaceId:space.id,spaceKey:space.key,spaceName:space.name,baseUrl:space.baseUrl}}});
+   const config=effectiveConfig(temporary),token=await getAtlassianToken(temporary);
+   const catalog=await requestJson(baseConfluence(config)+'/api/v2/spaces/'+encodeURIComponent(space.id)+'/pages?limit=100',
+    {token,basicEmail:config.get('jira.email'),timeoutMs:10000});
+   const prefix='ATGV · Source Vault · '+space.key+' · ';
+   const candidates=new Set((catalog.results||[]).filter(p=>p.title?.startsWith(prefix)).map(p=>p.title.slice(prefix.length))
+    .filter(value=>/^[a-z][a-z0-9-]{0,48}$/.test(value)));
+   if(candidates.size===1)id=[...candidates][0];
+  }catch(error){report('Confluence project identity discovery deferred: '+String(error.message||error).slice(0,220));}
+  const colliding=local.find(p=>p.id===id);
+  if(colliding)throw new Error(`Folder projects/${id} already belongs to a different project. Choose or rename it manually.`);
   return normalizeProjectInput({name:space.name,id,settings:{jira:{projectKey:jiraKey},confluence:{spaceId:space.id,spaceKey:space.key,spaceName:space.name,baseUrl:space.baseUrl}}});
 }
 async function testOpeningProject(){
