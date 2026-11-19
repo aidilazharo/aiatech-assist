@@ -1928,17 +1928,27 @@ function saveCheckpointEntry(checkpoint,kind,key,value,limit){
 }
 // A timeout cancels only this AI request, not the user's mapping run. Race the
 // cancellation explicitly because some providers do not settle when cancelled.
-async function requestSourcePreflight(target,prompt,run){
- const child=new AbortController(),parent=run.controller.signal;
+// Bound each model call independently: a slow Copilot SDK or cloud request
+// must not abort the parent run and discard other completed section checkpoints.
+function recoverableSourceAIError(error){
+ const message=String(error?.message||error);
+ return error?.code==='ATGV_SOURCE_AI_TIMEOUT'||error?.name==='TimeoutError'||
+  /(?:time.?out|invalid json|invalid response|incomplete|connection reset|econnreset|network error|rate limit|\b429\b|\b502\b|\b503\b|\b504\b|temporarily unavailable|empty response|no repair proposal)/i.test(message);
+}
+async function requestSourceAI(target,prompt,run,{maxChars=20000,timeoutMs=SOURCE_PREFLIGHT_AI_TIMEOUT_MS}={}){
+ const parent=run.controller.signal,child=new AbortController();
  if(parent.aborted){const error=Error('Source mapping stopped before saving.');error.name='AbortError';throw error;}
  let timer,onStop;
- const stopped=new Promise((_,reject)=>{
-  onStop=()=>{const error=Error('Source mapping stopped before saving.');error.name='AbortError';reject(error);child.abort();};
+ const cancelled=new Promise((_,reject)=>{
+  onStop=()=>{const error=Error('Source mapping stopped before saving.');error.name='AbortError';child.abort();reject(error);};
   parent.addEventListener('abort',onStop,{once:true});
-  timer=setTimeout(()=>{const error=Error('AI document preflight timed out.');error.code='ATGV_PREFLIGHT_TIMEOUT';reject(error);child.abort();},SOURCE_PREFLIGHT_AI_TIMEOUT_MS);
+  timer=setTimeout(()=>{const error=Error('AI request timed out; the section can be retried.');error.code='ATGV_SOURCE_AI_TIMEOUT';child.abort();reject(error);},timeoutMs);
  });
- try{return await Promise.race([aiAnswer(target,prompt,20000,{json:true,signal:child.signal,timeoutMs:SOURCE_PREFLIGHT_AI_TIMEOUT_MS}),stopped]);}
+ try{return await Promise.race([aiAnswer(target,prompt,maxChars,{json:true,signal:child.signal,timeoutMs}),cancelled]);}
  finally{clearTimeout(timer);parent.removeEventListener('abort',onStop);}
+}
+async function requestSourcePreflight(target,prompt,run){
+ return requestSourceAI(target,prompt,run,{maxChars:20000,timeoutMs:SOURCE_PREFLIGHT_AI_TIMEOUT_MS});
 }
 async function processSelectedDiscoverySources(msg){
  if(activeDiscoveryMappingRun)throw Error('Source mapping is already running. Stop it before starting another mapping.');
@@ -2017,7 +2027,7 @@ async function processSelectedDiscoverySources(msg){
       try{const restored=baDocumentPreflight.parse(savedPreflight,section.text);if(restored.ready)result=restored;}catch{}
       if(result)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Resuming: using the completed preflight for '+source.name+label+'…'});
      }
-     for(let networkAttempt=1;!result&&networkAttempt<=2;networkAttempt++){
+     for(let networkAttempt=1;!result&&networkAttempt<=3;networkAttempt++){
       try{
        const ai=await requestSourcePreflight(target,prompt,run);
        check();result=baDocumentPreflight.parse(ai,section.text);
@@ -2025,8 +2035,8 @@ async function processSelectedDiscoverySources(msg){
        break;
       }catch(error){
        check();
-       const timedOut=error.code==='ATGV_PREFLIGHT_TIMEOUT'||error.name==='TimeoutError'||/\btimed?\s*out\b|\btimeout\b/i.test(String(error.message||error));
-       if(!timedOut)throw error;
+       const timedOut=error.code==='ATGV_SOURCE_AI_TIMEOUT'||error.name==='TimeoutError'||/\btimed?\s*out\b|\btimeout\b/i.test(String(error.message||error));
+       if(!recoverableSourceAIError(error))throw error;
        if(networkAttempt===1&&attempt===1&&preflightSplitRecoveries===0&&section.text.length>4000){
         const parts=discoveryImport.splitDocumentText(section.text,Math.max(2000,Math.floor(section.text.length/2)));
         if(parts.length>1&&sections.length-1+parts.length<=25){
@@ -2038,11 +2048,11 @@ async function processSelectedDiscoverySources(msg){
          break;
         }
        }
-       if(networkAttempt===1){
-        await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'The AI response timed out. Retrying this section once…'});
+       if(networkAttempt<3){
+        await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Recovering from an incomplete or timed-out AI response ('+networkAttempt+'/3). Reusing saved sections; original document unchanged…'});
         continue;
        }
-       throw Error(source.name+label+': AI document preflight timed out twice. Check the selected AI model and network access, then select Retry Mapping. The original document and existing BRs remain unchanged.');
+       throw Error(source.name+label+': AI preflight could not complete after three recovery attempts. '+String(error.message||error).slice(0,240)+' Saved sections remain available for Resume AI Mapping.');
       }
      }
      if(retrySmaller)break;
@@ -2088,22 +2098,21 @@ async function processSelectedDiscoverySources(msg){
      if(proposals)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'Resuming: using completed mapping for '+doc.name+label+'…'});
     }
     if(!proposals){
-     for(let attempt=1;attempt<=2;attempt++){
-      run.timeout=false;
-      const timer=setTimeout(()=>{run.timeout=true;run.controller.abort();},SOURCE_MAPPING_AI_TIMEOUT_MS);
+     for(let attempt=1;attempt<=3;attempt++){
+      check();
       try{
-       const answer=await aiAnswer(target,mappingPrompt+(attempt===2?'\n\nThe previous response was invalid. Return the exact JSON schema with all 12 keys as strings, using empty strings when evidence is missing.':''),95000,{json:true,signal:run.controller.signal,timeoutMs:SOURCE_MAPPING_AI_TIMEOUT_MS});
+       const responsePrompt=mappingPrompt+(attempt>1?'\n\nRECOVERY: Your previous response was unavailable or invalid. Return exactly the 12-key JSON answers schema. Use empty strings where source evidence is absent; do not invent business policies.':'');
+       const answer=await requestSourceAI(target,responsePrompt,run,{maxChars:95000,timeoutMs:SOURCE_MAPPING_AI_TIMEOUT_MS});
        check();
-       try{proposals=discoveryImport.parseMappingResponse(answer);if(checkpoint){saveCheckpointEntry(checkpoint,'mapping',mappingKey,answer,30);await persistCheckpoint();}}
-       catch(error){
-        if(attempt===2)throw Error(doc.name+label+': AI mapping returned an invalid response twice. Retry Mapping or select another AI model. '+error.message);
-        await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'The AI response was incomplete. Retrying the mapping once…'});
-       }
+       proposals=discoveryImport.parseMappingResponse(answer);
+       if(checkpoint){saveCheckpointEntry(checkpoint,'mapping',mappingKey,answer,30);await persistCheckpoint();}
+       break;
       }catch(error){
-       if(run.timeout)throw Error(doc.name+label+': AI mapping timed out after '+SOURCE_MAPPING_AI_TIMEOUT_MS/1000+' seconds. Check AI provider access in Settings, then use Retry Mapping. No results were saved.');
-       throw error;
-      }finally{clearTimeout(timer);}
-      check();if(proposals)break;
+       check();
+       if(!recoverableSourceAIError(error)||attempt===3)
+        throw Error(doc.name+label+': AI mapping could not recover safely after '+attempt+' attempt(s). '+String(error.message||error).slice(0,260)+' Completed sections remain saved for Resume AI Mapping.');
+       await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'Recovering incomplete AI mapping ('+attempt+'/3). Completed sections remain saved…'});
+      }
      }
      check();successfulSourceMappings.set(cacheKey,proposals);
      if(successfulSourceMappings.size>50)successfulSourceMappings.delete(successfulSourceMappings.keys().next().value);
@@ -2117,17 +2126,26 @@ async function processSelectedDiscoverySources(msg){
     check();run.phase='preflight';run.timeout=false;
     await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Comparing mapped requirements across all '+sections.length+' document sections…'});
     const crossPrompt=baDocumentPreflight.crossSectionPrompt(partAnswers),crossKey=sha(crossPrompt);
-    const timer=setTimeout(()=>{run.timeout=true;run.controller.abort();},SOURCE_MAPPING_AI_TIMEOUT_MS);
-    try{
-     let answer=checkpoint?.cross?.[crossKey];
-     if(answer)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Resuming: checking saved cross-section review…'});
-     else answer=await aiAnswer(target,crossPrompt,12000,{json:true,signal:run.controller.signal,timeoutMs:SOURCE_MAPPING_AI_TIMEOUT_MS});
-     check();const review=baDocumentPreflight.parseCrossSection(answer,partAnswers);
-     if(review.conflicts.length)throw Error(source.name+': conflicting requirements across document sections need Business Analyst clarification: '+review.conflicts.map(item=>String(item.detail).slice(0,250)).slice(0,3).join(' | ')+' No mapping was saved.');
-     if(checkpoint){saveCheckpointEntry(checkpoint,'cross',crossKey,answer,5);await persistCheckpoint();}
-     crossSectionChecked=true;
-    }catch(error){if(run.timeout)throw Error(source.name+': cross-section review timed out. No mapping was saved; retry mapping.');throw error;}
-    finally{clearTimeout(timer);}
+    let crossError;
+    for(let attempt=1;attempt<=3;attempt++){
+     check();
+     try{
+      let answer=checkpoint?.cross?.[crossKey];
+      if(answer)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Resuming: validating saved cross-section review…'});
+      else answer=await requestSourceAI(target,crossPrompt+(attempt>1?'\n\nRECOVERY: Return valid evidence-backed JSON only. Missing details are not contradictions.':''),run,{maxChars:12000,timeoutMs:SOURCE_MAPPING_AI_TIMEOUT_MS});
+      check();
+      const review=baDocumentPreflight.parseCrossSection(answer,partAnswers);
+      if(review.conflicts.length)throw Object.assign(Error(source.name+': conflicting business requirements need BA clarification: '+review.conflicts.map(item=>String(item.detail).slice(0,250)).slice(0,3).join(' | ')),{code:'ATGV_BUSINESS_CONFLICT'});
+      if(checkpoint){saveCheckpointEntry(checkpoint,'cross',crossKey,answer,5);await persistCheckpoint();}
+      crossSectionChecked=true;crossError=null;break;
+     }catch(error){
+      check();
+      if(error.code==='ATGV_BUSINESS_CONFLICT'||!recoverableSourceAIError(error))throw error;
+      crossError=error;
+      if(attempt<3)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Cross-section AI review was interrupted. Retrying ('+attempt+'/3) without restarting the document…'});
+     }
+    }
+    if(crossError)throw Error(source.name+': cross-section review could not complete after recovery attempts. '+String(crossError.message||crossError).slice(0,240)+' Saved section mappings remain available for Resume AI Mapping.');
    }
    // Aggregate evidence from every source section, with bounded UI/report
    // metadata. All sections must pass before the atomic mapping commit.
