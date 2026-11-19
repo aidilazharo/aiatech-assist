@@ -9,6 +9,7 @@ const FILE='atgv-startup-unified-diagnostics.log';
 let appendChain=Promise.resolve();
 function safe(value){
  return String(value??'')
+  .replace(/(authorization\\s*[:=]\\s*)(?:Bearer|Basic)\\s+[A-Za-z0-9._~+\\/=-]+/gi,'$1[REDACTED]')
   .replace(/(authorization|token|password|secret|apikey|api[_ -]?key)(\s*[:=]\s*)([^\s;,&]+)/gi,'$1$2[REDACTED]')
   .replace(/(https?:\/\/)([^/\s:@]+):([^@\s/]+)@/gi,'$1[REDACTED]@')
   .replace(/\b(?:github_pat_[A-Za-z0-9_]{12,}|gh[pousr]_[A-Za-z0-9]{12,}|ATATT[A-Za-z0-9._-]{12,})\b/g,'[REDACTED_CREDENTIAL]')
