@@ -59,7 +59,9 @@ test('archiving a published BR source preserves approved revision and existing J
 test('webview offers archive/delete and restore controls with preserved document selections',()=>{
  const html=read('test/generated/extension-source.txt'),ui=read('media/start.js'),css=read('media/start.css');
  assert.match(html,/id="discoveryImport" class="ba-source-icon-btn" title="Upload Word or PDF"/);
- assert.match(ui,/Delete Everywhere: remove verified linked Jira/);
+ assert.match(ui,/remove.textContent='Delete Everywhere'/);
+ assert.match(ui,/archive.textContent='Remove Source'/);
+ assert.match(ui,/replace.textContent='Replace & Reprocess'/);
  assert.match(ui,/deleteBREverywhere/);
  assert.match(html,/id="archivedSources"/);
  assert.match(ui,/function renderArchivedSources\(\)/);assert.doesNotMatch(ui,/Archived & superseded documents/);
