@@ -11,7 +11,7 @@ const STAGES=Object.freeze({
 });
 const isLargeDocument=textLength=>Number(textLength)>=LARGE_CHARS;
 function timeout(stage,isLarge){const item=STAGES[stage];if(!item)throw Error('Invalid BA AI stage.');return isLarge?item.largeTimeoutMs:item.normalTimeoutMs;}
-function attempts(stage,isLarge,hasSecondaryProvider){if(!STAGES[stage])throw Error('Invalid BA AI stage.');return isLarge?(hasSecondaryProvider?2:1):3;}
+function attempts(stage,isLarge,hasSecondaryProvider){if(!STAGES[stage])throw Error('Invalid BA AI stage.');return 3; /* Three failures before the optional simplified-mode prompt, even for large BRDs. */}
 function checkpointRecord(stage){
  if(!['preflight','mapping'].includes(stage))throw Error('Invalid recovery checkpoint stage.');
  return JSON.stringify({atgvFallback:SENTINEL,stage,sourceOnly:true,reviewRequired:true});
