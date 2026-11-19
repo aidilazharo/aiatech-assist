@@ -485,7 +485,9 @@ function setView(next){
   // An empty upload placeholder has no recoverable content and needs no card.
   // Navigation never stops an active host-side mapping, Jira publication or
   // another long-running process. Preserve the active BR step across screens.
-  const baProcessRunning=discoveryImportBusy||!!baBusyTask||['preparing','preflight','repair','mapping','committing'].includes(mappingRunPhase);
+  const baProcessRunning=(typeof discoveryImportBusy!=='undefined'&&discoveryImportBusy)||
+    (typeof baBusyTask!=='undefined'&&!!baBusyTask)||
+    (typeof mappingRunPhase!=='undefined'&&['preparing','preflight','repair','mapping','committing'].includes(mappingRunPhase));
   if(view==='discovery'&&next!=='discovery'){
     if(!baProcessRunning){baResumeCardReady=baHasRecoverableBR(brState);baViewedStep=null;}
   }else if(next==='discovery'&&view!=='discovery'&&baResumeCardReady&&!baProcessRunning){
@@ -2152,7 +2154,7 @@ function jiraIssueAssigneeEditor(value){
 }
 function applyJiraAssigneeUsers(msg){
  if(msg.key!==jiraModalKey||!jiraModalDetail||msg.projectId!==activeId||msg.requestId!==jiraModalAssigneeRequest)return;
- const select=$('jiraIssueAssigneeSelect'),apply=$('jiraIssueAssigneeApply'),note=$('jiraIssueAssigneeStatus');
+ const select=document.getElementById('jiraIssueAssigneeSelect'),apply=document.getElementById('jiraIssueAssigneeApply'),note=document.getElementById('jiraIssueAssigneeStatus');
  if(!select||!apply||!note)return;
  const current=jiraModalDetail.assigneeId||'';
  jiraModalAssigneeData=msg;select.replaceChildren();
@@ -7453,8 +7455,8 @@ window.addEventListener('message',event=>{
  const msg=event.data||{};
  if(msg.type==='pmJiraAssignableUsersResult')applyJiraAssigneeUsers(msg);
  if(msg.type==='pmJiraAssignableUsersError'&&msg.projectId===activeId&&msg.key===jiraModalKey&&msg.requestId===jiraModalAssigneeRequest){
-   const note=$('jiraIssueAssigneeStatus');if(note)note.textContent='Assignment unavailable: '+(msg.message||'Refresh Jira and review the user roles.');
-   const select=$('jiraIssueAssigneeSelect');if(select)select.disabled=true;
+   const note=document.getElementById('jiraIssueAssigneeStatus');if(note)note.textContent='Assignment unavailable: '+(msg.message||'Refresh Jira and review the user roles.');
+   const select=document.getElementById('jiraIssueAssigneeSelect');if(select)select.disabled=true;
  }
  if(msg.type==='pmJiraAssigned'&&msg.projectId===activeId&&msg.key===jiraModalKey&&msg.requestId===jiraModalAssigneeRequest){
    jiraModalAssigneeBusy=false;
@@ -7463,10 +7465,10 @@ window.addEventListener('message',event=>{
    refreshJiraIssueModal();searchJiraInventory();
  }
  if(msg.type==='pmJiraAssignmentError'&&msg.projectId===activeId&&msg.key===jiraModalKey&&msg.requestId===jiraModalAssigneeRequest){
-   jiraModalAssigneeBusy=false;const note=$('jiraIssueAssigneeStatus');
+   jiraModalAssigneeBusy=false;const note=document.getElementById('jiraIssueAssigneeStatus');
    if(note)note.textContent='Jira assignment failed: '+(msg.message||'Refresh and retry.');
-   const select=$('jiraIssueAssigneeSelect');if(select)select.disabled=false;
-   const apply=$('jiraIssueAssigneeApply');if(apply)apply.disabled=false;
+   const select=document.getElementById('jiraIssueAssigneeSelect');if(select)select.disabled=false;
+   const apply=document.getElementById('jiraIssueAssigneeApply');if(apply)apply.disabled=false;
  }
  if(msg.type==='roleJiraIssueSaved'&&msg.projectId===activeId&&msg.requestId===jiraModalSaveRequest&&msg.key===jiraModalKey){
    jiraModalSaving=false;
