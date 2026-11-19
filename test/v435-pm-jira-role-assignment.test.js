@@ -60,7 +60,7 @@ test('candidates must have a verified matching role and valid account ID',()=>{
 });
 test('Epic assignment only includes development hierarchy, excludes other role subtasks',()=>{
  const p=pm.plan({rootKey:'TC-100',projectKey:'TC',items,register});
- assert.deepEqual(p.targets.map(x=>x.key),['TC-100','TC-101','TC-102','TC-103','TC-107']);
+ assert.deepEqual(p.targets.map(x=>x.key),['TC-100','TC-101','TC-102','TC-107','TC-103'].sort((a,b)=>a==='TC-100'?-1:b==='TC-100'?1:a.localeCompare(b)));
  assert.deepEqual(p.excluded.map(x=>x.key).sort(),['TC-104','TC-105','TC-106']);
  const tree=ownership.developmentTree(register,'BR-001');
  assert.deepEqual(tree.entries.map(x=>x.key),['TC-100','TC-101','TC-102','TC-103','TC-107']);
