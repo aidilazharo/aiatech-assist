@@ -3060,7 +3060,7 @@ async function generateBusinessRequirements(options={}){
   let proposal;
   if(mappedGroups.length>1){
    proposal=[];
-   if(mappedGroups.length>25)throw Error('More than 25 separate Business Requirements detected. Divide into smaller BR cycles before generating drafts.');
+   // Each source-backed BR group is built independently, then accumulated for one approved save.
    for(const [index,group] of mappedGroups.entries()){
     const parts=[];
     for(const ref of group.units)parts.push(await baBrTextPipeline.read(registry,activeProject.id,ref));
@@ -3072,6 +3072,9 @@ async function generateBusinessRequirements(options={}){
   }else proposal=baTimeoutSimplified.simpleProposal({name:source.name,text:verified.text,answers:saved.answers});
   const currentSaved=await discovery.load(registry,activeProject.id);
   if(currentSaved.revision!==saved.revision)throw Error('Discovery changed during simplified BR generation.');
+  const action='Continue';
+  const approval=await uiWarning('AI prepared '+proposal.length.toLocaleString('en-US')+' source-backed Business Requirements.\\n\\nContinue to save these as editable drafts for Business Analyst review? Cancel leaves the existing BRs and Jira untouched. Acceptance criteria and AI checks are NOT VERIFIED.',{modal:true,detail:'No Jira issues will be created or updated by generating drafts. Final Jira publication remains subject to explicit BR approval and Jira Preflight.'},action);
+  if(approval!==action){await dashboard?.webview.postMessage({type:'baProgress',task:'generate',done:true,message:'Generation cancelled. Existing Business Requirements and Jira unchanged.'});return;}
   const updated=await brWorkflow.generated(registry,activeProject.id,register.revision,{discoveryRevision:saved.revision,requirements:proposal,riskAccepted:false,actor:await verifiedBAActor()});
   await recordBAProcess({stage:'generate',action:'source-only-simple-br',status:'needs-review',details:'Deterministic source-only draft generated; acceptance criteria not verified. Jira publication still requires BR approval.'});
   await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
@@ -3097,7 +3100,7 @@ async function generateBusinessRequirements(options={}){
   (historic.length?'\nPREVIOUSLY COMPLETED BUSINESS REQUIREMENTS (READ ONLY): '+JSON.stringify(historic.slice(0,100))+'. These requirements belong to earlier published cycles. Do not regenerate, modify, remove, or return their IDs. For new independent source documents, return only genuinely new requirements. Overlap must be reconciled separately, not duplicated.':'');
  let proposed;
  if(mappedGroups.length>1&&!options.selective){
-  if(mappedGroups.length>25)throw Error('More than 25 separate Business Requirements detected. Split the original document into smaller BR cycles.');
+  // Process source-backed groups sequentially; no fixed cap on the total BR count.
   proposed=[];
   for(const [index,group] of mappedGroups.entries()){
    const sourcePartTexts=[];
@@ -3140,8 +3143,8 @@ async function generateBusinessRequirements(options={}){
     prompt=brWorkflow.promptForGeneration(unitAnswers,activeRequirements,[{name:group.sourceName+' / BR '+group.brIndex,excerpt:sources.join('').slice(0,6500)}])+
      '\\n\\nSOURCE-SCOPED JSON RECOVERY: Return exactly ONE complete source-backed Business Requirement with the required fields and nested feature/story/task arrays. Preserve the existing BR ID if appropriate. The verified Markdown mapping represents this single BR.';
    }else{
-    const problem=initialFailure?.code==='ATGV_GENERATION_COUNT'?(initialFailure.requirementCount>25?'Previous model output exceeded 25 BRs. Preserve every unique requirement by grouping related rules under features and stories. Never silently omit a rule.':'Previous model output contained no BRs; return at least one source-backed complete BR.'):'Previous output could not be parsed as valid requirements JSON.';
-    prompt=question+'\\n\\nSTRICT JSON RECOVERY: '+problem+' Return ONLY a complete JSON object {"requirements":[{"title":"...","objective":"...","scope":"...","acceptanceCriteria":"...","features":[]}]}. Include 1–25 complete business requirements; no Markdown or commentary.';
+    const problem=initialFailure?.code==='ATGV_GENERATION_COUNT'?'Previous model output contained no BRs; return at least one source-backed complete BR.':'Previous output could not be parsed as valid requirements JSON.';
+    prompt=question+'\\n\\nSTRICT JSON RECOVERY: '+problem+' Return ONLY a complete JSON object {"requirements":[{"title":"...","objective":"...","scope":"...","acceptanceCriteria":"...","features":[]}]}. Include every valid evidence-backed business requirement, without a fixed number limit; no Markdown or commentary.';
    }
    await dashboard?.webview.postMessage({type:'baProgress',task:'generate',message:'Retrying with '+(initialFailure?.requirementCount===0&&mappedGroups.length===1&&activeRequirements.length<=1?'source-scoped Markdown':'validated JSON')+' evidence and explicit requirement-count checks…'});
   }
@@ -3150,13 +3153,19 @@ async function generateBusinessRequirements(options={}){
   catch(error){
    initialFailure=error;
    if(attempt===2){
-    const explanation=error.code==='ATGV_GENERATION_COUNT'?(error.requirementCount===0?'AI returned zero requirements; confirm the mapped document contains business requirements.':'AI returned '+error.requirementCount+' separate requirements, above the 25-per-generation safety limit. Split the BR into smaller source-backed groups.'):error.message;
+    const explanation=error.code==='ATGV_GENERATION_COUNT'?'AI returned zero requirements; confirm the mapped document contains business requirements.':error.message;
     throw Error('AI generation failed validation twice: '+explanation+' No Business Requirements or Jira issues were changed. The verified source and Discovery answers are preserved for retry.');
    }
   }
  }
  }
  if(!proposed?.length)throw Error('AI generated no valid Business Requirements. No changes were saved. Check the 12 discovery answers and retry.');
+ // Human approval occurs before any BR registry mutation. The reported count is
+ // the actual validated array length (including accumulated Markdown groups).
+ const proceed='Continue';
+ const count=proposed.length;
+ const confirmed=await uiWarning('AI generated '+count.toLocaleString('en-US')+' valid Business Requirement'+(count===1?'':'s')+'.\\n\\nContinue to save these as editable draft requirements for review?\\n\\nCancel keeps all existing approved BR revisions, drafts, Jira identities, and source documents unchanged.',{modal:true,detail:'Large sets are generated in source-backed groups to avoid model response limits. No Jira writes occur until the revised BRs are reviewed, approved, and pass Jira Preflight.'},proceed);
+ if(confirmed!==proceed){await dashboard?.webview.postMessage({type:'baProgress',task:'generate',done:true,message:'Cancelled before saving '+count+' generated BRs. Existing BR and Jira data unchanged.'});return;}
  const currentSaved=await discovery.load(registry,activeProject.id);if(currentSaved.revision!==saved.revision)throw Error('Discovery changed while generating BRs. Retry.');
  const updated=await brWorkflow.generated(registry,activeProject.id,register.revision,{discoveryRevision:saved.revision,requirements:proposed,riskAccepted,targetBrIds:focused,actor:await verifiedBAActor()});
  await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
