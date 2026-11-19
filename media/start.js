@@ -6846,7 +6846,8 @@ $('discoverySave').addEventListener('click',()=>{
  openBAWorkflowStep('review');
 });
 $('discoveryForm').addEventListener('submit',e=>{
-  e.preventDefault();if(!discoveryData||$('discoverySave').disabled||discoveryAutosaving||baBusyTask)return;
+  e.preventDefault();if(!discoveryData||$('discoverySave').disabled)return;
+  if(discoveryAutosaving||baBusyTask)return; // Reject duplicate manual clicks while a save is running.
   const answers=Object.fromEntries(BA_QUESTIONS.map(([key])=>[key,$('ba-'+key).value]));
   discoveryAutosaving=true;discoveryAutosaveSnapshot=answers;
   baBusy('saveDiscovery','Saving 12 discovery answers…');send('saveDiscovery',{answers,revision:discoveryData.revision,preserveReview:preserveReviewOnSave});
