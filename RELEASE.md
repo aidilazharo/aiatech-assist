@@ -1,25 +1,20 @@
-# ATGV AIATECH Assist v0.4.46
+# ATGV AIATECH Assist v0.4.47
 
-## Business Analyst: explicit Discovery Save and reliable partial-save recovery
+## Startup and project opening performance
 
-- Disabled automatic saves of the 12 Discovery questions. Edits remain unsaved until **Save 12 Questions** is clicked.
-- Reject legacy webview autosave commands at the host boundary, preventing race conditions with user-initiated writes.
-- Keep an immutable snapshot of the answers during manual Save; preserve any typing made while the write is in progress for explicit further saving.
-- When the Discovery JSON file was already written but BR-register linking failed, permit a manual retry against the persisted revision without rewriting the Discovery file.
-- Detect already-linked identical answers to avoid redundant revisions or unnecessarily invalidating an AI Review.
-- Report specific save errors in the Discovery UI, retain user edits and allow manual retry. Stale on-disk revisions cannot be overwritten silently.
-- Add **saveDiscovery** to the downloadable BR troubleshooting log's tracked operations. The log now records attempts, errors and completion without storing answers.
+- Begin scanning technology stack prerequisites immediately after the Start webview is loaded, before the heavyweight dashboard data snapshot is ready.
+- Restore saved (nonsecret) Jira, Confluence and GitHub connection fields immediately. Verify credentials using the existing secure-store and live checks before allowing authenticated operations.
+- Cache startup verification for UI rendering for up to 30 seconds; startup authorization and Test & Save still use fresh secure-store checks.
+- Parallelize independent, read-only Jira account, Jira project/type, Confluence space and optional project GitHub repository checks; preserve all required security and permission gates.
+- Avoid an extra full dashboard refresh and repeated recent-project writes after successfully opening the project.
+- Hide the optional GitHub Copilot SDK tile and placeholder 'Checking permissions…' message from the prerequisite card. Permission checks continue to run and gate startup normally.
+- Remove the hover background behind the prerequisite scan status, the redundant footer top divider, and the default 'Choose a project to open.' hint.
+- Disable all project-opening actions immediately after a click and render them solid dark gray while the project progress bar is running. Label the selected button 'Opening…' until completion or error.
+- Verify that the 12 Discovery Questions are rendered in a single set without an intentional Question 13; rendering replaces existing question nodes rather than appending duplicate groups.
 
-## Jira Preview: automatic field population
+## Compatibility and safety
 
-- Show all Jira metadata fields with source-backed auto-filled values, Jira defaults, existing values or explicit missing-evidence placeholders.
-- Populate every supported writable Jira text/custom text field with approved-BR evidence or a clearly labelled text placeholder.
-- For non-text fields (assignee, priority, date, number, option and similar), show a preview-only placeholder when evidence is missing, without sending invalid placeholder strings to Jira.
-- Keep existing unsupported Jira values intact; required fields without valid values still block publication instead of inventing information.
-- Add per-issue summary counts for mapped fields, text placeholders, Jira defaults, existing values and preview-only values.
-
-## Tests and compatibility
-
-- Added tests covering manual-only saving, stale revisions, partial-save retry, idempotent saves and Jira field-type safety.
-- Existing BR documents, source evidence, approved changes, Jira work items and role permissions are not modified by this update.
-- Missing values in typed mandatory Jira fields still require Jira-valid data before approval or publication.
+- No changes to existing BRs, Jira issues, source documents or approval history.
+- No credentials are sent to the webview; only previously saved nonsecret connection fields are prefilled.
+- Disabled/hidden startup visuals do not bypass workspace permission checks, Jira authentication or Confluence access checks.
+- New regressions cover startup scan order, UI gating, API verification concurrency, and the 12-question list.
