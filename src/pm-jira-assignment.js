@@ -11,6 +11,8 @@ function group(type){
  if(/^(?:br|business requirement|business requirements)$/.test(name))return 'br';
  if(name==='epic')return 'epic';
  if(/^(?:story|stories|user story|user stories)$/.test(name))return 'story';
+ if(name==='task')return 'task';
+ if(/^(?:subtask|sub task)$/.test(name))return 'subtask';
  return 'other';
 }
 const DEV_LABEL='atgv-role-software-developer';
