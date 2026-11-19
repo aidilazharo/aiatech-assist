@@ -24,7 +24,7 @@ test('startup boots prerequisites on webview readiness and hides optional Copilo
  assert.match(ui,/message\.type==='startupSavedFields'/);
  assert.match(ui,/startupPrereqRequested=true;/);
  assert.match(ui,/send\('startupReadiness'\);/);
- assert.match(page,/id="startupCopilotCard"[^>]*class="[^"]*hidden/);
+ assert.match(page,/id="startupCopilotCard"[^>]*class="[^"]*startup-copilot-card" hidden/);
  assert.match(styles,/#startupCopilotCard\{display:none!important\}/);
  assert.doesNotMatch(page,/<p>Checking permissions…<\/p>/);
 });
