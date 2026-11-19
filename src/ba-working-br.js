@@ -14,6 +14,7 @@ function prepare(source,sections,reports){
  if(!Array.isArray(sections)||!sections.length||sections.length>25||sections.some(text=>typeof text!=='string')||sections.join('')!==source.text)throw Error('Working BR source coverage validation failed.');
  if(!Array.isArray(reports)||reports.length!==sections.length)throw Error('All document sections must finish preflight before mapping.');
  const workingSections=[],guidance=[];let correctionCount=0;
+ const verificationIncomplete=reports.some(x=>x.degraded===true||x.status==='needs-review');
  for(let i=0;i<sections.length;i++){
   const report=reports[i];
   if(!report||report.ready!==true||!Array.isArray(report.blockers)||report.blockers.length)throw Error('A preflight blocker must be resolved before mapping.');
@@ -34,7 +35,7 @@ function prepare(source,sections,reports){
   {label:'Complete extracted source coverage',status:'PASS'},
   {label:'Working-copy spelling corrections validated',status:'PASS'},
   {label:'Curated guidance identified as provisional',status:'PASS'},
-  {label:'AI preflight reports no unresolved blockers',status:'PASS'}
+  {label:'AI preflight quality and contradiction review',status:verificationIncomplete?'NOT VERIFIED — BA REVIEW REQUIRED':'PASS'}
  ];
  let maxFence=3;for(const match of source.text.matchAll(/~+/g))maxFence=Math.max(maxFence,match[0].length+1);
  const fence='~'.repeat(maxFence);
@@ -48,7 +49,8 @@ function prepare(source,sections,reports){
   '- Source excerpt: '+(item.sourceExcerpt||'No verified quotation available.'),'- Finding: '+item.issue,
   '- Provisional recommendation: '+item.resolution,'- Rationale: '+item.rationale);
  lines.push('','## Preflight Validation',...checks.map(item=>'- '+item.label+': '+item.status),
-  '- Application and acceptance tests: NOT RUN; these require an implemented application.','');
+  '- Application and acceptance tests: NOT RUN; these require an implemented application.',
+  verificationIncomplete?'- Mandatory next step: Business Analyst must review source-only mapping, open decisions and unresolved AI checks before approval.':'', '');
  return {content:lines.join('\n'),sections:workingSections,checks,correctionCount};
 }
 

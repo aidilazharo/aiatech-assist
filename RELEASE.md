@@ -1,3 +1,15 @@
+# ATGV AIATECH Assist v0.4.34
+
+- Fix recurring Business Analyst document timeouts for large, structured BRDs (60,000+ extracted characters), including GATE MVP1a v2.0.
+- Bound long-document per-call AI preflight, mapping and cross-check budgets; try the installed, authenticated Microsoft/GitHub Copilot SDK only when the user enabled the existing opt-in setting.
+- After recoverable AI timeout, continue a SOURCE-ONLY extraction of all original sections rather than restarting the complete document or looping indefinitely.
+- Save authenticated source-only fallback markers in the existing resumable AI checkpoint to make retry/restart deterministic.
+- Preserve original document bytes, full extracted working BR, evidence, and pending BA decisions without inventing authority or changing Jira records.
+- Mark quality checks **NOT VERIFIED** and any skipped cross-section review **needs-review**; actual business conflicts remain BA decisions.
+- Add regression tests using a synthetic 100k-character BRD, source coverage and safe recovery logic.
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.33
 
 - Fix `tech-cockpit` and other project-opening failures when a GitHub account owner is saved during onboarding but the project repository remains optional and unconfigured.
