@@ -1,3 +1,10 @@
+# ATGV AIATECH Assist v0.4.31
+
+- Rename the in-progress Business Requirement action button from **Force Delete Everywhere** to **Delete**.
+- The verified delete-everywhere scope, safeguards, remote deletion preview and confirmations are unchanged.
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.30
 
 - Remove the green Uploaded Documents progress bar; keep the document count pill.
