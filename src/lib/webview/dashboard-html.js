@@ -409,6 +409,7 @@ function html(webview,{resumeLibrary=false}={}){
     <section id="baStepNavigation" class="ba-step-navigation hidden" aria-label="Business Requirements step navigation">
       <div id="baNextStepRow" class="ba-next-step-row" role="group" aria-label="Previous and next Business Requirements steps">
         <button id="baPreviousStep" type="button" class="secondary" title="Return to the previous Business Requirements step">Previous Step</button>
+        <button id="baDownloadProcessLog" type="button" class="secondary atgv-icon-only ba-process-log-btn" title="Download complete Business Requirements process and troubleshooting log (.txt)" aria-label="Download Business Requirements troubleshooting log"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8l4 4v14H4V3h4zm8 0v5h4M8 12h8M8 16h8"/></svg></button><span id="baProcessLogStatus" class="muted ba-process-log-status" role="status" aria-live="polite"></span>
         <button id="baNextStep" type="button" class="secondary" title="Continue to the next Business Requirements step">Next Step</button>
       </div>
     </section>
