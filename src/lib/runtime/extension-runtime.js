@@ -2233,20 +2233,12 @@ async function processSelectedDiscoverySources(msg){
     await recordBAProcess({stage:'preflight',action:'section-'+(part+1)+'-of-'+sections.length,
      status:result.degraded?'ai-unverified':result.ready?'passed':'needs-review',
      details:'Preflight section '+(result.degraded?'used source-only recovery':'processed')+'.'});
-   }
-   // Complete and validate every section before using the working BR for mapping.
-   check();run.phase='preflight';
-   const working=baWorkingBr.prepare(source,sections,reports);
-   const workingRef=await baWorkingBr.store(registry,run.projectId,source.digest,working.content);
-   check();
-   const workingSession=documentPreflightSessions.get(run.projectId);
-   if(workingSession)baPreflightReports.attachWorkingBR(workingSession,{digest:selected[i],ref:workingRef,checks:working.checks});
-   for(let part=0;part<sections.length;part++){
-    const result=reports[part],label=sections.length>1?' (section '+(part+1)+'/'+sections.length+')':'';
+    // Complete both AI stages for this immutable TXT unit before starting the next.
+    const singleWorking=baWorkingBr.prepare({...source,text:sections[part]},[sections[part]],[result]);
     check();run.phase='mapping';
-    const doc={...source,name:preparedUnits[part].filename,text:working.sections[part].text};
+    const doc={...source,name:preparedUnits[part].filename,text:singleWorking.sections[0].text};
     await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'Mapping AI-updated working BR '+(i+1)+'/'+readable.length+': '+doc.name+label+'… (Stop Mapping is available)'});
-    const mappingPrompt=discoveryImport.createMappingPrompt(doc)+working.sections[part].guidance+'\n\nThe document above is the AI-updated working BR, with verified spelling corrections. Preflight preserved the original business rules; label recommendations as provisional. Do not invent TDD test inputs, expected outputs, approvals or policy.'+await roleSkillPrompt('business-analyst');
+    const mappingPrompt=discoveryImport.createMappingPrompt(doc)+singleWorking.sections[0].guidance+'\n\nThe document above is the AI-updated working BR, with verified spelling corrections. Preflight preserved the original business rules; label recommendations as provisional. Do not invent TDD test inputs, expected outputs, approvals or policy.'+await roleSkillPrompt('business-analyst');
     check();
     // A retry may obtain different preflight corrections or guidance. Never
     // reuse a mapping generated from a different working BR or prompt.
@@ -2309,6 +2301,13 @@ async function processSelectedDiscoverySources(msg){
      details:sourceOnlyMappingPart?'AI mapping unavailable; literal source extraction used.':'AI mapping completed.'});
     await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'Mapped '+(i+1)+'/'+readable.length+' document(s), section '+(part+1)+'/'+sections.length+'. Validating results…'});
    }
+   // Finalize source-preserving working copy after each TXT unit completed preflight and mapping.
+   check();run.phase='preflight';
+   const working=baWorkingBr.prepare(source,sections,reports);
+   const workingRef=await baWorkingBr.store(registry,run.projectId,source.digest,working.content);
+   check();
+   const workingSession=documentPreflightSessions.get(run.projectId);
+   if(workingSession)baPreflightReports.attachWorkingBR(workingSession,{digest:selected[i],ref:workingRef,checks:working.checks});
    const proposals=baBrTextPipeline.mergeForDiscovery(partAnswers,preparedUnits);
    let crossSectionChecked=false;
    if(sections.length>1&&!run.mappingOffline){
