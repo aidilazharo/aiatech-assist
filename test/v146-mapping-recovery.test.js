@@ -271,3 +271,14 @@ test('completed history appears only on Start and mapping exposes Stop/Retry',()
  assert.match(host,/case 'stopDiscoverySourceMapping'/);
  assert.doesNotMatch(ui,/topNoticeQueue=topNoticeQueue\.filter\(/);
 });
+
+// Source review findings must remain independently detectable after mapping.
+test('saved mapping blockers require explicit source-revision review',()=>{
+ const workflow=require('../src/br-workflow');
+ const unresolved={mappingCompleted:{preflights:[{digest:'a'.repeat(64),status:'needs-review',issues:[
+  {severity:'blocker',category:'contradiction',detail:'Conflicting EXCO approval sequencing'}]}]}};
+ const findings=workflow.sourceReviewFindings(unresolved);
+ assert.equal(findings.length,1);
+ assert.match(findings[0].issue,/EXCO approval/);
+ assert.equal(workflow.sourceReviewFindings({mappingCompleted:{preflights:[{status:'ready',issues:[]}]}}).length,0);
+});
