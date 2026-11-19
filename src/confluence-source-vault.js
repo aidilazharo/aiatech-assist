@@ -53,7 +53,7 @@ async function snapshot(registry,projectId){
  const normalized=raw?JSON.parse(raw):cleanRecord(register);
  const discovery=await fs.readFile(path.join(root,'documents','requirements','discovery-12.json'),'utf8').catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
  const docs=new Map();
- for(const entry of [...(register.sourceDocuments||[]),...(register.archivedSources||[]),...Object.values(register.sourceVersions||{})]){
+ for(const entry of [...(register.sourceDocuments||[]),...(register.archivedSources||[]),...Object.values(register.sourceVersions||{}).filter(entry=>!['deleted-unused','deleted-everywhere','deleted'].includes(entry?.status))]){
   if(!validDocument(entry))continue;docs.set(entry.storedName,{name:entry.name,digest:entry.digest,
    byteDigest:entry.byteDigest,storedName:entry.storedName,uploadedAt:entry.uploadedAt||'',version:Number(entry.version||1)});
  }
