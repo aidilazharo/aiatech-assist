@@ -6969,6 +6969,10 @@ window.addEventListener('message',event=>{
     if(task==='skipReview'&&view==='discovery')requestAnimationFrame(()=>{if(!discoveryDirty&&baReviewFinalized())openBAWorkflowStep('generate');});
     if(task==='confirmReview'&&view==='discovery')requestAnimationFrame(()=>{if(!discoveryDirty&&baReviewFinalized())openBAWorkflowStep('generate');});
   }
+  if(m.type==='brJiraLinkFixed'){
+    baBusy('',null);
+    status('Existing Jira '+m.key+' linked to '+m.path+'. No Jira issue was created or changed.');
+  }
   if(m.type==='brJiraPlan'){baFailedProcess='';baFailedMessage='';
     stageProgress('jiraPreview','JIRA preview generated.',100);baBusy('',null);brPlanRevision=m.revision;jiraPlanForCR=m.changes||[];jiraPreviewIssueTypes=m.issueTypes||{};jiraPreviewProject=m.jiraProject||'';jiraPreviewFieldsByPath=m.fieldPlans||{};jiraProtectionForCR=m.protection||[];brJiraPreviewApproved=false;brJiraPlanChanges=(m.changes||[]).length;brJiraPlanConflicts=(m.conflicts||[]).length;
     jiraPublicationPlan=[];jiraPublicationConfirmed.clear();renderJiraApprovalTable();
@@ -6981,7 +6985,25 @@ window.addEventListener('message',event=>{
      {key:'details',label:'Details',sortable:false,render:row=>jiraDetailsButton(row.entry)}
     ],{label:'Jira change preview',pageSize:5});
     const conflicts=$('brJiraConflicts');conflicts.replaceChildren();conflicts.classList.toggle('hidden',!(m.conflicts||[]).length);
-    for(const message of m.conflicts||[])conflicts.append(brElement('p','',message));
+    for(const message of m.conflicts||[]){
+      const row=brElement('div','jira-link-repair-row');
+      row.append(brElement('p','',message));
+      const found=/^([^:\s]+): issue ([A-Z][A-Z0-9_]{1,20}-\d{1,12}) exists without a recorded operation$/.exec(message);
+      const item=found?(m.changes||[]).find(x=>x.path===found[1]&&x.action==='create'):null;
+      if(item){
+        const fix=brElement('button','secondary jira-link-repair-action','Fix Jira Link');
+        fix.type='button';fix.title='Verify the existing Jira issue and restore its local ATGV link. No Jira issue is created, modified or deleted.';
+        fix.setAttribute('aria-label','Fix Jira link for '+found[2]+' · '+found[1]);
+        fix.addEventListener('click',()=>{
+          if(!brPlanRevision||baBusyTask)return;
+          fix.disabled=true;
+          baBusy('jiraFixLink','Verifying and restoring Jira link '+found[2]+'…');
+          send('brJiraFixLink',{revision:brPlanRevision,path:found[1],key:found[2]});
+        });
+        row.append(fix);
+      }
+      conflicts.append(row);
+    }
     const retire=(m.changes||[]).filter(x=>x.action==='retire'&&x.requiresApproval);
     $('brApproveRetirements').classList.toggle('hidden',!retire.length);$('brApproveRetirements').disabled=!retire.length;
     $('brJiraApprove').disabled=!count||(m.conflicts||[]).length>0;$('brJiraSync').disabled=true;renderDiscoverySummary();renderChangeRequests();if(jiraProtectionForCR.some(row=>row.blocked))$('baCRPanel').open=true;
@@ -7235,6 +7257,7 @@ window.addEventListener('message',event=>{
     if(m.error&&view==='discovery'&&['review','stopReview'].includes(baBusyTask)){reviewStopReason='AI Review failed: '+String(m.message||'Unknown AI provider error').slice(0,1000)+' Select Re-run AI Review to retry.';}
     if(m.error&&view==='discovery'&&baBusyTask==='jiraSync'&&jiraPublishState.phase!=='failed'){jiraPublishState={...jiraPublishState,phase:'failed',message:'Jira publication failed: '+String(m.message||'Unknown error').slice(0,1000)+'. Reconcile and preview the remaining changes before retrying.'};renderJiraPublicationState();}
     if(m.error&&view==='discovery'){const stepByTask={import:'upload',saveDiscovery:'mapping',review:'review',skipReview:'review',applyReview:'review',generate:'generate',saveBR:'save',approveBR:'approve',jiraPreview:'jiraPreview',jiraApprove:'jiraApprove',jiraSync:'publish'};baFailedProcess=stepByTask[baBusyTask]||'';baFailedMessage=m.message||'Process failed.';}
+    if(m.error&&baBusyTask==='jiraFixLink')for(const button of document.querySelectorAll('.jira-link-repair-action'))button.disabled=false;
     if(m.error||baBusyTask==='resolveProposals'||baBusyTask==='review'||baBusyTask==='generate'||baBusyTask==='skipReview'||baBusyTask==='approveBR'||baBusyTask==='jiraRetire'||baBusyTask==='jiraPreview'||baBusyTask==='jiraApprove'||baBusyTask==='jiraSync'){baBusy('',null);if(brEditorSaving){brEditorSaving=false;updateBREditorActions();}brApprovePending=false;pendingUploadAfterClaim=false;}
     if(m.error&&brEditing)$('brEditError').textContent=m.message||'Business Requirements draft save failed.';
     if(m.error){if(['review','generate','jiraPreview','jiraApprove','jiraSync'].includes(baBusyTask))stageProgress(baBusyTask,'Failed: '+(m.message||'Operation failed'),0);$('gateProgress').classList.add('hidden');if($('settingsSpaceMessage').textContent==='Searching…')$('settingsSpaceMessage').textContent=m.message||'Search failed';}
