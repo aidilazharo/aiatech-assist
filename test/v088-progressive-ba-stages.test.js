@@ -78,7 +78,7 @@ test('Start, upload, mapping, Discovery Questions, AI Review and documents have 
  assert.match(ui,/showReview/);
  assert.match(ui,/showDocuments/);
  assert.match(ui,/showJira/);
- assert.match(ui,/else if\(!readiness\.canReview\)/);
+ assert.match(ui,/else if\(readiness\.needsDecision\)/);
  assert.match(ui,/filled===total/);
  assert.match(ui,/brGenerate:!!baBusyTask\|\|!mine\|\|!\(brState\?\.sourceDocuments\|\|\[\]\)\.length\|\|!reviewGood/);
 });
