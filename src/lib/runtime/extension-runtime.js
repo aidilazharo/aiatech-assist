@@ -31,6 +31,7 @@ const discovery=require('../../ba-discovery');
 const discoveryImport=require('../../discovery-import');
 const baDocumentPreflight=require('../../ba-document-preflight');
 const baPreflightReports=require('../../ba-preflight-report');
+const baWorkingBr=require('../../ba-working-br');
 const discoveryReview=require('../../discovery-review');
 const brWorkflow=require('../../br-workflow');
 const jiraPreviewDetails=require('../../jira-preview-details');
@@ -1913,13 +1914,26 @@ async function processSelectedDiscoverySources(msg){
      throw Error(source.name+label+': document needs Business Analyst clarification before mapping. '+problem+' Original document preserved; no unsupported requirements invented.');
     }
     reports.push(result);
+   }
+   // Complete and validate every section before using the working BR for mapping.
+   check();run.phase='preflight';
+   const working=baWorkingBr.prepare(source,sections,reports);
+   const workingRef=await baWorkingBr.store(registry,run.projectId,source.digest,working.content);
+   check();
+   const workingSession=documentPreflightSessions.get(run.projectId);
+   if(workingSession)baPreflightReports.attachWorkingBR(workingSession,{digest:selected[i],ref:workingRef,checks:working.checks});
+   for(let part=0;part<sections.length;part++){
+    const result=reports[part],label=sections.length>1?' (section '+(part+1)+'/'+sections.length+')':'';
     check();run.phase='mapping';
-    const doc={...source,text:result.effectiveText};
-    await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'Mapping '+(i+1)+'/'+readable.length+': '+doc.name+label+'… (Stop Mapping is available)'});
-    const cacheKey=run.projectId+'|'+selected[i]+'|'+doc.name+'|'+target.label+'|'+part+'|'+sections.length;
+    const doc={...source,text:working.sections[part].text};
+    await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'Mapping AI-updated working BR '+(i+1)+'/'+readable.length+': '+doc.name+label+'… (Stop Mapping is available)'});
+    const mappingPrompt=discoveryImport.createMappingPrompt(doc)+working.sections[part].guidance+'\n\nThe document above is the AI-updated working BR, with verified spelling corrections. Preflight preserved the original business rules; label recommendations as provisional. Do not invent TDD test inputs, expected outputs, approvals or policy.'+await roleSkillPrompt('business-analyst');
+    check();
+    // A retry may obtain different preflight corrections or guidance. Never
+    // reuse a mapping generated from a different working BR or prompt.
+    const cacheKey=run.projectId+'|'+selected[i]+'|'+doc.name+'|'+target.label+'|'+part+'|'+sections.length+'|'+sha(mappingPrompt);
     let proposals=successfulSourceMappings.get(cacheKey);
     if(!proposals){
-     const mappingPrompt=discoveryImport.createMappingPrompt(doc)+baDocumentPreflight.mappingGuidance(result)+'\n\nSource preflight preserved original business rules; label recommendations as provisional. Do not invent TDD test inputs, expected outputs, approvals or policy.'+await roleSkillPrompt('business-analyst');
      for(let attempt=1;attempt<=2;attempt++){
       run.timeout=false;
       const timer=setTimeout(()=>{run.timeout=true;run.controller.abort();},SOURCE_MAPPING_AI_TIMEOUT_MS);
@@ -1961,8 +1975,9 @@ async function processSelectedDiscoverySources(msg){
    // metadata. All sections must pass before the atomic mapping commit.
    const report={status:'ready',crossSectionChecked,summary:sections.length>1?'All '+sections.length+' document sections and their mapped claims were reviewed; source remains unchanged.':reports[0].summary,
     applied:reports.flatMap(x=>x.applied).slice(0,12),
+    skipped:reports.flatMap(x=>x.skipped||[]).slice(0,12),
     issues:reports.flatMap(x=>x.issues).slice(0,16),
-    resolutions:reports.flatMap(x=>x.resolutions||[]).slice(0,12)};
+    resolutions:reports.flatMap(x=>x.resolutions||[]).slice(0,12),sections:reports,workingBR:workingRef,checks:working.checks};
    preflights.push(baDocumentPreflight.evidence(report,selected[i]));
    mappedProposals.push({filename:source.name,answers:proposals});
   }
@@ -7522,6 +7537,28 @@ async function handleDashboardMessage(msg){
       case 'importDiscovery':{
         await dashboard?.webview.postMessage({type:'discoveryImportProgress',message:'Reading selected documents…'});
         try{await importDiscoveryDocument(msg.roleId);}catch(e){await dashboard?.webview.postMessage({type:'discoveryImportFailed',message:e.message});throw e;}
+        break;
+      }
+      case 'downloadWorkingBR':{
+        const projectId=activeProject?.id||'';
+        try{
+          requireOpened();if(msg.projectId!==projectId)throw Error('The Business Analyst project changed.');
+          await requireBAOwner('ba-discovery');
+          const register=await brWorkflow.load(registry,projectId);
+          const evidence=(register.mappingCompleted?.preflights||[]).find(item=>item.workingBR&&(register.sourceDocuments||[]).some(doc=>doc.digest===item.digest));
+          const source=(register.sourceDocuments||[]).find(doc=>doc.digest===evidence?.digest);
+          if(!source||evidence.workingBR.sourceDigest!==source.digest)throw Error('No current AI-updated working BR is available.');
+          await sourceStore.originalBytes(registry,projectId,source);
+          const content=await baWorkingBr.read(registry,projectId,evidence.workingBR);
+          const suggestedName=baPreflightReports.filename(projectId,source.name).replace(/^ATGV-Preflight-/,'ATGV-Working-BR-').replace(/\.txt$/,'.md');
+          const destination=await vscode.window.showSaveDialog({title:'Download AI-updated Working BR (.md)',defaultUri:vscode.Uri.file(path.join(require('node:os').homedir(),suggestedName)),filters:{'Markdown document':['md']},saveLabel:'Download Working BR'});
+          if(activeProject?.id!==projectId)throw Error('The project changed. Please retry the download.');
+          if(destination){await vscode.workspace.fs.writeFile(destination,Buffer.from(content,'utf8'));await dashboard?.webview.postMessage({type:'discoveryWorkingBRDownloadResult',projectId,saved:true,filename:path.basename(destination.fsPath||suggestedName)});}
+          else await dashboard?.webview.postMessage({type:'discoveryWorkingBRDownloadResult',projectId,cancelled:true});
+        }catch(error){
+          report('Working BR export: '+String(error.message||error));
+          if(activeProject?.id===projectId)await dashboard?.webview.postMessage({type:'discoveryWorkingBRDownloadResult',projectId,error:String(error.message||error).slice(0,400)});
+        }
         break;
       }
       case 'downloadDocumentPreflight':{

@@ -44,7 +44,7 @@ test('UI has Custom Stack, requested roster controls, accessible icons and progr
  for(const id of ['architectCustomScan','architectCustomRun','architectCustomStop'])
   assert.ok(host.includes("case '"+id+"':"),id);
  assert.match(html,/Assigned Jira Tasks/);
- assert.match(ui,/paintStartupStack\(row,/);
+ assert.match(ui,/paintStartupStack\(summary,/);
  assert.match(html,/aria-label="Download unified error log"/);
  const start=ui.indexOf(' const brCell=item=>{',ui.indexOf('function renderBAJiraInventory()'));
  const block=ui.slice(start,ui.indexOf(' baJiraTableInstance=ATGVDataTables.mount(root,rows',start));

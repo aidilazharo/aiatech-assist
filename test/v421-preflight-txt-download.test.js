@@ -2,6 +2,7 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const report=require('../src/ba-preflight-report');
+const preflight=require('../src/ba-document-preflight');
 const digest='a'.repeat(64);
 const source=[{digest,name:'GATE Project Initiation and Project Approval BRD Revised v1.1.docx'}];
 const result=(n)=>({ready:n!==3,summary:'Checked section '+n,applied:[],skipped:[],
@@ -38,6 +39,55 @@ test('saved results can be exported after a reload with a truthful bounded-summa
  assert.match(txt,/Saved aggregate summary/);
  assert.match(txt,/All mapped/);
  assert.equal(report.fromSaved('TC',source,[{digest:'b'.repeat(64)}]),null);
+});
+test('report compares original and updated working text and preserves proposed changes after reload',()=>{
+ const original='Add namme using keyboard. The limit is 100 characters.';
+ const parsed=preflight.parse(JSON.stringify({status:'ready',summary:'Checked',edits:[
+  {before:'Add namme',after:'Add name',reason:'Spelling'},
+  {before:'100 characters',after:'200 characters',reason:'Suggested new limit'}
+ ],issues:[{severity:'warning',category:'keyboard',detail:'Keyboard behavior needs clarification',sourceExcerpt:'using keyboard',suggestion:'Use native keyboard semantics'}]}),original);
+ assert.equal(parsed.effectiveText,'Add name using keyboard. The limit is 100 characters.');
+ const docs=[{...source[0],byteDigest:'b'.repeat(64)}];
+ const session=report.create('TC',docs);
+ report.capture(session,{digest,sourceName:docs[0].name,section:1,totalSections:1,attempt:1,report:parsed});
+ report.finish(session,{state:'completed'});
+ const txt=report.format(session);
+ assert.match(txt,/CORRECTIONS AND CHANGES BASED ON THE ORIGINAL DOCUMENT/);
+ assert.match(txt,/Original file SHA-256: b{64}/);
+ assert.match(txt,/Original text: Add namme/);
+ assert.match(txt,/Working text after correction: Add name/);
+ assert.match(txt,/Used in the working BR sent to mapping/);
+ assert.match(txt,/Verified original text: 100 characters/);
+ assert.match(txt,/Proposed replacement: 200 characters/);
+ assert.match(txt,/Status: NOT APPLIED/);
+ assert.match(txt,/Original excerpt: using keyboard/);
+ assert.match(txt,/PROVISIONAL MAPPING GUIDANCE/);
+ const saved=report.fromSaved('TC',docs,[preflight.evidence(parsed,digest)]);
+ const restored=report.format(saved);
+ for(const expected of ['Add namme','Add name','100 characters','200 characters','using keyboard'])assert.ok(restored.includes(expected),expected);
+});
+test('unverified AI quotations are not reported as source evidence',()=>{
+ const parsed=preflight.parse(JSON.stringify({status:'ready',summary:'Checked',edits:[],issues:[{severity:'warning',category:'keyboard',detail:'Missing keyboard rules',sourceExcerpt:'fabricated quotation',suggestion:'Use standard keys'}]}),'No relevant quotation exists.');
+ assert.equal(parsed.issues[0].sourceExcerpt,'');
+ assert.equal(parsed.resolutions[0].sourceExcerpt,'');
+ const s=report.create('TC',source);report.capture(s,{digest,sourceName:source[0].name,section:1,totalSections:1,attempt:1,report:parsed});report.finish(s,{state:'blocked'});
+ const txt=report.format(s);
+ assert.match(txt,/No verified quotation available/);
+ assert.doesNotMatch(txt,/fabricated quotation/);
+ assert.match(txt,/completion of mapping is not confirmed|mapping from this check is not confirmed/i);
+});
+test('saved multi-section report retains corrections beyond the aggregate preview limit',()=>{
+ const parts=[];
+ for(let section=0;section<2;section++){
+  const lines=Array.from({length:10},(_,i)=>`Item ${section*10+i} namme`);
+  parts.push(preflight.parse(JSON.stringify({status:'ready',summary:'Checked',edits:lines.map(before=>({before,after:before.replace('namme','name'),reason:'Spelling'})),issues:[]}),lines.join('\n')));
+ }
+ const combined={status:'ready',summary:'Checked',applied:parts.flatMap(part=>part.applied).slice(0,12),skipped:[],issues:[],resolutions:[],sections:parts};
+ const saved=preflight.evidence(combined,digest);
+ const txt=report.format(report.fromSaved('TC',source,[saved]));
+ assert.match(txt,/RECORDED WORKING-TEXT CORRECTIONS: 20/);
+ assert.match(txt,/Original text: Item 19 namme/);
+ assert.match(txt,/Working text after correction: Item 19 name/);
 });
 test('download filename is Windows-safe and has a TXT extension',()=>{
  assert.equal(report.filename('TC','GATE Project Initiation and Project Approval BRD Revised v1.1.docx'),'ATGV-Preflight-TC-GATE-Project-Initiation-and-Project-Approval-BRD-Revised-v1.1.txt');

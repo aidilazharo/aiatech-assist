@@ -4,6 +4,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { importDocumentText } = require('./discovery-import');
 const { extractLegacyDocx } = require('./docx-extractor');
+const workingBr = require('./ba-working-br');
 const DIGEST = /^[a-f0-9]{64}$/;
 function sourceDirectory(registry, id) { return path.join(path.dirname(registry.fileFor(id)), 'documents', 'requirements', 'sources'); }
 async function checkedDirectory(registry, id) {
@@ -102,11 +103,14 @@ async function removeStored(registry, id, entry) {
         throw Error('Invalid stored source metadata.');
     const directory = await checkedDirectory(registry, id), file = path.join(directory, entry.storedName);
     const stat = await fs.lstat(file).catch(error => error.code === 'ENOENT' ? null : Promise.reject(error));
-    if (!stat)
+    if (!stat) {
+        await workingBr.removeForSource(registry, id, entry.digest);
         return { deleted: false };
+    }
     if (!stat.isFile() || stat.isSymbolicLink())
         throw Error('Unsafe stored source document.');
     await fs.unlink(file);
+    await workingBr.removeForSource(registry, id, entry.digest);
     return { deleted: true };
 }
 module.exports = { sourceDirectory, store, read, originalBytes, removeStored };

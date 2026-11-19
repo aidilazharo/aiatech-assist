@@ -1,3 +1,13 @@
+# ATGV AIATECH Assist v0.4.27
+
+- Show a centered, collapsed prerequisite summary that expands all permission, stack and Copilot checks in one responsive grid.
+- Generate a BA-template working BR with verified spelling corrections and clearly labelled provisional guidance while preserving the original upload.
+- Complete and validate every document section before mapping the updated working text and guidance.
+- Include original excerpts, applied corrections, rejected suggestions and validation results in the downloadable pre-flight report.
+- Provide a separate download of the verified AI-updated working BR; keep application and acceptance tests marked as not run until executed.
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.26
 
 - Recover interrupted source mapping and allow mapping to be stopped during document preflight.

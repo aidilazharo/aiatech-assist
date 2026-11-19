@@ -2094,6 +2094,29 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 #workView .architect-simple-fields button.atgv-icon-only{width:34px;min-width:34px;padding:6px}
 @media(prefers-reduced-motion:reduce){.atgv-startup-stack .atgv-stack-ring,.atgv-permission-step .atgv-stack-ring{animation:none!important}.atgv-scan-ring-fill,.atgv-stack-ring-fill{transition:none!important}}
 
+/* One collapsed, keyboard-accessible disclosure for all prerequisite checks. */
+.atgv-startup-prerequisites>.atgv-tool-scan-status{display:flex;align-items:center;justify-content:center;gap:12px;min-height:68px;margin:8px 0 0;padding:8px 12px;cursor:pointer;text-align:left;list-style:none;border-radius:8px;color:var(--vscode-foreground)}
+.atgv-startup-prerequisites>.atgv-tool-scan-status::-webkit-details-marker,.atgv-permission-step::-webkit-details-marker{display:none}
+.atgv-startup-prerequisites>.atgv-tool-scan-status:hover,.atgv-permission-step:hover{background:var(--vscode-list-hoverBackground)}
+.atgv-startup-prerequisites>.atgv-tool-scan-status:focus-visible,.atgv-permission-step:focus-visible{outline:2px solid var(--vscode-focusBorder);outline-offset:-2px}
+.atgv-prerequisite-summary-copy{display:flex;flex-direction:column;gap:3px;min-width:0;overflow-wrap:anywhere}
+#startupScanSummaryIssues{color:var(--vscode-errorForeground);font-size:11px}
+#startupScanSummaryIssues:empty{display:none}
+.atgv-prerequisite-chevron{font-size:18px;transition:transform 180ms ease}
+.atgv-startup-prerequisites[open] .atgv-prerequisite-chevron{transform:rotate(180deg)}
+.atgv-startup-prerequisites #startupToolMessage{margin:8px 0 0;text-align:center}
+.atgv-startup-prerequisites .atgv-startup-stack-grid{margin:12px 0 4px}
+.atgv-startup-permissions{display:contents}
+.atgv-permission-row{box-sizing:border-box;padding:0;background:var(--vscode-sideBar-background);border-radius:9px;overflow:hidden}
+.atgv-permission-step{box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;min-height:92px;padding:10px;text-align:center;cursor:pointer;list-style:none}
+.atgv-permission-step .atgv-stack-ring{width:clamp(44px,6vw,56px)}
+.atgv-permission-step .atgv-permission-label{font-weight:650;overflow-wrap:anywhere}
+.atgv-permission-step .atgv-permission-status{font-size:11px;padding:3px 6px;border-radius:5px;background:var(--vscode-editorWidget-background)}
+.atgv-permission-row[data-state=ready] .atgv-permission-status{color:var(--vscode-testing-iconPassed)}
+.atgv-permission-row[data-state=error] .atgv-permission-status{color:var(--vscode-errorForeground)}
+.atgv-permission-detail{margin:0;padding:0 10px 10px;color:var(--vscode-descriptionForeground);font-size:11px;overflow-wrap:anywhere}
+@media(prefers-reduced-motion:reduce){.atgv-prerequisite-chevron{transition:none}}
+
 /* Existing application scanner remains isolated from the catalogue bootstrap workflow. */
 .architect-custom-panel{border:1px solid var(--vscode-panel-border);border-radius:8px;padding:13px 14px;margin:11px 0;background:var(--vscode-editor-background)}
 .architect-custom-panel.hidden{display:none!important}
@@ -2115,6 +2138,8 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 #discoveryView #baPreflightRetry{margin-left:0}
 #discoveryView .ba-source-preflight-header{flex-wrap:wrap;gap:8px}
 #discoveryView #baPreflightDownload.hidden{display:none!important}
+#discoveryView #baWorkingBrDownload{flex:0 0 auto;font-size:12px;padding:5px 10px}
+#discoveryView #baWorkingBrDownload.hidden{display:none!important}
 @media(max-width:550px){#discoveryView #baPreflightDownload{margin-left:0}#discoveryView .ba-source-preflight-header strong{flex:1 1 100%}}
 
 /* Jira preview is one focused modal per issue, not an expanding inline panel. */

@@ -20,18 +20,21 @@ function mappingHarness(aiAnswer,opts={}){
   requireOpened(){},async requireBAOwner(){},
   brWorkflow:{async load(){return register;},async commitSourceMapping(_r,_id,revision,changes){
    assert.equal(revision,7);assert.deepEqual([...changes.digests],[digest]);commits++;
+   if(opts.failFirstCommit&&commits===1)throw Error('Simulated commit interruption');
    events.push({type:'commit'});return {revision:8,mappingCompleted:{proposals:changes.proposals}};
   }},
   async activeAiTarget(){return {label:'Test model'};},
   async roleSkillPrompt(){return '';},
-  sourceStore:{async read(){return {name:'visitor.pdf',text:'Requirements'}}},
-  discoveryImport:{...discoveryModule,createMappingPrompt(){return 'Map'},parseMappingResponse(answer){return JSON.parse(answer)}},
+  sourceStore:{async read(){return {name:'visitor.pdf',digest,text:opts.sourceText||'Requirements'}}},
+  discoveryImport:{...discoveryModule,createMappingPrompt(doc){return opts.realPrompt?discoveryModule.createMappingPrompt(doc):'Map'},parseMappingResponse(answer){return JSON.parse(answer)}},
   baDocumentPreflight,
   baPreflightReports:require('../src/ba-preflight-report'),
+  baWorkingBr:{...require('../src/ba-working-br'),async store(_registry,_project,sourceDigest){return {filename:'test.md',digest:'f'.repeat(64),sourceDigest}}},
   documentPreflightSessions:new Map(),
   successfulSourceMappings:new Map(),
+  sha:require('../src/utils').sha,
   aiAnswer:(target,prompt,limit,settings)=>{
-   if(String(prompt).includes('automated Business Analyst source-document quality checker'))return Promise.resolve(JSON.stringify({status:'ready',summary:'Checked',edits:[],issues:[]}));
+   if(String(prompt).includes('automated Business Analyst source-document quality checker'))return Promise.resolve(JSON.stringify((typeof opts.preflightResponse==='function'?opts.preflightResponse(prompt):opts.preflightResponse)||{status:'ready',summary:'Checked',edits:[],issues:[]}));
    return aiAnswer(target,prompt,limit,settings);
   }, dashboard:{webview:{async postMessage(msg){events.push(msg)}}}
  };
@@ -67,6 +70,38 @@ test('successful mapping publishes proposals only after atomic register commit',
  assert.ok(order.indexOf('commit')<order.indexOf('discoveryImportResult'));
  assert.ok(order.indexOf('discoveryImportResult')<order.indexOf('discoveryImportDone'));
  assert.equal(t.sandbox.activeDiscoveryMappingRun,null);
+});
+test('mapping receives the corrected working BR and the report records the change',async()=>{
+ const opts={sourceText:'Please add namme once.',realPrompt:true,preflightResponse:{status:'ready',summary:'Checked',edits:[{before:'add namme',after:'add name',reason:'Spelling'}],issues:[]}};
+ const prompts=[];const t=mappingHarness(async(_target,prompt)=>{prompts.push(prompt);return '{"problem":"Add name"}';},opts);
+ await t.processMapping(t.request);
+ assert.equal(prompts.length,1);
+ assert.match(prompts[0],/Please add name once\./);
+ assert.doesNotMatch(prompts[0],/Please add namme once\./);
+ const text=require('../src/ba-preflight-report').format(t.sandbox.documentPreflightSessions.get('tc'));
+ assert.match(text,/Original text: add namme/);
+ assert.match(text,/Working text after correction: add name/);
+ assert.match(text,/Used in the working BR sent to mapping/);
+});
+test('retry does not reuse mapping from a different AI-updated working copy',async()=>{
+ const opts={sourceText:'Please add namme once.',realPrompt:true,failFirstCommit:true,preflightResponse:{status:'ready',summary:'Checked',edits:[{before:'add namme',after:'add name',reason:'Spelling'}],issues:[]}};
+ const prompts=[];const t=mappingHarness(async(_target,prompt)=>{prompts.push(prompt);return '{"problem":"Add name"}';},opts);
+ await assert.rejects(t.processMapping(t.request),/Simulated commit interruption/);
+ opts.preflightResponse={status:'ready',summary:'Checked',edits:[],issues:[]};
+ await t.processMapping(t.request);
+ assert.equal(prompts.length,2);
+ assert.match(prompts[0],/Please add name once\./);
+ assert.match(prompts[1],/Please add namme once\./);
+});
+test('all source sections pass preflight before the first mapping request',async()=>{
+ let mappingCalls=0;
+ const opts={sourceText:'A'.repeat(30000)+'\nSECOND SECTION: permissions conflict.',preflightResponse:prompt=>prompt.includes('SECOND SECTION')?
+  {status:'needs-input',summary:'Conflict',edits:[],issues:[{severity:'blocker',category:'contradiction',detail:'Permissions conflict over access',suggestion:'Ask the owner'}]}:
+  {status:'ready',summary:'Checked',edits:[],issues:[]}};
+ const t=mappingHarness(async()=>{mappingCalls++;return '{"problem":"A"}';},opts);
+ await assert.rejects(t.processMapping(t.request),/clarification before mapping/);
+ assert.equal(mappingCalls,0);
+ assert.equal(t.commits,0);
 });
 test('invalid AI mapping is retried once before a complete proposal is committed',async()=>{
  let calls=0;

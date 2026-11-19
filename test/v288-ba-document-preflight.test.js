@@ -23,15 +23,23 @@ test('BA AI preflight checks RED/GREEN testability but does not claim to execute
  assert.match(p,/Never fabricate a requirement/i);
  assert.match(p,/do not claim that this preflight executes/i);
 });
-test('proposed text edits are never applied automatically',()=>{
+test('verified spelling corrections update the working copy, not the original',()=>{
  const response=ai({status:'ready',summary:'Source can be mapped',edits:[{before:'Add namme',after:'Add name',reason:'Obvious spelling correction'}],issues:[]});
  const result=preflight.parse(response,SRC);
  assert.equal(result.ready,true);
- assert.equal(result.applied.length,0);
- assert.equal(result.effectiveText,SRC);
+ assert.equal(result.applied.length,1);
+ assert.equal(result.effectiveText,SRC.replace('Add namme','Add name'));
  assert.match(SRC,/Add namme using keyboard/);
- assert.equal(result.skipped.length,1);
+ assert.equal(result.skipped.length,0);
+ assert.deepEqual(result.applied[0],{before:'Add namme',after:'Add name',reason:'Obvious spelling correction'});
  assert.equal(preflight.evidence(result,SHA).originalPreserved,true);
+});
+test('ambiguous matches and unrecognized changes are never applied',()=>{
+ assert.equal(preflight.safeEdit('namme','name','namme and namme'),false);
+ assert.equal(preflight.safeEdit('active','inactive','active status'),false);
+ assert.equal(preflight.safeEdit('must','may','must approve'),false);
+ assert.equal(preflight.safeEdit('namme','name','different source'),false);
+ assert.equal(preflight.safeEdit('namme','name','Enter namme'),true);
 });
 test('unsafe AI proposals changing requirements, limits, negation, identifiers or ambiguous text are ignored',()=>{
  const rows=[['100 characters','200 characters'],['must persist','may persist'],['press Enter','press Escape'],['Add namme','Add full name with passwords and role policies']];
