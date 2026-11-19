@@ -68,12 +68,12 @@ test('work-start evidence persists across extension reloads',async()=>fixture(as
  state=await workflow.recordJiraWorkHistory(reg,'demo',reloaded.revision,{protection:[{issues:[{key:'AIA-42',known:true,started:false,status:'To Do'}]}],blocked:[]});
  assert.equal(state.jiraWorkHistory['AIA-42'].started,true);
 }));
-test('BR screen supports CR panel, selective drafts, live status and guarded autosave',()=>{
+test('BR screen supports CR panel, selective drafts, live status and manual Discovery saves',()=>{
  const host=read(path.join(__dirname,'../test/generated/extension-source.txt'),'utf8');const ui=read(path.join(__dirname,'../media/start.js'),'utf8');
  for(const id of ['baCRPanel','baCRList','baCRForm','brGenerateAffected','baJiraRefreshStatus'])assert.ok(host.includes('id="'+id+'"'),id);
  for(const cmd of ['brChangeRequestCreate','brChangeRequestDecision','brJiraRefreshWorkStates'])assert.ok(host.includes("case '"+cmd+"'"),cmd);
  assert.match(host,/jiraProtectionAssessment/);assert.match(host,/await jiraPreflight\(/);
- assert.match(ui,/scheduleDiscoveryAutosave\(\)/);assert.match(ui,/discoveryAutosaveSnapshot/);
+ assert.doesNotMatch(ui,/scheduleDiscoveryAutosave\(\)/);assert.doesNotMatch(ui,/autosave:true/);assert.match(ui,/discoveryAutosaveSnapshot/);
  assert.doesNotMatch(ui,/editorLayoutTwoColumns|ViewColumn\.Two/);
 });
 test('selective regeneration updates only targeted BR drafts',async()=>fixture(async(reg,state)=>{

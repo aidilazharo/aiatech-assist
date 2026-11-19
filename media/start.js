@@ -240,7 +240,7 @@ function baHasRecoverableBR(state){
 let jiraPublishState={phase:'idle',confirmed:0,total:0,message:'No Jira publication is running.',currentKey:'',error:''};
 let jiraPublicationPlan=[],jiraPublicationConfirmed=new Map();
 let jiraPreviewFieldsByPath={};
-let jiraPlanForCR=[],jiraProtectionForCR=[],jiraPreviewIssueTypes={},jiraPreviewProject='',discoveryAutoSaveTimer=null,discoveryAutosaving=false,discoveryAutosaveSnapshot=null;
+let jiraPlanForCR=[],jiraProtectionForCR=[],jiraPreviewIssueTypes={},jiraPreviewProject='',discoveryAutosaving=false,discoveryAutosaveSnapshot=null;
 let brRoleRepairPreview=null,brRoleRepairBusy=false;
 let mappingRunPhase='',mappingRetryAvailable=false,mappingFailureMessage='',mappingFailurePhase='',baPreflightInfo=null,reviewStopReason='',restoredMappingEpoch=null,sourceSelectedDigests=new Set(),jiraBrowseBaseUrl='',discoveryData=null,discoveryDirty=false,discoveryImportProposal=null,discoveryImportQueue=[],discoveryImportBusy=false,sourceRemoving=false,discoveryReviewProposal=null,preserveReviewOnSave=false,applyingAiReview=false,flowData=null,brState=null,brEditing=null,brPlanRevision=null,brJiraPreviewApproved=false,brQuill=null,brReadOnly=false,baOwnerState=null,baBusyTask='',brEditorDirty=false,brEditorSaving=false,brApprovePending=false,brJiraPlanChanges=0,brJiraPlanConflicts=0,pendingUploadAfterClaim=false,reviewApplyRetry=null,reviewApplyPhase='',reviewApplyRetryAvailable=false,reviewStageState=null;
 let mappingResumeAvailable=false;
@@ -5003,7 +5003,9 @@ function renderJiraIssueDetails(entry,readOnly=false){
  if(fieldPlan){
   const section=document.createElement('section');section.className='jira-preview-field-list';
   const title=document.createElement('h3');title.textContent='All available Jira fields ('+(fieldPlan.fields||[]).length+')';section.append(title);
-  const explanation=document.createElement('p');explanation.className='muted';explanation.textContent='Field names and types are verified against the selected Jira issue type. Unsupported structured values are not fabricated. Existing Jira values remain unchanged unless supported by approved requirements.';section.append(explanation);
+  const explanation=document.createElement('p');explanation.className='muted';explanation.textContent='ATGV automatically fills all supported writable text fields from the approved BR, and inserts a clear missing-information placeholder where text evidence is unavailable. Non-text fields (users, dates, numbers and selections) display a preview-only placeholder when no valid value exists; Jira will not accept arbitrary text in these fields. Existing unsupported values are preserved.';section.append(explanation);
+  const totals=fieldPlan.autofillSummary;
+  if(totals){const summary=document.createElement('p');summary.className='muted';summary.textContent='Auto-filled: '+totals.mapped+' · Text placeholders: '+totals.textPlaceholders+' · Existing Jira values: '+totals.preserved+' · Jira defaults: '+totals.jiraDefaults+' · Preview-only / needs valid Jira value: '+totals.previewOnly;section.append(summary);}
   for(const field of fieldPlan.fields||[]){
    const row=document.createElement('div');row.className='jira-preview-field';
    const caption=document.createElement('strong');caption.textContent=field.name+(field.required?' · Required':'');
@@ -6024,7 +6026,7 @@ function renderDiscovery(){
       const counter=document.createElement('small');counter.className='discovery-answer-count';
       const helper=document.createElement('small');helper.className='muted';helper.textContent=key==='questions'?'Enter NONE if there are no unresolved questions.':'Use evidence from the uploaded document or confirmed business context.';
       const updateCounter=()=>{counter.textContent=area.value.length.toLocaleString()+' / 100,000';state.textContent=area.value.trim()?'Answered':'Required';wrap.classList.toggle('complete',!!area.value.trim());};
-      updateCounter();area.addEventListener('input',()=>{if(!applyingAiReview)preserveReviewOnSave=false;discoveryDirty=true;$('discoverySave').disabled=!baCanEdit('ba-discovery');updateCounter();refreshDiscoveryGroupCounts();renderDiscoverySummary();scheduleDiscoveryAutosave();});
+      updateCounter();area.addEventListener('input',()=>{if(!applyingAiReview)preserveReviewOnSave=false;discoveryDirty=true;$('discoverySave').disabled=!baCanEdit('ba-discovery');updateCounter();refreshDiscoveryGroupCounts();renderDiscoverySummary();$('baDiscoverySaveStatus').textContent='Unsaved changes · click Save 12 Questions to save manually';});
       wrap.append(labelRow,area,helper,counter);section.append(wrap);
     }
     root.append(section);
@@ -6836,25 +6838,16 @@ $('discoveryImportApply').addEventListener('click',()=>{
   const count=selections.length;discoveryImportProposal=discoveryImportQueue.shift()||null;renderDiscoveryImportProposal();
   // Accepting a proposal with no checked replacements must still link the
   // existing answers to the new mapping revision, after explicit review.
-  if(!discoveryImportProposal){discoveryDirty=true;scheduleDiscoveryAutosave();}
+  if(!discoveryImportProposal){discoveryDirty=true;$('baDiscoverySaveStatus').textContent='Mapped answers have unsaved changes · click Save 12 Questions';}
   $('discoveryImportStatus').textContent=discoveryImportProposal?`${count} mapped. Next: ${discoveryImportProposal.filename}`:`${count} mapped answer(s). Review and save 12 questions.`;renderDiscoverySummary();
 });
-function scheduleDiscoveryAutosave(){
- clearTimeout(discoveryAutoSaveTimer);
- if(!discoveryData||!baCanEdit('ba-discovery')||!baMappingComplete()||!!baBusyTask)return;
- $('baDiscoverySaveStatus').textContent='Unsaved changes · saving soon';
- discoveryAutoSaveTimer=setTimeout(()=>{
-  if(!discoveryDirty||discoveryAutosaving||baBusyTask||!discoveryData||!baCanEdit('ba-discovery')||!baMappingComplete())return;
-  const answers=Object.fromEntries(BA_QUESTIONS.map(([key])=>[key,$('ba-'+key).value]));
-  discoveryAutosaving=true;discoveryAutosaveSnapshot=answers;baBusy('saveDiscovery','Saving draft answers…');send('saveDiscovery',{answers,revision:discoveryData.revision,preserveReview:preserveReviewOnSave,autosave:true});
- },1800);
-}
 $('discoverySave').addEventListener('click',()=>{
  if($('discoverySave').type!=='button'||$('discoverySave').disabled||discoveryDirty)return;
  openBAWorkflowStep('review');
 });
 $('discoveryForm').addEventListener('submit',e=>{
   e.preventDefault();if(!discoveryData||$('discoverySave').disabled)return;
+  if(discoveryAutosaving||baBusyTask)return; // Reject duplicate manual clicks while a save is running.
   const answers=Object.fromEntries(BA_QUESTIONS.map(([key])=>[key,$('ba-'+key).value]));
   discoveryAutosaving=true;discoveryAutosaveSnapshot=answers;
   baBusy('saveDiscovery','Saving 12 discovery answers…');send('saveDiscovery',{answers,revision:discoveryData.revision,preserveReview:preserveReviewOnSave});
@@ -6889,7 +6882,7 @@ window.addEventListener('message',event=>{
   }
   if(m.type==='brDeletionProgress'&&m.projectId===activeId){
    if(m.target==='in-progress'&&m.phase==='running'){
-    if(discoveryAutoSaveTimer)clearTimeout(discoveryAutoSaveTimer);discoveryAutoSaveTimer=null;discoveryAutosaveSnapshot=null;discoveryDirty=false;brEditorDirty=false;mappingResumeAvailable=false;mappingRetryAvailable=false;
+    discoveryAutosaveSnapshot=null;discoveryAutosaving=false;discoveryDirty=false;brEditorDirty=false;mappingResumeAvailable=false;mappingRetryAvailable=false;
    }
    showBRDeletionProgress(m.phase,m.message,m.deleted,m.total);
    if(['completed','cancelled','failed'].includes(m.phase)){
@@ -7008,7 +7001,7 @@ window.addEventListener('message',event=>{
     if(view==='discovery'&&((m.count||0)>0||(m.revised||0)>0||(m.reverified||0)>0))
       requestAnimationFrame(()=>document.querySelector('#discoveryView .source-documents-panel:not(.hidden)')?.scrollIntoView({block:'start',behavior:'smooth'}));
   }
-  if(m.type==='discoverySaved'){const editedDuringSave=!!discoveryAutosaveSnapshot&&BA_QUESTIONS.some(([key])=>($('ba-'+key)?.value||'')!==discoveryAutosaveSnapshot[key]);const edits=editedDuringSave?Object.fromEntries(BA_QUESTIONS.map(([key])=>[key,$('ba-'+key).value])):null;discoveryAutosaving=false;discoveryAutosaveSnapshot=null;baReopenQuestions=false;baReopenDocuments=false;if(baBusyTask==='saveDiscovery')baBusyTask='';discoveryData=m.discovery;discoveryDirty=false;preserveReviewOnSave=false;renderDiscovery();if(edits){for(const [key,value] of Object.entries(edits))if($('ba-'+key))$('ba-'+key).value=value;discoveryDirty=true;scheduleDiscoveryAutosave();}status(m.linkPending?'Answers saved. Retry Save 12 Questions to update the workflow.':'Discovery answers saved locally.');renderDiscoverySummary();}
+  if(m.type==='discoverySaved'){const editedDuringSave=!!discoveryAutosaveSnapshot&&BA_QUESTIONS.some(([key])=>($('ba-'+key)?.value||'')!==discoveryAutosaveSnapshot[key]);const edits=editedDuringSave?Object.fromEntries(BA_QUESTIONS.map(([key])=>[key,$('ba-'+key).value])):null;discoveryAutosaving=false;discoveryAutosaveSnapshot=null;baReopenQuestions=false;baReopenDocuments=false;if(baBusyTask==='saveDiscovery')baBusyTask='';discoveryData=m.discovery;discoveryDirty=false;preserveReviewOnSave=false;renderDiscovery();if(edits){for(const [key,value] of Object.entries(edits))if($('ba-'+key))$('ba-'+key).value=value;discoveryDirty=true;}else if(m.linkPending){discoveryDirty=true;$('discoverySave').disabled=false;}status(m.linkPending?'Answers saved to disk, but BR workflow linking failed. Click Save 12 Questions to retry manually.':'Discovery answers saved locally.');$('baDiscoverySaveStatus').textContent=m.linkPending?'Save partially completed · Retry manually':discoveryDirty?'Edits made during save · Save again manually':'Saved';renderDiscoverySummary();}
   if(m.type==='discoveryImportProgress'){
    if(m.phase)mappingRunPhase=m.phase;
    if(['mapping','preparing','preflight','repair'].includes(m.phase))dismissObsoleteBARestartNotice();
@@ -7232,7 +7225,7 @@ window.addEventListener('message',event=>{
     if(m.error&&designBusy){designBatchPending=false;if(designBusyKind){const current=designProcessState[designBusyKind];setDesignProcess(designBusyKind,current?.percent||0,'Failed: '+(m.message||'Design generation failed.'),'error');}designBusy=false;designBusyKind='';renderDesignCards();$('designStatus').textContent='';}if(m.error){$('designSaveDraft').disabled=false;}
     if(m.error&&view==='knowledge'){$('knowledgeSync').disabled=!activeId;$('knowledgeSyncStatus').textContent=m.message||'Knowledge synchronization failed.';}
     if(m.error&&view==='landing'){$('overviewKnowledgeStatus').textContent=m.message||'Project knowledge request failed.';$('overviewKnowledgeSync').disabled=!activeId;}
-    if(m.error&&sourceRemoving){sourceRemoving=false;renderSourceDocuments();}status(m.message,!!m.error);if(m.error&&view==='discovery'&&discoveryDirty){discoveryAutosaving=false;discoveryAutosaveSnapshot=null;$('discoverySave').disabled=false;$('baDiscoverySaveStatus').textContent='Save failed · Retry';}if(m.error&&view==='documentEditor'&&docDirty){docSaving=false;$('docSave').disabled=false;$('docEditorStatus').textContent=m.message;}if(m.error&&gateBusy){gateBusy=false;gateError=m.message;renderGate();}}
+    if(m.error&&sourceRemoving){sourceRemoving=false;renderSourceDocuments();}status(m.message,!!m.error);if(m.error&&view==='discovery'&&discoveryDirty){discoveryAutosaving=false;discoveryAutosaveSnapshot=null;$('discoverySave').disabled=!baCanEdit('ba-discovery');$('baDiscoverySaveStatus').textContent='Save not completed: '+String(m.message||'Unknown error').slice(0,250)+' · Retry manually';}if(m.error&&view==='documentEditor'&&docDirty){docSaving=false;$('docSave').disabled=false;$('docEditorStatus').textContent=m.message;}if(m.error&&gateBusy){gateBusy=false;gateError=m.message;renderGate();}}
   if(m.type==='discovered'){
     if(m.origin==='settings'){if(m.requestId!==settingsSearchId||read('settingsSpaceQuery').replace(/\s+/g,' ').toLocaleLowerCase()!==String(m.query).toLocaleLowerCase())return;}
     else if(m.requestId!==gateSearchId||read('gateQuery').replace(/\s+/g,' ').toLocaleLowerCase()!==String(m.query).toLocaleLowerCase())return;

@@ -144,7 +144,7 @@ let startupSessionProceedApproved=false;
 let startupVerifiedSignature='';
 let startupPermissionsState=null,startupReadinessState=null,startupReadinessSequence=0;
 function isBAProcessCommand(command){
- return /^(?:br[A-Z]|ba[A-Z]|discovery[A-Z]|importDiscovery|processDiscoverySources|updateSourceDocuments|downloadWorkingBR|downloadDocumentPreflight|deleteBREverywhere|stopDiscoverySourceMapping|restartUncompletedBusinessRequirement|startOrRestartBusinessRequirements)/.test(String(command||''))&&
+ return /^(?:br[A-Z]|ba[A-Z]|discovery[A-Z]|importDiscovery|saveDiscovery|processDiscoverySources|updateSourceDocuments|downloadWorkingBR|downloadDocumentPreflight|deleteBREverywhere|stopDiscoverySourceMapping|restartUncompletedBusinessRequirement|startOrRestartBusinessRequirements)/.test(String(command||''))&&
   command!=='baDownloadProcessLog';
 }
 async function recordBAProcess(event){
@@ -7708,10 +7708,24 @@ async function handleDashboardMessage(msg){
         await refreshDashboard();await notice(enabled?'Auto-sync enabled for this VS Code session.':'Auto-sync disabled.');break;
       }
       case 'saveDiscovery':{
+        if(msg.autosave===true)throw Error('Automatic Discovery saving is disabled. Click Save 12 Questions to save manually.');
         requireOpened();await requireBAOwner('ba-discovery');
         const beforeDiscovery=await discovery.load(registry,activeProject.id);
-        const saved=await discovery.save(registry,activeProject.id,msg.answers,msg.revision);
+        // Manual Save is the sole write path. An earlier save may already have
+        // written discovery-12.json but failed to link its revision to the BR
+        // register. Reuse that identical file instead of writing a new one.
+        if(typeof msg.revision!=='string'||msg.revision!==beforeDiscovery.revision)
+          throw Error('Discovery answers changed on disk since this page was loaded. No edits were overwritten. Reopen the Discovery Questions and review the latest saved revision before retrying.');
+        const sameAnswers=discovery.QUESTIONS.every(([key])=>String(msg.answers?.[key]??'').trim()===beforeDiscovery.answers[key]);
+        const saved=sameAnswers?beforeDiscovery:await discovery.save(registry,activeProject.id,msg.answers,msg.revision);
         const register=await brWorkflow.load(registry,activeProject.id);
+        const alreadyLinked=register.discoveryRevision===saved.revision&&discovery.QUESTIONS.every(([key])=>String(register.discoveryAnswers?.[key]??'')===saved.answers[key]);
+        if(alreadyLinked){
+          await dashboard?.webview.postMessage({type:'discoverySaved',discovery:saved});
+          await dashboard?.webview.postMessage({type:'brUpdated',register});
+          await notice('All 12 Discovery answers are already saved and linked to this BR revision.');
+          break;
+        }
         const answerChanges=discovery.changesForRegistration(beforeDiscovery,saved,register);
         let updated;
         try{updated=await brWorkflow.discoverySaved(registry,activeProject.id,register.revision,saved.revision,{preserveReview:msg.preserveReview===true,answerChanges,answers:saved.answers});}
