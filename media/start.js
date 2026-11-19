@@ -4950,6 +4950,8 @@ function baReviewCurrent(){return !!(brState?.reviewRevision&&brState.reviewRevi
 function baReviewMode(){return baReviewSkipped()?'skip':'run';}
 function baReviewFinalized(){
  if(!baReviewCurrent())return false;
+ const readiness=currentDiscoveryReadiness();
+ if(readiness.filled!==readiness.total)return false;
  let review;try{review=JSON.parse(brState?.reviewText||'{}');}catch{return false;}
  return !!(review.skipped||review.applied||review.confirmed||(brState?.brs||[]).some(br=>br.status!=='retired'&&br.source?.discoveryRevision===brState.discoveryRevision));
 }
@@ -5020,6 +5022,12 @@ function renderSourceDocuments(){
  const root=$('sourceDocuments');root.replaceChildren();
  renderSourcePreflight();
  const files=brState?.sourceDocuments||[];
+ // Older interrupted mappings could persist a source selection without a
+ // completed mapping. Restore that selection so the analyst can retry it.
+ if(!baMappingComplete()&&!discoveryImportBusy&&!sourceSelectedDigests.size){
+  const processed=brState?.processedSources||[];
+  for(const file of files)if(processed.includes(file.digest))sourceSelectedDigests.add(file.digest);
+ }
  refreshBAHeadingProgress();
  const validSelection=[...sourceSelectedDigests].filter(x=>files.some(f=>f.digest===x));
  if(validSelection.length!==sourceSelectedDigests.size){sourceSelectedDigests=new Set(validSelection);if(activeId)send('baSourceSelection',{digests:validSelection});}
@@ -5029,7 +5037,7 @@ function renderSourceDocuments(){
   const item=document.createElement('div');item.className='source-document-row';
   const info=document.createElement('div');info.className='source-document-info';
   const selector=document.createElement('input');selector.type='checkbox';selector.className='source-select-radio';selector.setAttribute('aria-label','Select '+doc.name+' for 12-question processing');selector.checked=sourceSelectedDigests.has(doc.digest);
-  selector.disabled=!!baBusyTask||baMappingComplete()||!!(brState?.processedSources||[]).length||!baCanEdit('ba-discovery');
+  selector.disabled=!!baBusyTask||baMappingComplete()||!baCanEdit('ba-discovery');
   selector.classList.remove('hidden'); // Locked sources remain visible for audit after mapping.
   selector.addEventListener('change',()=>{if(selector.checked)sourceSelectedDigests.add(doc.digest);else sourceSelectedDigests.delete(doc.digest);send('baSourceSelection',{digests:[...sourceSelectedDigests]});renderSourceSelection();});
   const name=document.createElement('strong');name.textContent=doc.name;
@@ -5058,12 +5066,11 @@ function updateSourceSubmitButton(){
  const button=$('sourceProcessSubmit');
  const complete=baMappingComplete();
  const processing=discoveryImportBusy||!!baBusyTask;
- const alreadySubmitted=!!(brState?.processedSources||[]).length||!!brState?.mappingCompleted;
- button.dataset.action=complete?'next':alreadySubmitted||processing?'processing':'submit';
- button.textContent=complete?'Next Step · Map & Save 12':alreadySubmitted||processing?'Processing Documents…':'Submit Selected Documents';
- button.title=complete?'Open Map & Save 12':alreadySubmitted||processing?'Document mapping is in progress':'Submit selected documents for discovery mapping';
+ button.dataset.action=complete?'next':processing?'processing':'submit';
+ button.textContent=complete?'Next Step · Map & Save 12':processing?'Processing Documents…':'Submit Selected Documents';
+ button.title=complete?'Open Map & Save 12':processing?'Document mapping is in progress':'Submit selected documents for discovery mapping';
  const selectable=!!(brState?.sourceDocuments||[]).length&&!!activeId&&selectedRole==='business-analyst';
- button.disabled=processing||!selectable||(complete?false:alreadySubmitted||!sourceSelectedDigests.size||!!discoveryImportProposal||!baCanEdit('ba-discovery'));
+ button.disabled=processing||!selectable||(complete?false:!sourceSelectedDigests.size||!!discoveryImportProposal||!baCanEdit('ba-discovery'));
  button.classList.toggle('ba-step-next-complete',complete);
  button.classList.toggle('secondary',complete);
  button.classList.toggle('hidden',complete); // Navigation now lives in #baStepNavigation.
@@ -5447,10 +5454,10 @@ function renderBAButtons(){
  // Completed Jira publishing is read-only; expose this action again only for an approved new plan.
  $('brJiraSync').classList.toggle('hidden',!brPlanRevision&&(baPublishedCurrent()||jiraPublishState.phase==='completed'));
  const tasks={
-  discoveryImport:!!baBusyTask||discoveryImportBusy||baMappingComplete()||!!(brState?.processedSources||[]).length||selectedRole!=='business-analyst'||!activeId,
+  discoveryImport:!!baBusyTask||discoveryImportBusy||baMappingComplete()||selectedRole!=='business-analyst'||!activeId,
   discoveryImportApply:!!baBusyTask||!discoveryImportProposal||!mine,
-  discoverySave:saved&&!discoveryDirty&&current.filled===current.total&&baMappingComplete()?!!baBusyTask:!!baBusyTask||!mine||!baMappingComplete()||!!discoveryImportProposal||!!discoveryImportQueue.length||!discoveryDirty,
-  discoveryCopilot:baBusyTask==='review'?false:!!baBusyTask||!mine||!baMappingComplete()||!!discoveryImportProposal||!!discoveryImportQueue.length||!saved||current.filled!==current.total||discoveryDirty,
+  discoverySave:saved&&!discoveryDirty&&baMappingComplete()?!!baBusyTask:!!baBusyTask||!mine||!baMappingComplete()||!!discoveryImportProposal||!!discoveryImportQueue.length||(!discoveryDirty&&saved),
+  discoveryCopilot:baBusyTask==='review'?false:!!baBusyTask||!mine||!baMappingComplete()||!!discoveryImportProposal||!!discoveryImportQueue.length||!saved||discoveryDirty,
   baReviewSkip:baBusyTask==='review'?false:!!baBusyTask||!mine||!baMappingComplete()||!!discoveryImportProposal||!!discoveryImportQueue.length||!saved||current.filled!==current.total||discoveryDirty,
   brGenerate:!!baBusyTask||!mine||!(brState?.sourceDocuments||[]).length||!reviewGood||freshDraftPending||generatingDone,
   brJiraPreview:!!baBusyTask||!reviewGood||!brs.length||brs.some(br=>br.status!=='approved'&&!(br.status==='retire-proposed'&&br.approvedContent)||br.status==='approved'&&br.needsRefresh)||(!approved&&!retiredJiraPending)||baPublishedCurrent()||(!!brPlanRevision&&brJiraPlanChanges>0),
@@ -5491,9 +5498,9 @@ function renderBAButtons(){
  const finish=$('baReviewFinish');
  const unresolvedFindings=discoveryHasReviewBlockers();
  finish.textContent=unresolvedFindings?'Review & Acknowledge Findings':'Confirm AI Review & Continue';
- finish.title=unresolvedFindings?'Review source evidence and explicitly acknowledge the unresolved AI findings. Does not approve BRs.':'Record human confirmation of the current AI Review.';
+ finish.title=current.filled!==current.total?'Complete and save all 12 answers, then re-run AI Review.':unresolvedFindings?'Review source evidence and explicitly acknowledge the unresolved AI findings. Does not approve BRs.':'Record human confirmation of the current AI Review.';
  finish.classList.toggle('hidden',!reviewCurrent||baReviewFinalized()&&!unresolvedFindings);
- finish.disabled=!!baBusyTask||!mine||!reviewCurrent||discoveryDirty;
+ finish.disabled=!!baBusyTask||!mine||!reviewCurrent||discoveryDirty||current.filled!==current.total;
  const legacySources=(brState?.sourceDocuments||[]).filter(source=>(brState?.processedSources||[]).includes(source.digest)&&!/^[a-f0-9]{64}$/.test(String(source.byteDigest||'')));
  $('brLegacySourceRecovery').classList.toggle('hidden',!legacySources.length);
  $('brReuploadOriginalSource').disabled=!legacySources.length||!!baBusyTask||discoveryImportBusy||selectedRole!=='business-analyst'||!activeId;
@@ -5521,7 +5528,7 @@ function renderBAButtons(){
 }
 function renderBAOwner(){
  const canEdit=baCanEdit('ba-discovery');
- $('discoveryImport').disabled=selectedRole!=='business-analyst'||!!baBusyTask||!(brState?.restartPending||(brState?.sourceDocuments||[]).length&&!baMappingComplete()&&!(brState?.processedSources||[]).length);
+ $('discoveryImport').disabled=selectedRole!=='business-analyst'||!!baBusyTask||!(brState?.restartPending||(brState?.sourceDocuments||[]).length&&!baMappingComplete());
  for(const node of document.querySelectorAll('#discoveryQuestions textarea'))node.readOnly=!canEdit;
  renderDiscoverySummary();
 }
@@ -5598,7 +5605,7 @@ function renderDiscoverySummary(){
   $('discoveryMissing').textContent=missing.length?`${missing.length} question${missing.length===1?'':'s'} remaining${missingPreview?': '+missingPreview:''}${missing.length>3?' …':''}`:readiness.needsDecision?'Question 12 still contains unresolved items.':'All 12 questions completed.';
   $('discoveryProgress').textContent=`${filled} / ${total} answered`;
   $('discoveryProgressFill').style.width=percent+'%';
-  $('discoveryProgressHint').textContent=filled===total?'12 answers complete. Open decisions are allowed in drafts but block final approval.':'Save all 12 discovery answers before AI Review.';
+  $('discoveryProgressHint').textContent=filled===total?'12 answers complete. Open decisions are allowed in drafts but block final approval.':'Save the available answers to run AI Review. Complete all 12 before generating requirements.';
   const imported=!!brState?.importName&&(brState.processedSources===null||brState.processedSources===undefined||brState.processedSources.length>0);
   const reviewReady=!!(brState?.reviewRevision&&brState.reviewRevision===brState.discoveryRevision&&!discoveryDirty);
   const activeBrs=activeBusinessRequirements(); // Exclude preserved history, as the BR card list does.
@@ -5606,7 +5613,7 @@ function renderDiscoverySummary(){
   const savedBrs=activeBrs.filter(br=>!!br.draftSavedAt||!!br.approvedContent).length;
   const approved=activeBrs.filter(br=>br.status==='approved').length;
   const published=baPublishedCurrent();
-  const savedDiscovery=!!discoveryData?.updatedAt&&brState?.discoveryRevision===discoveryData?.revision&&!discoveryDirty&&filled===total;
+  const savedDiscovery=ATGVBAProgress.savedAnswersReady(discoveryData,brState,discoveryDirty,!!discoveryImportProposal||!!discoveryImportQueue.length);
   const hasSources=(brState?.sourceDocuments||[]).length>0;
   const mappingDone=baMappingComplete();
   if(mappingDone&&brState?.mappingCompleted?.epoch===brState.importEpoch&&restoredMappingEpoch!==brState.importEpoch){
@@ -5627,7 +5634,7 @@ function renderDiscoverySummary(){
   const status=ATGVBAStageFlow.select({hasSources,mappingDone,mappingProposal:!!discoveryImportProposal,savedDiscovery,reviewCurrent:reviewReady,reviewFinalized,generated,allApproved,publishedCurrent:baPublishedCurrent(),reopenQuestions:baReopenQuestions,reopenDocuments:baReopenDocuments,pendingJiraInbound:(brState?.inboundJira||[]).some(entry=>entry.status==='pending'||entry.status==='reviewed'),pendingChangeResolution:pendingChange});
   if(baProgressProjectId!==activeId){baViewedStep=null;baPreviousStage='';baLastActiveStep='';baProgressProjectId=activeId;jiraPublicationPlan=[];jiraPublicationConfirmed.clear();jiraPublishState={phase:'idle',confirmed:0,total:0,message:'No Jira publication is running.',currentKey:'',error:''};}
   // Upload remains the active first milestone until mapping actually starts. Merely attaching a file must not hide Submit.
-  const mappingSubmitted=!!(brState?.processedSources||[]).length||!!brState?.mappingCompleted||discoveryImportBusy;
+  const mappingSubmitted=mappingDone||discoveryImportBusy;
   const progress=ATGVBAProgress.derive({started:hasSources||!!brState?.restartPending,hasSources:hasSources&&mappingSubmitted,mappingDone,savedDiscovery,reviewFinalized,reviewWarnings:discoveryHasReviewBlockers(),generated,totalBrs:activeBrs.length,savedBrs,allApproved,approvalBlocked:readiness.needsDecision||discoveryHasReviewBlockers(),jiraPreview:!!brPlanRevision,jiraApproved:brJiraPreviewApproved,published:baPublishedCurrent(),failedStep:baFailedProcess});
   const activeStep=progress.find(step=>step.current)?.key||'start';
   // Keep the just-completed milestone visible until the user chooses Next Step.
@@ -5671,7 +5678,7 @@ function renderDiscoverySummary(){
  // has selected/submitted it. Never hide the source selection prematurely.
  // Hide the panel only after mapping was actually submitted; preserve the
  // Restart in the Business Requirements header remains the explicit way to replace sources.
- const sourceMappingStarted=!!(brState?.processedSources||[]).length||!!brState?.mappingCompleted||discoveryImportBusy;
+ const sourceMappingStarted=mappingDone||discoveryImportBusy;
  const showSources=displayed==='upload'; // Step 1 only; review later stages without duplicate source panels.
   const showMapping=displayed==='mapping'&&!!discoveryImportProposal;
   const showQuestions=displayed==='mapping'&&mappingDone&&!discoveryImportProposal;
@@ -5684,7 +5691,7 @@ function renderDiscoverySummary(){
   $('discoveryReadiness').textContent=progress.every(step=>step.complete)?'Published · 10 of 10 complete':`${(currentMilestone?.index??0)+1} of 10 · ${currentMilestone?.label||'Start'}`;
   // Give the BA an actionable question number and label instead of only '1 answer remaining'.
   const missingQuestionDetails=missing.slice(0,2).map(item=>{const index=BA_QUESTIONS.findIndex(([key])=>key===item.key);return `Q${index+1}: ${item.label}`;}).join(' · ');
-  $('discoveryMissing').textContent=status.stage==='questions'&&missing.length?`${missing.length} discovery answer${missing.length===1?'':'s'} remaining — ${missingQuestionDetails}${missing.length>2?' …':''}`:status.stage==='questions'&&readiness.needsDecision?'Open decisions recorded; approval requires resolution.':progress.every(step=>step.complete)?'Jira publishing completed.':currentMilestone?.label==='AI Review'?'Inspect saved AI Review evidence and suggestions.':`Current action: ${currentMilestone?.label||'Upload'}`;
+  $('discoveryMissing').textContent=missing.length&&mappingDone?`${missing.length} unanswered — ${missingQuestionDetails}${missing.length>2?' …':''}. AI Review can identify gaps; complete all answers before generation.`:status.stage==='questions'&&readiness.needsDecision?'Open decisions recorded; approval requires resolution.':progress.every(step=>step.complete)?'Jira publishing completed.':currentMilestone?.label==='AI Review'?'Inspect saved AI Review evidence and suggestions.':`Current action: ${currentMilestone?.label||'Upload'}`;
   $('baDiscoveryProgress').classList.toggle('hidden',!showQuestions);
   // Never offer a save when all 12 answers match the persisted revision.
   // The same inline action advances to AI Review after the persisted 12 answers are ready.
@@ -5697,9 +5704,9 @@ function renderDiscoverySummary(){
   discoveryAction.classList.toggle('ba-step-next-complete',discoveryAdvanceReady);
   discoveryAction.classList.toggle('secondary',discoveryAdvanceReady);
   discoveryAction.classList.toggle('hidden',discoveryAdvanceReady); // Already saved: use standalone Next Step.
-  discoveryAction.disabled=discoveryAdvanceReady?!!baBusyTask:!discoveryDirty||!baCanEdit('ba-discovery')||!!baBusyTask||!mappingDone;
-  $('discoveryQuestionsBadge').textContent=savedDiscovery?'Ready':`${filled} / ${total} answered`;
-  $('discoveryQuestionsBadge').classList.toggle('ba-ready',savedDiscovery);
+  discoveryAction.disabled=discoveryAdvanceReady?!!baBusyTask:(!discoveryDirty&&!!discoveryData?.updatedAt&&brState?.discoveryRevision===discoveryData?.revision)||!baCanEdit('ba-discovery')||!!baBusyTask||!mappingDone||!!discoveryImportProposal||!!discoveryImportQueue.length;
+  $('discoveryQuestionsBadge').textContent=savedDiscovery&&filled===total?'Ready':`${filled} / ${total} answered${savedDiscovery?' · saved':''}`;
+  $('discoveryQuestionsBadge').classList.toggle('ba-ready',savedDiscovery&&filled===total);
   const questionsPanel=$('discoveryQuestionsPanel');
   questionsPanel.classList.toggle('hidden',!showQuestions);
   if(showQuestions&&questionsPanel.dataset.lastSaved!==String(savedDiscovery)){
@@ -5803,12 +5810,14 @@ function renderDiscovery(){
   if(!discoveryData)return;
   const root=$('discoveryQuestions');
   if(discoveryDirty){renderDiscoverySummary();return;}
+  const openGroups=new Set([...root.querySelectorAll('.discovery-group[open]')].map(group=>group.dataset.from));
   root.replaceChildren();
   const groups=[['Business context',0,4],['Requirements and rules',4,8],['Delivery and open questions',8,12]];
   for(const [heading,from,to] of groups){
     const section=document.createElement('details');section.className='discovery-group';section.dataset.from=String(from);section.dataset.to=String(to);
     const summary=document.createElement('summary');summary.className='discovery-group-head';
     const filledInGroup=BA_QUESTIONS.slice(from,to).filter(([key])=>(discoveryData.answers?.[key]||'').trim()).length;
+    section.open=openGroups.has(String(from))||filledInGroup<to-from;
     const headingWrap=document.createElement('div');const title=document.createElement('strong');title.textContent=heading;const range=document.createElement('small');range.textContent=`Questions ${from+1}–${to}`;headingWrap.append(title,range);
     const pill=document.createElement('span');pill.className='discovery-group-pill';pill.textContent=`${filledInGroup} / ${to-from}`;summary.append(headingWrap,pill);section.append(summary);
     for(let idx=from;idx<to;idx++){
@@ -6504,7 +6513,7 @@ function renderDiscoveryReview(){
   root.append(card);
  }
  if(!(review.suggestions||[]).length&&!review.skipped){root.append(brElement('p','ba-review-empty',review.applied?'Selected suggestions applied.':'No replacement suggested. You can proceed to Generate Business Requirements Documents.'));}
- else if(!review.skipped&&!(review.suggestions||[]).some(item=>item.suggestedAnswer)){root.append(brElement('p','ba-review-empty','No evidence-supported replacements are available; Apply Answer Replacements is disabled by design. Update and save relevant discovery answers, re-run AI Review, or use Review & Acknowledge Findings to record an explicit decision. Formal approval still requires complete Discovery and any independent Business Owner approval.'));}
+ else if(!review.skipped&&!(review.suggestions||[]).some(item=>item.suggestedAnswer)){const readiness=currentDiscoveryReadiness();root.append(brElement('p','ba-review-empty',readiness.filled!==readiness.total?'Return to Map & Save 12, complete the unanswered questions and save, then re-run AI Review.':'No evidence-supported replacements are available. Update and save the relevant answers and re-run AI Review, or acknowledge the findings after checking the evidence.'));}
  if(review.skipped)root.append(brElement('p','ba-review-empty','AI Review skipped. You can proceed to Generate Business Requirements Documents.'));
  renderBAButtons();
 }
@@ -6555,7 +6564,7 @@ function retryDiscoveryMapping(){
  send('processDiscoverySources',{digests:[...sourceSelectedDigests],revision:brState.revision});
 }
 $('baStopMapping').addEventListener('click',()=>{
- if(!discoveryImportBusy||!['preparing','mapping'].includes(mappingRunPhase))return;
+ if(!discoveryImportBusy||!['preparing','preflight','repair','mapping'].includes(mappingRunPhase))return;
  mappingRunPhase='stopping';setDiscoveryImportBusy(true,'Stopping mapping…');send('stopDiscoverySourceMapping');
 });
 $('baMappingRetry').addEventListener('click',retryDiscoveryMapping);
@@ -6577,6 +6586,9 @@ $('discoveryImportApply').addEventListener('click',()=>{
     if(area){area.value=discoveryImportProposal.answers[key];area.dispatchEvent(new Event('input',{bubbles:true}));}
   }
   const count=selections.length;discoveryImportProposal=discoveryImportQueue.shift()||null;renderDiscoveryImportProposal();
+  // Accepting a proposal with no checked replacements must still link the
+  // existing answers to the new mapping revision, after explicit review.
+  if(!discoveryImportProposal){discoveryDirty=true;scheduleDiscoveryAutosave();}
   $('discoveryImportStatus').textContent=discoveryImportProposal?`${count} mapped. Next: ${discoveryImportProposal.filename}`:`${count} mapped answer(s). Review and save 12 questions.`;renderDiscoverySummary();
 });
 function scheduleDiscoveryAutosave(){
@@ -6594,8 +6606,9 @@ $('discoverySave').addEventListener('click',()=>{
  openBAWorkflowStep('review');
 });
 $('discoveryForm').addEventListener('submit',e=>{
-  e.preventDefault();if(!discoveryData||!discoveryDirty||$('discoverySave').disabled)return;
+  e.preventDefault();if(!discoveryData||$('discoverySave').disabled)return;
   const answers=Object.fromEntries(BA_QUESTIONS.map(([key])=>[key,$('ba-'+key).value]));
+  discoveryAutosaving=true;discoveryAutosaveSnapshot=answers;
   baBusy('saveDiscovery','Saving 12 discovery answers…');send('saveDiscovery',{answers,revision:discoveryData.revision,preserveReview:preserveReviewOnSave});
 });
 function requestDiscoveryReview(){
@@ -6730,7 +6743,7 @@ window.addEventListener('message',event=>{
     if(view==='discovery'&&((m.count||0)>0||(m.revised||0)>0||(m.reverified||0)>0))
       requestAnimationFrame(()=>document.querySelector('#discoveryView .source-documents-panel:not(.hidden)')?.scrollIntoView({block:'start',behavior:'smooth'}));
   }
-  if(m.type==='discoverySaved'){const editedDuringSave=!!discoveryAutosaveSnapshot&&BA_QUESTIONS.some(([key])=>($('ba-'+key)?.value||'')!==discoveryAutosaveSnapshot[key]);const edits=editedDuringSave?Object.fromEntries(BA_QUESTIONS.map(([key])=>[key,$('ba-'+key).value])):null;discoveryAutosaving=false;discoveryAutosaveSnapshot=null;baReopenQuestions=false;baReopenDocuments=false;if(baBusyTask==='saveDiscovery')baBusyTask='';discoveryData=m.discovery;discoveryDirty=!!editedDuringSave;preserveReviewOnSave=false;renderDiscovery();if(edits){for(const [key,value] of Object.entries(edits))if($('ba-'+key))$('ba-'+key).value=value;scheduleDiscoveryAutosave();}status('12 discovery questions saved locally.');renderDiscoverySummary();}
+  if(m.type==='discoverySaved'){const editedDuringSave=!!discoveryAutosaveSnapshot&&BA_QUESTIONS.some(([key])=>($('ba-'+key)?.value||'')!==discoveryAutosaveSnapshot[key]);const edits=editedDuringSave?Object.fromEntries(BA_QUESTIONS.map(([key])=>[key,$('ba-'+key).value])):null;discoveryAutosaving=false;discoveryAutosaveSnapshot=null;baReopenQuestions=false;baReopenDocuments=false;if(baBusyTask==='saveDiscovery')baBusyTask='';discoveryData=m.discovery;discoveryDirty=false;preserveReviewOnSave=false;renderDiscovery();if(edits){for(const [key,value] of Object.entries(edits))if($('ba-'+key))$('ba-'+key).value=value;discoveryDirty=true;scheduleDiscoveryAutosave();}status(m.linkPending?'Answers saved. Retry Save 12 Questions to update the workflow.':'Discovery answers saved locally.');renderDiscoverySummary();}
   if(m.type==='discoveryImportProgress'){
    if(m.phase)mappingRunPhase=m.phase;
    if(['mapping','preparing','preflight','repair'].includes(m.phase))dismissObsoleteBARestartNotice();
@@ -6906,6 +6919,7 @@ window.addEventListener('message',event=>{
   if(m.type==='openingError'){gateBusy=false;gateError=m.message||'Could not open project.';gateOfflineAvailable=!!m.canOffline;gateOpeningPercent(0,'Project opening failed: '+gateError);renderGate();}
   if(m.type==='state')updateState(m);
   if(m.type==='notice'){
+    if(m.error&&view==='discovery'&&baBusyTask==='saveDiscovery'){discoveryAutosaving=false;discoveryAutosaveSnapshot=null;}
     if(view==='discovery'&&!m.error&&$('baInlineStatus')){
       const node=$('baInlineStatus');node.textContent=String(m.message||'').slice(0,1200);
       node.setAttribute('role',m.error?'alert':'status');

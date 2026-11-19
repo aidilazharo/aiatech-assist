@@ -44,10 +44,10 @@ test('Upload register is visible and disabled outside an active Start Restart so
  assert.match(ui,/function renderArchivedSources\(\)/);assert.match(ui,/root\.replaceChildren\(\);root\.classList\.add\('hidden'\)/);
  assert.match(ui,/selector\.classList\.remove\('hidden'\)/);
 });
-test('Save 12 becomes Next Step when persisted and rejects unchanged save submissions',()=>{
- assert.match(ui,/discoverySave:saved&&!discoveryDirty&&current.filled===current.total&&baMappingComplete\(\)\?/);
- assert.match(ui,/\|\|!discoveryDirty/);
- assert.match(ui,/if\(!discoveryData\|\|!discoveryDirty\|\|\$\('discoverySave'\)\.disabled\)return;/);
+test('Save becomes Next Step when persisted and supports retrying an unlinked revision',()=>{
+ assert.match(ui,/discoverySave:saved&&!discoveryDirty&&baMappingComplete\(\)\?/);
+ assert.match(ui,/\(!discoveryDirty&&saved\)/);
+ assert.match(ui,/if\(!discoveryData\|\|\$\('discoverySave'\)\.disabled\)return;/);
  assert.match(ui,/discoveryDirty=true;\$\('discoverySave'\)\.disabled=!baCanEdit/);
  assert.match(ui,/discoveryAction.type=discoveryAdvanceReady\?'button':'submit'/);
  assert.match(ui,/openBAWorkflowStep\('review'\)/);

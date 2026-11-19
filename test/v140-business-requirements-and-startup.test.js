@@ -15,16 +15,17 @@ test('an uploaded source remains at Upload until mapping is submitted, then step
  assert.equal(progress.derive({started:true,hasSources:false}).find(x=>x.current).key,'upload');
  const mapping=progress.derive({hasSources:true,mappingDone:false});
  assert.equal(mapping.find(x=>x.current).key,'mapping');
- assert.match(ui,/const mappingSubmitted=!!\(brState\?\.processedSources\|\|\[\]\)\.length/);
+ assert.match(ui,/const mappingSubmitted=mappingDone\|\|discoveryImportBusy/);
  assert.match(ui,/hasSources:hasSources&&mappingSubmitted,mappingDone/);
  assert.match(ui,/const showSources=displayed==='upload'/);
  assert.match(ui,/\.source-documents-panel'\)\.classList\.toggle\('hidden',!showSources\)/);
 });
 
-test('saved discovery is green Ready, can advance to review, and cannot be saved unchanged',()=>{
- assert.match(ui,/discoveryQuestionsBadge'\)\.textContent=savedDiscovery\?'Ready'/);
- assert.match(ui,/discoveryQuestionsBadge'\)\.classList\.toggle\('ba-ready',savedDiscovery/);
- assert.match(ui,/discoveryAction.disabled=discoveryAdvanceReady\?!!baBusyTask:!discoveryDirty\|\|!baCanEdit/);
+test('complete saved discovery is green Ready; unlinked answers remain retryable',()=>{
+ assert.match(ui,/discoveryQuestionsBadge'\)\.textContent=savedDiscovery&&filled===total\?'Ready'/);
+ assert.match(ui,/discoveryQuestionsBadge'\)\.classList\.toggle\('ba-ready',savedDiscovery&&filled===total/);
+ assert.match(ui,/discoveryAction.disabled=discoveryAdvanceReady\?!!baBusyTask:/);
+ assert.match(ui,/brState\?\.discoveryRevision===discoveryData\?\.revision/);
  assert.match(css,/#discoveryQuestionsBadge\.ba-ready\{color:#b9f3d7/);
  assert.match(css,/#discoverySave:disabled/);
 });

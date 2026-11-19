@@ -13,10 +13,10 @@ test('12-question Save action becomes Next Step AI Review only after a current p
  assert.match(ui,/discoveryAction.type=discoveryAdvanceReady\?'button':'submit'/);
  assert.match(ui,/discoveryAction.textContent=discoveryAdvanceReady\?'Next Step · AI Review':'Save 12 Questions'/);
  assert.match(ui,/discoveryAction.disabled=discoveryAdvanceReady\?!!baBusyTask:/);
- assert.match(ui,/discoverySave:saved&&!discoveryDirty&&current.filled===current.total&&baMappingComplete\(\)\?/);
+ assert.match(ui,/discoverySave:saved&&!discoveryDirty&&baMappingComplete\(\)\?/);
  assert.match(ui,/if\(\$\('discoverySave'\)\.type!=='button'\|\|\$\('discoverySave'\)\.disabled\|\|discoveryDirty\)return/);
  assert.match(ui,/openBAWorkflowStep\('review'\)/);
- assert.match(ui,/if\(!discoveryData\|\|!discoveryDirty\|\|\$\('discoverySave'\)\.disabled\)return/);
+ assert.match(ui,/if\(!discoveryData\|\|\$\('discoverySave'\)\.disabled\)return/);
 });
 
 test('Step 3 completion footer is hidden without disabling later-step navigation',()=>{

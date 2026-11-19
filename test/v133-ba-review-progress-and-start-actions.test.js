@@ -54,7 +54,7 @@ test('Upload panel remains read-only after mapping; only header Restart offers s
  assert.doesNotMatch(ui,/const showSourceChange=/);
  assert.match(ui,/const sourceLocked=!sourceWindowOpen\|\|sourceMappingStarted/);
  assert.match(ui,/\$\('discoveryImport'\)\.disabled=sourceLocked/);
- assert.match(ui,/discoveryImport:!!baBusyTask\|\|discoveryImportBusy\|\|baMappingComplete\(\)\|\|!!\(brState\?\.processedSources\|\|\[\]\)\.length/);
+ assert.match(ui,/discoveryImport:!!baBusyTask\|\|discoveryImportBusy\|\|baMappingComplete\(\)/);
  assert.doesNotMatch(ui,/baRestartSources/);
  assert.match(host,/case 'restartDiscoverySources':\{/);
  assert.match(host,/approved Business Requirements and published Jira issues remain protected history/);

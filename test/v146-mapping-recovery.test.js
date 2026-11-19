@@ -68,6 +68,22 @@ test('successful mapping publishes proposals only after atomic register commit',
  assert.ok(order.indexOf('discoveryImportResult')<order.indexOf('discoveryImportDone'));
  assert.equal(t.sandbox.activeDiscoveryMappingRun,null);
 });
+test('invalid AI mapping is retried once before a complete proposal is committed',async()=>{
+ let calls=0;
+ const t=mappingHarness(async()=>++calls===1?'not JSON':'{"problem":"Register visitors"}');
+ await t.processMapping(t.request);
+ assert.equal(calls,2);
+ assert.equal(t.commits,1);
+ assert.ok(t.events.some(row=>row.phase==='mapping'&&/Retrying/.test(row.message)));
+});
+test('two invalid mappings leave the register unchanged and report a retryable error',async()=>{
+ let calls=0;
+ const t=mappingHarness(async()=>{calls++;return 'not JSON';});
+ await assert.rejects(t.processMapping(t.request),/invalid response twice/);
+ assert.equal(calls,2);
+ assert.equal(t.commits,0);
+ assert.equal(t.events.some(row=>row.type==='discoveryImportResult'),false);
+});
 test('per-source AI timeouts do not commit partial discovery or Jira changes',async()=>{
  const t=mappingHarness((_target,_prompt,_limit,{signal})=>new Promise((_resolve,reject)=>{
   signal.addEventListener('abort',()=>reject(Object.assign(Error('aborted'),{name:'AbortError'})),{once:true});

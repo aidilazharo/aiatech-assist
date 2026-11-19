@@ -16,6 +16,9 @@
   ['jiraApprove','discoveryStepJiraApprove','Approve Preview'],
   ['publish','discoveryStepPublish','Publish Jira']
  ];
+ function savedAnswersReady(data,register,dirty,proposalPending){
+  return !!data?.updatedAt&&!!data?.revision&&register?.discoveryRevision===data.revision&&!dirty&&!proposalPending;
+ }
  function derive(input){
   const x=input||{};
   const published=!!x.published;
@@ -34,5 +37,5 @@
    return {key,id,label,index:i,state,complete:completed[i],current:i===currentIndex,selectable:completed[i]||i===currentIndex||state==='failure'};
   });
  }
- return {definitions,derive};
+ return {definitions,derive,savedAnswersReady};
 });

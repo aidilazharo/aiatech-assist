@@ -59,6 +59,15 @@ function assess(answers) {
     const canReview = filled === QUESTIONS.length && /^none[.!]?$/i.test(unresolved);
     return { filled, total: QUESTIONS.length, canReview, missing: QUESTIONS.filter(([k]) => !answers[k]?.trim()).map(([key, label]) => ({ key, label })), needsDecision: !!unresolved && !/^none[.!]?$/i.test(unresolved) };
 }
+// If a prior save wrote the answers but failed to update the workflow record,
+// compare against that record's last linked answers on retry. Otherwise the
+// first write would hide the changes from downstream impact tracking.
+function changesForRegistration(before, saved, register) {
+    const previous = register?.discoveryAnswers;
+    const hasLinkedSnapshot = !!register?.discoveryRevision && register.discoveryRevision !== before.revision && QUESTIONS.every(([key]) => typeof previous?.[key] === 'string');
+    const baseline = hasLinkedSnapshot ? previous : before.answers;
+    return QUESTIONS.filter(([key]) => baseline[key] !== saved.answers[key]).map(([key]) => ({ key, before: baseline[key], after: saved.answers[key] }));
+}
 async function load(registry, id) {
     const file = await safeLocation(registry, id);
     const text = await fs.readFile(file, 'utf8').catch(e => e.code === 'ENOENT' ? null : Promise.reject(e));
@@ -96,4 +105,4 @@ async function save(registry, id, answers, baseRevision) {
         return load(registry, id);
     });
 }
-module.exports = { QUESTIONS, MAX_ANSWER_LENGTH, assess, load, save, asMarkdown };
+module.exports = { QUESTIONS, MAX_ANSWER_LENGTH, assess, changesForRegistration, load, save, asMarkdown };
