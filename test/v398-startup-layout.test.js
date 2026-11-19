@@ -3,10 +3,10 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 const root=path.resolve(__dirname,'..'),read=file=>fs.readFileSync(path.join(root,file),'utf8');
 const html=read('src/lib/webview/dashboard-html.js'),ui=read('media/start.js'),css=read('media/start.css');
 
-test('Copilot is a stack-style card opening a setup dialog',()=>{
+test('Copilot setup control remains available internally but is hidden on the startup grid',()=>{
  const start=html.indexOf('<div class="atgv-startup-stack-grid">'),end=html.indexOf('id="startupInstallFeedback"',start),grid=html.slice(start,end);
  assert.ok(start>=0&&end>start);assert.match(grid,/id="startupStackGrid"/);
- assert.match(grid,/id="startupCopilotCard"[^>]*class="atgv-startup-stack atgv-startup-stack-button atgv-stack-ring-card startup-copilot-card"/);
+ assert.match(grid,/id="startupCopilotCard"[^>]*class="atgv-startup-stack atgv-startup-stack-button atgv-stack-ring-card startup-copilot-card hidden"/);
  assert.match(grid,/aria-controls="startupCopilotModal"/);assert.match(grid,/id="startupCopilotBadge"/);
  assert.match(html,/id="startupCopilotModal"[^>]*aria-hidden="true"/);assert.match(html,/id="startupCopilotSetup"/);
  assert.doesNotMatch(html,/class="startup-copilot-setup"/);assert.match(css,/\.startup-stack-grid-items\{display:contents\}/);
