@@ -29,6 +29,15 @@ function mappingHarness(aiAnswer,opts={}){
   async roleSkillPrompt(){return opts.roleSkill||'';},
   sourceStore:{async read(){return {name:'visitor.pdf',digest,text:opts.sourceText||'Requirements'}}},
   discoveryImport:{...discoveryModule,createMappingPrompt(doc){return opts.realPrompt?discoveryModule.createMappingPrompt(doc):'Map'},parseMappingResponse(answer){return JSON.parse(answer)}},
+  baBrTextPipeline:{
+   async prepare(_registry,_id,source){
+    const parts=discoveryModule.splitDocumentText(source.text,12000);
+    return parts.map((text,i)=>({text,filename:'BR001-P'+(i+1)+'.txt',digest:require('../src/ba-br-txt-pipeline').sha(text),
+      sourceDigest:source.digest,brIndex:1,partIndex:i+1,parts:parts.length,characters:text.length}));
+   },
+   mergeForDiscovery(parts){return discoveryModule.mergeMappingAnswers(parts);}
+  },
+
   baDocumentPreflight,
   baSourceSelectionGuard:require('../src/ba-source-selection-guard'),
   baLargeDocumentRecovery:require('../src/ba-large-document-recovery'),
@@ -110,14 +119,14 @@ test('retry does not reuse mapping from a different AI-updated working copy',asy
  assert.match(prompts[0],/Please add name once\./);
  assert.match(prompts[1],/Please add namme once\./);
 });
-test('all source sections pass preflight before the first mapping request',async()=>{
+test('mapping completes each TXT unit before the next and never commits a later blocked unit',async()=>{
  let mappingCalls=0;
  const opts={sourceText:'A'.repeat(30000)+'\nSECOND SECTION: permissions conflict.',preflightResponse:prompt=>prompt.includes('SECOND SECTION')?
   {status:'needs-input',summary:'Conflict',edits:[],issues:[{severity:'blocker',category:'contradiction',detail:'Permissions conflict over access',suggestion:'Ask the owner'}]}:
   {status:'ready',summary:'Checked',edits:[],issues:[]}};
  const t=mappingHarness(async()=>{mappingCalls++;return '{"problem":"A"}';},opts);
  await assert.rejects(t.processMapping(t.request),/clarification before mapping/);
- assert.equal(mappingCalls,0);
+ assert.equal(mappingCalls,2,'earlier verified TXT units may map but no partial result is committed');
  assert.equal(t.commits,0);
 });
 test('invalid AI mapping is retried once before a complete proposal is committed',async()=>{
@@ -144,7 +153,7 @@ test('per-source AI timeouts do not commit partial discovery or Jira changes',as
  assert.equal(t.commits,0);
  assert.equal(t.events.some(x=>x.type==='discoveryImportResult'),false);
 });
-test('slow preflight retries in smaller sections, covers the full source and then maps',async()=>{
+test('slow preflight retries the same immutable TXT unit without changing source coverage',async()=>{
  let preflightCalls=0;const sourceText='A'.repeat(8000)+' end';
  const opts={sourceText,setTimeout:callback=>setTimeout(callback,15),preflightAnswer:()=>{
   if(++preflightCalls===1)return new Promise(()=>{}); // Simulate a provider that ignores cancellation.
@@ -153,10 +162,10 @@ test('slow preflight retries in smaller sections, covers the full source and the
  const t=mappingHarness(async(_target,prompt)=>String(prompt).includes('Review mapped business claims')?
   '{"status":"consistent","conflicts":[]}':'{"problem":"A requirement"}',opts);
  await t.processMapping(t.request);
- assert.ok(preflightCalls>=3);assert.equal(t.commits,1);
- assert.ok(t.events.some(row=>/Retrying this section in smaller parts/.test(row.message||'')));
+ assert.ok(preflightCalls>=2);assert.equal(t.commits,1);
+ assert.ok(!t.events.some(row=>/Retrying this section in smaller parts/.test(row.message||'')));
  const report=t.sandbox.documentPreflightSessions.get('tc');
- assert.ok(report.entries.length>=2);assert.ok(report.entries.every(entry=>entry.totalSections===report.entries.length));
+ assert.ok(report.entries.length>=1);assert.ok(report.entries.every(entry=>entry.totalSections===1));
 });
 test('repeated preflight timeouts stop safely after a bounded retry',async()=>{
  let calls=0;
