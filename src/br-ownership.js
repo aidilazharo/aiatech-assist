@@ -17,6 +17,19 @@ function tree(register,brId){
  if(entries[0]?.path!==id)throw Error('The BR Epic must be the root of its mapped hierarchy.');
  return {brId:id,rootKey:entries[0].key,entries};
 }
+function developmentTree(register,brId){
+ const scope=tree(register,brId);
+ const entries=scope.entries.filter(item=>!/\/ROLE-(?!DEVELOPER(?:\/|$))[A-Z0-9_-]+/i.test(item.path));
+ const known=new Set(entries.map(x=>x.key));
+ for(const [p,row] of Object.entries(register.roleTaskMappings||{})){
+  if(!p.startsWith(scope.brId+'/'))continue;
+  if(String(row?.roleId||'').toLowerCase()!=='developer'&&!/\/ROLE-DEVELOPER$/i.test(p))continue;
+  const key=String(row?.key||'').toUpperCase();
+  if(!ISSUE.test(key)||known.has(key))continue;
+  known.add(key);entries.push({path:p,key,kind:'Role'});
+ }
+ return {...scope,entries};
+}
 function fromKey(register,key){
  const wanted=String(key||'').toUpperCase();
  for(const [p,v] of Object.entries(register?.synced||{}))if(String(v?.key||'').toUpperCase()===wanted){
@@ -26,7 +39,7 @@ function fromKey(register,key){
 }
 async function verifyOwner({register,brId,projectKey,accountId,readIssue}){
  if(!accountId)throw Error('Jira identity is unavailable for BR ownership verification.');
- const scope=tree(register,brId);
+ const scope=developmentTree(register,brId);
  for(const entry of scope.entries){
   const issue=await readIssue(entry.key);
   if(issue?.key!==entry.key||issue?.fields?.project?.key!==projectKey)throw Error('Jira mapping changed for '+entry.key+'.');
@@ -37,7 +50,7 @@ async function verifyOwner({register,brId,projectKey,accountId,readIssue}){
 async function changeWholeBr({register,brId,projectKey,accountId,mode,readIssue,setAssignee}){
  if(!['assign','unassign'].includes(mode))throw Error('Invalid whole-BR ownership action.');
  if(!accountId||typeof readIssue!=='function'||typeof setAssignee!=='function')throw Error('Jira identity and read/write operations are required.');
- const scope=tree(register,brId);
+ const scope=developmentTree(register,brId);
  // Phase 1: validate the complete published hierarchy BEFORE any remote mutation.
  const before=[];
  for(const entry of scope.entries){
@@ -72,4 +85,4 @@ async function changeWholeBr({register,brId,projectKey,accountId,mode,readIssue,
  }
  return {...scope,mode,count:before.length,changed:changed.length,accountId:mode==='assign'?accountId:null};
 }
-module.exports={tree,fromKey,verifyOwner,changeWholeBr};
+module.exports={tree,developmentTree,fromKey,verifyOwner,changeWholeBr};
