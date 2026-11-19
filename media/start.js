@@ -7632,6 +7632,34 @@ function renderStartupConnectionChecks(){
  }
  updateStartupIssueSummary();
 }
+function renderStartupConnectionLog(entries){
+ const root=$('startupConnectionLogList');
+ if(!root)return;
+ const rows=(Array.isArray(entries)?entries:[]).slice(0,80);
+ const errors=rows.filter(row=>/^(error|failed|offline|not-saved|needs-attention)$/i.test(String(row.status||''))).length;
+ $('startupConnectionLogCount').textContent=rows.length?errors+' issue(s) · '+rows.length+' recent event(s)':'No events recorded';
+ root.replaceChildren();
+ if(!rows.length){
+  const empty=document.createElement('p');empty.className='muted';
+  empty.textContent='No connection checks or errors recorded yet.';root.append(empty);return;
+ }
+ for(const event of rows){
+  const card=document.createElement('div');card.className='atgv-connection-log-entry';
+  const status=String(event.status||'unknown').toLowerCase();
+  card.dataset.status=status;
+  const heading=document.createElement('div');heading.className='atgv-connection-log-heading';
+  const name=document.createElement('strong');name.textContent=String(event.tool||'Connection').slice(0,80);
+  const badge=document.createElement('span');badge.className='atgv-connection-log-status';badge.textContent=status;
+  const time=document.createElement('time');time.className='muted';time.dateTime=String(event.time||'');
+  const stamp=new Date(event.time);time.textContent=Number.isFinite(stamp.getTime())?stamp.toLocaleString():String(event.time||'Unknown time');
+  heading.append(name,badge,time);
+  const detail=document.createElement('p');detail.textContent=String(event.detail||'No additional details.').slice(0,450);
+  card.append(heading,detail);
+  const meta=[event.host,Number.isFinite(event.durationMs)?event.durationMs+' ms':''].filter(Boolean).join(' · ');
+  if(meta){const info=document.createElement('small');info.className='muted';info.textContent=meta;card.append(info);}
+  root.append(card);
+ }
+}
 function resetStartupConnectionChecks(){
  startupConnectionCheckResults.clear();
  for(const [id,label] of STARTUP_CONNECTION_CHECK_LABELS)startupConnectionCheckResults.set(id,{id,label,state:'idle',message:'Test and save connections to check this service.'});
@@ -7957,6 +7985,20 @@ $('startupRefresh').addEventListener('click',()=>{
  $('startupToolMessage').textContent='Refreshing local computer prerequisites…';
  $('startupRefresh').disabled=true;renderStartupPage();send('startupReadiness');
 });
+$('startupConnectionLogPanel').addEventListener('toggle',()=>{
+ if($('startupConnectionLogPanel').open){
+  $('startupConnectionLogMessage').textContent='Loading saved connection checks…';
+  send('startupGetConnectionLogs');
+ }
+});
+$('startupConnectionLogRefresh').addEventListener('click',()=>{
+ $('startupConnectionLogMessage').textContent='Refreshing connection diagnostics…';
+ send('startupGetConnectionLogs');
+});
+$('startupConnectionLogDownload').addEventListener('click',()=>{
+ $('startupConnectionLogMessage').textContent='Choose where to save the connection diagnostics…';
+ send('startupDownloadConnectionLogs');
+});
 $('startupPrevious').addEventListener('click',()=>{
  if(startupAutoEnabled)stopStartupAuto();
  if(startupPage===1&&!startupVerifying&&!startupInstallingModule){startupPage=0;$('startupPrerequisiteDetails').open=false;renderStartupPage();}
@@ -8011,6 +8053,16 @@ window.addEventListener('message',event=>{
  }
  if(message.type==='startupDiagnosticSaved'){
   setStartupInstallFeedback(message.message||'Unified startup diagnostics saved.','success');
+ }
+ if(message.type==='startupConnectionLogResult'){
+  renderStartupConnectionLog(message.entries);
+  $('startupConnectionLogMessage').textContent='Showing the latest locally saved checks.';
+ }
+ if(message.type==='startupConnectionLogSaved'){
+  $('startupConnectionLogMessage').textContent=message.message||'Connection log exported.';
+ }
+ if(message.type==='startupConnectionLogError'){
+  $('startupConnectionLogMessage').textContent=message.message||'Connection log is unavailable.';
  }
  if(message.type==='startupConnectionCheck'&&message.requestId===startupConnectionCheckSequence&&message.check?.id){
   if(startupConnectionCheckResults.has(message.check.id)){startupConnectionCheckResults.set(message.check.id,message.check);renderStartupConnectionChecks();}
