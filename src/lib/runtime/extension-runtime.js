@@ -2103,7 +2103,7 @@ async function processSelectedDiscoverySources(msg){
   // Retain at most ten active project reports in the extension process.
   if(documentPreflightSessions.size>10)documentPreflightSessions.delete(documentPreflightSessions.keys().next().value);
   await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preparing',message:'Checking the selected documents and AI model…'});
-  const target=await activeAiTarget();check();
+  const target=run.skipAiChecks?{kind:'source-only',label:'ATGV Source-Only Recovery',modelId:'none'}:await activeAiTarget();check();
   // External Copilot receives BR content only after an explicit opt-in in VS
   // Code Settings, and only when its SDK is already locally installed.
   if(target.kind!=='copilot-sdk'&&cfg().get('ai.useCopilotSdkForBaRecovery',false)&&await copilotRepairSdk.installed(context.globalStorageUri.fsPath)){

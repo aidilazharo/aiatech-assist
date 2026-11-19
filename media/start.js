@@ -5843,15 +5843,16 @@ function renderDiscoverySummary(){
   previousButton.title=previousButton.disabled?'Complete or save your current work before navigating back.':'Return to '+previousDefinition.label;
   nextButton.dataset.nextStep=next?.key||'';
   nextButton.dataset.stage=displayed;
-  const ready=!!next&&!!currentDefinition?.complete;
-  // Explicitly confirm saved AI Review using Next rather than trapping the BA.
+  // An unfinished AI Review can use Next to confirm its already-saved findings.
   const canConfirm=displayed==='review'&&reviewReady&&!reviewFinalized&&!navigatingBusy&&savedDiscovery;
+  const ready=(!!next&&!!currentDefinition?.complete)||canConfirm;
   nextButton.dataset.confirmReview=canConfirm?'true':'false';
-  nextButton.dataset.milestoneState=ready||canConfirm?'ready':'blocked';
-  nextButton.classList.toggle('secondary',!(ready||canConfirm));
-  nextButton.disabled=!(ready||canConfirm);
-  nextButton.classList.toggle('ba-step-next-complete',ready||canConfirm);
-  nextButton.textContent=canConfirm?(discoveryHasReviewBlockers()?'Review & Acknowledge Findings':'Confirm AI Review & Continue'):nextDefinition?'Next Step · '+nextDefinition.label:'Workflow Complete';
+  nextButton.dataset.milestoneState=ready?'ready':'blocked';
+  nextButton.classList.toggle('secondary',!ready);
+  nextButton.disabled=!ready;
+  nextButton.classList.toggle('ba-step-next-complete',ready);
+  nextButton.textContent=nextDefinition?'Next Step · '+nextDefinition.label:'Workflow Complete';
+  if(canConfirm)nextButton.textContent=discoveryHasReviewBlockers()?'Review & Acknowledge Findings':'Confirm AI Review & Continue';
   nextButton.title=!nextDefinition?'The final Business Requirements milestone.':ready?'Continue to '+nextDefinition.label:currentDefinition?.complete?'Next step is unavailable until its prerequisites are satisfied.':'Complete this milestone before continuing.';
   document.querySelector('.jira-inbound-panel').classList.toggle('hidden',!status.showJiraInbound||!showJira);
   $('discoveryImportStatus').classList.toggle('hidden',!showSources&&!showMapping);
@@ -6790,8 +6791,8 @@ window.addEventListener('message',event=>{
     }
     brApprovePending=false;renderOverviewJira();renderDiscoveryReview();renderBRs();renderDocumentGroups();if(!discoveryImportBusy)baBusy('',null);if(brEditing)updateBREditorActions();
     if(task==='approveBR')baReopenDocuments=false;
-    if(['skipReview','confirmReview'].includes(task)&&view==='discovery'&&!discoveryDirty)
-      requestAnimationFrame(()=>{if(baReviewFinalized())openBAWorkflowStep('generate');});
+    if(task==='skipReview'&&view==='discovery')requestAnimationFrame(()=>{if(!discoveryDirty&&baReviewFinalized())openBAWorkflowStep('generate');});
+    if(task==='confirmReview'&&view==='discovery')requestAnimationFrame(()=>{if(!discoveryDirty&&baReviewFinalized())openBAWorkflowStep('generate');});
   }
   if(m.type==='brJiraPlan'){baFailedProcess='';baFailedMessage='';
     stageProgress('jiraPreview','JIRA preview generated.',100);baBusy('',null);brPlanRevision=m.revision;jiraPlanForCR=m.changes||[];jiraPreviewIssueTypes=m.issueTypes||{};jiraPreviewProject=m.jiraProject||'';jiraPreviewFieldsByPath=m.fieldPlans||{};jiraProtectionForCR=m.protection||[];brJiraPreviewApproved=false;brJiraPlanChanges=(m.changes||[]).length;brJiraPlanConflicts=(m.conflicts||[]).length;
