@@ -36,7 +36,7 @@ function hostFixture(){
   sdlcCatalog:{activeRoot:async()=>({})},report:()=>{}
  };
  const start=runtime.indexOf("const STARTUP_VERIFIED_SECRET='atgvAssist.startupConnections.verified';");
- const end=runtime.indexOf('async function testAndSaveStartupConnections(message){',start);
+ const end=runtime.indexOf('async function testAndSaveStartupConnections(message,',start);
  assert.ok(start>0&&end>start);
  vm.createContext(sandbox);
  vm.runInContext(runtime.slice(start,end),sandbox);
@@ -96,8 +96,8 @@ function webviewFixture(){
  assert.ok(a>0&&z>a);
  const source=[
   "const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluenceUrl',email:'startupEmail',githubUrl:'startupGithubUrl'};",
-  "let startupSetupRequired=true,startupPage=0,startupVerifying=false,startupInstallingModule='',startupConnectionVerified=false,startupScanComplete=true,startupFormInitialized=false,startupReturnToConnections=false,startupPrereqRequested=false,startupOpenStackId='',startupCopilotModalOpen=false; let gateBusy=false,gateError='',workspaceOpened=false,opening={phase:'search'};", 
-  "let startupAutoNotice='',startupAutoEnabled=false,startupAutoProject=null,startupAutoStage=''; function beginStartupAuto(){}",
+  "let startupSetupRequired=true,startupPage=0,startupVerifying=false,startupInstallingModule='',startupConnectionVerified=false,startupConnectionEditSnapshot=null,startupScanComplete=true,startupFormInitialized=false,startupReturnToConnections=false,startupPrereqRequested=false,startupOpenStackId='',startupCopilotModalOpen=false; let gateBusy=false,gateError='',workspaceOpened=false,opening={phase:'search'};",
+  "let startupAutoNotice='',startupAutoEnabled=false,startupAutoProject=null,startupAutoStage='',startupConnectionHealthStarted=false,startupConnectionHealthError=false,startupConnectionCheckPending=false; function beginStartupAuto(){} function checkSavedStartupConnections(){startupConnectionHealthStarted=true;}",
   ui.slice(a,z),
   "return {renderStartupConfig,renderStartupPage,getPage:()=>startupPage,isVerified:()=>startupConnectionVerified,setOpening:p=>opening={phase:p},setGateBusy:v=>gateBusy=v,setGateError:v=>gateError=v};"
  ].join('\n');

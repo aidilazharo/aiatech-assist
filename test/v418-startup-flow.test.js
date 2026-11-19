@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'../media/start.js'),'utf8');
-function fixture({permissionsOk=true,stackReady=true,checking=false}={}){
+function fixture({permissionsOk=true,stackReady=true,checking=false,connectionChecking=false}={}){
  let now=0,nextId=0;const timers=new Map(),sent=[],opened=[],nodes=new Map();
  const element=id=>{
   if(!nodes.has(id)){
@@ -21,11 +21,11 @@ function fixture({permissionsOk=true,stackReady=true,checking=false}={}){
  assert.ok(start>=0&&end>start);
  const init=`let startupAutoTimer=null,startupAutoEnabled=true,startupAutoStage='',startupAutoNotice='',startupAutoDeadline=0,startupPage=0,startupSetupRequired=true;
  let startupAutoProject={id:'p1',name:'Project One',techStackId:'react',techStackCompanionId:''};
- let startupPermissions={ok:${permissionsOk}},startupScanComplete=true,startupConnectionVerified=true,startupOpenStackId='',startupCopilotModalOpen=false;
+ let startupPermissions={ok:${permissionsOk}},startupScanComplete=true,startupConnectionVerified=true,startupOpenStackId='',startupCopilotModalOpen=false,startupConnectionCheckPending=${connectionChecking};
  let startupStackData={catalog:{available:true},stacks:[{id:'react',ready:${stackReady}}]},latestSoftwareUpdateState={busy:${checking}};
  const STARTUP_SCREEN_MS=5000;
  function renderStartupPage(){};function startupPayload(){return {email:'saved'};};`;
- const create=new Function('$','setTimeout','clearTimeout','Date','send','launchFromGate',init+source.slice(start,end)+`\nreturn {beginStartupAuto,stopStartupAuto,getPage:()=>startupPage,getEnabled:()=>startupAutoEnabled,getStage:()=>startupAutoStage,projectStep:()=>{startupSetupRequired=false;beginStartupAuto('project');},setChecking:value=>latestSoftwareUpdateState.busy=value};`);
+ const create=new Function('$','setTimeout','clearTimeout','Date','send','launchFromGate',init+source.slice(start,end)+`\nreturn {beginStartupAuto,stopStartupAuto,getPage:()=>startupPage,getEnabled:()=>startupAutoEnabled,getStage:()=>startupAutoStage,projectStep:()=>{startupSetupRequired=false;beginStartupAuto('project');},setChecking:value=>latestSoftwareUpdateState.busy=value,setConnectionChecking:value=>startupConnectionCheckPending=value};`);
  const api=create(element,schedule,cancel,{now:()=>now},(command,payload)=>sent.push({command,...payload}),data=>opened.push(data));
  return {api,advance,sent,opened,element};
 }
@@ -47,4 +47,11 @@ test('failed permissions or a missing selected stack stop automatic opening',()=
 test('an update check keeps the setup screen visible until its result is ready',()=>{
  const x=fixture({checking:true});x.api.beginStartupAuto('stack');x.advance(9000);assert.equal(x.api.getPage(),0);
  x.api.setChecking(false);x.advance(4999);assert.equal(x.api.getPage(),0);x.advance(251);assert.equal(x.api.getPage(),1);
+});
+test('automatic project opening waits for the connection checks to finish',()=>{
+ const x=fixture({connectionChecking:true});x.api.beginStartupAuto('stack');x.advance(15000);
+ assert.equal(x.api.getPage(),1);assert.equal(x.sent.length,0);
+ assert.match(x.element('startupProceedInfo').textContent,/Checking Jira/);
+ x.api.setConnectionChecking(false);x.advance(1250);
+ assert.equal(x.sent.length,1);assert.equal(x.sent[0].command,'startupProceed');
 });

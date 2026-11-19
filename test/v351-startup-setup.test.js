@@ -61,7 +61,7 @@ test('start page and branded extension-update modal are separate surfaces',()=>{
 test('host requires live Jira, Confluence, GitHub and library checks before saving and proceeding',()=>{
  const host=read('src/lib/runtime/extension-runtime.js');
  assert.match(host,/await testJiraConnection\(config,atlassian\)/);
- assert.match(host,/\/api\/v2\/spaces\?limit=1/);
+ assert.match(host,/confluenceApi\+'\?limit=1'/);
  assert.match(host,/await sdlcCatalog\.remoteInfo\(libraryConf,github\)/);
  assert.match(host,/atgvAssist\.startupSetup\.completed/);
  assert.match(host,/storedStartupVerification\(\)/);
@@ -101,6 +101,7 @@ test('setup host saves no credentials before all five remote access checks succe
   requestJson:async(url)=>{
    if(url.includes('/api/v2/spaces')){events.push('confluence');return {results:[]};}
    if(url.endsWith('/user')){events.push('github-account');return {login:'tester'};}
+   if(url.endsWith('/users/aiamalaysia')){events.push('github-organization');return {login:'aiamalaysia'};}
    const match=url.match(/\/repos\/([^/]+)\/([^/]+)$/);
    if(match){events.push('github-repo:'+match[2]);return {full_name:match[1]+'/'+match[2]};}
    throw Error('Unexpected URL: '+url);
@@ -114,12 +115,13 @@ test('setup host saves no credentials before all five remote access checks succe
  vm.createContext(testContext);vm.runInContext(setupText.slice(start,end),testContext);
  const form=defaults.DEFAULTS;
  denyLibrary=true;
- await assert.rejects(testContext.testAndSaveStartupConnections({settings:form,atlassianToken:'ATL',githubToken:'PAT'}),/Access denied/);
+ const rejected=await testContext.testAndSaveStartupConnections({settings:form,atlassianToken:'ATL',githubToken:'PAT'});
+ assert.equal(rejected.success,false);assert.equal(rejected.checks.find(check=>check.id==='library').state,'error');
  assert.equal(state.size,0);assert.equal(secrets.size,0);
  denyLibrary=false;
  const accepted=await testContext.testAndSaveStartupConnections({settings:form,atlassianToken:'ATL',githubToken:'PAT'});
  assert.equal(accepted.success,true);
- assert.deepEqual(events.filter(e=>['jira','confluence','github-account','library-main'].includes(e)).slice(-4),['jira','confluence','github-account','library-main']);
+ for(const check of ['jira','confluence','github-account','github-organization','library-main'])assert.ok(events.includes(check),check);
  assert.equal(state.get('atgvAssist.extensionSettings').github.repo,undefined,'onboarding does not set a project repo');
  assert.equal(state.get('atgvAssist.sdlcCatalog').repositoryUrl,defaults.FIXED_LIBRARY_REPOSITORY);
  assert.equal(state.get('atgvAssist.startupSetup.completed'),undefined,'Testing alone must not mark setup complete. Proceed must do that.');

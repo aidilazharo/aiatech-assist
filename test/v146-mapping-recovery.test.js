@@ -34,7 +34,10 @@ function mappingHarness(aiAnswer,opts={}){
   successfulSourceMappings:new Map(),
   sha:require('../src/utils').sha,
   aiAnswer:(target,prompt,limit,settings)=>{
-   if(String(prompt).includes('automated Business Analyst source-document quality checker'))return Promise.resolve(JSON.stringify((typeof opts.preflightResponse==='function'?opts.preflightResponse(prompt):opts.preflightResponse)||{status:'ready',summary:'Checked',edits:[],issues:[]}));
+   if(String(prompt).includes('automated Business Analyst source-document quality checker')){
+    if(opts.preflightAnswer)return opts.preflightAnswer(target,prompt,limit,settings);
+    return Promise.resolve(JSON.stringify((typeof opts.preflightResponse==='function'?opts.preflightResponse(prompt):opts.preflightResponse)||{status:'ready',summary:'Checked',edits:[],issues:[]}));
+   }
    return aiAnswer(target,prompt,limit,settings);
   }, dashboard:{webview:{async postMessage(msg){events.push(msg)}}}
  };
@@ -126,6 +129,36 @@ test('per-source AI timeouts do not commit partial discovery or Jira changes',as
  await assert.rejects(t.processMapping(t.request),/timed out after 180 seconds/);
  assert.equal(t.commits,0);
  assert.equal(t.events.some(x=>x.type==='discoveryImportResult'),false);
+});
+test('slow preflight retries in smaller sections, covers the full source and then maps',async()=>{
+ let preflightCalls=0;const sourceText='A'.repeat(8000)+' end';
+ const opts={sourceText,setTimeout:callback=>setTimeout(callback,15),preflightAnswer:()=>{
+  if(++preflightCalls===1)return new Promise(()=>{}); // Simulate a provider that ignores cancellation.
+  return Promise.resolve(JSON.stringify({status:'ready',summary:'Checked',edits:[],issues:[]}));
+ }};
+ const t=mappingHarness(async(_target,prompt)=>String(prompt).includes('Review mapped business claims')?
+  '{"status":"consistent","conflicts":[]}':'{"problem":"A requirement"}',opts);
+ await t.processMapping(t.request);
+ assert.ok(preflightCalls>=3);assert.equal(t.commits,1);
+ assert.ok(t.events.some(row=>/Retrying this section in smaller parts/.test(row.message||'')));
+ const report=t.sandbox.documentPreflightSessions.get('tc');
+ assert.ok(report.entries.length>=2);assert.ok(report.entries.every(entry=>entry.totalSections===report.entries.length));
+});
+test('repeated preflight timeouts stop safely after a bounded retry',async()=>{
+ let calls=0;
+ const t=mappingHarness(async()=>'{"problem":"Unexpected mapping"}',{sourceText:'short requirement',setTimeout:callback=>setTimeout(callback,15),preflightAnswer:()=>{calls++;return new Promise(()=>{});}});
+ await assert.rejects(t.processMapping(t.request),/preflight timed out twice/);
+ assert.equal(calls,2);assert.equal(t.commits,0);
+ assert.ok(t.events.some(row=>/Retrying this section once/.test(row.message||'')));
+ assert.equal(t.events.some(row=>row.type==='discoveryImportResult'),false);
+});
+test('stopping during preflight aborts without retrying or saving',async()=>{
+ let calls=0;
+ const t=mappingHarness(async()=>'{"problem":"Unexpected mapping"}',{preflightAnswer:()=>{calls++;return new Promise(()=>{});}});
+ const completion=t.processMapping(t.request);
+ await waitFor(()=>calls===1);t.sandbox.activeDiscoveryMappingRun.controller.abort();
+ await assert.rejects(completion,{name:'AbortError'});
+ assert.equal(calls,1);assert.equal(t.commits,0);
 });
 test('restart notice dismissal works with const queue and the exact screenshot message',()=>{
  const begin=ui.indexOf('function dismissObsoleteBARestartNotice(){');

@@ -104,7 +104,7 @@ async function resolveAiTarget({ vscodeApi, config = {}, secret = '', request = 
     }
     return { kind: provider, name: id, vendor: provider, modelId: id, endpoint, secret, label: `${id} (${provider})` };
 }
-async function sendAiText({ vscodeApi, target, prompt, system = '', maxChars = 60000, json = false, request = requestJson, signal } = {}) {
+async function sendAiText({ vscodeApi, target, prompt, system = '', maxChars = 60000, json = false, request = requestJson, signal, timeoutMs = 25000 } = {}) {
     if (!target)
         throw Error('An AI model must be selected first.');
     if (signal?.aborted)
@@ -141,28 +141,28 @@ async function sendAiText({ vscodeApi, target, prompt, system = '', maxChars = 6
             text = await executeCodex({ runtimeRoot: target.runtimeRoot, cwd: target.projectDirectory, prompt, system, signal, maxChars, transport: target.transport, model: target.modelId });
         }
         else if (target.kind === 'openai') {
-            const result = await request(target.endpoint, { method: 'POST', token: target.secret, data: { model: target.modelId, input: messages }, signal });
+            const result = await request(target.endpoint, { method: 'POST', token: target.secret, data: { model: target.modelId, input: messages }, signal, timeoutMs });
             text = String(result.output_text || '') || ((result.output || []).flatMap(x => x.content || []).filter(x => x.type === 'output_text').map(x => x.text || '').join(''));
         }
         else if (target.kind === 'anthropic') {
-            const result = await request(target.endpoint, { method: 'POST', headers: { 'x-api-key': target.secret, 'anthropic-version': '2023-06-01' }, data: { model: target.modelId, max_tokens: 4096, messages: [{ role: 'user', content: [system, prompt].filter(Boolean).join('\n\n') }] }, signal });
+            const result = await request(target.endpoint, { method: 'POST', headers: { 'x-api-key': target.secret, 'anthropic-version': '2023-06-01' }, data: { model: target.modelId, max_tokens: 4096, messages: [{ role: 'user', content: [system, prompt].filter(Boolean).join('\n\n') }] }, signal, timeoutMs });
             text = (result.content || []).filter(x => x.type === 'text').map(x => x.text || '').join('');
         }
         else if (target.kind === 'azure-openai') {
             const url = new URL(target.endpoint);
             if (!url.searchParams.has('api-version'))
                 url.searchParams.set('api-version', '2024-10-21');
-            const result = await request(url.toString(), { method: 'POST', headers: { 'api-key': target.secret }, data: { messages, temperature: 0.1 }, signal });
+            const result = await request(url.toString(), { method: 'POST', headers: { 'api-key': target.secret }, data: { messages, temperature: 0.1 }, signal, timeoutMs });
             text = String(result.choices?.[0]?.message?.content || '');
         }
         else if (target.kind === 'ollama') {
             const endpoint = validateUrl(target.endpoint, { local: true }).replace(/\/$/, '') + '/api/chat';
-            const result = await request(endpoint, { method: 'POST', data: { model: target.modelId, stream: false, ...(json ? { format: 'json' } : {}), messages }, signal });
+            const result = await request(endpoint, { method: 'POST', data: { model: target.modelId, stream: false, ...(json ? { format: 'json' } : {}), messages }, signal, timeoutMs });
             text = String(result.message?.content || '');
         }
         else if (target.kind === 'openai-compatible') {
             const endpoint = validateUrl(target.endpoint, { local: true });
-            const result = await request(endpoint, { method: 'POST', token: target.secret, data: { model: target.modelId, messages, temperature: 0.1 }, signal });
+            const result = await request(endpoint, { method: 'POST', token: target.secret, data: { model: target.modelId, messages, temperature: 0.1 }, signal, timeoutMs });
             const content = result.choices?.[0]?.message?.content;
             text = typeof content === 'string' ? content : Array.isArray(content) ? content.filter(x => x.type === 'text').map(x => x.text || '').join('') : '';
         }

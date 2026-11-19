@@ -24,6 +24,8 @@ function responseErrorDetail(body) {
 function jira404Hint(url) {
     if (!url.hostname.endsWith('.atlassian.net')) return '';
     const route = url.pathname;
+    if (/^\/wiki\/api\//.test(route))
+        return 'Confluence API endpoint not found or not accessible. Check the Confluence URL, product access, API-token scopes and permissions.';
     if (/^\/rest\/api\/3\/issue\/[^/]+/.test(route))
         return 'Jira issue not found or not visible. Check its issue key, Browse Projects permission and issue-security rules. A 404 does not prove deletion.';
     if (/^\/rest\/api\/3\/project\/[^/]+/.test(route))
@@ -33,12 +35,14 @@ function jira404Hint(url) {
     return 'Verify the configured Jira Base URL and the REST endpoint. For project-specific requests also check Browse Projects and API-token access.';
 }
 async function requestJson(url, options = {}) {
-    const { token, basicEmail, method = 'GET', data, headers = {}, signal } = options;
+    const { token, basicEmail, method = 'GET', data, headers = {}, signal, timeoutMs = 25000 } = options;
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 600000)
+        throw Error('Invalid request timeout.');
     const auth = token ? (basicEmail ? 'Basic ' + Buffer.from(`${basicEmail}:${token}`).toString('base64') : 'Bearer ' + token) : undefined;
     const response = await fetch(url, { method, headers: {
             'Accept': 'application/json', 'Content-Type': 'application/json',
             ...(auth ? { 'Authorization': auth } : {}), ...headers
-        }, body: data === undefined ? undefined : JSON.stringify(data), redirect: 'error', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(25000)]) : AbortSignal.timeout(25000) });
+        }, body: data === undefined ? undefined : JSON.stringify(data), redirect: 'error', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs) });
     if (!response.ok) {
         let body = '';
         try { body = (await response.text()).slice(0, 2000); } catch { /* Body may be absent. */ }

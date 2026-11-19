@@ -7509,6 +7509,9 @@ window.addEventListener('message',event=>{
 const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluenceUrl',email:'startupEmail',
  githubUrl:'startupGithubUrl'};
 let startupFormInitialized=false,startupPrereqRequested=false,startupConnectionVerified=false,startupSetupRequired=true,startupReturnToConnections=false;
+let startupConnectionEditSnapshot=null;
+let startupConnectionCheckSequence=0,startupConnectionCheckPending=false,startupConnectionHealthStarted=false,startupConnectionHealthError=false;
+const startupConnectionCheckResults=new Map();
 let startupVerifying=false,startupScanComplete=false,startupPage=0,startupInstallingModule='';
 let startupLastInstalledTool='';
 let startupStackData=null,startupOpenStackId='',startupStackPriorFocus=null;
@@ -7601,6 +7604,28 @@ function renderStartupScanPlaceholders(){
  }
 }
 function startupPayload(){return Object.fromEntries(Object.entries(startupFieldMap).map(([key,id])=>[key,$(id).value.trim()]));}
+function renderStartupConnectionChecks(){
+ const list=$('startupConnectionChecks');list.replaceChildren();
+ for(const check of startupConnectionCheckResults.values()){
+  const item=document.createElement('li');item.dataset.state=check.state;
+  item.textContent=check.label+': '+check.message+(check.url?' ('+check.url+')':'');list.append(item);
+ }
+ list.classList.toggle('hidden',startupConnectionCheckResults.size===0);
+}
+function beginStartupConnectionChecks(){
+ startupConnectionCheckPending=true;startupConnectionCheckResults.clear();
+ for(const [id,label] of [['jira','Jira API'],['confluence','Confluence API'],['github','GitHub API'],['organization','GitHub organization'],['library','SDLC Library']])
+  startupConnectionCheckResults.set(id,{id,label,state:'pending',message:'Checking…'});
+ renderStartupConnectionChecks();return ++startupConnectionCheckSequence;
+}
+function checkSavedStartupConnections(){
+ startupConnectionHealthStarted=true;
+ startupConnectionHealthError=false;
+ $('startupConnectionMessage').textContent='Checking saved Jira, Confluence and GitHub connections…';
+ $('startupConnectionMessage').className='test-status';
+ send('startupCheckConnections',{settings:startupPayload(),requestId:beginStartupConnectionChecks()});
+ renderStartupPage();
+}
 function renderStartupPermissionRows(checks){
  const root=$('startupPermissionChecks');
  const expanded=new Set([...root.querySelectorAll('.atgv-permission-row[open]')].map(row=>row.dataset.checkId));
@@ -7646,6 +7671,7 @@ function beginStartupAuto(stage){
    startupPage=1;renderStartupPage();beginStartupAuto('connections');return;
   }
   if(stage==='connections'){
+   if(startupConnectionCheckPending){target.textContent='Checking Jira, Confluence and GitHub connections…';startupAutoDeadline=Date.now()+1000;startupAutoTimer=setTimeout(tick,250);return;}
    if(!startupConnectionVerified){stopStartupAuto('Automatic opening paused: verify the saved connections.');return;}
    startupAutoStage='proceeding';$('startupProceed').disabled=true;
    send('startupProceed',{settings:startupPayload(),autoResume:true,projectId:startupAutoProject.id});return;
@@ -7661,12 +7687,16 @@ function renderStartupPage(){
  if(!startupSetupRequired)return;
  if(startupPage!==0&&startupOpenStackId)closeStartupStackModal();
  if(startupPage!==0&&startupCopilotModalOpen)closeStartupCopilotModal();
- // A saved, verified connection is read-only across page navigation and VS Code restarts.
- // Reconfiguration is managed in Settings; an unverified saved state must be tested.
+ // Saved connections remain read-only until the user chooses Edit.
  $('startupTestConnections').disabled=startupVerifying||startupConnectionVerified;
  $('startupTestConnections').classList.toggle('hidden',startupConnectionVerified);
  for(const id of [...Object.values(startupFieldMap),'startupAtlassianToken','startupGithubToken'])
   $(id).disabled=startupVerifying||startupConnectionVerified;
+ const editButton=$('startupEditConnections');
+ editButton.classList.toggle('hidden',!startupConnectionVerified&&!startupConnectionEditSnapshot);
+ editButton.disabled=startupVerifying;
+ editButton.textContent=startupConnectionEditSnapshot?'Cancel':'Edit';
+ editButton.setAttribute('aria-label',startupConnectionEditSnapshot?'Cancel editing connections':'Edit Jira, Confluence and GitHub connections');
  $('startupComputerCard').classList.toggle('hidden',startupPage!==0);
  $('startupConnectionForm').classList.toggle('hidden',startupPage!==1);
  $('startupPrevious').classList.toggle('hidden',startupPage===0);
@@ -7675,6 +7705,7 @@ function renderStartupPage(){
  $('startupProceed').disabled=startupVerifying||!!startupInstallingModule||(startupPage===0?!startupScanComplete:!startupConnectionVerified);
  $('startupProceed').textContent=startupPage===0?'Next →':'Next: Search Project →';
  $('startupProceedInfo').textContent=startupPage===0?(startupScanComplete?'Review available modules, then select Next.':'Checking computer prerequisites…'):
+  startupConnectionCheckPending?'Checking Jira, Confluence and GitHub connections…':startupConnectionHealthError?'Some connection checks need attention. Review them before continuing.':
   startupConnectionVerified?'Connections verified. Select Next to search projects.':'Test & Save Connections to enable Next.';
  if(startupAutoNotice&&!startupAutoEnabled)$('startupProceedInfo').textContent=startupAutoNotice;
 }
@@ -7703,14 +7734,15 @@ function renderStartupConfig(config){
   startupAutoEnabled=required&&!!startupAutoProject;
   if(startupConnectionVerified&&!startupAutoEnabled)startupPage=1;
   startupFormInitialized=true;
- }else if(config.verified===true){
+ }else if(config.verified===true&&!startupConnectionEditSnapshot){
   startupConnectionVerified=true;
  }
- if(startupConnectionVerified){
+ if(startupConnectionVerified&&!startupConnectionHealthError&&!startupConnectionCheckPending){
   $('startupConnectionMessage').textContent='Jira, Confluence and GitHub connections already verified and saved.';
   $('startupConnectionMessage').className='test-status success';
  }
  showStartupStep(required||startupReturnToConnections);
+ if(required&&startupConnectionVerified&&!startupConnectionHealthStarted&&!startupConnectionEditSnapshot)checkSavedStartupConnections();
  if(required&&!startupPrereqRequested){startupPrereqRequested=true;startupScanPercent(0,'Starting prerequisite scan…');renderStartupScanPlaceholders();send('startupReadiness');}
  if(required&&startupAutoEnabled&&!startupAutoStage)beginStartupAuto('stack');
 }
@@ -7829,6 +7861,30 @@ function invalidateStartupConnection(){
  $('startupConnectionMessage').textContent='Connection settings changed. Test and save again before proceeding.';
  renderStartupPage();
 }
+function toggleStartupConnectionEdit(){
+ if(startupVerifying)return;
+ if(startupConnectionEditSnapshot){
+  for(const [key,id] of Object.entries(startupFieldMap))$(id).value=startupConnectionEditSnapshot[key];
+  $('startupAtlassianToken').value='';$('startupGithubToken').value='';
+  startupConnectionEditSnapshot=null;startupConnectionVerified=true;
+  updateHeaderUserName(read('startupEmail'));
+  $('startupConnectionMessage').textContent='Changes discarded. Saved connections remain available.';
+  $('startupConnectionMessage').className='test-status success';
+  checkSavedStartupConnections();
+ }else if(startupConnectionVerified){
+  if(startupAutoEnabled)stopStartupAuto('Automatic opening paused while editing connections.');
+  startupAutoNotice='';
+  startupConnectionHealthError=false;
+  startupConnectionCheckSequence++;startupConnectionCheckPending=false;startupConnectionCheckResults.clear();renderStartupConnectionChecks();
+  startupConnectionEditSnapshot=Object.fromEntries(Object.entries(startupFieldMap).map(([key,id])=>[key,$(id).value]));
+  startupConnectionVerified=false;
+  $('startupConnectionMessage').textContent='Update the connection details, then test and save them.';
+  $('startupConnectionMessage').className='test-status';
+ }
+ renderStartupPage();
+ if(startupConnectionEditSnapshot)$('startupJiraUrl').focus();
+}
+$('startupEditConnections').addEventListener('click',toggleStartupConnectionEdit);
 for(const id of Object.values(startupFieldMap))$(id).addEventListener('input',invalidateStartupConnection);
 for(const id of ['startupAtlassianToken','startupGithubToken'])$(id).addEventListener('input',invalidateStartupConnection);
 $('startupStackModalClose').addEventListener('click',closeStartupStackModal);
@@ -7886,7 +7942,7 @@ $('startupConnectionForm').addEventListener('submit',event=>{
  startupConnectionVerified=false;startupVerifying=true;
  renderStartupPage();
  $('startupConnectionMessage').textContent='Testing Jira, Confluence and GitHub account…';
- send('startupTestConnections',{settings:startupPayload(),atlassianToken:read('startupAtlassianToken'),githubToken:read('startupGithubToken')});
+ send('startupTestConnections',{settings:startupPayload(),atlassianToken:read('startupAtlassianToken'),githubToken:read('startupGithubToken'),requestId:beginStartupConnectionChecks()});
 });
 $('startupProceed').addEventListener('click',()=>{
  if(startupVerifying||startupInstallingModule)return;
@@ -7930,12 +7986,31 @@ window.addEventListener('message',event=>{
  if(message.type==='startupDiagnosticSaved'){
   setStartupInstallFeedback(message.message||'Unified startup diagnostics saved.','success');
  }
+ if(message.type==='startupConnectionCheck'&&message.requestId===startupConnectionCheckSequence&&message.check?.id){
+  if(startupConnectionCheckResults.has(message.check.id)){startupConnectionCheckResults.set(message.check.id,message.check);renderStartupConnectionChecks();}
+ }
+ if(message.type==='startupConnectionHealthResult'&&message.requestId===startupConnectionCheckSequence){
+  startupConnectionCheckPending=false;
+  if(Array.isArray(message.checks)){for(const check of message.checks)if(startupConnectionCheckResults.has(check.id))startupConnectionCheckResults.set(check.id,check);renderStartupConnectionChecks();}
+  else{startupConnectionCheckResults.clear();renderStartupConnectionChecks();}
+  startupConnectionHealthError=!message.success||!!message.checks?.some(check=>check.state==='offline');
+  if(startupConnectionHealthError){
+   $('startupConnectionMessage').textContent=message.success?'Some services are available offline. Review the checks below.':'Some connections need attention. Review the checks below or select Edit.';
+   $('startupConnectionMessage').className='test-status error';
+   if(startupAutoEnabled)stopStartupAuto('Automatic opening paused: review the connection checks.');
+  }else{$('startupConnectionMessage').textContent=message.message||'Connections verified.';$('startupConnectionMessage').className='test-status success';}
+  renderStartupPage();
+ }
  if(message.type==='startupConnectionsResult'){
+  if(message.requestId!==startupConnectionCheckSequence)return;
+  startupConnectionCheckPending=false;startupConnectionHealthStarted=true;startupConnectionHealthError=!message.success;
+  if(Array.isArray(message.checks)){for(const check of message.checks)if(startupConnectionCheckResults.has(check.id))startupConnectionCheckResults.set(check.id,check);renderStartupConnectionChecks();}
+  else{startupConnectionCheckResults.clear();renderStartupConnectionChecks();}
   startupVerifying=false;
   startupConnectionVerified=message.success===true;
   $('startupConnectionMessage').textContent=message.message||'Connection test did not complete.';
   $('startupConnectionMessage').className=startupConnectionVerified?'test-status success':'test-status error';
-  if(startupConnectionVerified){$('startupAtlassianToken').value='';$('startupGithubToken').value='';send('startupReadiness');}
+  if(startupConnectionVerified){startupConnectionEditSnapshot=null;$('startupAtlassianToken').value='';$('startupGithubToken').value='';send('startupReadiness');}
   renderStartupPage();
  }
  if(message.type==='startupProceedResult'){
