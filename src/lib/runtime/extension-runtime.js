@@ -1932,8 +1932,8 @@ function saveCheckpointEntry(checkpoint,kind,key,value,limit){
 // must not abort the parent run and discard other completed section checkpoints.
 function recoverableSourceAIError(error){
  const message=String(error?.message||error);
- return error?.code==='ATGV_SOURCE_AI_TIMEOUT'||error?.name==='TimeoutError'||
-  /(?:time.?out|invalid json|invalid response|incomplete|connection reset|econnreset|network error|rate limit|\b429\b|\b502\b|\b503\b|\b504\b|temporarily unavailable|empty response|no repair proposal)/i.test(message);
+ return error?.code==='ATGV_SOURCE_AI_TIMEOUT'||error?.name==='TimeoutError'||error?.name==='SyntaxError'||
+  /(?:time.?out|invalid json|invalid response|not valid json|unexpected token|missing required|missing the answers|invalid .* answer|incomplete|connection reset|econnreset|network error|rate limit|\b429\b|\b502\b|\b503\b|\b504\b|temporarily unavailable|empty response|no repair proposal)/i.test(message);
 }
 function trySourceAIFallback(run,error){
  if(error?.name==='AbortError')return false;
@@ -1951,9 +1951,9 @@ async function requestSourceAI(target,prompt,run,{maxChars=20000,timeoutMs=SOURC
  if(parent.aborted){const error=Error('Source mapping stopped before saving.');error.name='AbortError';throw error;}
  let timer,onStop;
  const cancelled=new Promise((_,reject)=>{
-  onStop=()=>{const error=Error('Source mapping stopped before saving.');error.name='AbortError';child.abort();reject(error);};
+  onStop=()=>{const error=Error('Source mapping stopped before saving.');error.name='AbortError';reject(error);child.abort();};
   parent.addEventListener('abort',onStop,{once:true});
-  timer=setTimeout(()=>{const error=Error('AI request timed out; the section can be retried.');error.code='ATGV_SOURCE_AI_TIMEOUT';child.abort();reject(error);},timeoutMs);
+  timer=setTimeout(()=>{const error=Error('AI request timed out; the section can be retried.');error.code='ATGV_SOURCE_AI_TIMEOUT';reject(error);child.abort();},timeoutMs);
  });
  try{return await Promise.race([aiAnswer(run.useRecovery&&run.recoveryTarget?run.recoveryTarget:target,prompt,maxChars,{json:true,signal:child.signal,timeoutMs}),cancelled]);}
  finally{clearTimeout(timer);parent.removeEventListener('abort',onStop);}
