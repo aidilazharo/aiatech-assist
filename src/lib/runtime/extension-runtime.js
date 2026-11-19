@@ -33,6 +33,7 @@ const baDocumentPreflight=require('../../ba-document-preflight');
 const baMappingCheckpoint=require('../../ba-mapping-checkpoint');
 const baLargeDocumentRecovery=require('../../ba-large-document-recovery');
 const baPreflightReports=require('../../ba-preflight-report');
+const baProcessDiagnostics=require('../../ba-process-diagnostics');
 const baWorkingBr=require('../../ba-working-br');
 const discoveryReview=require('../../discovery-review');
 const brWorkflow=require('../../br-workflow');
@@ -138,6 +139,33 @@ let startupSessionVerified=false;
 let startupSessionProceedApproved=false;
 let startupVerifiedSignature='';
 let startupPermissionsState=null,startupReadinessState=null,startupReadinessSequence=0;
+function isBAProcessCommand(command){
+ return /^(?:br[A-Z]|ba[A-Z]|discovery[A-Z]|importDiscovery|processDiscoverySources|updateSourceDocuments|downloadWorkingBR|downloadDocumentPreflight|deleteBREverywhere|stopDiscoverySourceMapping|restartUncompletedBusinessRequirement|startOrRestartBusinessRequirements)/.test(String(command||''))&&
+  command!=='baDownloadProcessLog';
+}
+async function recordBAProcess(event){
+ const projectId=activeProject?.id;
+ if(!projectId||!context?.globalStorageUri?.fsPath)return;
+ try{await baProcessDiagnostics.append(context.globalStorageUri.fsPath,projectId,event);}
+ catch(error){report('BA process log write unavailable: '+String(error.code||'IO error'));}
+}
+async function exportBAProcessLog(projectId){
+ requireOpened();
+ if(projectId!==activeProject?.id)throw Error('The project changed. Reopen its Business Requirements page.');
+ const register=await brWorkflow.load(registry,projectId);
+ const events=await baProcessDiagnostics.read(context.globalStorageUri.fsPath,projectId);
+ const checkpoint=await baMappingCheckpoint.load?.(registry,projectId).catch?.(()=>null)||null;
+ const content=baProcessDiagnostics.exportText({projectId,events,register,checkpoint});
+ const target=await vscode.window.showSaveDialog({
+  title:'Save Complete Business Requirements Troubleshooting Log',
+  defaultUri:vscode.Uri.file(path.join(require('node:os').homedir(),'ATGV-BR-Process-'+projectId+'-'+new Date().toISOString().slice(0,10)+'.txt')),
+  filters:{'Plain text':['txt']},saveLabel:'Download BR Process Log'
+ });
+ if(!target)return {cancelled:true};
+ if(projectId!==activeProject?.id)throw Error('The project changed during log export. Retry from the current project.');
+ await vscode.workspace.fs.writeFile(target,Buffer.from(content,'utf8'));
+ return {saved:true,filename:path.basename(target.fsPath)};
+}
 async function recordStartupDiagnostic(entry){
  try{return await startupDiagnostics.append(context.globalStorageUri.fsPath,entry);}
  catch(error){report('Startup diagnostic write failed: '+error.message);return null;}
@@ -4368,9 +4396,22 @@ async function startupStackCatalog(){
 }
 async function handleDashboardMessage(msg){
   if(!msg||typeof msg.command!=='string')return;
+  const baAction=isBAProcessCommand(msg.command),baStarted=Date.now(),baCommand=String(msg.command);
+  let baFailure='';
   try{
     await ready;
+    if(baAction)await recordBAProcess({stage:'action',action:baCommand,status:'started',key:/^BR-\d+$/.test(String(msg.brId||''))?msg.brId:''});
     switch(msg.command){
+      case 'baDownloadProcessLog':{
+        const projectId=activeProject?.id||'';
+        try{
+          const result=await exportBAProcessLog(String(msg.projectId||''));
+          await dashboard?.webview.postMessage({type:'baProcessLogResult',projectId,...result});
+        }catch(error){
+          await dashboard?.webview.postMessage({type:'baProcessLogResult',projectId,error:String(error.message||error).slice(0,350)});
+        }
+        break;
+      }
       case 'openIssueReport':openIssueReport(String(msg.screen||''));break;
       case 'architectStopInstall':{
         if(architectInstallAbort){architectInstallAbort.abort();await dashboard?.webview.postMessage({type:'architectStackProgress',projectId:activeProject?.id,message:'Stopping the current dependency installation. Previous failed versions remain recorded.'});}
@@ -6515,7 +6556,9 @@ async function handleDashboardMessage(msg){
                 deadline:project.schedule?.endDate,overrides:baseline.projectKey===key?baseline.estimates:{}});
               forecast.baseline={revision:baseline.revision,approvedAt:baseline.approvedAt,approvedBy:baseline.approvedBy};
               forecast.provisional=!!result.truncated||!!result.cancelled;
-            }catch(e){forecast={error:String(e.message||e)};}
+             }catch(e){
+    if(baAction)baFailure=String(e.message||e);
+forecast={error:String(e.message||e)};}
             await dashboard?.webview.postMessage({type:'projectDeliveryForecast',projectId,requestId,forecast});
             await dashboard?.webview.postMessage({type:'jiraInventoryCompleted',projectId,requestId,...result});
           }
@@ -8541,6 +8584,9 @@ async function handleDashboardMessage(msg){
         await dashboard?.webview.postMessage({type:'roleHandoffOwners',projectId:activeProject.id,...state,documents:state.documents.filter(x=>x.documentId.startsWith('handoff-'))});
       }catch{}
     }
+  }finally{
+    if(baAction)await recordBAProcess({stage:'action',action:baCommand,status:baFailure?'failed':'finished',
+      details:baFailure?baFailure.slice(0,400):'',durationMs:Date.now()-baStarted});
   }
 }
 function requireOpened(){if(openingFlow.phase!=='open')throw new Error('Open an ATGV project first.');}
