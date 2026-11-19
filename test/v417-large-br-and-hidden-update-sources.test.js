@@ -15,7 +15,7 @@ test('v417: long requirements text is split losslessly across bounded mapping se
  assert.ok(parts.length>=4,'large documents must use multiple AI calls');
  assert.ok(parts.every(part=>part.length<=importer.MAX_MAPPING_CHUNK));
  assert.equal(parts.join(''),src,'every character in the original source must be represented');
- assert.equal(importer.MAX_EXTRACTED,300000);
+ assert.equal(importer.MAX_EXTRACTED,600000);
  assert.equal(importer.MAX_MAPPING_CHUNK,28000);
 });
 
