@@ -4552,7 +4552,7 @@ async function atgvJobCheckpoint(projectId,command,{step,inputHash,outputHash,pe
 }
 
 function isLongRunningHostProcess(command){
- return /^(?:processDiscoverySources|generateBusinessRequirements|generateDrafts|applyDiscoveryReview|brJiraSync|brJiraPreview|brRoleTaskRepairPublish|developerBrRun|developerBrPreviewDraft|developerBrStartServer|devCopilotStart|designGenerate|designRegenerateAffected|architectCustomRun|architectRunServer|architectTestStack|architectBootstrap|architectCommit|architectPublish|architectSaveStack|catalogPull|syncDocuments|startupInstallModule|sync)$/.test(String(command||''));
+ return /^(?:processDiscoverySources|generateBusinessRequirements|generateDrafts|applyDiscoveryReview|brJiraSync|brJiraPreview|brJiraApprove|brJiraScanExternal|brJiraRefreshWorkStates|brRoleTaskRepairPublish|developerBrRun|developerBrPreviewDraft|developerBrStartServer|devCopilotStart|designGenerate|designRegenerateAffected|uxPipelineGenerate|uxDesignGenerate|uxPublishFrontend|uxFrameworkSync|architectCustomRun|architectCustomScan|architectRecommend|architectValidate|architectRunServer|architectTestStack|architectBootstrap|architectCommit|architectPublish|architectSaveStack|architectCheckStackUpdates|architectPullStackUpdates|catalogPull|catalogCheck|catalogTest|syncDocuments|startupInstallModule|refreshConnectedSources|checkSoftwareUpdates|aiServiceRun|aiServiceInstall|pmJiraAssignableUsers|pmJiraSetAssignee|pmJiraTransition|pmApproveEffortBaseline|sync)$/.test(String(command||''));
 }
 function hasActiveProjectProcess(id){
  return !!id&&([...activeHostProcesses.values()].some(job=>job.projectId===id)||activeDiscoveryMappingRun?.projectId===id);
