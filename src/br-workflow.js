@@ -121,7 +121,7 @@ async function archiveRestartDrafts(registry,id,ids){
   await fs.rename(file,path.join(archive,id+'.md'));
  }
 }
-async function addSources(registry,id,revision,documents,{restart=false,actor='Business Analyst',restartedNames=[],singleSourceCycle=false}={}){
+async function addSources(registry,id,revision,documents,{restart=false,actor='Business Analyst',restartedNames=[],singleSourceCycle=false,replacementDigest=''}={}){
  if(!Array.isArray(documents)||!documents.length||documents.length>10)throw Error('Upload 1–10 source documents.');
  const updated=await write(registry,id,revision,next=>{
   const sources=documents.map(x=>({name:plain(x.name,220),digest:String(x.digest||''),byteDigest:String(x.byteDigest||''),characters:Number(x.characters||0),storedName:String(x.storedName||''),uploadedBy:String(x.uploadedBy||'Unknown').slice(0,180),uploadedAt:String(x.uploadedAt||new Date().toISOString()),addedAt:x.addedAt||new Date().toISOString()}));
@@ -129,26 +129,49 @@ async function addSources(registry,id,revision,documents,{restart=false,actor='B
   if(sources.some(x=>x.byteDigest&&!/^[a-f0-9]{64}$/.test(x.byteDigest)))throw Error('Original file byte checksum must be a SHA-256 digest.');
   if(new Set(sources.map(x=>x.name.toLowerCase())).size!==sources.length||new Set(sources.map(x=>x.digest)).size!==sources.length)throw Error('Source list must contain unique names and documents.');
   const previous=next.sourceDocuments||[];
+  // Explicit replacement is the only way to rename a processed BR source while
+  // retaining its document identity and existing approved BR / Jira mappings.
+  const replacement=replacementDigest?previous.find(item=>item.digest===replacementDigest):null;
+  if(replacementDigest){
+   if(!/^[a-f0-9]{64}$/.test(String(replacementDigest))||!replacement)throw Error('Source version changed. Refresh before replacing the document.');
+   if(restart||sources.length!==1||previous.length!==1)throw Error('Replace & Reprocess requires exactly one active source and one updated file.');
+   if(sources[0].digest===replacement.digest)throw Error('The updated document has the same extracted contents; no source revision is necessary.');
+   if(Object.keys(next.pending||{}).length)throw Error('Resolve pending Jira publication before replacing the source.');
+  }
+  const impactedBrIds=replacement?new Set(sourceLifecycle(next,replacement.digest).dependencies):new Set();
   if(singleSourceCycle&&!restart&&sources.length>1)throw Error('Only one active source document is allowed per Business Requirement. Delete the existing upload or create a new BR cycle.');
   const previouslyKnown=[...previous,...(next.archivedSources||[])];
   // A source document's identity is independent of its content hash. A matching
   // filename (or exact historical content) continues the same source lineage.
   for(const source of sources){
-   const prior=previous.find(old=>old.name.toLowerCase()===source.name.toLowerCase())||previous.find(old=>old.digest===source.digest)||[...(next.archivedSources||[])].reverse().find(old=>old.name.toLowerCase()===source.name.toLowerCase()||old.digest===source.digest);
+   const prior=replacement||previous.find(old=>old.name.toLowerCase()===source.name.toLowerCase())||previous.find(old=>old.digest===source.digest)||[...(next.archivedSources||[])].reverse().find(old=>old.name.toLowerCase()===source.name.toLowerCase()||old.digest===source.digest);
    const stableId=prior?.sourceId||'DOC-'+(prior?.digest||source.digest).slice(0,20);
    source.sourceId=stableId;
    source.version=!prior?1:prior.digest===source.digest?Math.max(1,Number(prior.version)||1):(Math.max(1,Number(prior.version)||1)+1);
    source.previousDigest=prior?.digest!==source.digest?prior?.digest||null:prior?.previousDigest||null;
   }
-  const replaced=previous.filter(item=>sources.some(x=>x.name.toLowerCase()===item.name.toLowerCase()&&x.digest!==item.digest));
+  const replaced=previous.filter(item=>item.digest===replacementDigest||sources.some(x=>x.name.toLowerCase()===item.name.toLowerCase()&&x.digest!==item.digest));
   const reverifiedLegacy=sources.filter(source=>previous.some(old=>old.name.toLowerCase()===source.name.toLowerCase()&&old.digest===source.digest&&old.storedName===source.storedName&&!/^[a-f0-9]{64}$/.test(String(old.byteDigest||''))&&/^[a-f0-9]{64}$/.test(source.byteDigest)));
-  const changedProcessed=replaced.some(item=>sourceLifecycle(next,item.digest).processed)||!!next.mappingCompleted&&sources.some(item=>!previous.some(old=>old.digest===item.digest));
+  const changedProcessed=!!replacement||replaced.some(item=>sourceLifecycle(next,item.digest).processed)||!!next.mappingCompleted&&sources.some(item=>!previous.some(old=>old.digest===item.digest));
   for(const old of replaced){
    archiveEntry(next,old,'superseded','Replaced by newer uploaded document version');
-   const newer=sources.find(x=>x.name.toLowerCase()===old.name.toLowerCase()&&x.digest!==old.digest);
+   const newer=sources.find(x=>replacement?x.digest!==old.digest:x.name.toLowerCase()===old.name.toLowerCase()&&x.digest!==old.digest);
    next.sourceRevisionHistory=(next.sourceRevisionHistory||[]).concat({sourceId:newer.sourceId,name:newer.name,fromDigest:old.digest,toDigest:newer.digest,fromVersion:Number(old.version)||1,toVersion:newer.version,at:new Date().toISOString(),actor:String(actor||'Business Analyst').slice(0,120),review:'awaiting-discovery-and-requirement-approval',jiraChanged:false}).slice(-250);
   }
   next.sourceDocuments=sources;
+  if(replacement){
+   for(const br of next.brs||[]){
+    if(!impactedBrIds.has(br.id)||br.status==='retired'||br.archivedFromRestart)continue;
+    // Keep immutable approvedContent and every remote Jira key, but require
+    // updated evidence and human approval before new remote operations.
+    br.needsRefresh=true;
+    br.staleReason='Updated source document: regenerate, review and approve BR revision';
+    br.businessApproval=null;
+   }
+   event(next,'source-replacement-awaiting-approval',{
+    sourceId:sources[0].sourceId,previousDigest:replacement.digest,newDigest:sources[0].digest,
+    impactedBrIds:[...impactedBrIds],existingJiraKeysPreserved:true});
+  }
   // A previously completed document can be revised during a later cycle.
   // Reopen only the BRs carrying this document's explicit source evidence.
   const restoredRevisions=sources.filter(source=>!previous.some(old=>old.digest===source.digest)&&
@@ -181,7 +204,7 @@ async function addSources(registry,id,revision,documents,{restart=false,actor='B
    next.restartPending=true;
    next.importEpoch=Math.max(1,Number(next.importEpoch||0)+1);
    event(next,'business-requirements-restarted',{documents:restartedNames,actor:String(actor||'Business Analyst').slice(0,150),approvedPreserved:true,jiraPreserved:true});
-  }else if(changedProcessed){next.mappingCompleted=null;next.processedSources=[];next.discoveryRevision='';next.reviewRevision='';next.reviewText='';next.reviewRiskAccepted=null;next.impact=[];next.retirementApprovals={};next.restartPending=false;event(next,'source-revision-awaiting-review',{sourceIds:replaced.map(old=>sources.find(x=>x.name.toLowerCase()===old.name.toLowerCase())?.sourceId),jiraUnchanged:true});}
+  }else if(changedProcessed){next.mappingCompleted=null;next.processedSources=[];next.discoveryRevision='';next.reviewRevision='';next.reviewText='';next.reviewRiskAccepted=null;next.impact=[];next.retirementApprovals={};next.restartPending=false;if(replacement){next.importName='';next.importDigest='';}event(next,'source-revision-awaiting-review',{sourceIds:replaced.map(old=>sources.find(x=>x.name.toLowerCase()===old.name.toLowerCase())?.sourceId),jiraUnchanged:true});}
   next.sourceHistory=(next.sourceHistory||[]).concat(replaced.map(old=>({action:'superseded',digest:old.digest,at:new Date().toISOString(),documents:sources})));
   if(reverifiedLegacy.length)event(next,'legacy-source-original-verified',{digests:reverifiedLegacy.map(item=>item.digest),actor:String(actor||'Business Analyst').slice(0,150),existingApprovalsPreserved:true,jiraMappingsPreserved:true});
   event(next,'source-uploaded',{count:sources.length,changedProcessed,replacedDigests:replaced.map(item=>item.digest),sourceRevisionCount:replaced.length,approvedBRsPreserved:true,jiraMappingsPreserved:true});
