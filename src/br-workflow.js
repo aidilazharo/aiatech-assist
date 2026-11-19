@@ -1011,7 +1011,7 @@ function reviewGate(next,{allowRiskAcknowledgement=false,actor='Business Analyst
  if(!warnings)return;
  if(next.reviewRiskAccepted?.revision===next.discoveryRevision&&next.reviewRevision===next.discoveryRevision&&
     next.reviewRiskAccepted.sourceFingerprint===String(next.importDigest||''))return;
- if(!allowRiskAcknowledgement)throw Error('AI or source-document findings require explicit Business Analyst acknowledgment before BR generation or approval.');
+ if(!allowRiskAcknowledgement)throw Error('AI or source-document findings require explicit risk acknowledgment by the Business Analyst before BR generation or approval.');
  const findings=[...(value.suggestions||[]).filter(item=>item.severity==='Critical'||item.severity==='High'||!item.suggestedAnswer)
   .map(item=>({key:String(item.key||''),severity:String(item.severity||''),issue:String(item.issue||'').slice(0,500)})),...sourceFindings].slice(0,24);
  next.reviewRiskAccepted={revision:next.discoveryRevision,at:new Date().toISOString(),by:String(actor||'Business Analyst').slice(0,120),decision:'Continue with Risks',sourceFingerprint:String(next.importDigest||''),findings};
