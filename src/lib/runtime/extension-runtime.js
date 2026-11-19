@@ -36,6 +36,7 @@ const baTimeoutSimplified=require('../../ba-timeout-simplified');
 const baPreflightReports=require('../../ba-preflight-report');
 const baProcessDiagnostics=require('../../ba-process-diagnostics');
 const baWorkingBr=require('../../ba-working-br');
+const baBrTextPipeline=require('../../ba-br-txt-pipeline');
 const discoveryReview=require('../../discovery-review');
 const brWorkflow=require('../../br-workflow');
 const baSourceSelectionGuard=require('../../ba-source-selection-guard');
@@ -2123,9 +2124,12 @@ async function processSelectedDiscoverySources(msg){
     details:'Sectioned source selected for AI mapping; document text not recorded.'});
    run.largeSource=baLargeDocumentRecovery.isLargeDocument(source.text.length);
    run.preflightOffline=!!run.skipAiChecks;run.mappingOffline=!!run.skipAiChecks;run.sourceOnlyPreflight=!!run.skipAiChecks;
-   let sections=discoveryImport.splitDocumentText(source.text);
-   const smallerSections=discoveryImport.splitDocumentText(source.text,12000);
-   if(smallerSections.length<=25)sections=smallerSections;
+   // Every text unit is an immutable, checksum-verified local .txt file.
+   // Boundaries are stable across retries and each unit is processed in order.
+   const preparedUnits=await baBrTextPipeline.prepare(registry,run.projectId,source);
+   let sections=preparedUnits.map(unit=>unit.text);
+   await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preparing',
+    message:'Extracted '+preparedUnits.length+' verified BR .txt file(s) from '+source.name+'. Processing each file in order; original upload unchanged.'});
    const resumeMeta={sourceDigest:selected[i],textDigest:sha(source.text),modelDigest,revision:resumeRevision};
    let checkpoint=null;
    if(resumeKey){
@@ -2133,7 +2137,7 @@ async function processSelectedDiscoverySources(msg){
      checkpoint=await baMappingCheckpoint.load(registry,run.projectId,resumeMeta,resumeKey);
      if(checkpoint){
       let offset=0;const restored=checkpoint.sectionLengths.map(length=>{const part=source.text.slice(offset,offset+length);offset+=length;return part;});
-      if(offset===source.text.length&&restored.every(Boolean))sections=restored;else checkpoint=null;
+      if(offset===source.text.length&&restored.length===preparedUnits.length&&restored.every((part,index)=>part&&sha(part)===preparedUnits[index].digest))sections=restored;else checkpoint=null;
      }
      if(!checkpoint){
       const marker=context.workspaceState.get?.('atgvAssist.baMappingResume.'+run.projectId);
@@ -2153,11 +2157,10 @@ async function processSelectedDiscoverySources(msg){
     }catch(error){checkpoint=null;report('AI resume checkpoint could not be saved: '+String(error.message||error));
      await dashboard?.webview.postMessage({type:'discoveryMappingCheckpoint',projectId:run.projectId,resumeAvailable:false,message:'AI progress could not be saved for a later resume. Check workspace storage permissions.'});}
    };
-   let preflightSplitRecoveries=0;
    const reports=[],partAnswers=[];
    for(let part=0;part<sections.length;part++){
     check();run.phase='preflight';
-    const section={...source,text:sections[part]};
+    const section={...source,name:preparedUnits[part].filename,text:sections[part]};
     const label=sections.length>1?' (section '+(part+1)+'/'+sections.length+')':'';
     await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'AI document preflight '+(i+1)+'/'+readable.length+label+': checking acceptance criteria and contradictions in '+source.name+'…'});
     let result,previous='',retrySmaller=false;
@@ -2194,17 +2197,7 @@ async function processSelectedDiscoverySources(msg){
         break;
        }
        if(!trySourceAIFallback(run,error))throw error;
-       if(!run.largeSource&&networkAttempt===1&&attempt===1&&preflightSplitRecoveries===0&&section.text.length>4000){
-        const parts=discoveryImport.splitDocumentText(section.text,Math.max(2000,Math.floor(section.text.length/2)));
-        if(parts.length>1&&sections.length-1+parts.length<=25){
-         sections.splice(part,1,...parts);preflightSplitRecoveries++;retrySmaller=true;
-         const session=documentPreflightSessions.get(run.projectId);
-         if(session)for(const entry of session.entries)if(entry.digest===selected[i])entry.totalSections=sections.length;
-         if(checkpoint&&Object.keys(checkpoint.preflight).length)await persistCheckpoint();
-         await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'The AI response was slow. Retrying this section in smaller parts; the complete original document remains included…'});
-         break;
-        }
-       }
+       // Preserve persisted .txt boundaries on retries; checkpoint resumes the same BR text unit.
        if(networkAttempt<maxNetworkAttempts){
         await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Recovering AI preflight ('+networkAttempt+'/'+maxNetworkAttempts+')'+(run.useRecovery?' using Microsoft Copilot SDK':'')+'. Saved sections remain unchanged…'});
         continue;
@@ -2251,7 +2244,7 @@ async function processSelectedDiscoverySources(msg){
    for(let part=0;part<sections.length;part++){
     const result=reports[part],label=sections.length>1?' (section '+(part+1)+'/'+sections.length+')':'';
     check();run.phase='mapping';
-    const doc={...source,text:working.sections[part].text};
+    const doc={...source,name:preparedUnits[part].filename,text:working.sections[part].text};
     await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'Mapping AI-updated working BR '+(i+1)+'/'+readable.length+': '+doc.name+label+'… (Stop Mapping is available)'});
     const mappingPrompt=discoveryImport.createMappingPrompt(doc)+working.sections[part].guidance+'\n\nThe document above is the AI-updated working BR, with verified spelling corrections. Preflight preserved the original business rules; label recommendations as provisional. Do not invent TDD test inputs, expected outputs, approvals or policy.'+await roleSkillPrompt('business-analyst');
     check();
@@ -2316,7 +2309,7 @@ async function processSelectedDiscoverySources(msg){
      details:sourceOnlyMappingPart?'AI mapping unavailable; literal source extraction used.':'AI mapping completed.'});
     await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'Mapped '+(i+1)+'/'+readable.length+' document(s), section '+(part+1)+'/'+sections.length+'. Validating results…'});
    }
-   const proposals=discoveryImport.mergeMappingAnswers(partAnswers);
+   const proposals=baBrTextPipeline.mergeForDiscovery(partAnswers,preparedUnits);
    let crossSectionChecked=false;
    if(sections.length>1&&!run.mappingOffline){
     check();run.phase='preflight';run.timeout=false;
@@ -2367,7 +2360,7 @@ async function processSelectedDiscoverySources(msg){
     issues:[...reports.flatMap(x=>x.issues),...reviewIssues].slice(0,16),
     resolutions:reports.flatMap(x=>x.resolutions||[]).slice(0,12),sections:reports,workingBR:workingRef,checks:working.checks};
    preflights.push(baDocumentPreflight.evidence(report,selected[i]));
-   mappedProposals.push({filename:source.name,answers:proposals});
+   mappedProposals.push({filename:source.name,answers:proposals,units:preparedUnits.map((unit,index)=>({sourceDigest:unit.sourceDigest,filename:unit.filename,digest:unit.digest,brIndex:unit.brIndex,partIndex:unit.partIndex,parts:unit.parts,characters:unit.characters,answers:partAnswers[index]}))});
   }
   check();run.phase='committing';
   await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'committing',message:'Saving complete mapping atomically. Cancellation is disabled during this step…'});
