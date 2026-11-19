@@ -43,6 +43,7 @@ const remoteBRDeletion=require('../../remote-br-deletion');
 const brDeletionPreview=require('../../br-deletion-preview');
 const orphanJiraCleanup=require('../../orphaned-jira-cleanup');
 const jiraLinkReconciliation=require('../../jira-link-reconciliation');
+const startupJiraReconciliation=require('../../startup-jira-reconciliation');
 const resetEverywhere=require('../../reset-everywhere');
 const localReset=require('../reset/local-reset');
 const localContentBackup=require('../backup/local-content-backup');
@@ -403,12 +404,12 @@ function scheduleCatalogChecks(){
 // Fixed trusted update repositories; never use a saved URL for code updates.
 const extensionSourceRepository=require('../../../package.json').repository.url;
 const libraryReleaseUpdater=require('../updates/library-release-updater');
-const releasePatAccess=require('../updates/release-pat-access');
 const FIXED_LIBRARY_REPOSITORY='https://github.com/aidilazharo/tech-stacks-skills';
 let softwareUpdateTimer=null,softwareStartupTimer=null,softwareCheckBusy=false;
 let extensionRelease=null,extensionLatest=null,libraryRelease=null,extensionUpdateChecked='',extensionUpdateError='',libraryUpdateError='';
-const RELEASE_DOWNLOAD_PAT_SECRET='atgvAssist.releaseDownload.pat';
-let releaseDownloadPatSaved=false;
+let libraryLatest=null;
+const LEGACY_RELEASE_DOWNLOAD_PAT_SECRET='atgvAssist.releaseDownload.pat';
+let extensionReleaseWarnings=[],libraryReleaseWarnings=[];
 let startupSessionId=0,startupUpdateSessionChecked=0,pendingStartupUpdateCheck=false;
 function updatePreferences(){
  return {
@@ -421,21 +422,14 @@ function updatePreferences(){
 }
 function updateStatus(){return {settings:updatePreferences(),installedVersion:require('../../../package.json').version,
  latest:extensionRelease?{version:extensionRelease.version,tag:extensionRelease.tag,url:extensionRelease.url}:null,
- extensionLatest:extensionLatest?{version:extensionLatest.version,tag:extensionLatest.tag,url:extensionLatest.url}:null,
+ extensionLatest,
  extensionLastCheck:extensionUpdateChecked,extensionError:extensionUpdateError,
  libraryLastCheck:catalogLastCheck,libraryError:libraryUpdateError,
- libraryLatest:catalogRemote?.version||'',libraryLatestSha:catalogRemote?.sha||'',busy:softwareCheckBusy,releasePatSaved:releaseDownloadPatSaved};}
+ libraryLatest:libraryLatest?.version||'',libraryLatestAvailable:!!libraryRelease,libraryLatestSha:catalogRemote?.sha||'',busy:softwareCheckBusy,extensionReleaseWarnings,libraryReleaseWarnings};}
 async function publishUpdateStatus(){
- releaseDownloadPatSaved=!!(await context.secrets.get(RELEASE_DOWNLOAD_PAT_SECRET));
  await dashboard?.webview.postMessage({type:'softwareUpdateState',value:updateStatus()});
 }
-// Release-only credential. Public releases work anonymously; never fall back to
-// project credentials or interactive GitHub sign-in for release downloads.
-async function releaseAccessToken(){
- return String(await context.secrets.get(RELEASE_DOWNLOAD_PAT_SECRET)||'');
-}
-// GitHub issue submission and source workflows must never receive the
-// restricted release token: they use the independent project/account identity.
+// Project GitHub actions continue to use their independent account identity.
 async function githubIssueAccessToken({interactive=false}={}){
  try{
   const identity=globalCredentialEndpoint('github');
@@ -470,7 +464,7 @@ async function performVerifiedExtensionInstall(operation){
   await postExtensionInstallProgress(operation,'downloading',...phases.downloading);
   const folder=path.join(context.globalStorageUri.fsPath,'updates');
   const vsix=await releaseUpdater.downloadVerified(operation.release,{
-   token:operation.token,directory:folder,
+   directory:folder,
    onProgress:async stage=>{
     if(phases[stage])await postExtensionInstallProgress(operation,stage,...phases[stage]);
    }
@@ -515,7 +509,7 @@ async function offerBrandedExtensionUpgrade(release){
     }).catch(()=>{clearTimeout(timer);pendingExtensionUpgradeOffers.delete(requestId);resolve({action:'Later',requestId});});
  });
 }
-async function promptExtensionRelease(release,token,{force=false}={}){
+async function promptExtensionRelease(release,{force=false}={}){
  if(!updatePreferences().promptForUpdates||!release)return;
  const key='atgvAssist.updates.promptedRelease';
  const promptId=(release.repository||releaseUpdater.REPO)+'|'+(release.tag||'');
@@ -526,18 +520,18 @@ async function promptExtensionRelease(release,token,{force=false}={}){
  const requestId=typeof selected==='object'&&selected?selected.requestId:null;
  if(action==='View Release')await vscode.env.openExternal(vscode.Uri.parse(release.url));
  if(action==='Install Upgrade'&&!activeExtensionUpgradeInstall){
-  const operation={requestId,release,token,running:false};
+  const operation={requestId,release,running:false};
   activeExtensionUpgradeInstall=operation;
   await performVerifiedExtensionInstall(operation);
  }
 }
 async function checkExtensionRelease({prompt=false,interactive=false,forcePrompt=false}={}){
- const token=await releaseAccessToken({interactive});
  try{
   const installed=require('../../../package.json').version;
-  const result=await releaseUpdater.latestRelease({version:installed,token,repositoryUrl:updatePreferences().releaseRepositoryUrl,includeCurrent:true});
-  extensionLatest=result;extensionRelease=result&&releaseUpdater.compareVersion(result.version,installed)>0?result:null;extensionUpdateError='';extensionUpdateChecked=new Date().toISOString();
-  if(prompt&&extensionRelease)await promptExtensionRelease(extensionRelease,token,{force:forcePrompt});
+  const checked=await releaseUpdater.latestAcrossRepositories({version:installed,includeCurrent:true});
+  const result=checked.release;extensionReleaseWarnings=checked.errors;
+  extensionLatest=checked.latest;extensionRelease=result&&releaseUpdater.compareVersion(result.version,installed)>0?result:null;extensionUpdateError='';extensionUpdateChecked=new Date().toISOString();
+  if(prompt&&extensionRelease)await promptExtensionRelease(extensionRelease,{force:forcePrompt});
   return extensionRelease;
  }catch(error){extensionLatest=null;extensionRelease=null;extensionUpdateError=error.message;report('GitHub extension release check: '+error.message);if(interactive)throw error;return null;}
  finally{await publishUpdateStatus();}
@@ -614,17 +608,18 @@ async function promptLibraryRelease(release,{force=false}={}){
 async function checkLibraryRelease({prompt=false,interactive=false,forcePrompt=false}={}){
  try{
   if(catalogBusy){libraryRelease=null;libraryUpdateError='Library update check is waiting for another catalog operation.';return null;}
-  const token=await releaseAccessToken({interactive});
-  libraryRelease=await libraryReleaseUpdater.latest({token});
-  if(!libraryRelease)throw Error('No verified Library source ZIP and checksum are available in GitHub Releases.');
-  catalogRemote={repository:libraryRelease.repository,version:libraryRelease.version,tag:libraryRelease.tag,sha:''};
+  const checked=await libraryReleaseUpdater.latestAcrossRepositories();
+  libraryRelease=checked.release;libraryLatest=checked.latest;libraryReleaseWarnings=checked.errors;
+  if(!libraryLatest)throw Error('No public Library release was found.');
+  catalogRemote={repository:libraryLatest.repository,version:libraryLatest.version,tag:libraryLatest.tag,sha:''};
   catalogLastCheck=new Date().toISOString();catalogLastError='';libraryUpdateError='';
+  if(!libraryRelease)return null;
   const remote=libraryRelease.version,installedCatalog=(await catalogUiState()).installed||{};
   const comparison=libraryUpdateVersion.compareInstalledRelease(installedCatalog,libraryRelease);
   if(!comparison.available)return null;
   if(prompt)await promptLibraryRelease(libraryRelease,{force:forcePrompt});
   return remote;
- }catch(error){libraryRelease=null;libraryUpdateError=error.message;report('GitHub SDLC Library update: '+error.message);if(interactive)throw error;return null;}
+ }catch(error){libraryRelease=null;libraryLatest=null;libraryUpdateError=error.message;report('GitHub SDLC Library update: '+error.message);if(interactive)throw error;return null;}
  finally{await publishUpdateStatus();}
 }
 async function checkSoftwareUpdates({prompt=false,interactive=false,force=false,startup=false}={}){
@@ -637,7 +632,7 @@ async function checkSoftwareUpdates({prompt=false,interactive=false,force=false,
    (force||config.autoCheckLibrary)?checkLibraryRelease({interactive}).catch(e=>errors.push('Library: '+e.message)):Promise.resolve()
   ]);
   if(prompt){
-   if(extensionRelease)await promptExtensionRelease(extensionRelease,await releaseAccessToken({interactive}),{force:startup});
+   if(extensionRelease)await promptExtensionRelease(extensionRelease,{force:startup});
    if(libraryRelease)await promptLibraryRelease(libraryRelease,{force:startup});
   }
   if(errors.length&&interactive)throw Error(errors.join(' | '));
@@ -808,7 +803,8 @@ async function initialize(){
   if(ownershipRetryTimer){clearInterval(ownershipRetryTimer);ownershipRetryTimer=null;}ownershipOfflineUntil=0;
   if(aiServiceTimer){clearInterval(aiServiceTimer);aiServiceTimer=null;}if(autoSyncTimer){clearInterval(autoSyncTimer);autoSyncTimer=null;}if(jiraMonitorTimer){clearInterval(jiraMonitorTimer);jiraMonitorTimer=null;}
   if(liveRemoteTimer){clearInterval(liveRemoteTimer);liveRemoteTimer=null;}
-  approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;++activationEpoch;activeProject=undefined;store=undefined;pendingTests={jira:null,github:null};verifiedConnections.clear();extensionSettings=normalizeExtensionSettings(context.globalState.get('atgvAssist.extensionSettings',{}));releaseDownloadPatSaved=!!(await context.secrets.get(RELEASE_DOWNLOAD_PAT_SECRET));
+  approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;++activationEpoch;activeProject=undefined;store=undefined;pendingTests={jira:null,github:null};verifiedConnections.clear();extensionSettings=normalizeExtensionSettings(context.globalState.get('atgvAssist.extensionSettings',{}));
+  await context.secrets.delete(LEGACY_RELEASE_DOWNLOAD_PAT_SECRET).catch(error=>report('Could not remove obsolete release credential: '+error.message));
   workspaceOverridePath=null;
   const actualFolder=vscode.workspace.workspaceFolders?.[0];
   if(actualFolder){const located=await workspaceForFolder(actualFolder.uri.fsPath);if(located.source==='project-folder')workspaceOverridePath=located.root;}
@@ -866,8 +862,30 @@ async function activateProject(id){
    },liveRemoteRefresh.INTERVAL_MS);
    liveRemoteTimer.unref?.();
    void refreshLiveRemoteData({reason:'project-open',force:true}).catch(e=>report('Live Jira/Confluence opening fetch: '+e.message));
+   void reconcileStartupPublishedJira(project,epoch).catch(e=>report('Startup Jira reconciliation deferred: '+e.message));
   }
   return project;
+}
+
+async function reconcileStartupPublishedJira(project,epoch){
+ if(remoteBRDeletionBusy)return;
+ remoteBRDeletionBusy=true;
+ try{
+  const sameProject=()=>epoch===activationEpoch&&activeProject?.id===project.id&&!openingOffline&&openingFlow.phase==='open';
+  const journal=await remoteBRDeletion.readJobs(registry,project.id);
+  if((journal.jobs||[]).some(job=>job.status!=='completed'))throw Error('An unfinished Jira deletion job needs review.');
+  if(!sameProject())return;
+  const result=await startupJiraReconciliation.run({registry,projectId:project.id,config:effectiveConfig(project),token:await getAtlassianToken(project),shouldContinue:sameProject});
+  if(!sameProject())return;
+  if(result.changed){
+   approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;
+   await dashboard?.webview.postMessage({type:'brUpdated',register:result.register});
+   await refreshDashboard();
+   const removed=result.brsRemoved+result.linksRemoved,restored=result.brsRestored+result.linksRestored;
+   await notice('Startup Jira check: '+result.brsRemoved+' published BR(s) and '+result.linksRemoved+' Jira link(s) removed from the active list; '+restored+' restored. Unavailable items have a local recovery copy because Jira may also return 404 for restricted items.',false);
+   report(`Startup Jira reconciliation: ${removed} unavailable, ${restored} restored; no remote changes.`);
+  }else if(result.conflicts)report('Startup Jira reconciliation retained recovery copies because a local mapping changed.');
+ }finally{remoteBRDeletionBusy=false;}
 }
 
 const {createDashboardHtml}=require('../webview/dashboard-html');
@@ -4221,50 +4239,25 @@ async function handleDashboardMessage(msg){
         await handleDashboardMessage({command:'catalogPull'});
         break;
       }
-      case 'saveReleaseDownloadPat':{
-        try{
-          const token=releasePatAccess.normalizeToken(msg.token);
-          const verified=await releasePatAccess.verifyReadOnlyReleaseAccess(token);
-          await context.secrets.store(RELEASE_DOWNLOAD_PAT_SECRET,token);
-          releaseDownloadPatSaved=true;
-          await publishUpdateStatus();
-          await dashboard?.webview.postMessage({type:'releaseDownloadPatResult',saved:true,success:true,message:'Release-only PAT securely saved. '+verified.summary});
-        }catch(error){
-          await dashboard?.webview.postMessage({type:'releaseDownloadPatResult',success:false,message:String(error.message||error).slice(0,460)});
-        }
-        break;
-      }
-      case 'clearReleaseDownloadPat':{
-        const accept=await uiWarning('Remove the release-only GitHub PAT from VS Code secure storage? Public release downloads will still work. This does not change project GitHub, Jira or SDLC Catalog credentials.',{modal:true},'Remove Release PAT');
-        if(accept!=='Remove Release PAT'){
-          await dashboard?.webview.postMessage({type:'releaseDownloadPatResult',cancelled:true,message:'Release PAT was not changed.'});
-          break;
-        }
-        await context.secrets.delete(RELEASE_DOWNLOAD_PAT_SECRET);
-        releaseDownloadPatSaved=false;
-        await publishUpdateStatus();
-        await dashboard?.webview.postMessage({type:'releaseDownloadPatResult',saved:false,success:true,message:'Release-only PAT removed. Public releases can be downloaded without authentication.'});
-        break;
-      }
       case 'checkSoftwareUpdates':{
         await checkSoftwareUpdates({prompt:true,interactive:true,force:true});break;
       }
       case 'viewExtensionRelease':{
-        if(!extensionRelease)throw Error('Check for an available extension release first.');
-        await vscode.env.openExternal(vscode.Uri.parse(extensionRelease.url));break;
+        if(!extensionLatest)throw Error('Check for an extension release first.');
+        await vscode.env.openExternal(vscode.Uri.parse(extensionLatest.url));break;
       }
       case 'installExtensionRelease':{
         if(!extensionRelease)throw Error('No verified newer release is available.');
         // Manual installs use the same visible upgrade modal and verified progress
         // rather than silently downloading/installing and closing the UI.
         if(activeExtensionUpgradeInstall?.running)break;
-        const release=extensionRelease,token=await releaseAccessToken({interactive:true});
+        const release=extensionRelease;
         const selected=await offerBrandedExtensionUpgrade(release);
         const action=typeof selected==='string'?selected:selected?.action;
         const requestId=typeof selected==='object'&&selected?selected.requestId:null;
         if(action==='View Release')await vscode.env.openExternal(vscode.Uri.parse(release.url));
         if(action==='Install Upgrade'&&!activeExtensionUpgradeInstall){
-          const operation={requestId,release,token,running:false};
+          const operation={requestId,release,running:false};
           activeExtensionUpgradeInstall=operation;
           await performVerifiedExtensionInstall(operation);
         }
@@ -6567,20 +6560,20 @@ async function handleDashboardMessage(msg){
         }
         const config=sdlcCatalog.normalizeConfig({...catalogConfig(),repositoryUrl:FIXED_LIBRARY_REPOSITORY});
         catalogBusy=true;
-        await progress('running',5,'Preparing SDLC Library update…','Checking the fixed GitHub release repository.');
+        await progress('running',5,'Preparing SDLC Library update…','Checking the public GitHub release repositories.');
         await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});
         try{
           if(!getWorkspace())throw Error('Open a workspace before pulling the SDLC Library.');
-          const token=await releaseAccessToken({interactive:true});
           await progress('running',20,'Checking GitHub Releases','Finding the latest trusted Library source ZIP and SHA-256 checksum.');
-          const release=await libraryReleaseUpdater.latest({token});
-          if(!release)throw Error('No verified SDLC Library release ZIP is available.');
+          const checked=await libraryReleaseUpdater.latestAcrossRepositories();
+          const release=checked.release;libraryLatest=checked.latest;libraryReleaseWarnings=checked.errors;
+          if(!release)throw Error(checked.latest?'The latest public Library release is missing its verified ZIP or checksum.':'No public SDLC Library release is available.');
           libraryRelease=release;
           const stage=path.join(context.globalStorageUri.fsPath,'updates','library-'+crypto.randomUUID());
           let selected,downloadedHash='';
           try{
-            await progress('running',45,'Downloading Library archive','Downloading the fixed GitHub release ZIP and checksum.');
-            const archive=await libraryReleaseUpdater.downloadVerified(release,{token,directory:stage});
+            await progress('running',45,'Downloading Library archive','Downloading the public GitHub release ZIP and checksum.');
+            const archive=await libraryReleaseUpdater.downloadVerified(release,{directory:stage});
             downloadedHash=crypto.createHash('sha256').update(await fs.readFile(archive)).digest('hex');
             await progress('running',65,'Verifying Library contents','Checking archive entries, VERSION and catalog.json metadata.');
             const inspected=await offlineLibrary.inspectZip(archive);

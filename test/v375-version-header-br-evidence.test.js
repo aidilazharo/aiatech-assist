@@ -35,7 +35,7 @@ test('pinned GitHub VERSION is checked for all update polls, including non-ZIP c
  assert.doesNotMatch(source,/const info=currentZip\?await sdlcCatalog\.remoteVersion/);
  assert.match(source,/libraryUpdateVersion\.compareInstalledRelease\(installedCatalog,libraryRelease\)/);
  assert.match(source,/installedVersion:comparison\.installed,\s*remoteVersion:comparison\.remote/);
- assert.match(source,/libraryLatest:catalogRemote\?\.version\|\|''/);
+ assert.match(source,/libraryLatest:libraryLatest\?\.version\|\|''/);
  assert.match(source,/catalogRemote=null;catalogLastError=error\.message/);
 });
 test('available version and update modal are strictly versions, no SHA as a version',()=>{

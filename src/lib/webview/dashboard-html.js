@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.4.24';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.4.25';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -128,7 +128,7 @@ function html(webview,{resumeLibrary=false}={}){
    <div id="contentPane" class="content-pane" role="main">
    <main id="gateView" class="gate-container">
     <div class="gate-top"><div class="gate-identity gate-lead-identity"><span class="gate-logo-stack"><img src="${brand}" alt="ATGV" class="gate-logo"/></span><span class="gate-product-title"><h1>AIATECH ASSIST</h1><small class="gate-brand-versions">Extension v${extensionVersion}<span id="gateLibraryVersion"> · Library —</span></small></span></div><div class="gate-header-actions"><button id="gateReportIssue" type="button" class="guide-icon-button" aria-label="Report an issue" title="Report an Issue"><svg class="guide-help-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.5 0-3-.4-4.3-1.2L3 20l1.3-4A8.5 8.5 0 1 1 21 11.5Z"/><path d="M12 7.5v4.5M12 15.5h.01"/></svg></button><button id="gateGuideHelp" type="button" class="guide-icon-button" aria-label="Open interactive user guide" title="Interactive User Guide" aria-haspopup="dialog" aria-controls="guideMenu"><svg class="guide-help-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.65 9a2.5 2.5 0 0 1 4.7 1.2c0 1.8-2.35 2-2.35 3.7"/><path d="M12 17.3h.01"/></svg></button></div></div>
-    <p id="gateLatestVersions" class="atgv-startup-latest hidden" role="status" aria-live="polite"></p>
+    <p id="gateLatestVersions" class="atgv-startup-latest" role="status" aria-live="polite">Checking latest extension and Library versions…</p>
     <div id="gateFolderAlert" class="gate-folder-alert hidden" role="alert"><div><strong>Open a VS Code folder to continue</strong><p>ATGV needs an open folder to find or create project files. Select a folder before searching or creating a project.</p></div><button id="gateOpenFolder" type="button">Open Folder</button></div>
     <section id="startupSetup" class="atgv-startup-setup" aria-label="ATGV computer readiness and connection setup">
       <div id="startupComputerCard" class="atgv-startup-card">
@@ -266,16 +266,6 @@ function html(webview,{resumeLibrary=false}={}){
         <button type="button" id="pullLibraryFiles" class="secondary">Pull Library Files</button>
         <button type="button" id="installExtensionRelease" class="secondary" disabled>Install Verified VSIX</button>
         <button type="button" id="viewExtensionRelease" class="secondary" disabled>View GitHub Release</button>
-      </div>
-      <div class="release-download-pat-settings" aria-label="Optional GitHub Release Download PAT">
-        <label for="releaseDownloadPat"><strong>Release Download PAT</strong> <span class="muted">(optional · downloads only)</span></label>
-        <div class="release-download-pat-controls">
-          <input id="releaseDownloadPat" type="password" autocomplete="new-password" spellcheck="false" maxlength="512" placeholder="github_pat_… (not stored in project settings)" aria-describedby="releaseDownloadPatHelp releaseDownloadPatStatus">
-          <button type="button" id="saveReleaseDownloadPat" class="secondary">Save &amp; Test PAT</button>
-          <button type="button" id="clearReleaseDownloadPat" class="secondary" disabled>Remove PAT</button>
-        </div>
-        <p id="releaseDownloadPatHelp" class="muted">Use a fine-grained PAT with <strong>Contents: Read-only</strong> for private release repositories. Public release downloads need no PAT. Stored in VS Code SecretStorage; not used for Git pushes, project repositories, PRs or Jira.</p>
-        <p id="releaseDownloadPatStatus" class="muted" role="status" aria-live="polite">Public release downloads work without a PAT.</p>
       </div>
       <p id="softwareExtensionStatus" class="test-status muted" role="status" aria-live="polite">Extension: not checked.</p>
       <p id="softwareLibraryStatus" class="test-status muted" role="status" aria-live="polite">Library: check the SDLC Catalog section for its installed version.</p>

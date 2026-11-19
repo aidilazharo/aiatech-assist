@@ -1,3 +1,13 @@
+# ATGV AIATECH Assist v0.4.25
+
+- Check published BRs and linked Jira items after opening a project; remove unavailable records from active lists while preserving recoverable copies.
+- Restore saved records automatically when Jira makes them visible again; skip drafts, pending publications, network errors and missing project permissions.
+- Download releases anonymously from the public distribution repositories or the existing public source repositories, without a release-download PAT.
+- Compare releases from both sources and show the latest published extension and Library versions on Start.
+- Supply public distribution workflows that mirror checksum-verified extension and Library releases using each target repository's GitHub Actions token.
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.24
 
 - Add an optional **Release Download PAT** control under Settings → Extension & SDLC Library Updates.

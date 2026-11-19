@@ -90,6 +90,16 @@ test('an explicitly verified release becomes active ahead of an equal-version Gi
   assert.equal(selected.offline,true);assert.equal((await catalog.activeRoot(workspace)).releaseTag,'v1.1.16-source-build.9');
  }finally{catalog.gitInstalled=original;}
 });
+test('the public distribution repository can supply a verified archive for the canonical Library',async t=>{
+ const workspace=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-public-library-'));t.after(()=>fs.rm(workspace,{recursive:true,force:true}));
+ const file=path.join(workspace,'source.zip'),repositoryUrl='https://github.com/aidilazharo/tech-stacks-skills';
+ await fs.writeFile(file,zip(catalogFiles('Public Library release')));
+ const selected=await library.importZip({workspace,file,repositoryUrl,verifiedRelease:{repository:'aidilazharo/library',tag:'v1.1.16-source-build.9'}});
+ assert.equal(selected.repository,'aidilazharo/tech-stacks-skills');
+ assert.equal(selected.releaseRepository,'aidilazharo/library');
+ assert.equal((await library.imported(workspace,repositoryUrl)).releaseTag,'v1.1.16-source-build.9');
+ await assert.rejects(library.importZip({workspace,file,repositoryUrl,verifiedRelease:{repository:'untrusted/library',tag:'v1.1.16-source-build.10'}}),/Invalid verified Library release identity/);
+});
 function release(repo,tag,files){return {tag_name:tag,draft:false,html_url:`https://github.com/${repo}/releases/tag/${tag}`,assets:files.map((name,i)=>({name,size:100,url:`https://api.github.com/repos/${repo}/releases/assets/${i+1}`}))};}
 test('extension and library lookups compare a stable release with newer prereleases',async()=>{
  const stableLib=release(libUpdates.REPO,'v1.1.15',['tech-stacks-skills-1.1.15-source.zip','library-source.sha256']);
