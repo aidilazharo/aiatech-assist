@@ -74,6 +74,7 @@ test('real BA conflicts still require human decision, without falsely claiming t
  ]}),'Approve or reject project initiation.');
  assert.equal(result.ready,false);
  assert.ok(result.blockers.length);
- assert.match(host,/ATGV_BUSINESS_CONFLICT/);
- assert.match(host,/Saved section mappings remain available for Resume AI Mapping/);
+ assert.match(host,/crossConflicts\.push\(/);
+ assert.match(host,/needsAnalystReview\?'needs-review':'ready'/);
+ assert.match(host,/Business-rule finding in/);
 });
