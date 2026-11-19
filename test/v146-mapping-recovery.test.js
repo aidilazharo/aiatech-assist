@@ -31,6 +31,8 @@ function mappingHarness(aiAnswer,opts={}){
   discoveryImport:{...discoveryModule,createMappingPrompt(doc){return opts.realPrompt?discoveryModule.createMappingPrompt(doc):'Map'},parseMappingResponse(answer){return JSON.parse(answer)}},
   baDocumentPreflight,
   baLargeDocumentRecovery:require('../src/ba-large-document-recovery'),
+  baTimeoutSimplified:require('../src/ba-timeout-simplified'),
+  async uiWarning(){return undefined;},
   baPreflightReports:require('../src/ba-preflight-report'),
   baWorkingBr:{...require('../src/ba-working-br'),async store(_registry,_project,sourceDigest){return {filename:'test.md',digest:'f'.repeat(64),sourceDigest}}},
   documentPreflightSessions:new Map(),
