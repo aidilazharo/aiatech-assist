@@ -113,3 +113,39 @@ test('v442: all role/workspace commands use one journal with no unguarded replay
  assert.match(ui,/function renderAtgvJobs\(/);
  assert.match(ui,/retryWorkflowJob/);
 });
+
+test('v442: resumed AI workflow restores only independently verified completed stages',async t=>{
+ const {engine}=await sandbox(t);
+ const inputHash=fingerprint('unchanged model + source + prompt version');
+ let firstStage=0,lastStage=0;
+ const localArtifact={reviewed:true,requirement:'BR-001'};
+ const stageOne={id:'evidence',inputHash:fingerprint('evidence-v1'),
+  execute:async()=>{firstStage++;return localArtifact;},
+  restore:async()=>localArtifact};
+ const stageTwo={id:'review',inputHash:fingerprint('review-v1'),
+  execute:async()=>{lastStage++;if(lastStage===1)throw Error('Provider unavailable');return {approved:false,reviewRequired:true};}};
+ await assert.rejects(engine.runStages('tech-cockpit',{command:'processDiscoverySources',inputHash,
+  stages:[stageOne,stageTwo],retry:{maxAttempts:1}}),/Provider unavailable/);
+ const [failed]=await engine.list('tech-cockpit');
+ assert.equal(failed.status,'failed');assert.equal(firstStage,1);
+ const done=await engine.runStages('tech-cockpit',{command:'processDiscoverySources',inputHash,
+  resumeJobId:failed.id,stages:[stageOne,stageTwo],retry:{maxAttempts:1}});
+ assert.deepEqual(done.restored,['evidence']);
+ assert.equal(firstStage,1,'persisted artifact must avoid redundant AI calls');
+ assert.equal(lastStage,2);
+ assert.equal((await engine.list('tech-cockpit'))[0].status,'completed');
+});
+test('v442: changed source evidence blocks replay and modified stored artifact fails closed',async t=>{
+ const {engine}=await sandbox(t);
+ const inputHash=fingerprint('source-1'),artifact={id:'one'};
+ const rows=[{id:'extract',inputHash:fingerprint('source-A'),execute:async()=>artifact,restore:async()=>({id:'tampered'})},
+  {id:'review',inputHash:fingerprint('source-B'),execute:async()=>{throw Error('Retry later');}}];
+ await assert.rejects(engine.runStages('tech-cockpit',{command:'generateBusinessRequirements',inputHash,stages:rows,retry:{maxAttempts:1}}),/Retry later/);
+ const [record]=await engine.list('tech-cockpit');
+ await assert.rejects(engine.runStages('tech-cockpit',{command:'generateBusinessRequirements',inputHash:fingerprint('changed source'),
+  resumeJobId:record.id,stages:rows,retry:{maxAttempts:1}}),/changed/);
+ await assert.rejects(engine.runStages('tech-cockpit',{command:'generateBusinessRequirements',inputHash,
+  resumeJobId:record.id,stages:rows,retry:{maxAttempts:1}}),/changed or is incomplete/);
+ const [failed]=await engine.list('tech-cockpit');
+ assert.equal(failed.status,'failed');
+});
