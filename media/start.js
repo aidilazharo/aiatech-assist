@@ -7871,7 +7871,7 @@ function updateStartupIssueSummary(){
  const checks=startupPermissions?.checks||[...startupPermissionProgress.values()];
  const permissionIssues=checks.filter(check=>check.ok===false).length;
  const stackIssues=startupScanComplete?(startupStackData?.stacks||[]).filter(stack=>!stack.ready).length:0;
- const copilotIssue=startupScanComplete&&$('startupCopilotCard')?.dataset?.progressState==='error'?1:0;
+ const copilotIssue=0; // Optional hidden SDK must not count as a blocking startup issue.
  const connectionIssues=[...startupConnectionCheckResults.values()].filter(check=>check.state==='error'||check.state==='offline').length;
  const count=permissionIssues+stackIssues+copilotIssue+connectionIssues;
  node.textContent=count?`${count} ${count===1?'check needs':'checks need'} attention`:'';
@@ -8320,10 +8320,20 @@ $('startupProceed').addEventListener('click',()=>{
 });
 window.addEventListener('message',event=>{
  const message=event.data||{};
- if(message.type==='startupSavedFields'&&!startupFormInitialized){
-  const saved=message.saved||{};
-  for(const [key,id] of Object.entries(startupFieldMap))if(!$(id).value)$(id).value=saved[key]||'';
-  updateHeaderUserName(saved.email);
+ if(message.type==='startupSavedFields'){
+  if(!startupFormInitialized){
+   const saved=message.saved||{};
+   for(const [key,id] of Object.entries(startupFieldMap))if(!$(id).value)$(id).value=saved[key]||'';
+   updateHeaderUserName(saved.email);
+  }
+  // Start scanning as soon as the host confirms the webview is ready,
+  // without waiting for the larger project and credential state payload.
+  if(!startupPrereqRequested){
+   startupPrereqRequested=true;
+   renderStartupScanPlaceholders();
+   startupScanPercent(0,'Starting prerequisite scan…');
+   send('startupReadiness');
+  }
  }
  if(message.type==='state'&&message.startupSetup)renderStartupConfig(message.startupSetup);
  if(message.type==='startupReadinessProgress'){
