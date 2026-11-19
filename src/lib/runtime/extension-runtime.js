@@ -2178,14 +2178,14 @@ async function processSelectedDiscoverySources(msg){
      }
      if(!result&&(run.preflightOffline||run.skipAiChecks)){
       result=baLargeDocumentRecovery.preflight(section.text);run.sourceOnlyPreflight=true;
-      if(checkpoint){saveCheckpointEntry(checkpoint,'preflight',promptKey,baLargeDocumentRecovery.checkpointRecord('preflight'),60);await persistCheckpoint();}
+      if(checkpoint){saveCheckpointEntry(checkpoint,'preflight',promptKey,baLargeDocumentRecovery.checkpointRecord('preflight'),100);await persistCheckpoint();}
      }
      const maxNetworkAttempts=baLargeDocumentRecovery.attempts('preflight',!!run.largeSource,!!run.recoveryTarget);
      for(let networkAttempt=1;!result&&networkAttempt<=maxNetworkAttempts;networkAttempt++){
       try{
        const ai=await requestSourcePreflight(target,prompt,run);
        check();result=baDocumentPreflight.parse(ai,section.text);
-       if(result.ready&&checkpoint){saveCheckpointEntry(checkpoint,'preflight',promptKey,ai,60);await persistCheckpoint();}
+       if(result.ready&&checkpoint){saveCheckpointEntry(checkpoint,'preflight',promptKey,ai,100);await persistCheckpoint();}
        break;
       }catch(error){
        check();
@@ -2193,7 +2193,7 @@ async function processSelectedDiscoverySources(msg){
        if(timedOut&&await offerSimpleDraftAfterTimeout(run,error)){
         run.preflightOffline=true;run.sourceOnlyPreflight=true;run.mappingOffline=true;
         result=baLargeDocumentRecovery.preflight(section.text);
-        if(checkpoint){saveCheckpointEntry(checkpoint,'preflight',promptKey,baLargeDocumentRecovery.checkpointRecord('preflight'),60);await persistCheckpoint();}
+        if(checkpoint){saveCheckpointEntry(checkpoint,'preflight',promptKey,baLargeDocumentRecovery.checkpointRecord('preflight'),100);await persistCheckpoint();}
         break;
        }
        if(!trySourceAIFallback(run,error))throw error;
@@ -2205,7 +2205,7 @@ async function processSelectedDiscoverySources(msg){
        if(run.largeSource){
         run.preflightOffline=true;run.sourceOnlyPreflight=true;
         result=baLargeDocumentRecovery.preflight(section.text);
-        if(checkpoint){saveCheckpointEntry(checkpoint,'preflight',promptKey,baLargeDocumentRecovery.checkpointRecord('preflight'),60);await persistCheckpoint();}
+        if(checkpoint){saveCheckpointEntry(checkpoint,'preflight',promptKey,baLargeDocumentRecovery.checkpointRecord('preflight'),100);await persistCheckpoint();}
         await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'AI preflight unavailable. Continuing with source-only review; AI quality checks are NOT verified and BA review is required.'});
         break;
        }
@@ -2264,7 +2264,7 @@ async function processSelectedDiscoverySources(msg){
     if(!proposals&&(run.mappingOffline||run.skipAiChecks)){
      proposals=baLargeDocumentRecovery.mapping(doc.text,{section:part+1,totalSections:sections.length});
      sourceOnlyMappingPart=true;
-     if(checkpoint){saveCheckpointEntry(checkpoint,'mapping',mappingKey,baLargeDocumentRecovery.checkpointRecord('mapping'),30);await persistCheckpoint();}
+     if(checkpoint){saveCheckpointEntry(checkpoint,'mapping',mappingKey,baLargeDocumentRecovery.checkpointRecord('mapping'),80);await persistCheckpoint();}
     }
     if(!proposals){
      const maxMappingAttempts=baLargeDocumentRecovery.attempts('mapping',!!run.largeSource,!!run.recoveryTarget);
@@ -2275,14 +2275,14 @@ async function processSelectedDiscoverySources(msg){
        const answer=await requestSourceAI(target,responsePrompt,run,{maxChars:run.largeSource?30000:95000,timeoutMs:baLargeDocumentRecovery.timeout('mapping',!!run.largeSource)});
        check();
        proposals=discoveryImport.parseMappingResponse(answer);
-       if(checkpoint){saveCheckpointEntry(checkpoint,'mapping',mappingKey,answer,30);await persistCheckpoint();}
+       if(checkpoint){saveCheckpointEntry(checkpoint,'mapping',mappingKey,answer,80);await persistCheckpoint();}
        break;
       }catch(error){
        check();
        if(baTimeoutSimplified.timedOut(error)&&await offerSimpleDraftAfterTimeout(run,error)){
         run.mappingOffline=true;sourceOnlyMappingPart=true;run.preflightOffline=true;run.sourceOnlyPreflight=true;
         proposals=baLargeDocumentRecovery.mapping(doc.text,{section:part+1,totalSections:sections.length});
-        if(checkpoint){saveCheckpointEntry(checkpoint,'mapping',mappingKey,baLargeDocumentRecovery.checkpointRecord('mapping'),30);await persistCheckpoint();}
+        if(checkpoint){saveCheckpointEntry(checkpoint,'mapping',mappingKey,baLargeDocumentRecovery.checkpointRecord('mapping'),80);await persistCheckpoint();}
         break;
        }
        if(!trySourceAIFallback(run,error))throw error;
@@ -2290,7 +2290,7 @@ async function processSelectedDiscoverySources(msg){
         if(!run.largeSource)throw Error(doc.name+label+': AI mapping could not recover safely after '+attempt+' attempt(s). '+String(error.message||error).slice(0,260)+' Completed sections remain saved for Resume AI Mapping.');
         run.mappingOffline=true;sourceOnlyMappingPart=true;
         proposals=baLargeDocumentRecovery.mapping(doc.text,{section:part+1,totalSections:sections.length});
-        if(checkpoint){saveCheckpointEntry(checkpoint,'mapping',mappingKey,baLargeDocumentRecovery.checkpointRecord('mapping'),30);await persistCheckpoint();}
+        if(checkpoint){saveCheckpointEntry(checkpoint,'mapping',mappingKey,baLargeDocumentRecovery.checkpointRecord('mapping'),80);await persistCheckpoint();}
         await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'AI mapping timed out. Continuing source-only extraction, with full source retained and BA review required.'});
         break;
        }
