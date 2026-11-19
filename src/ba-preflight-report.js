@@ -7,9 +7,9 @@ const clean=(value,limit=5000)=>String(value??'').replace(/\0/g,'').replace(/\r\
 const trimList=(items,n=30)=>Array.isArray(items)?items.slice(0,n).filter(x=>x&&typeof x==='object'):[];
 function create(projectId,documents){
  if(!projectId||!Array.isArray(documents)||!documents.length)throw Error('Preflight report needs a project and source document.');
- const names=documents.filter(x=>x?.digest&&x?.name).slice(0,10).map(x=>({name:clean(x.name,180),digest:clean(x.digest,80)}));
+ const names=documents.filter(x=>x?.digest&&x?.name).slice(0,10).map(x=>({name:clean(x.name,180),digest:clean(x.digest,80),byteDigest:/^[a-f0-9]{64}$/i.test(String(x.byteDigest||''))?String(x.byteDigest):''}));
  if(!names.length)throw Error('No verified source document available for the preflight report.');
- return {projectId:clean(projectId,100),startedAt:new Date().toISOString(),state:'checking',source:'session',documents:names,entries:[],error:'',crossSectionChecked:false};
+ return {projectId:clean(projectId,100),startedAt:new Date().toISOString(),state:'checking',source:'session',documents:names,entries:[],workingBRs:[],error:'',crossSectionChecked:false};
 }
 function capture(session,{digest,sourceName,section,totalSections,attempt,report}){
  if(!session||!report||!session.documents.some(x=>x.digest===digest))throw Error('Unrecognized preflight source.');
@@ -24,6 +24,11 @@ function finish(session,{state='completed',error='',crossSectionChecked=false}={
  if(!session)throw Error('Missing preflight report.');
  session.state=state;session.error=clean(error,3000);session.crossSectionChecked=crossSectionChecked===true;return session;
 }
+function attachWorkingBR(session,{digest,ref,checks}){
+ if(!session?.documents?.some(doc=>doc.digest===digest))throw Error('Unrecognized working BR source.');
+ session.workingBRs=(session.workingBRs||[]).filter(item=>item.digest!==digest);
+ session.workingBRs.push({digest,ref,checks:Array.isArray(checks)?checks.slice(0,12):[]});return session;
+}
 function fromSaved(projectId,documents,saved){
  const available=(saved||[]).filter(item=>documents.some(doc=>doc.digest===item.digest));
  if(!available.length)return null;
@@ -32,9 +37,11 @@ function fromSaved(projectId,documents,saved){
  session.startedAt=clean(available[0].checkedAt,60)||session.startedAt;
  session.crossSectionChecked=available.every(x=>x.crossSectionChecked===true);
  for(const entry of available){
-  session.entries.push({digest:entry.digest,sourceName:session.documents.find(x=>x.digest===entry.digest)?.name||'',section:null,totalSections:null,attempt:null,
-   at:clean(entry.checkedAt,60),status:clean(entry.status,50)||'ready',summary:clean(entry.summary,1000),
-   applied:trimList(entry.applied,12),skipped:[],issues:trimList(entry.issues,20),resolutions:trimList(entry.resolutions,12)});
+  if(entry.workingBR)attachWorkingBR(session,{digest:entry.digest,ref:entry.workingBR,checks:entry.checks});
+  const parts=Array.isArray(entry.sections)&&entry.sections.length?entry.sections:[entry];
+  for(const [index,part] of parts.entries())session.entries.push({digest:entry.digest,sourceName:session.documents.find(x=>x.digest===entry.digest)?.name||'',section:parts[0]===entry?null:index+1,totalSections:parts[0]===entry?null:parts.length,attempt:null,
+   at:clean(entry.checkedAt,60),status:clean(part.status,50)||'ready',summary:clean(part.summary,1000),
+   applied:trimList(part.applied,12),skipped:trimList(part.skipped,12),issues:trimList(part.issues,20),resolutions:trimList(part.resolutions,12)});
  }
  return session;
 }
@@ -58,10 +65,48 @@ function format(session,{generatedAt=new Date().toISOString()}={}){
  for(const document of session.documents){
   const entries=session.entries.filter(x=>x.digest===document.digest);
   if(!entries.length)continue;
-  write('-'.repeat(70),'DOCUMENT: '+clean(document.name,180),'Source SHA-256: '+clean(document.digest,80),
+  write('-'.repeat(70),'DOCUMENT: '+clean(document.name,180),'Extracted text SHA-256: '+clean(document.digest,80),
+   'Original file SHA-256: '+(document.byteDigest||'Not recorded for this upload'),
    'Recorded section checks: '+entries.length,'');
+  write('CORRECTIONS AND CHANGES BASED ON THE ORIGINAL DOCUMENT',
+   'Original uploaded file: UNCHANGED. Any text corrections below apply only to preflight working text.',
+   'Unapplied suggestions and provisional mapping guidance are not approved requirements.','');
+  const locations=entries.map(part=>part.section==null?'Saved aggregate summary':'Section '+part.section+'/'+part.totalSections+(part.attempt==null?' - Final check':' - Attempt '+part.attempt+'/2'));
+  const corrections=entries.flatMap((part,index)=>trimList(part.applied,12).map(item=>({item,where:locations[index],ready:part.status==='ready'})));
+  write('RECORDED WORKING-TEXT CORRECTIONS: '+corrections.length);
+  if(!corrections.length)write('  None. No automatic source text correction was recorded.');
+  for(const [i,{item,where,ready}] of corrections.entries())write('  '+(i+1)+'. '+where,
+   '     Original text: '+(clean(item.before,500)||'(not recorded)'),
+   '     Working text after correction: '+(clean(item.after,500)||'(not recorded)'),
+   '     Reason: '+(clean(item.reason,500)||'(not recorded)'),
+   '     Status: '+(session.state==='completed'&&ready?'Used in the working BR sent to mapping.':'Working text prepared; mapping from this check is not confirmed.'));
+  const proposals=entries.flatMap((part,index)=>trimList(part.skipped,12).map(item=>({item,where:locations[index]})));
+  write('PROPOSED TEXT CHANGES NOT APPLIED: '+proposals.length);
+  if(!proposals.length)write('  None.');
+  for(const [i,{item,where}] of proposals.entries())write('  '+(i+1)+'. '+where,
+   '     '+(item.sourceVerified?'Verified original text: ':'Proposed original text (not verified): ')+(clean(item.before,500)||'(not recorded)'),
+   '     Proposed replacement: '+(clean(item.after,500)||'(not recorded)'),
+   '     Reason suggested: '+(clean(item.reason,500)||'(not recorded)'),
+   '     Status: NOT APPLIED; the suggested correction did not pass validation.');
+  const guidance=entries.flatMap((part,index)=>trimList(part.resolutions,12).map(item=>({item,where:locations[index],ready:part.status==='ready'})));
+  write('PROVISIONAL MAPPING GUIDANCE: '+guidance.length);
+  if(!guidance.length)write('  None.');
+  for(const [i,{item,where,ready}] of guidance.entries())write('  '+(i+1)+'. '+where,
+   '     Original excerpt: '+(clean(item.sourceExcerpt,300)||'No verified quotation available.'),
+   '     Finding (AI description): '+(clean(item.issue,1000)||'(not recorded)'),
+   '     Proposed guidance: '+(clean(item.resolution,5000)||'(not recorded)'),
+   '     Basis: '+(clean(item.standard,800)||'(not recorded)'),
+   '     Status: '+(session.state==='completed'&&ready?'Provided as provisional mapping guidance; review resulting answers.':'Provisional only; mapping from this check is not confirmed.'));
+  const working=(session.workingBRs||[]).find(item=>item.digest===document.digest);
+  write('','WORKING BR VALIDATION');
+  if(working?.checks?.length){
+   for(const check of working.checks)write('  '+clean(check.label,200)+': '+clean(check.status,30));
+   write('  Working document SHA-256: '+clean(working.ref?.digest,80));
+  }else write('  Working BR validation was not recorded for this report.');
+  write('  Application and acceptance tests: NOT RUN; these require an implemented application.');
+  write('');
   for(const [index,part] of entries.entries()){
-   const sectionLabel=part.section==null?'Saved aggregate summary':'Section '+part.section+'/'+part.totalSections+' - Attempt '+part.attempt+'/2';
+   const sectionLabel=locations[index];
    write('CHECK '+(index+1)+': '+sectionLabel,'Checked at: '+clean(part.at,80),
     'Result: '+clean(part.status,60).toUpperCase(),'Summary: '+clean(part.summary,1000)||'(none)','');
    const applied=trimList(part.applied,12),skipped=trimList(part.skipped,12),recommendations=trimList(part.resolutions,12),issues=trimList(part.issues,20);
@@ -69,7 +114,7 @@ function format(session,{generatedAt=new Date().toISOString()}={}){
    if(applied.length)for(const [i,item] of applied.entries())write('  '+(i+1)+'. Before: '+clean(item.before,500),'     After: '+clean(item.after,500),'     Reason: '+clean(item.reason,500));
    else write('  None. Original file not modified.');
    if(skipped.length){write('UNAPPLIED CORRECTION PROPOSALS: '+skipped.length);
-    for(const [i,item] of skipped.entries())write('  '+(i+1)+'. '+clean(item.before,500),'     Reason: '+clean(item.reason,500));}
+    for(const [i,item] of skipped.entries())write('  '+(i+1)+'. '+clean(item.before,500),'     Proposed replacement: '+clean(item.after,500),'     Reason: '+clean(item.reason,500));}
    write('PROVISIONAL INDUSTRY-STANDARD RECOMMENDATIONS: '+recommendations.length);
    if(!recommendations.length)write('  None.');
    for(const [i,item] of recommendations.entries()){
@@ -87,4 +132,4 @@ function format(session,{generatedAt=new Date().toISOString()}={}){
  }
  return line.join('\n').replace(/\n*$/,'\n');
 }
-module.exports={create,capture,finish,fromSaved,filename,format};
+module.exports={create,capture,attachWorkingBR,finish,fromSaved,filename,format};

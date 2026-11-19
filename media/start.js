@@ -4990,6 +4990,8 @@ function renderSourcePreflight(){
  panel.classList.toggle('hidden',!info);
  const download=$('baPreflightDownload');
  if(download){const available=!!(info?.reportAvailable||(savedCurrent&&!baPreflightInfo));download.classList.toggle('hidden',!info);download.disabled=!available||!activeId;}
+ const workingDownload=$('baWorkingBrDownload');
+ if(workingDownload){const available=!!(savedCurrent&&saved?.workingBR);workingDownload.classList.toggle('hidden',!available);workingDownload.disabled=!available||!activeId;}
  const retry=$('baPreflightRetry');
  if(retry){const showRetry=hasDedicatedPreflightRecovery();retry.classList.toggle('hidden',!showRetry);retry.disabled=!showRetry||!brState||!sourceSelectedDigests.size||selectedRole!=='business-analyst'||!activeId;}
  if(!info)return;
@@ -5002,7 +5004,7 @@ function renderSourcePreflight(){
  $('baSourcePreflightCounts').textContent=`${fixes} safe text correction(s) · ${(info.resolutions||[]).length} industry-standard recommendation(s) · ${risks} warning(s) · Original unchanged`;
  const detail=$('baSourcePreflightFindings');detail.replaceChildren();
  for(const fix of (info.applied||[]).slice(0,5)){
-  const li=document.createElement('li');li.textContent=`Auto-corrected: “${String(fix.before||'').slice(0,90)}” → “${String(fix.after||'').slice(0,90)}”`;detail.append(li);
+  const li=document.createElement('li');li.textContent=`Working BR: “${String(fix.before||'').slice(0,90)}” → “${String(fix.after||'').slice(0,90)}”`;detail.append(li);
  }
  for(const item of (info.resolutions||[]).slice(0,8)){
   const li=document.createElement('li');li.textContent='AI default ('+item.standard+', provisional): '+item.resolution;detail.append(li);
@@ -5017,6 +5019,10 @@ $('baPreflightDownload').addEventListener('click',()=>{
  if(button.disabled||!activeId)return;
  button.disabled=true;
  send('downloadDocumentPreflight',{projectId:activeId});
+});
+$('baWorkingBrDownload').addEventListener('click',()=>{
+ if($('baWorkingBrDownload').disabled||!activeId)return;
+ $('baWorkingBrDownload').disabled=true;send('downloadWorkingBR',{projectId:activeId});
 });
 function renderSourceDocuments(){
  const root=$('sourceDocuments');root.replaceChildren();
@@ -6787,6 +6793,11 @@ window.addEventListener('message',event=>{
    if(m.error)status('Pre-flight report download failed: '+m.error,true);
    else if(m.saved)status('AI document pre-flight report saved as '+(m.filename||'a text file')+'.');
   }
+  if(m.type==='discoveryWorkingBRDownloadResult'&&m.projectId===activeId){
+   renderSourcePreflight();
+   if(m.error)status('Working BR download failed: '+m.error,true);
+   else if(m.saved)status('AI-updated working BR saved as '+(m.filename||'a Markdown document')+'.');
+  }
   if(m.type==='discoverySourceRemoveCancelled'){sourceRemoving=false;renderSourceDocuments();}
   if(m.type==='discoverySourceRemoved'){sourceRemoving=false;discoveryImportQueue=[];discoveryImportProposal=null;renderDiscoveryImportProposal();status(`${m.filename} ${m.action==='archived'?'archived':'deleted as unused upload'}. Approved BRs and Jira unchanged.${m.storedCleanupWarning?' Stored upload cleanup failed: '+m.storedCleanupWarning:''}`);}
   if(m.type==='discoveryUploadedSourceDeleted'){baPreflightInfo=null;sourceRemoving=false;sourceSelectedDigests.clear();discoveryImportQueue=[];discoveryImportProposal=null;renderDiscoveryImportProposal();status(`${m.filename} and ${(m.deletedBrIds||[]).length} linked BR(s) deleted from ATGV. Remote Jira/Confluence unchanged.${m.storedCleanupWarning?' Stored copy cleanup failed: '+m.storedCleanupWarning:''}${m.brExportCleanupWarning?' BR file cleanup failed: '+m.brExportCleanupWarning:''}`,!!(m.storedCleanupWarning||m.brExportCleanupWarning));}
@@ -7515,11 +7526,12 @@ function setStartupCopilotStatus(state,message){
  $('startupCopilotStatus').textContent=message;
  $('startupCopilotStatus').className='startup-copilot-status '+(state==='ready'?'success':state==='error'||state==='unsupported'?'error':'muted');
  const card=$('startupCopilotCard'),badge=$('startupCopilotBadge');
- badge.textContent=startupCopilotBusy?'Setting up…':state==='ready'?'Installed':state==='unsupported'?'Update required':state==='error'?'Setup failed':'Needs setup';
+ badge.textContent=startupCopilotBusy?'Setting up…':state==='ready'?'Ready':state==='unsupported'?'Update required':state==='error'?'Setup failed':'Needs setup';
  card.classList.toggle('is-ready',state==='ready');card.classList.toggle('is-missing',state==='error'||state==='unsupported'||state==='available');
  card.setAttribute('aria-label','GitHub Copilot SDK: '+badge.textContent);
  if(typeof startupRing==='function'&&!card._atgvProgress)startupRing(card);
  if(typeof paintStartupStack==='function')paintStartupStack(card,{id:'copilot-sdk',name:'GitHub Copilot SDK',percent:state==='ready'?100:state==='working'?45:0,status:state==='ready'?'complete':state==='working'?'running':'error',message:badge.textContent});
+ if(typeof updateStartupIssueSummary==='function')updateStartupIssueSummary();
 }
 function openStartupCopilotModal(){
  startupCopilotPriorFocus=document.activeElement;startupCopilotModalOpen=true;
@@ -7543,6 +7555,15 @@ function startupScanPercent(percent,message){
  $('startupScanToolTrack').setAttribute('aria-valuenow',String(value));
  $('startupScanToolTrack').setAttribute('aria-valuetext',String(message||'Checking tools'));
  $('startupScanToolName').textContent=message||'Checking tools…';
+}
+function updateStartupIssueSummary(){
+ const node=$('startupScanSummaryIssues');if(!node)return;
+ const checks=startupPermissions?.checks||[...startupPermissionProgress.values()];
+ const permissionIssues=checks.filter(check=>check.ok===false).length;
+ const stackIssues=startupScanComplete?(startupStackData?.stacks||[]).filter(stack=>!stack.ready).length:0;
+ const copilotIssue=startupScanComplete&&$('startupCopilotCard')?.dataset?.progressState==='error'?1:0;
+ const count=permissionIssues+stackIssues+copilotIssue;
+ node.textContent=count?`${count} ${count===1?'check needs':'checks need'} attention`:'';
 }
 function startupRing(card){
  const ring=document.createElement('span');ring.className='atgv-stack-ring';ring.setAttribute('role','progressbar');
@@ -7581,15 +7602,20 @@ function renderStartupScanPlaceholders(){
 }
 function startupPayload(){return Object.fromEntries(Object.entries(startupFieldMap).map(([key,id])=>[key,$(id).value.trim()]));}
 function renderStartupPermissionRows(checks){
- const root=$('startupPermissionChecks');root.replaceChildren();
+ const root=$('startupPermissionChecks');
+ const expanded=new Set([...root.querySelectorAll('.atgv-permission-row[open]')].map(row=>row.dataset.checkId));
+ root.replaceChildren();
+ const shortLabels={workspace:'Workspace',folders:'Project folders',extension:'Extension',library:'SDLC Library'};
  for(const check of checks||[]){
-  const row=document.createElement('div');row.className='atgv-permission-row atgv-permission-step';row.dataset.state=check.ok?'ready':'error';
-  startupRing(row);
-  paintStartupStack(row,{name:check.label||'Permission',status:check.ok?'complete':'error',percent:check.ok?100:0,message:check.detail||''});
-  const summary=document.createElement('div');summary.className='atgv-permission-copy';
-  const title=document.createElement('strong');title.textContent=String(check.label||'Permission')+': '+(check.ok?'Ready':'Needs attention');
-  const detail=document.createElement('small');detail.textContent=String(check.detail||'');summary.append(title,detail);row.append(summary);root.append(row);
+  const row=document.createElement('details');row.className='atgv-permission-row';row.dataset.state=check.ok?'ready':'error';row.dataset.checkId=String(check.id||'');row.open=expanded.has(row.dataset.checkId);
+  const summary=document.createElement('summary');summary.className='atgv-permission-step';
+  const title=document.createElement('strong');title.className='atgv-permission-label';title.textContent=shortLabels[check.id]||String(check.label||'Permission');summary.append(title);
+  startupRing(summary);
+  paintStartupStack(summary,{name:check.label||'Permission',status:check.ok?'complete':'error',percent:check.ok?100:0,message:check.detail||''});
+  const status=document.createElement('span');status.className='atgv-permission-status';status.textContent=check.ok?'Ready':'Needs attention';summary.append(status);
+  const detail=document.createElement('p');detail.className='atgv-permission-detail';detail.textContent=String(check.detail||'No additional details.');row.append(summary,detail);root.append(row);
  }
+ updateStartupIssueSummary();
 }
 function renderStartupPermissions(result){
  startupPermissions=result;renderStartupPermissionRows(result?.checks||[]);
@@ -7704,12 +7730,13 @@ function renderStartupStackReadiness(result){
   const card=document.createElement('button');card.type='button';card.className='atgv-startup-stack atgv-startup-stack-button atgv-stack-ring-card '+(stack.ready?'is-ready':'is-missing');card.dataset.stackId=stack.id;
   card.setAttribute('aria-haspopup','dialog');card.setAttribute('aria-controls','startupStackModal');
   const title=document.createElement('span');title.textContent=stack.name;
-  const badge=document.createElement('span');badge.className='atgv-stack-ready';badge.textContent=stack.hostRequirementsUnknown?'Host check unavailable':stack.ready?'Host tools available':'Needs tools';
+  const badge=document.createElement('span');badge.className='atgv-stack-ready';badge.textContent=stack.hostRequirementsUnknown?'Unavailable':stack.ready?'Ready':'Needs tools';
   card.setAttribute('aria-label',stack.name+': '+badge.textContent+'. View host tools and project modules');
   card.append(title);startupRing(card);card.append(badge);
   paintStartupStack(card,startupStackProgress.get(stack.id)||{name:stack.name,status:stack.ready?'complete':'error',percent:stack.ready?100:0,message:badge.textContent});
   card.addEventListener('click',()=>{if(startupAutoEnabled)stopStartupAuto('Automatic opening paused while reviewing the stack.');openStartupStackModal(stack.id,card);});grid.append(card);
  }
+ if(typeof updateStartupIssueSummary==='function')updateStartupIssueSummary();
  if(startupOpenStackId){
   const stack=result.stacks.find(item=>item.id===startupOpenStackId);
   if(stack){const content=$('startupStackModalContent'),scrollTop=content.scrollTop;renderStartupStackDetails(stack);content.scrollTop=scrollTop;}
@@ -7836,18 +7863,21 @@ $('startupCopilotSetup').addEventListener('click',()=>{
 for(const id of ['startupUnifiedLog','gateUnifiedLog'])$(id).addEventListener('click',()=>send('startupExportUnifiedLog'));
 $('startupAutoPause').addEventListener('click',()=>stopStartupAuto());
 $('gateAutoPause').addEventListener('click',()=>stopStartupAuto());
+$('startupPrerequisiteDetails').addEventListener('toggle',()=>{
+ if($('startupPrerequisiteDetails').open&&startupAutoEnabled)stopStartupAuto('Automatic opening paused while reviewing prerequisites.');
+});
 $('startupRefresh').addEventListener('click',()=>{
  if(startupInstallingModule)return;
  if(startupAutoEnabled)stopStartupAuto('Automatic opening paused while checks are refreshed.');
  startupPermissions=null;startupPermissionProgress.clear();renderStartupScanPlaceholders();
- startupScanComplete=false;
+ startupScanComplete=false;updateStartupIssueSummary();
  startupScanPercent(0,'Refreshing local computer prerequisites…');
  $('startupToolMessage').textContent='Refreshing local computer prerequisites…';
  $('startupRefresh').disabled=true;renderStartupPage();send('startupReadiness');
 });
 $('startupPrevious').addEventListener('click',()=>{
  if(startupAutoEnabled)stopStartupAuto();
- if(startupPage===1&&!startupVerifying&&!startupInstallingModule){startupPage=0;renderStartupPage();}
+ if(startupPage===1&&!startupVerifying&&!startupInstallingModule){startupPage=0;$('startupPrerequisiteDetails').open=false;renderStartupPage();}
 });
 $('startupEmail').addEventListener('input',()=>updateHeaderUserName(read('startupEmail')));
 $('startupConnectionForm').addEventListener('submit',event=>{
