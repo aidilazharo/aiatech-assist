@@ -1,3 +1,13 @@
+# ATGV AIATECH Assist v0.4.38
+
+- Fix the visible “Review & Acknowledge Findings” button remaining unclickable after AI Review is recorded. Stale client ownership and readiness state no longer silently disable it.
+- Validate active BR operations, saved discovery revisions and all 12 answers on click; explain missing or unsaved data instead of an inert button.
+- Keep server-side verified Business Analyst identity, immutable approval gates and explicit modal acknowledgement for unresolved findings; no automatic BR/Jira approval or publishing.
+- Restore the review button and controls after cancelled acknowledgement or failed host validation, without resetting mapping checkpoints or requiring document re-upload.
+- Add regression coverage for saved-review acknowledgement, incomplete answers, busy processing and completion cancellation.
+ 
+## Previous release
+
 # ATGV AIATECH Assist v0.4.37
 
 - Add confirmed Skip AI Preflight · Source-Only recovery for blocked AI checks, preserving the original source, marking AI verification unverified and retaining human BR/Jira approval gates.

@@ -5172,7 +5172,43 @@ $('baNewRequirement').addEventListener('click',beginNewBusinessRequirement);
 $('baStartMyWork').addEventListener('click',()=>{navigate('sdlc-roles');send('deliveryRefresh');send('roleHandoffOwners');});
 $('baStartSolutionDesigns').addEventListener('click',()=>navigate('planning'));
 $('baStartSDLCReadiness').addEventListener('click',()=>navigate('flow'));
-$('baReviewFinish').addEventListener('click',()=>{if($('baReviewFinish').disabled)return;baBusy('confirmReview','Completing AI Review…');send('confirmDiscoveryReview');});
+// The review confirmation is an explicit BA action, not an implicit status
+// transition. Keep it clickable when cached UI ownership or readiness is stale;
+// show a precise reason instead of silently swallowing clicks. The host always
+// revalidates saved answers, current review and verified BA identity.
+function confirmSavedBAReview(){
+ if(baBusyTask){
+  status('Another Business Requirements operation is still running ('+baBusyTask+'). Finish or stop it before confirming AI Review.',true);
+  return;
+ }
+ if(discoveryImportBusy){
+  status('Document mapping is still running. Finish or stop mapping before confirming AI Review.',true);
+  return;
+ }
+ if(!activeId||selectedRole!=='business-analyst'){
+  status('Open Business Analyst · My Work for this project before confirming the review.',true);
+  return;
+ }
+ if(!brState?.reviewRevision||brState.reviewRevision!==brState.discoveryRevision){
+  status('The AI Review is no longer current. Save your discovery answers and run AI Review again.',true);
+  return;
+ }
+ if(discoveryDirty||discoveryAutosaving){
+  status('Save the edited discovery answers before confirming AI Review. The saved review cannot be applied to unsaved changes.',true);
+  return;
+ }
+ const readiness=currentDiscoveryReadiness();
+ if(readiness.filled!==readiness.total){
+  const missing=(readiness.missing||[]).slice(0,3).map(x=>x.label).filter(Boolean);
+  status('Complete and save all 12 discovery answers before confirming AI Review ('+readiness.filled+'/'+readiness.total+' complete'+(missing.length?'; missing: '+missing.join(', '):'')+').',true);
+  return;
+ }
+ // The host verifies the current identity directly; a delayed owner poll must
+ // not make this visibly available action impossible to click.
+ baBusy('confirmReview','Verifying saved AI findings and Business Analyst identity…');
+ send('confirmDiscoveryReview',{projectId:activeId,discoveryRevision:brState.discoveryRevision});
+}
+$('baReviewFinish').addEventListener('click',confirmSavedBAReview);
 $('baOpenChangeProposal').addEventListener('click',()=>{baShowChangeProposal=!baShowChangeProposal;renderDiscoverySummary();if(baShowChangeProposal){const pane=document.querySelector('.change-proposal-panel');pane.open=true;pane.scrollIntoView({block:'start',behavior:'smooth'});}});
 $('sourceProcessSubmit').addEventListener('click',()=>{
  if($('sourceProcessSubmit').disabled||!brState)return;
@@ -5576,7 +5612,11 @@ function renderBAButtons(){
  finish.textContent=unresolvedFindings?'Review & Acknowledge Findings':'Confirm AI Review & Continue';
  finish.title=current.filled!==current.total?'Complete and save all 12 answers, then re-run AI Review.':unresolvedFindings?'Review source evidence and explicitly acknowledge the unresolved AI findings. Does not approve BRs.':'Record human confirmation of the current AI Review.';
  finish.classList.toggle('hidden',!reviewCurrent||baReviewFinalized()&&!unresolvedFindings);
- finish.disabled=!!baBusyTask||!mine||!reviewCurrent||discoveryDirty||current.filled!==current.total;
+ // Never silently disable a visible acknowledgement because of a stale
+ // ownership cache or readiness badge. The handler explains prerequisites,
+ // and the host checks permissions and saved revisions before any write.
+ finish.disabled=baBusyTask==='confirmReview';
+ finish.setAttribute('aria-disabled',finish.disabled?'true':'false');
  const legacySources=(brState?.sourceDocuments||[]).filter(source=>(brState?.processedSources||[]).includes(source.digest)&&!/^[a-f0-9]{64}$/.test(String(source.byteDigest||'')));
  $('brLegacySourceRecovery').classList.toggle('hidden',!legacySources.length);
  $('brReuploadOriginalSource').disabled=!legacySources.length||!!baBusyTask||discoveryImportBusy||selectedRole!=='business-analyst'||!activeId;
@@ -6756,6 +6796,14 @@ window.addEventListener('message',event=>{
   if(m.type==='knowledgeSyncProgress'){$('knowledgeSyncStatus').textContent=m.message||'Syncing…';$('overviewKnowledgeStatus').textContent=m.message||'Syncing…';return;}
   if(m.type==='knowledgeSyncResult'){$('knowledgeSync').disabled=false;$('overviewKnowledgeSync').disabled=false;renderKnowledgeState(m.summary||{});$('knowledgeSyncStatus').textContent=m.message+(m.errors?.length?' · '+m.errors.map(e=>e.source+': '+e.message).join(' · '):'');$('overviewKnowledgeStatus').textContent=$('knowledgeSyncStatus').textContent;return;}
   if(m.type==='baOwners'){if(m.projectId===activeId){baOwnerState=m;renderBAOwner();renderBRs();}return;}
+  if(m.type==='baReviewConfirmResult'){
+    // Cancelled consent, failed Jira verification or a saved-answer mismatch
+    // must not strand the entire BA interface in a permanent busy state.
+    if(baBusyTask==='confirmReview')baBusy('',m.message||'AI Review confirmation ended.');
+    if(!m.success)status(m.message||'AI Review was not confirmed; you can retry without deleting the document.',!m.cancelled);
+    renderDiscoverySummary();
+    return;
+  }
  if(m.type==='brUpdated'){
     if(baBusyTask==='skipReview'){reviewApplyRetry=null;reviewApplyRetryAvailable=false;}
     if(baBusyTask==='generate')stageProgress('generate','Business Requirement documents generated.',100);
