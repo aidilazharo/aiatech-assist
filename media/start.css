@@ -2233,7 +2233,6 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
  color:var(--vscode-disabledForeground,#989898)!important;
  cursor:not-allowed;opacity:1
 }
-#startupSetup.atgv-connection-step .atgv-startup-footer{display:none!important}
 .br-workflow-panel[data-step="generate"] .br-toolbar,
 .br-workflow-panel[data-step="generate"] #brCards,
 .br-workflow-panel[data-step="generate"] #brImpactSummary{display:none!important}
