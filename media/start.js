@@ -7008,6 +7008,16 @@ window.addEventListener('message',event=>{
   if(m.type==='openingStart'){gateError='';gateOfflineAvailable=false;spaces=[];jiraProjects=[];gateSearchId=null;settingsSearchId=null;gateSearched=false;$('gateSearchMessage').textContent='';showGate();status('');}
   if(m.type==='openingProgress'){gateOpeningPercent(m.percent,m.message);$('gateProgress').classList.toggle('hidden',m.stage==='done');}
   if(m.type==='openingError'){gateBusy=false;gateError=m.message||'Could not open project.';gateOfflineAvailable=!!m.canOffline;gateOpeningPercent(0,'Project opening failed: '+gateError);renderGate();}
+  if(m.type==='navigationRefreshState'&&m.projectId===activeId&&m.requestId===navigationRefreshRequestId){
+    if(m.mapping?.running){
+      mappingRunPhase=String(m.mapping.phase||'preparing');
+      if(!discoveryImportBusy)setDiscoveryImportBusy(true,'Background AI document mapping is continuing. You can return to other screens while it works.');
+    }
+    // A completed job is handled by its own completion event and not restarted
+    // merely because an older menu-refresh response arrives.
+    if(view==='discovery')renderDiscoverySummary();
+    if(view==='work'&&selectedRole==='project-manager')renderPMDashboard();
+  }
   if(m.type==='state')updateState(m);
   if(m.type==='notice'){
     if(m.error&&view==='discovery'&&baBusyTask==='saveDiscovery'){discoveryAutosaving=false;discoveryAutosaveSnapshot=null;}
