@@ -240,7 +240,7 @@ function baHasRecoverableBR(state){
 let jiraPublishState={phase:'idle',confirmed:0,total:0,message:'No Jira publication is running.',currentKey:'',error:''};
 let jiraPublicationPlan=[],jiraPublicationConfirmed=new Map();
 let jiraPreviewFieldsByPath={};
-let jiraPlanForCR=[],jiraProtectionForCR=[],jiraPreviewIssueTypes={},jiraPreviewProject='',discoveryAutosaving=false,discoveryAutosaveSnapshot=null;
+let jiraPlanForCR=[],jiraLinkCandidates=[],jiraProtectionForCR=[],jiraPreviewIssueTypes={},jiraPreviewProject='',discoveryAutosaving=false,discoveryAutosaveSnapshot=null;
 let brRoleRepairPreview=null,brRoleRepairBusy=false;
 let mappingRunPhase='',mappingRetryAvailable=false,mappingFailureMessage='',mappingFailurePhase='',baPreflightInfo=null,reviewStopReason='',restoredMappingEpoch=null,sourceSelectedDigests=new Set(),jiraBrowseBaseUrl='',discoveryData=null,discoveryDirty=false,discoveryImportProposal=null,discoveryImportQueue=[],discoveryImportBusy=false,sourceRemoving=false,discoveryReviewProposal=null,preserveReviewOnSave=false,applyingAiReview=false,flowData=null,brState=null,brEditing=null,brPlanRevision=null,brJiraPreviewApproved=false,brQuill=null,brReadOnly=false,baOwnerState=null,baBusyTask='',brEditorDirty=false,brEditorSaving=false,brApprovePending=false,brJiraPlanChanges=0,brJiraPlanConflicts=0,pendingUploadAfterClaim=false,reviewApplyRetry=null,reviewApplyPhase='',reviewApplyRetryAvailable=false,reviewStageState=null;
 let mappingResumeAvailable=false;
@@ -4958,13 +4958,35 @@ function jiraKeyNode(key){
  if(linked){node.href=base+'/browse/'+encodeURIComponent(value);node.target='_blank';node.rel='noopener noreferrer';node.title='Open Jira issue '+value;}
  return node;
 }
+function jiraLinkCandidate(entry){
+ return entry?.action==='create'?jiraLinkCandidates.find(item=>item.path===entry.path):null;
+}
+function jiraFixLinkButton(path,key){
+ const fix=brElement('button','secondary jira-link-repair-action','Fix Jira Link');
+ fix.type='button';fix.title='Verify the existing Jira issue and restore its ATGV link without creating, changing or deleting an issue.';
+ fix.setAttribute('aria-label','Fix Jira link for '+key+' · '+path);
+ fix.addEventListener('click',()=>{
+  if(!brPlanRevision||baBusyTask||fix.disabled)return;
+  fix.disabled=true;fix.textContent='Verifying…';
+  baBusy('jiraFixLink','Verifying Jira link '+key+'…');
+  send('brJiraFixLink',{revision:brPlanRevision,path,key});
+ });
+ return fix;
+}
+function jiraDetailsActions(entry,readOnly=false){
+ const group=document.createElement('div');group.className='jira-preview-row-actions';
+ group.append(jiraDetailsButton(entry,readOnly));
+ const candidate=jiraLinkCandidate(entry);
+ if(candidate)group.append(jiraFixLinkButton(entry.path,candidate.key));
+ return group;
+}
 function renderJiraApprovalTable(){
  const root=$('brJiraApprovalTable');if(!root)return;
  const rows=jiraPlanForCR.map(entry=>({action:String(entry.action||'').toUpperCase(),kind:entry.kind||'Issue',type:jiraPreviewIssueTypes[entry.path]||'Not verified',path:entry.path||'',title:entry.title||'',key:entry.key||'—',approval:entry.requiresApproval?'Approval required':'Standard',entry}));
  ATGVDataTables.mount(root,rows,[
   {key:'action',label:'Action'},{key:'kind',label:'ATGV type'},{key:'type',label:'Jira type'},{key:'path',label:'BR path'},{key:'title',label:'Summary'},{key:'key',label:'Existing Jira key',render:row=>jiraKeyNode(row.key)},{key:'approval',label:'Approval'},
-  {key:'details',label:'Details',sortable:false,render:row=>jiraDetailsButton(row.entry,true)}
- ],{label:'Jira preview items awaiting approval',pageSize:5});
+  {key:'details',label:'Details',sortable:false,render:row=>jiraDetailsActions(row.entry,true)}
+ ],{label:'Jira preview items awaiting approval',pageSize:5,pinFirst:row=>!!jiraLinkCandidate(row.entry)});
 }
 function closeJiraIssuePreview(){
  const dialog=$('brJiraIssueModal');if(!dialog)return;
@@ -6987,7 +7009,7 @@ window.addEventListener('message',event=>{
     status('Existing Jira '+m.key+' linked to '+m.path+'. No Jira issue was created or changed.');
   }
   if(m.type==='brJiraPlan'){baFailedProcess='';baFailedMessage='';
-    stageProgress('jiraPreview','JIRA preview generated.',100);baBusy('',null);brPlanRevision=m.revision;jiraPlanForCR=m.changes||[];jiraPreviewIssueTypes=m.issueTypes||{};jiraPreviewProject=m.jiraProject||'';jiraPreviewFieldsByPath=m.fieldPlans||{};jiraProtectionForCR=m.protection||[];brJiraPreviewApproved=false;brJiraPlanChanges=(m.changes||[]).length;brJiraPlanConflicts=(m.conflicts||[]).length;
+    stageProgress('jiraPreview','JIRA preview generated.',100);baBusy('',null);brPlanRevision=m.revision;jiraPlanForCR=m.changes||[];jiraLinkCandidates=Array.isArray(m.linkCandidates)?m.linkCandidates.filter(row=>row&&typeof row.path==='string'&&/^[A-Z][A-Z0-9_]{1,20}-\d{1,12}$/.test(String(row.key||''))):[];jiraPreviewIssueTypes=m.issueTypes||{};jiraPreviewProject=m.jiraProject||'';jiraPreviewFieldsByPath=m.fieldPlans||{};jiraProtectionForCR=m.protection||[];brJiraPreviewApproved=false;brJiraPlanChanges=(m.changes||[]).length;brJiraPlanConflicts=(m.conflicts||[]).length;
     jiraPublicationPlan=[];jiraPublicationConfirmed.clear();renderJiraApprovalTable();
     for(const id of ['brJiraDetailsPanel','brJiraApprovalDetails']){$(id).classList.add('hidden');$(id).replaceChildren();}
     const box=$('brJiraChanges');box.replaceChildren();box.classList.remove('hidden');
@@ -6995,8 +7017,8 @@ window.addEventListener('message',event=>{
     box.append(brElement('h3','',count+' Jira changes'));
     ATGVDataTables.mount(box,(m.changes||[]).map(entry=>({action:String(entry.action||'').toUpperCase(),kind:entry.kind||'Issue',type:jiraPreviewIssueTypes[entry.path]||'Not verified',path:entry.path||'',title:entry.title||'',key:entry.key||'—',approval:entry.requiresApproval?'Approval required':'Standard',entry})),[
      {key:'action',label:'Action'},{key:'kind',label:'ATGV type'},{key:'type',label:'Jira type'},{key:'path',label:'BR path'},{key:'title',label:'Summary'},{key:'key',label:'Existing Jira key',render:row=>jiraKeyNode(row.key)},{key:'approval',label:'Approval'},
-     {key:'details',label:'Details',sortable:false,render:row=>jiraDetailsButton(row.entry)}
-    ],{label:'Jira change preview',pageSize:5});
+     {key:'details',label:'Details',sortable:false,render:row=>jiraDetailsActions(row.entry)}
+    ],{label:'Jira change preview',pageSize:5,pinFirst:row=>!!jiraLinkCandidate(row.entry)});
     const conflicts=$('brJiraConflicts');conflicts.replaceChildren();conflicts.classList.toggle('hidden',!(m.conflicts||[]).length);
     for(const message of m.conflicts||[]){
       const row=brElement('div','jira-link-repair-row');
