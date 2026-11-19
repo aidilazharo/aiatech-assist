@@ -57,7 +57,7 @@ test('ATGV start keeps manual discovery available until the webview is ready',as
  assert.equal(env.startupScan.status,'complete');
  assert.match(env.startupScan.message,/Choose a project/);
  assert.equal(env.activeProject,null);
- assert.deepEqual(messages.map(m=>m.type),['startupScan','refresh']);
+ assert.deepEqual(messages.map(m=>m.type),['startupSavedFields','startupScan','refresh']);
 });
 
 test('manual project opening remains available alongside guarded automatic resume',()=>{
