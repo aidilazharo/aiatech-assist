@@ -6,7 +6,7 @@ const {validProjectKey}=require('./remote-actions');
 const {htmlToText}=require('./utils');
 const escape=value=>String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const clean=(value,n=180)=>String(value||'').trim().slice(0,n);
-const ROLES=Object.freeze({'business-analyst':'Business Analyst','solution-architect':'Solution Architect','ux-designer':'UI/UX Designer','software-developer':'Developer','project-manager':'Project Manager'});
+const ROLES=Object.freeze({'business-analyst':'Business Analyst','solution-architect':'Solution Architect','ux-designer':'UI/UX Designer','software-developer':'Developer','project-manager':'Project Manager','qa-engineer':'QA Engineer','uat-tester':'UAT Tester'});
 function displayName(email,preferred=''){
  const name=clean(preferred);
  if(name)return name;

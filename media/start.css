@@ -2171,3 +2171,11 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 .atgv-connection-log-entry[data-status="ok"] .atgv-connection-log-status,.atgv-connection-log-entry[data-status="verified"] .atgv-connection-log-status{color:var(--vscode-testing-iconPassed,#6abb80)}
 .atgv-connection-log-entry p{font-size:12px;line-height:1.5;margin:5px 0 2px}
 .atgv-connection-log-entry small{font-size:11px}
+
+
+/* BR workflow troubleshooting download sits beside Previous Step, not Next Step. */
+#discoveryView #baNextStepRow .ba-process-log-btn{flex:0 0 34px;min-width:34px;min-height:34px;width:34px;height:34px;padding:6px;display:inline-flex;align-items:center;justify-content:center}
+#discoveryView #baNextStepRow .ba-process-log-btn svg{height:17px;width:17px;pointer-events:none}
+#discoveryView #baNextStepRow .ba-process-log-status{max-width:min(300px,32vw);font-size:11px;overflow-wrap:anywhere;white-space:normal}
+#discoveryView #baNextStepRow #baNextStep{margin-left:auto}
+@media(max-width:720px){#discoveryView #baNextStepRow{flex-wrap:wrap}#discoveryView #baNextStepRow .ba-process-log-status{flex-basis:100%;max-width:100%;order:3}}

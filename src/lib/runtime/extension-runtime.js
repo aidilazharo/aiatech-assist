@@ -32,7 +32,9 @@ const discoveryImport=require('../../discovery-import');
 const baDocumentPreflight=require('../../ba-document-preflight');
 const baMappingCheckpoint=require('../../ba-mapping-checkpoint');
 const baLargeDocumentRecovery=require('../../ba-large-document-recovery');
+const baTimeoutSimplified=require('../../ba-timeout-simplified');
 const baPreflightReports=require('../../ba-preflight-report');
+const baProcessDiagnostics=require('../../ba-process-diagnostics');
 const baWorkingBr=require('../../ba-working-br');
 const discoveryReview=require('../../discovery-review');
 const brWorkflow=require('../../br-workflow');
@@ -66,6 +68,7 @@ const jiraControl=require('../../jira-change-control');
 const jiraDuplicates=require('../../jira-duplicate-cleanup');
 const jiraFieldPreflight=require('../../jira-field-preflight');
 const jiraProjectInventory=require('../../jira-project-inventory');
+const pmJiraAssignment=require('../../pm-jira-assignment');
 const jiraItemEditor=require('../../jira-item-editor');
 const sourceStore=require('../../source-store');
 const {evaluate:continuityEvaluate}=require('../../continuity');
@@ -137,6 +140,39 @@ let startupSessionVerified=false;
 let startupSessionProceedApproved=false;
 let startupVerifiedSignature='';
 let startupPermissionsState=null,startupReadinessState=null,startupReadinessSequence=0;
+function isBAProcessCommand(command){
+ return /^(?:br[A-Z]|ba[A-Z]|discovery[A-Z]|importDiscovery|processDiscoverySources|updateSourceDocuments|downloadWorkingBR|downloadDocumentPreflight|deleteBREverywhere|stopDiscoverySourceMapping|restartUncompletedBusinessRequirement|startOrRestartBusinessRequirements)/.test(String(command||''))&&
+  command!=='baDownloadProcessLog';
+}
+async function recordBAProcess(event){
+ const projectId=activeProject?.id;
+ if(!projectId||!context?.globalStorageUri?.fsPath)return;
+ try{await baProcessDiagnostics.append(context.globalStorageUri.fsPath,projectId,event);}
+ catch(error){report('BA process log write unavailable: '+String(error.code||'IO error'));}
+}
+async function exportBAProcessLog(projectId){
+ requireOpened();
+ if(projectId!==activeProject?.id)throw Error('The project changed. Reopen its Business Requirements page.');
+ const register=await brWorkflow.load(registry,projectId);
+ const events=await baProcessDiagnostics.read(context.globalStorageUri.fsPath,projectId);
+ let checkpoint=null;
+ try{
+  const folder=path.join(path.dirname(registry.fileFor(projectId)),'documents','requirements','ai-resume');
+  const pending=await fs.readdir(folder);
+  const digests=new Set((register.sourceDocuments||[]).map(source=>source.digest));
+  if(pending.some(name=>/^[a-f0-9]{64}\.json$/.test(name)&&digests.has(name.slice(0,64))))checkpoint={present:true};
+ }catch(error){if(error.code!=='ENOENT')report('BA checkpoint listing unavailable: '+String(error.code||error.message).slice(0,100));}
+ const content=baProcessDiagnostics.exportText({projectId,events,register,checkpoint});
+ const target=await vscode.window.showSaveDialog({
+  title:'Save Complete Business Requirements Troubleshooting Log',
+  defaultUri:vscode.Uri.file(path.join(require('node:os').homedir(),'ATGV-BR-Process-'+projectId+'-'+new Date().toISOString().slice(0,10)+'.txt')),
+  filters:{'Plain text':['txt']},saveLabel:'Download BR Process Log'
+ });
+ if(!target)return {cancelled:true};
+ if(projectId!==activeProject?.id)throw Error('The project changed during log export. Retry from the current project.');
+ await vscode.workspace.fs.writeFile(target,Buffer.from(content,'utf8'));
+ return {saved:true,filename:path.basename(target.fsPath)};
+}
 async function recordStartupDiagnostic(entry){
  try{return await startupDiagnostics.append(context.globalStorageUri.fsPath,entry);}
  catch(error){report('Startup diagnostic write failed: '+error.message);return null;}
@@ -2025,6 +2061,16 @@ async function requestSourceAI(target,prompt,run,{maxChars=20000,timeoutMs=SOURC
  try{return await Promise.race([aiAnswer(run.useRecovery&&run.recoveryTarget?run.recoveryTarget:target,prompt,maxChars,{json:true,signal:child.signal,timeoutMs}),cancelled]);}
  finally{clearTimeout(timer);parent.removeEventListener('abort',onStop);}
 }
+async function offerSimpleDraftAfterTimeout(run,error){
+ return baTimeoutSimplified.registerTimeout(run,error,async ({message,button})=>{
+  const answer=await uiWarning(message,{modal:true},button);
+  const approved=answer===button;
+  await recordBAProcess({stage:'ai-timeout',action:approved?'simplified-draft-opted-in':'simplified-draft-declined',
+   status:approved?'needs-review':'retry-available',details:'Three timeout failures; user choice recorded. Business approval and Jira safeguards remain required.'});
+  if(approved)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Simplified source-backed Jira draft selected. All remaining AI quality checks are unverified; BA approval remains required.'});
+  return approved;
+ });
+}
 async function requestSourcePreflight(target,prompt,run){
  return requestSourceAI(target,prompt,run,{maxChars:run.largeSource?11000:20000,timeoutMs:baLargeDocumentRecovery.timeout('preflight',!!run.largeSource)});
 }
@@ -2065,8 +2111,10 @@ async function processSelectedDiscoverySources(msg){
   for(let i=0;i<readable.length;i++){
    check();
    const source=readable[i];
+   await recordBAProcess({stage:'upload',action:'source-selected',status:'processing',
+    details:'Sectioned source selected for AI mapping; document text not recorded.'});
    run.largeSource=baLargeDocumentRecovery.isLargeDocument(source.text.length);
-   run.preflightOffline=false;run.mappingOffline=false;run.sourceOnlyPreflight=false;
+   run.preflightOffline=!!run.skipAiChecks;run.mappingOffline=!!run.skipAiChecks;run.sourceOnlyPreflight=!!run.skipAiChecks;
    let sections=discoveryImport.splitDocumentText(source.text);
    const smallerSections=discoveryImport.splitDocumentText(source.text,12000);
    if(smallerSections.length<=25)sections=smallerSections;
@@ -2117,7 +2165,7 @@ async function processSelectedDiscoverySources(msg){
       }
       if(result)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Resuming: using saved '+(result.degraded?'source-only review':'AI preflight')+' for '+source.name+label+'…'});
      }
-     if(!result&&run.preflightOffline){
+     if(!result&&(run.preflightOffline||run.skipAiChecks)){
       result=baLargeDocumentRecovery.preflight(section.text);run.sourceOnlyPreflight=true;
       if(checkpoint){saveCheckpointEntry(checkpoint,'preflight',promptKey,baLargeDocumentRecovery.checkpointRecord('preflight'),60);await persistCheckpoint();}
      }
@@ -2130,7 +2178,13 @@ async function processSelectedDiscoverySources(msg){
        break;
       }catch(error){
        check();
-       const timedOut=error.code==='ATGV_SOURCE_AI_TIMEOUT'||error.name==='TimeoutError'||/\btimed?\s*out\b|\btimeout\b/i.test(String(error.message||error));
+       const timedOut=baTimeoutSimplified.timedOut(error);
+       if(timedOut&&await offerSimpleDraftAfterTimeout(run,error)){
+        run.preflightOffline=true;run.sourceOnlyPreflight=true;run.mappingOffline=true;
+        result=baLargeDocumentRecovery.preflight(section.text);
+        if(checkpoint){saveCheckpointEntry(checkpoint,'preflight',promptKey,baLargeDocumentRecovery.checkpointRecord('preflight'),60);await persistCheckpoint();}
+        break;
+       }
        if(!trySourceAIFallback(run,error))throw error;
        if(!run.largeSource&&networkAttempt===1&&attempt===1&&preflightSplitRecoveries===0&&section.text.length>4000){
         const parts=discoveryImport.splitDocumentText(section.text,Math.max(2000,Math.floor(section.text.length/2)));
@@ -2175,6 +2229,9 @@ async function processSelectedDiscoverySources(msg){
      throw Error(source.name+label+': document needs Business Analyst clarification before mapping. '+problem+' Original document preserved; no unsupported requirements invented.');
     }
     reports.push(result);
+    await recordBAProcess({stage:'preflight',action:'section-'+(part+1)+'-of-'+sections.length,
+     status:result.degraded?'ai-unverified':result.ready?'passed':'needs-review',
+     details:'Preflight section '+(result.degraded?'used source-only recovery':'processed')+'.'});
    }
    // Complete and validate every section before using the working BR for mapping.
    check();run.phase='preflight';
@@ -2203,7 +2260,7 @@ async function processSelectedDiscoverySources(msg){
      }else{try{proposals=discoveryImport.parseMappingResponse(checkpoint.mapping[mappingKey]);}catch{}}
      if(proposals)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'Resuming: using completed '+(sourceOnlyMappingPart?'source-only extraction (BA review required)':'AI mapping')+' for '+doc.name+label+'…'});
     }
-    if(!proposals&&run.mappingOffline){
+    if(!proposals&&(run.mappingOffline||run.skipAiChecks)){
      proposals=baLargeDocumentRecovery.mapping(doc.text,{section:part+1,totalSections:sections.length});
      sourceOnlyMappingPart=true;
      if(checkpoint){saveCheckpointEntry(checkpoint,'mapping',mappingKey,baLargeDocumentRecovery.checkpointRecord('mapping'),30);await persistCheckpoint();}
@@ -2221,6 +2278,12 @@ async function processSelectedDiscoverySources(msg){
        break;
       }catch(error){
        check();
+       if(baTimeoutSimplified.timedOut(error)&&await offerSimpleDraftAfterTimeout(run,error)){
+        run.mappingOffline=true;sourceOnlyMappingPart=true;run.preflightOffline=true;run.sourceOnlyPreflight=true;
+        proposals=baLargeDocumentRecovery.mapping(doc.text,{section:part+1,totalSections:sections.length});
+        if(checkpoint){saveCheckpointEntry(checkpoint,'mapping',mappingKey,baLargeDocumentRecovery.checkpointRecord('mapping'),30);await persistCheckpoint();}
+        break;
+       }
        if(!trySourceAIFallback(run,error))throw error;
        if(attempt===maxMappingAttempts){
         if(!run.largeSource)throw Error(doc.name+label+': AI mapping could not recover safely after '+attempt+' attempt(s). '+String(error.message||error).slice(0,260)+' Completed sections remain saved for Resume AI Mapping.');
@@ -2240,6 +2303,9 @@ async function processSelectedDiscoverySources(msg){
      }
     }
     partAnswers.push(proposals);
+    await recordBAProcess({stage:'mapping',action:'section-'+(part+1)+'-of-'+sections.length,
+     status:sourceOnlyMappingPart?'source-only-review-required':'mapped',
+     details:sourceOnlyMappingPart?'AI mapping unavailable; literal source extraction used.':'AI mapping completed.'});
     await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'Mapped '+(i+1)+'/'+readable.length+' document(s), section '+(part+1)+'/'+sections.length+'. Validating results…'});
    }
    const proposals=discoveryImport.mergeMappingAnswers(partAnswers);
@@ -2266,22 +2332,28 @@ async function processSelectedDiscoverySources(msg){
       crossSectionChecked=true;crossError=null;break;
      }catch(error){
       check();
-      if(error.code==='ATGV_BUSINESS_CONFLICT'||!trySourceAIFallback(run,error))throw error;
+      if(error.code==='ATGV_BUSINESS_CONFLICT')throw error;
+      if(baTimeoutSimplified.timedOut(error)&&await offerSimpleDraftAfterTimeout(run,error)){
+       run.mappingOffline=true;run.sourceOnlyPreflight=true;crossError=error;break;
+      }
+      if(!trySourceAIFallback(run,error))throw error;
       crossError=error;
       if(attempt<maxCrossAttempts)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Cross-section AI review was interrupted. Retrying ('+attempt+'/'+maxCrossAttempts+')'+(run.useRecovery?' with Microsoft Copilot SDK':'')+' without restarting the document…'});
      }
     }
     }
     if(crossError){
-     if(!run.largeSource)throw Error(source.name+': cross-section review could not complete after recovery attempts. '+String(crossError.message||crossError).slice(0,240)+' Saved section mappings remain available for Resume AI Mapping.');
+     if(!run.largeSource&&!run.skipAiChecks)throw Error(source.name+': cross-section review could not complete after recovery attempts. '+String(crossError.message||crossError).slice(0,240)+' Saved section mappings remain available for Resume AI Mapping.');
      await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Cross-section AI review is NOT VERIFIED due to provider errors or request size. Draft mapping is retained and requires Business Analyst review.'});
     }
    }
    // Aggregate evidence from every source section, with bounded UI/report
    // metadata. All sections must pass before the atomic mapping commit.
+   await recordBAProcess({stage:'cross-section',action:'consistency-review',status:crossSectionChecked?'verified':'not-verified',
+    details:'Cross-section AI check '+(crossSectionChecked?'completed':'not verified; BA review required')+'.'});
    const partialVerification=run.sourceOnlyPreflight||run.mappingOffline||(sections.length>1&&!crossSectionChecked);
    const reviewIssues=partialVerification?[{severity:'warning',category:'ai-verification',detail:'One or more AI analysis stages could not be verified. Source-only extraction and full original document are available; BA review is required before approval.',sourceExcerpt:'',suggestion:'Review all source-backed requirements and open decisions before approving or publishing.'}]:[];
-   const report={status:partialVerification?'needs-review':'ready',crossSectionChecked,summary:partialVerification?'Source-only recovery completed; AI validation is incomplete. The uploaded original and full working BR were preserved. BA review required.':sections.length>1?'All '+sections.length+' document sections and their mapped claims were reviewed; source remains unchanged.':reports[0].summary,
+   const report={status:partialVerification?'needs-review':'ready',crossSectionChecked,summary:run.skipAiChecks?baTimeoutSimplified.MARKER+'. Source-only recovery completed; all AI checks are unverified and BA review is required.':partialVerification?'Source-only recovery completed; AI validation is incomplete. The uploaded original and full working BR were preserved. BA review required.':sections.length>1?'All '+sections.length+' document sections and their mapped claims were reviewed; source remains unchanged.':reports[0].summary,
     applied:reports.flatMap(x=>x.applied).slice(0,12),
     skipped:reports.flatMap(x=>x.skipped||[]).slice(0,12),
     issues:[...reports.flatMap(x=>x.issues),...reviewIssues].slice(0,16),
@@ -2292,6 +2364,8 @@ async function processSelectedDiscoverySources(msg){
   check();run.phase='committing';
   await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'committing',message:'Saving complete mapping atomically. Cancellation is disabled during this step…'});
   const latest=await brWorkflow.commitSourceMapping(registry,run.projectId,original.revision,{digests:selected,proposals:mappedProposals,preflights});
+  await recordBAProcess({stage:'mapping',action:'save-mapping',status:'committed',
+    details:'Mapped discovery and preflight evidence saved to requirements register.'});
   for(const digest of selected)try{await baMappingCheckpoint.remove(registry,run.projectId,digest);}catch(error){report('Completed AI checkpoint cleanup: '+String(error.message||error));}
   try{await context.workspaceState.update('atgvAssist.baMappingResume.'+run.projectId,undefined);}catch(error){report('Completed AI resume marker cleanup: '+String(error.message||error));}
   for(const key of successfulSourceMappings.keys())if(key.startsWith(run.projectId+'|'))successfulSourceMappings.delete(key);
@@ -2903,6 +2977,23 @@ async function generateBusinessRequirements(options={}){
  }
  const focused=options.selective===true?staleDrafts.map(b=>b.id):null;
  if(options.selective&&!focused?.length)throw Error('No outdated Business Requirements drafts are eligible for selective regeneration.');
+ if(baTimeoutSimplified.isSimplifiedEvidence(register)){
+  if(!review.skipped)throw Error('Simplified Jira drafts require the Business Analyst to select Skip AI Review and acknowledge that AI verification was incomplete.');
+  if(options.selective)throw Error('Simplified draft generation does not support selective regeneration. Review the complete source.');
+  const proceed=await uiWarning('Create a simplified source-only BR draft for subsequent Jira Epic, Stories and Tasks?\n\nAcceptance criteria and AI quality checks will be marked NOT VERIFIED. This does not publish Jira or bypass mandatory BR approval. Review all source statements and approve the draft before publishing.',{modal:true},'Create Simple Draft');
+  if(proceed!=='Create Simple Draft')return;
+  const source=register.sourceDocuments.find(row=>(register.processedSources||[]).includes(row.digest));
+  if(!source)throw Error('Verified source document is required for simplified BR generation.');
+  const verified=await sourceStore.read(registry,activeProject.id,source);
+  const proposal=baTimeoutSimplified.simpleProposal({name:source.name,text:verified.text,answers:saved.answers});
+  const currentSaved=await discovery.load(registry,activeProject.id);
+  if(currentSaved.revision!==saved.revision)throw Error('Discovery changed during simplified BR generation.');
+  const updated=await brWorkflow.generated(registry,activeProject.id,register.revision,{discoveryRevision:saved.revision,requirements:proposal,riskAccepted:false,actor:await verifiedBAActor()});
+  await recordBAProcess({stage:'generate',action:'source-only-simple-br',status:'needs-review',details:'Deterministic source-only draft generated; acceptance criteria not verified. Jira publication still requires BR approval.'});
+  await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
+  await notice('Simple BR draft created. Review and approve before publishing Jira Epic, Stories and Tasks. AI checks were skipped; no tests were run.');
+  return;
+ }
  const target=await activeAiTarget();
  // Generate Requirements is a user-initiated AI action; approval and publishing remain separate gates.
  await dashboard?.webview.postMessage({type:'baProgress',task:'generate',message:'Generating Business Requirement documents…'});
@@ -4365,11 +4456,36 @@ async function startupStackCatalog(){
  const token=await catalogToken(config,{interactive:false});
  return startupCatalogInventory.remote({config,token});
 }
+// Host processes survive screen navigation. Keep their project identity until
+// the original command settles. A project switch is deferred while mutation is
+// active because project-scoped references cannot safely be rebound mid-run.
+const activeHostProcesses=new Map();
+function isLongRunningHostProcess(command){
+ return /^(?:processDiscoverySources|generateBusinessRequirements|generateDrafts|applyDiscoveryReview|brJiraSync|brJiraPreview|brRoleTaskRepairPublish|developerBrRun|developerBrPreviewDraft|developerBrStartServer|devCopilotStart|designGenerate|designRegenerateAffected|architectCustomRun|architectRunServer|architectTestStack|architectBootstrap|architectCommit|architectPublish|architectSaveStack|catalogPull|syncDocuments|startupInstallModule|sync)$/.test(String(command||''));
+}
+function hasActiveProjectProcess(id){
+ return !!id&&([...activeHostProcesses.values()].some(job=>job.projectId===id)||activeDiscoveryMappingRun?.projectId===id);
+}
 async function handleDashboardMessage(msg){
   if(!msg||typeof msg.command!=='string')return;
+  const hostJob=activeProject?.id&&isLongRunningHostProcess(msg.command)?Symbol(msg.command):null;
+  if(hostJob)activeHostProcesses.set(hostJob,{projectId:activeProject.id,command:msg.command,startedAt:Date.now()});
+  const baAction=isBAProcessCommand(msg.command),baStarted=Date.now(),baCommand=String(msg.command);
+  let baFailure='';
   try{
     await ready;
+    if(baAction)await recordBAProcess({stage:'action',action:baCommand,status:'started',key:/^BR-\d+$/.test(String(msg.brId||''))?msg.brId:''});
     switch(msg.command){
+      case 'baDownloadProcessLog':{
+        const projectId=activeProject?.id||'';
+        try{
+          const result=await exportBAProcessLog(String(msg.projectId||''));
+          await dashboard?.webview.postMessage({type:'baProcessLogResult',projectId,...result});
+        }catch(error){
+          await dashboard?.webview.postMessage({type:'baProcessLogResult',projectId,error:String(error.message||error).slice(0,350)});
+        }
+        break;
+      }
       case 'openIssueReport':openIssueReport(String(msg.screen||''));break;
       case 'architectStopInstall':{
         if(architectInstallAbort){architectInstallAbort.abort();await dashboard?.webview.postMessage({type:'architectStackProgress',projectId:activeProject?.id,message:'Stopping the current dependency installation. Previous failed versions remain recorded.'});}
@@ -4712,7 +4828,28 @@ async function handleDashboardMessage(msg){
          }
          break;
        }
-       case 'refresh':if(!webviewCoreReady)break;await refreshLiveRemoteData({reason:'manual-refresh',force:true});await refreshDashboard();break;
+       case 'viewNavigateRefresh':{
+        requireOpened();
+        if(msg.projectId!==activeProject?.id||!webviewCoreReady)break;
+        // A screen/menu refresh is READ-ONLY. Do not replace the webview,
+        // invoke a stop handler, reset selected workflow data, or cancel jobs.
+        // The state snapshot completes without waiting on remote providers.
+        const navigationProject=activeProject.id;
+        await refreshDashboard();
+        if(navigationProject===activeProject?.id){
+          const mapping=activeDiscoveryMappingRun?.projectId===navigationProject
+            ?{running:true,phase:activeDiscoveryMappingRun.phase||'preparing'}:{running:false};
+          await dashboard?.webview.postMessage({type:'navigationRefreshState',projectId:navigationProject,
+            requestId:msg.requestId,roleId:String(msg.roleId||''),view:String(msg.view||''),mapping,
+            activeJobs:[...activeHostProcesses.values()].filter(job=>job.projectId===navigationProject).map(job=>job.command)});
+          // Revalidate external content asynchronously. The existing throttling
+          // prevents a new remote scan for every rapid menu click.
+          void refreshLiveRemoteData({reason:'menu-navigation',force:false}).catch(error=>
+            report('Menu data refresh: '+String(error.message||error).slice(0,200)));
+        }
+        break;
+      }
+      case 'refresh':if(!webviewCoreReady)break;await refreshLiveRemoteData({reason:'manual-refresh',force:true});await refreshDashboard();break;
       case 'refreshConnectedSources':{
         requireOpened();
         await refreshLiveRemoteData({reason:'view-open'});
@@ -5143,6 +5280,83 @@ async function handleDashboardMessage(msg){
         if(!/^https:\/\/[^\s]+$/.test(requested)||!requested.startsWith(site+'/browse/'))throw Error('Only the configured Jira browse URL can be opened.');
         await vscode.env.openExternal(vscode.Uri.parse(requested));break;
       }
+      case 'pmJiraAssignableUsers':
+      case 'pmJiraSetAssignee':{
+        const projectId=activeProject?.id||'',issueKey=String(msg.key||'').toUpperCase(),requestId=msg.requestId;
+        const writing=msg.command==='pmJiraSetAssignee';
+        try{
+          requireOpened();requireOnline();
+          if(!projectId||msg.projectId!==projectId)throw Error('Project changed. Reopen the Jira issue.');
+          const key=developerGit.jiraKey(issueKey),config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
+          if(!token)throw Error('Jira credentials are not connected.');
+          const projectKey=validProjectKey(config.get('jira.projectKey'));
+          const auth={token,basicEmail:String(config.get('jira.email')||'').trim()};
+          const base=baseAtlassian(config);
+          const permissions=await requestJson(base+'/rest/api/3/mypermissions?projectKey='+encodeURIComponent(projectKey)+'&permissions=ASSIGN_ISSUES',auth);
+          if(!pmJiraAssignment.canAssign(permissions))throw Error('Your Jira account needs Assign Issues permission for this project.');
+          const [issue,register,found,self]=await Promise.all([
+            jiraReadIssue(config,token,key),
+            brWorkflow.load(registry,projectId),
+            myWorkPresence.locate(config,token,projectKey),
+            requestJson(base+'/rest/api/3/myself',auth)
+          ]);
+          if(issue?.fields?.project?.key!==projectKey||!self?.accountId)throw Error('Jira issue or connected account belongs to a different project.');
+          const roster=myWorkPresence.extractRows(found.page?.body?.storage?.value||'');
+          const pm=roster.find(row=>row.id===self.accountId&&row.roles?.includes('Project Manager'));
+          if(!pm)throw Error('Project Manager role is not recorded for the connected Jira account. Open Project Manager · My Work and refresh the team roster.');
+          const item=jiraProjectInventory.normalizeIssue(issue,projectKey);
+          if(!item)throw Error('Jira issue is not accessible in this project.');
+          const role=pmJiraAssignment.roleForIssue(item,register);
+          if(!role)throw Error('This Jira Task/Subtask has no unambiguous SDLC role. Add the correct ATGV role label or repair its role mapping before assigning.');
+          let scope=null;
+          if(['br','epic'].includes(pmJiraAssignment.group(item.type))){
+            const snapshot=pmLatestSnapshot;
+            if(!snapshot||snapshot.projectId!==projectId||snapshot.projectKey!==projectKey||Date.now()-snapshot.at>600000)throw Error('Refresh the complete Project Jira Work Items table before assigning an entire BR/Epic.');
+            scope=pmJiraAssignment.plan({rootKey:key,projectKey,items:snapshot.items,register});
+          }
+          const candidates=pmJiraAssignment.rosterCandidates(roster,role);
+          if(!candidates.length&&msg.command==='pmJiraAssignableUsers')
+            throw Error('No '+role+' users are recorded in the project roster. Ask a team member to open My Work using the correct role.');
+          const targetId=writing?(msg.accountId===null?null:String(msg.accountId||'')):null;
+          if(writing&&targetId&&!candidates.some(user=>user.accountId===targetId))throw Error('Selected Jira user does not have the required '+role+' role in the project roster.');
+          // Jira explicitly verifies assignability. A roster role alone does not
+          // grant the permission to assign or make a user assignable.
+          const assignable=await requestJson(base+'/rest/api/3/user/assignable/search?issueKey='+encodeURIComponent(key)+'&maxResults=1000',auth);
+          if(!Array.isArray(assignable))throw Error('Jira did not return a valid assignable-user list.');
+          const validIds=new Set(assignable.filter(x=>x?.active!==false).map(x=>String(x.accountId||'')));
+          const eligible=candidates.filter(x=>validIds.has(x.accountId));
+          if(!writing){
+            await dashboard?.webview.postMessage({type:'pmJiraAssignableUsersResult',projectId,key,requestId,role,
+              assigneeId:item.assigneeId,users:eligible,scope:scope?{count:scope.count,excludedCount:scope.excludedCount}:null,
+              message:eligible.length?'Only role-matched, Jira-assignable team members are shown.':'No '+role+' team members are assignable in Jira. Confirm project permissions and role registration.'});
+            break;
+          }
+          if(targetId&&!eligible.some(x=>x.accountId===targetId))throw Error('Selected user is no longer Jira-assignable for this ticket. Refresh the assignee list.');
+          if(String(issue.fields?.updated||'')!==String(msg.expectedUpdated||''))throw Error('Jira issue changed. Refresh it before assigning.');
+          const targets=scope?.targets||[{key,updated:String(issue.fields.updated||''),owner:String(issue.fields.assignee?.accountId||''),type:item.type}];
+          const user=targetId?eligible.find(x=>x.accountId===targetId):null;
+          const targetLabel=targetId?user.name:'Unassigned';
+          const description=scope?'Assign '+targets.length+' development issue(s) under '+key+' to '+targetLabel+'? '+scope.excludedCount+' other-role ticket(s) will remain unchanged.':
+            'Set '+key+' ('+role+') assignee to '+targetLabel+' in Jira?';
+          const decision=await uiWarning(description+'\n\nJira will validate all selected issues and revert completed changes if an update fails.',{modal:true},'Confirm Assignment');
+          if(decision!=='Confirm Assignment'){
+            await dashboard?.webview.postMessage({type:'pmJiraAssigned',projectId,key,requestId,cancelled:true});break;
+          }
+          const result=await pmJiraAssignment.change({targets,projectKey,accountId:targetId,expectedUpdated:msg.expectedUpdated,
+            readIssue:key=>jiraReadIssue(config,token,key),
+            setAssignee:(key,accountId)=>requestJson(base+'/rest/api/3/issue/'+encodeURIComponent(key)+'/assignee',{...auth,method:'PUT',data:{accountId}})
+          });
+          pmLatestSnapshot=null; // Stale assignee state must never be trusted.
+          await recordStartupDiagnostic({stage:'pm-jira-assignment',projectId,status:'complete',tool:'Jira',detail:
+            'PM updated '+result.changed+' of '+result.count+' development/role-matched issue assignments for '+key+'; role '+role+'.'});
+          await dashboard?.webview.postMessage({type:'pmJiraAssigned',projectId,key,requestId,success:true,...result,role,excludedCount:scope?.excludedCount||0});
+        }catch(error){
+          report('PM Jira assignment failed: '+String(error.message||error).slice(0,300));
+          await dashboard?.webview.postMessage({type:writing?'pmJiraAssignmentError':'pmJiraAssignableUsersError',
+            projectId,key:issueKey,requestId,message:String(error.message||error).slice(0,450)});
+        }
+        break;
+      }
       case 'roleJiraIssueDetails':{
         requireOpened();requireOnline();
         const key=developerGit.jiraKey(msg.key),config=effectiveConfig(activeProject);
@@ -5157,7 +5371,7 @@ async function handleDashboardMessage(msg){
           const registered=await brWorkflow.load(registry,activeProject.id);
           const matched=Object.entries(registered.synced||{}).find(([,row])=>row?.key===key);
           const linkedBrId=matched?matched[0].split('/')[0]:'';
-          const value={key,linkedBrId,transitions,summary:String(fields.summary||''),description:textFromAdf(fields.description).slice(0,20000),type:String(fields.issuetype?.name||''),status:String(fields.status?.name||''),priority:String(fields.priority?.name||'Unspecified'),assignee:String(fields.assignee?.displayName||'Unassigned'),reporter:String(fields.reporter?.displayName||'Unknown'),parent:fields.parent?{key:String(fields.parent.key||''),summary:String(fields.parent.fields?.summary||'')}:null,subtasks:(fields.subtasks||[]).slice(0,150).map(sub=>({key:String(sub.key||''),summary:String(sub.fields?.summary||''),status:String(sub.fields?.status?.name||'')})),labels:(fields.labels||[]).slice(0,35).filter(x=>typeof x==='string'),created:fields.created||'',updated:fields.updated||'',dueDate:fields.duedate||'',components:(fields.components||[]).map(x=>x.name).filter(Boolean).slice(0,30),fixVersions:(fields.fixVersions||[]).map(x=>x.name).filter(Boolean).slice(0,30),url:baseAtlassian(config)+'/browse/'+encodeURIComponent(key)};
+          const value={key,linkedBrId,transitions,summary:String(fields.summary||''),description:textFromAdf(fields.description).slice(0,20000),type:String(fields.issuetype?.name||''),status:String(fields.status?.name||''),priority:String(fields.priority?.name||'Unspecified'),assignee:String(fields.assignee?.displayName||'Unassigned'),assigneeId:String(fields.assignee?.accountId||''),reporter:String(fields.reporter?.displayName||'Unknown'),parent:fields.parent?{key:String(fields.parent.key||''),summary:String(fields.parent.fields?.summary||'')}:null,subtasks:(fields.subtasks||[]).slice(0,150).map(sub=>({key:String(sub.key||''),summary:String(sub.fields?.summary||''),status:String(sub.fields?.status?.name||'')})),labels:(fields.labels||[]).slice(0,35).filter(x=>typeof x==='string'),created:fields.created||'',updated:fields.updated||'',dueDate:fields.duedate||'',components:(fields.components||[]).map(x=>x.name).filter(Boolean).slice(0,30),fixVersions:(fields.fixVersions||[]).map(x=>x.name).filter(Boolean).slice(0,30),url:baseAtlassian(config)+'/browse/'+encodeURIComponent(key)};
           await dashboard?.webview.postMessage({type:'roleJiraIssueDetails',key,requestId:msg.requestId,value});
         }catch(error){await dashboard?.webview.postMessage({type:'roleJiraIssueDetailsError',key,requestId:msg.requestId,message:String(error.message||error).slice(0,500)});}
         break;
@@ -6437,7 +6651,7 @@ async function handleDashboardMessage(msg){
                 deadline:project.schedule?.endDate,overrides:baseline.projectKey===key?baseline.estimates:{}});
               forecast.baseline={revision:baseline.revision,approvedAt:baseline.approvedAt,approvedBy:baseline.approvedBy};
               forecast.provisional=!!result.truncated||!!result.cancelled;
-            }catch(e){forecast={error:String(e.message||e)};}
+             }catch(e){forecast={error:String(e.message||e)};}
             await dashboard?.webview.postMessage({type:'projectDeliveryForecast',projectId,requestId,forecast});
             await dashboard?.webview.postMessage({type:'jiraInventoryCompleted',projectId,requestId,...result});
           }
@@ -7046,12 +7260,16 @@ async function handleDashboardMessage(msg){
         await refreshDashboard();break;
       }
       case 'openingBack':{
+        if(hasActiveProjectProcess(activeProject?.id))
+          throw Error('An ATGV process is still running. It continues while you switch screens within this project. Finish or explicitly stop it before switching projects.');
         ++startupSequence;
         if(openingLocked)throw new Error('Wait for the current step to complete.');
         openingGeneration++;openingFlow.reset();openingOffline=false;++activationEpoch;activeProject=undefined;store=undefined;tree?.refresh();
         await refreshDashboard();break;
       }
       case 'openingAuto':{
+        if(hasActiveProjectProcess(activeProject?.id))
+          throw Error('A current-project process is running. Switch screens without interrupting it; finish before opening another project.');
         ++startupSequence;
         try{
           if(msg.autoResume){if(!startupSessionProceedApproved||!await storedStartupVerification())throw Error('Saved connections require verification.');await requireAutomaticStartup(String(msg.projectId||''));}
@@ -7979,6 +8197,7 @@ async function handleDashboardMessage(msg){
       case 'processDiscoverySources':{
         try{await processSelectedDiscoverySources(msg);}
         catch(e){
+          await recordBAProcess({stage:'mapping',action:'processDiscoverySources',status:e.name==='AbortError'?'cancelled':'failed',details:String(e.message||e).slice(0,400)});
           if(e.name==='AbortError')await dashboard?.webview.postMessage({type:'discoveryImportCancelled',mapping:true,message:'Mapping stopped before saving. Retry Mapping is available.'});
           else{
             const phase=e.phase||'';
@@ -8409,6 +8628,7 @@ async function handleDashboardMessage(msg){
       default:throw new Error('Unsupported webview action.');
     }
   }catch(e){
+    if(baAction)baFailure=String(e.message||e);
     captureLocalIssue(msg.command,e);
     if(msg._fromDesignTab)throw e;
     if(String(msg.command||'').startsWith('brRoleTaskRepair')){roleRepairBusy=false;await dashboard?.webview.postMessage({type:'brRoleTaskRepairError',brId:String(msg.brId||''),message:e.message});}
@@ -8463,6 +8683,10 @@ async function handleDashboardMessage(msg){
         await dashboard?.webview.postMessage({type:'roleHandoffOwners',projectId:activeProject.id,...state,documents:state.documents.filter(x=>x.documentId.startsWith('handoff-'))});
       }catch{}
     }
+  }finally{
+    if(hostJob)activeHostProcesses.delete(hostJob);
+    if(baAction)await recordBAProcess({stage:'action',action:baCommand,status:baFailure?'failed':'finished',
+      details:baFailure?baFailure.slice(0,400):'',durationMs:Date.now()-baStarted});
   }
 }
 function requireOpened(){if(openingFlow.phase!=='open')throw new Error('Open an ATGV project first.');}

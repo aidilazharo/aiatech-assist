@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.4.34';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.4.36';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -409,6 +409,7 @@ function html(webview,{resumeLibrary=false}={}){
     <section id="baStepNavigation" class="ba-step-navigation hidden" aria-label="Business Requirements step navigation">
       <div id="baNextStepRow" class="ba-next-step-row" role="group" aria-label="Previous and next Business Requirements steps">
         <button id="baPreviousStep" type="button" class="secondary" title="Return to the previous Business Requirements step">Previous Step</button>
+        <button id="baDownloadProcessLog" type="button" class="secondary atgv-icon-only ba-process-log-btn" title="Download complete Business Requirements process and troubleshooting log (.txt)" aria-label="Download Business Requirements troubleshooting log"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8l4 4v14H4V3h4zm8 0v5h4M8 12h8M8 16h8"/></svg></button><span id="baProcessLogStatus" class="muted ba-process-log-status" role="status" aria-live="polite"></span>
         <button id="baNextStep" type="button" class="secondary" title="Continue to the next Business Requirements step">Next Step</button>
       </div>
     </section>
@@ -443,6 +444,7 @@ function html(webview,{resumeLibrary=false}={}){
         </div>
         <div id="pmJiraTableView" aria-label="Searchable Jira DataTable">
           <div class="pm-filters"><label>Search <input id="pmJiraFilter" type="search" placeholder="Issue key, summary or owner" autocomplete="off"></label>
+        <label>Type <select id="pmTypeFilter"><option value="">All types</option><option value="br">BR</option><option value="epic">Epic</option><option value="story">User Stories</option><option value="task">Task</option><option value="subtask">Subtask</option><option value="other">Other types</option></select></label>
         <label>Assignee <select id="pmAssigneeFilter"><option value="">All assignees</option></select></label>
         <label>Status <select id="pmStatusFilter"><option value="">All statuses</option></select></label>
         <label>Priority <select id="pmPriorityFilter"><option value="">All priorities</option></select></label>

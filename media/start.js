@@ -483,10 +483,14 @@ function setView(next){
   }
   // Show the in-progress BR summary only after leaving this page and returning.
   // An empty upload placeholder has no recoverable content and needs no card.
+  // Navigation never stops an active host-side mapping, Jira publication or
+  // another long-running process. Preserve the active BR step across screens.
+  const baProcessRunning=(typeof discoveryImportBusy!=='undefined'&&discoveryImportBusy)||
+    (typeof baBusyTask!=='undefined'&&!!baBusyTask)||
+    (typeof mappingRunPhase!=='undefined'&&['preparing','preflight','repair','mapping','committing'].includes(mappingRunPhase));
   if(view==='discovery'&&next!=='discovery'){
-    baResumeCardReady=baHasRecoverableBR(brState);
-    baViewedStep=null;
-  }else if(next==='discovery'&&view!=='discovery'&&baResumeCardReady){
+    if(!baProcessRunning){baResumeCardReady=baHasRecoverableBR(brState);baViewedStep=null;}
+  }else if(next==='discovery'&&view!=='discovery'&&baResumeCardReady&&!baProcessRunning){
     baViewedStep='start';
   }
   for(const page of pages)page.classList.toggle('hidden',page!==target);
@@ -892,6 +896,17 @@ function updateState(msg){
   else if(!workspaceOpened)document.body.classList.add('gate-mode');
   renderGate();
 }
+let navigationRefreshRequestId=0;
+function requestNavigationRefresh(destination){
+ if(!workspaceOpened||!activeId)return;
+ // A menu refresh updates the existing webview and must never reload the
+ // document, abort a host process or discard the selected workflow step.
+ queueMicrotask(()=>{
+  if(!workspaceOpened||!activeId)return;
+  send('viewNavigateRefresh',{projectId:activeId,destination,view,roleId:selectedRole,
+   requestId:++navigationRefreshRequestId});
+ });
+}
 function navigate(destination){
   if(roleSettingsDirty&&view==='project'&&destination!=='project-settings'&&destination!=='tech'){status('Save project role settings before leaving Project Settings.',true);return;}
   if(view==='discovery'&&discoveryDirty){status('Save your discovery answers before leaving this screen.',true);return;}
@@ -907,6 +922,7 @@ function navigate(destination){
   if(!workspaceOpened&&!['settings'].includes(destination)){
     showGate();return;
   }
+  requestNavigationRefresh(destination);
   const isRole=visibleRoles().some(role=>role.id===destination);
   if(isRole&&activeId){usedRoleIds.add(destination);send('markRoleUsed',{roleId:destination});}
   selectedNav=isRole||destination==='discovery'?'sdlc-roles':destination==='project-settings'||destination==='tech'?'settings':destination;
@@ -1321,6 +1337,15 @@ function pmOptionList(id,values,defaultText){
  for(const entry of entries){const item=document.createElement('option');item.value=entry;item.textContent=entry;node.append(item);}
  node.value=entries.includes(selection)?selection:'';
 }
+function pmJiraIssueType(type){
+ const t=String(type||'').trim().toLowerCase().replace(/[\s_-]+/g,' ');
+ if(['br','business requirement','business requirements'].includes(t))return 'br';
+ if(t==='epic')return 'epic';
+ if(['story','stories','user story','user stories'].includes(t))return 'story';
+ if(t==='task')return 'task';
+ if(['subtask','sub task','sub-task'].includes(t))return 'subtask';
+ return 'other';
+}
 function pmToday(){const now=new Date();return [now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-');}
 function pmText(tag,text,className=''){const node=document.createElement(tag);node.textContent=String(text??'');if(className)node.className=className;return node;}
 function pmJiraLink(item){const link=document.createElement('button');link.type='button';link.className='jira-issue-inline-link';link.textContent=item.key;link.addEventListener('click',()=>openJiraIssueModal(item.key));return link;}
@@ -1451,8 +1476,8 @@ function renderPMDashboard(){
  pmOptionList('pmAssigneeFilter',items.map(x=>x.assignee||'Unassigned'),'All assignees');
  pmOptionList('pmStatusFilter',items.map(x=>x.status),'All statuses');
  pmOptionList('pmPriorityFilter',items.map(x=>x.priority),'All priorities');
- const assignee=$('pmAssigneeFilter').value,status=$('pmStatusFilter').value,priority=$('pmPriorityFilter').value,due=$('pmDueFilter').value,term=$('pmJiraFilter').value.trim().toLowerCase();
- const matches=summary.items.filter(item=>(!assignee||(item.assignee||'Unassigned')===assignee)&&(!status||item.status===status)&&(!priority||item.priority===priority)&&
+ const typeFilter=$('pmTypeFilter').value,assignee=$('pmAssigneeFilter').value,status=$('pmStatusFilter').value,priority=$('pmPriorityFilter').value,due=$('pmDueFilter').value,term=$('pmJiraFilter').value.trim().toLowerCase();
+ const matches=summary.items.filter(item=>(!typeFilter||pmJiraIssueType(item.type)===typeFilter)&&(!assignee||(item.assignee||'Unassigned')===assignee)&&(!status||item.status===status)&&(!priority||item.priority===priority)&&
  (!due||(due==='overdue'&&item.pmState.overdue)||(due==='soon'&&item.pmState.dueSoon)||(due==='none'&&!item.dueDate))&&
  (!term||[item.key,item.summary,item.assignee,item.status,item.priority].some(v=>String(v||'').toLowerCase().includes(term))));
  // Default: explicit blocker first, overdue second, due-soon third, then Jira's created-descending order.
@@ -1477,7 +1502,7 @@ function ensurePMJiraInventory(force=false){
 }
 $('pmRefreshJira').addEventListener('click',searchJiraInventory);
 $('pmApproveEstimates').addEventListener('click',()=>send('pmApproveEffortBaseline',{projectId:activeId,overrides:pmEffortEdits}));
-for(const id of ['pmJiraFilter','pmAssigneeFilter','pmStatusFilter','pmPriorityFilter','pmDueFilter'])$(id).addEventListener(id==='pmJiraFilter'?'input':'change',renderPMDashboard);
+for(const id of ['pmJiraFilter','pmTypeFilter','pmAssigneeFilter','pmStatusFilter','pmPriorityFilter','pmDueFilter'])$(id).addEventListener(id==='pmJiraFilter'?'input':'change',renderPMDashboard);
 $('pmOpenDocuments').addEventListener('click',()=>navigate('documents'));
 $('pmOpenApprovals').addEventListener('click',()=>navigate('operations'));
 $('pmOpenGantt').addEventListener('click',()=>{navigate('overview');$('overviewGanttDetails').open=true;send('loadPlanning');});
@@ -1509,11 +1534,8 @@ function openJiraInventory(){
 }
 function closeJiraInventory(){
  $('jiraInventoryModal').classList.add('hidden');$('jiraInventoryModal').setAttribute('aria-hidden','true');
- // The BA DataTable may still need this shared project scan; do not cancel it on modal close.
- if(view!=='work'||!['business-analyst','project-manager'].includes(selectedRole)){
-  jiraInventoryRequest++;jiraInventoryRunning=false;jiraInventoryLoaded=false;
-  send('cancelProjectJiraInventory');
- }
+ // Jira inventory scans remain active in the host even when the modal closes.
+ // Keep request IDs and partial pages so returning to the page resumes live data.
  $('overviewJiraInventory').focus();
 }
 $('overviewJiraInventory').addEventListener('click',openJiraInventory);
@@ -2076,8 +2098,10 @@ function syncArchitectStackButtons(project){
 let roleJiraProject='',roleJiraLoading=false,roleJiraLoaded=false,roleJiraItems=[],roleJiraIncomplete=false,roleJiraRequest=0;
 let jiraModalKey='',jiraModalRequest=0,jiraModalPreviousFocus=null,jiraModalUrl='';
 let jiraModalDetail=null,jiraModalEditing=false,jiraModalSaving=false,jiraModalSaveRequest=0,roleJiraRefreshAfterSave=false;
+let jiraModalAssigneeRequest=0,jiraModalAssigneeBusy=false,jiraModalAssigneeData=null;
 function resetJiraIssueEditor(){
  jiraModalEditing=false;jiraModalSaving=false;jiraModalDetail=null;
+ jiraModalAssigneeRequest++;jiraModalAssigneeBusy=false;jiraModalAssigneeData=null;
  $('jiraIssueEditPanel').classList.add('hidden');$('jiraIssueModalBody').classList.remove('hidden');
  $('jiraIssueModalEdit').classList.add('hidden');$('jiraIssueModalSave').classList.add('hidden');$('jiraIssueModalCancelEdit').classList.add('hidden');
  $('jiraIssueEditStatus').textContent='';
@@ -2108,8 +2132,48 @@ function saveJiraIssueEdit(){
 function closeJiraIssueModal(){const panel=$('jiraIssueModal');panel.classList.add('hidden');panel.setAttribute('aria-hidden','true');jiraModalKey='';jiraModalUrl='';jiraModalRequest++;jiraModalSaveRequest++;resetJiraIssueEditor();if(jiraModalPreviousFocus?.isConnected)jiraModalPreviousFocus.focus();}
 function openJiraIssueModal(key){resetJiraIssueEditor();if(!/^[A-Z][A-Z0-9_]{1,20}-\d{1,12}$/.test(String(key||'')))return;jiraModalPreviousFocus=document.activeElement;jiraModalKey=key;jiraModalUrl='';$('jiraIssueModalTitle').textContent='Jira '+key;$('jiraIssueModalSubtitle').textContent='Loading live issue details…';$('jiraIssueModalBody').textContent='Retrieving Jira details…';$('jiraIssueModalOpen').disabled=true;$('jiraIssueModal').classList.remove('hidden');$('jiraIssueModal').setAttribute('aria-hidden','false');$('jiraIssueModalClose').focus();refreshJiraIssueModal();}
 function refreshJiraIssueModal(){if(!jiraModalKey)return;resetJiraIssueEditor();jiraModalUrl='';$('jiraIssueModalOpen').disabled=true;$('jiraIssueModalTitle').textContent='Jira '+jiraModalKey;$('jiraIssueModalReload').disabled=true;$('jiraIssueModalSubtitle').textContent='Refreshing ticket details…';$('jiraIssueModalBody').textContent='Loading from Jira…';send('roleJiraIssueDetails',{key:jiraModalKey,requestId:++jiraModalRequest});}
+function jiraIssueAssigneeEditor(value){
+ const wrap=document.createElement('div');wrap.className='jira-assignee-editor';
+ const current=pmText('span','Current: '+(value.assignee||'Unassigned'),'muted');
+ const select=document.createElement('select');select.id='jiraIssueAssigneeSelect';select.setAttribute('aria-label','Select verified SDLC role assignee');select.disabled=true;
+ const loading=document.createElement('option');loading.value='';loading.textContent='Loading eligible team members…';select.append(loading);
+ const apply=document.createElement('button');apply.type='button';apply.className='secondary';apply.id='jiraIssueAssigneeApply';apply.textContent='Assign';apply.disabled=true;
+ const note=document.createElement('p');note.id='jiraIssueAssigneeStatus';note.className='muted';note.setAttribute('role','status');note.textContent='Checking Jira permissions and role-matched users…';
+ const sameSelection=()=>select.value===(value.assigneeId||'__unassigned__');
+ select.addEventListener('change',()=>{apply.disabled=jiraModalAssigneeBusy||!jiraModalAssigneeData||!select.value||sameSelection();});
+ apply.addEventListener('click',()=>{
+  if(apply.disabled||jiraModalAssigneeBusy||!jiraModalAssigneeData||value.key!==jiraModalKey)return;
+  jiraModalAssigneeBusy=true;apply.disabled=true;select.disabled=true;
+  note.textContent='Confirming Jira assignment scope and permissions…';
+  send('pmJiraSetAssignee',{projectId:activeId,key:value.key,accountId:select.value==='__unassigned__'?null:select.value,
+    expectedUpdated:value.updated,requestId:++jiraModalAssigneeRequest});
+ });
+ wrap.append(current,select,apply,note);
+ send('pmJiraAssignableUsers',{projectId:activeId,key:value.key,requestId:++jiraModalAssigneeRequest});
+ return wrap;
+}
+function applyJiraAssigneeUsers(msg){
+ if(msg.key!==jiraModalKey||!jiraModalDetail||msg.projectId!==activeId||msg.requestId!==jiraModalAssigneeRequest)return;
+ const select=document.getElementById('jiraIssueAssigneeSelect'),apply=document.getElementById('jiraIssueAssigneeApply'),note=document.getElementById('jiraIssueAssigneeStatus');
+ if(!select||!apply||!note)return;
+ const current=jiraModalDetail.assigneeId||'';
+ jiraModalAssigneeData=msg;select.replaceChildren();
+ const empty=document.createElement('option');empty.value='__unassigned__';empty.textContent='Unassigned';select.append(empty);
+ let found=!current;
+ for(const user of (msg.users||[])){
+  const option=document.createElement('option');option.value=user.accountId;option.textContent=user.name;select.append(option);
+  if(option.value===current)found=true;
+ }
+ if(current&&!found){
+  const old=document.createElement('option');old.value=current;old.disabled=true;old.textContent=(jiraModalDetail.assignee||'Current user')+' (not currently eligible)';select.append(old);
+ }
+ select.value=current||'__unassigned__';
+ select.disabled=false;apply.disabled=true;
+ const scope=msg.scope?' · '+msg.scope.count+' development items; '+msg.scope.excludedCount+' specialist-role items excluded':'';
+ note.textContent='Required role: '+msg.role+scope+'. '+(msg.message||'Select an eligible user, then click Assign.');
+}
 function renderJiraIssueModal(value){if(!value||value.key!==jiraModalKey)return;resetJiraIssueEditor();jiraModalDetail=value;$('jiraIssueModalEdit').classList.remove('hidden');const root=$('jiraIssueModalBody');root.replaceChildren();jiraModalUrl=value.url||'';$('jiraIssueModalOpen').disabled=!jiraModalUrl;$('jiraIssueModalReload').disabled=false;$('jiraIssueModalTitle').textContent=value.key+' · '+value.summary;$('jiraIssueModalSubtitle').textContent=value.type+' · '+value.status;
- const fields=[['Status',value.status],['Priority',value.priority],['Assignee',value.assignee],['Reporter',value.reporter],['Type',value.type],['Created',value.created],['Updated',value.updated],['Due date',value.dueDate]];const grid=document.createElement('dl');grid.className='jira-issue-detail-grid';for(const [label,val] of fields){if(!val)continue;const wrapper=document.createElement('div');const dt=document.createElement('dt');dt.textContent=label;const dd=document.createElement('dd');dd.textContent=val;wrapper.append(dt,dd);grid.append(wrapper);}root.append(grid);
+ const fields=[['Status',value.status],['Priority',value.priority],['Type',value.type],['Reporter',value.reporter],['Created',value.created],['Updated',value.updated],['Due date',value.dueDate],['Assignee',value.assignee]];const grid=document.createElement('dl');grid.className='jira-issue-detail-grid';for(const [label,val] of fields){if(!val)continue;const wrapper=document.createElement('div');const dt=document.createElement('dt');dt.textContent=label;const dd=document.createElement('dd');if(label==='Assignee'&&selectedRole==='project-manager'&&view==='work')dd.append(jiraIssueAssigneeEditor(value));else dd.textContent=val;wrapper.append(dt,dd);grid.append(wrapper);}root.append(grid);
  const section=(label,text)=>{const box=document.createElement('section');box.className='jira-issue-detail-block';const heading=document.createElement('h3');heading.textContent=label;const content=document.createElement('p');content.textContent=text||'Not provided';box.append(heading,content);root.append(box);return box;};
  section('Description',value.description||'No description provided.');
  if(value.parent){const box=section('Parent',value.parent.key+' · '+(value.parent.summary||''));const btn=document.createElement('button');btn.className='jira-issue-inline-link';btn.type='button';btn.textContent='View '+value.parent.key;btn.addEventListener('click',()=>{jiraModalKey=value.parent.key;refreshJiraIssueModal();});box.append(btn);}
@@ -6403,6 +6467,12 @@ $('brNextPreviewSave').addEventListener('click',()=>{
 });
 $('baJiraRefreshStatus').addEventListener('click',()=>send('brJiraRefreshWorkStates'));
 $('brJiraPreview').addEventListener('click',()=>{if($('brJiraPreview').disabled)return;baBusy('jiraPreview','Checking JIRA changes and conflicts…');send('brJiraPreview');});
+$('baDownloadProcessLog').addEventListener('click',()=>{
+ if(!activeId)return;
+ const button=$('baDownloadProcessLog');button.disabled=true;
+ $('baProcessLogStatus').textContent='Preparing troubleshooting log…';
+ send('baDownloadProcessLog',{projectId:activeId});
+});
 $('baPreviousStep').addEventListener('click',()=>{
  if($('baPreviousStep').disabled)return;
  const key=$('baPreviousStep').dataset.previousStep;
@@ -6730,6 +6800,10 @@ window.addEventListener('message',event=>{
   if(m.type==='brJiraPlanApproved'){baFailedProcess='';stageProgress('jiraApprove','JIRA preview approved.',100);brJiraPreviewApproved=true;baBusy('',null);status(`${m.count} Jira preview change${m.count===1?'':'s'} approved for publishing.`);renderDiscoverySummary();}
   if(m.type==='brRetirementsApproved'){brPlanRevision=null;brJiraPreviewApproved=false;brJiraPlanChanges=0;brJiraPlanConflicts=0;$('brJiraChanges').classList.add('hidden');$('brJiraConflicts').classList.add('hidden');baBusy('',null);stageProgress('jiraRetire','Jira retirement review complete (100%). Preview regeneration is ready.',100);status('Jira retirements approved. Regenerate the preview.',false,{persistent:true});return;}
   if(m.type==='brRevisionCreated'&&m.brId){openBREditor(m.brId);}
+ if(m.type==='baProcessLogResult'&&m.projectId===activeId){
+   $('baDownloadProcessLog').disabled=false;
+   $('baProcessLogStatus').textContent=m.error?'Log unavailable: '+m.error:m.cancelled?'Log download cancelled.':m.saved?'Troubleshooting log saved: '+m.filename:'Log export finished.';
+ }
  if(m.type==='brJiraDone'){stageProgress('jiraSync',`${m.count} JIRA changes published.`,100);baBusy('',null);jiraPublishState={...jiraPublishState,phase:'completed',confirmed:m.count,total:m.count,message:`Successfully published and recorded ${m.count} Jira changes.`};baViewedStep='publish';baPreviousStage='complete';renderPublishedJira();renderJiraPublishedItems();brPlanRevision=null;brJiraPlanChanges=0;brJiraPreviewApproved=false;$('brJiraApprove').disabled=true;$('brJiraSync').disabled=true;$('brJiraChanges').classList.add('hidden');renderDiscoverySummary();}
   if(m.type==='discoveryRestarted'){baPreflightInfo=null;mappingFailurePhase='';baResumeCardReady=false;mappingResumeAvailable=false;jiraPublicationPlan=[];jiraPublicationConfirmed.clear();baLastActiveStep='';mappingRunPhase='';mappingRetryAvailable=false;mappingFailureMessage='';baViewedStep=null;baPreviousStage='';baFailedProcess='';
     baReopenQuestions=false;baReopenDocuments=false;discoveryData=m.discovery;discoveryDirty=false;discoveryReviewProposal=null;discoveryImportProposal=null;discoveryImportQueue=[];restoredMappingEpoch=null;preserveReviewOnSave=false;
@@ -6936,6 +7010,16 @@ window.addEventListener('message',event=>{
   if(m.type==='openingStart'){gateError='';gateOfflineAvailable=false;spaces=[];jiraProjects=[];gateSearchId=null;settingsSearchId=null;gateSearched=false;$('gateSearchMessage').textContent='';showGate();status('');}
   if(m.type==='openingProgress'){gateOpeningPercent(m.percent,m.message);$('gateProgress').classList.toggle('hidden',m.stage==='done');}
   if(m.type==='openingError'){gateBusy=false;gateError=m.message||'Could not open project.';gateOfflineAvailable=!!m.canOffline;gateOpeningPercent(0,'Project opening failed: '+gateError);renderGate();}
+  if(m.type==='navigationRefreshState'&&m.projectId===activeId&&m.requestId===navigationRefreshRequestId){
+    if(m.mapping?.running){
+      mappingRunPhase=String(m.mapping.phase||'preparing');
+      if(!discoveryImportBusy)setDiscoveryImportBusy(true,'Background AI document mapping is continuing. You can return to other screens while it works.');
+    }
+    // A completed job is handled by its own completion event and not restarted
+    // merely because an older menu-refresh response arrives.
+    if(view==='discovery')renderDiscoverySummary();
+    if(view==='work'&&selectedRole==='project-manager')renderPMDashboard();
+  }
   if(m.type==='state')updateState(m);
   if(m.type==='notice'){
     if(m.error&&view==='discovery'&&baBusyTask==='saveDiscovery'){discoveryAutosaving=false;discoveryAutosaveSnapshot=null;}
@@ -7369,6 +7453,23 @@ $('architectApproveStack').addEventListener('click',()=>architectBegin('architec
 
 window.addEventListener('message',event=>{
  const msg=event.data||{};
+ if(msg.type==='pmJiraAssignableUsersResult')applyJiraAssigneeUsers(msg);
+ if(msg.type==='pmJiraAssignableUsersError'&&msg.projectId===activeId&&msg.key===jiraModalKey&&msg.requestId===jiraModalAssigneeRequest){
+   const note=document.getElementById('jiraIssueAssigneeStatus');if(note)note.textContent='Assignment unavailable: '+(msg.message||'Refresh Jira and review the user roles.');
+   const select=document.getElementById('jiraIssueAssigneeSelect');if(select)select.disabled=true;
+ }
+ if(msg.type==='pmJiraAssigned'&&msg.projectId===activeId&&msg.key===jiraModalKey&&msg.requestId===jiraModalAssigneeRequest){
+   jiraModalAssigneeBusy=false;
+   if(msg.cancelled){refreshJiraIssueModal();return;}
+   status(msg.changed+' of '+msg.count+' Jira work item(s) assigned and verified'+(msg.excludedCount?' · '+msg.excludedCount+' specialist-role item(s) unchanged':'')+'.');
+   refreshJiraIssueModal();searchJiraInventory();
+ }
+ if(msg.type==='pmJiraAssignmentError'&&msg.projectId===activeId&&msg.key===jiraModalKey&&msg.requestId===jiraModalAssigneeRequest){
+   jiraModalAssigneeBusy=false;const note=document.getElementById('jiraIssueAssigneeStatus');
+   if(note)note.textContent='Jira assignment failed: '+(msg.message||'Refresh and retry.');
+   const select=document.getElementById('jiraIssueAssigneeSelect');if(select)select.disabled=false;
+   const apply=document.getElementById('jiraIssueAssigneeApply');if(apply)apply.disabled=false;
+ }
  if(msg.type==='roleJiraIssueSaved'&&msg.projectId===activeId&&msg.requestId===jiraModalSaveRequest&&msg.key===jiraModalKey){
    jiraModalSaving=false;
    roleJiraRefreshAfterSave=true;

@@ -19,7 +19,7 @@ function mappingHarness(aiAnswer,opts={}){
   setTimeout:opts.setTimeout||setTimeout,clearTimeout,
   activeDiscoveryMappingRun:null,activeProject:{id:'tc'},registry:opts.registry||{},
   cfg:()=>({get:()=>false}),
-  requireOpened(){},async requireBAOwner(){},
+  requireOpened(){},async requireBAOwner(){},async recordBAProcess(){},
   brWorkflow:{async load(){return register;},async commitSourceMapping(_r,_id,revision,changes){
    assert.equal(revision,7);assert.deepEqual([...changes.digests],[digest]);commits++;
    if(opts.failFirstCommit&&commits===1)throw Error('Simulated commit interruption');
@@ -31,6 +31,8 @@ function mappingHarness(aiAnswer,opts={}){
   discoveryImport:{...discoveryModule,createMappingPrompt(doc){return opts.realPrompt?discoveryModule.createMappingPrompt(doc):'Map'},parseMappingResponse(answer){return JSON.parse(answer)}},
   baDocumentPreflight,
   baLargeDocumentRecovery:require('../src/ba-large-document-recovery'),
+  baTimeoutSimplified:require('../src/ba-timeout-simplified'),
+  async uiWarning(){return undefined;},
   baPreflightReports:require('../src/ba-preflight-report'),
   baWorkingBr:{...require('../src/ba-working-br'),async store(_registry,_project,sourceDigest){return {filename:'test.md',digest:'f'.repeat(64),sourceDigest}}},
   documentPreflightSessions:new Map(),

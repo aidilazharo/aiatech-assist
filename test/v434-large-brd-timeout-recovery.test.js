@@ -27,8 +27,8 @@ test('source-only fallback is restricted to large documents and preserves source
  assert.equal(recovery.isLargeDocument(20000),false);
  assert.equal(recovery.timeout('preflight',true),45000);
  assert.equal(recovery.timeout('mapping',true),75000);
- assert.equal(recovery.attempts('preflight',true,false),1);
- assert.equal(recovery.attempts('preflight',true,true),2);
+ assert.equal(recovery.attempts('preflight',true,false),3);
+ assert.equal(recovery.attempts('preflight',true,true),3);
  assert.equal(recovery.attempts('preflight',false,false),3);
  const result=recovery.preflight(longFixture);
  assert.equal(result.effectiveText,longFixture);
