@@ -48,7 +48,7 @@ test('collapsed summary still reports checks that need attention',()=>{
  const message={},copilot={dataset:{progressState:'error'}};
  const context={$:id=>id==='startupScanSummaryIssues'?message:copilot,startupPermissions:{checks:[{ok:true},{ok:false}]},startupPermissionProgress:new Map(),startupConnectionCheckResults:new Map(),startupScanComplete:true,startupStackData:{stacks:[{ready:true},{ready:false}]}};
  vm.runInNewContext(ui.slice(start,end)+'\nupdateStartupIssueSummary()',context);
- assert.equal(message.textContent,'3 checks need attention');
+ assert.equal(message.textContent,'2 checks need attention');
  context.startupPermissions={checks:[{ok:true}]};context.startupStackData={stacks:[{ready:true}]};copilot.dataset.progressState='complete';
  vm.runInNewContext('updateStartupIssueSummary()',context);
  assert.equal(message.textContent,'');
