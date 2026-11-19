@@ -216,21 +216,56 @@ class DurableWorkflowEngine{
    return {changed:true,value:structuredClone(job)};
   });
  }
- async runStages(projectId,{command,inputHash,stages,signal,retry={} }={}){
+ async resume(projectId,id,{command,inputHash}={}){
+  if(!/^[a-f0-9]{64}$/.test(String(inputHash||'')))throw Error('Resume requires the exact original input hash.');
+  return this.transaction(projectId,jobs=>{
+   const job=jobs.find(j=>j.id===id);
+   if(!job)throw Error('Unknown workflow job.');
+   if(job.command!==command||job.inputHash!==inputHash)throw Error('Source, project, model or command changed; start a new job.');
+   if(!['failed','interrupted'].includes(job.status)||!job.retryable||!['ai','read'].includes(job.kind))
+    throw Error('Resume not permitted; reconcile external state or start a new approved operation.');
+   job.status='running';job.phase='resuming';job.attempts=Math.min(100,job.attempts+1);
+   job.error='';job.completedAt='';job.updatedAt=this.now();
+   return {changed:true,value:structuredClone(job)};
+  });
+ }
+ async runStages(projectId,{command,inputHash,stages,signal,retry={},resumeJobId=null}={}){
   if(!Array.isArray(stages)||!stages.length||stages.length>40)throw Error('Invalid workflow stages.');
-  const job=await this.begin(projectId,{command,inputHash,kind:'ai',retryable:true});
-  const result={jobId:job.id,results:[]};
+  const job=resumeJobId?
+   await this.resume(projectId,resumeJobId,{command,inputHash}):
+   await this.begin(projectId,{command,inputHash,kind:'ai',retryable:true});
+  const result={jobId:job.id,results:[],restored:[]};
   try{
+   const seen=new Set();
    for(const [index,stage] of stages.entries()){
     if(signal?.aborted)throw Object.assign(Error('Workflow cancelled.'),{name:'AbortError'});
-    if(!stage||!/^[a-zA-Z][a-zA-Z0-9_-]{0,65}$/.test(stage.id)||typeof stage.execute!=='function'||!/^[a-f0-9]{64}$/.test(stage.inputHash))throw Error('Invalid stage declaration.');
-    const value=await retryRecoverable(()=>stage.execute({signal,jobId:job.id}),{signal,...retry,kind:stage.kind||'ai'});
-    await this.checkpoint(projectId,job.id,{step:stage.id,inputHash:stage.inputHash,outputHash:fingerprint(value),percent:Math.round((index+1)/stages.length*99)});
+    if(!stage||!/^[a-zA-Z][a-zA-Z0-9_-]{0,65}$/.test(stage.id)||typeof stage.execute!=='function'||!/^[a-f0-9]{64}$/.test(stage.inputHash)||seen.has(stage.id))
+     throw Error('Invalid or duplicated stage declaration.');
+    seen.add(stage.id);
+    const completed=job.steps?.[stage.id];
+    let value,restored=false;
+    if(completed?.inputHash===stage.inputHash&&completed.outputHash&&typeof stage.restore==='function'){
+     // Never trust a stored "done" flag by itself. Re-open the actual local
+     // artifact and compare its digest before reusing work from another run.
+     value=await stage.restore({jobId:job.id,step:stage.id,signal});
+     if(fingerprint(value)!==completed.outputHash)
+      throw Error('Saved stage artifact was changed or is incomplete; manual review required.');
+     restored=true;
+    }else{
+     // Without an explicit restore and verification callback there is no
+     // durable output to reuse, even though the previous step was marked done.
+     value=await retryRecoverable(()=>stage.execute({signal,jobId:job.id}),{signal,...retry,kind:stage.kind||'ai'});
+     await this.checkpoint(projectId,job.id,{step:stage.id,inputHash:stage.inputHash,outputHash:fingerprint(value),percent:Math.round((index+1)/stages.length*99)});
+    }
     result.results.push(value);
+    if(restored)result.restored.push(stage.id);
    }
    await this.finish(projectId,job.id);
    return result;
-  }catch(e){await this.update(projectId,job.id,{status:e.name==='AbortError'?'cancelled':'failed',error:e,phase:'failed'});throw e;}
+  }catch(e){
+   await this.update(projectId,job.id,{status:e.name==='AbortError'?'cancelled':'failed',error:e,phase:'failed'});
+   throw e;
+  }
  }
  close(){try{this.db?.close();}finally{this.db=null;}}
 }
