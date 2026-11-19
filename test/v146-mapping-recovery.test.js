@@ -158,7 +158,7 @@ test('slow preflight retries in smaller sections, covers the full source and the
 test('repeated preflight timeouts stop safely after a bounded retry',async()=>{
  let calls=0;
  const t=mappingHarness(async()=>'{"problem":"Unexpected mapping"}',{sourceText:'short requirement',setTimeout:callback=>setTimeout(callback,15),preflightAnswer:()=>{calls++;return new Promise(()=>{});}});
- await assert.rejects(t.processMapping(t.request),/AI preflight could not complete after three recovery attempts/);
+ await assert.rejects(t.processMapping(t.request),/AI preflight could not complete after 3 recovery attempts/);
  assert.equal(calls,3);assert.equal(t.commits,0);
  assert.ok(t.events.some(row=>/Recovering AI preflight/.test(row.message||'')));
  assert.equal(t.events.some(row=>row.type==='discoveryImportResult'),false);
@@ -177,7 +177,7 @@ test('completed preflight sections resume after a later timeout and extension re
  const first=mappingHarness(async()=>'{"problem":"unexpected"}',{checkpoints,sourceText:text,setTimeout:callback=>setTimeout(callback,10),preflightAnswer:()=>{
   firstCalls++;return firstCalls===1?Promise.resolve('{"status":"ready","summary":"Checked","edits":[],"issues":[]}'):new Promise(()=>{});
  }});
- await assert.rejects(first.processMapping(first.request),/AI preflight could not complete after three recovery attempts/);
+ await assert.rejects(first.processMapping(first.request),/AI preflight could not complete after 3 recovery attempts/);
  assert.ok(checkpoints.size);assert.equal(first.commits,0);
  let resumedPreflights=0;
  const second=mappingHarness(async(_target,prompt)=>String(prompt).includes('Review mapped business claims')?'{"status":"consistent","conflicts":[]}':'{"problem":"A requirement"}',{checkpoints,sourceText:text,preflightAnswer:()=>{resumedPreflights++;return Promise.resolve('{"status":"ready","summary":"Checked","edits":[],"issues":[]}');}});
@@ -194,7 +194,7 @@ test('a fully processed section resumes after a commit interruption without anot
  const second=mappingHarness(async()=>{calls++;throw Error('Mapping should have resumed');},{checkpoints,preflightAnswer:()=>{calls++;throw Error('Preflight should have resumed');}});
  await second.processMapping(second.request);
  assert.equal(calls,0);assert.equal(second.commits,1);assert.equal(checkpoints.size,0);
- assert.ok(second.events.some(row=>/Resuming: using completed mapping/.test(row.message||'')));
+ assert.ok(second.events.some(row=>/Resuming: using completed AI mapping/.test(row.message||'')));
 });
 test('authenticated on-disk checkpoints resume across fresh extension sessions',async()=>{
  const fsAsync=require('node:fs/promises'),os=require('node:os');
