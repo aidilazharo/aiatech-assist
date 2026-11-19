@@ -5,7 +5,7 @@ const zlib = require('node:zlib');
 const { extractOfflinePdfText } = require('./pdf-offline-extractor');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
-const { QUESTIONS, MAX_ANSWER_LENGTH } = require('./ba-discovery');
+const { QUESTIONS, MAX_ANSWER_LENGTH, noOpenDecisions } = require('./ba-discovery');
 const execFileAsync = promisify(execFile);
 const MAX_FILE_BYTES = 12 * 1024 * 1024;
 // Keep the complete text for normal long BA requirements. AI requests are
@@ -137,7 +137,7 @@ function mergeMappingAnswers(parts) {
         for (const part of parts) {
             const value = String(part?.[key] || '').trim();
             if (!value) continue;
-            if (key === 'questions' && value.toUpperCase() === 'NONE') { onlyNone = true; continue; }
+            if (key === 'questions' && noOpenDecisions(value)) { onlyNone = true; continue; }
             const normalized = value.replace(/\s+/g, ' ').toLowerCase();
             if (seen.has(normalized)) continue;
             seen.add(normalized);

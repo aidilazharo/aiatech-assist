@@ -2272,3 +2272,8 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 #discoveryView .jira-preflight-recovery{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;max-width:100%;min-width:0}
 #discoveryView .jira-preflight-recovery span{flex:1 1 260px;min-width:0;overflow-wrap:anywhere}
 #discoveryView .jira-preflight-recovery .jira-link-repair-action{flex:0 0 auto;max-width:100%;white-space:normal;min-height:32px}
+
+/* v0.4.50: explicit no-open-decisions choice belongs to Discovery Question 12. */
+#discoveryView .ba-no-open-decisions{display:flex;align-items:center;gap:9px;min-width:0;max-width:100%;font-size:12px;line-height:1.4;cursor:pointer;overflow-wrap:anywhere}
+#discoveryView .ba-no-open-decisions input{flex:0 0 auto;margin:0;width:15px;height:15px}
+#discoveryView .ba-no-open-decisions input:disabled+span{opacity:.6;cursor:not-allowed}

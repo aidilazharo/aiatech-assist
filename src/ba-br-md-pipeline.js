@@ -5,7 +5,7 @@ const fs=require('node:fs/promises');
 const path=require('node:path');
 const crypto=require('node:crypto');
 const importer=require('./discovery-import');
-const {QUESTIONS,MAX_ANSWER_LENGTH}=require('./ba-discovery');
+const {QUESTIONS,MAX_ANSWER_LENGTH,noOpenDecisions}=require('./ba-discovery');
 const DIGEST=/^[a-f0-9]{64}$/;
 const MAX_UNITS=64;
 const UNIT_CHARS=12000;
@@ -152,14 +152,14 @@ function mergeForDiscovery(answers,units){
   for(let i=0;i<answers.length;i++){
    const value=String(answers[i]?.[key]||'').trim();
    if(!value)continue;
-   if(key==='questions'&&value.toUpperCase()==='NONE')continue;
+   if(key==='questions'&&noOpenDecisions(value))continue;
    const fingerprint=value.replace(/\s+/g,' ').toLowerCase();
    if(seen.has(fingerprint))continue;
    seen.add(fingerprint);values.push({value,ref:units[i]});
   }
   const full=values.map(x=>x.value).join('\n\n');
   if(full.length<=MAX_ANSWER_LENGTH){
-   merged[key]=full||(key==='questions'&&answers.some(x=>String(x?.questions||'').toUpperCase()==='NONE')?'NONE':'');
+   merged[key]=full||(key==='questions'&&answers.some(x=>noOpenDecisions(x?.questions))?'NONE':'');
    continue;
   }
   const suffix='\n\n[SUMMARY ONLY: full source-backed answers are preserved per BR Markdown file in the mapping register. Review all BR sections before approval.]';

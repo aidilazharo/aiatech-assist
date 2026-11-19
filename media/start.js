@@ -4894,7 +4894,7 @@ const BA_QUESTIONS=[
  ['dependencies','Systems, teams, vendors and dependencies'],
  ['constraints','Constraints and non-functional requirements'],
  ['measures','Measurable success criteria'],
- ['questions','Open decisions and unresolved questions (NONE if none)']
+ ['questions','Open decisions and unresolved questions']
 ];
 function activeProjectRecord(){return projects.find(project=>project.id===activeId)||null;}
 function formatDateTime(value){
@@ -4904,12 +4904,13 @@ function formatDateTime(value){
   return 'Updated: '+date.toLocaleString();
 }
 function setWorkflowStep(id,active){const node=$(id);if(node)node.classList.toggle('active',!!active);}
+function noOpenDecisions(value){return /^(?:none|no (?:open|outstanding|unresolved) (?:decisions|questions|issues)|n\/a)[.!]?$/i.test(String(value||'').trim());}
 function currentDiscoveryReadiness(){
   if(!discoveryDirty||!$('discoveryQuestions')?.children.length)return discoveryData?.readiness||{filled:0,total:12,missing:[],canReview:false,needsDecision:false};
   const answers=Object.fromEntries(BA_QUESTIONS.map(([key])=>[key,$('ba-'+key)?.value.trim()||'']));
   const missing=BA_QUESTIONS.filter(([key])=>!answers[key]).map(([key,label])=>({key,label}));
   const unresolved=answers.questions||'';
-  return {filled:12-missing.length,total:12,missing,needsDecision:!!unresolved&&!/^none[.!]?$/i.test(unresolved),canReview:missing.length===0&&/^none[.!]?$/i.test(unresolved)};
+  return {filled:12-missing.length,total:12,missing,needsDecision:!!unresolved&&!noOpenDecisions(unresolved),canReview:missing.length===0,canApprove:missing.length===0&&(!unresolved||noOpenDecisions(unresolved))};
 }
 function refreshDiscoveryGroupCounts(){
   for(const section of $('discoveryQuestions')?.querySelectorAll('.discovery-group')||[]){
@@ -6072,10 +6073,27 @@ function renderDiscovery(){
       const area=document.createElement('textarea');area.id='ba-'+key;area.rows=5;area.maxLength=100000;area.placeholder='Add the evidence, context or decision for this question.';
       area.value=answer;area.readOnly=!baCanEdit('ba-discovery');
       const counter=document.createElement('small');counter.className='discovery-answer-count';
-      const helper=document.createElement('small');helper.className='muted';helper.textContent=key==='questions'?'Enter NONE if there are no unresolved questions.':'Use evidence from the uploaded document or confirmed business context.';
-      const updateCounter=()=>{counter.textContent=area.value.length.toLocaleString()+' / 100,000';state.textContent=area.value.trim()?'Answered':'Required';wrap.classList.toggle('complete',!!area.value.trim());};
+      const helper=document.createElement('small');helper.className='muted';helper.textContent=key==='questions'?'List each unresolved decision, owner and due date where known. To confirm there are none, use the checkbox below.':'Use evidence from the uploaded document or confirmed business context.';
+      let noDecisionCheckbox=null,noDecisionChoice=null;
+      if(key==='questions'){
+        noDecisionChoice=document.createElement('label');noDecisionChoice.className='ba-no-open-decisions';
+        noDecisionCheckbox=document.createElement('input');noDecisionCheckbox.type='checkbox';noDecisionCheckbox.id='ba-no-open-decisions';noDecisionCheckbox.disabled=area.readOnly;
+        const checkboxLabel=document.createElement('span');checkboxLabel.textContent='No open decisions (confirmed)';
+        noDecisionChoice.append(noDecisionCheckbox,checkboxLabel);
+        noDecisionCheckbox.addEventListener('change',()=>{
+          if(noDecisionCheckbox.checked&&area.value.trim()&&!noOpenDecisions(area.value)){
+            noDecisionCheckbox.checked=false;
+            status('Question 12 contains unresolved decisions. Review and resolve them before confirming that none remain.',true);
+            return;
+          }
+          if(noDecisionCheckbox.checked)area.value='No open decisions';
+          else if(noOpenDecisions(area.value))area.value='';
+          area.dispatchEvent(new Event('input',{bubbles:true})); // Manual Save is still required.
+        });
+      }
+      const updateCounter=()=>{counter.textContent=area.value.length.toLocaleString()+' / 100,000';state.textContent=area.value.trim()?'Answered':'Required';wrap.classList.toggle('complete',!!area.value.trim());if(noDecisionCheckbox)noDecisionCheckbox.checked=noOpenDecisions(area.value);};
       updateCounter();area.addEventListener('input',()=>{if(!applyingAiReview)preserveReviewOnSave=false;discoveryDirty=true;$('discoverySave').disabled=!baCanEdit('ba-discovery');updateCounter();refreshDiscoveryGroupCounts();renderDiscoverySummary();$('baDiscoverySaveStatus').textContent='Unsaved changes · click Save 12 Questions to save manually';});
-      wrap.append(labelRow,area,helper,counter);section.append(wrap);
+      wrap.append(labelRow,area,helper);if(noDecisionChoice)wrap.append(noDecisionChoice);wrap.append(counter);section.append(wrap);
     }
     root.append(section);
   }
@@ -6499,8 +6517,8 @@ function brApprovalPrerequisites(br){
  const readiness=discoveryData?.readiness;
  if(!readiness||readiness.filled!==readiness.total){
   add('discovery',`Complete and save all 12 Discovery answers (${readiness?.filled||0} of ${readiness?.total||12} currently filled).`);
- }else if(!readiness.canReview){
-  add('discovery','Question 12 still contains unresolved decisions. Resolve the decisions and save exactly NONE (or NONE.) only when none remain. Acknowledging AI findings does not close Question 12.');
+ }else if(readiness.needsDecision){
+  add('discovery','Question 12 records unresolved decisions. Review them during AI Review and resolve them before final BR approval. Acknowledging AI findings does not close those decisions.');
  }
  if(br?.draftSavedAt&&br.draftSource&&(br.draftSource.discoveryRevision!==brState?.discoveryRevision||br.draftSource.digest!==brState?.importDigest||br.draftSource.epoch!==brState?.importEpoch))add('draftSource','The saved draft is based on an older source or Discovery revision. Regenerate and save a current draft.');
  if(br?.dependencyReviewRequired)add('impact','Review affected upstream requirement dependencies before approving.');

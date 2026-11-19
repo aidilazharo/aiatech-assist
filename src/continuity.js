@@ -3,11 +3,11 @@ const { QUESTIONS, assess } = require('./ba-discovery');
 function evaluate(answers, { approved = false, documents = null } = {}) {
     const state = assess(answers);
     const tasks = [
-        { id: 'requirements', name: 'Business requirements', ready: state.canReview && approved, blockedBy: !state.canReview ? 'Complete the 12 discovery answers and resolve open questions' : !approved ? 'Human approval required' : null },
+        { id: 'requirements', name: 'Business requirements', ready: state.canApprove && approved, blockedBy: !state.canReview ? 'Complete all 12 discovery answers' : state.needsDecision ? 'Resolve open decisions before final approval' : !approved ? 'Human approval required' : null },
         { id: 'planning', name: 'Project planning draft', ready: !!answers.problem && !!answers.scope, blockedBy: !answers.problem || !answers.scope ? 'Business problem and scope required' : null },
         { id: 'architecture', name: 'Architecture proposal', ready: !!answers.targetProcess && !!answers.dependencies && !!answers.constraints, blockedBy: !answers.targetProcess || !answers.dependencies || !answers.constraints ? 'Target process, dependencies and NFRs required' : null },
         { id: 'acceptance-tests', name: 'Acceptance test draft', ready: !!answers.acceptance && !!answers.businessRules, blockedBy: !answers.acceptance || !answers.businessRules ? 'Acceptance criteria and business rules required' : null },
-        { id: 'implementation', name: 'Implementation work', ready: state.canReview && approved, blockedBy: 'Approval and executable architecture checks are required before automatic development' }
+        { id: 'implementation', name: 'Implementation work', ready: state.canApprove && approved, blockedBy: 'Approval and executable architecture checks are required before automatic development' }
     ];
     tasks[4].ready = false;
     if (Array.isArray(documents)) {

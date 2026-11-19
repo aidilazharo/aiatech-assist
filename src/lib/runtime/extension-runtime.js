@@ -7914,7 +7914,8 @@ async function handleDashboardMessage(msg){
       case 'brSaveAndApprove':{
         requireOpened();await requireBAOwner('ba-br-'+msg.brId);
         const savedDiscovery=await discovery.load(registry,activeProject.id);
-        if(!savedDiscovery.readiness.canReview)throw Error('Resolve the open Discovery decisions before approving Business Requirements.');
+        if(!savedDiscovery.readiness.canReview)throw Error('Complete and save all 12 Discovery answers before final Business Requirements approval.');
+        if(savedDiscovery.readiness.needsDecision)throw Error('Question 12 contains unresolved business decisions. Resolve the decisions and save Discovery before final Business Requirements approval.');
         const current=await brWorkflow.load(registry,activeProject.id);
         if(current.revision!==msg.revision)throw Error('Business Requirements changed. Reload and review the current revision.');
         const target=current.brs.find(br=>br.id===msg.brId);
@@ -7940,7 +7941,8 @@ async function handleDashboardMessage(msg){
       }
       case 'brApprove':{
         requireOpened();await requireBAOwner('ba-br-'+msg.brId);const savedDiscovery=await discovery.load(registry,activeProject.id);
-        if(!savedDiscovery.readiness.canReview)throw Error('Complete all 12 saved Discovery answers and resolve open decisions (NONE if none) before approving a BR.');
+        if(!savedDiscovery.readiness.canReview)throw Error('Complete and save all 12 Discovery answers before approving a BR.');
+        if(savedDiscovery.readiness.needsDecision)throw Error('Question 12 contains unresolved business decisions. Resolve them and save Discovery before final BR approval.');
         const yes=await uiWarning(`Approve ${msg.brId}? Approved revision becomes read-only; subsequent discovery changes create a new draft.`,{modal:true},'Approve BR');
         if(yes!=='Approve BR'){await dashboard?.webview.postMessage({type:'baProgress',done:true});break;}
         const actor=await verifiedBAActor();

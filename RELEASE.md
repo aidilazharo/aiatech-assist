@@ -1,22 +1,21 @@
-# ATGV AIATECH Assist v0.4.49
+# ATGV AIATECH Assist v0.4.50
 
-## Jira Preflight — before preview
+## Discovery Question 12: No forced "NONE"
 
-- Check every planned Jira issue and its existing remote identity before generating an approvable Jira Preview.
-- Validate parent references, issue types, project, duplicate matches, edit/create field metadata, required fields, and remote changes.
-- Collect blocking findings in a dedicated **Jira Preflight** view; the actual Jira Preview is not rendered until preflight passes.
-- Show count of checked items, all identified blocking findings, and a **Fix Jira Link** action for verified recovery candidates.
-- Rerun preflight after repairing an existing link. Fail closed for mismatched issue identities and unexpected Jira updates.
+- Accept a saved, non-empty answer to all twelve Discovery questions before AI Review. Actual unresolved decisions no longer block AI Review or the review-acknowledgement action.
+- Display the Question 12 label as **Open decisions and unresolved questions** without requiring a special word or punctuation.
+- Add an explicit **No open decisions (confirmed)** checkbox; it writes an editable plain-language answer only when the field is empty or already a no-decisions confirmation. It never silently overwrites actual listed decisions.
+- Retain manual **Save 12 Questions**. Checkbox selection is not automatic saving; changed answers still invalidate the previous AI Review until re-run.
+- Preserve existing NONE/NONE. answers and accept "No open decisions", "No unresolved decisions", "No outstanding decisions" and N/A as equivalent explicit confirmations.
 
-## Jira link repair
+## Approval safeguard
 
-- Use structured Jira issue keys and BR paths instead of relying solely on error-message text.
-- Correct the 8-column Jira preview DataTable layout to stop header and row-action overlap in narrow VS Code panels.
-- If an existing role subtask is verified but does not match the current approved BR wording, link it without rewriting Jira and retain an explicit UPDATE pending approval.
-- Show recoverable errors and restore the **Fix Jira Link** button for another attempt.
+- Keep real open decisions visible in discovery review and draft generation, with a **needsDecision** state.
+- Block both host-level final BR approval routes while Question 12 contains unresolved business decisions, even if AI Review findings have been acknowledged. Do not block review or draft preparation.
+- Keep independent Business Owner review, source integrity, and Jira publication protections unchanged.
+- Normalize no-decision statements consistently when merging evidence across document sections; never discard real unresolved decisions in other sections.
 
-## Verification and release
+## Verification and packaging
 
-- Added regression checks for preflight gating, Jira link recovery, historical role-task content and table layout.
-- GitHub Actions must pass the full regression suite, theme validation and VSIX packaging before this release is promoted.
-- The public release mirror requires its own credentials and update workflow; a private source release does not automatically update the public VSIX download.
+- Add regression tests for blank Q12, 12/12 review with real open decisions, explicit no-decisions confirmation, UI synchronization, and the separate host approval gates.
+- GitHub Actions runs the regression suite, Windows checks, UI theme check, and VSIX packaging before release is merged.

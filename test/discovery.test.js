@@ -22,10 +22,21 @@ test('BA discovery has precisely 12 stable non-repeated fields',()=>{
   assert.equal(discovery.assess({}).filled,0);
   assert.equal(discovery.assess(filled).filled,12);
 });
-test('missing answers and open questions cannot be marked ready',()=>{
+test('Question 12 can contain genuine open decisions during AI Review, but final BR approval stays gated',()=>{
+  const pending={...filled,questions:'TRM sync pending: owner Finance; due date TBD'};
   assert.equal(discovery.assess({}).canReview,false);
-  assert.equal(discovery.assess({...filled,questions:'Policy decision is pending'}).canReview,false);
+  assert.equal(discovery.assess({...filled,questions:'   '}).canReview,false);
+  assert.equal(discovery.assess(pending).filled,12);
+  assert.equal(discovery.assess(pending).canReview,true,'Unresolved decisions are valid review evidence');
+  assert.equal(discovery.assess(pending).needsDecision,true);
+  assert.equal(discovery.assess(pending).canApprove,false);
+  assert.equal(evaluate(pending,{approved:true}).tasks[0].ready,false,'Cannot approve with unresolved decisions');
+  assert.match(evaluate(pending,{approved:true}).tasks[0].blockedBy,/Resolve open decisions/);
   assert.equal(discovery.assess(filled).canReview,true);
+  assert.equal(discovery.assess(filled).canApprove,true);
+  assert.equal(discovery.noOpenDecisions('NONE.'),true,'Legacy saved answers still work');
+  assert.equal(discovery.noOpenDecisions('No open decisions'),true);
+  assert.equal(discovery.noOpenDecisions('None except TRM sync'),false);
   assert.equal(evaluate(filled).tasks[0].ready,false,'Human approval remains mandatory');
   assert.equal(evaluate(filled,{approved:true}).tasks[0].ready,true);
   assert.equal(evaluate(filled,{approved:true}).tasks[4].ready,false,'Cannot auto-authorize implementation');

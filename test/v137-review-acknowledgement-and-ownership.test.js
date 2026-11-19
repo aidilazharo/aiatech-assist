@@ -29,7 +29,7 @@ test('review with no unresolved risk does not accept an unnecessary risk acknowl
  assert.equal(JSON.parse(x.reviewText).confirmed,true);assert.equal(x.reviewRiskAccepted,null);
 }));
 test('Quill approval explains all blockers and does not bypass independent Business Owner decision',()=>{
- assert.match(ui,/Question 12 still contains unresolved decisions/);
+ assert.match(ui,/Question 12 records unresolved decisions/);
  assert.match(ui,/Independent Business Owner approval is pending/);
  assert.match(ui,/Approval blocked: /);
  assert.match(ui,/reviewRiskAccepted/);
