@@ -52,7 +52,9 @@ async function load(registry,id){
  const value=raw?JSON.parse(raw):empty();
  if(value.schema!==1||!Array.isArray(value.brs)||value.brs.length>100||!value.links||typeof value.links!=='object'||!value.synced||typeof value.synced!=='object')throw Error('BR register is invalid.');
  const current={...empty(),...value,revision:checksum(raw||'')};
- if(!current.sourceDocuments.length&&!current.restartPending&&current.importEpoch&&current.sourceHistory?.length){
+ // Only legacy registers without a sourceDocuments field need migration.
+ // An explicitly empty list is authoritative after a user deletes a cycle.
+ if(!Array.isArray(value.sourceDocuments)&&!current.restartPending&&current.importEpoch&&current.sourceHistory?.length){
   const history=current.sourceHistory.at(-1);
   if(history?.documents?.length)current.sourceDocuments=history.documents;
  }
@@ -442,11 +444,50 @@ async function forceDeleteArchivedSource(registry,id,revision,{digest:sourceDige
 async function discardEmptyIncompleteCycle(registry,id,revision,{actor='Business Analyst'}={}){
  return write(registry,id,revision,next=>{
   if(next.sourceDocuments.length||next.brs.some(br=>!br.archivedFromRestart&&br.status!=='retired'))throw Error('An unfinished BR or source remains. Use Delete Everywhere for the selected source or BR.');
-  if(Object.keys(next.pending||{}).length||Object.keys(next.roleTaskPending||{}).length)throw Error('Pending Jira publication must be reconciled.');
   if(!next.restartPending)throw Error('There is no empty in-progress BR cycle to discard.');
   next.restartPending=false;next.mappingCompleted=null;next.processedSources=[];next.reviewText='';next.reviewRevision='';
-  next.discoveryRevision='';next.importName='';next.importDigest='';
+  next.discoveryRevision='';next.discoveryAnswers={};next.importName='';next.importDigest='';next.restartRecovery=null;
   event(next,'discarded-empty-incomplete-br',{actor:String(actor).slice(0,120)});
+ });
+}
+function inProgressDeletionImpact(register){
+ const requirements=(register.brs||[]).filter(br=>!br.archivedFromRestart&&br.status!=='retired').map(br=>({id:br.id,title:br.title||'',approved:!!br.approvedContent}));
+ const ids=new Set(requirements.map(br=>br.id));
+ const sources=(register.sourceDocuments||[]).map(source=>{
+  const linked=linkedBRsForSource(register,source);
+  const historical=(register.completedCycles||[]).some(cycle=>(cycle.sources||[]).some(item=>item.digest===source.digest)&&
+   (cycle.requirements||[]).some(br=>!ids.has(br.id)));
+  const shared=linked.some(br=>!ids.has(br.id))||historical||(register.archivedSources||[]).some(item=>item.digest===source.digest);
+  return {name:source.name,digest:source.digest,storedName:source.storedName||'',shared};
+ });
+ const jiraKeys=[...new Set([...Object.entries(register.synced||{}),...Object.entries(register.roleTaskMappings||{})]
+  .filter(([key,item])=>ids.has(key.split('/')[0])&&item?.key).map(([,item])=>item.key))].sort();
+ return {requirements,sources,jiraKeys};
+}
+async function forceDeleteInProgressCycle(registry,id,revision,{actor='Business Analyst',expectedBrIds,expectedSourceDigests,expectedJiraKeys,remoteDeletionJobId=''}={}){
+ if(!Array.isArray(expectedBrIds)||!Array.isArray(expectedSourceDigests)||!Array.isArray(expectedJiraKeys))throw Error('Confirm the current BR, source and Jira scope before deleting.');
+ return write(registry,id,revision,next=>{
+  const impact=inProgressDeletionImpact(next),ids=impact.requirements.map(item=>item.id).sort();
+  const digests=impact.sources.map(item=>item.digest).sort();
+  if(ids.some(brId=>!/^BR-[0-9]+$/.test(brId))||digests.some(digest=>!/^[a-f0-9]{64}$/.test(String(digest))))throw Error('Invalid in-progress deletion scope.');
+  if(JSON.stringify(ids)!==JSON.stringify([...new Set(expectedBrIds)].sort())||JSON.stringify(digests)!==JSON.stringify([...new Set(expectedSourceDigests)].sort())||
+   JSON.stringify(impact.jiraKeys)!==JSON.stringify([...new Set(expectedJiraKeys)].sort()))throw Error('In-progress BR or linked records changed. Refresh and confirm again.');
+  if(!ids.length&&!digests.length&&!next.restartPending)throw Error('There is no in-progress Business Requirement to delete.');
+  if(ids.length)deleteBRRecords(next,ids,{actor,reason:'In-progress cycle force-deleted',remoteDeletionJobId});
+  const removed=new Set(impact.sources.filter(item=>!item.shared).map(item=>item.digest));
+  for(const entry of impact.sources.filter(item=>item.shared)){
+   const original=next.sourceDocuments.find(item=>item.digest===entry.digest);
+   if(original)archiveEntry(next,original,'archived','Shared evidence retained for another Business Requirement');
+  }
+  next.sourceDocuments=[];
+  next.archivedSources=(next.archivedSources||[]).filter(item=>!removed.has(item.digest));
+  for(const digest of removed)delete (next.sourceVersions||{})[digest];
+  next.sourceHistory=(next.sourceHistory||[]).map(row=>({...row,...(Array.isArray(row.documents)?{documents:row.documents.filter(item=>!removed.has(item.digest))}:{})}));
+  next.sourceHistory.push({action:'in-progress-cycle-force-deleted',at:new Date().toISOString(),documents:[],deletedBrIds:ids});
+  next.restartPending=false;next.restartRecovery=null;next.mappingCompleted=null;next.processedSources=[];
+  next.discoveryAnswers={};next.discoveryRevision='';next.reviewRevision='';next.reviewText='';next.reviewRiskAccepted=null;
+  next.importName='';next.importDigest='';next.discoveryProposals=[];next.sourceConflicts=[];next.sourceConflictDecisions={};
+  event(next,'in-progress-cycle-force-deleted',{brIds:ids,removedSources:[...removed],sharedSourcesPreserved:impact.sources.filter(item=>item.shared).map(item=>item.digest),actor:String(actor).slice(0,120)});
  });
 }
 // Only the uploaded source whose verified digest belongs EXCLUSIVELY to the
@@ -1495,4 +1536,4 @@ async function finishChangeRequest(registry,id,revision,{paths,actor}){
   }
  });
 }
-module.exports={discoveryTargetScope,reconcileDiscoveryTargets,startOrRestart,repairRestart,linkJiraChangeRequest,recordAIChangeImpact,recordJiraWorkHistory,createChangeRequest,decideChangeRequest,finishChangeRequest,write,sourceLifecycle,archiveSource,restoreSource,forceDeleteArchivedSource,forceDeleteActiveSource,forceDeleteBusinessRequirement,exclusiveBRSourceEntries,discardEmptyIncompleteCycle,sourceDeletionImpact,activeSourceDeletionImpact,removeBRExports,sourceRemovalImpact,reviewSourceConflict,resolveDiscoveryProposal,recordRoleDocumentImpact,decideRoleDocumentImpact,endorse,clearDependencyImpact,changeEngine,propose,decideProposal,rejectConflictingProposals,proposalConflicts,recordLinkedJiraStatus,recordInboundJira,reviewInboundJira,reconcileRevertedJira,reconcileApprovedJira,load,imported,addSources,removeSource,selectSources,completeSourceMapping,commitSourceMapping,repairPendingExports,discoverySaved,reviewed,skipReview,confirmReview,generated,beginRevision,edit,approve,retire,keep,plan,saveJiraIssueDetails,approveRetirements,beginOperation,markAttempt,recorded,parseGenerated,promptForGeneration,validateProposal,flattenApproved,asMarkdown,normalizedContent,matchScore};
+module.exports={discoveryTargetScope,reconcileDiscoveryTargets,startOrRestart,repairRestart,linkJiraChangeRequest,recordAIChangeImpact,recordJiraWorkHistory,createChangeRequest,decideChangeRequest,finishChangeRequest,write,sourceLifecycle,archiveSource,restoreSource,forceDeleteArchivedSource,forceDeleteActiveSource,forceDeleteBusinessRequirement,exclusiveBRSourceEntries,discardEmptyIncompleteCycle,inProgressDeletionImpact,forceDeleteInProgressCycle,sourceDeletionImpact,activeSourceDeletionImpact,removeBRExports,sourceRemovalImpact,reviewSourceConflict,resolveDiscoveryProposal,recordRoleDocumentImpact,decideRoleDocumentImpact,endorse,clearDependencyImpact,changeEngine,propose,decideProposal,rejectConflictingProposals,proposalConflicts,recordLinkedJiraStatus,recordInboundJira,reviewInboundJira,reconcileRevertedJira,reconcileApprovedJira,load,imported,addSources,removeSource,selectSources,completeSourceMapping,commitSourceMapping,repairPendingExports,discoverySaved,reviewed,skipReview,confirmReview,generated,beginRevision,edit,approve,retire,keep,plan,saveJiraIssueDetails,approveRetirements,beginOperation,markAttempt,recorded,parseGenerated,promptForGeneration,validateProposal,flattenApproved,asMarkdown,normalizedContent,matchScore};

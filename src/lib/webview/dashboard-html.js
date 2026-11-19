@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.4.28';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.4.29';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -128,7 +128,6 @@ function html(webview,{resumeLibrary=false}={}){
    <div id="contentPane" class="content-pane" role="main">
    <main id="gateView" class="gate-container">
     <div class="gate-top"><div class="gate-identity gate-lead-identity"><span class="gate-logo-stack"><img src="${brand}" alt="ATGV" class="gate-logo"/></span><span class="gate-product-title"><h1>AIATECH ASSIST</h1><small class="gate-brand-versions">Extension v${extensionVersion}<span id="gateLibraryVersion"> · Library —</span></small></span></div><div class="gate-header-actions"><button id="gateReportIssue" type="button" class="guide-icon-button" aria-label="Report an issue" title="Report an Issue"><svg class="guide-help-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.5 0-3-.4-4.3-1.2L3 20l1.3-4A8.5 8.5 0 1 1 21 11.5Z"/><path d="M12 7.5v4.5M12 15.5h.01"/></svg></button><button id="gateGuideHelp" type="button" class="guide-icon-button" aria-label="Open interactive user guide" title="Interactive User Guide" aria-haspopup="dialog" aria-controls="guideMenu"><svg class="guide-help-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.65 9a2.5 2.5 0 0 1 4.7 1.2c0 1.8-2.35 2-2.35 3.7"/><path d="M12 17.3h.01"/></svg></button></div></div>
-    <p id="gateLatestVersions" class="atgv-startup-latest" role="status" aria-live="polite">Checking latest extension and Library versions…</p>
     <div id="gateFolderAlert" class="gate-folder-alert hidden" role="alert"><div><strong>Open a VS Code folder to continue</strong><p>ATGV needs an open folder to find or create project files. Select a folder before searching or creating a project.</p></div><button id="gateOpenFolder" type="button">Open Folder</button></div>
     <section id="startupSetup" class="atgv-startup-setup" aria-label="ATGV computer readiness and connection setup">
       <div id="startupComputerCard" class="atgv-startup-card">
@@ -136,7 +135,7 @@ function html(webview,{resumeLibrary=false}={}){
        <details id="startupPrerequisiteDetails" class="atgv-startup-prerequisites">
         <summary class="atgv-tool-scan-status"><span id="startupScanToolTrack" class="atgv-scan-ring" role="progressbar" aria-label="Technology stack prerequisites scan" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="startupScanToolFill" class="atgv-scan-ring-fill"></span><strong id="startupScanToolPercent">0%</strong></span><span class="atgv-prerequisite-summary-copy"><span id="startupScanToolName" role="status" aria-live="polite">Scanning prerequisites…</span><small id="startupScanSummaryIssues" aria-live="polite"></small></span><span class="atgv-prerequisite-chevron" aria-hidden="true">⌄</span></summary>
         <p id="startupToolMessage" class="muted" role="status" aria-live="polite">Checking installed runtimes and command-line tools…</p>
-        <div class="atgv-startup-stack-grid"><div id="startupPermissionChecks" class="atgv-startup-permissions" aria-live="polite"><p>Checking permissions…</p></div><div id="startupStackGrid" class="startup-stack-grid-items"></div><button id="startupCopilotCard" type="button" class="atgv-startup-stack atgv-startup-stack-button atgv-stack-ring-card startup-copilot-card" aria-haspopup="dialog" aria-controls="startupCopilotModal" aria-label="GitHub Copilot SDK: checking setup"><span>GitHub Copilot SDK</span><span id="startupCopilotBadge" class="atgv-stack-ready">Checking…</span></button></div>
+        <div class="atgv-startup-stack-grid"><div id="startupPermissionChecks" class="atgv-startup-permissions" aria-live="polite"><p>Checking permissions…</p></div><div id="startupConnectionChecks" role="group" aria-label="API connection checks" aria-live="polite"></div><div id="startupStackGrid" class="startup-stack-grid-items"></div><button id="startupCopilotCard" type="button" class="atgv-startup-stack atgv-startup-stack-button atgv-stack-ring-card startup-copilot-card" aria-haspopup="dialog" aria-controls="startupCopilotModal" aria-label="GitHub Copilot SDK: checking setup"><span>GitHub Copilot SDK</span><span id="startupCopilotBadge" class="atgv-stack-ready">Checking…</span></button></div>
        </details>
        <p id="startupInstallFeedback" class="atgv-startup-install-feedback muted" role="status" aria-live="polite"></p>
       </div>
@@ -147,7 +146,7 @@ function html(webview,{resumeLibrary=false}={}){
        <div class="field"><label for="startupAtlassianToken">Atlassian API token</label><input type="password" id="startupAtlassianToken" autocomplete="new-password" placeholder="Enter token or retain securely saved token"></div>
        <div class="field"><label for="startupGithubUrl">GitHub organization URL</label><input type="url" id="startupGithubUrl" placeholder="https://github.com/aiamalaysia" required></div>
        <div class="field"><label for="startupGithubToken">GitHub personal access token</label><input type="password" id="startupGithubToken" autocomplete="new-password" placeholder="Enter PAT or retain securely saved token"><button type="button" id="startupEditConnections" class="secondary hidden" aria-label="Edit Jira, Confluence and GitHub connections">Edit</button></div>
-      </div><div class="atgv-startup-actions"><button type="submit" id="startupTestConnections">Test &amp; Save Connections</button><span id="startupConnectionMessage" role="status" aria-live="polite">Verify Jira, Confluence, and your GitHub account to continue.</span></div><ul id="startupConnectionChecks" class="atgv-startup-connection-checks hidden" aria-label="API connection checks" aria-live="polite"></ul></form>
+      </div><div class="atgv-startup-actions"><button type="submit" id="startupTestConnections">Test &amp; Save Connections</button><span id="startupConnectionMessage" role="status" aria-live="polite">Verify Jira, Confluence, and your GitHub account to continue.</span></div></form>
       <div class="atgv-startup-footer"><button type="button" id="startupUnifiedLog" class="secondary atgv-icon-only" aria-label="Download unified error log" title="Download unified error log (startup, prerequisite and project errors)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m-4-4 4 4 4-4M5 17v4h14v-4"/></svg></button><button type="button" id="startupPrevious" class="secondary hidden" disabled>← Previous</button><button type="button" id="startupAutoPause" class="secondary hidden">Pause automatic opening</button><p id="startupProceedInfo" role="status">Checking computer prerequisites…</p><button type="button" id="startupProceed" disabled>Next →</button></div>
     </section>
     <section id="gateFinder" class="gate-finder hidden">
@@ -356,7 +355,7 @@ function html(webview,{resumeLibrary=false}={}){
       <div class="ba-incomplete-actions" role="group" aria-label="Uncompleted requirement actions">
         <button id="baResumeIncomplete" type="button">Resume</button>
         <button id="baRestartIncomplete" class="secondary" type="button">Restart</button>
-        <button id="baDeleteIncomplete" class="danger" type="button">Delete</button>
+        <button id="baDeleteIncomplete" class="danger" type="button" data-br-delete-action>Force Delete Everywhere</button>
       </div>
     </section>
     <!-- Step 1 is retained in the milestone tracker. Its only content is the

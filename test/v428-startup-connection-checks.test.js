@@ -19,7 +19,8 @@ function pageFixture(){
    nodes.set(id,{id,value:'',textContent:'',className:'',disabled:false,dataset:{},children:[],attrs:{},events:{},
     classList:{toggle:(name,on)=>on?classes.add(name):classes.delete(name),contains:name=>classes.has(name),add:name=>classes.add(name),remove:name=>classes.delete(name)},
     setAttribute(name,value){this.attrs[name]=value;},focus(){this.focused=true;},
-    addEventListener(name,fn){this.events[name]=fn;},append(child){this.children.push(child);},replaceChildren(){this.children=[];}
+    addEventListener(name,fn){this.events[name]=fn;},append(...children){this.children.push(...children);},replaceChildren(){this.children=[];},
+    querySelectorAll(){return this.children.filter(child=>child.open);}
    });
   }
   return nodes.get(id);
@@ -29,8 +30,10 @@ function pageFixture(){
   "const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluenceUrl',email:'startupEmail',githubUrl:'startupGithubUrl'};",
   "let startupSetupRequired=true,startupPage=1,startupVerifying=false,startupInstallingModule='',startupConnectionVerified=false,startupConnectionEditSnapshot=null,startupScanComplete=true,startupFormInitialized=false,startupReturnToConnections=false,startupPrereqRequested=true,startupOpenStackId='',startupCopilotModalOpen=false;",
   "let startupConnectionCheckSequence=0,startupConnectionCheckPending=false,startupConnectionHealthStarted=false,startupConnectionHealthError=false;const startupConnectionCheckResults=new Map();",
+  "const STARTUP_CONNECTION_CHECK_LABELS=[['jira','Jira API'],['confluence','Confluence API'],['github','GitHub API'],['organization','GitHub organization'],['library','SDLC Library API']];function updateStartupIssueSummary(){}",
   "let startupAutoNotice='',startupAutoEnabled=false,startupAutoProject=null,startupAutoStage='';let gateBusy=false,gateError='',workspaceOpened=false,opening={phase:'search'};",
   "function stopStartupAuto(){startupAutoEnabled=false;} function beginStartupAuto(){}",
+  segment('function startupRing(', 'function updateStartupStackProgress('),
   segment('function startupPayload(){','function renderStartupPermissionRows('),
   segment('function renderStartupPage(){','function renderStartupStackReadiness('),
   segment('function invalidateStartupConnection(){',"for(const id of Object.values(startupFieldMap))"),
@@ -40,7 +43,8 @@ function pageFixture(){
   '}',
   'return {renderStartupConfig,renderStartupPage,toggleStartupConnectionEdit,receive,setAuto:v=>startupAutoEnabled=v,isAuto:()=>startupAutoEnabled,isVerified:()=>startupConnectionVerified};'
  ].join('\n');
- const document={createElement:()=>({dataset:{},textContent:''})};
+ const document={createElement:tag=>({tag,dataset:{},style:{},children:[],textContent:'',attributes:{},open:false,
+  setAttribute(name,value){this.attributes[name]=value;},append(...children){this.children.push(...children);}})};
  const create=new Function('$','document','read','send','updateHeaderUserName','extensionSettings','startupScanPercent','renderStartupScanPlaceholders',source);
  return {node,sent,page:create(node,document,id=>node(id).value,(type,extra)=>sent.push({type,...extra}),()=>{},{jira:{}},()=>{},()=>{})};
 }
@@ -53,6 +57,8 @@ test('Edit is below the GitHub token field and verified startup checks run autom
  assert.equal(sent.at(-1).type,'startupCheckConnections');
  assert.deepEqual(Object.keys(sent.at(-1).settings).sort(),['confluenceUrl','email','githubUrl','jiraUrl']);
  assert.equal(node('startupConnectionChecks').children.length,5);
+ assert.equal(node('startupConnectionChecks').children[0].tag,'details');
+ assert.equal(node('startupConnectionChecks').children[0].children[0]._atgvProgress.number.textContent,'0%');
  assert.equal(node('startupEditConnections').textContent,'Edit');
  assert.equal(node('startupEditConnections').classList.contains('hidden'),false);
  assert.equal(node('startupJiraUrl').disabled,true);
@@ -99,7 +105,17 @@ test('A failed background health check remains visible across state refreshes',(
  const request=sent.at(-1);page.receive({type:'startupConnectionHealthResult',requestId:request.requestId,success:false,checks:[{id:'confluence',label:'Confluence API',state:'error',message:'Server responded (HTTP 404).',url:'https://example.atlassian.net/wiki/api/v2/spaces'}]});
  page.renderStartupConfig(config);
  assert.match(node('startupConnectionMessage').textContent,/connections need attention/i);
- assert.match(node('startupConnectionChecks').children[1].textContent,/HTTP 404/);
+ assert.match(node('startupConnectionChecks').children[1].children[1].textContent,/HTTP 404/);
+ assert.equal(node('startupConnectionChecks').children[1].children[0]._atgvProgress.number.textContent,'!');
+});
+test('connection cards show success and keep their details open during updates',()=>{
+ const {node,sent,page}=pageFixture();page.renderStartupConfig(config);const request=sent.at(-1);
+ node('startupConnectionChecks').children[0].open=true;
+ page.receive({type:'startupConnectionCheck',requestId:request.requestId,check:{id:'jira',label:'Jira API',state:'ok',message:'Reachable and verified.',url:'https://example.atlassian.net/rest/api/3/myself'}});
+ const card=node('startupConnectionChecks').children[0];
+ assert.equal(card.open,true);assert.equal(card.children[0]._atgvProgress.number.textContent,'100%');
+ assert.equal(card.children[0].children.at(-1).textContent,'Ready');
+ assert.match(card.children[1].textContent,/example\.atlassian\.net/);
 });
 
 function hostFixture(failures={}){

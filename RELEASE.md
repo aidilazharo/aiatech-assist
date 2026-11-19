@@ -1,3 +1,15 @@
+# ATGV AIATECH Assist v0.4.29
+
+- Align all collapsed prerequisite cards by removing inherited spacing from the permission checks.
+- Display Jira, Confluence, GitHub and Library API checks as circular cards in the prerequisite grid.
+- Force-delete the in-progress BR cycle and verified linked records, while retaining evidence shared with unrelated BRs.
+- Resume AI preflight and mapping from validated section checkpoints after a stop, timeout or restart.
+- Remove the latest extension and Library version text from the Start screen.
+- Keep the public extension and Library mirrors reliable when anonymous GitHub API requests are rate limited, using the built-in GitHub Actions token.
+- Includes all v0.4.28 startup connection, source re-upload and AI preflight recovery fixes.
+
+## Previous release
+
 # ATGV AIATECH Assist v0.4.28
 
 - Add Edit and Cancel controls for saved Jira, Confluence and GitHub connection details on Start.

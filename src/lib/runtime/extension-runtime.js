@@ -30,6 +30,7 @@ const {readTimeline,saveRoleTimeline,saveBulkRoleTimelines,readDiagram,saveDiagr
 const discovery=require('../../ba-discovery');
 const discoveryImport=require('../../discovery-import');
 const baDocumentPreflight=require('../../ba-document-preflight');
+const baMappingCheckpoint=require('../../ba-mapping-checkpoint');
 const baPreflightReports=require('../../ba-preflight-report');
 const baWorkingBr=require('../../ba-working-br');
 const discoveryReview=require('../../discovery-review');
@@ -1354,6 +1355,9 @@ async function dashboardState(){
   }
   const brState=exportRecovery?.register||(openingFlow.phase==='open'&&activeProject?await brWorkflow.load(registry,activeProject.id):null);
   const baSelectedSources=brState?(context.workspaceState.get('atgvAssist.baSelectedSources.'+activeProject.id,[])||[]).filter(digest=>brState.sourceDocuments.some(source=>source.digest===digest)):[];
+  const resumeMarker=brState?context.workspaceState.get('atgvAssist.baMappingResume.'+activeProject.id):null;
+  const baMappingResumeAvailable=!!(resumeMarker&&String(resumeMarker.revision)===String(brState?.revision)&&
+   Array.isArray(resumeMarker.digests)&&resumeMarker.digests.length&&resumeMarker.digests.every(digest=>brState.sourceDocuments.some(source=>source.digest===digest)));
   const jiraBrowseBaseUrl=openingFlow.phase==='open'&&activeProject?String(effectiveConfig(activeProject).get('jira.baseUrl')||'').replace(/\/$/,''):'';
   let flowState=discoveryState?continuityEvaluate(discoveryState.answers,{approved:!!brState?.brs?.some(br=>br.status==='approved'&&!br.needsRefresh&&br.approvedContent)}):null;
   const serviceUrl=context.globalState.get('atgvAssist.serviceUrl','');
@@ -1386,7 +1390,7 @@ async function dashboardState(){
   }
   const roleSteps=activeProject&&openingFlow.phase==='open'?await roleStepEngine.overview(registry,activeProject.id,currentWork.roles):{scopeId:'project',roles:[]};
   const consolidatedSdlc=activeProject&&openingFlow.phase==='open'?await roleStepEngine.consolidated(registry,activeProject.id,currentWork.roles):{roles:[],scopes:0,verifiedEvidence:0,outputs:0};
-  return {architectErrorLogCount:activeProject?.id?architectErrorLogs.count(activeProject.id):0,projectConnections,emptyWorkspace:emptyWorkspace&&!unmanagedFolders.length,guideAutoShown,baSelectedSources,delivery,unifiedRepository,usedRoles,designState,approvedDesignHash,blueprintRegister,blueprintAssessment,health,aiService,unmanagedFolders,brState,exportRecoveryFailures:exportRecovery?.failures||[],jiraBrowseBaseUrl,roleSettings,timeline,modelStatus,recentProjects,projectReadiness,openingOffline,startupScan,startupSetup:await startupStatus(projects),serviceConfigured,serviceUrl,coordinationProvider:coordinationProvider(),remoteLinks:links,liveRemote:activeProject?.id===liveRemoteState.projectId?liveRemoteState:null,autoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.autoSync.'+activeProject.id,false)),jiraAutoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.jiraAutoSync.'+activeProject.id,false)),discovery:discoveryState,flow:flowState,type:'state',projects,techStacks,activeId:openingFlow.phase==='open'?activeProject?.id||null:null,opening:openingFlow.snapshot(),summary:openingFlow.phase==='open'?store?.summary()||{documents:0,chunks:0}:{documents:0,chunks:0},workspace:getWorkspace()?.uri.fsPath||null,extensionSettings,jiraTokenSaved,githubTokenSaved,catalog:await catalogUiState(),updates:updateStatus(),work:currentWork,roleSteps,consolidatedSdlc};
+  return {architectErrorLogCount:activeProject?.id?architectErrorLogs.count(activeProject.id):0,projectConnections,emptyWorkspace:emptyWorkspace&&!unmanagedFolders.length,guideAutoShown,baMappingResumeAvailable,baSelectedSources,delivery,unifiedRepository,usedRoles,designState,approvedDesignHash,blueprintRegister,blueprintAssessment,health,aiService,unmanagedFolders,brState,exportRecoveryFailures:exportRecovery?.failures||[],jiraBrowseBaseUrl,roleSettings,timeline,modelStatus,recentProjects,projectReadiness,openingOffline,startupScan,startupSetup:await startupStatus(projects),serviceConfigured,serviceUrl,coordinationProvider:coordinationProvider(),remoteLinks:links,liveRemote:activeProject?.id===liveRemoteState.projectId?liveRemoteState:null,autoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.autoSync.'+activeProject.id,false)),jiraAutoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.jiraAutoSync.'+activeProject.id,false)),discovery:discoveryState,flow:flowState,type:'state',projects,techStacks,activeId:openingFlow.phase==='open'?activeProject?.id||null:null,opening:openingFlow.snapshot(),summary:openingFlow.phase==='open'?store?.summary()||{documents:0,chunks:0}:{documents:0,chunks:0},workspace:getWorkspace()?.uri.fsPath||null,extensionSettings,jiraTokenSaved,githubTokenSaved,catalog:await catalogUiState(),updates:updateStatus(),work:currentWork,roleSteps,consolidatedSdlc};
 }
 async function publishBlueprintState(){
   if(!dashboard||!activeProject)return;
@@ -1911,6 +1915,17 @@ const documentPreflightSessions=new Map(); // Project-scoped, in-memory section/
 // updates may reach the active discovery record, even after a timeout or Stop.
 const SOURCE_MAPPING_AI_TIMEOUT_MS=180000;
 const SOURCE_PREFLIGHT_AI_TIMEOUT_MS=120000;
+async function aiMappingResumeKey(){
+ const name='atgvAssist.baMappingCheckpointKey';let secret=await context.secrets.get(name);
+ if(!secret){secret=crypto.randomBytes(32).toString('hex');await context.secrets.store(name,secret);}
+ if(!/^[a-f0-9]{64}$/.test(String(secret)))throw Error('AI resume key is invalid.');
+ return secret;
+}
+function saveCheckpointEntry(checkpoint,kind,key,value,limit){
+ const entries=checkpoint[kind];
+ if(!Object.hasOwn(entries,key)&&Object.keys(entries).length>=limit)delete entries[Object.keys(entries)[0]];
+ entries[key]=value;
+}
 // A timeout cancels only this AI request, not the user's mapping run. Race the
 // cancellation explicitly because some providers do not settle when cancelled.
 async function requestSourcePreflight(target,prompt,run){
@@ -1949,6 +1964,9 @@ async function processSelectedDiscoverySources(msg){
   const target=await activeAiTarget();check();
   const readable=[];
   for(const source of documents){readable.push(await sourceStore.read(registry,run.projectId,source));check();}
+  let resumeKey='';
+  try{resumeKey=await aiMappingResumeKey();}catch(error){report('AI resume storage unavailable: '+String(error.message||error));}
+  const modelDigest=sha(JSON.stringify({kind:String(target.kind||''),label:String(target.label||''),modelId:String(target.modelId||target.model?.id||''),endpoint:String(target.endpoint||'')}));
   const mappedProposals=[],preflights=[];
   for(let i=0;i<readable.length;i++){
    check();
@@ -1956,6 +1974,33 @@ async function processSelectedDiscoverySources(msg){
    let sections=discoveryImport.splitDocumentText(source.text);
    const smallerSections=discoveryImport.splitDocumentText(source.text,12000);
    if(smallerSections.length<=25)sections=smallerSections;
+   const resumeMeta={sourceDigest:selected[i],textDigest:sha(source.text),modelDigest,revision:String(original.revision)};
+   let checkpoint=null;
+   if(resumeKey){
+    try{
+     checkpoint=await baMappingCheckpoint.load(registry,run.projectId,resumeMeta,resumeKey);
+     if(checkpoint){
+      let offset=0;const restored=checkpoint.sectionLengths.map(length=>{const part=source.text.slice(offset,offset+length);offset+=length;return part;});
+      if(offset===source.text.length&&restored.every(Boolean))sections=restored;else checkpoint=null;
+     }
+     if(!checkpoint){
+      const marker=context.workspaceState.get?.('atgvAssist.baMappingResume.'+run.projectId);
+      if(marker&&String(marker.revision)===String(original.revision)&&(marker.digests||[]).includes(selected[i]))
+       await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Saved AI progress does not match the current document or model. Starting the required checks again…'});
+      checkpoint=baMappingCheckpoint.fresh(resumeMeta,sections);
+     }
+    }catch(error){checkpoint=null;report('AI resume checkpoint unavailable: '+String(error.message||error));}
+   }
+   const persistCheckpoint=async()=>{
+    if(!checkpoint||!resumeKey)return;
+    try{
+     checkpoint.sectionLengths=sections.map(text=>text.length);
+     await baMappingCheckpoint.save(registry,run.projectId,checkpoint,resumeKey);
+     await context.workspaceState.update('atgvAssist.baMappingResume.'+run.projectId,{revision:String(original.revision),digests:[...selected]});
+     await dashboard?.webview.postMessage({type:'discoveryMappingCheckpoint',projectId:run.projectId,resumeAvailable:true});
+    }catch(error){checkpoint=null;report('AI resume checkpoint could not be saved: '+String(error.message||error));
+     await dashboard?.webview.postMessage({type:'discoveryMappingCheckpoint',projectId:run.projectId,resumeAvailable:false,message:'AI progress could not be saved for a later resume. Check workspace storage permissions.'});}
+   };
    let preflightSplitRecoveries=0;
    const reports=[],partAnswers=[];
    for(let part=0;part<sections.length;part++){
@@ -1965,12 +2010,19 @@ async function processSelectedDiscoverySources(msg){
     await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'AI document preflight '+(i+1)+'/'+readable.length+label+': checking acceptance criteria and contradictions in '+source.name+'…'});
     let result,previous='',retrySmaller=false;
     for(let attempt=1;attempt<=2;attempt++){
-     check();
+     check();result=null;
      const prompt=baDocumentPreflight.prompt(section,{previous,attempt})+await roleSkillPrompt('business-analyst');
-     for(let networkAttempt=1;networkAttempt<=2;networkAttempt++){
+     const promptKey=sha(prompt),savedPreflight=checkpoint?.preflight?.[promptKey];
+     if(savedPreflight){
+      try{const restored=baDocumentPreflight.parse(savedPreflight,section.text);if(restored.ready)result=restored;}catch{}
+      if(result)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Resuming: using the completed preflight for '+source.name+label+'…'});
+     }
+     for(let networkAttempt=1;!result&&networkAttempt<=2;networkAttempt++){
       try{
        const ai=await requestSourcePreflight(target,prompt,run);
-       check();result=baDocumentPreflight.parse(ai,section.text);break;
+       check();result=baDocumentPreflight.parse(ai,section.text);
+       if(result.ready&&checkpoint){saveCheckpointEntry(checkpoint,'preflight',promptKey,ai,60);await persistCheckpoint();}
+       break;
       }catch(error){
        check();
        const timedOut=error.code==='ATGV_PREFLIGHT_TIMEOUT'||error.name==='TimeoutError'||/\btimed?\s*out\b|\btimeout\b/i.test(String(error.message||error));
@@ -1981,6 +2033,7 @@ async function processSelectedDiscoverySources(msg){
          sections.splice(part,1,...parts);preflightSplitRecoveries++;retrySmaller=true;
          const session=documentPreflightSessions.get(run.projectId);
          if(session)for(const entry of session.entries)if(entry.digest===selected[i])entry.totalSections=sections.length;
+         if(checkpoint&&Object.keys(checkpoint.preflight).length)await persistCheckpoint();
          await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'The AI response was slow. Retrying this section in smaller parts; the complete original document remains included…'});
          break;
         }
@@ -2029,6 +2082,11 @@ async function processSelectedDiscoverySources(msg){
     // reuse a mapping generated from a different working BR or prompt.
     const cacheKey=run.projectId+'|'+selected[i]+'|'+doc.name+'|'+target.label+'|'+part+'|'+sections.length+'|'+sha(mappingPrompt);
     let proposals=successfulSourceMappings.get(cacheKey);
+    const mappingKey=sha(mappingPrompt);
+    if(!proposals&&checkpoint?.mapping?.[mappingKey]){
+     try{proposals=discoveryImport.parseMappingResponse(checkpoint.mapping[mappingKey]);}catch{}
+     if(proposals)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'Resuming: using completed mapping for '+doc.name+label+'…'});
+    }
     if(!proposals){
      for(let attempt=1;attempt<=2;attempt++){
       run.timeout=false;
@@ -2036,7 +2094,7 @@ async function processSelectedDiscoverySources(msg){
       try{
        const answer=await aiAnswer(target,mappingPrompt+(attempt===2?'\n\nThe previous response was invalid. Return the exact JSON schema with all 12 keys as strings, using empty strings when evidence is missing.':''),95000,{json:true,signal:run.controller.signal,timeoutMs:SOURCE_MAPPING_AI_TIMEOUT_MS});
        check();
-       try{proposals=discoveryImport.parseMappingResponse(answer);}
+       try{proposals=discoveryImport.parseMappingResponse(answer);if(checkpoint){saveCheckpointEntry(checkpoint,'mapping',mappingKey,answer,30);await persistCheckpoint();}}
        catch(error){
         if(attempt===2)throw Error(doc.name+label+': AI mapping returned an invalid response twice. Retry Mapping or select another AI model. '+error.message);
         await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'mapping',message:'The AI response was incomplete. Retrying the mapping once…'});
@@ -2058,11 +2116,15 @@ async function processSelectedDiscoverySources(msg){
    if(sections.length>1){
     check();run.phase='preflight';run.timeout=false;
     await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Comparing mapped requirements across all '+sections.length+' document sections…'});
+    const crossPrompt=baDocumentPreflight.crossSectionPrompt(partAnswers),crossKey=sha(crossPrompt);
     const timer=setTimeout(()=>{run.timeout=true;run.controller.abort();},SOURCE_MAPPING_AI_TIMEOUT_MS);
     try{
-     const answer=await aiAnswer(target,baDocumentPreflight.crossSectionPrompt(partAnswers),12000,{json:true,signal:run.controller.signal,timeoutMs:SOURCE_MAPPING_AI_TIMEOUT_MS});
+     let answer=checkpoint?.cross?.[crossKey];
+     if(answer)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Resuming: checking saved cross-section review…'});
+     else answer=await aiAnswer(target,crossPrompt,12000,{json:true,signal:run.controller.signal,timeoutMs:SOURCE_MAPPING_AI_TIMEOUT_MS});
      check();const review=baDocumentPreflight.parseCrossSection(answer,partAnswers);
      if(review.conflicts.length)throw Error(source.name+': conflicting requirements across document sections need Business Analyst clarification: '+review.conflicts.map(item=>String(item.detail).slice(0,250)).slice(0,3).join(' | ')+' No mapping was saved.');
+     if(checkpoint){saveCheckpointEntry(checkpoint,'cross',crossKey,answer,5);await persistCheckpoint();}
      crossSectionChecked=true;
     }catch(error){if(run.timeout)throw Error(source.name+': cross-section review timed out. No mapping was saved; retry mapping.');throw error;}
     finally{clearTimeout(timer);}
@@ -2080,6 +2142,8 @@ async function processSelectedDiscoverySources(msg){
   check();run.phase='committing';
   await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'committing',message:'Saving complete mapping atomically. Cancellation is disabled during this step…'});
   const latest=await brWorkflow.commitSourceMapping(registry,run.projectId,original.revision,{digests:selected,proposals:mappedProposals,preflights});
+  for(const digest of selected)try{await baMappingCheckpoint.remove(registry,run.projectId,digest);}catch(error){report('Completed AI checkpoint cleanup: '+String(error.message||error));}
+  try{await context.workspaceState.update('atgvAssist.baMappingResume.'+run.projectId,undefined);}catch(error){report('Completed AI resume marker cleanup: '+String(error.message||error));}
   for(const key of successfulSourceMappings.keys())if(key.startsWith(run.projectId+'|'))successfulSourceMappings.delete(key);
   // Results appear only after the atomic commit. Failed or stopped runs do
   // not present unsaved proposals to the analyst.
@@ -2204,13 +2268,13 @@ async function deleteBREverywhere(msg){
  const assertDeletionProject=()=>{if(activeProject?.id!==deletionProjectId)throw Error('Active project changed during deletion. Return to the original project and retry; no new remote deletion started.');};
  let deletionCompleted=false,deletionErrored=false;
  const deletionStatus=async(phase,message,deleted=0,total=0)=>dashboard?.webview.postMessage({
-  type:'brDeletionProgress',projectId:deletionProjectId,phase,message,deleted,total});
- const deletionComplete=async(brIds,jiraKeys=[],confluencePageIds=[])=>{
+  type:'brDeletionProgress',projectId:deletionProjectId,target:msg.target,phase,message,deleted,total});
+ const deletionComplete=async(brIds,jiraKeys=[],confluencePageIds=[],warnings=[])=>{
   // Refresh all roles from authoritative local data only AFTER confirmed deletion.
-  await dashboard?.webview.postMessage({type:'brDeletedEverywhere',projectId:deletionProjectId,brIds,jiraKeys,confluencePageIds});
+  await dashboard?.webview.postMessage({type:'brDeletedEverywhere',projectId:deletionProjectId,target:msg.target,brIds,jiraKeys,confluencePageIds});
   try{await refreshDashboard();}catch(error){report('BR deletion refresh warning: '+error.message);}
   deletionCompleted=true;
-  await deletionStatus('completed','Deletion completed. Jira and all role workspaces are refreshing.',1,1);
+  await deletionStatus(warnings.length?'failed':'completed',warnings.length?'Deletion needs cleanup: '+warnings.join('; '):'Deletion completed. Jira and all role workspaces are refreshing.',1,1);
  };
  try{
   await deletionStatus('preparing','Checking BR ownership and linked Jira, Confluence and Git records…');
@@ -2218,8 +2282,13 @@ async function deleteBREverywhere(msg){
   if(initial.revision!==msg.revision)throw Error('Business Requirements changed. Refresh and retry.');
   const sourceDigest=String(msg.digest||'');
   const type=String(msg.target||'br');
-  let source=null,impact;
-  if(type==='active-source'||type==='archived-source'){
+  let source=null,impact,cycleImpact=null,cycleActor='';
+  if(type==='in-progress'){
+   cycleActor=(await requireBAOwner('ba-discovery')).actor;
+   cycleImpact=brWorkflow.inProgressDeletionImpact(initial);
+   impact={requirements:cycleImpact.requirements};
+   source={type:'in-progress',name:'Current in-progress cycle',sources:cycleImpact.sources};
+  }else if(type==='active-source'||type==='archived-source'){
    await requireBAOwner('ba-discovery');
    if(!/^[a-f0-9]{64}$/.test(sourceDigest))throw Error('Invalid source fingerprint.');
    impact=type==='active-source'?brWorkflow.activeSourceDeletionImpact(initial,sourceDigest):brWorkflow.sourceDeletionImpact(initial,sourceDigest);
@@ -2233,7 +2302,31 @@ async function deleteBREverywhere(msg){
    impact={requirements:[{id:brId,title:br.title}]};
   }else throw Error('Unknown remote deletion target.');
   const ids=impact.requirements.map(item=>item.id).sort();
+  if(ids.length)remoteBRDeletion.assertRegister(initial,ids);
   await requireVerifiedBRDeletionOwner(ids);
+  if(type==='in-progress'&&!ids.length){
+   const sources=cycleImpact.sources,removable=sources.filter(item=>!item.shared),shared=sources.filter(item=>item.shared);
+   const action='Force Delete Everywhere';
+   const summary=`Force delete the current in-progress Business Requirement?\n\nNo BR or remote Jira/Confluence record is mapped to this cycle. ${removable.length} unshared uploaded document(s) will be removed. ${shared.length} source document(s) are shared with other BRs and will be retained as historical evidence. Current discovery answers and unsaved edits will be discarded.`;
+   if(await uiWarning(summary,{modal:true},action)!==action)return;
+   assertDeletionProject();
+   await deletionStatus('running','Removing the in-progress cycle and its local references…');
+   const actor=cycleActor;
+   const updated=await brWorkflow.forceDeleteInProgressCycle(registry,activeProject.id,initial.revision,{actor,expectedBrIds:[],expectedSourceDigests:sources.map(item=>item.digest),expectedJiraKeys:[]});
+   const warnings=[];
+   for(const entry of removable)if(entry.storedName&&!([...updated.sourceDocuments,...updated.archivedSources].some(row=>row.storedName===entry.storedName)))
+    try{await sourceStore.removeStored(registry,activeProject.id,entry);}catch(error){warnings.push('Source cleanup: '+String(error.message||error));}
+   for(const entry of sources)try{await baMappingCheckpoint.remove(registry,activeProject.id,entry.digest);}catch(error){warnings.push('AI progress cleanup: '+String(error.message||error));}
+   try{const answers=await discovery.load(registry,activeProject.id);const cleared=await discovery.save(registry,activeProject.id,{},answers.revision);
+    await dashboard?.webview.postMessage({type:'discoverySaved',discovery:cleared});}
+   catch(error){warnings.push('Discovery cleanup: '+String(error.message||error));}
+   try{await context.workspaceState.update('atgvAssist.baSelectedSources.'+activeProject.id,[]);await context.workspaceState.update('atgvAssist.baMappingResume.'+activeProject.id,undefined);}catch(error){warnings.push('Source selection: '+String(error.message||error));}
+   documentPreflightSessions.delete(activeProject.id);
+   await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
+   await deletionComplete([],[],[],warnings);
+   await notice(warnings.length?'In-progress cycle removed, but cleanup needs attention: '+warnings.join('; '):'In-progress cycle and its unshared source data deleted. No remote records were linked.',!!warnings.length);
+   return;
+  }
   if(!ids.length){
    if(!source)throw Error('Select a Business Requirement to delete.');
    const unused=(type==='active-source'?initial.sourceDocuments:initial.archivedSources||[]).find(row=>row.digest===sourceDigest);
@@ -2264,14 +2357,16 @@ async function deleteBREverywhere(msg){
   const localOwnership=brArtifactCleanup.ownership(initial,ids);
   const exclusiveUploadedSources=source?[]:brWorkflow.exclusiveBRSourceEntries(initial,ids);
 
-  const hasRemotes=localOwnership.keys.length||ids.some(id=>(initial.completedCycles||[]).some(c=>(c.requirements||[]).some(br=>br.id===id&&(br.jiraKey||(br.jiraIssues||[]).length))));
+  const localLinks=await new DocumentSync({folder:path.dirname(registry.fileFor(activeProject.id))}).read();
+  const hasRemotes=localOwnership.keys.length||ids.some(id=>localLinks.entries?.[`approved-brs/${id}.md`]?.pageId||
+   (initial.completedCycles||[]).some(c=>(c.requirements||[]).some(br=>br.id===id&&(br.jiraKey||(br.jiraIssues||[]).length))));
   const localOnly=!hasRemotes&&ids.every(id=>{
     const br=initial.brs.find(x=>x.id===id);
     return br&&br.status!=='approved'&&!br.approvedContent;
   });
   if(localOnly){
-   const action='Delete In-Progress BR';
-   const text=`Delete ${ids.join(', ')} and their current-cycle source data and artifacts? No Jira publication or approved BR record exists for these draft(s). The uploaded source will be deleted only if explicitly selected. This cannot be undone.`;
+   const action=type==='in-progress'?'Force Delete Everywhere':'Delete In-Progress BR';
+   const text=`Delete ${ids.join(', ')} and their current-cycle source data and artifacts? No Jira publication or approved BR record exists for these draft(s). ${type==='in-progress'?'Unshared uploads and unsaved edits will be removed; sources shared with other BRs will be preserved.':'The uploaded source will be deleted only if explicitly selected.'} This cannot be undone.`;
    if(await uiWarning(text,{modal:true},action)!==action)return;
    const phrase='DELETE DRAFT '+ids.join(',');
    if(await uiInput({prompt:'Type exactly '+phrase,placeHolder:phrase})!==phrase)return;
@@ -2281,29 +2376,38 @@ async function deleteBREverywhere(msg){
    await requireVerifiedBRDeletionOwner(ids);
    const current=await brWorkflow.load(registry,activeProject.id);
    if(current.revision!==initial.revision)throw Error('Draft changed before confirmation. Refresh.');
-   let updated;
-   if(source){
+   let updated;const localWarnings=[];
+   if(source?.type==='in-progress'){
+    updated=await brWorkflow.forceDeleteInProgressCycle(registry,activeProject.id,current.revision,{actor,expectedBrIds:ids,expectedSourceDigests:source.sources.map(item=>item.digest),expectedJiraKeys:[]});
+    for(const entry of source.sources.filter(item=>!item.shared))if(entry.storedName&&
+      ![...updated.sourceDocuments,...updated.archivedSources].some(item=>item.storedName===entry.storedName))
+     try{await sourceStore.removeStored(registry,activeProject.id,entry);}catch(error){localWarnings.push('Source cleanup: '+String(error.message||error));}
+    for(const entry of source.sources)try{await baMappingCheckpoint.remove(registry,activeProject.id,entry.digest);}catch(error){localWarnings.push('AI progress cleanup: '+String(error.message||error));}
+   }else if(source){
     updated=source.type==='active-source'?
      await brWorkflow.forceDeleteActiveSource(registry,activeProject.id,current.revision,{digest:source.digest,actor,expectedBrIds:ids}):
      await brWorkflow.forceDeleteArchivedSource(registry,activeProject.id,current.revision,{digest:source.digest,actor,expectedBrIds:ids});
     const original=[...(initial.sourceDocuments||[]),...(initial.archivedSources||[])].find(s=>s.digest===source.digest);
     if(original?.storedName&&!([...updated.sourceDocuments,...updated.archivedSources].some(s=>s.storedName===original.storedName)))await sourceStore.removeStored(registry,activeProject.id,original);
    }else updated=await brWorkflow.forceDeleteBusinessRequirement(registry,activeProject.id,current.revision,{brId:ids[0],actor,expectedJiraKeys:[]});
-   await brWorkflow.removeBRExports(registry,activeProject.id,ids);
+   try{await brWorkflow.removeBRExports(registry,activeProject.id,ids);}catch(error){localWarnings.push('BR exports: '+String(error.message||error));}
    for(const entry of exclusiveUploadedSources)if(entry.storedName&&
       ![...updated.sourceDocuments,...updated.archivedSources].some(v=>v.storedName===entry.storedName))
       await sourceStore.removeStored(registry,activeProject.id,entry);
-   const cleaned=await brArtifactCleanup.cleanup(aiRoot(),localOwnership);
-   await projectEffortRegister.removeBRTaskEstimates(registry,activeProject.id,{jiraKeys:localOwnership.keys,actor});
+   let cleaned={removed:[]};
+   try{cleaned=await brArtifactCleanup.cleanup(aiRoot(),localOwnership);}catch(error){localWarnings.push('Local artifacts: '+String(error.message||error));}
+   try{await projectEffortRegister.removeBRTaskEstimates(registry,activeProject.id,{jiraKeys:localOwnership.keys,actor});}catch(error){localWarnings.push('Effort estimates: '+String(error.message||error));}
    pmLatestSnapshot=null;
    if(source&&!updated.sourceDocuments.length){
-    const answers=await discovery.load(registry,activeProject.id);
-    await discovery.save(registry,activeProject.id,{},answers.revision);
+    try{const answers=await discovery.load(registry,activeProject.id);const cleared=await discovery.save(registry,activeProject.id,{},answers.revision);
+     await dashboard?.webview.postMessage({type:'discoverySaved',discovery:cleared});}
+    catch(error){localWarnings.push('Discovery cleanup: '+String(error.message||error));}
    }
+   if(type==='in-progress'){try{await context.workspaceState.update('atgvAssist.baSelectedSources.'+activeProject.id,[]);await context.workspaceState.update('atgvAssist.baMappingResume.'+activeProject.id,undefined);}catch(error){localWarnings.push('Source selection: '+String(error.message||error));}documentPreflightSessions.delete(activeProject.id);}
    approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;jiraPreviewValidation=null;
    await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
-   await deletionComplete(ids);
-   await notice(`${ids.join(', ')} draft(s) and ${cleaned.removed.length} scoped artifact(s) deleted locally. No remote Jira or Confluence records existed for these drafts.`);
+   await deletionComplete(ids,[],[],localWarnings);
+   await notice(`${ids.join(', ')} draft(s) and ${cleaned.removed.length} scoped artifact(s) deleted locally. No remote Jira or Confluence records existed for these drafts.${localWarnings.length?' Cleanup needs attention: '+localWarnings.join('; '):''}`,!!localWarnings.length);
    return;
   }
   requireOnline();
@@ -2383,7 +2487,14 @@ async function deleteBREverywhere(msg){
     }
     const current=await brWorkflow.load(registry,activeProject.id);
     if(current.revision!==savedPlan.registerRevision)throw Error('BR register changed after remote deletion. Manual reconciliation required.');
-    if(savedPlan.source){
+    if(savedPlan.source?.type==='in-progress'){
+     updated=await brWorkflow.forceDeleteInProgressCycle(registry,activeProject.id,current.revision,{actor,expectedBrIds:ids,
+      expectedSourceDigests:savedPlan.source.sources.map(item=>item.digest),expectedJiraKeys:[...new Set(savedPlan.jira.map(item=>item.key))],remoteDeletionJobId:job.id});
+     for(const entry of savedPlan.source.sources.filter(item=>!item.shared))if(entry.storedName&&
+       ![...updated.sourceDocuments,...updated.archivedSources].some(item=>item.storedName===entry.storedName))
+      try{await sourceStore.removeStored(registry,activeProject.id,entry);}catch(error){finalizeWarnings.push('Source file cleanup: '+error.message);}
+     for(const entry of savedPlan.source.sources)try{await baMappingCheckpoint.remove(registry,activeProject.id,entry.digest);}catch(error){finalizeWarnings.push('AI progress cleanup: '+String(error.message||error));}
+    }else if(savedPlan.source){
      updated=savedPlan.source.type==='active-source'?
       await brWorkflow.forceDeleteActiveSource(registry,activeProject.id,current.revision,{digest:savedPlan.source.digest,actor,expectedBrIds:ids,remoteDeletionJobId:job.id}):
       await brWorkflow.forceDeleteArchivedSource(registry,activeProject.id,current.revision,{digest:savedPlan.source.digest,actor,expectedBrIds:ids,remoteDeletionJobId:job.id});
@@ -2400,10 +2511,14 @@ async function deleteBREverywhere(msg){
       ![...updated.sourceDocuments,...updated.archivedSources].some(v=>v.storedName===entry.storedName))
       try{await sourceStore.removeStored(registry,activeProject.id,entry);}
       catch(error){finalizeWarnings.push('Exclusive source file: '+error.message);}
-    if((savedPlan.source?.type==='active-source'||exclusiveUploadedSources.length)&&!updated.sourceDocuments.length){
+    if((savedPlan.source?.type==='active-source'||savedPlan.source?.type==='in-progress'||exclusiveUploadedSources.length)&&!updated.sourceDocuments.length){
       try{const answers=await discovery.load(registry,activeProject.id);
         await discovery.save(registry,activeProject.id,{},answers.revision);}
       catch(error){finalizeWarnings.push('Discovery answers cleanup: '+error.message);}
+    }
+    if(savedPlan.source?.type==='in-progress'){
+     try{await context.workspaceState.update('atgvAssist.baSelectedSources.'+activeProject.id,[]);await context.workspaceState.update('atgvAssist.baMappingResume.'+activeProject.id,undefined);}catch(error){finalizeWarnings.push('Source selection: '+String(error.message||error));}
+     documentPreflightSessions.delete(activeProject.id);
     }
     approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;jiraPreviewValidation=null;
     await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
@@ -2439,7 +2554,7 @@ async function deleteBREverywhere(msg){
   // BR-register finalization have BOTH succeeded. Old in-flight Jira pages must
   // not repopulate the webview with a pre-deletion snapshot.
   assertDeletionProject();
-  await deletionComplete(ids,plan.jira.map(row=>row.key),plan.confluence.map(row=>row.pageId));
+  await deletionComplete(ids,plan.jira.map(row=>row.key),plan.confluence.map(row=>row.pageId),cleanupWarnings);
   const countMessage=`Jira deleted: ${plan.jira.length}; Confluence pages moved to Trash: ${plan.confluence.length}; local artifacts removed: ${localCleanup.removed.length}; verified GitHub branches removed: ${deletedBranches.length}. Shared assets and merged main-branch code were preserved.`;
   if(cleanupWarnings.length)report('BR deletion cleanup requires attention: '+cleanupWarnings.join(' | '));
   await notice(plan.jira.length||plan.confluence.length?
@@ -7415,14 +7530,7 @@ async function handleDashboardMessage(msg){
         await dashboard?.webview.postMessage({type:'brUpdated',register:updated});break;
       }
       case 'deleteEmptyIncompleteCycle':{
-        requireOpened();await requireBAOwner('ba-discovery');
-        const current=await brWorkflow.load(registry,activeProject.id);
-        if(current.revision!==msg.revision)throw Error('BR changed. Refresh and retry.');
-        if(await uiWarning('Discard this empty Business Requirement in Progress? Approved BRs, published Jira issues and shared project data remain unchanged.',{modal:true},'Delete Empty Draft')!=='Delete Empty Draft')break;
-        const updated=await brWorkflow.discardEmptyIncompleteCycle(registry,activeProject.id,current.revision,{actor:await verifiedBAActor()});
-        const answers=await discovery.load(registry,activeProject.id);
-        await discovery.save(registry,activeProject.id,{},answers.revision);
-        await dashboard?.webview.postMessage({type:'brUpdated',register:updated});break;
+        await deleteBREverywhere({...msg,target:'in-progress'});break;
       }
       case 'brRoleTaskRepairPreview':{
         requireOpened();requireOnline();

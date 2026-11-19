@@ -180,6 +180,7 @@ let jiraPreviewFieldsByPath={};
 let jiraPlanForCR=[],jiraProtectionForCR=[],jiraPreviewIssueTypes={},jiraPreviewProject='',discoveryAutoSaveTimer=null,discoveryAutosaving=false,discoveryAutosaveSnapshot=null;
 let brRoleRepairPreview=null,brRoleRepairBusy=false;
 let mappingRunPhase='',mappingRetryAvailable=false,mappingFailureMessage='',mappingFailurePhase='',baPreflightInfo=null,reviewStopReason='',restoredMappingEpoch=null,sourceSelectedDigests=new Set(),jiraBrowseBaseUrl='',discoveryData=null,discoveryDirty=false,discoveryImportProposal=null,discoveryImportQueue=[],discoveryImportBusy=false,sourceRemoving=false,discoveryReviewProposal=null,preserveReviewOnSave=false,applyingAiReview=false,flowData=null,brState=null,brEditing=null,brPlanRevision=null,brJiraPreviewApproved=false,brQuill=null,brReadOnly=false,baOwnerState=null,baBusyTask='',brEditorDirty=false,brEditorSaving=false,brApprovePending=false,brJiraPlanChanges=0,brJiraPlanConflicts=0,pendingUploadAfterClaim=false,reviewApplyRetry=null,reviewApplyPhase='',reviewApplyRetryAvailable=false,reviewStageState=null;
+let mappingResumeAvailable=false;
 let aiProposalSelected=null,aiServiceLastProject=null;
 let deliveryState={items:[]},deliveryInfo=null,deliveryDraftDirty=false,deliveryBusy=false,deliveryTab='editor';
 let spaceSearchSequence=0,gateSearchId=null,settingsSearchId=null,gateSearched=false,modelPickerChoice='',modelPickerCurrent='',modelPickerData=null,modelPickerSaving=false;
@@ -795,7 +796,7 @@ function updateExtensionSettingBadges(){
 function collapseExtensionSettings(){for(const details of document.querySelectorAll('#settingsView details.ext-settings-accordion'))details.open=false;}
 function collapseProjectSettings(){const panel=$('projectSettingsPanel');if(panel)panel.open=false;for(const details of document.querySelectorAll('#projectView details.ext-settings-accordion'))details.open=false;}
 function updateState(msg){
-  if(activeId!==msg.activeId){if(baRequirementModalTarget)closeBARequirementModal(false);brDeletionBusy=false;hideBRDeletionProgress();roleJiraRequest++;baResumeCardReady=baHasRecoverableBR(msg.brState);baViewedStep=null;baPreflightInfo=null;mappingFailurePhase='';if(pmJiraTableInstance){pmJiraTableInstance.destroy?.();pmJiraTableInstance=null;} jiraInventoryRequest++;jiraInventoryLastChecked=0;jiraInventoryRunning=false;jiraInventoryLoaded=false;jiraInventoryError="";jiraInventoryItems=[];jiraInventoryProject="";jiraInventoryKey="";jiraInventoryViewerId="";aiChangeResolutionView.receive({type:'aiChangeResolution/state',cases:[]});baShowChangeProposal=false;restoredMappingEpoch=null;discoveryImportProposal=null;discoveryImportQueue=[];brState=msg.brState||null;reviewStageState=null;reviewApplyRetry=null;reviewApplyRetryAvailable=false;deliveryInfo=null;deliveryDraftDirty=false;deliveryState={items:[]};sourceSelectedDigests=new Set(Array.isArray(msg.baSelectedSources)?msg.baSelectedSources:[]);opsOwnerDocs=[];opsOwnerLoaded=false;opsOwnerMe=null;opsOwnerBusy=false;handoffOwnerBusy=null;baOwnerState=null;selectedHandoffBrId=null;handoffOwnership={me:null,documents:[],scope:null};}
+  if(activeId!==msg.activeId){mappingResumeAvailable=false;mappingRetryAvailable=false;if(baRequirementModalTarget)closeBARequirementModal(false);brDeletionBusy=false;hideBRDeletionProgress();roleJiraRequest++;baResumeCardReady=baHasRecoverableBR(msg.brState);baViewedStep=null;baPreflightInfo=null;mappingFailurePhase='';if(pmJiraTableInstance){pmJiraTableInstance.destroy?.();pmJiraTableInstance=null;} jiraInventoryRequest++;jiraInventoryLastChecked=0;jiraInventoryRunning=false;jiraInventoryLoaded=false;jiraInventoryError="";jiraInventoryItems=[];jiraInventoryProject="";jiraInventoryKey="";jiraInventoryViewerId="";aiChangeResolutionView.receive({type:'aiChangeResolution/state',cases:[]});baShowChangeProposal=false;restoredMappingEpoch=null;discoveryImportProposal=null;discoveryImportQueue=[];brState=msg.brState||null;reviewStageState=null;reviewApplyRetry=null;reviewApplyRetryAvailable=false;deliveryInfo=null;deliveryDraftDirty=false;deliveryState={items:[]};sourceSelectedDigests=new Set(Array.isArray(msg.baSelectedSources)?msg.baSelectedSources:[]);opsOwnerDocs=[];opsOwnerLoaded=false;opsOwnerMe=null;opsOwnerBusy=false;handoffOwnerBusy=null;baOwnerState=null;selectedHandoffBrId=null;handoffOwnership={me:null,documents:[],scope:null};}
   workspaceFolderAvailable=!!msg.workspace;
   $('gateFolderAlert').classList.toggle('hidden',workspaceFolderAvailable);
   $('gateManual').disabled=!workspaceFolderAvailable;
@@ -832,6 +833,16 @@ function updateState(msg){
   if(!roleSettingsDirty){roleSettings=msg.roleSettings||{roles:[],enabled:[],revision:null};renderRoleSettings();}
   if(!roleTimelineDirty&&!bulkTimelineDirty&&!bulkTimelineSaving){timelineData=msg.timeline||{tasks:[],revision:null};renderRoleTimeline();if(selectedRole==='project-manager'&&view==='work')renderPMDashboard();}
   if(msg.brState)brState=msg.brState;
+  if(msg.baMappingResumeAvailable&&!discoveryImportBusy&&brState){
+   mappingResumeAvailable=true;
+   if(!sourceSelectedDigests.size)sourceSelectedDigests=new Set((msg.baSelectedSources?.length?msg.baSelectedSources:brState.sourceDocuments.map(source=>source.digest)));
+   if(!mappingRetryAvailable){mappingRetryAvailable=true;mappingFailureMessage='Previous AI progress is saved. Resume mapping from the last completed section.';mappingFailurePhase='';}
+   renderMappingRecovery();
+  }else if(msg.baMappingResumeAvailable===false&&!discoveryImportBusy&&mappingResumeAvailable){
+   mappingResumeAvailable=false;
+   if(mappingFailureMessage.startsWith('Previous AI progress is saved.'))mappingFailureMessage='The document or workflow changed. Retry mapping with the current information.';
+   renderMappingRecovery();
+  }
   if(Array.isArray(msg.exportRecoveryFailures)&&msg.exportRecoveryFailures.length)status(`${msg.exportRecoveryFailures.length} Business Requirements export(s) need recovery. Reopen this project after fixing folder permissions.`,true);
   if(msg.discovery&&!discoveryDirty){discoveryData=msg.discovery;renderDiscovery();}
   flowData=msg.flow||null;renderFlow();
@@ -4480,9 +4491,6 @@ function renderSoftwareUpdates(data,force=false){
  const latestVersion=data.extensionLatest?.version||data.latest?.version||'';
  $('softwareExtensionStatus').textContent=data.extensionError?`Extension: ${data.extensionError}`:latestVersion&&!data.extensionLatest.installable?`Latest extension v${latestVersion}: verified VSIX or checksum not available.`:data.latest?`Extension v${data.latest.version} available (installed v${version}). Release: ${data.latest.tag}.`:data.extensionLastCheck?`Installed extension v${version}${latestVersion?' · latest v'+latestVersion:' · no public release found'} (checked ${new Date(data.extensionLastCheck).toLocaleString()}).`:`Installed extension: v${version}; not checked yet.`;
  $('softwareLibraryStatus').textContent=data.libraryError?`Library: ${data.libraryError}`:data.libraryLatest?`Library release: v${data.libraryLatest}${data.libraryLatestAvailable?'. Pull Library Files to install the verified source archive.':'; verified ZIP or checksum not available.'}`:'Library: no public release yet.';
- const extensionText=data.extensionError?'Extension latest: unavailable':latestVersion?'Extension latest: v'+latestVersion+(!data.extensionLatest.installable?' · package unavailable':data.latest?' · update available':''):(data.extensionLastCheck?'Extension latest: no release':'Extension latest: checking…');
- const libraryText=data.libraryError?'Library latest: unavailable':data.libraryLatest?'Library latest: v'+data.libraryLatest+(data.libraryLatestAvailable?'':' · package unavailable'):'Library latest: checking…';
- $('gateLatestVersions').textContent=extensionText+(data.extensionReleaseWarnings?.length?' · some sources unavailable':'')+' | '+libraryText+(data.libraryReleaseWarnings?.length?' · some sources unavailable':'');
  $('viewExtensionRelease').disabled=!data.extensionLatest;
  $('installExtensionRelease').disabled=!data.latest;
  $('checkSoftwareUpdates').disabled=!!data.busy;
@@ -4993,7 +5001,7 @@ function renderSourcePreflight(){
  const workingDownload=$('baWorkingBrDownload');
  if(workingDownload){const available=!!(savedCurrent&&saved?.workingBR);workingDownload.classList.toggle('hidden',!available);workingDownload.disabled=!available||!activeId;}
  const retry=$('baPreflightRetry');
- if(retry){const showRetry=hasDedicatedPreflightRecovery();retry.classList.toggle('hidden',!showRetry);retry.disabled=!showRetry||!brState||!sourceSelectedDigests.size||selectedRole!=='business-analyst'||!activeId;}
+ if(retry){const showRetry=hasDedicatedPreflightRecovery();retry.textContent=mappingResumeAvailable?'Resume AI Mapping':'Retry Mapping';retry.classList.toggle('hidden',!showRetry);retry.disabled=!showRetry||!brState||!sourceSelectedDigests.size||selectedRole!=='business-analyst'||!activeId;}
  if(!info)return;
  const phase=info.phase||'checking',running=['preflight','repair','checking'].includes(phase);
  panel.dataset.phase=running?'running':phase;
@@ -5531,6 +5539,7 @@ function renderBAButtons(){
  nextPreview.classList.add('hidden'); // Preview navigation is in the standalone toolbar.
  nextPreview.disabled=!canPreview||!!baBusyTask||brEditorSaving||discoveryDirty;
  nextPreview.classList.toggle('ba-step-next-complete',canPreview);
+ renderMappingRecovery();
 }
 function renderBAOwner(){
  const canEdit=baCanEdit('ba-discovery');
@@ -5571,7 +5580,7 @@ function renderBAUncompleted(progress,activeStep,activeBrs,hasSources,displayed)
  const canRestart=hasSources&&!Object.keys(brState?.pending||{}).length&&!discoveryDirty&&!brEditorDirty&&!baBusyTask&&!discoveryImportBusy&&!brEditorSaving&&selectedRole==='business-analyst'&&!!activeId;
  $('baRestartIncomplete').disabled=!canRestart;
  $('baRestartIncomplete').title=!hasSources?'Already awaiting a source upload. Resume to continue.':discoveryDirty||brEditorDirty?'Save or discard unsaved changes before restarting.':Object.keys(brState?.pending||{}).length?'Resolve pending Jira operations before restarting.':canRestart?'Archive the unfinished cycle and start again from Upload.':'Restart is temporarily unavailable.';
- const deleting=!!baBusyTask||discoveryImportBusy||brEditorSaving||discoveryDirty||brEditorDirty||selectedRole!=='business-analyst';
+ const deleting=!!baBusyTask||discoveryImportBusy||brEditorSaving||discoveryAutosaving||brDeletionBusy||selectedRole!=='business-analyst';
  $('baDeleteIncomplete').disabled=deleting||(!sources.length&&!active.length&&!brState?.restartPending);
  $('baDeleteIncomplete').title=deleting?'Finish or discard active editing before deletion.':'Delete the current in-progress BR and its scoped artifacts everywhere after verification.';
 }
@@ -5585,11 +5594,7 @@ $('baResumeIncomplete').addEventListener('click',()=>{
 });
 $('baDeleteIncomplete').addEventListener('click',()=>{
  if($('baDeleteIncomplete').disabled||!brState||!activeId)return;
- const sources=brState.sourceDocuments||[],active=(brState.brs||[]).filter(br=>!br.archivedFromRestart&&br.status!=='retired');
- if(sources.length===1)requestBRDeletion({target:'active-source',digest:sources[0].digest,revision:brState.revision});
- else if(!sources.length&&active.length===1)requestBRDeletion({target:'br',brId:active[0].id,revision:brState.revision});
- else if(!sources.length&&!active.length&&brState.restartPending)send('deleteEmptyIncompleteCycle',{revision:brState.revision});
- else alert('This in-progress cycle has multiple sources or BRs. Delete each linked source or BR from the Business Requirements list to review the full scope.');
+ requestBRDeletion({target:'in-progress',revision:brState.revision});
 });
 $('baRestartIncomplete').addEventListener('click',()=>{
  if($('baRestartIncomplete').disabled||!brState||!activeId)return;
@@ -6552,6 +6557,7 @@ function renderMappingRecovery(){
  $('baStopMapping').disabled=!canStop;
  $('baRetryMapping').classList.add('hidden');
  const retry=!!mappingRetryAvailable&&!running;
+ $('baMappingRetry').textContent=mappingResumeAvailable?'Resume AI Mapping':'Retry Mapping';
  panel.classList.toggle('hidden',!retry||hasDedicatedPreflightRecovery());
  $('baMappingRetry').disabled=!retry||!brState||!sourceSelectedDigests.size||selectedRole!=='business-analyst'||!activeId;
  $('baMappingRecoveryMessage').textContent=mappingFailureMessage||'Mapping was stopped. No discovery changes were saved.';
@@ -6566,7 +6572,7 @@ function retryDiscoveryMapping(){
  baPreflightInfo=null;renderSourcePreflight();
  discoveryImportProposal=null;discoveryImportQueue=[];renderDiscoveryImportProposal();
  dismissObsoleteBARestartNotice();
- setDiscoveryImportBusy(true,'Retrying AI document preflight and source mapping…');
+ setDiscoveryImportBusy(true,mappingResumeAvailable?'Resuming AI document preflight and source mapping…':'Retrying AI document preflight and source mapping…');
  send('processDiscoverySources',{digests:[...sourceSelectedDigests],revision:brState.revision});
 }
 $('baStopMapping').addEventListener('click',()=>{
@@ -6646,6 +6652,9 @@ window.addEventListener('message',event=>{
     renderBRs();status(`Jira repair interrupted after ${m.created||0} created, ${m.linked||0} linked: ${m.message||'Check Jira and regenerate preview'}`,true,{persistent:true});return;
   }
   if(m.type==='brDeletionProgress'&&m.projectId===activeId){
+   if(m.target==='in-progress'&&m.phase==='running'){
+    if(discoveryAutoSaveTimer)clearTimeout(discoveryAutoSaveTimer);discoveryAutoSaveTimer=null;discoveryAutosaveSnapshot=null;discoveryDirty=false;brEditorDirty=false;mappingResumeAvailable=false;mappingRetryAvailable=false;
+   }
    showBRDeletionProgress(m.phase,m.message,m.deleted,m.total);
    if(['completed','cancelled','failed'].includes(m.phase)){
     renderSourceDocuments();
@@ -6728,7 +6737,7 @@ window.addEventListener('message',event=>{
   if(m.type==='brRetirementsApproved'){brPlanRevision=null;brJiraPreviewApproved=false;brJiraPlanChanges=0;brJiraPlanConflicts=0;$('brJiraChanges').classList.add('hidden');$('brJiraConflicts').classList.add('hidden');baBusy('',null);stageProgress('jiraRetire','Jira retirement review complete (100%). Preview regeneration is ready.',100);status('Jira retirements approved. Regenerate the preview.',false,{persistent:true});return;}
   if(m.type==='brRevisionCreated'&&m.brId){openBREditor(m.brId);}
  if(m.type==='brJiraDone'){stageProgress('jiraSync',`${m.count} JIRA changes published.`,100);baBusy('',null);jiraPublishState={...jiraPublishState,phase:'completed',confirmed:m.count,total:m.count,message:`Successfully published and recorded ${m.count} Jira changes.`};baViewedStep='publish';baPreviousStage='complete';renderPublishedJira();renderJiraPublishedItems();brPlanRevision=null;brJiraPlanChanges=0;brJiraPreviewApproved=false;$('brJiraApprove').disabled=true;$('brJiraSync').disabled=true;$('brJiraChanges').classList.add('hidden');renderDiscoverySummary();}
-  if(m.type==='discoveryRestarted'){baPreflightInfo=null;mappingFailurePhase='';baResumeCardReady=false;jiraPublicationPlan=[];jiraPublicationConfirmed.clear();baLastActiveStep='';mappingRunPhase='';mappingRetryAvailable=false;mappingFailureMessage='';baViewedStep=null;baPreviousStage='';baFailedProcess='';
+  if(m.type==='discoveryRestarted'){baPreflightInfo=null;mappingFailurePhase='';baResumeCardReady=false;mappingResumeAvailable=false;jiraPublicationPlan=[];jiraPublicationConfirmed.clear();baLastActiveStep='';mappingRunPhase='';mappingRetryAvailable=false;mappingFailureMessage='';baViewedStep=null;baPreviousStage='';baFailedProcess='';
     baReopenQuestions=false;baReopenDocuments=false;discoveryData=m.discovery;discoveryDirty=false;discoveryReviewProposal=null;discoveryImportProposal=null;discoveryImportQueue=[];restoredMappingEpoch=null;preserveReviewOnSave=false;
     sourceSelectedDigests=new Set(m.digests||[]);brPlanRevision=null;brJiraPreviewApproved=false;brEditing=null;baShowChangeProposal=false;
     reviewApplyRetry=null;reviewApplyRetryAvailable=false;reviewStageState=null;reviewStopReason='';
@@ -6737,8 +6746,9 @@ window.addEventListener('message',event=>{
     status(m.freshStart?'New Business Requirements cycle ready. Upload source documents to begin.':`New Business Requirements cycle ready. ${m.archivedCount||0} earlier source document(s) moved to history. Approved Business Requirements and Jira links are preserved.`);
     {navigate('discovery');requestAnimationFrame(()=>document.querySelector('.source-documents-panel')?.scrollIntoView({block:'nearest',behavior:'smooth'}));}
   }
-  if(m.type==='discoverySourceRevised'){baPreflightInfo=null;mappingFailurePhase='';sourceSelectedDigests=new Set(m.digests||[]);baReopenQuestions=false;baReopenDocuments=false;renderDiscoverySummary();status(m.count+' new or revised source(s) saved. Existing approved requirements and Jira keys preserved. Re-map documents, review changes, and approve before updating Jira.');}
+  if(m.type==='discoverySourceRevised'){baPreflightInfo=null;mappingResumeAvailable=false;mappingFailurePhase='';sourceSelectedDigests=new Set(m.digests||[]);baReopenQuestions=false;baReopenDocuments=false;renderDiscoverySummary();status(m.count+' new or revised source(s) saved. Existing approved requirements and Jira keys preserved. Re-map documents, review changes, and approve before updating Jira.');}
   if(m.type==='discoveryUploadDone'){
+    mappingResumeAvailable=false;
     if(m.autoPreflight)sourceSelectedDigests=new Set((brState?.sourceDocuments||[]).map(item=>item.digest));
     if((m.count||0)>0||(m.revised||0)>0||(m.reverified||0)>0){baPreflightInfo=m.autoPreflight?{phase:'preflight',summary:'Uploaded. Starting automatic AI document preflight, safe corrections and TDD testability checks…',applied:[],issues:[]}:null;} 
     if((m.count||0)>0||(m.revised||0)>0||(m.reverified||0)>0){
@@ -6756,6 +6766,10 @@ window.addEventListener('message',event=>{
    if(['preflight','repair'].includes(m.phase)){baPreflightInfo={...(baPreflightInfo||{}),phase:m.phase,summary:m.message||'Checking document…'};renderSourcePreflight();}
    setDiscoveryImportBusy(true,m.message||'Processing…');
   }
+  if(m.type==='discoveryMappingCheckpoint'&&m.projectId===activeId){
+   mappingResumeAvailable=m.resumeAvailable===true;
+   if(m.message)status(m.message,true);
+  }
   if(m.type==='discoverySourcePreflight'){
    baPreflightInfo={phase:m.phase||'checking',sourceName:m.sourceName,sourceDigest:m.digest,section:m.section,totalSections:m.totalSections,summary:m.summary||'',applied:m.applied||[],issues:m.issues||[],resolutions:m.resolutions||[],reportAvailable:true};renderSourcePreflight();
   }
@@ -6766,7 +6780,7 @@ window.addEventListener('message',event=>{
    setDiscoveryImportBusy(false,m.message||'Upload cancelled. No answers changed.');renderSourcePreflight();renderDiscoverySummary();
   }
   if(m.type==='discoveryImportDone'){
-   dismissObsoleteBARestartNotice();mappingRunPhase='';mappingRetryAvailable=false;mappingFailureMessage='';mappingFailurePhase='';
+   dismissObsoleteBARestartNotice();mappingRunPhase='';mappingRetryAvailable=false;mappingResumeAvailable=false;mappingFailureMessage='';mappingFailurePhase='';
    if(m.preflightCount)baPreflightInfo={...(baPreflightInfo||{}),phase:'ready'};
    setDiscoveryImportBusy(false,`${m.count} document(s) preflight checked and mapped. Review the 12 answers.`);renderSourceDocuments();renderDiscoverySummary();
    if(m.automatic&&view==='discovery')requestAnimationFrame(()=>{if(!baBusyTask&&!discoveryImportBusy)openBAWorkflowStep('mapping');});
@@ -7512,6 +7526,7 @@ let startupFormInitialized=false,startupPrereqRequested=false,startupConnectionV
 let startupConnectionEditSnapshot=null;
 let startupConnectionCheckSequence=0,startupConnectionCheckPending=false,startupConnectionHealthStarted=false,startupConnectionHealthError=false;
 const startupConnectionCheckResults=new Map();
+const STARTUP_CONNECTION_CHECK_LABELS=[['jira','Jira API'],['confluence','Confluence API'],['github','GitHub API'],['organization','GitHub organization'],['library','SDLC Library API']];
 let startupVerifying=false,startupScanComplete=false,startupPage=0,startupInstallingModule='';
 let startupLastInstalledTool='';
 let startupStackData=null,startupOpenStackId='',startupStackPriorFocus=null;
@@ -7565,7 +7580,8 @@ function updateStartupIssueSummary(){
  const permissionIssues=checks.filter(check=>check.ok===false).length;
  const stackIssues=startupScanComplete?(startupStackData?.stacks||[]).filter(stack=>!stack.ready).length:0;
  const copilotIssue=startupScanComplete&&$('startupCopilotCard')?.dataset?.progressState==='error'?1:0;
- const count=permissionIssues+stackIssues+copilotIssue;
+ const connectionIssues=[...startupConnectionCheckResults.values()].filter(check=>check.state==='error'||check.state==='offline').length;
+ const count=permissionIssues+stackIssues+copilotIssue+connectionIssues;
  node.textContent=count?`${count} ${count===1?'check needs':'checks need'} attention`:'';
 }
 function startupRing(card){
@@ -7605,16 +7621,31 @@ function renderStartupScanPlaceholders(){
 }
 function startupPayload(){return Object.fromEntries(Object.entries(startupFieldMap).map(([key,id])=>[key,$(id).value.trim()]));}
 function renderStartupConnectionChecks(){
- const list=$('startupConnectionChecks');list.replaceChildren();
+ const list=$('startupConnectionChecks');
+ const expanded=new Set([...list.querySelectorAll('details[open]')].map(row=>row.dataset.checkId));
+ list.replaceChildren();
  for(const check of startupConnectionCheckResults.values()){
-  const item=document.createElement('li');item.dataset.state=check.state;
-  item.textContent=check.label+': '+check.message+(check.url?' ('+check.url+')':'');list.append(item);
+  const item=document.createElement('details');item.className='atgv-permission-row atgv-connection-check';item.dataset.checkId=check.id;
+  item.dataset.state=check.state==='ok'?'ready':check.state==='error'||check.state==='offline'?'error':'pending';item.open=expanded.has(check.id);
+  const summary=document.createElement('summary');summary.className='atgv-permission-step';
+  const label=document.createElement('strong');label.className='atgv-permission-label';label.textContent=check.label;summary.append(label);
+  startupRing(summary);
+  const status=check.state==='ok'?'Ready':check.state==='pending'?'Checking':check.state==='offline'?'Offline':check.state==='error'?'Needs attention':'Not checked';
+  paintStartupStack(summary,{name:check.label,status:check.state==='ok'?'complete':check.state==='error'||check.state==='offline'?'error':check.state==='idle'?'idle':'running',percent:check.state==='ok'?100:0,message:check.message});
+  const badge=document.createElement('span');badge.className='atgv-permission-status';badge.textContent=status;summary.append(badge);
+  const detail=document.createElement('p');detail.className='atgv-permission-detail';detail.textContent=check.message+(check.url?' '+check.url:'');
+  item.append(summary,detail);list.append(item);
  }
- list.classList.toggle('hidden',startupConnectionCheckResults.size===0);
+ updateStartupIssueSummary();
+}
+function resetStartupConnectionChecks(){
+ startupConnectionCheckResults.clear();
+ for(const [id,label] of STARTUP_CONNECTION_CHECK_LABELS)startupConnectionCheckResults.set(id,{id,label,state:'idle',message:'Test and save connections to check this service.'});
+ renderStartupConnectionChecks();
 }
 function beginStartupConnectionChecks(){
  startupConnectionCheckPending=true;startupConnectionCheckResults.clear();
- for(const [id,label] of [['jira','Jira API'],['confluence','Confluence API'],['github','GitHub API'],['organization','GitHub organization'],['library','SDLC Library']])
+ for(const [id,label] of STARTUP_CONNECTION_CHECK_LABELS)
   startupConnectionCheckResults.set(id,{id,label,state:'pending',message:'Checking…'});
  renderStartupConnectionChecks();return ++startupConnectionCheckSequence;
 }
@@ -7730,6 +7761,7 @@ function renderStartupConfig(config){
   // Restore verified state before rendering the wizard so "Next: Search Project"
   // is enabled immediately after restarting the extension or VS Code.
   startupConnectionVerified=config.verified===true;
+  resetStartupConnectionChecks();
   startupAutoProject=startupConnectionVerified&&config.selectedProject?.id?config.selectedProject:null;
   startupAutoEnabled=required&&!!startupAutoProject;
   if(startupConnectionVerified&&!startupAutoEnabled)startupPage=1;
@@ -7875,7 +7907,7 @@ function toggleStartupConnectionEdit(){
   if(startupAutoEnabled)stopStartupAuto('Automatic opening paused while editing connections.');
   startupAutoNotice='';
   startupConnectionHealthError=false;
-  startupConnectionCheckSequence++;startupConnectionCheckPending=false;startupConnectionCheckResults.clear();renderStartupConnectionChecks();
+  startupConnectionCheckSequence++;startupConnectionCheckPending=false;resetStartupConnectionChecks();
   startupConnectionEditSnapshot=Object.fromEntries(Object.entries(startupFieldMap).map(([key,id])=>[key,$(id).value]));
   startupConnectionVerified=false;
   $('startupConnectionMessage').textContent='Update the connection details, then test and save them.';
@@ -7992,10 +8024,10 @@ window.addEventListener('message',event=>{
  if(message.type==='startupConnectionHealthResult'&&message.requestId===startupConnectionCheckSequence){
   startupConnectionCheckPending=false;
   if(Array.isArray(message.checks)){for(const check of message.checks)if(startupConnectionCheckResults.has(check.id))startupConnectionCheckResults.set(check.id,check);renderStartupConnectionChecks();}
-  else{startupConnectionCheckResults.clear();renderStartupConnectionChecks();}
+  else resetStartupConnectionChecks();
   startupConnectionHealthError=!message.success||!!message.checks?.some(check=>check.state==='offline');
   if(startupConnectionHealthError){
-   $('startupConnectionMessage').textContent=message.success?'Some services are available offline. Review the checks below.':'Some connections need attention. Review the checks below or select Edit.';
+   $('startupConnectionMessage').textContent=message.success?'Some services are available offline. Review Technology stack prerequisites.':'Some connections need attention. Review Technology stack prerequisites or select Edit.';
    $('startupConnectionMessage').className='test-status error';
    if(startupAutoEnabled)stopStartupAuto('Automatic opening paused: review the connection checks.');
   }else{$('startupConnectionMessage').textContent=message.message||'Connections verified.';$('startupConnectionMessage').className='test-status success';}
@@ -8005,10 +8037,14 @@ window.addEventListener('message',event=>{
   if(message.requestId!==startupConnectionCheckSequence)return;
   startupConnectionCheckPending=false;startupConnectionHealthStarted=true;startupConnectionHealthError=!message.success;
   if(Array.isArray(message.checks)){for(const check of message.checks)if(startupConnectionCheckResults.has(check.id))startupConnectionCheckResults.set(check.id,check);renderStartupConnectionChecks();}
-  else{startupConnectionCheckResults.clear();renderStartupConnectionChecks();}
+  else resetStartupConnectionChecks();
   startupVerifying=false;
   startupConnectionVerified=message.success===true;
   $('startupConnectionMessage').textContent=message.message||'Connection test did not complete.';
+  if(!startupConnectionVerified&&Array.isArray(message.checks)){
+   const failed=message.checks.filter(check=>check.state==='error').map(check=>check.label);
+   if(failed.length)$('startupConnectionMessage').textContent='Check '+failed.join(', ')+'. No changes were saved. Details are under Technology stack prerequisites.';
+  }
   $('startupConnectionMessage').className=startupConnectionVerified?'test-status success':'test-status error';
   if(startupConnectionVerified){startupConnectionEditSnapshot=null;$('startupAtlassianToken').value='';$('startupGithubToken').value='';send('startupReadiness');}
   renderStartupPage();

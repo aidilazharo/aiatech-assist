@@ -15,11 +15,13 @@ test('prerequisite summary starts collapsed and contains one grid for every chec
  const section=html.slice(begin,end);
  assert.doesNotMatch(section.slice(0,section.indexOf('>')),/\sopen(?:\s|=|>)/);
  assert.match(section,/<summary class="atgv-tool-scan-status">/);
- for(const id of ['startupScanToolPercent','startupScanToolName','startupPermissionChecks','startupStackGrid','startupCopilotCard'])assert.ok(section.includes('id="'+id+'"'),id);
+ for(const id of ['startupScanToolPercent','startupScanToolName','startupPermissionChecks','startupConnectionChecks','startupStackGrid','startupCopilotCard'])assert.ok(section.includes('id="'+id+'"'),id);
  assert.match(section,/<div class="atgv-startup-stack-grid">/);
  assert.match(css,/\.atgv-startup-permissions\{display:contents\}/);
  assert.match(css,/\.startup-stack-grid-items\{display:contents\}/);
  assert.match(css,/\.atgv-startup-prerequisites>\.atgv-tool-scan-status\{display:flex;align-items:center;justify-content:center/);
+ assert.match(css,/\.atgv-startup-stack-grid details\.atgv-permission-row\{margin:0\}/,'permission cards must not inherit the global details margin');
+ assert.match(css,/\.atgv-permission-row:not\(\[open\]\)>\.atgv-permission-step\{height:100%\}/,'closed permission cards fill the same grid row as technology cards');
 });
 
 test('permission cards keep concise labels, accessible details and their open state during updates',()=>{
@@ -44,7 +46,7 @@ test('permission cards keep concise labels, accessible details and their open st
 test('collapsed summary still reports checks that need attention',()=>{
  const start=ui.indexOf('function updateStartupIssueSummary('),end=ui.indexOf('function startupRing(',start);
  const message={},copilot={dataset:{progressState:'error'}};
- const context={$:id=>id==='startupScanSummaryIssues'?message:copilot,startupPermissions:{checks:[{ok:true},{ok:false}]},startupPermissionProgress:new Map(),startupScanComplete:true,startupStackData:{stacks:[{ready:true},{ready:false}]}};
+ const context={$:id=>id==='startupScanSummaryIssues'?message:copilot,startupPermissions:{checks:[{ok:true},{ok:false}]},startupPermissionProgress:new Map(),startupConnectionCheckResults:new Map(),startupScanComplete:true,startupStackData:{stacks:[{ready:true},{ready:false}]}};
  vm.runInNewContext(ui.slice(start,end)+'\nupdateStartupIssueSummary()',context);
  assert.equal(message.textContent,'3 checks need attention');
  context.startupPermissions={checks:[{ok:true}]};context.startupStackData={stacks:[{ready:true}]};copilot.dataset.progressState='complete';
