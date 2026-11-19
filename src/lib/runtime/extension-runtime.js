@@ -2244,17 +2244,18 @@ async function processSelectedDiscoverySources(msg){
    }
    const proposals=discoveryImport.mergeMappingAnswers(partAnswers);
    let crossSectionChecked=false;
-   if(sections.length>1){
+   if(sections.length>1&&!run.mappingOffline){
     check();run.phase='preflight';run.timeout=false;
     await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Comparing mapped requirements across all '+sections.length+' document sections…'});
     const crossPrompt=baDocumentPreflight.crossSectionPrompt(partAnswers),crossKey=sha(crossPrompt);
     let crossError;
-    for(let attempt=1;attempt<=3;attempt++){
+    const maxCrossAttempts=baLargeDocumentRecovery.attempts('cross',!!run.largeSource,!!run.recoveryTarget);
+    for(let attempt=1;attempt<=maxCrossAttempts;attempt++){
      check();
      try{
       let answer=checkpoint?.cross?.[crossKey];
       if(answer)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Resuming: validating saved cross-section review…'});
-      else answer=await requestSourceAI(target,crossPrompt+(attempt>1?'\n\nRECOVERY: Return valid evidence-backed JSON only. Missing details are not contradictions.':''),run,{maxChars:12000,timeoutMs:SOURCE_MAPPING_AI_TIMEOUT_MS});
+      else answer=await requestSourceAI(target,crossPrompt+(attempt>1?'\n\nRECOVERY: Return valid evidence-backed JSON only. Missing details are not contradictions.':''),run,{maxChars:12000,timeoutMs:baLargeDocumentRecovery.timeout('cross',!!run.largeSource)});
       check();
       const review=baDocumentPreflight.parseCrossSection(answer,partAnswers);
       if(review.conflicts.length)throw Object.assign(Error(source.name+': conflicting business requirements need BA clarification: '+review.conflicts.map(item=>String(item.detail).slice(0,250)).slice(0,3).join(' | ')),{code:'ATGV_BUSINESS_CONFLICT'});
@@ -2264,17 +2265,22 @@ async function processSelectedDiscoverySources(msg){
       check();
       if(error.code==='ATGV_BUSINESS_CONFLICT'||!trySourceAIFallback(run,error))throw error;
       crossError=error;
-      if(attempt<3)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Cross-section AI review was interrupted. Retrying ('+attempt+'/3)'+(run.useRecovery?' with Microsoft Copilot SDK':'')+' without restarting the document…'});
+      if(attempt<maxCrossAttempts)await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Cross-section AI review was interrupted. Retrying ('+attempt+'/'+maxCrossAttempts+')'+(run.useRecovery?' with Microsoft Copilot SDK':'')+' without restarting the document…'});
      }
     }
-    if(crossError)throw Error(source.name+': cross-section review could not complete after recovery attempts. '+String(crossError.message||crossError).slice(0,240)+' Saved section mappings remain available for Resume AI Mapping.');
+    if(crossError){
+     if(!run.largeSource)throw Error(source.name+': cross-section review could not complete after recovery attempts. '+String(crossError.message||crossError).slice(0,240)+' Saved section mappings remain available for Resume AI Mapping.');
+     await dashboard?.webview.postMessage({type:'discoveryImportProgress',phase:'preflight',message:'Cross-section AI review is NOT VERIFIED due to provider errors. Draft mapping is retained and requires Business Analyst review.'});
+    }
    }
    // Aggregate evidence from every source section, with bounded UI/report
    // metadata. All sections must pass before the atomic mapping commit.
-   const report={status:'ready',crossSectionChecked,summary:sections.length>1?'All '+sections.length+' document sections and their mapped claims were reviewed; source remains unchanged.':reports[0].summary,
+   const partialVerification=run.sourceOnlyPreflight||run.mappingOffline||(sections.length>1&&!crossSectionChecked);
+   const reviewIssues=partialVerification?[{severity:'warning',category:'ai-verification',detail:'One or more AI analysis stages could not be verified. Source-only extraction and full original document are available; BA review is required before approval.',sourceExcerpt:'',suggestion:'Review all source-backed requirements and open decisions before approving or publishing.'}]:[];
+   const report={status:partialVerification?'needs-review':'ready',crossSectionChecked,summary:partialVerification?'Source-only recovery completed; AI validation is incomplete. The uploaded original and full working BR were preserved. BA review required.':sections.length>1?'All '+sections.length+' document sections and their mapped claims were reviewed; source remains unchanged.':reports[0].summary,
     applied:reports.flatMap(x=>x.applied).slice(0,12),
     skipped:reports.flatMap(x=>x.skipped||[]).slice(0,12),
-    issues:reports.flatMap(x=>x.issues).slice(0,16),
+    issues:[...reports.flatMap(x=>x.issues),...reviewIssues].slice(0,16),
     resolutions:reports.flatMap(x=>x.resolutions||[]).slice(0,12),sections:reports,workingBR:workingRef,checks:working.checks};
    preflights.push(baDocumentPreflight.evidence(report,selected[i]));
    mappedProposals.push({filename:source.name,answers:proposals});
