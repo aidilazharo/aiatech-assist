@@ -6502,7 +6502,10 @@ function updateBREditorActions(){
    const [label,action]=resolutionButtons[blocker.key];
    const button=brElement('button','secondary br-approval-next',label);button.type='button';
    button.addEventListener('click',()=>{
-    if(action==='brApprovalEditDiscovery'||action==='brApprovalReviewAI'){$(action).click();return;}
+    // Use real workflow navigation. Forwarding to a hidden button left the
+    // Approval milestone active, so the Discovery/AI Review panels stayed hidden.
+    if(action==='brApprovalEditDiscovery'){openDiscoveryQuestionsFromApproval();return;}
+    if(action==='brApprovalReviewAI'){openAIReviewFromApproval();return;}
     if(!closeBREditor())return;
     if(action==='ownership'){
      baReopenDocuments=true;renderDiscoverySummary();
@@ -6548,16 +6551,50 @@ $('brUnsavedCancel').addEventListener('click',()=>{$('brUnsavedModal').classList
 $('brUnsavedDiscard').addEventListener('click',()=>closeBREditor(true));
 $('brUnsavedSave').addEventListener('click',()=>{brCloseAfterSave=true;$('brUnsavedModal').classList.add('hidden');$('brUnsavedModal').setAttribute('aria-hidden','true');$('brEditSave').click();});
 $('brEditClose').addEventListener('click',()=>closeBREditor());
-$('brApprovalEditDiscovery').addEventListener('click',()=>{
- if(!closeBREditor())return;
- baReopenQuestions=true;baReopenDocuments=false;renderDiscoverySummary();
- $('discoveryQuestionsPanel').open=true;$('discoveryQuestionsPanel').scrollIntoView({block:'start',behavior:'smooth'});
-});
-$('brApprovalReviewAI').addEventListener('click',()=>{
- if(!closeBREditor())return;
- baReopenQuestions=false;baReopenDocuments=false;renderDiscoverySummary();
- $('discoveryReviewPanel').open=true;$('discoveryReviewPanel').scrollIntoView({block:'start',behavior:'smooth'});
-});
+// Approval prerequisites are shown inside the BR editor, but Discovery and
+// AI Review are rendered under separate milestones. Navigate to the milestone
+// BEFORE expanding, scrolling, or focusing its panel.
+function openApprovalPrerequisiteStep(step,panelId,answerKey=''){
+ if(!closeBREditor())return false; // Preserve the existing unsaved-draft prompt.
+ baReopenQuestions=step==='mapping';
+ baReopenDocuments=false;
+ if(!openBAWorkflowStep(step)){
+  status('Cannot open the '+(step==='mapping'?'Discovery Questions':'AI Review')+
+   ' milestone. Save pending changes or complete its prerequisites first.',true);
+  return false;
+ }
+ const panel=$(panelId);
+ if(!panel||panel.classList.contains('hidden')){
+  status('The requested Business Requirements panel is unavailable. Check the mapped source and saved Discovery state.',true);
+  return false;
+ }
+ panel.open=true;
+ const answer=answerKey?$('ba-'+answerKey):null;
+ if(answer){
+  const section=answer.closest('.discovery-group');
+  if(section)section.toggleAttribute('open',true);
+ }
+ requestAnimationFrame(()=>{
+  if(panel.classList.contains('hidden'))return;
+  const target=answer||panel;
+  target.scrollIntoView({block:answer?'center':'start',behavior:'smooth'});
+  if(answer){
+   answer.focus({preventScroll:true});
+   if(answer.readOnly)status('Discovery answers are read-only. Switch to the Business Analyst role and verify your project permissions.',true);
+  }
+ });
+ return true;
+}
+function openDiscoveryQuestionsFromApproval(){
+ const readiness=currentDiscoveryReadiness();
+ const target=readiness.needsDecision?'questions':readiness.missing?.[0]?.key||'questions';
+ return openApprovalPrerequisiteStep('mapping','discoveryQuestionsPanel',target);
+}
+function openAIReviewFromApproval(){
+ return openApprovalPrerequisiteStep('review','discoveryReviewPanel');
+}
+$('brApprovalEditDiscovery').addEventListener('click',openDiscoveryQuestionsFromApproval);
+$('brApprovalReviewAI').addEventListener('click',openAIReviewFromApproval);
 $('brEditModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeBREditor();});
 $('brEditSave').addEventListener('click',()=>{
  if(!brEditing||!brState||brReadOnly||brEditorSaving)return;
