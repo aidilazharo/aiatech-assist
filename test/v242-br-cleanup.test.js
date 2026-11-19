@@ -7,8 +7,9 @@ const key='TC-392',other='TC-411';
 function register(){return {brs:[{id:'BR-005',status:'approved',approvedContent:{features:[{id:'F-1',title:'Dashboard',stories:[{id:'S-1',title:'Monitoring Dashboard'}]}]}}],
  synced:{'BR-005':{key:'TC-390',marker:'atgv-'+'a'.repeat(24),remoteDigest:'sha'},'BR-005/F-1':{key:'TC-391',marker:'atgv-'+'b'.repeat(24),remoteDigest:'sha'},'BR-005/F-1/S-1':{key,marker:'atgv-'+'c'.repeat(24),remoteDigest:'sha'}},
  roleTaskMappings:{'BR-005/F-1/S-1/ROLE-UIUX':{key:'TC-413',marker:'atgv-'+'d'.repeat(24),roleLabel:'atgv-role-ux-designer',storyKey:key,parentKey:'TC-391'}}};}
-test('Delete button in progress routes the complete cycle through Delete Everywhere',()=>{
- assert.match(src,/id="baDeleteIncomplete"/);
+test('in-progress button reads Delete and retains the verified Delete Everywhere workflow',()=>{
+ assert.ok(src.includes('id="baDeleteIncomplete" class="danger" type="button" data-br-delete-action>Delete</button>'));
+ assert.ok(!src.includes('id="baDeleteIncomplete" class="danger" type="button" data-br-delete-action>Force Delete Everywhere</button>'));
  const start=ui.indexOf("$('baDeleteIncomplete').addEventListener('click'");const end=ui.indexOf("$('baRestartIncomplete').addEventListener('click'",start),part=ui.slice(start,end);
  assert.match(part,/requestBRDeletion\(\{target:'in-progress',revision:brState\.revision\}\)/);
  assert.match(src,/case 'deleteEmptyIncompleteCycle'/);
