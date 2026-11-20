@@ -5668,8 +5668,12 @@ function renderBAButtons(){
  renderSourceDocuments();
  const current=currentDiscoveryReadiness(),saved=!!discoveryData?.updatedAt&&brState?.discoveryRevision===discoveryData?.revision;
  const reviewGood=reviewCurrent&&baMappingComplete()&&baReviewFinalized();
- const brs=brState?.restartPending?[]:activeBusinessRequirements(),generatingDone=brs.length>0&&!brs.some(br=>br.needsRefresh),pendingDraft=brs.some(br=>br.status==='draft');
- const staleDrafts=brs.filter(br=>br.status==='draft'&&(br.staleReason==='Discovery answers changed'||br.staleReason==='New source mapping completed'||br.source?.discoveryRevision!==brState?.discoveryRevision));
+ const brs=brState?.restartPending?[]:activeBusinessRequirements(),pendingDraft=brs.some(br=>br.status==='draft');
+ // A newly generated draft has needsRefresh=true until human review. That does
+ // NOT mean AI generation failed. Only stale source/discovery evidence or an
+ // outstanding non-draft refresh should stop Preview & Save.
+ const staleDrafts=brs.filter(br=>br.status==='draft'&&(br.staleReason==='Discovery answers changed'||br.staleReason==='New source mapping completed'||br.source?.discoveryRevision!==brState?.discoveryRevision||br.source?.digest!==brState?.importDigest));
+ const generatingDone=brs.length>0&&!staleDrafts.length&&!brs.some(br=>br.status!=='draft'&&br.needsRefresh);
  const freshDraftPending=brs.some(br=>br.status==='draft'&&!staleDrafts.includes(br));
  const approved=brs.some(br=>br.status==='approved'&&!br.needsRefresh);
  const retiredJiraPending=Object.keys(brState?.synced||{}).some(nodePath=>brState?.brs?.some(br=>br.id===nodePath.split('/')[0]&&br.status==='retired'));
@@ -5751,7 +5755,7 @@ function renderBAButtons(){
  $('brGenerate').classList.toggle('hidden',displayedStage!=='generate'||staleDrafts.length>0||generatingDone);
  $('brGenerateAffected').classList.toggle('hidden',displayedStage!=='generate'||!staleDrafts.length);
  const nextPreview=$('brNextPreviewSave');
- const canPreview=generatingDone&&displayedStage==='generate'&&(window.baLastGuideProgress||[]).some(step=>step.key==='save'&&step.selectable);
+ const canPreview=generatingDone&&displayedStage==='generate'&&pendingDraft&&(window.baLastGuideProgress||[]).some(step=>step.key==='save'&&step.selectable);
  nextPreview.classList.add('hidden'); // Preview navigation is in the standalone toolbar.
  nextPreview.disabled=!canPreview||!!baBusyTask||brEditorSaving||discoveryDirty;
  nextPreview.classList.toggle('ba-step-next-complete',canPreview);
@@ -5829,7 +5833,7 @@ function renderDiscoverySummary(){
   $('discoveryUpdatedAt').textContent=formatDateTime(discoveryData?.updatedAt);
   $('discoveryReadiness').textContent=`${filled} / ${total} answered`;
   const missingPreview=missing.slice(0,3).map(item=>item.label).join(' · ');
-  $('discoveryMissing').textContent=missing.length?`${missing.length} question${missing.length===1?'':'s'} remaining${missingPreview?': '+missingPreview:''}${missing.length>3?' …':''}`:readiness.needsDecision?'Question 12 still contains unresolved items.':'All 12 questions completed.';
+  $('discoveryMissing').textContent=missing.length?`${missing.length} question${missing.length===1?'':'s'} remaining${missingPreview?': '+missingPreview:''}${missing.length>3?' …':''}`:readiness.needsDecision?'12 answers complete · Question 12 records open decisions (draft review allowed).':'All 12 questions completed.';
   $('discoveryProgress').textContent=`${filled} / ${total} answered`;
   $('discoveryProgressFill').style.width=percent+'%';
   $('discoveryProgressHint').textContent=filled===total?'12 answers complete. Open decisions are allowed in drafts but block final approval.':'Save the available answers to run AI Review. Complete all 12 before generating requirements.';
@@ -6017,7 +6021,10 @@ function renderDiscoverySummary(){
   // outstanding Discovery decisions before entering the approval milestone.
   // Keep the Preview & Save stage accessible while approval is pending.
   const previewActionReady=displayed!=='generate'||!$('brNextPreviewSave').disabled;
-  const approvalActionReady=displayed!=='save'||(!readiness.needsDecision&&!discoveryHasReviewBlockers());
+  // Question 12 and acknowledged AI risks are FINAL APPROVAL safeguards, not
+ // navigation safeguards. Let saved drafts reach the approval-review screen;
+ // actual approval still validates these conditions in the extension host.
+ const approvalActionReady=displayed!=='save'||!!currentDefinition?.complete;
   const ready=ATGVJiraWorkflowTables.nextActionReady({next,complete:!!currentDefinition?.complete,canConfirm,previewReady:previewActionReady,approvalReady:approvalActionReady});
   nextButton.dataset.confirmReview=canConfirm?'true':'false';
   nextButton.dataset.milestoneState=ready?'ready':'blocked';
@@ -6028,8 +6035,8 @@ function renderDiscoverySummary(){
   nextButton.textContent=nextDefinition?'Next Step · '+nextDefinition.label:'Workflow Complete';
   if(canConfirm)nextButton.textContent=discoveryHasReviewBlockers()?'Review & Acknowledge Findings':'Confirm AI Review & Continue';
   nextButton.title=!nextDefinition?'The final Business Requirements milestone.':ready?'Continue to '+nextDefinition.label:
-   !approvalActionReady?'Resolve Discovery Question 12 and outstanding BA findings before proceeding to approval.':
-   !previewActionReady?'Finish generating the BR drafts before opening Preview & Save.':
+   !approvalActionReady?'Save all generated drafts before reviewing approval readiness.':
+   !previewActionReady?'Current-source BR drafts are unavailable or outdated. Regenerate stale drafts before opening Preview & Save.':
    currentDefinition?.complete?'Next step is unavailable until its prerequisites are satisfied.':'Complete this milestone before continuing.';
   document.querySelector('.jira-inbound-panel').classList.toggle('hidden',!status.showJiraInbound||!showJira);
   $('discoveryImportStatus').classList.toggle('hidden',!showSources&&!showMapping);
@@ -6086,7 +6093,7 @@ function renderDiscovery(){
       const area=document.createElement('textarea');area.id='ba-'+key;area.rows=5;area.maxLength=100000;area.placeholder='Add the evidence, context or decision for this question.';
       area.value=answer;area.readOnly=!baCanEdit('ba-discovery');
       const counter=document.createElement('small');counter.className='discovery-answer-count';
-      const helper=document.createElement('small');helper.className='muted';helper.textContent=key==='questions'?'List each unresolved decision, owner and due date where known. To confirm there are none, use the checkbox below.':'Use evidence from the uploaded document or confirmed business context.';
+      const helper=document.createElement('small');helper.className='muted';helper.textContent=key==='questions'?'Record genuine open decisions with owner and due date when known. You do not need to enter “None” to generate or preview drafts. Only confirm “No open decisions” if that is accurate; final approval requires open decisions to be resolved.':'Use evidence from the uploaded document or confirmed business context.';
       let noDecisionCheckbox=null,noDecisionChoice=null;
       if(key==='questions'){
         noDecisionChoice=document.createElement('label');noDecisionChoice.className='ba-no-open-decisions';
