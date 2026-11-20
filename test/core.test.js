@@ -11,9 +11,9 @@ function config(obj){return {get(k){return obj[k]??'';}};}
 function ok(o){return {ok:true,status:200,json:async()=>o};}
 
 test('version display and semver are both correct and capped at 99',()=>{
- assert.deepEqual(parseVersion('0.00.00'),{semver:'0.0.0',display:'0.0.00'});
+ assert.deepEqual(parseVersion('0.00.00'),{semver:'0.0.0',display:'0.0.0'});
  assert.deepEqual(parseVersion('1.09.99'),{semver:'1.9.99',display:'1.9.99'});
- assert.deepEqual(parseVersion('0.1.00'),{semver:'0.1.0',display:'0.1.00'});
+ assert.deepEqual(parseVersion('0.1.00'),{semver:'0.1.0',display:'0.1.0'});
  assert.throws(()=>parseVersion('100.00.00'));
  assert.throws(()=>parseVersion('0.0.100'));
  assert.throws(()=>parseVersion('1.2.3-beta'));

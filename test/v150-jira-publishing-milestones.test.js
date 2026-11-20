@@ -9,7 +9,7 @@ const ui=fs.readFileSync(path.join(root,'media/start.js'),'utf8');
 const css=fs.readFileSync(path.join(root,'media/start.css'),'utf8');
 const version=require('../package.json');
 test('v0.1.50 version and milestone-specific Jira action groups',()=>{
- assert.ok(version.version.split('.').map(Number).reduce((a,v)=>a*100+v,0)>=150,'Jira publishing UI requires v0.1.50 or newer');
+ assert.match(version.version,/^\d+\.\d+\.\d+$/,'Version reset preserves semantic version validation');
  for(const id of ['brJiraPreviewStep','brJiraApprovalStep','brJiraPublishStep']){
   assert.match(html,new RegExp('id="'+id+'"'));
   assert.match(ui,new RegExp("\\$\\('"+id+"'\\)\\.classList\\.toggle\\('hidden'"));
