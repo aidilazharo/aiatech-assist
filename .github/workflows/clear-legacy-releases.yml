@@ -15,6 +15,7 @@ jobs:
       - name: Delete old GitHub Releases and associated release tags
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         shell: bash
         run: |
           set -euo pipefail
@@ -23,7 +24,7 @@ jobs:
           while IFS= read -r tag; do
             [[ -n "$tag" ]] || continue
             case "$tag" in v0.0.0|v0.0.0-*) echo "Retaining fresh baseline $tag"; continue ;; esac
-            gh release delete "$tag" --yes --cleanup-tag
+            gh release delete "$tag" --repo "$GH_REPO" --yes --cleanup-tag
             count=$((count+1))
           done <<< "$tags"
           echo "Deleted $count legacy releases/tags; retained v0.0.0 builds." >> "$GITHUB_STEP_SUMMARY"
