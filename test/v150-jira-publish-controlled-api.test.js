@@ -15,7 +15,7 @@ function setup({failCreate=false,approval='Publish Jira'}={}){
  const jiraPreviewFieldPlans={'BR-777':{fields:[{id:'summary',type:'string',required:true}],extraFields:{},existingDigest:null}};
  const binding=JSON.stringify({atgvProjectId:'test-project',site:'https://mock.atlassian.test',project:'TC',actor:'mock-actor',items:[item],fields:jiraPreviewFieldPlans});
  const deps={
-  jiraSyncBusy:false,jiraPreviewFieldPlans,approvedJiraPreviewRevision:1,approvedJiraPreviewBinding:sha(binding),activeProject:{id:'test-project'},registry:{},
+  jiraSyncBusy:false,jiraPreviewQuality:{assess:()=>({eligible:true,errors:[]})},jiraPreviewFieldPlans,approvedJiraPreviewRevision:1,approvedJiraPreviewBinding:sha(binding),activeProject:{id:'test-project'},registry:{},
   requireOnline(){}, effectiveConfig(){return config;},getAtlassianToken:async()=> 'unused-token',
   verifiedBAActor:async()=> 'mock-actor',sha,baseAtlassian:()=> 'https://mock.atlassian.test',
   prePublishIdentityGuard:async()=>({safe:true}),jiraPreflight:async()=>[],jiraIssueTypes:async()=>[{id:'10001',name:'Epic',subtask:false}],

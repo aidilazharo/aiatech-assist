@@ -4577,6 +4577,7 @@ window.addEventListener('message',event=>{
 $('knowledgeSync').addEventListener('click',()=>{if(!activeId)return;$('knowledgeSync').disabled=true;$('knowledgeSyncStatus').textContent='Syncing local project documents and available connected sources…';send('sync',{id:activeId});});
 $('jiraTemplatePreview').addEventListener('click',()=>send('jiraTemplatePreview'));
 $('jiraTemplateApprove').addEventListener('click',()=>send('jiraTemplateApprove'));
+$('jiraTemplateSync').addEventListener('click',()=>send('jiraTemplateSync'));
 $('knowledgeSearch').addEventListener('click',()=>send('ragSearch',{query:read('ragQuery')}));
 $('knowledgeAsk').addEventListener('click',()=>send('ragAsk',{query:read('ragQuery')}));
 $('knowledgeRagSettings').addEventListener('click',()=>send('ragSettings'));
@@ -5037,7 +5038,7 @@ function renderJiraIssueDetails(entry,readOnly=false){
    const note=document.createElement('p');note.className='muted';note.classList.add('jira-template-suggestion-status');
    propose.addEventListener('click',()=>send('jiraTemplateSuggest',{path:entry.path,hash:entry.hash,revision:brPlanRevision}));
    root.append(propose,note);
-   window.atgvPendingJiraDetails={path:entry.path,acceptance:inputs.acceptanceCriteria,done:inputs.definitionOfDone};
+   if(typeof window!=='undefined')window.atgvPendingJiraDetails={path:entry.path,acceptance:inputs.acceptanceCriteria,done:inputs.definitionOfDone};
  }
  if(!readOnly){const save=document.createElement('button');save.type='button';save.textContent='Save Jira details & refresh preview';save.addEventListener('click',()=>{
    if(!brPlanRevision||baBusyTask)return;

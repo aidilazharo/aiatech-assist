@@ -8895,6 +8895,20 @@ async function handleDashboardMessage(msg){
         await dashboard?.webview.postMessage({type:'jiraTemplateState',value});
         await notice('Approved TRM-based Story Definition of Done indexed in project RAG. Jira issue fields remain unchanged.');break;
       }
+      case 'jiraTemplateSync':{
+        requireOpened();requireOnline();await requireBAOwner('ba-discovery');
+        const action='Sync Approved Template';
+        const confirmation=await uiWarning('Sync the verified, project-approved Jira Definition of Done template with the configured Confluence space? Existing differing approved templates are never overwritten; changes require review. Approved Confluence templates may be imported to this computer.',{modal:true},action);
+        if(confirmation!==action)break;
+        const projectId=activeProject.id,root=path.dirname(registry.fileFor(projectId));
+        const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
+        const result=await jiraTemplateKnowledge.syncConfluence(root,{projectId,projectKey:validProjectKey(config.get('jira.projectKey')),config,token,
+          clients:{getConfluenceSpace,baseConfluence,requestJson,getConfluencePage,writeConfluence}});
+        const value=result.template;
+        await store.replace('ApprovedJiraTemplate',[{id:'jira-trm-template:'+projectId,provider:'ApprovedJiraTemplate',title:'Approved TRM Story AC / DoD template',text:value.items.join('\n'),url:'file://'+path.join(root,'knowledge','jira-approved-trm-story-template.md'),approvedAt:value.approvedAt,sourceRefs:[value.origin]}]);
+        await dashboard?.webview.postMessage({type:'jiraTemplateState',value});
+        await notice('Confluence project template '+result.status+'. '+value.items.length+' approved DoD items are available in project RAG.');break;
+      }
       case 'jiraTemplateSuggest':{
         requireOpened();await requireBAOwner('ba-discovery');
         const reg=await brWorkflow.load(registry,activeProject.id);
