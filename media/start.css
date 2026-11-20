@@ -2284,3 +2284,10 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 #discoveryView .source-document-actions button{flex:0 1 auto;white-space:normal;max-width:100%;min-height:32px;text-align:center;line-height:1.35;font-size:11px;padding:6px 9px}
 #discoveryView .source-document-actions button.br-danger:not(:disabled){background:var(--vscode-inputValidation-errorBackground,#60292d)!important;border-color:var(--vscode-inputValidation-errorBorder,#b45b63)!important;color:var(--vscode-errorForeground,#f5aaa9)!important}
 @media(max-width:800px){#discoveryView .source-document-row{align-items:flex-start}#discoveryView .source-document-actions{flex:1 1 100%;justify-content:flex-start;margin-left:0}}
+
+/* BA v0.4.55: explicit feedback inputs for approve/regenerate proposals. */
+#discoveryView .ba-ai-refinement{display:flex;flex-direction:column;gap:6px;flex:1 1 100%;min-width:min(100%,240px);margin:8px 0;color:inherit}
+#discoveryView .ba-ai-refinement textarea{display:block;box-sizing:border-box;width:100%;min-height:60px;max-width:100%;resize:vertical}
+#discoveryView #baGeneralizationGuidance{margin:6px 0 12px;font-size:12px;line-height:1.5}
+#discoveryView .br-documents-actions{flex-wrap:wrap}
+#discoveryView #brRegenerateProposal{max-width:100%;white-space:normal}
