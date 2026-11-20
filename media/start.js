@@ -542,7 +542,8 @@ function workspaceBreadcrumbContext(){
  const modal=baRequirementModalTarget;
  const selectedBr=brEditing||modal?.scopeId||modal?.rootKey||'';
  const stage=baViewedStep||window.baLastGuideProgress?.find(step=>step.current)?.key||'start';
- return {view,roleId:selectedRole,stage,requirementOpen:baBreadcrumbAtRequirements||!!modal||!!brEditing,
+ return {view,roleId:selectedRole,stage,rootOnly:view==='discovery'&&!baBreadcrumbAtRequirements&&!modal&&!brEditing,
+  requirementOpen:baBreadcrumbAtRequirements||!!modal||!!brEditing,
   brId:view==='discovery'?selectedBr:view==='uxPreview'?uxSelectedKey:
    view==='work'&&selectedRole==='software-developer'?$('developerBrSelect')?.value:'',
   documentTitle:view==='documentEditor'?$('docEditorTitle')?.textContent:''};
