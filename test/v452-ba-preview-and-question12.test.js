@@ -28,8 +28,8 @@ test('fresh generated unsaved BRs remain eligible for Preview & Save despite nee
  assert.equal(current.staleCount,0);
  const steps=progress.derive({started:true,hasSources:true,mappingDone:true,savedDiscovery:true,reviewFinalized:true,generated:true,totalBrs:2,savedBrs:0});
  assert.equal(workflow.getNextStep(steps,'generate',false)?.key,'save');
- assert.match(ui,/const canPreview=generatingDone&&pendingDraft&&displayedStage==='generate'/);
- assert.match(ui,/const previewActionReady=displayed!=='generate'\|\|!\$('brNextPreviewSave'\)\.disabled/);
+ assert.match(ui,/const canPreview=generatingDone&&displayedStage==='generate'&&pendingDraft/);
+ assert.equal(ui.includes("const previewActionReady=displayed!=='generate'||!$('brNextPreviewSave').disabled"),true);
 });
 test('source or discovery changes still prevent stale draft preview',()=>{
  assert.equal(generatedReadiness([draft({digest:'old',discoveryRevision:'disc1'})]).generatingDone,false);

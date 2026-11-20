@@ -5755,7 +5755,7 @@ function renderBAButtons(){
  $('brGenerate').classList.toggle('hidden',displayedStage!=='generate'||staleDrafts.length>0||generatingDone);
  $('brGenerateAffected').classList.toggle('hidden',displayedStage!=='generate'||!staleDrafts.length);
  const nextPreview=$('brNextPreviewSave');
- const canPreview=generatingDone&&pendingDraft&&displayedStage==='generate'&&(window.baLastGuideProgress||[]).some(step=>step.key==='save'&&step.selectable);
+ const canPreview=generatingDone&&displayedStage==='generate'&&pendingDraft&&(window.baLastGuideProgress||[]).some(step=>step.key==='save'&&step.selectable);
  nextPreview.classList.add('hidden'); // Preview navigation is in the standalone toolbar.
  nextPreview.disabled=!canPreview||!!baBusyTask||brEditorSaving||discoveryDirty;
  nextPreview.classList.toggle('ba-step-next-complete',canPreview);
