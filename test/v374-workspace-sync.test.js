@@ -37,7 +37,7 @@ test('GitHub repo URLs, base branches, copy scopes and exclusions are validated'
   assert.throws(()=>sync.scopeName(invalid));
  for(const file of ['.git/config','.env','.env.production','src/private.pem','node_modules/package.json'])
   assert.equal(sync.isAllowedPath(file),false,file);
- for(const file of ['src/index.js','README.md','docs/guide.md','.github/workflows/release.yml'])assert.equal(sync.isAllowedPath(file),true,file);
+ for(const file of ['src/index.js','README.md','docs/guide.md','.github/workflows/release.yml','.github/CODEOWNERS','.github/dependabot.yml','.github/ISSUE_TEMPLATE/bug.yml','.github/actions/build/action.yml'])assert.equal(sync.isAllowedPath(file),true,file);
 });
 test('PR title, commit and branch describe the source change rather than the branch name',()=>{
  const sha='a'.repeat(40),sourceMessage='fix: validate repository setup scripts';
@@ -89,6 +89,12 @@ test('sync copies tracked workflows and creates a review branch without modifyin
  fs.writeFileSync(path.join(source,'README.md'),'Repo A readme\n');
  fs.writeFileSync(path.join(source,'.env'),'DO_NOT_COPY=secret\n');
  fs.writeFileSync(path.join(source,'.github','workflows','release.yml'),'source workflow\n');
+ fs.writeFileSync(path.join(source,'.github','CODEOWNERS'),'@source-team\n');
+ fs.writeFileSync(path.join(source,'.github','dependabot.yml'),'version: 2\n');
+ fs.writeFileSync(path.join(source,'.github','PULL_REQUEST_TEMPLATE.md'),'Source PR template\n');
+ fs.mkdirSync(path.join(source,'.github','ISSUE_TEMPLATE'),{recursive:true});
+ fs.writeFileSync(path.join(source,'.github','ISSUE_TEMPLATE','bug.yml'),'name: Bug\n');
+ fs.writeFileSync(path.join(source,'.github','credentials.json'),'{"token":"do-not-copy"}\n');
  git(['add','--all'],source);git(['commit','-m','Initial Repo A'],source);
  const sourceSha=git(['rev-parse','HEAD'],source);
  git(['init','--bare','-b','main',sourceBare],temp);
@@ -100,6 +106,7 @@ test('sync copies tracked workflows and creates a review branch without modifyin
  fs.mkdirSync(path.join(target,'.github','workflows'),{recursive:true});
  fs.writeFileSync(path.join(target,'.github','workflows','release.yml'),'Repo B release workflow\n');
  fs.writeFileSync(path.join(target,'.github','workflows','destination-only.yml'),'Retained workflow\n');
+ fs.writeFileSync(path.join(target,'.github','FUNDING.yml'),'Retained destination funding\n');
  git(['add','--all'],target);git(['commit','-m','Initial Repo B'],target);
  const originalTargetSha=git(['rev-parse','HEAD'],target);
  git(['remote','add','origin',targetBare],target);git(['push','-u','origin','main'],target);
@@ -127,7 +134,7 @@ test('sync copies tracked workflows and creates a review branch without modifyin
  await assert.rejects(()=>sync.sync({sourceUrl:'https://github.com/Acme/repo-a',destinationUrl:'https://github.com/Acme/wrong',destinationFolder:target,sourcePat:'ghp_'+'s'.repeat(40),destPat:'ghp_'+'d'.repeat(40),runner,githubApi}),/Repo B URL differs/);
  assert.equal(result.sourceSha,sourceSha);
  assert.equal(result.base,'main');
- assert.equal(result.fileCount,3);
+ assert.equal(result.fileCount,7);
  assert.match(result.branch,/^chore\/.+/);
  assert.doesNotMatch(result.branch,/-[a-f0-9]{8}$/);
  assert.equal(git(['rev-parse','refs/remotes/origin/main'],target),originalTargetSha);
@@ -136,9 +143,15 @@ test('sync copies tracked workflows and creates a review branch without modifyin
  assert.equal(fs.readFileSync(path.join(target,'.github','workflows','release.yml'),'utf8'),'source workflow\n');
  assert.equal(fs.readFileSync(path.join(target,'.github','workflows','destination-only.yml'),'utf8'),'Retained workflow\n');
  assert.equal(git(['show','refs/remotes/origin/main:.github/workflows/release.yml'],target),'Repo B release workflow');
+ assert.equal(fs.readFileSync(path.join(target,'.github','CODEOWNERS'),'utf8'),'@source-team\n');
+ assert.equal(fs.readFileSync(path.join(target,'.github','dependabot.yml'),'utf8'),'version: 2\n');
+ assert.equal(fs.readFileSync(path.join(target,'.github','PULL_REQUEST_TEMPLATE.md'),'utf8'),'Source PR template\n');
+ assert.equal(fs.readFileSync(path.join(target,'.github','ISSUE_TEMPLATE','bug.yml'),'utf8'),'name: Bug\n');
+ assert.equal(fs.readFileSync(path.join(target,'.github','FUNDING.yml'),'utf8'),'Retained destination funding\n');
+ assert.equal(fs.existsSync(path.join(target,'.github','credentials.json')),false);
  assert.equal(fs.existsSync(path.join(target,'.env')),false);
  assert.equal(prOptions.base,'main');assert.equal(prOptions.branch,result.branch);
- for(const field of [sourceSha,'Acme/repo-a','Acme/repo-b','src/main.js','README.md','.github/workflows/release.yml','Files changed: 3'])
+ for(const field of [sourceSha,'Acme/repo-a','Acme/repo-b','src/main.js','README.md','.github/workflows/release.yml','Files changed: 7'])
   assert.ok(prBody.includes(field),field);
 });
 
