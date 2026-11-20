@@ -147,25 +147,27 @@ function validateReviewPresentation(review,sha){
   throw Error('Enter PR details as bullet points, with a maximum of 10 points.');
 }
 function prDetails({source,destination,sha,scope,base,branch,count,changedFiles=[],sourceBranch='',sourceMessage='',sourceCommitFiles=[]}){
- const short=sha.slice(0,8);
  const relevant=sourceCommitFiles.length?sourceCommitFiles:changedFiles;
  const action=meaningfulSubject(sourceMessage,relevant);
  const label=readableTitle(sourceMessage,relevant);
- const displayed=changedFiles.slice(0,8).map(file=>'- `'+String(file).replace(/[\r\n\0`]/g,'?')+'`');
+ // Keep verifiable source identity before long path lists. The formatter limits
+ // descriptions to ten bullets; prior versions lost the source SHA as soon as
+ // more than a few .github files were included.
+ const paths=changedFiles.slice(0,25).map(file=>'`'+String(file).replace(/[\r\n\0`]/g,'?')+'`');
  return {
   title:label.slice(0,110),
   commit:action.slice(0,110),
   body:formatPrDetails([
    '- '+label,
    '- Files changed: '+count,
-   ...displayed,
-   ...(changedFiles.length>8?['- And '+(changedFiles.length-8)+' other files']:[]),
-   '- '+source.name+' ('+(sourceBranch||'default')+' @ '+short+')',
+   '- Source: '+source.name+' ('+(sourceBranch||'default')+' @ '+sha.slice(0,8)+')',
    '- Commit: '+sha,
    '- Target: '+destination.name+' / '+base,
    '- PR base: '+base,
    '- Review branch: '+branch,
-   '- Copy scope: '+(scope==='.'?'eligible tracked files':scope)
+   '- Copy scope: '+(scope==='.'?'eligible tracked files':scope),
+   '- Changed paths: '+paths.join(', '),
+   ...(changedFiles.length>25?['- Other changed files: '+(changedFiles.length-25)]:[])
   ].join('\n'))
  };
 }
@@ -214,8 +216,12 @@ async function trackedFiles(source,scope){
  const eligible=candidates.filter(isAllowedPath);
  const scoped=eligible.filter(p=>scope==='.'||p===scope||p.startsWith(scope+'/'));
  if(!scoped.length)throw Error('Repo A has no eligible tracked files in '+scope+'.');
- // Source workflows are always part of the review, even for a narrow scope.
- const paths=[...new Set([...scoped,...eligible.filter(p=>p.startsWith('.github/workflows/'))])];
+ // GitHub metadata (workflows, CODEOWNERS, templates, Dependabot and custom
+ // actions) must travel with the source even when the selected scope is narrow.
+ // Include only eligible tracked files, never .git or credential/secret paths.
+ // Destination-only .github files are preserved; no directory pruning occurs.
+ const githubFiles=eligible.filter(p=>p.startsWith('.github/'));
+ const paths=[...new Set([...scoped,...githubFiles])];
  if(paths.length>MAX_FILES)throw Error('Copy exceeds '+MAX_FILES+' tracked files. Select a smaller scope.');
  let bytes=0;
  const valid=[];
@@ -453,7 +459,8 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
     ...proposed,sourceSha:sha,baseSha,sourceBranch:chosenBranch,sourceRepo:source.name,
     destinationRepo:destination.name,base,copyScope:scope,
     sourcePrUrl:sourcePr?.url||'',fileCount:files.length,sourceCode:facts.codeOverview,
-    sourceCommitFiles,excludedSourceCommitFiles,workflowFiles:files.filter(file=>file.startsWith('.github/workflows/')),
+    sourceCommitFiles,excludedSourceCommitFiles,githubFiles:files.filter(file=>file.startsWith('.github/')),
+     workflowFiles:files.filter(file=>file.startsWith('.github/workflows/')),
     notice:'Suggestions use verified source code structure and latest source commit. No Repo B files were changed.'
    }};
   }
