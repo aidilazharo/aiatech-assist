@@ -5735,14 +5735,15 @@ function renderBAButtons(){
  $('discoveryCopilot').classList.toggle('secondary',reviewAdvanceReady);
  $('discoveryCopilot').classList.toggle('ba-review-stop',running);
  $('baReviewSkip').disabled=tasks.baReviewSkip||baReviewLocked();
+ $('baReviewRegenerate').disabled=!!baBusyTask||!mine||!reviewCurrent||discoveryDirty;
  const reviewComplete=baReviewFinalized();
  for(const name of ['discoveryCopilot','discoveryReviewApply','baReviewSkip']){
   const item=$(name);const hide=reviewComplete&&!running&&name!=='discoveryCopilot';item.classList.toggle('hidden',hide);item.setAttribute('aria-hidden',hide?'true':'false');
  }
  const finish=$('baReviewFinish');
  const unresolvedFindings=discoveryHasReviewBlockers();
- finish.textContent=unresolvedFindings?'Review & Acknowledge Findings':'Confirm AI Review & Continue';
- finish.title=current.filled!==current.total?'Complete and save all 12 answers, then re-run AI Review.':unresolvedFindings?'Review source evidence and explicitly acknowledge the unresolved AI findings. Does not approve BRs.':'Record human confirmation of the current AI Review.';
+ finish.textContent='Approve AI Review & Continue';
+ finish.title=current.filled!==current.total?'Complete and save all 12 answers, then re-run AI Review.':unresolvedFindings?'Approve the AI proposal with clearly marked provisional decisions; final BR approval remains separate.':'Approve the current AI Review proposal.';
  finish.classList.toggle('hidden',!reviewCurrent||baReviewFinalized()&&!unresolvedFindings);
  // Never silently disable a visible acknowledgement because of a stale
  // ownership cache or readiness badge. The handler explains prerequisites,
@@ -5761,6 +5762,8 @@ function renderBAButtons(){
  for(const [id,complete] of stageMap)$(id).classList.toggle('ba-completed',!!complete);
  $('brGenerate').classList.toggle('hidden',staleDrafts.length>0||generatingDone);
  $('brGenerateAffected').classList.toggle('hidden',!staleDrafts.length);$('brGenerateAffected').disabled=!!baBusyTask||!mine||!reviewGood||!staleDrafts.length;
+ const regenerableDrafts=brs.filter(br=>br.status==='draft'&&!staleDrafts.includes(br)&&!br.approvedContent);
+ $('brRegenerateProposal').disabled=!!baBusyTask||!mine||!reviewGood||!regenerableDrafts.length;
  $('brGenerate').textContent=brs.length?'Update Business Requirements Documents':'Generate Business Requirements Documents';
  $('brGenerate').title=freshDraftPending?'Review or approve current drafts first.':staleDrafts.length?'Regenerate outdated drafts; prior manual edits are kept in history.':generatingDone?'Business Requirements are up to date.':'Generate Business Requirements documents.';
  $('brGenerate').setAttribute('aria-label',freshDraftPending?'Approve or review current drafts before updating':(brs.length?'Update Business Requirements Documents':'Generate Business Requirements Documents'));
@@ -5919,6 +5922,7 @@ function renderDiscoverySummary(){
   }
   const viewing=progress.find(step=>step.key===displayed);
   $('baProgressSelected').textContent=`${viewing?.index+1||1} of ${progress.length} · ${viewing?.label||'Upload'}${baViewedStep&&baViewedStep!==activeStep?' · Previous step':''}`;
+  $('baGeneralizationGuidance').textContent=ATGVBAProgress.guidanceFor(displayed);
   // Step 2 becomes active as soon as a PDF is uploaded, *before* the user
  // has selected/submitted it. Never hide the source selection prematurely.
  // Hide the panel only after mapping was actually submitted; preserve the
@@ -5997,6 +6001,7 @@ function renderDiscoverySummary(){
   $('brStageTitle').textContent=stageCopy[0];
   $('brStageDescription').textContent=stageCopy[1];
   $('brGenerateSummary').classList.toggle('hidden',displayed!=='generate');
+  $('brRegenerateProposal').classList.toggle('hidden',!showDocuments||!['generate','save','approve'].includes(displayed)||!activeBrs.some(br=>br.status==='draft'&&!br.approvedContent));
   $('brGenerateSummary').textContent=!activeBrs.length?'No Business Requirements generated yet. Use Generate Business Requirements Documents.':
    activeBrs.length+' Business Requirements generated · '+savedBrs+' saved draft(s) · '+approved+' approved. Select Next Step to open the separate Preview & Save screen.';
   document.querySelector('.change-proposal-panel').classList.toggle('hidden',!showDocuments||!generated||!baShowChangeProposal);
@@ -6048,7 +6053,7 @@ function renderDiscoverySummary(){
   nextButton.setAttribute('aria-disabled',String(!ready));
   nextButton.classList.toggle('ba-step-next-complete',ready);
   nextButton.textContent=nextDefinition?'Next Step · '+nextDefinition.label:'Workflow Complete';
-  if(canConfirm)nextButton.textContent=discoveryHasReviewBlockers()?'Review & Acknowledge Findings':'Confirm AI Review & Continue';
+  if(canConfirm)nextButton.textContent='Approve AI Review & Continue';
   nextButton.title=!nextDefinition?'The final Business Requirements milestone.':ready?'Continue to '+nextDefinition.label:
    !approvalActionReady?'Save all generated drafts before reviewing approval readiness.':
    !previewActionReady?'Current-source BR drafts are unavailable or outdated. Regenerate stale drafts before opening Preview & Save.':
