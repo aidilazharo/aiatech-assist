@@ -3110,13 +3110,14 @@ async function generateBusinessRequirements(options={}){
  const riskAccepted=false;
  const staleDrafts=(register.brs||[]).filter(br=>br.status==='draft'&&(br.staleReason==='Discovery answers changed'||br.staleReason==='New source mapping completed'||br.source?.discoveryRevision!==register.discoveryRevision));
  const currentDrafts=(register.brs||[]).filter(br=>br.status==='draft'&&!staleDrafts.includes(br));
- if(currentDrafts.length&&!options.selective)throw Error('Review or approve the current Business Requirements drafts before generating again.');
+ if(currentDrafts.length&&!options.selective&&!options.regenerate)throw Error('Review or approve the current Business Requirements drafts, or choose Regenerate Proposal to improve them.');
+ if(options.regenerate&&(!currentDrafts.length||currentDrafts.some(br=>br.approvedContent)))throw Error('Regeneration requires editable, unapproved drafts. Start a controlled revision for approved requirements.');
  if(staleDrafts.length){
   const action='Regenerate Outdated Drafts';
   const decision=await uiWarning(`${staleDrafts.length} outdated draft(s) will be replaced by newly generated content. Previous drafts, including manual edits, will be kept in revision history. Continue?`,{modal:true},action);
   if(decision!==action){await dashboard?.webview.postMessage({type:'baProgress',done:true});return;}
  }
- const focused=options.selective===true?staleDrafts.map(b=>b.id):null;
+ const focused=options.selective===true?staleDrafts.map(b=>b.id):options.regenerate===true?currentDrafts.map(b=>b.id):null;
  const mappedGroups=baBrTextPipeline.groups(register.mappingCompleted?.proposals||[]);
  if(options.selective&&!focused?.length)throw Error('No outdated Business Requirements drafts are eligible for selective regeneration.');
  if(baTimeoutSimplified.isSimplifiedEvidence(register)){
@@ -3165,11 +3166,13 @@ async function generateBusinessRequirements(options={}){
  // Only active BR identities are presented as update candidates to the model.
  const activeRequirements=register.brs.filter(br=>!br.archivedFromRestart&&br.status!=='retired');
  const historic=register.brs.filter(br=>br.archivedFromRestart&&br.approvedContent).map(br=>({id:br.id,title:br.approvedContent.title}));
+ const refinement=String(options.feedback||'').trim().slice(0,1500);
  const question=brWorkflow.promptForGeneration(saved.answers,focused?activeRequirements.filter(x=>focused.includes(x.id)):activeRequirements,supporting)+
+  (refinement?'\nUSER REGENERATION FEEDBACK: '+refinement+'\nImprove the answer using verified source only; preserve required scope, identities, prior approvals and all testable criteria.':'')+
   (focused?'\nSELECTIVE UPDATE: Return ONLY these existing Business Requirements using their current titles. Do not create, remove, or revise unrelated requirements. Targets: '+JSON.stringify(activeRequirements.filter(x=>focused.includes(x.id)).map(x=>({id:x.id,title:x.title}))) : '')+
   (historic.length?'\nPREVIOUSLY COMPLETED BUSINESS REQUIREMENTS (READ ONLY): '+JSON.stringify(historic.slice(0,100))+'. These requirements belong to earlier published cycles. Do not regenerate, modify, remove, or return their IDs. For new independent source documents, return only genuinely new requirements. Overlap must be reconciled separately, not duplicated.':'');
  let proposed;
- if(mappedGroups.length>1&&!options.selective){
+ if(mappedGroups.length>1&&!options.selective&&!options.regenerate){
   // Process source-backed groups sequentially; no fixed cap on the total BR count.
   proposed=[];
   for(const [index,group] of mappedGroups.entries()){
