@@ -153,7 +153,7 @@ function prDetails({source,destination,sha,scope,base,branch,count,changedFiles=
  // Keep verifiable source identity before long path lists. The formatter limits
  // descriptions to ten bullets; prior versions lost the source SHA as soon as
  // more than a few .github files were included.
- const paths=changedFiles.slice(0,25).map(file=>'`'+String(file).replace(/[\\r\\n\\0`]/g,'?')+'`');
+ const paths=changedFiles.slice(0,25).map(file=>'`'+String(file).replace(/[\r\n\0`]/g,'?')+'`');
  return {
   title:label.slice(0,110),
   commit:action.slice(0,110),
@@ -168,7 +168,7 @@ function prDetails({source,destination,sha,scope,base,branch,count,changedFiles=
    '- Copy scope: '+(scope==='.'?'eligible tracked files':scope),
    '- Changed paths: '+paths.join(', '),
    ...(changedFiles.length>25?['- Other changed files: '+(changedFiles.length-25)]:[])
-  ].join('\\n'))
+  ].join('\n'))
  };
 }
 function patEnvironment(pat,{githubCli=false}={}){
