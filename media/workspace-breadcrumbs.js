@@ -30,7 +30,7 @@
   'business-owner':'Business Owner','business-analyst':'Business Analyst'
  });
  const segment=(label,action=null)=>({label,action});
- const clean=x=>String(x??'').replace(/[\\x00-\\x1f]/g,' ').trim().slice(0,160);
+ const clean=x=>String(x??'').replace(/[\x00-\x1f]/g,' ').trim().slice(0,160);
  function requirementId(x){
   const input=clean(x),br=input.match(/(?:^|[^A-Za-z0-9])BR-([0-9]+)(?![A-Za-z0-9])/i);
   if(br)return 'BR-'+br[1].padStart(2,'0');
