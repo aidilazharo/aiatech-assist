@@ -39,7 +39,7 @@ test('all AI Review controls live after findings in the review footer, not in th
   assert.ok(section.indexOf('id="'+id+'"')>footer,id+' must be in footer');
  }
  assert.match(css,/#discoveryView \.ba-review-details \.ba-review-footer\{/);
- assert.match(ui,/finish.textContent=unresolvedFindings\?'Review & Acknowledge Findings'/);
+ assert.match(ui,/finish\.textContent='Approve AI Review & Continue'/);
 });
 
 test('release metadata is v0.2.98',()=>{
