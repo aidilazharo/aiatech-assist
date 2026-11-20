@@ -147,26 +147,28 @@ function validateReviewPresentation(review,sha){
   throw Error('Enter PR details as bullet points, with a maximum of 10 points.');
 }
 function prDetails({source,destination,sha,scope,base,branch,count,changedFiles=[],sourceBranch='',sourceMessage='',sourceCommitFiles=[]}){
- const short=sha.slice(0,8);
  const relevant=sourceCommitFiles.length?sourceCommitFiles:changedFiles;
  const action=meaningfulSubject(sourceMessage,relevant);
  const label=readableTitle(sourceMessage,relevant);
- const displayed=changedFiles.slice(0,8).map(file=>'- `'+String(file).replace(/[\r\n\0`]/g,'?')+'`');
+ // Keep verifiable source identity before long path lists. The formatter limits
+ // descriptions to ten bullets; prior versions lost the source SHA as soon as
+ // more than a few .github files were included.
+ const paths=changedFiles.slice(0,25).map(file=>'`'+String(file).replace(/[\\r\\n\\0`]/g,'?')+'`');
  return {
   title:label.slice(0,110),
   commit:action.slice(0,110),
   body:formatPrDetails([
    '- '+label,
    '- Files changed: '+count,
-   ...displayed,
-   ...(changedFiles.length>8?['- And '+(changedFiles.length-8)+' other files']:[]),
-   '- '+source.name+' ('+(sourceBranch||'default')+' @ '+short+')',
+   '- Source: '+source.name+' ('+(sourceBranch||'default')+' @ '+sha.slice(0,8)+')',
    '- Commit: '+sha,
    '- Target: '+destination.name+' / '+base,
    '- PR base: '+base,
    '- Review branch: '+branch,
-   '- Copy scope: '+(scope==='.'?'eligible tracked files':scope)
-  ].join('\n'))
+   '- Copy scope: '+(scope==='.'?'eligible tracked files':scope),
+   '- Changed paths: '+paths.join(', '),
+   ...(changedFiles.length>25?['- Other changed files: '+(changedFiles.length-25)]:[])
+  ].join('\\n'))
  };
 }
 function patEnvironment(pat,{githubCli=false}={}){
