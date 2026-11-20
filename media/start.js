@@ -3091,6 +3091,7 @@ $('developerBrSelect').addEventListener('change',()=>{
  if(developerBrBusy)return;
  developerBrSelected=$('developerBrSelect').value;
  resetDeveloperBr();developerBrTab='logs';renderDeveloperBrChoices();if(developerBrSelected){send('developerBrLogs',{brId:developerBrSelected});send('developerBrRecoveryInfo',{brId:developerBrSelected});}
+ renderWorkspaceBreadcrumbs();
 });
 function stopDeveloperBr(){
  if(developerBrStopping||!developerBrSelected||!(developerBrBusy||developerBrServerRunning||developerBrServerBusy))return;
