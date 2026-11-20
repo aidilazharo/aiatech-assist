@@ -2291,3 +2291,16 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 #discoveryView #baGeneralizationGuidance{margin:6px 0 12px;font-size:12px;line-height:1.5}
 #discoveryView .br-documents-actions{flex-wrap:wrap}
 #discoveryView #brRegenerateProposal{max-width:100%;white-space:normal}
+
+/* v0.4.57: unified blue breadcrumbs on every ATGV workspace page. */
+.content-pane main.has-workspace-breadcrumb > .page-kicker{display:none!important}
+.content-pane main.has-workspace-breadcrumb .ux-preview-hero-top > .ux-preview-kicker{display:none!important}
+.atgv-workspace-breadcrumbs{display:flex;align-items:center;flex-wrap:wrap;gap:7px;max-width:100%;min-height:20px;margin:2px 0 12px;color:var(--atgv-accent,#478bff);font-size:11px;font-weight:750;letter-spacing:.35px;line-height:1.55;overflow-wrap:anywhere}
+.atgv-workspace-breadcrumbs .atgv-breadcrumb-link,.atgv-workspace-breadcrumbs .atgv-breadcrumb-current{font:inherit;letter-spacing:inherit;color:var(--atgv-accent,#478bff);background:transparent!important;border:0;box-shadow:none;padding:1px 0;margin:0;white-space:normal;overflow-wrap:anywhere;text-align:left;line-height:inherit}
+.atgv-workspace-breadcrumbs .atgv-breadcrumb-link{cursor:pointer;text-decoration:none;border-radius:2px}
+.atgv-workspace-breadcrumbs .atgv-breadcrumb-link:hover{color:var(--vscode-textLink-activeForeground,#86b7ff);text-decoration:underline}
+.atgv-workspace-breadcrumbs .atgv-breadcrumb-link:focus-visible{outline:2px solid var(--vscode-focusBorder,#478bff);outline-offset:3px}
+.atgv-workspace-breadcrumbs .atgv-breadcrumb-current{font-weight:800;cursor:default}
+.atgv-workspace-breadcrumbs .atgv-breadcrumb-separator{color:var(--vscode-descriptionForeground,#9299a8);opacity:.85;user-select:none;font-weight:450}
+#discoveryView .modal-card > .atgv-workspace-breadcrumbs{margin:0 0 12px}
+@media(max-width:670px){.atgv-workspace-breadcrumbs{font-size:10px;gap:5px;margin-bottom:9px}}
