@@ -6858,7 +6858,7 @@ function renderDiscoveryReview(){
  const issues=(review?.suggestions||[]).length;
  $('baReviewCount').textContent=current&&issues?`(${issues} issue${issues===1?'':'s'} found)`:'';
  $('baReviewBadge').classList.toggle('hidden',!current);
- $('baReviewBadge').textContent=!current?'Pending':review?.skipped?'Skipped':review?.applied?'Applied':brState?.reviewRiskAccepted?.revision===brState?.discoveryRevision?'Risks acknowledged':discoveryHasReviewBlockers()?'Issues found':'Reviewed';
+ $('baReviewBadge').textContent=!current?'Pending':review?.skipped?'Skipped':review?.applied?'Applied':brState?.reviewRiskAccepted?.revision===brState?.discoveryRevision?'AI proposal approved':discoveryHasReviewBlockers()?'Issues found':'Reviewed';
  $('discoveryReviewPanel').classList.toggle('ba-review-skipped',!!review?.skipped&&current);
  renderSavedReviewEvidence(review,current);
  if(!review){$('discoveryReviewSummary').textContent='No AI review yet.';renderBAButtons();return;}
