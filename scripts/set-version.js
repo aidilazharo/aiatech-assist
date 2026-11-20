@@ -22,8 +22,8 @@ if (require.main === module) {
         const readme=path.join(root,'README.md');
         const release=path.join(root,'RELEASE.md');
         const previous=fs.readFileSync(readme,'utf8');
-        fs.writeFileSync(readme,previous.replace(/^\\*\\*Version: [^*]+\\*\\*/m,'**Version: '+v.semver+'**'));
-        fs.writeFileSync(release,'# ATGV AIATECH Assist v'+v.semver+'\\n\\n## Changes\\n\\n- Describe verified changes in this release.\\n\\n## Validation\\n\\n- Record Node regressions, Windows checks, VSIX verification and release provenance.\\n');
+        fs.writeFileSync(readme,previous.replace(/^\*\*Version: [^*]+\*\*/m,'**Version: '+v.semver+'**'));
+        fs.writeFileSync(release,'# ATGV AIATECH Assist v'+v.semver+'\n\n## Changes\n\n- Describe verified changes in this release.\n\n## Validation\n\n- Record Node regressions, Windows checks, VSIX verification and release provenance.\n');
 
         console.log(`Saved display version ${v.display} (VS Code SemVer ${v.semver})`);
     }
