@@ -534,6 +534,86 @@ function trackProcessEvent(m){
 function status(message,error=false,{persistent=false}={}){if(message&&view==='work'){const serverError=error&&/(?:server|preview|approved stack branch|current branch|localhost)/i.test(message);const stackError=error&&!serverError&&/(?:stack|npm|dependency|git branch|bootstrap|build|install)/i.test(message);const id=serverError?'server':stackError?'stack':'status';processActivityUpsert(id,serverError?'Application Server':stackError?'Technology Stack':'Workspace Process',message,error?'failed':'done',error?null:100);}statusText=message||'';$('status').textContent=statusText;$('status').className='status hidden'+(error?' error':'');if(statusText){notifyTop(statusText,{error,success:!error&&atgvSeverity(statusText)==='success',persistent});atgvInlineNotice(statusText,error);}else atgvInlineNotice('',false);}
 window.addEventListener('message',e=>trackProcessEvent(e.data));
 function field(id,v=''){$(id).value=v;}
+
+// Breadcrumbs are a presentation-only view of the existing navigation state.
+// Never reinterpret an unsaved edit or publication gate as permission to leave.
+let baBreadcrumbAtRequirements=false;
+function workspaceBreadcrumbContext(){
+ const modal=baRequirementModalTarget;
+ const selectedBr=brEditing||modal?.scopeId||modal?.rootKey||'';
+ const stage=baViewedStep||window.baLastGuideProgress?.find(step=>step.current)?.key||'start';
+ return {view,roleId:selectedRole,stage,rootOnly:view==='discovery'&&!baBreadcrumbAtRequirements&&!modal&&!brEditing,
+  requirementOpen:baBreadcrumbAtRequirements||!!modal||!!brEditing,
+  brId:view==='discovery'?selectedBr:view==='uxPreview'?uxSelectedKey:
+   view==='work'&&selectedRole==='software-developer'?$('developerBrSelect')?.value:'',
+  documentTitle:view==='documentEditor'?$('docEditorTitle')?.textContent:''};
+}
+function workspaceBreadcrumbAction(action){
+ if(!action)return;
+ if(action==='my-work'||action==='br-home'){
+  if(view!=='discovery'){
+   navigate(action==='my-work'&&view==='uxPreview'?'ux-designer':'sdlc-roles');
+   return;
+  }
+  // Modals may contain unsaved edits: never discard them to navigate.
+  if(brEditing&&!closeBREditor())return;
+  if(baRequirementModalTarget)closeBARequirementModal();
+  baBreadcrumbAtRequirements=action==='br-home';
+  baViewedStep='start';
+  renderDiscoverySummary();
+  if(typeof renderWorkspaceBreadcrumbs==='function')renderWorkspaceBreadcrumbs();
+  return;
+ }
+ if(action==='ux-work'){navigate('ux-designer');return;}
+ navigate(action);
+}
+function renderWorkspaceBreadcrumbs(){
+ if(typeof ATGVWorkspaceBreadcrumbs==='undefined')return;
+ const id=view==='landing'?'landingView':view==='discovery'?'workView':view+'View';
+ const active=$(id);
+ if(!active||active.classList.contains('hidden'))return;
+ const trail=ATGVWorkspaceBreadcrumbs.trail(workspaceBreadcrumbContext());
+ const build=container=>{
+  if(!container)return;
+  let nav=[...container.children].find(el=>el.classList?.contains('atgv-workspace-breadcrumbs'));
+  if(!nav){nav=document.createElement('nav');nav.className='atgv-workspace-breadcrumbs';
+   nav.setAttribute('aria-label','Breadcrumb');
+   container.insertBefore(nav,container.firstChild);
+  }
+  const signature=JSON.stringify(trail);
+  if(nav.dataset.route===signature)return;
+  nav.dataset.route=signature;nav.replaceChildren();
+  for(const [i,segment] of trail.entries()){
+   if(i){const sep=document.createElement('span');sep.className='atgv-breadcrumb-separator';
+    sep.textContent='/';sep.setAttribute('aria-hidden','true');nav.append(sep);}
+   const leaf=i===trail.length-1;
+   const item=document.createElement(!leaf&&segment.action?'button':'span');
+   item.className=leaf?'atgv-breadcrumb-current':'atgv-breadcrumb-link';
+   item.textContent=segment.label;
+   if(leaf)item.setAttribute('aria-current','page');
+   if(item.tagName==='BUTTON'){
+    item.type='button';item.title='Go to '+segment.label;
+    item.addEventListener('click',()=>workspaceBreadcrumbAction(segment.action));
+   }
+   nav.append(item);
+  }
+  container.classList.add('has-workspace-breadcrumb');
+ };
+ build(active);
+ // Show the full My Work / Business Requirement / BR-ID path inside a dialog.
+ // A breadcrumb only behind a modal cannot be seen or used by the reader.
+ const dialogs=[['brEditModal','.br-edit-card'],['baRequirementModal','.ba-requirement-modal-card']];
+ for(const [modalId,selector] of dialogs){
+  const overlay=$(modalId),card=overlay?.querySelector(selector);
+  if(!card)continue;
+  if(view==='discovery'&&!overlay.classList.contains('hidden'))build(card);
+  else{
+   const old=[...card.children].find(el=>el.classList?.contains('atgv-workspace-breadcrumbs'));
+   old?.remove();card.classList.remove('has-workspace-breadcrumb');
+  }
+ }
+}
+
 function setView(next){
   // Hide every workspace page, not just a fixed list. A newly added page must
   // never remain visible behind another menu or expose the wrong workflow.
@@ -561,6 +641,7 @@ function setView(next){
   // Keep its logical 'discovery' mode so existing save/approval and error guards work.
   $('discoveryView').classList.toggle('hidden',next!=='discovery');
   view=next;
+  if(typeof renderWorkspaceBreadcrumbs==='function')renderWorkspaceBreadcrumbs();
   $('contentPane').scrollTop=0;
   window.dispatchEvent(new Event('atgv:viewchange'));
 }
@@ -958,6 +1039,7 @@ function updateState(msg){
   }
   else if(!workspaceOpened)document.body.classList.add('gate-mode');
   renderGate();
+  if(typeof renderWorkspaceBreadcrumbs==='function')renderWorkspaceBreadcrumbs();
 }
 let navigationRefreshRequestId=0;
 function requestNavigationRefresh(destination){
@@ -998,6 +1080,7 @@ function navigate(destination){
   if(isRole||destination==='sdlc-roles'){
     if(!visibleRoles().some(role=>role.id===selectedRole))selectedRole=visibleRoles()[0]?.id||'business-analyst';
     const baWorkspace=selectedRole==='business-analyst';
+    if(baWorkspace)baBreadcrumbAtRequirements=false;
     setView(baWorkspace?'discovery':'work');renderSidebarRole();renderRoleWork();
     if(baWorkspace){renderDiscovery();refreshAIChangeResolution();}
     renderRoleTimeline();ensurePMJiraInventory(true);ensureBAJiraInventory(true);send('roleHandoffOwners');return;
@@ -1009,6 +1092,7 @@ function navigate(destination){
   if(destination==='knowledge'){setView('knowledge');send('refreshConnectedSources');return;}
   if(destination==='planning'){setView('planning');send('loadPlanning');renderDesignCards();return;}
   if(destination==='discovery'){
+    baBreadcrumbAtRequirements=true;
     selectedRole='business-analyst';renderSidebarRole();
     setView('discovery');renderRoleWork();ensureBAJiraInventory(true);
     send('baOwnersRefresh');renderDiscovery();refreshAIChangeResolution();return;
@@ -1310,9 +1394,11 @@ function openBARequirementModal(ref,openAnswers=false){
  if(!ref||!activeId)return;
  baRequirementPriorFocus=document.activeElement;
  baRequirementModalTarget={kind:ref.kind,scopeId:ref.scopeId,rootKey:ref.rootKey,projectId:activeId,openAnswers};
+ baBreadcrumbAtRequirements=true;
  $('baRequirementModalTitle').textContent=ref.title||ref.label||'Business Requirement details';
  if(ref.kind==='local')renderBACompletedRecords();else renderBAJiraBackedEpics();
  $('baRequirementModal').classList.remove('hidden');$('baRequirementModal').setAttribute('aria-hidden','false');
+ if(typeof renderWorkspaceBreadcrumbs==='function')renderWorkspaceBreadcrumbs();
  $('baRequirementModalClose').focus();
 }
 function closeBARequirementModal(restore=true){
@@ -1320,6 +1406,7 @@ function closeBARequirementModal(restore=true){
  const content=$('baRequirementModalContent'),card=content.firstElementChild;
  if(card&&target.projectId===activeId)$(target.kind==='local'?'baCompletedList':'baJiraBackedEpics').append(card);
  content.replaceChildren();$('baRequirementModal').classList.add('hidden');$('baRequirementModal').setAttribute('aria-hidden','true');
+ if(typeof renderWorkspaceBreadcrumbs==='function')renderWorkspaceBreadcrumbs();
  const previous=baRequirementPriorFocus;baRequirementPriorFocus=null;
  if(restore){if(previous?.isConnected)previous.focus();else $('baJiraBrFilter').focus();}
 }
@@ -2610,6 +2697,7 @@ function openUxPipelinePreview(){
  if(!uxReadyForPreview())return;
  $('uxDesignBuilder').classList.remove('hidden');setView('uxPreview');
  $('uxPreviewHeading').textContent='Jira '+uxSelectedKey+' - UI/UX Design Preview';
+ if(typeof renderWorkspaceBreadcrumbs==='function')renderWorkspaceBreadcrumbs();
  $('uxPreviewVersion').textContent=(uxPipeline.status==='approved'?'Approved':'Draft')+' v'+uxPipeline.revisionNumber;
  $('uxPreviewVersion').classList.toggle('ux-approved',uxPipeline.status==='approved');
  $('uxPreviewMetadata').textContent='Generated by '+uxPipeline.designer+' · On '+new Date(uxPipeline.generatedAt).toLocaleString()+' · AI '+(uxPipeline.aiModel||'Not recorded')+' · Jira '+uxSelectedKey;
@@ -3003,6 +3091,7 @@ $('developerBrSelect').addEventListener('change',()=>{
  if(developerBrBusy)return;
  developerBrSelected=$('developerBrSelect').value;
  resetDeveloperBr();developerBrTab='logs';renderDeveloperBrChoices();if(developerBrSelected){send('developerBrLogs',{brId:developerBrSelected});send('developerBrRecoveryInfo',{brId:developerBrSelected});}
+ if(typeof renderWorkspaceBreadcrumbs==='function')renderWorkspaceBreadcrumbs();
 });
 function stopDeveloperBr(){
  if(developerBrStopping||!developerBrSelected||!(developerBrBusy||developerBrServerRunning||developerBrServerBusy))return;
@@ -4827,6 +4916,7 @@ function openQuillDocument(doc){
   activeDoc=doc;docDirty=false;docSaving=false;docMode='quill';
   documentOwner=null;$('docOwnerStatus').textContent='Owner: Checking…';$('docAssign').disabled=true;
   $('docEditorTitle').textContent=doc.title;$('docEditorPath').textContent=doc.path;
+  if(typeof renderWorkspaceBreadcrumbs==='function')renderWorkspaceBreadcrumbs();
   $('docSave').disabled=true;$('docMarkdownSource').readOnly=true;$('docOpenSource').disabled=false;$('docOpenSource').textContent='Edit Markdown';
   $('editorWysiwyg').classList.remove('hidden');$('editorMarkdown').classList.add('hidden');
   quillMount();
@@ -6071,6 +6161,7 @@ function renderDiscoverySummary(){
   const stepHints={upload:'Select source documents and submit for AI mapping.',mapping:'Select uploaded documents for mapping, then review and save the 12 answers.',review:'Inspect saved AI findings, sources and individual answers before confirming the review.',generate:'Generate Business Requirements drafts.',save:'Preview and save every draft.',approve:'Check and approve Business Requirements.',jiraPreview:'Inspect the generated Jira plan.',jiraApprove:'Approve the current Jira preview.',publish:'Publish the approved Jira plan.'};
   $('discoveryProgressHint').textContent=stepHints[displayed]||hints[status.stage]||'';
   renderBAButtons();
+  if(typeof renderWorkspaceBreadcrumbs==='function')renderWorkspaceBreadcrumbs();
 }
 function openBAWorkflowStep(key){
   navigate('discovery');
@@ -6090,6 +6181,7 @@ for(const definition of ATGVBAProgress.definitions){
  node.addEventListener('click',()=>{
   if(node.disabled)return;
   baViewedStep=definition[0];
+  baBreadcrumbAtRequirements=true;
   renderDiscoverySummary();
  });
 }
@@ -6652,11 +6744,12 @@ function updateBREditorActions(){
 }
 function openBREditor(id){
  const br=brState?.brs?.find(item=>item.id===id);if(!br||br.status==='retired'||br.status==='retire-proposed')return;
- brEditing=id;brReadOnly=br.status!=='draft'||!baCanEdit('ba-br-'+id);brEditorDirty=false;brEditorSaving=false;
+ brEditing=id;baBreadcrumbAtRequirements=true;brReadOnly=br.status!=='draft'||!baCanEdit('ba-br-'+id);brEditorDirty=false;brEditorSaving=false;
  const editorMilestone=baViewedStep||window.baLastGuideProgress?.find(step=>step.current)?.key||'';
  $('brEditTitle').textContent=(editorMilestone==='approve'?'Review for Approval ':brReadOnly?'Preview ':'Preview / Edit ')+id;
  $('brEditError').textContent='';
  $('brEditModal').classList.remove('hidden');$('brEditModal').setAttribute('aria-hidden','false');rebuildBRQuill(br,brReadOnly||editorMilestone==='approve');updateBREditorActions();
+ if(typeof renderWorkspaceBreadcrumbs==='function')renderWorkspaceBreadcrumbs();
 }
 let brCloseAfterSave=false;
 function closeBREditor(force=false){
@@ -6664,7 +6757,7 @@ function closeBREditor(force=false){
  if(!force&&brEditorDirty){$('brUnsavedModal').classList.remove('hidden');$('brUnsavedModal').setAttribute('aria-hidden','false');return false;}
  $('brUnsavedModal').classList.add('hidden');$('brUnsavedModal').setAttribute('aria-hidden','true');
  brCloseAfterSave=false;brEditing=null;brReadOnly=false;brQuill=null;brEditorDirty=false;brApprovePending=false;
- $('brEditModal').classList.add('hidden');$('brEditModal').setAttribute('aria-hidden','true');return true;
+ $('brEditModal').classList.add('hidden');$('brEditModal').setAttribute('aria-hidden','true');if(typeof renderWorkspaceBreadcrumbs==='function')renderWorkspaceBreadcrumbs();return true;
 }
 $('brUnsavedCancel').addEventListener('click',()=>{$('brUnsavedModal').classList.add('hidden');$('brUnsavedModal').setAttribute('aria-hidden','true');});
 $('brUnsavedDiscard').addEventListener('click',()=>closeBREditor(true));
