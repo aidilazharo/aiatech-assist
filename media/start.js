@@ -5337,12 +5337,13 @@ function confirmSavedBAReview(){
  send('confirmDiscoveryReview',{projectId:activeId,discoveryRevision:brState.discoveryRevision});
 }
 $('baReviewFinish').addEventListener('click',confirmSavedBAReview);
+$('baOpenChangeProposal').addEventListener('click',()=>{baShowChangeProposal=!baShowChangeProposal;renderDiscoverySummary();if(baShowChangeProposal){const pane=document.querySelector('.change-proposal-panel');pane.open=true;pane.scrollIntoView({block:'start',behavior:'smooth'});}});
 $('baReviewRegenerate').addEventListener('click',()=>{
  if($('baReviewRegenerate').disabled||baBusyTask||discoveryDirty)return;
  reviewStopReason='';baBusy('review','Regenerating and validating AI Review with your feedback…');
  send('copilotDiscovery',{feedback:$('baReviewFeedback').value.slice(0,1500)});
 });
-$('baOpenChangeProposal').addEventListener('click',()=>{baShowChangeProposal=!baShowChangeProposal;renderDiscoverySummary();if(baShowChangeProposal){const pane=document.querySelector('.change-proposal-panel');pane.open=true;pane.scrollIntoView({block:'start',behavior:'smooth'});}});
+
 $('sourceProcessSubmit').addEventListener('click',()=>{
  if($('sourceProcessSubmit').disabled||!brState)return;
  if($('sourceProcessSubmit').dataset.action==='next'){
