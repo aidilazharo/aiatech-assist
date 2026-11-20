@@ -64,14 +64,14 @@ test('webview loads the route model before start.js and renders safe accessible 
 });
 test('breadcrumbs follow real navigation, BR editor, completed BR modal and documents',()=>{
  const ui=read('media/start.js');
- assert.match(ui,/view=next;\s*renderWorkspaceBreadcrumbs\(\)/);
+ assert.match(ui,/view=next;\s*if\(typeof renderWorkspaceBreadcrumbs==='function'\)renderWorkspaceBreadcrumbs\(\)/);
  assert.match(ui,/baBreadcrumbAtRequirements=action==='br-home'/);
  assert.match(ui,/if\(brEditing&&!closeBREditor\(\)\)return/);
  assert.match(ui,/baBreadcrumbAtRequirements=true;/);
  assert.match(ui,/const dialogs=\[\['brEditModal'/);
  assert.match(ui,/const overlay=\$\(modalId\),card=overlay\?\.querySelector\(selector\)/);
  assert.match(ui,/documentTitle:view==='documentEditor'/);
- assert.match(ui,/renderWorkspaceBreadcrumbs\(\);\s*\$\('baRequirementModalClose'\)\.focus/);
+ assert.match(ui,/if\(typeof renderWorkspaceBreadcrumbs==='function'\)renderWorkspaceBreadcrumbs\(\);\s*\$\('baRequirementModalClose'\)\.focus/);
  assert.match(ui,/\$\('brEditModal'\)\.classList\.add\('hidden'\);[^\n]*renderWorkspaceBreadcrumbs\(\)/);
- assert.match(ui,/\$\('docEditorTitle'\)\.textContent=doc.title;\$\('docEditorPath'\)\.textContent=doc.path;\s*renderWorkspaceBreadcrumbs\(\)/);
+ assert.match(ui,/\$\('docEditorTitle'\)\.textContent=doc.title;\$\('docEditorPath'\)\.textContent=doc.path;\s*if\(typeof renderWorkspaceBreadcrumbs==='function'\)renderWorkspaceBreadcrumbs\(\)/);
 });
