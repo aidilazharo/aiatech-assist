@@ -3062,14 +3062,14 @@ async function restoreDiscoverySource(msg){
  await dashboard?.webview.postMessage({type:'discoverySourceRestored',filename:source.name});
  await notice('Archived source restored. Select it to map new discovery evidence; BRs and Jira remain unchanged until approval.');
 }
-async function aiDiscoverySuggestion(signal){
+async function aiDiscoverySuggestion(signal,feedback=''){
  const checkCancelled=()=>{if(signal.aborted)throw Object.assign(new Error('AI Review stopped.'),{name:'AbortError'});};
  requireOpened();await requireBAOwner('ba-discovery');checkCancelled();const currentDiscovery=await discovery.load(registry,activeProject.id);
  const target=await activeAiTarget();
  // The Business Analyst explicitly initiated AI Review; continue without a duplicate consent prompt.
  checkCancelled();
  await dashboard?.webview.postMessage({type:'baProgress',task:'review',message:'Analyzing the 12 discovery answers…'});
- const question=discoveryReview.createReviewPrompt(currentDiscovery.answers);
+ const question=discoveryReview.createReviewPrompt(currentDiscovery.answers,feedback);
  const raw=await aiAnswer(target,question+await roleSkillPrompt('business-analyst'),28000,{json:true,signal});
  checkCancelled();
  let reviewed;
@@ -8741,7 +8741,7 @@ async function handleDashboardMessage(msg){
       case 'copilotDiscovery':{
         if(activeDiscoveryReviewRun)break;
         const controller=new AbortController();
-        const completion=aiDiscoverySuggestion(controller.signal);
+        const completion=aiDiscoverySuggestion(controller.signal,String(msg.feedback||'').slice(0,1500));
         activeDiscoveryReviewRun={controller,completion};
         try{await completion;}
         catch(error){
