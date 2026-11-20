@@ -1,15 +1,17 @@
-# ATGV AIATECH Assist v0.4.56
+# ATGV AIATECH Assist v0.4.57
 
-## Fix: Confluence source vault attachment IDs
+## Unified workspace breadcrumbs
 
-- Accept both numeric and att-prefixed Confluence attachment identifiers (e.g., 123456 and att123456) returned by Confluence Cloud.
-- Validate attachment IDs on upload confirmation and download; pass through only safe, exact server-provided identifiers.
-- Reject arbitrary IDs, encoded path separators, unexpected punctuation, and malformed prefixes before any attachment download request.
-- Ensure the Confluence source vault can restore original BR documents and project attachments on a second computer when the API returns att-prefixed IDs.
-- Keep the existing SHA-256 byte verification, source manifest validation, conflict checks, and no-overwrite local recovery guarantees.
-- Add regression tests for modern and legacy ID formats, live-style att-prefixed upload/restore, and malicious ID rejection.
-- No changes to the SDLC Library; version remains v1.1.17.
+- Add blue, accessible breadcrumbs above the page title on every workspace page, replacing the hard-coded blue kicker text.
+- Route BA navigation as My Work, My Work / Business Requirement and My Work / Business Requirement / BR-01 (or the actual selected BR ID).
+- Refresh breadcrumb trails when switching pages, selecting BA milestones, opening and closing BR editors, viewing completed BR or Jira-only Epic details, selecting Developer BRs and opening document/design previews.
+- Render the full nested breadcrumb inside BR modal dialogs, so the selected BR is visible even when a modal covers the page header.
+- Make ancestor segments navigable while respecting unsaved Business Requirement and document edits. Current-page labels are not clickable.
+- Add responsive width handling, keyboard-visible focus, aria-label=Breadcrumb and aria-current=page.
+- Keep user-initiated navigation client-side; it does not reload the webview or alter Jira/Confluence data.
+- Add regression coverage for every main workspace page and BR-01/BR-02 breadcrumb identity.
 
-## Validation
+## Quality gates
 
-Run full Node.js regression tests, Windows reset tests, UI theme checks, VSIX activation/packaging checks, and GitHub release workflow. Merge only after all required CI checks pass.
+- Run full Node.js regression tests, Windows startup/reset test, UI theme consistency check, and VSIX compilation/activation verification.
+- No SDLC Library changes; Library remains v1.1.17.
