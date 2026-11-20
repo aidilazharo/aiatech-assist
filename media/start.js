@@ -5337,6 +5337,11 @@ function confirmSavedBAReview(){
  send('confirmDiscoveryReview',{projectId:activeId,discoveryRevision:brState.discoveryRevision});
 }
 $('baReviewFinish').addEventListener('click',confirmSavedBAReview);
+$('baReviewRegenerate').addEventListener('click',()=>{
+ if($('baReviewRegenerate').disabled||baBusyTask||discoveryDirty)return;
+ reviewStopReason='';baBusy('review','Regenerating and validating AI Review with your feedback…');
+ send('copilotDiscovery',{feedback:$('baReviewFeedback').value.slice(0,1500)});
+});
 $('baOpenChangeProposal').addEventListener('click',()=>{baShowChangeProposal=!baShowChangeProposal;renderDiscoverySummary();if(baShowChangeProposal){const pane=document.querySelector('.change-proposal-panel');pane.open=true;pane.scrollIntoView({block:'start',behavior:'smooth'});}});
 $('sourceProcessSubmit').addEventListener('click',()=>{
  if($('sourceProcessSubmit').disabled||!brState)return;
@@ -6732,6 +6737,11 @@ $('brEditApprove').addEventListener('click',()=>{
 $('brRerun').addEventListener('click',()=>{if(baBusyTask||!activeId)return;send('rerunBusinessRequirement',{projectId:activeId});});
 $('brGenerate').addEventListener('click',()=>{if($('brGenerate').disabled)return;if(discoveryDirty){status('Save the 12 questions before generating Business Requirements documents.',true);return;}baBusy('generate','Preparing Business Requirements generation…');send('generateBusinessRequirements');});
 $('brGenerateAffected').addEventListener('click',()=>{if($('brGenerateAffected').disabled)return;baBusy('generate','Regenerating affected Business Requirements…');send('generateBusinessRequirements',{selective:true});});
+$('brRegenerateProposal').addEventListener('click',()=>{
+ if($('brRegenerateProposal').disabled||discoveryDirty)return;
+ baBusy('generate','Regenerating source-backed BR drafts with your feedback…');
+ send('generateBusinessRequirements',{regenerate:true,feedback:$('brRegenerationFeedback').value.slice(0,1500)});
+});
 $('brNextPreviewSave').addEventListener('click',()=>{
  if($('brNextPreviewSave').disabled||!brState||discoveryDirty||brEditorSaving||baBusyTask)return;
  const drafts=activeBusinessRequirements().filter(br=>br.status==='draft');
@@ -6971,7 +6981,7 @@ function requestDiscoveryReview(){
  if($('discoveryCopilot').disabled)return;
  if($('discoveryCopilot').dataset.action==='next-generate'){openBAWorkflowStep('generate');return;}
  if(baBusyTask==='review'){baBusy('stopReview','Stopping AI Review…');send('stopDiscoveryReview');return;}
- reviewStopReason='';renderDiscoveryReview();baBusy('review','Preparing AI Review…');send('copilotDiscovery');
+ reviewStopReason='';renderDiscoveryReview();baBusy('review','Preparing AI Review…');send('copilotDiscovery',{feedback:$('baReviewFeedback').value.slice(0,1500)});
 }
 $('discoveryCopilot').addEventListener('click',requestDiscoveryReview);
 window.addEventListener('message',event=>{
