@@ -51,10 +51,10 @@ test('visible acknowledgement is enabled independent of cached ownership, while 
  assert.doesNotMatch(ui,/finish\.disabled=!!baBusyTask\|\|!mine/);
  assert.match(host,/case 'confirmDiscoveryReview':\{\s*try\{\s*requireOpened\(\);await requireBAOwner\('ba-discovery'\)/);
  assert.match(host,/const actor=await verifiedBAActor\(\)/);
- assert.match(host,/case 'confirmDiscoveryReview':[\s\S]*?'Acknowledge Findings'/);
+ assert.match(host,/case 'confirmDiscoveryReview':[\s\S]*?acknowledgeRisks:unresolved/);
 });
 test('confirmation cancellation, failures and success return a UI result to clear busy state',()=>{
- assert.match(host,/type:'baReviewConfirmResult',success:false,cancelled:true/);
+ assert.match(host,/baGeneralization\.reviewState\(register,review\)\.flagged/);
  assert.match(host,/type:'baReviewConfirmResult',success:false,/);
  assert.match(host,/type:'baReviewConfirmResult',success:true/);
  assert.match(ui,/if\(m\.type==='baReviewConfirmResult'\)/);

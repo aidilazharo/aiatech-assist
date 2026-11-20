@@ -20,7 +20,8 @@ test('review renders explicit no replacement message and exposes Generate BR wit
  assert.ok(ui.includes('complete the unanswered questions and save, then re-run AI Review'));
  assert.ok(ui.includes('const reviewGood=reviewCurrent&&baMappingComplete()&&baReviewFinalized();'));
  assert.ok(ui.includes('const reviewReady=!!(brState?.reviewRevision&&brState.reviewRevision===brState.discoveryRevision&&!discoveryDirty);'));
- assert.ok(host.includes("'Continue with Risks'"),'unresolved blockers should require an explicit acknowledgment');
+ assert.ok(host.includes('baGeneralization.generationGuard(register,review)'),'generation must honor the saved human approval and never show a second generic warning');
+ assert.ok(host.includes('acknowledgeRisks:unresolved'),'explicit BA review approval persists source-bound provisional assumptions');
 });
 test('review Apply has stop and retry controls, guarded cancellation and completion messages',()=>{
  assert.ok(host.includes('id="baReviewApplyStop"'));

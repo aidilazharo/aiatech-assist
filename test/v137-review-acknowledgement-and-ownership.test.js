@@ -33,7 +33,7 @@ test('Quill approval explains all blockers and does not bypass independent Busin
  assert.match(ui,/Independent Business Owner approval is pending/);
  assert.match(ui,/Approval blocked: /);
  assert.match(ui,/reviewRiskAccepted/);
- assert.match(host,/Review & Acknowledge|Acknowledge Findings/);
+ assert.match(host,/Approve AI Review & Continue|acknowledgeRisks:unresolved/);
  assert.match(ui,/finish\.classList\.toggle\('hidden',!reviewCurrent\|\|baReviewFinalized\(\)&&!unresolvedFindings\)/);
 });
 test('ownership action is inline beside ownership pill and not relegated to overflow',()=>{

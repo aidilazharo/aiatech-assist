@@ -18,8 +18,8 @@ test('nine-step workflow retains header readiness while bottom process descripti
 });
 test('AI review distinguishes replacement actions from review risk acknowledgments',()=>{
  assert.match(host,/id="discoveryReviewApply"[^>]*>Apply Answer Replacements/);
- assert.match(host,/Review &amp; Acknowledge Findings records your decision/);
- assert.match(ui,/finish\.textContent=unresolvedFindings\?'Review & Acknowledge Findings'/);
+ assert.match(host,/Approve AI Review &amp; Continue records your approval for draft generation/);
+ assert.match(ui,/finish\.textContent='Approve AI Review & Continue'/);
  assert.match(ui,/apply\.disabled=!!baBusyTask\|\|!mine\|\|!reviewCurrent/);
 });
 test('BR filter defaults to All on project change and Preview Edit is in the ownership row',()=>{

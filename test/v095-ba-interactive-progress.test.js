@@ -22,9 +22,9 @@ test('completed stages become green and current approval becomes amber',()=>{
  assert.equal(stages[6].current,true);
  assert.equal(stages[7].selectable,false);
 });
-test('review findings remain amber without hiding completed review from navigation',()=>{
+test('review findings remain visible but approved milestones are not stuck amber',()=>{
  const stages=derive({...ready,reviewWarnings:true});
- assert.equal(stages[3].state,'warning');
+ assert.equal(stages[3].state,'success');
  assert.equal(stages[3].selectable,true);
  assert.equal(stages[6].current,true);
 });
