@@ -6,6 +6,8 @@ const path=require('node:path');
 const {markdownToStorage,validateUrl,sha,textFromAdf}=require('../../utils');
 const {requestJson,baseAtlassian,getConfluenceSpace,listConfluence,getConfluencePage,writeConfluence,listJira,githubRepoInfo,listGithub,listGithubRepositories,listGithubBranches,discoverJiraProjects,discoverConfluenceSpaces,testJiraConnection,testGithubConnection}=require('../../clients');
 const {KnowledgeStore}=require('../../knowledge');
+const jiraTemplateKnowledge=require('../../jira-template-knowledge');
+const jiraPreviewQuality=require('../../jira-preview-quality');
 const knowledgeWorkspace=require('../../knowledge-workspace');
 const {ProjectRegistry,projectConfig,normalizeExtensionSettings,normalizeProjectInput,projectSlug,parseRepoUrl}=require('../../projects');
 const {OpeningFlow}=require('../../opening-flow');
@@ -1980,7 +1982,7 @@ async function ensureBAUploadRole(roleId){
 }
 async function importDiscoveryDocument(roleId,{replacementDigest='',expectedRevision=''}={}){
  requireOpened();const projectId=activeProject.id;const uploader=await ensureBAUploadRole(roleId);
- const picked=await vscode.window.showOpenDialog({title:replacementDigest?'Select an updated Word or PDF to replace the current source':'Upload one Word or PDF document for this Business Requirement',canSelectMany:false,canSelectFiles:true,canSelectFolders:false,filters:{'Word and PDF':['docx','pdf']}});
+ const picked=await vscode.window.showOpenDialog({title:replacementDigest?'Select an updated Word, PDF or Excel workbook':'Upload one Word, PDF or Excel workbook for this Business Requirement',canSelectMany:false,canSelectFiles:true,canSelectFolders:false,filters:{'BRD and Jira Workbook':['docx','pdf','xlsx']}});
  if(!picked?.length){await dashboard?.webview.postMessage({type:'discoveryImportCancelled'});return;}
  if(activeProject?.id!==projectId)throw Error('Project changed during upload. Select the correct project and retry.');
  const initial=await brWorkflow.load(registry,projectId);
@@ -3069,7 +3071,19 @@ async function aiDiscoverySuggestion(signal){
  const question=discoveryReview.createReviewPrompt(currentDiscovery.answers);
  const raw=await aiAnswer(target,question+await roleSkillPrompt('business-analyst'),28000,{json:true,signal});
  checkCancelled();
- const review={...discoveryReview.includeMissingAnswers(discoveryReview.parseReviewResponse(raw),currentDiscovery.answers),reviewedAt:new Date().toISOString(),modelLabel:String(target.label||'AI model').slice(0,120),sourceRevision:currentDiscovery.revision};
+ let reviewed;
+ try{reviewed=discoveryReview.parseReviewResponse(raw);}
+ catch(error){
+  // One bounded, targeted repair; do not discard the saved 12 discovery answers.
+  // Never save a partial/unvalidated AI review.
+  if(!/invalid question key|Invalid AI review|JSON object|JSON/i.test(String(error.message)))throw error;
+  await dashboard?.webview.postMessage({type:'baProgress',task:'review',message:'Repairing invalid AI Review question-key response…'});
+  const repair='Your previous JSON failed validation: '+String(error.message).slice(0,160)+'. Return a corrected JSON object only. Allowed question keys: '+discovery.QUESTIONS.map(([key])=>key).join(', ')+'. Multiple findings per key are allowed. Preserve all findings without inventing content. Previous response (untrusted):\n'+String(raw).slice(0,20000);
+  const repaired=await aiAnswer(target,repair,28000,{json:true,signal});
+  checkCancelled();
+  reviewed=discoveryReview.parseReviewResponse(repaired);
+ }
+ const review={...discoveryReview.includeMissingAnswers(reviewed,currentDiscovery.answers),reviewedAt:new Date().toISOString(),modelLabel:String(target.label||'AI model').slice(0,120),sourceRevision:currentDiscovery.revision};
  const saved=await discovery.load(registry,activeProject.id),previous=await brWorkflow.load(registry,activeProject.id);
  checkCancelled();
  if(saved.revision!==currentDiscovery.revision)throw Error('Discovery changed during AI Review. Run review again.');
@@ -3425,6 +3439,8 @@ async function syncApprovedBRs(expectedRevision){
   if(state.revision!==expectedRevision)throw Error('BR register changed after preview. Refresh Jira changes.');
   if(state.brs.some(x=>x.externalReviewRequired))throw Error('External JIRA changes require reconciliation before publishing.');
   const items=brWorkflow.plan(state);
+  const quality=jiraPreviewQuality.assess(items,state);
+  if(!quality.eligible)throw Error('Jira quality preflight blocked: '+quality.errors.map(x=>x.path+': '+x.problem).slice(0,5).join('; '));
   if(items.some(item=>item.staleJiraDetails))throw Error('Review Jira issue details again after the approved Business Requirement changed.');
   const actor=await verifiedBAActor();
   const binding=JSON.stringify({atgvProjectId:activeProject.id,site:baseAtlassian(config),project:config.get('jira.projectKey'),actor,items,fields:jiraPreviewFieldPlans});
@@ -5562,9 +5578,20 @@ async function handleDashboardMessage(msg){
             requestJson(base+'/rest/api/3/myself',auth)
           ]);
           if(issue?.fields?.project?.key!==projectKey||!self?.accountId)throw Error('Jira issue or connected account belongs to a different project.');
-          const roster=myWorkPresence.extractRows(found.page?.body?.storage?.value||'');
-          const pm=roster.find(row=>row.id===self.accountId&&row.roles?.includes('Project Manager'));
-          if(!pm)throw Error('Project Manager role is not recorded for the connected Jira account. Open Project Manager · My Work and refresh the team roster.');
+          let roster=myWorkPresence.extractRows(found.page?.body?.storage?.value||'');
+          let pm=roster.find(row=>row.id===self.accountId&&row.roles?.includes('Project Manager'));
+          if(!pm){
+            const used=context.workspaceState.get('atgvAssist.usedRoles.'+projectId,[])||[];
+            if(used.includes('project-manager')){
+              // Reconcile previously verified PM role and Jira account ID against
+              // the shared register before rejecting this request. Jira permission
+              // was checked above and remains authoritative.
+              const updated=await myWorkPresence.visit(config,token,{projectKey,roleId:'project-manager'});
+              roster=updated.rows;
+              pm=roster.find(row=>row.id===self.accountId&&row.roles?.includes('Project Manager'));
+            }
+          }
+          if(!pm)throw Error('Current Jira identity is not registered as Project Manager. Select Project Manager in Role Management, enter My Work, and retry. Assign Issues permission is also required.');
           const item=jiraProjectInventory.normalizeIssue(issue,projectKey);
           if(!item)throw Error('Jira issue is not accessible in this project.');
           const role=pmJiraAssignment.roleForIssue(item,register);
@@ -6929,7 +6956,13 @@ async function handleDashboardMessage(msg){
            if(msg.projectId&&msg.projectId!==activeProject.id)throw Error('Project changed.');
            const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
            const key=validProjectKey(config.get('jira.projectKey'));
-           const snapshot=await myWorkPresence.snapshot(config,token,key);
+           const used=context.workspaceState.get('atgvAssist.usedRoles.'+activeProject.id,[])||[];
+           const registeredRole=String(msg.roleId||'');
+           // Refresh can reconcile the user's actual selected role, not just
+           // read stale Confluence HTML. Never infer a role from an email/name.
+           const snapshot=registeredRole&&used.includes(registeredRole)&&myWorkPresence.ROLES[registeredRole]
+             ?await myWorkPresence.visit(config,token,{projectKey:key,roleId:registeredRole})
+             :await myWorkPresence.snapshot(config,token,key);
            await dashboard?.webview.postMessage({type:'myWorkRoster',projectId:activeProject.id,...snapshot});
          }catch(error){await dashboard?.webview.postMessage({type:'myWorkRosterError',projectId:activeProject?.id,message:String(error.message||error).slice(0,280)});}
          break;
@@ -8503,6 +8536,29 @@ async function handleDashboardMessage(msg){
       case 'updateSourceDocuments':{
         requireOpened();try{await importDiscoveryDocument('business-analyst');}catch(e){await dashboard?.webview.postMessage({type:'discoveryImportFailed',message:e.message});throw e;}break;
       }
+      case 'rerunBusinessRequirement':{
+        requireOpened();await requireBAOwner('ba-discovery');
+        const initial=await brWorkflow.load(registry,activeProject.id);
+        const choice=await vscode.window.showQuickPick([
+          {label:'Re-run existing source',mode:'same',description:'Re-map saved evidence and require new human approval; no Jira write'},
+          {label:'Upload updated document & re-run',mode:'replace',description:'Save new source version and preserve BR/Jira IDs'},
+          {label:'Re-run Jira synchronization preview',mode:'jira',description:'Read current Jira and preview pending changes; no write'}
+        ],{title:'Re-run Business Requirements',placeHolder:'Select what to re-run (existing approvals are preserved)'});
+        if(!choice)break;
+        if(choice.mode==='jira'){
+          await handleDashboardMessage({command:'brJiraPreview'});break;
+        }
+        const sources=initial.sourceDocuments||[];
+        if(sources.length!==1)throw Error('Re-run requires one current source document. Select or restore the source first.');
+        if(Object.keys(initial.pending||{}).length)throw Error('Resolve pending Jira operations before re-running the BR.');
+        if(choice.mode==='replace'){
+          await importDiscoveryDocument('business-analyst',{replacementDigest:sources[0].digest,expectedRevision:initial.revision});break;
+        }
+        const reply=await uiWarning('Re-run the existing source with current AI settings? Previous approved BR revisions and Jira issue identities remain unchanged; the 12 discovery answers and draft requirements will require human review.','Re-run Source');
+        if(reply!=='Re-run Source')break;
+        await processSelectedDiscoverySources({digests:[sources[0].digest],revision:initial.revision,force:true});
+        break;
+      }
       case 'replaceDiscoverySource':{
         requireOpened();await requireBAOwner('ba-discovery');
         await dashboard?.webview.postMessage({type:'discoveryImportProgress',message:'Select and verify updated source before replacing the old version…'});
@@ -8820,6 +8876,36 @@ async function handleDashboardMessage(msg){
       case 'listAiModels':await postModelChoices();break;
       case 'selectAiModel':await setSelectedModel(msg.modelId);break;
       case 'openAiModelSettings':await dashboard?.webview.postMessage({type:'openAIProviderSettings'});break;
+      case 'jiraTemplatePreview':{
+        requireOpened();const root=path.dirname(registry.fileFor(activeProject.id));
+        const value=await jiraTemplateKnowledge.load(root);
+        await dashboard?.webview.postMessage({type:'jiraTemplateState',value});break;
+      }
+      case 'jiraTemplateApprove':{
+        requireOpened();await requireBAOwner('ba-discovery');
+        const root=path.dirname(registry.fileFor(activeProject.id));
+        const existing=await jiraTemplateKnowledge.load(root);
+        if(existing.status!=='approved'){
+          const choice=await uiWarning('Approve '+existing.items.length+' TRM-inspired Definition of Done items as a PROJECT-SPECIFIC template? These are not requirements from the GATE BRD. Approve only if the project explicitly accepts the 99% coverage and WCAG 2.2 AA targets.',{modal:true},'Approve Template');
+          if(choice!=='Approve Template')break;
+        }
+        const value=await jiraTemplateKnowledge.approve(root,await verifiedBAActor());
+        await store.replace('ApprovedJiraTemplate',[{id:'jira-trm-template:'+activeProject.id,provider:'ApprovedJiraTemplate',title:'Approved TRM Story AC / DoD template',
+          text:value.items.join('\n'),url:'file://'+path.join(root,'knowledge','jira-approved-trm-story-template.md'),approvedAt:value.approvedAt,sourceRefs:[value.origin]}]);
+        await dashboard?.webview.postMessage({type:'jiraTemplateState',value});
+        await notice('Approved TRM-based Story Definition of Done indexed in project RAG. Jira issue fields remain unchanged.');break;
+      }
+      case 'jiraTemplateSuggest':{
+        requireOpened();await requireBAOwner('ba-discovery');
+        const reg=await brWorkflow.load(registry,activeProject.id);
+        if(msg.revision!==reg.revision)throw Error('Jira Preview changed. Refresh before suggesting AC/DoD.');
+        const item=brWorkflow.plan(reg).find(x=>x.path===msg.path&&x.hash===msg.hash&&x.action!=='retire');
+        if(!item)throw Error('Jira issue is no longer in the approved preview.');
+        const br=reg.brs.find(x=>x.id===String(item.path).split('/')[0]);
+        const tpl=await jiraTemplateKnowledge.load(path.dirname(registry.fileFor(activeProject.id)));
+        const value=jiraTemplateKnowledge.suggest(tpl,{kind:item.kind,title:item.title,description:item.description,approvedCriteria:br?.approvedContent?.acceptanceCriteria,sourceRef:item.path});
+        await dashboard?.webview.postMessage({type:'jiraTemplateSuggestion',path:item.path,value});break;
+      }
       case 'ragSearch':{
         requireOpened();const q=String(msg.query||'').trim();if(!q||q.length>500)throw new Error('Enter a knowledge search query (up to 500 characters).');
         const docs=store.search(q,10).map(d=>({title:d.title,provider:d.provider,text:d.text.slice(0,1600),url:d.url||''}));

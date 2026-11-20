@@ -1002,7 +1002,7 @@ function navigate(destination){
     if(baWorkspace){renderDiscovery();refreshAIChangeResolution();}
     renderRoleTimeline();ensurePMJiraInventory(true);ensureBAJiraInventory(true);send('roleHandoffOwners');return;
   }
-  if(destination==='overview'){setView('landing');$('overviewGanttDetails').open=false;send('loadPlanning');send('myWorkRosterRefresh',{projectId:activeId});return;}
+  if(destination==='overview'){setView('landing');$('overviewGanttDetails').open=false;send('loadPlanning');send('myWorkRosterRefresh',{projectId:activeId,roleId:selectedRole});return;}
   if(destination==='settings'){$('settingsBack').textContent=workspaceOpened?'← Back to Workspace':'← Back to Projects';collapseExtensionSettings();setView('settings');updateExtensionSettingBadges();if(workspaceOpened)send('devRepositoryStatus');return;}
   if(destination==='library'){setView('library');window.atgvLibraryStudio?.refresh();return;}
   if(destination==='documents'){setView('documents');renderDocumentGroups();return;}
@@ -1734,7 +1734,7 @@ $('projectConnectionForm').addEventListener('submit',event=>{
 });
 let lastRosterProject='';
 function renderOverviewConnections(data){
- if(activeId&&lastRosterProject!==activeId){lastRosterProject=activeId;send('myWorkRosterRefresh',{projectId:activeId});}
+ if(activeId&&lastRosterProject!==activeId){lastRosterProject=activeId;send('myWorkRosterRefresh',{projectId:activeId,roleId:selectedRole});}
  if(!activeId)lastRosterProject='';
  projectConnectionsSnapshot=data||{jira:{},confluence:{}};
  const jira=data?.jira||{},space=data?.confluence||{};
@@ -4550,6 +4550,7 @@ $('diagramSave').addEventListener('click',()=>{
   diagramSaving=true;$('diagramSave').disabled=true;diagramStatus('Saving diagram…');
   send('saveDiagram',{revision:activeDiagram.revision,model:diagramCanvas.serialize()});
 });
+function msgTemplateText(v){return v?.status==='approved'?`Approved by ${v.approvedBy} on ${v.approvedAt} · ${v.items?.length||0} DoD items. Use Jira Preview to suggest content.`:`Proposed TRM Story template · ${v?.items?.length||0} DoD items. Requires explicit BA approval.\n`+(v?.items||[]).map(x=>'- '+x).join('\n');}
 function projectKnowledgeSubmit(kind){
  const input=$('overviewRagQuery');const query=input.value.trim();
  if(!query){$('overviewKnowledgeStatus').textContent='Enter a project knowledge question or search phrase.';input.focus();return;}
@@ -4574,6 +4575,8 @@ window.addEventListener('message',event=>{
   searchJiraInventory();
 });
 $('knowledgeSync').addEventListener('click',()=>{if(!activeId)return;$('knowledgeSync').disabled=true;$('knowledgeSyncStatus').textContent='Syncing local project documents and available connected sources…';send('sync',{id:activeId});});
+$('jiraTemplatePreview').addEventListener('click',()=>send('jiraTemplatePreview'));
+$('jiraTemplateApprove').addEventListener('click',()=>send('jiraTemplateApprove'));
 $('knowledgeSearch').addEventListener('click',()=>send('ragSearch',{query:read('ragQuery')}));
 $('knowledgeAsk').addEventListener('click',()=>send('ragAsk',{query:read('ragQuery')}));
 $('knowledgeRagSettings').addEventListener('click',()=>send('ragSettings'));
@@ -5029,7 +5032,14 @@ function renderJiraIssueDetails(entry,readOnly=false){
    const wrap=document.createElement('label');wrap.textContent=label;const input=document.createElement('textarea');input.rows=4;input.maxLength=5000;input.value=entry.jiraDetails?.[field]||entry.staleJiraDetails?.[field]||'';input.placeholder='Not specified';input.readOnly=readOnly;wrap.append(input);form.append(wrap);inputs[field]=input;
   }
   root.append(form);
-  if(!readOnly){const save=document.createElement('button');save.type='button';save.textContent='Save Jira details & refresh preview';save.addEventListener('click',()=>{
+  if(!readOnly){
+   const propose=document.createElement('button');propose.type='button';propose.className='secondary';propose.textContent='Suggest AC & DoD (TRM reference)';
+   const note=document.createElement('p');note.className='muted';note.classList.add('jira-template-suggestion-status');
+   propose.addEventListener('click',()=>send('jiraTemplateSuggest',{path:entry.path,hash:entry.hash,revision:brPlanRevision}));
+   root.append(propose,note);
+   window.atgvPendingJiraDetails={path:entry.path,acceptance:inputs.acceptanceCriteria,done:inputs.definitionOfDone};
+ }
+ if(!readOnly){const save=document.createElement('button');save.type='button';save.textContent='Save Jira details & refresh preview';save.addEventListener('click',()=>{
    if(!brPlanRevision||baBusyTask)return;
    baBusy('jiraDetails','Saving Jira details and refreshing the preview…');
    send('brJiraSaveDetails',{revision:brPlanRevision,path:entry.path,hash:entry.hash,acceptanceCriteria:inputs.acceptanceCriteria.value,definitionOfDone:inputs.definitionOfDone.value});
@@ -5102,8 +5112,11 @@ function renderJiraApprovalSummary(){
  const root=$('brJiraApprovalSummary');if(!root)return;
  const actions=jiraPlanForCR||[];
  const counts={create:0,update:0,retire:0};for(const item of actions)if(Object.hasOwn(counts,item.action))counts[item.action]++;
+ const quality=typeof ATGVJiraWorkflowTables==='undefined'?null:ATGVJiraWorkflowTables;
+ const skipped=Math.max(0,Object.keys(brState?.synced||{}).length-counts.update-counts.retire);
+ const storyMissing=actions.filter(e=>e.kind==='Story'&&e.action!=='retire'&&(!e.jiraDetails?.acceptanceCriteria||!e.jiraDetails?.definitionOfDone)).length;
  const message=jiraPreflightBlocked?`Jira Preflight blocked: ${brJiraPlanConflicts} issue(s) need resolution before preview. No Jira Preview has been created.`:!brPlanRevision?'Generate and inspect a Jira preview before approval.':`${actions.length} changes in the current approved Business Requirements cycle · ${counts.create} CREATE · ${counts.update} UPDATE · ${counts.retire} RETIRE. ${brJiraPlanConflicts?'Resolve '+brJiraPlanConflicts+' conflict(s) before approval.':'No blocking conflicts in preview.'}`;
- root.textContent=message+(brJiraPreviewApproved?' Preview approved; proceed to Step 10 to publish.':'');
+ root.textContent=message+` · ${skipped} existing issue(s) unchanged (SKIP).`+(storyMissing?` ${storyMissing} Story item(s) need AC/DoD review; use View details → Suggest AC & DoD.`:'')+(brJiraPreviewApproved?' Preview approved; proceed to Step 10 to publish.':'');
 }
 function baBusy(task,message,percent){
  if(task)stageProgress(task,message,percent);
@@ -5958,6 +5971,7 @@ function renderDiscoverySummary(){
   $('baCompletedSection').classList.toggle('hidden',displayed!=='start');
   document.querySelector('.source-documents-panel').classList.toggle('hidden',!showSources);
   $('sourceSelectionActions').classList.toggle('hidden',!showSources);
+ $('brRerun').disabled=!activeId||!!baBusyTask||selectedRole!=='business-analyst';
   const sourceWindowOpen=!!brState?.restartPending||hasSources&&!sourceMappingStarted;
  const sourceLocked=!sourceWindowOpen||sourceMappingStarted||!!baBusyTask||discoveryImportBusy;
   $('discoveryImport').disabled=sourceLocked||selectedRole!=='business-analyst'||!activeId;
@@ -6709,6 +6723,7 @@ $('brEditApprove').addEventListener('click',()=>{
   send('brSaveAndApprove',{brId:brEditing,revision:brState.revision,dirty,content});
  }catch(error){brApprovePending=false;$('brEditError').textContent=error.message;}
 });
+$('brRerun').addEventListener('click',()=>{if(baBusyTask||!activeId)return;send('rerunBusinessRequirement',{projectId:activeId});});
 $('brGenerate').addEventListener('click',()=>{if($('brGenerate').disabled)return;if(discoveryDirty){status('Save the 12 questions before generating Business Requirements documents.',true);return;}baBusy('generate','Preparing Business Requirements generation…');send('generateBusinessRequirements');});
 $('brGenerateAffected').addEventListener('click',()=>{if($('brGenerateAffected').disabled)return;baBusy('generate','Regenerating affected Business Requirements…');send('generateBusinessRequirements',{selective:true});});
 $('brNextPreviewSave').addEventListener('click',()=>{
@@ -6917,7 +6932,7 @@ $('baRetryMapping').addEventListener('click',retryDiscoveryMapping);
 function triggerDiscoveryImport(){
  if(discoveryImportBusy||baBusyTask||selectedRole!=='business-analyst')return;
  if(!discoveryData){$('discoveryImportStatus').textContent='Open a project first.';return;}
- setDiscoveryImportBusy(true,'Choose one Word or PDF document…');send('importDiscovery',{roleId:selectedRole});
+ setDiscoveryImportBusy(true,'Choose one Word, PDF or Excel workbook…');send('importDiscovery',{roleId:selectedRole});
 }
 $('discoveryImport').addEventListener('click',triggerDiscoveryImport);
 function requestSourceReupload(){if(discoveryImportBusy||baBusyTask||selectedRole!=='business-analyst'||!activeId)return;setDiscoveryImportBusy(true,'Select the original Word/PDF file to verify or update…');send('updateSourceDocuments');}
@@ -7252,7 +7267,14 @@ window.addEventListener('message',event=>{
    stageProgress('review',reviewStopReason,failed?0:100);baBusy('',null);renderDiscoveryReview();return;
   }
   if(m.type==='discoveryReviewResult'){reviewStopReason='';dismissObsoleteBARestartNotice();reviewApplyRetryAvailable=false;reviewApplyRetry=null;stageProgress('review','AI Review completed.',100);discoveryReviewProposal=m.review||null;renderDiscoveryReview();status('AI Review completed. Apply accepted suggestions or continue to Business Requirements generation.');}
-  if(m.type==='ragResult'){
+  if(m.type==='jiraTemplateSuggestion'&&window.atgvPendingJiraDetails?.path===m.path){
+  const state=window.atgvPendingJiraDetails;const v=m.value||{};
+  if(!state.acceptance.value&&v.acceptanceCriteria)state.acceptance.value=v.acceptanceCriteria;
+  if(!state.done.value&&v.definitionOfDone)state.done.value=v.definitionOfDone;
+  const note=document.querySelector('.jira-template-suggestion-status');if(note)note.textContent='AC: '+(v.acOrigin||'unavailable')+' · DoD: '+(v.dodOrigin||'unavailable')+'. Review and click Save Jira details to confirm. Existing text was preserved.';
+ }
+ if(m.type==='jiraTemplateState'){const box=$('jiraTemplateStatus');if(box)box.textContent=msgTemplateText(m.value);}
+ if(m.type==='ragResult'){
   const entries=(m.docs||[]).map((d,i)=>`[${i+1}] ${d.title} · ${d.provider}\n${d.text}\n${d.url||''}`).join('\n\n');
   $('ragAnswer').textContent=(m.answer||'')+'\n\n'+entries;
   $('overviewRagResult').classList.remove('hidden');$('overviewRagAnswer').textContent=m.answer||'No matching indexed evidence.';
@@ -7597,7 +7619,7 @@ function renderMyWorkRoster(rows){
 }
 $('overviewUserRefresh').addEventListener('click',()=>{
  $('overviewUserStatus').textContent='Loading verified My Work users from Confluence…';
- send('myWorkRosterRefresh',{projectId:activeId});
+ send('myWorkRosterRefresh',{projectId:activeId,roleId:selectedRole});
 });
 window.addEventListener('message',event=>{
  const m=event.data||{};

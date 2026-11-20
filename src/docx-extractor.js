@@ -124,4 +124,4 @@ function extractLegacyDocx(data){
  });
  return decode(xml.replace(/<w:(?:tab|ptab)\b[^>]*\/?\s*>/g,'\t').replace(/<w:(?:br|cr)\b[^>]*\/?\s*>/g,'\n').replace(/<\/w:(?:p|tr)>/g,'\n').replace(/<\/w:tc>/g,'\t').replace(/<[^>]+>/g,'')).replace(/\r/g,'').replace(/\n[ \t]*\n[ \t]*\n+/g,'\n\n').trim();
 }
-module.exports={extractDocx,extractLegacyDocx};
+module.exports={extractDocx,extractLegacyDocx,zipEntries,parseXml};

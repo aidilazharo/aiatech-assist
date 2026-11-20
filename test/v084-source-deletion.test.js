@@ -58,7 +58,7 @@ test('archiving a published BR source preserves approved revision and existing J
 }));
 test('webview offers archive/delete and restore controls with preserved document selections',()=>{
  const html=read('test/generated/extension-source.txt'),ui=read('media/start.js'),css=read('media/start.css');
- assert.match(html,/id="discoveryImport" class="ba-source-icon-btn" title="Upload Word or PDF"/);
+ assert.match(html,/id="discoveryImport" class="ba-source-icon-btn" title="Upload Word, PDF or Excel workbook"/);
  assert.match(ui,/remove.textContent='Delete Everywhere'/);
  assert.match(ui,/archive.textContent='Remove Source'/);
  assert.match(ui,/replace.textContent='Replace & Reprocess'/);

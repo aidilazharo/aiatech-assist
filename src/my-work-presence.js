@@ -17,12 +17,13 @@ function extractRows(body){
  const rows=[];
  for(const match of String(body||'').matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)){
   const cells=[...match[1].matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi)].map(x=>x[1]);
-  if(cells.length!==3||/<th\b/i.test(match[1]))continue;
+  if(![3,4].includes(cells.length)||/<th\b/i.test(match[1]))continue;
   const email=clean((cells[0].match(/<small\b[^>]*>([^<]*)<\/small>/i)||[])[1],250);
   const name=clean(htmlToText(cells[0].replace(/<small\b[^>]*>[\s\S]*?<\/small>/gi,'')),180);
   const roles=clean(htmlToText(cells[1]),500).split(/\s*;\s*/).filter(Boolean);
   const tasks=clean(htmlToText(cells[2]),1200);
-  const id=(match[0].match(/data-atgv-account="([^"]+)"/i)||[])[1]||'';
+  // Confluence storage may strip data-* attributes. Fourth-column text is durable.
+  const id=clean(cells[3]?htmlToText(cells[3]):(match[0].match(/data-atgv-account="([^"]+)"/i)||[])[1],200);
   if(!email&&!id)continue;
   rows.push({id:clean(id,200),email,name,roles:[...new Set(roles)],tasks});
  }
@@ -30,8 +31,8 @@ function extractRows(body){
 }
 function renderRows(rows){
  return '<p>ATGV My Work user register. Names and roles originate from signed-in Jira identities and actual My Work visits. Jira tasks reflect the latest verified user visit.</p>'+
- '<table><tbody><tr><th>Name</th><th>Roles</th><th>JIRA Task</th></tr>'+
- rows.map(row=>'<tr data-atgv-account="'+escape(row.id)+'"><td>'+escape(row.name)+'<p><small>'+escape(row.email)+'</small></p></td><td>'+escape(row.roles.join('; '))+'</td><td>'+escape(row.tasks||'No assigned task')+'</td></tr>').join('')+'</tbody></table>';
+ '<table><tbody><tr><th>Name</th><th>Roles</th><th>JIRA Task</th><th>Jira Account ID</th></tr>'+
+ rows.map(row=>'<tr data-atgv-account="'+escape(row.id)+'"><td>'+escape(row.name)+'<p><small>'+escape(row.email)+'</small></p></td><td>'+escape(row.roles.join('; '))+'</td><td>'+escape(row.tasks||'No assigned task')+'</td><td><code>'+escape(row.id)+'</code></td></tr>').join('')+'</tbody></table>';
 }
 async function locate(config,token,projectKey){
  const space=await getConfluenceSpace(config,token),name=title(projectKey);

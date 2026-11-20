@@ -32,7 +32,7 @@ function searchChunks(chunks, query, topN = 5) {
     const words = [...new Set(tokenize(query))];
     if (!words.length)
         return [];
-    const corpus = chunks.map(c => tokenize(c.text + ' ' + c.title));
+    const corpus = chunks.map(c => tokenize(c.text + ' ' + c.title + ' ' + String(c.provider||'') + ' ' + String((c.tags||[]).join(' '))));
     const n = corpus.length;
     if (!n)
         return [];
