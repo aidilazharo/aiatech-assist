@@ -23,12 +23,12 @@ test('BA Next Step is ready only when its actual next action can execute',()=>{
 });
 test('generate-to-preview remains available without prematurely requiring final BR approval',()=>{
  assert.match(ui,/const previewActionReady=displayed!=='generate'\|\|!\$\('brNextPreviewSave'\)\.disabled/);
- assert.match(ui,/const approvalActionReady=displayed!=='save'\|\|\(!readiness\.needsDecision&&!discoveryHasReviewBlockers\(\)\)/);
+ assert.match(ui,/const approvalActionReady=displayed!=='save'\|\|!!currentDefinition\?\.complete/);
  assert.match(ui,/const ready=ATGVJiraWorkflowTables\.nextActionReady\(/);
  assert.match(ui,/nextButton\.disabled=!ready/);
  assert.match(ui,/nextButton\.dataset\.milestoneState=ready\?'ready':'blocked'/);
  assert.match(ui,/nextButton\.setAttribute\('aria-disabled',String\(!ready\)\)/);
- assert.match(ui,/Resolve Discovery Question 12 and outstanding BA findings before proceeding to approval/);
+ assert.match(ui,/Question 12 and acknowledged AI risks are FINAL APPROVAL safeguards/);
 });
 test('Next Step is blue only when ready and dark gray when blocked or disabled',()=>{
  assert.match(css,/#baStepNavigation #baNextStep\[data-milestone-state="ready"\]:not\(:disabled\)\{[\s\S]*?background:var\(--vscode-button-background,#0e639c\)!important/);
