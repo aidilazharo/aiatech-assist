@@ -42,7 +42,7 @@
   if(current==='discovery'){
    const result=[segment('My Work','my-work')];
    const id=requirementId(state.brId);
-   if(clean(state.stage)!=='start'||id||state.requirementOpen===true)
+   if(state.rootOnly!==true&&(clean(state.stage)!=='start'||id||state.requirementOpen===true))
     result.push(segment('Business Requirement','br-home'));
    if(id)result.push(segment(id));
    // A leaf is always inert, including the BA root-only screen.
