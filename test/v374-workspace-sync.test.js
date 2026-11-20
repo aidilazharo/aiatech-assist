@@ -37,7 +37,7 @@ test('GitHub repo URLs, base branches, copy scopes and exclusions are validated'
   assert.throws(()=>sync.scopeName(invalid));
  for(const file of ['.git/config','.env','.env.production','src/private.pem','node_modules/package.json'])
   assert.equal(sync.isAllowedPath(file),false,file);
- for(const file of ['src/index.js','README.md','docs/guide.md','.github/workflows/release.yml','.github/CODEOWNERS','.github/dependabot.yml','.github/ISSUE_TEMPLATE/bug.yml','.github/actions/build/action.yml'])assert.equal(sync.isAllowedPath(file),true,file);
+ for(const file of ['src/index.js','README.md','docs/guide.md','.github/workflows/release.yml','.github/CODEOWNERS','.github/dependabot.yml','.github/ISSUE_TEMPLATE/bug.yml','.github/actions/ci/action.yml'])assert.equal(sync.isAllowedPath(file),true,file);
 });
 test('PR title, commit and branch describe the source change rather than the branch name',()=>{
  const sha='a'.repeat(40),sourceMessage='fix: validate repository setup scripts';
