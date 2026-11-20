@@ -8,7 +8,7 @@ const crypto=require('node:crypto');
 const {ProjectRegistry}=require('../src/projects');
 const store=require('../src/source-store');
 const br=require('../src/br-workflow');
-const {ConfluenceSourceVault,validateManifest,isSafeRelative}=require('../src/confluence-source-vault');
+const {ConfluenceSourceVault,validateManifest,isSafeRelative,validAttachmentId}=require('../src/confluence-source-vault');
 const sha=data=>crypto.createHash('sha256').update(data).digest('hex');
 const config={get:key=>({
  'jira.baseUrl':'https://example.atlassian.net','jira.email':'ba@example.com',
@@ -32,10 +32,10 @@ function fakeConfluence(){
    const file=options.body.get('file');assert.ok(file);
    const name=file.name,bytes=Buffer.from(await file.arrayBuffer());
    const prior=objects.get(name);
-   objects.set(name,{id:prior?.id||String(nextId++),name,bytes,version:(prior?.version||0)+1});
+   objects.set(name,{id:prior?.id||'att'+String(nextId++),name,bytes,version:(prior?.version||0)+1});
    return json({results:[{id:objects.get(name).id,title:name}]});
   }
-  const match=u.pathname.match(/^\/wiki\/rest\/api\/content\/99\/child\/attachment\/(\d+)\/download$/);
+  const match=u.pathname.match(/^\/wiki\/rest\/api\/content\/99\/child\/attachment\/(att\d+|\d+)\/download$/);
   if(match){const obj=[...objects.values()].find(x=>x.id===match[1]);
    if(!obj)return new Response('Not found',{status:404});
    return new Response(obj.bytes,{status:200});
@@ -81,6 +81,7 @@ test('Confluence vault uploads every original and related project upload, then a
   const pushed=await first.sync();
   assert.equal(pushed.conflicts.length,0,JSON.stringify(pushed.conflicts));
   assert.equal(pushed.uploaded,3,'original PDF, UI/UX image, metadata manifest');
+  assert.ok([...remote.objects.values()].every(x=>/^att\d+$/.test(x.id)),'test must use actual Cloud-style att-prefixed attachment IDs');
   const manifestName='ATGV-project-demo-source-state.json';
   assert.ok(remote.objects.has(manifestName));
   assert.ok(remote.objects.has(document.storedName));
@@ -118,6 +119,17 @@ test('manifest rejects cross-project, cross-space, path traversal, and mismatche
  assert.equal(isSafeRelative('ux/a.png'),true);
  assert.throws(()=>validateManifest({...raw,files:[{relative:'../unsafe.png',byteDigest:'a'.repeat(64),attachment:'ATGV-'+'a'.repeat(64)+'.png'}]},'demo','55'),/invalid/);
 });
+test('Confluence attachment IDs support numeric and att-prefixed forms without accepting arbitrary paths',()=>{
+ for(const id of ['123','000123','att123','att000123'])assert.equal(validAttachmentId(id),true,id);
+ for(const id of ['',null,undefined,'att','attABC','ATT123','123/download','../123','att123?version=1','123%2F456','att-123',' 123 ','att123\\n'])assert.equal(validAttachmentId(id),false,String(id));
+});
+test('attachment download rejects malformed IDs before any network request',async()=>fixture(async({a})=>{
+ let requests=0;
+ const vault=new ConfluenceSourceVault({registry:a,projectId:'demo',config,token:'test-token',
+  fetchImpl:async()=>{requests++;throw Error('Network should not be used for invalid IDs');}});
+ await assert.rejects(()=>vault.download('99',{id:'att123/download'}),/Invalid Confluence attachment ID/);
+ assert.equal(requests,0);
+}));
 test('runtime wires Confluence upload, new-machine recovery, five-minute retry and user-visible status',()=>{
  const host=require('node:fs').readFileSync(path.join(__dirname,'../src/lib/runtime/extension-runtime.js'),'utf8');
  const ui=require('node:fs').readFileSync(path.join(__dirname,'../media/start.js'),'utf8');

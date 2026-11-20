@@ -11,6 +11,9 @@ const brWorkflow=require('./br-workflow');
 const sourceStore=require('./source-store');
 const {checksum}=require('./document-editor');
 const DIGEST=/^[a-f0-9]{64}$/;
+// Confluence Cloud attachment IDs can be numeric or prefixed with "att".
+// Accept only documented safe ID shapes; preserve the exact server-provided ID.
+const ATTACHMENT_ID=/^(?:att)?[0-9]+$/;
 const PROJECT=/^[a-z][a-z0-9-]{0,48}$/;
 const FILE=/^[a-f0-9]{64}\.(?:pdf|docx)$/;
 const OTHER=/\.(?:pdf|docx|doc|pptx|xlsx|xls|png|jpg|jpeg|webp)$/i;
@@ -175,11 +178,11 @@ class ConfluenceSourceVault{
    {method:'POST',body:form,headers:{'X-Atlassian-Token':'nocheck',Accept:'application/json'},max:1024*1024});
   const value=JSON.parse(data.toString('utf8'));
   const entry=value.results?.find(x=>x.title===name);
-  if(!/^\d+$/.test(String(entry?.id||'')))throw Error('Confluence upload response did not confirm the requested attachment.');
+  if(!ATTACHMENT_ID.test(String(entry?.id||'')))throw Error('Confluence upload response did not confirm a valid attachment ID for the requested file.');
   return entry;
  }
  async download(pageId,entry,expected){
-  if(!/^\d+$/.test(String(entry?.id||'')))throw Error('Invalid Confluence attachment ID.');
+  if(!ATTACHMENT_ID.test(String(entry?.id||'')))throw Error('Invalid Confluence attachment ID.');
   const bytes=await this.requestBinary(this.base+'/rest/api/content/'+encodeURIComponent(pageId)+'/child/attachment/'+encodeURIComponent(entry.id)+'/download');
   if(expected&&sha(bytes)!==expected)throw Error('Confluence attachment checksum differs from the original bytes; local documents were preserved.');
   return bytes;
@@ -332,4 +335,4 @@ class ConfluenceSourceVault{
   return result;
  }
 }
-module.exports={ConfluenceSourceVault,validateManifest,isSafeRelative,snapshotHash,validDocument};
+module.exports={ConfluenceSourceVault,validateManifest,isSafeRelative,snapshotHash,validDocument,validAttachmentId:id=>ATTACHMENT_ID.test(String(id??''))};

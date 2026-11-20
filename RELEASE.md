@@ -1,17 +1,15 @@
-# ATGV AIATECH Assist v0.4.55
+# ATGV AIATECH Assist v0.4.56
 
-## AI-first Business Requirements workflow (all 10 steps)
+## Fix: Confluence source vault attachment IDs
 
-- Add a shared ten-stage AI generalization policy to Start, Upload, Map & Save 12, AI Review, Generate Requirements, Preview & Save, Approve Requirements, Jira Preview, Approve Preview and Publish Jira.
-- Strengthen upload preflight, discovery mapping, AI Review and BR generation with source-aware generalized guidance. Unverified rules remain proposed options rather than facts.
-- Replace repeated generic Continue with Risks dialogs with one visible Approve AI Review & Continue action. The BA approval is recorded against the discovery revision and source fingerprint, and is not automatically reused after source changes.
-- Provide Regenerate AI Review with optional user feedback, preserving saved discovery answers until explicitly approved.
-- Provide Regenerate AI Draft for editable, unapproved BRs using optional user feedback. Keep previous draft versions and stable identities.
-- Keep approved BRs, business decisions, Jira approvals, remote identities and publication safety gates intact. No automatic Jira updates or business-policy fabrication.
-- Display stage-specific AI guidance on all 10 milestones and avoid showing an acknowledged AI Review as an outstanding warning.
+- Accept both numeric and att-prefixed Confluence attachment identifiers (e.g., 123456 and att123456) returned by Confluence Cloud.
+- Validate attachment IDs on upload confirmation and download; pass through only safe, exact server-provided identifiers.
+- Reject arbitrary IDs, encoded path separators, unexpected punctuation, and malformed prefixes before any attachment download request.
+- Ensure the Confluence source vault can restore original BR documents and project attachments on a second computer when the API returns att-prefixed IDs.
+- Keep the existing SHA-256 byte verification, source manifest validation, conflict checks, and no-overwrite local recovery guarantees.
+- Add regression tests for modern and legacy ID formats, live-style att-prefixed upload/restore, and malicious ID rejection.
+- No changes to the SDLC Library; version remains v1.1.17.
 
-## Quality and publishing
+## Validation
 
-- Test all ten milestone policies, approval fingerprints, feedback-driven regeneration, retained history and existing regression suite.
-- Run Windows stack checks, UI-theme validation and verified VSIX packaging.
-- Library version remains unchanged; this release updates the extension only.
+Run full Node.js regression tests, Windows reset tests, UI theme checks, VSIX activation/packaging checks, and GitHub release workflow. Merge only after all required CI checks pass.
