@@ -214,8 +214,12 @@ async function trackedFiles(source,scope){
  const eligible=candidates.filter(isAllowedPath);
  const scoped=eligible.filter(p=>scope==='.'||p===scope||p.startsWith(scope+'/'));
  if(!scoped.length)throw Error('Repo A has no eligible tracked files in '+scope+'.');
- // Source workflows are always part of the review, even for a narrow scope.
- const paths=[...new Set([...scoped,...eligible.filter(p=>p.startsWith('.github/workflows/'))])];
+ // GitHub metadata (workflows, CODEOWNERS, templates, Dependabot and custom
+ // actions) must travel with the source even when the selected scope is narrow.
+ // Include only eligible tracked files, never .git or credential/secret paths.
+ // Destination-only .github files are preserved; no directory pruning occurs.
+ const githubFiles=eligible.filter(p=>p.startsWith('.github/'));
+ const paths=[...new Set([...scoped,...githubFiles])];
  if(paths.length>MAX_FILES)throw Error('Copy exceeds '+MAX_FILES+' tracked files. Select a smaller scope.');
  let bytes=0;
  const valid=[];
@@ -453,7 +457,8 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
     ...proposed,sourceSha:sha,baseSha,sourceBranch:chosenBranch,sourceRepo:source.name,
     destinationRepo:destination.name,base,copyScope:scope,
     sourcePrUrl:sourcePr?.url||'',fileCount:files.length,sourceCode:facts.codeOverview,
-    sourceCommitFiles,excludedSourceCommitFiles,workflowFiles:files.filter(file=>file.startsWith('.github/workflows/')),
+    sourceCommitFiles,excludedSourceCommitFiles,githubFiles:files.filter(file=>file.startsWith('.github/')),
+     workflowFiles:files.filter(file=>file.startsWith('.github/workflows/')),
     notice:'Suggestions use verified source code structure and latest source commit. No Repo B files were changed.'
    }};
   }
