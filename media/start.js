@@ -534,6 +534,85 @@ function trackProcessEvent(m){
 function status(message,error=false,{persistent=false}={}){if(message&&view==='work'){const serverError=error&&/(?:server|preview|approved stack branch|current branch|localhost)/i.test(message);const stackError=error&&!serverError&&/(?:stack|npm|dependency|git branch|bootstrap|build|install)/i.test(message);const id=serverError?'server':stackError?'stack':'status';processActivityUpsert(id,serverError?'Application Server':stackError?'Technology Stack':'Workspace Process',message,error?'failed':'done',error?null:100);}statusText=message||'';$('status').textContent=statusText;$('status').className='status hidden'+(error?' error':'');if(statusText){notifyTop(statusText,{error,success:!error&&atgvSeverity(statusText)==='success',persistent});atgvInlineNotice(statusText,error);}else atgvInlineNotice('',false);}
 window.addEventListener('message',e=>trackProcessEvent(e.data));
 function field(id,v=''){$(id).value=v;}
+
+// Breadcrumbs are a presentation-only view of the existing navigation state.
+// Never reinterpret an unsaved edit or publication gate as permission to leave.
+let baBreadcrumbAtRequirements=false;
+function workspaceBreadcrumbContext(){
+ const modal=baRequirementModalTarget;
+ const selectedBr=brEditing||modal?.scopeId||modal?.rootKey||'';
+ const stage=baViewedStep||window.baLastGuideProgress?.find(step=>step.current)?.key||'start';
+ return {view,roleId:selectedRole,stage,requirementOpen:baBreadcrumbAtRequirements||!!modal||!!brEditing,
+  brId:view==='discovery'?selectedBr:view==='uxPreview'?uxSelectedKey:
+   view==='work'&&selectedRole==='software-developer'?$('developerBrSelect')?.value:'',
+  documentTitle:view==='documentEditor'?$('docEditorTitle')?.textContent:''};
+}
+function workspaceBreadcrumbAction(action){
+ if(!action)return;
+ if(action==='my-work'||action==='br-home'){
+  if(view!=='discovery'){
+   navigate(action==='my-work'&&view==='uxPreview'?'ux-designer':'sdlc-roles');
+   return;
+  }
+  // Modals may contain unsaved edits: never discard them to navigate.
+  if(brEditing&&!closeBREditor())return;
+  if(baRequirementModalTarget)closeBARequirementModal();
+  baBreadcrumbAtRequirements=action==='br-home';
+  baViewedStep='start';
+  renderDiscoverySummary();
+  renderWorkspaceBreadcrumbs();
+  return;
+ }
+ if(action==='ux-work'){navigate('ux-designer');return;}
+ navigate(action);
+}
+function renderWorkspaceBreadcrumbs(){
+ if(typeof ATGVWorkspaceBreadcrumbs==='undefined')return;
+ const id=view==='landing'?'landingView':view==='discovery'?'workView':view+'View';
+ const active=$(id);
+ if(!active||active.classList.contains('hidden'))return;
+ const trail=ATGVWorkspaceBreadcrumbs.trail(workspaceBreadcrumbContext());
+ const build=container=>{
+  if(!container)return;
+  let nav=[...container.children].find(el=>el.classList?.contains('atgv-workspace-breadcrumbs'));
+  if(!nav){nav=document.createElement('nav');nav.className='atgv-workspace-breadcrumbs';
+   nav.setAttribute('aria-label','Breadcrumb');
+   container.insertBefore(nav,container.firstChild);
+  }
+  const signature=JSON.stringify(trail);
+  if(nav.dataset.route===signature)return;
+  nav.dataset.route=signature;nav.replaceChildren();
+  for(const [i,segment] of trail.entries()){
+   if(i){const sep=document.createElement('span');sep.className='atgv-breadcrumb-separator';
+    sep.textContent='/';sep.setAttribute('aria-hidden','true');nav.append(sep);}
+   const leaf=i===trail.length-1;
+   const item=document.createElement(!leaf&&segment.action?'button':'span');
+   item.className=leaf?'atgv-breadcrumb-current':'atgv-breadcrumb-link';
+   item.textContent=segment.label;
+   if(leaf)item.setAttribute('aria-current','page');
+   if(item.tagName==='BUTTON'){
+    item.type='button';item.title='Go to '+segment.label;
+    item.addEventListener('click',()=>workspaceBreadcrumbAction(segment.action));
+   }
+   nav.append(item);
+  }
+  container.classList.add('has-workspace-breadcrumb');
+ };
+ build(active);
+ // Show the full My Work / Business Requirement / BR-ID path inside a dialog.
+ // A breadcrumb only behind a modal cannot be seen or used by the reader.
+ const dialogs=[['brEditModal','.br-edit-card'],['baRequirementModal','.ba-requirement-modal-card']];
+ for(const [modalId,selector] of dialogs){
+  const overlay=$(modalId),card=overlay?.querySelector(selector);
+  if(!card)continue;
+  if(view==='discovery'&&!overlay.classList.contains('hidden'))build(card);
+  else{
+   const old=[...card.children].find(el=>el.classList?.contains('atgv-workspace-breadcrumbs'));
+   old?.remove();card.classList.remove('has-workspace-breadcrumb');
+  }
+ }
+}
+
 function setView(next){
   // Hide every workspace page, not just a fixed list. A newly added page must
   // never remain visible behind another menu or expose the wrong workflow.
@@ -561,6 +640,7 @@ function setView(next){
   // Keep its logical 'discovery' mode so existing save/approval and error guards work.
   $('discoveryView').classList.toggle('hidden',next!=='discovery');
   view=next;
+  renderWorkspaceBreadcrumbs();
   $('contentPane').scrollTop=0;
   window.dispatchEvent(new Event('atgv:viewchange'));
 }
@@ -958,6 +1038,7 @@ function updateState(msg){
   }
   else if(!workspaceOpened)document.body.classList.add('gate-mode');
   renderGate();
+  renderWorkspaceBreadcrumbs();
 }
 let navigationRefreshRequestId=0;
 function requestNavigationRefresh(destination){
