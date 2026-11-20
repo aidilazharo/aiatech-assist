@@ -14,6 +14,7 @@ const MAX_EXTRACTED = 600000;
 const MAX_MAPPING_CHUNK = 28000;
 const MAX_SECTION_ANSWER_LENGTH = 5000;
 const { extractDocx } = require('./docx-extractor');
+const { extractXlsx } = require('./xlsx-requirements');
 function extractBasicPdf(data) {
     const latin = data.toString('latin1');
     if (!latin.startsWith('%PDF-'))
@@ -91,12 +92,12 @@ async function importDocumentText(file, { readFile = fs.readFile, pdfExtractor =
     if (typeof file !== 'string')
         throw Error('Invalid document selection.');
     const ext = path.extname(file).toLowerCase();
-    if (!['.pdf', '.docx'].includes(ext))
-        throw Error('Choose a .docx Word document or .pdf file. Convert older .doc files to .docx.');
+    if (!['.pdf', '.docx', '.xlsx'].includes(ext))
+        throw Error('Choose a .docx Word document, .pdf or .xlsx requirements workbook. Convert older .doc files to .docx.');
     const data = await readFile(file);
     if (!Buffer.isBuffer(data) || data.length < 10 || data.length > MAX_FILE_BYTES)
         throw Error('Document must be 12 MB or smaller.');
-    const extracted = (ext === '.docx' ? extractDocx(data) : await pdfExtractor(file, data)).replace(/\0/g, '').trim();
+    const extracted = (ext === '.docx' ? extractDocx(data) : ext === '.xlsx' ? extractXlsx(data) : await pdfExtractor(file, data)).replace(/\0/g, '').trim();
     if (extracted.length < 15)
         throw Error('Document has insufficient readable text to map into 12 questions.');
     return { name: path.basename(file), text: extracted.slice(0, MAX_EXTRACTED), truncated: extracted.length > MAX_EXTRACTED, characters: Math.min(extracted.length, MAX_EXTRACTED) };

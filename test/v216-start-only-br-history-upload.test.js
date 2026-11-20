@@ -31,7 +31,7 @@ test('new BR action starts cycle then opens native upload; resume pending cycle 
  const action=host.slice(host.indexOf("case 'startOrRestartBusinessRequirements':"),host.indexOf("case 'restartDiscoverySources':"));
  assert.match(action,/if\(msg\.openUploadImmediately\)\{/);
  assert.match(action,/await importDiscoveryDocument\('business-analyst'\)/);
- assert.match(host,/showOpenDialog\(\{title:replacementDigest\?'Select an updated Word or PDF to replace the current source':'Upload one Word or PDF document for this Business Requirement'/);
+ assert.match(host,/showOpenDialog\(\{title:replacementDigest\?'Select an updated Word, PDF or Excel workbook':'Upload one Word, PDF or Excel workbook for this Business Requirement'/);
 });
 
 test('release version is 0.2.42 and BA workflow still has Start plus nine other milestones',()=>{

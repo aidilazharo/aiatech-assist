@@ -8,7 +8,7 @@ const script=fs.readFileSync(path.join(root,'media/start.js'),'utf8');
 test('AI review parser only accepts controlled question keys and safe suggested answers',()=>{
  const raw=JSON.stringify({summary:'Two issues',readiness:'Needs attention',suggestions:[{key:'scope',severity:'High',issue:'Scope is ambiguous',suggestedAnswer:'In scope: portal registration. Out of scope: billing.'}]});
  const parsed=review.parseReviewResponse(raw);assert.equal(parsed.suggestions[0].key,'scope');assert.equal(parsed.suggestions[0].severity,'High');
- assert.throws(()=>review.parseReviewResponse(JSON.stringify({suggestions:[{key:'unknown',issue:'x',suggestedAnswer:''}]})),/invalid or duplicate/);
+ assert.throws(()=>review.parseReviewResponse(JSON.stringify({suggestions:[{key:'unknown',issue:'x',suggestedAnswer:''}]})),/invalid question key/);
  assert.match(review.createReviewPrompt(Object.fromEntries(discovery.QUESTIONS.map(([key])=>[key,'x']))),/suggestedAnswer/);
 });
 test('Business Requirement UI is one 9-stage flow with collapsed question groups and Quill BR preview',()=>{
