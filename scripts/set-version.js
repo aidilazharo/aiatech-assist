@@ -9,7 +9,7 @@ function parseVersion(input) {
     const nums = match.slice(1).map(Number);
     if (nums.some(n => n > 99))
         throw new Error('Each version component must be 0–99.');
-    return { semver: nums.join('.'), display: `${nums[0]}.${String(nums[1])}.${String(nums[2]).padStart(2, '0')}` };
+    return { semver: nums.join('.'), display: nums.join('.') };
 }
 if (require.main === module) {
     try {
@@ -18,6 +18,13 @@ if (require.main === module) {
         manifest.version = v.semver;
         manifest.atgvDisplayVersion = v.display;
         fs.writeFileSync(file, JSON.stringify(manifest, null, 2) + '\n');
+        const root=path.join(__dirname,'..');
+        const readme=path.join(root,'README.md');
+        const release=path.join(root,'RELEASE.md');
+        const previous=fs.readFileSync(readme,'utf8');
+        fs.writeFileSync(readme,previous.replace(/^\\*\\*Version: [^*]+\\*\\*/m,'**Version: '+v.semver+'**'));
+        fs.writeFileSync(release,'# ATGV AIATECH Assist v'+v.semver+'\\n\\n## Changes\\n\\n- Describe verified changes in this release.\\n\\n## Validation\\n\\n- Record Node regressions, Windows checks, VSIX verification and release provenance.\\n');
+
         console.log(`Saved display version ${v.display} (VS Code SemVer ${v.semver})`);
     }
     catch (e) {
