@@ -7,6 +7,7 @@ const {markdownToStorage,validateUrl,sha,textFromAdf}=require('../../utils');
 const {requestJson,baseAtlassian,getConfluenceSpace,listConfluence,getConfluencePage,writeConfluence,listJira,githubRepoInfo,listGithub,listGithubRepositories,listGithubBranches,discoverJiraProjects,discoverConfluenceSpaces,testJiraConnection,testGithubConnection}=require('../../clients');
 const {KnowledgeStore}=require('../../knowledge');
 const jiraTemplateKnowledge=require('../../jira-template-knowledge');
+const baGeneralization=require('../../ba-generalization');
 const jiraPreviewQuality=require('../../jira-preview-quality');
 const knowledgeWorkspace=require('../../knowledge-workspace');
 const {ProjectRegistry,projectConfig,normalizeExtensionSettings,normalizeProjectInput,projectSlug,parseRepoUrl}=require('../../projects');
@@ -3102,12 +3103,11 @@ async function generateBusinessRequirements(options={}){
  if(saved.readiness.filled!==saved.readiness.total)
   throw Error('Complete and save all 12 discovery answers before generating Business Requirements.');
  let review={};try{review=JSON.parse(register.reviewText||'{}');}catch{}
- let riskAccepted=false;
- if(!review.skipped&&(review.readiness==='Needs attention'||(review.suggestions||[]).some(s=>s.severity==='Critical'))){
-  const proceed=await uiWarning('AI Review identified unresolved requirements. Review the findings and verify the discovery answers before generating draft BRs. Continue with these documented risks?',{modal:true},'Continue with Risks');
-  if(proceed!=='Continue with Risks'){await dashboard?.webview.postMessage({type:'baProgress',done:true});return;}
-  riskAccepted=true;
- }
+ // The explicit AI Review approval is the only consent gate for provisional
+ // draft assumptions. Avoid a second generic risk modal during generation.
+ // Unknown business policies remain visible and final approval remains gated.
+ baGeneralization.generationGuard(register,review);
+ const riskAccepted=false;
  const staleDrafts=(register.brs||[]).filter(br=>br.status==='draft'&&(br.staleReason==='Discovery answers changed'||br.staleReason==='New source mapping completed'||br.source?.discoveryRevision!==register.discoveryRevision));
  const currentDrafts=(register.brs||[]).filter(br=>br.status==='draft'&&!staleDrafts.includes(br));
  if(currentDrafts.length&&!options.selective)throw Error('Review or approve the current Business Requirements drafts before generating again.');
@@ -7916,20 +7916,14 @@ async function handleDashboardMessage(msg){
           throw Error('Complete and save discovery, then run AI Review before continuing.');
         let review;try{review=JSON.parse(register.reviewText||'{}');}catch{throw Error('AI Review data is invalid. Re-run AI Review.');}
         const sourceFindings=brWorkflow.sourceReviewFindings(register);
-        const unresolved=review.readiness==='Needs attention'||(review.suggestions||[]).some(item=>item.severity==='Critical')||sourceFindings.length>0;
-        if(unresolved){
-          const count=(review.suggestions||[]).length+sourceFindings.length;
-          const decision=await uiWarning(`AI Review and source-document validation have ${count} outstanding finding(s), including ${sourceFindings.length} source finding(s). Acknowledging records BA review of the evidence, NOT resolution of conflicting business policies or automatic approval of the BR/Jira work. Confirm that you understand the documented risks, and resolve open business decisions before final approval.`,{modal:true},'Acknowledge Findings');
-          if(decision!=='Acknowledge Findings'){
-            await dashboard?.webview.postMessage({type:'baReviewConfirmResult',success:false,cancelled:true,
-              message:'AI findings acknowledgement cancelled. No BR or Jira changes were saved.'});
-            break;
-          }
-        }
+        // The BA explicitly selected Approve AI Review in the visible findings
+        // panel. Record the current source-bound provisional assumptions once;
+        // never silently grant final BR or Jira publication approval.
+        const unresolved=baGeneralization.reviewState(register,review).flagged;
         const updated=await brWorkflow.confirmReview(registry,activeProject.id,register.revision,{discoveryRevision:saved.revision,actor:await verifiedBAActor(),acknowledgeRisks:unresolved});
         await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
         await dashboard?.webview.postMessage({type:'baReviewConfirmResult',success:true,
-          message:'AI Review confirmed. Generate Business Requirements Documents is now available.'});
+          message:'AI Review approved for editable drafts. Any open business decisions remain provisional until final approval.'});
         }catch(error){
           await dashboard?.webview.postMessage({type:'baReviewConfirmResult',success:false,
             message:'Unable to confirm AI Review: '+String(error.message||error).slice(0,350)});
