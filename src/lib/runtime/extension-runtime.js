@@ -192,7 +192,7 @@ async function recordStartupDiagnostic(entry){
   const result=await startupDiagnostics.append(context.globalStorageUri.fsPath,entry);
   if(/^(?:failed|failure|error|timeout|unreachable|denied)$/i.test(String(entry?.status||''))){
    const root=getWorkspace()?.uri.fsPath;
-   if(root)void idleImprovement.writeLog(root,{target:'extension',category:'error',
+   if(root&&fsSync.existsSync(path.join(root,'.atgv')))void idleImprovement.writeLog(root,{target:'extension',category:'error',
     screen:'Startup-'+String(entry.stage||'check').slice(0,50),
     title:'Startup '+String(entry.tool||entry.stage||'check')+' failure',
     observed:String(entry.detail||entry.message||'Startup check failed').slice(0,3000)}).catch(()=>{});
