@@ -6,7 +6,7 @@ const os=require('node:os');
 const path=require('node:path');
 const Module=require('node:module');
 const manifest=require('../package.json');
-async function until(fn){for(let i=0;i<3000;i++){if(await fn())return;await new Promise(r=>setTimeout(r,10));}throw new Error('Timeout waiting for host action');}
+async function until(fn){for(let i=0;i<1500;i++){if(await fn())return;await new Promise(r=>setTimeout(r,10));}throw new Error('Timeout waiting for host action');}
 function makeProject(id,key){return {id,name:id,settings:{jira:{projectKey:key},confluence:{spaceKey:key}}};}
 
 test('ATGV lifecycle commands and project dashboard save defaults and overrides',async()=>{
