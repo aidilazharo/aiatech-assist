@@ -56,9 +56,8 @@ test('Edit is below the GitHub token field and verified startup checks run autom
  page.renderStartupConfig(config);
  assert.equal(sent.at(-1).type,'startupCheckConnections');
  assert.deepEqual(Object.keys(sent.at(-1).settings).sort(),['email','githubUrl','jiraUrl','projectRepository']);
- assert.equal(node('startupConnectionChecks').children.length,8);
- assert.equal(node('startupConnectionChecks').children[0].tag,'details');
- assert.equal(node('startupConnectionChecks').children[0].children[0]._atgvProgress.number.textContent,'0%');
+ assert.equal(node('startupConnectionChecks').children.length,0,'idle checks must not appear in the interface');
+ assert.equal(node('startupConnectionProgress').children.length,0,'progress is hidden until a check starts');
  assert.equal(node('startupEditConnections').textContent,'Edit');
  assert.equal(node('startupEditConnections').classList.contains('hidden'),false);
  assert.equal(node('startupJiraUrl').disabled,true);
@@ -105,17 +104,35 @@ test('A failed background health check remains visible across state refreshes',(
  const request=sent.at(-1);page.receive({type:'startupConnectionHealthResult',requestId:request.requestId,success:false,checks:[{id:'confluence',label:'Confluence API',state:'error',message:'Server responded (HTTP 404).',url:'https://example.atlassian.net/wiki/api/v2/spaces'}]});
  page.renderStartupConfig(config);
  assert.match(node('startupConnectionMessage').textContent,/connections need attention/i);
- assert.match(node('startupConnectionChecks').children[1].children[1].textContent,/HTTP 404/);
- assert.equal(node('startupConnectionChecks').children[1].children[0]._atgvProgress.number.textContent,'!');
+ assert.match(node('startupConnectionChecks').children[0].children[1].textContent,/HTTP 404/);
+ assert.equal(node('startupConnectionChecks').children[0].children[0]._atgvProgress.number.textContent,'!');
 });
-test('connection cards show success and keep their details open during updates',()=>{
- const {node,sent,page}=pageFixture();page.renderStartupConfig(config);const request=sent.at(-1);
- node('startupConnectionChecks').children[0].open=true;
- page.receive({type:'startupConnectionCheck',requestId:request.requestId,check:{id:'jira',label:'Jira API',state:'ok',message:'Reachable and verified.',url:'https://example.atlassian.net/rest/api/3/myself'}});
- const card=node('startupConnectionChecks').children[0];
- assert.equal(card.open,true);assert.equal(card.children[0]._atgvProgress.number.textContent,'100%');
- assert.equal(card.children[0].children.at(-1).textContent,'Ready');
- assert.match(card.children[1].textContent,/example\.atlassian\.net/);
+test('checks display sequentially and each successful check disappears immediately',()=>{
+ const {node,sent,page}=pageFixture();page.renderStartupConfig(config);
+ const request=sent.at(-1),receive=(check)=>page.receive({type:'startupConnectionCheck',requestId:request.requestId,check});
+ const jira={id:'jira',label:'Jira API',state:'pending',message:'Checking…'};
+ receive(jira);
+ assert.equal(node('startupConnectionProgress').children.length,1);
+ assert.equal(node('startupConnectionProgress').children[0].children[0].children[0].textContent,'Jira API');
+ assert.equal(node('startupConnectionChecks').children.length,1);
+ assert.equal(node('startupConnectionChecks').children[0].tag,'details');
+ receive({...jira,state:'ok',message:'Reachable and verified.'});
+ assert.equal(node('startupConnectionProgress').children.length,0,'successful check should vanish');
+ assert.equal(node('startupConnectionChecks').children.length,0,'successful check should vanish from prerequisites');
+ const confluence={id:'confluence',label:'Confluence API',state:'pending',message:'Checking…'};
+ receive(confluence);
+ assert.equal(node('startupConnectionProgress').children.length,1);
+ assert.equal(node('startupConnectionProgress').children[0].children[0].children[0].textContent,'Confluence API');
+ receive({...confluence,state:'ok',message:'Reachable and verified.'});
+ assert.equal(node('startupConnectionProgress').children.length,0);
+ const github={id:'github',label:'GitHub account',state:'error',message:'HTTP 403'};
+ receive(github);
+ assert.equal(node('startupConnectionProgress').children.length,1,'failed check is retained for troubleshooting');
+ assert.equal(node('startupConnectionChecks').children.length,1);
+ assert.match(node('startupConnectionChecks').children[0].children[1].textContent,/HTTP 403/);
+ receive({...github,state:'ok',message:'Reachable and verified.'});
+ assert.equal(node('startupConnectionProgress').children.length,0,'repaired check is hidden');
+ assert.equal(node('startupConnectionChecks').children.length,0);
 });
 
 function hostFixture(failures={}){

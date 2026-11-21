@@ -2362,3 +2362,11 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 @keyframes atgv-connection-scan{from{transform:translateX(-110%)}to{transform:translateX(295%)}}
 @media(max-width:640px){#startupConnectionForm .atgv-repo-preview-item{align-items:flex-start;flex-direction:column;gap:3px}#startupConnectionForm .atgv-repo-preview-item code{text-align:left}}
 @media(prefers-reduced-motion:reduce){#startupConnectionForm .atgv-connection-progress-fill{animation:none!important}}
+
+/* v0.0.10: Keep completed and queued connection checks out of the Start UI.
+   Successful checks are tracked internally but never occupy visible space. */
+#startupConnectionForm #startupConnectionProgress:empty,
+#startupConnectionChecks:empty{display:none!important;margin:0!important;padding:0!important}
+/* Connection diagnostics remain available in the sanitized internal log and
+   the existing unified error-log export, not as a visible Start screen panel. */
+#startupConnectionForm #startupConnectionLogPanel{display:none!important}

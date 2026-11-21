@@ -53,6 +53,14 @@ test('Start connection setup presents read-only timeline and download button wit
  assert.match(ui,/detail\.textContent=String\(event\.detail/);
  assert.doesNotMatch(ui,/card\.innerHTML=/);
 });
+test('connection diagnostics are hidden on the Start screen while internal log export remains available',()=>{
+ const css=require('node:fs').readFileSync(path.join(__dirname,'../media/start.css'),'utf8');
+ assert.match(html,/<details id="startupConnectionLogPanel"[^>]*\bhidden\b[^>]*>/);
+ assert.match(css,/#startupConnectionForm #startupConnectionLogPanel\{display:none!important\}/);
+ assert.match(html,/id="startupUnifiedLog"/);
+ assert.match(source,/case 'startupDownloadConnectionLogs':/);
+ assert.match(source,/case 'startupGetConnectionLogs':/);
+});
 test('five independent connection checks are logged and export uses host-only storage',()=>{
  assert.match(source,/async function recordStartupConnectionResults\(/);
  assert.match(source,/for\(const check of result\?\.checks\|\|\[\]\)/);

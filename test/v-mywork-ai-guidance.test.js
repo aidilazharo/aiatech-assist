@@ -143,6 +143,6 @@ test('AI calls are read-only and scoped to visible role work',()=>{
   assert.match(ui,/send\('roleAiReview'/);
   assert.doesNotMatch(ui,/send\('(?:brJiraSync|pmJiraSetAssignee|architectApproveStack|uxPublishFrontend|delete|publish)'/);
   assert.match(host,/The AI cannot invoke commands/);
-  assert.equal(packageJson.version,'0.0.9');
-  assert.equal(packageJson.atgvDisplayVersion,'0.0.9');
+  assert.match(packageJson.version,/^\d+\.\d+\.\d+$/);
+  assert.equal(packageJson.atgvDisplayVersion,packageJson.version);
 });
