@@ -8034,6 +8034,12 @@ function renderArchitectCustomPanel(){
  panel.classList.toggle('hidden',!isCustom);
  if(!isCustom)return;
  const current=architectCustomInfo?.projectId===activeId?architectCustomInfo:null;
+ if(architectCustomRuntime.projectId!==activeId){
+  architectCustomRuntime={projectId:activeId,checked:false,running:false,pid:null,previewUrl:'',relative:'',mockPreview:false,exitCode:null,reachable:null};
+  architectCustomStatusPending=false;architectCustomLastError='';
+  if(activeId)architectCustomRequestStatus();
+ }
+ architectCustomDrawRuntime();
  const select=$('architectCustomTarget'),previous=select.value;
  select.replaceChildren();
  for(const target of current?.targets||[]){
@@ -8095,6 +8101,20 @@ function renderArchitectCustomPanel(){
 function architectCustomNotify(text,state='running'){
  const node=$('architectCustomStatus');node.textContent=String(text||'');node.dataset.state=state;
 }
+$('architectCustomCheckStatus').addEventListener('click',()=>{
+ if(!activeId||architectCustomStatusPending)return;
+ architectCustomRequestStatus();architectCustomDrawRuntime();
+});
+$('architectCustomOpenPreview').addEventListener('click',()=>{
+ if(!activeId||!architectCustomRuntime?.running||architectCustomRuntime.reachable!==true)return;
+ send('architectCustomOpenPreview',{projectId:activeId});
+});
+setInterval(()=>{
+ if($('architectStackSelect')?.value==='custom'&&activeId&&!architectCustomBusy&&
+    architectCustomRuntime.projectId===activeId&&architectCustomRuntime.running&&!architectCustomStatusPending){
+   architectCustomRequestStatus();
+ }
+},7000);
 $('architectCustomTarget').addEventListener('change',()=>{
  const current=architectCustomInfo?.projectId===activeId?architectCustomInfo:null;
  const selected=current?.targets?.find(x=>x.relative===$('architectCustomTarget').value);
@@ -8106,7 +8126,7 @@ $('architectCustomPreviewUrl').addEventListener('input',()=>{
 });
 $('architectCustomScan').addEventListener('click',()=>{
  if(!activeId||architectCustomBusy||architectActionBusy)return;
- architectCustomBusy=true;
+ architectCustomBusy=true;architectCustomOperation='SCANNING REPOSITORY';architectCustomLastError='';
  architectCustomSetProgress(4,'Scanning repository manifests and service requirements');
  architectCustomNotify('Analyzing repository with manifest evidence and configured Solution Architect AI…');
  renderArchitectCustomPanel();send('architectCustomScan',{projectId:activeId});
@@ -8152,7 +8172,9 @@ $('architectCustomActions').addEventListener('click',event=>{
 });
 $('architectCustomRun').addEventListener('click',()=>{
  if(!activeId||architectCustomBusy||!architectCustomInfo?.ready)return;
- architectCustomBusy=true;architectCustomNotify('Review the host confirmation before installing dependencies and running project scripts…');
+ architectCustomBusy=true;architectCustomOperation='WAITING FOR VS CODE CONFIRMATION';architectCustomLastError='';
+ architectCustomSetProgress(5,'Awaiting approval to install dependencies and run the app');
+ architectCustomNotify('Confirm the run action in the VS Code dialog. The application has NOT started yet.');
  renderArchitectCustomPanel();
  send('architectCustomRun',{projectId:activeId,sha:architectCustomInfo.sha,relative:$('architectCustomTarget').value,previewUrl:$('architectCustomPreviewUrl').value.trim()});
 });
@@ -8160,14 +8182,17 @@ $('architectCustomMockRun').addEventListener('click',()=>{
  if(!activeId||architectCustomBusy||!architectCustomInfo?.ready)return;
  const selected=architectCustomInfo.targets.find(t=>t.relative===$('architectCustomTarget').value);
  if(!selected?.mockable)return;
- architectCustomBusy=true;
- architectCustomNotify('Mock Preview uses fake sign-in and local API stubs. Review and confirm before installing frontend dependencies…');
+ architectCustomBusy=true;architectCustomOperation='WAITING FOR VS CODE CONFIRMATION';architectCustomLastError='';
+ architectCustomSetProgress(5,'Awaiting approval to launch Mock Preview');
+ architectCustomNotify('Confirm Mock Preview in the VS Code dialog; the preview has NOT started yet.');
  renderArchitectCustomPanel();
  send('architectCustomRun',{projectId:activeId,sha:architectCustomInfo.sha,relative:selected.relative,previewUrl:$('architectCustomPreviewUrl').value.trim(),mock:true});
 });
 $('architectCustomStop').addEventListener('click',()=>{
  if(!activeId||architectCustomBusy||!architectCustomRunning)return;
- architectCustomBusy=true;architectCustomNotify('Stopping the ATGV-managed custom application…');
+ architectCustomBusy=true;architectCustomOperation='STOPPING APPLICATION';architectCustomLastError='';
+ architectCustomSetProgress(20,'Stopping active localhost process');
+ architectCustomNotify('Stopping the ATGV-managed custom application…');
  renderArchitectCustomPanel();
  send('architectCustomStop',{projectId:activeId,relative:$('architectCustomTarget').value});
 });
