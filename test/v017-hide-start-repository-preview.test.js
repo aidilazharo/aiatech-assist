@@ -23,13 +23,13 @@ test('Start screen does not display extension and library repository URL listing
 test('Start never displays a derived project repository URL but retains connection fields',()=>{
  const html=read('src/lib/webview/dashboard-html.js');
  const js=read('media/start.js');
- assert.match(html,/id="startupProjectRepositoryPreview" hidden><\\/small>/);
- assert.doesNotMatch(html,/https:\\/\\/github\\.com\\/aiamalaysia\\/my-fow-technology-app-techassists/);
+ assert.ok(html.includes('id="startupProjectRepositoryPreview" hidden></small>'));
+ assert.ok(!html.includes('https://github.com/aiamalaysia/my-fow-technology-app-techassists'));
  const start=js.indexOf('function updateStartupRepositoryPreview(){');
- const end=js.indexOf('\\n// Display only the current sequential check.',start);
+ const end=js.indexOf('\n// Display only the current sequential check.',start);
  assert.ok(start>0&&end>start);
  const nodes={startupProjectRepositoryPreview:{textContent:'old URL',hidden:false}};
- vm.runInNewContext(js.slice(start,end)+'\\nupdateStartupRepositoryPreview();',{'$':id=>nodes[id]});
+ vm.runInNewContext(js.slice(start,end)+'\nupdateStartupRepositoryPreview();',{'$':id=>nodes[id]});
  assert.equal(nodes.startupProjectRepositoryPreview.textContent,'');
  assert.equal(nodes.startupProjectRepositoryPreview.hidden,true);
  assert.match(html,/id="startupProjectRepository"/);
