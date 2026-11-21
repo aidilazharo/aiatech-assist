@@ -198,3 +198,50 @@ test('genuinely different Confluence and local BRs remain protected without hist
   assert.equal(await fs.readFile(proof,'utf8'),'REMOTE ORIGINAL');
  }finally{global.fetch=previous;}
 }));
+
+test('Discovery timestamp-only rewrites do not create false Confluence baseline conflicts',async()=>fixture(async({a,b})=>{
+ const remote=fakeConfluence(),prior=global.fetch;global.fetch=remote.handle;
+ try{
+  let reg=await br.load(a,'demo');
+  await br.write(a,'demo',reg.revision,next=>{
+   next.brs=[{id:'BR-001',status:'draft',title:'Matching BR',features:[]}];
+  });
+  const discovery=require('../src/ba-discovery');
+  let answers=await discovery.load(a,'demo');
+  answers=await discovery.save(a,'demo',{problem:'Same user-authored problem'},answers.revision);
+  const first=new ConfluenceSourceVault({registry:a,projectId:'demo',config,token:'test-token'});
+  assert.equal((await first.sync()).conflicts.length,0);
+  const second=new ConfluenceSourceVault({registry:b,projectId:'demo',config,token:'test-token'});
+  assert.equal((await second.sync()).restored,true);
+  await fs.rm(second.stateFile);
+  const restored=await discovery.load(b,'demo');
+  await discovery.save(b,'demo',{problem:'Same user-authored problem'},restored.revision);
+  const writes=remote.calls.filter(x=>x.method==='POST').length;
+  const result=await second.sync();
+  assert.equal(result.baselineRecovered,true,JSON.stringify(result));
+  assert.deepEqual(result.conflicts,[]);
+  assert.equal(remote.calls.filter(x=>x.method==='POST').length,writes);
+ }finally{global.fetch=prior;}
+}));
+test('genuine Discovery answer differences are reported and never auto-overwritten',async()=>fixture(async({a,b})=>{
+ const remote=fakeConfluence(),prior=global.fetch;global.fetch=remote.handle;
+ try{
+  const discovery=require('../src/ba-discovery');
+  let state=await discovery.load(a,'demo');
+  await discovery.save(a,'demo',{problem:'REMOTE ACTUAL ANSWER'},state.revision);
+  const sample=path.join(path.dirname(a.fileFor('demo')),'documents','ux','diagram.png');
+  await fs.mkdir(path.dirname(sample),{recursive:true});await fs.writeFile(sample,'DIAGRAM');
+  await new ConfluenceSourceVault({registry:a,projectId:'demo',config,token:'test-token'}).sync();
+  const vault=new ConfluenceSourceVault({registry:b,projectId:'demo',config,token:'test-token'});
+  await vault.sync();
+  await fs.rm(vault.stateFile);
+  state=await discovery.load(b,'demo');
+  await discovery.save(b,'demo',{problem:'LOCAL DIFFERENT ANSWER'},state.revision);
+  const writes=remote.calls.filter(x=>x.method==='POST').length;
+  const result=await vault.sync();
+  assert.ok(result.conflicts.some(x=>/Discovery answers/.test(x)),JSON.stringify(result));
+  assert.ok(result.differenceSections.includes('Discovery answers'));
+  assert.equal((await discovery.load(b,'demo')).answers.problem,'LOCAL DIFFERENT ANSWER');
+  assert.equal(remote.calls.filter(x=>x.method==='POST').length,writes);
+ }finally{global.fetch=prior;}
+}));
