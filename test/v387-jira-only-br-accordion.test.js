@@ -75,7 +75,8 @@ test('a refreshed Jira inventory retains expanded state and never represents Jir
  root.children[0].open=true;render();
  assert.equal(root.children[0].open,true);
  assert.doesNotMatch(root.children[0].children[0].children[1].textContent,/Approved R|Completed/);
- assert.doesNotMatch(segment,/send\(|saveBR|brPublish|\\.approvedRevision\s*=/);
+ assert.match(segment,/send\('recoverJiraOnlyBR'/);
+ assert.doesNotMatch(segment,/saveBR|brPublish|deleteBREverywhere|\\.approvedRevision\s*=/);
 });
 test('Jira-only rows inherit completed BR CSS instead of a separate large-card layout',()=>{
  assert.match(css,/#discoveryView \.ba-completed-flat \.ba-jira-only-br-section\{margin:0 0 9px\}/);

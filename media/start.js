@@ -5593,6 +5593,14 @@ function renderBAJiraBackedEpics(){
   open.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();openJiraIssueModal(item.key);});
   open.addEventListener('keydown',event=>event.stopPropagation());
   heading.append(open);
+  if(item.brId){
+   const recover=brElement('button','secondary ba-recover-confluence','Recover from Confluence');
+   recover.type='button';recover.title='Restore only from the verified Confluence Source Vault. No Jira issue is deleted.';
+   recover.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();
+    send('recoverJiraOnlyBR',{projectId:activeId,brId:item.brId,jiraKey:item.key});
+   });
+   heading.append(recover);
+  }
   card.append(heading);
   const body=brElement('div','ba-completed-br-body');
   const info=brElement('div','ba-jira-recovery-info');
@@ -7769,32 +7777,39 @@ window.addEventListener('message',e=>{
 });
 // Initial state arrives after webview-asset-boot.js confirms CSS and controllers.
 function renderMyWorkRoster(rows){
- const target=$('overviewUserRows');if(!target)return;
- target.replaceChildren();
- const entries=Array.isArray(rows)?rows:[];
- if(!entries.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=3;td.textContent='No verified My Work visits recorded in Confluence.';tr.append(td);target.append(tr);return;}
- for(const item of entries){
-  const tr=document.createElement('tr'),name=document.createElement('td'),roles=document.createElement('td'),tasks=document.createElement('td');
-  const strong=document.createElement('strong');strong.textContent=String(item.name||'Unknown');
-  const email=document.createElement('small');email.textContent=String(item.email||'');
-  name.append(strong,email);
-  roles.textContent=(Array.isArray(item.roles)?item.roles:[]).join(', ')||'—';
-  tasks.className='overview-roster-tasks';
-  const assigned=String(item.tasks||'No assigned task').split(/\s*;\s*/).map(s=>s.trim()).filter(Boolean);
-  if(!assigned.length)assigned.push('No assigned task');
-  for(const entry of assigned){
-   const matched=/^([A-Z][A-Z0-9_]*-\d+)\s+\(([^)]+)\)$/.exec(entry);
-   const chip=document.createElement('span');chip.className='overview-roster-task';
-   if(matched){
-    const key=document.createElement('strong');key.textContent=matched[1];
-    const state=document.createElement('small');state.textContent=matched[2];
-    chip.append(key,state);
-   }else{chip.textContent=entry;chip.classList.add('overview-roster-task-note');}
-   tasks.append(chip);
+ const root=$('overviewUserRows');if(!root)return;
+ const entries=(Array.isArray(rows)?rows:[]).map(user=>({
+  ...user,rolesLabel:(Array.isArray(user.roles)?user.roles:[]).join(', ')||'—',
+  tasksText:String(user.tasks||'No assigned task')
+ }));
+ if(typeof ATGVDataTables==='undefined'){root.textContent='DataTable module not available. Reload ATGV.';return;}
+ const taskCell=(item,doc)=>{
+  const wrap=doc.createElement('div');wrap.className='overview-roster-tasks';
+  const tasks=item.tasksText.split(/\s*;\s*/).map(x=>x.trim()).filter(Boolean);
+  const shown=tasks.slice(0,12);
+  for(const task of shown){
+   const el=doc.createElement('span');el.className='overview-roster-task';
+   const hit=task.match(/^([A-Z][A-Z0-9_]+-\d+)\s*\(([^)]+)\)$/);
+   if(hit){const key=doc.createElement('strong');key.textContent=hit[1];const status=doc.createElement('small');status.textContent=hit[2];el.append(key,status);}
+   else el.textContent=task;
+   wrap.append(el);
   }
-  tr.append(name,roles,tasks);target.append(tr);
- }
+  if(tasks.length>shown.length){const more=doc.createElement('span');more.className='muted';more.textContent='+'+(tasks.length-shown.length)+' more tasks';more.title=item.tasksText;wrap.append(more);}
+  return wrap;
+ };
+ ATGVDataTables.mount(root,entries,[
+  {key:'name',label:'Name',render:(item,doc)=>{const box=doc.createElement('div'),strong=doc.createElement('strong'),small=doc.createElement('small');strong.textContent=String(item.name||'Unknown');small.textContent=String(item.email||item.id||'');box.append(strong,small);return box;}},
+  {key:'rolesLabel',label:'Roles'},
+  {key:'tasksText',label:'Assigned Jira Tasks',render:taskCell}
+ ],{pageSize:5,sortKey:'name',label:'My Work users and assigned Jira issues'});
 }
+$('overviewUserAddForm').addEventListener('submit',event=>{
+ event.preventDefault();
+ const id=String($('overviewUserAccountId').value||'').trim();
+ if(!id)return;
+ $('overviewUserStatus').textContent='Verifying Jira account before registration…';
+ send('myWorkRosterAddUser',{projectId:activeId,accountId:id});
+});
 $('overviewUserRefresh').addEventListener('click',()=>{
  $('overviewUserStatus').textContent='Loading verified My Work users from Confluence…';
  send('myWorkRosterRefresh',{projectId:activeId,roleId:selectedRole});
@@ -7804,7 +7819,8 @@ window.addEventListener('message',event=>{
  if(!activeId||m.projectId!==activeId)return;
  if(m.type==='myWorkRoster'){
   renderMyWorkRoster(m.rows);
-  $('overviewUserStatus').textContent=(m.rows?.length||0)+' users · assigned Jira tasks refreshed'+(m.assignmentWarning?' · '+m.assignmentWarning:'')+' · Confluence space '+(m.spaceKey||'')+(m.updatedAt?' · '+new Date(m.updatedAt).toLocaleString():'');
+  if(m.reason==='added-user')$('overviewUserAccountId').value='';
+  $('overviewUserStatus').textContent=(m.rows?.length||0)+' users · assigned Jira tasks refreshed'+(m.assignmentWarning?' · '+m.assignmentWarning:'')+(m.registryWarning?' · '+m.registryWarning:'')+(m.databaseId?' · Database v2 #'+m.databaseId:'')+' · Confluence space '+(m.spaceKey||'')+(m.updatedAt?' · '+new Date(m.updatedAt).toLocaleString():'');
  }else if(m.type==='myWorkRosterError'){
   $('overviewUserStatus').textContent='Confluence roster unavailable: '+(m.message||'Check space configuration and permissions.');
  }

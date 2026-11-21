@@ -86,6 +86,7 @@ const {WorkflowEngine}=require('../../workflow-engine');
 const {DurableWorkflowEngine,fingerprint:atgvJobHash,safeError:atgvJobSafeError}=require('../../atgv-job-engine');
 const {DocumentSync}=require('../../confluence-docsync');
 const {ConfluenceSourceVault}=require('../../confluence-source-vault');
+const confluenceBRRecovery=require('../../confluence-br-recovery');
 const {validProjectKey,jiraIssueTypes,jiraCreateIssue,jiraUpdateIssue,jiraRetireIssue,jiraFindIssueByMarker,jiraReadIssue,jiraReadIssueChangelog,jiraIssueFieldMetadata,jiraReadIssueAllFields,jiraMarker,remoteFingerprint,githubBranch,githubPullRequest,jiraAssignCurrentUser,jiraAssignRoleCurrentUser,jiraUnassignCurrentUser,jiraAvailableTransitions,jiraMove}=require('../../remote-actions');
 const companion=require('../../companion-client');
 const {OwnershipRegistry}=require('../../ownership');
@@ -7176,6 +7177,45 @@ async function handleDashboardMessage(msg){
         break;
       }
       case 'openAtgvAi':{await atgvAiChat.open(vscode,{runtimeRoot:aiRuntimeRoot(),onLog:report});break;}
+       case 'recoverJiraOnlyBR':{
+         const projectId=activeProject?.id||'';
+         try{
+           requireOpened();requireOnline();
+           if(msg.projectId!==projectId)throw Error('Project changed. Reopen the Jira-only BR.');
+           const id=String(msg.brId||''),key=String(msg.jiraKey||'');
+           if(!/^BR-[0-9]{1,8}$/.test(id))throw Error('This Jira Epic has no verified BR ID for Confluence recovery.');
+           const confirm=await vscode.window.showWarningMessage(
+             'Recover '+id+' / '+key+' from the verified Confluence Source Vault? Local BR data will only be added if the exact Jira mapping is confirmed. No Jira items will be deleted.',
+             {modal:true},'Recover Verified BR');
+           if(confirm!=='Recover Verified BR')break;
+           const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
+           const result=await confluenceBRRecovery.recover({registry,projectId,config,token,brId:id,jiraKey:key});
+           if(activeProject?.id!==projectId)break;
+           const register=await brWorkflow.load(registry,projectId);
+           await dashboard?.webview.postMessage({type:'brUpdated',register});
+           await refreshDashboard();
+           await notice(result.brId+' recovered from Confluence. '+result.linkedIssues+
+             ' Jira mappings verified, '+result.restoredDocuments+' document(s) downloaded. Review before Delete Everywhere.');
+         }catch(error){
+           report('Confluence orphaned BR recovery: '+String(error.message||error));
+           await dashboard?.webview.postMessage({type:'confluenceSourceVault',
+             error:'BR recovery blocked: '+String(error.message||error).slice(0,300)});
+         }
+         break;
+       }
+       case 'myWorkRosterAddUser':{
+         try{
+           requireOpened();requireOnline();
+           if(msg.projectId!==activeProject.id)throw Error('Project changed. Reopen the roster.');
+           const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
+           const projectKey=validProjectKey(config.get('jira.projectKey'));
+           const result=await myWorkPresence.addUser(config,token,{projectKey,accountId:msg.accountId});
+           await dashboard?.webview.postMessage({type:'myWorkRoster',projectId:activeProject.id,...result});
+         }catch(error){
+           await dashboard?.webview.postMessage({type:'myWorkRosterError',projectId:activeProject?.id,message:String(error.message||error).slice(0,280)});
+         }
+         break;
+       }
        case 'myWorkRosterRefresh':{
          try{
            requireOpened();requireOnline();
@@ -9915,6 +9955,27 @@ async function reset(){
   await localReset.checkOwnedWorkspaceLibrary(workspace);
   const projects=await registry.list();
   const connections=projects.map(project=>({id:project.id,...localReset.remoteCheckout(project,extensionSettings,cfg())}));
+  // A successful local upload is not proof that Confluence received its bytes.
+  // Prevent Reset from deleting the only surviving originals until the remote
+  // source vault manifest and checksums are verified for every affected project.
+  if(sourceVaultBusy)throw Error('Confluence document synchronization is in progress. Retry Reset after it completes.');
+  for(const project of projects){
+    const register=await brWorkflow.load(registry,project.id);
+    const originals=[...(register.sourceDocuments||[]),...(register.archivedSources||[])]
+      .filter(doc=>doc?.storedName&&doc?.byteDigest);
+    if(!originals.length)continue;
+    const config=effectiveConfig(project);
+    if(!config.get('confluence.spaceKey'))
+      throw Error('ATGV Reset blocked: '+project.id+' has original uploads but no Confluence backup space.');
+    const token=await getAtlassianToken(project);
+    const vault=new ConfluenceSourceVault({registry,projectId:project.id,config,token});
+    const uploaded=await vault.sync({mode:'both'});
+    if(uploaded.conflicts?.length||uploaded.skipped)
+      throw Error('ATGV Reset blocked: '+project.id+' Confluence backup requires review: '+(uploaded.conflicts||[uploaded.skipped]).join('; '));
+    const verified=await vault.sync({mode:'pull'});
+    if(verified.conflicts?.length||verified.skipped)
+      throw Error('ATGV Reset blocked: '+project.id+' could not verify its Confluence source vault.');
+  }
   const catalog=catalogConfig();
   const preview=localReset.preview(projects,connections,Boolean(catalog.repositoryUrl),workspace);
   const accepted=await uiWarning(preview,{modal:true},'Continue to RESET');
