@@ -7,7 +7,7 @@
  const ctx=canvas.getContext('2d');
  const input=get('atgvMyWorkAiInput'),form=get('atgvMyWorkAiChatForm'),button=get('atgvMyWorkAiSend');
  const transcript=get('atgvMyWorkAiConversation'),status=get('atgvMyWorkAiChatStatus');
- const label=get('atgvMyWorkAiWaveState'),suggestion=get('atgvMyWorkAiText');
+ const suggestion=get('atgvMyWorkAiText');
  const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
  let project='',role='',pendingId=0,sequence=0,pending=false;
  let w=300,h=150,last=0,phase=0,hue=Math.random()*360,energy=0,opacity=0,height=0,speed=0;
@@ -29,10 +29,10 @@
   ripples.push({x:w*(.2+Math.random()*.6),age:0,power:clamp(power,.2,2)});
   if(ripples.length>12)ripples.shift();
  }
- function activity(caption){label.textContent=caption||'AI ACTIVE';pulse(1);}
+ function activity(){pulse(1);}
  function startWriter(node,text){
   writer={node,text:String(text||''),index:0,progress:0};
-  node.textContent='';activity('GENERATING TEXT');
+  node.textContent='';activity();
  }
  function typewriter(node,text){queue.push([node,text]);if(!writer)startWriter(...queue.shift());}
  function addMessage(kind,text,animate=false){
@@ -44,18 +44,17 @@
  }
  function setBusy(isBusy){
   pending=!!isBusy;button.disabled=pending||!input.value.trim();
-  status.textContent=pending?'AI is preparing a response…':'Enter to send · Shift+Enter for a new line';
+  status.textContent=pending?'AI is preparing a response…':'';
  }
  function scope(snapshot){
   if(!snapshot)return;
   const nextProject=String(snapshot.projectId||''),nextRole=String(snapshot.roleId||'');
   if(project!==nextProject||role!==nextRole){
    project=nextProject;role=nextRole;pendingId=++sequence;pending=false;
-   // Reuse one shared chat UI for every enabled role; label the selected expert.
-   const chatLabel=panel.querySelector('.atgv-mywork-ai-chat-label');
-   if(chatLabel)chatLabel.textContent='CHAT WITH ATGV AI · '+String(snapshot.roleName||nextRole).slice(0,100);
+   // Keep the role context accessible without displaying an extra chat heading.
+   input.setAttribute('aria-label','Message ATGV AI · '+String(snapshot.roleName||nextRole).slice(0,100));
    writer=null;queue.length=0;transcript.replaceChildren();input.value='';
-   status.textContent='Role-aware AI assistant ready';button.disabled=true;pulse(1.3);
+   status.textContent='';button.disabled=true;pulse(1.3);
   }
  }
  if(window.ATGVMyWorkAI&&typeof window.ATGVMyWorkAI.update==='function'){
@@ -65,13 +64,13 @@
  window.ATGVMyWorkChat={showSuggestion(text){if(suggestion)typewriter(suggestion,text);}};
  input.addEventListener('input',()=>{
   pulse(.22+Math.min(1,input.value.length/380));
-  label.textContent='LISTENING TO INPUT';button.disabled=pending||!input.value.trim();
+  button.disabled=pending||!input.value.trim();
  });
  form.addEventListener('submit',event=>{
   event.preventDefault();
   const userText=input.value.trim();
   if(!userText||!project||!role||pending)return;
-  addMessage('user',userText);input.value='';setBusy(true);activity('AI THINKING');
+  addMessage('user',userText);input.value='';setBusy(true);activity();
   pendingId=++sequence;
   // Only the user-entered message crosses the webview boundary.
   if(typeof send==='function')send('roleAiChat',{projectId:project,roleId:role,requestId:pendingId,message:userText});
@@ -84,13 +83,13 @@
   const msg=event.data||{};
   if(msg.type!=='roleAiChatReply'||msg.projectId!==project||msg.roleId!==role||msg.requestId!==pendingId)return;
   setBusy(false);addMessage('assistant',msg.text||'No response received.',true);
-  activity(msg.error?'AI UNAVAILABLE':'AI RESPONDING');
+  activity();
  });
  function frame(now){
   if(!panel.isConnected){resizeObserver?.disconnect();return;}
   const dt=last?clamp((now-last)/1000,0,.06):0;last=now;
   const thinking=panel.dataset.state==='thinking';
-  if(thinking&&!thinkingBefore)activity('REVIEWING ROLE WORK');
+  if(thinking&&!thinkingBefore)activity();
   thinkingBefore=thinking;
   if(writer){
    writer.progress+=dt*270;const next=Math.min(writer.text.length,Math.floor(writer.progress));
@@ -124,7 +123,6 @@
   opacity=smooth(opacity,targetOpacity,engaged?9:4);
   speed=smooth(speed,targetSpeed,engaged?5:2);
   phase+=dt*speed;energy=Math.max(0,energy-dt*.66);
-  if(!engaged)label.textContent=stage==='SLEEPING'?'WAITING FOR ACTIVITY':stage;
   if(ctx){
    ctx.clearRect(0,0,w,h);
    if(opacity>.005){
