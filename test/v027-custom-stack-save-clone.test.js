@@ -64,6 +64,25 @@ test('Populated verified checkout is never overwritten or pulled by Save Custom 
   assert.equal(await fs.readFile(path.join(dest,'existing.txt'),'utf8'),'user-owned content');
  });
 });
+test('Git metadata without working-tree source uses a verified fast-forward pull',async()=>{
+ await fixture(async({root,state,driver,calls,dest})=>{
+  await fs.mkdir(path.join(dest,'.git'),{recursive:true});
+  let called=0;
+  const result=await ensureCustom(state,'demo',driver,{...opts(root),pull:async(folder,params)=>{
+   called++;
+   assert.equal(folder,dest);
+   assert.equal(params.owner,'acme');
+   assert.equal(params.name,'project');
+   assert.equal(params.expectedSha,'a'.repeat(40));
+   await fs.writeFile(path.join(dest,'package.json'),'{"name":"restored"}');
+   return {updated:true};
+  }});
+  assert.equal(result.mode,'pulled');
+  assert.equal(called,1);
+  assert.equal(calls.length,0);
+  assert.match(await fs.readFile(path.join(dest,'package.json'),'utf8'),/restored/);
+ });
+});
 test('Populated non-Git folder, symlink, and mismatched origins fail safely',async()=>{
  await fixture(async({root,state,driver,calls,dest})=>{
   await fs.mkdir(dest,{recursive:true});
