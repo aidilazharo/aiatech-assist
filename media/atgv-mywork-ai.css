@@ -146,6 +146,7 @@ body.atgv-mywork-chat-mode:not(.gate-mode) #appHeader .header-end{
    red bottom divider rather than disappearing with #appHeader.hidden. */
 body.atgv-mywork-chat-mode:not(.gate-mode) #topNotification.top-notification{
   position:relative;overflow:visible!important;z-index:20;
+  border-bottom:3px solid #D31145!important;
 }
 #topNotification #myWorkHeaderWave.mywork-header-wave{
   display:none;position:absolute;left:0;right:0;bottom:-3px;height:0;
