@@ -71,6 +71,7 @@ const startupInstall=require('../startup-install');
 const installCache=require('../../library-install-cache');
 const startupDiagnostics=require('../startup-diagnostics');
 const myWorkPresence=require('../../my-work-presence');
+const myWorkDailyBrief=require('../../my-work-daily-brief');
 const {SelfImprovement}=require('../../self-improvement');
 const idleImprovement=require('../../idle-improvement');
 const selfImprovementView=require('../../self-improvement-view');
@@ -9534,6 +9535,50 @@ async function handleDashboardMessage(msg){
         };
         const actionLabel=roleActionLabels[roleId]||'Open Role Workspace';
         const activity=await liveProjectActivity(projectId);
+        // The daily brief is deterministic, grounded in the actual configured
+        // project and Jira identity. It is not supplied by the webview or AI.
+        // Missing network evidence stays explicitly unavailable.
+        const dailyProject=await registry.read(projectId);
+        const dailyConfig=effectiveConfig(dailyProject);
+        let verifiedPerson={email:String(dailyConfig.get('jira.email')||'').slice(0,250)},
+            projectUsers=null,tokenAvailable=false;
+        try{
+          const dailyToken=await getAtlassianToken(dailyProject);
+          tokenAvailable=!!dailyToken;
+          if(dailyToken){
+            const jobs=[
+              requestJson(baseAtlassian(dailyConfig)+'/rest/api/3/myself',
+                {token:dailyToken,basicEmail:dailyConfig.get('jira.email')}),
+              dailyConfig.get('confluence.spaceKey')
+               ?myWorkPresence.snapshot(dailyConfig,dailyToken,
+                 validProjectKey(dailyConfig.get('jira.projectKey')))
+               :Promise.resolve(null)
+            ];
+            const [personResult,usersResult]=await Promise.allSettled(jobs);
+            if(personResult.status==='fulfilled'&&personResult.value?.accountId)
+              verifiedPerson={
+                accountId:personResult.value.accountId,
+                displayName:personResult.value.displayName||'',
+                email:personResult.value.emailAddress||verifiedPerson.email
+              };
+            if(usersResult.status==='fulfilled')projectUsers=usersResult.value;
+          }
+        }catch(error){
+          report('My Work daily brief identity/roster unavailable: '+String(error.message||error).slice(0,150));
+        }
+        const dailyBrief=myWorkDailyBrief.build({
+          identity:verifiedPerson,projectName:dailyProject.name||projectId,
+          roleId,roleName:role.label,deadline:dailyProject.schedule?.endDate||'',
+          tasks,assigned,requirements,activity,roster:projectUsers,
+          config:{
+            jiraConfigured:!!dailyConfig.get('jira.projectKey')&&tokenAvailable,
+            confluenceConfigured:!!dailyConfig.get('confluence.spaceKey')
+          }
+        });
+        if(activeProject?.id===projectId)
+          await dashboard?.webview.postMessage({
+            type:'roleAiDailyBrief',projectId,roleId,requestId,brief:dailyBrief
+          });
         // Project-wide evidence comes from the live Confluence/Jira activity registry,
         // not from the user's untrusted webview snapshot. Never treat missing data as done.
         const sharedNext=roleId==='business-analyst'&&activity?.incompleteBRs?.length
@@ -9560,9 +9605,11 @@ async function handleDashboardMessage(msg){
           const prompt='You are ATGV My Work role assistant. Only analyze the supplied role-scoped work summary. '+
             'Always give one concise, immediately actionable next-step suggestion in plain English (maximum 2 sentences), even if everything appears complete. '+
             'Reference a real incomplete task or assigned ticket when possible; otherwise recommend checking the next role workflow step. '+
+            'Give role-specific advice about schedule recovery when a deadline exists, or prioritize today\'s confirmed tasks and missing settings. '+
+            'Do not assert whole-project health from role-scoped tasks or guess team members. '+
             'Never invent completion, Jira permissions, approvals, blockers, ticket IDs or results. '+
             'Do not give commands or promise actions have been executed. No markdown and no JSON.\nWORK SUMMARY: '+
-            JSON.stringify(evidence);
+            JSON.stringify({...evidence,deadlineHealth:dailyBrief.health,today:dailyBrief.today,todayPriorities:dailyBrief.todayActions});
           const text=sharedNext||await aiAnswer(target,prompt,850);
           message=clean(text.replace(/\s+/g,' '),420);
           if(!message)throw Error('Empty AI suggestion');
