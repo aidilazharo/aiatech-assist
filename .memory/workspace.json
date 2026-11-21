@@ -5,7 +5,24 @@
     "workspace",
     "github",
     "branch",
-    "pull"
+    "pull",
+    "coding",
+    "agent",
+    "maintenance",
+    "pat",
+    "source",
+    "error"
   ],
-  "decisions": []
+  "decisions": [
+    {
+      "id": "WORKSPACE-0001",
+      "status": "accepted",
+      "decision": "Within each existing .atgv workspace maintain src/extension and src/library Git checkouts plus error-logs for sanitized diagnostics. Preserve existing workspace and project files."
+    },
+    {
+      "id": "WORKSPACE-0002",
+      "status": "accepted",
+      "decision": "When a verified GitHub issue or PR matches an error log, delete only that log. Retain unverified errors and archive successfully submitted PR evidence."
+    }
+  ]
 }
