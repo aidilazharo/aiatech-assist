@@ -7985,10 +7985,8 @@ let architectCustomProgressPercent=0,architectCustomProgressLabel='Ready to scan
 function architectCustomSetProgress(percent,label){
  if(Number.isFinite(Number(percent)))architectCustomProgressPercent=Math.min(100,Math.max(0,Math.round(Number(percent))));
  if(label)architectCustomProgressLabel=String(label).slice(0,180);
- const fill=$('architectCustomProgressFill'),bar=$('architectCustomProgress'),title=$('architectCustomProgressText');
- if(fill)fill.style.width=architectCustomProgressPercent+'%';
- if(bar)bar.setAttribute('aria-valuenow',String(architectCustomProgressPercent));
- if(title)title.textContent=architectCustomProgressLabel+' · '+architectCustomProgressPercent+'%';
+ // One shared progress indicator at the top of Technology Stack.
+ // Custom scanning and remediation phases reuse the existing catalog bar.
  if($('architectStackSelect')?.value==='custom')renderArchitectRequirements(projects.find(p=>p.id===activeId));
 }
 function renderArchitectCustomPanel(){
