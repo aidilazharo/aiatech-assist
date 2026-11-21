@@ -59,5 +59,6 @@ test('the BA register stays present even without a local completed-cycle snapsho
 test('Jira Epic recovery is read-only: no Jira write or local approval mutation in its renderer',()=>{
  const slice=ui.split('function renderBAJiraBackedEpics(){')[1].split('function renderBACompletedRecords(){')[0];
  assert.ok(slice.includes('openJiraIssueModal(item.key)'));
- assert.doesNotMatch(slice,/send\(|\.synced\s*=|\.status\s*=|saveBR|send\('brPublish/);
+ assert.match(slice,/send\('recoverJiraOnlyBR'/);
+ assert.doesNotMatch(slice,/\.synced\s*=|\.status\s*=|saveBR|send\('(brPublish|deleteBREverywhere)/);
 });
