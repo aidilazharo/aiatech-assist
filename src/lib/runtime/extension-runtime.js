@@ -155,7 +155,13 @@ function isBAProcessCommand(command){
 async function recordBAProcess(event){
  const projectId=activeProject?.id;
  if(!projectId||!context?.globalStorageUri?.fsPath)return;
- try{await baProcessDiagnostics.append(context.globalStorageUri.fsPath,projectId,event);}
+ try{await baProcessDiagnostics.append(context.globalStorageUri.fsPath,projectId,event);
+  if(/^(?:failed|failure|error|timeout)$/i.test(String(event?.status||''))){
+   const root=getWorkspace()?.uri.fsPath;
+   if(root)void idleImprovement.writeLog(root,{target:'extension',category:'error',
+    screen:'BA-'+String(event.stage||'process').slice(0,40),title:'Business Analyst '+String(event.action||event.stage||'workflow')+' failed',
+    observed:String(event.details||event.message||'Business Requirements processing failed').slice(0,3000)}).catch(()=>{});
+  }}
  catch(error){report('BA process log write unavailable: '+String(error.code||'IO error'));}
 }
 async function exportBAProcessLog(projectId){
@@ -182,7 +188,17 @@ async function exportBAProcessLog(projectId){
  return {saved:true,filename:path.basename(target.fsPath)};
 }
 async function recordStartupDiagnostic(entry){
- try{return await startupDiagnostics.append(context.globalStorageUri.fsPath,entry);}
+ try{
+  const result=await startupDiagnostics.append(context.globalStorageUri.fsPath,entry);
+  if(/^(?:failed|failure|error|timeout|unreachable|denied)$/i.test(String(entry?.status||''))){
+   const root=getWorkspace()?.uri.fsPath;
+   if(root)void idleImprovement.writeLog(root,{target:'extension',category:'error',
+    screen:'Startup-'+String(entry.stage||'check').slice(0,50),
+    title:'Startup '+String(entry.tool||entry.stage||'check')+' failure',
+    observed:String(entry.detail||entry.message||'Startup check failed').slice(0,3000)}).catch(()=>{});
+  }
+  return result;
+ }
  catch(error){report('Startup diagnostic write failed: '+error.message);return null;}
 }
 async function exportStartupDiagnostics(){
@@ -800,6 +816,14 @@ const report=text=>{
  // Also retain safe connection-related incidents after the setup wizard closes.
  // Do not store raw requests, user details, tokens or API response bodies.
  const note=String(text||'');
+ const unifiedRoot=getWorkspace()?.uri.fsPath;
+ if(unifiedRoot&&/\b(?:error|failed|failure|fatal|exception|crash|timeout|timed out|unauthorized|forbidden|permission denied|cannot|unable|HTTP [45][0-9][0-9])\b/i.test(note)){
+  const channel=/confluence/i.test(note)?'Confluence':/jira/i.test(note)?'Jira':/github/i.test(note)?'GitHub':
+   /business analyst|\bBA\b|preflight|mapping/i.test(note)?'Business Analyst':
+   /developer|build|test suite/i.test(note)?'Developer':/architect|tech stack/i.test(note)?'Solution Architect':
+   /AI|copilot|model/i.test(note)?'AI':'ATGV';
+  void idleImprovement.captureRuntimeError(unifiedRoot,channel,note).catch(()=>{});
+ }
  const service=/confluence|atlassian.*wiki/i.test(note)?'Confluence':
   /jira|atlassian/i.test(note)?'Jira':
   /github|sdlc catalog|library .*pull/i.test(note)?'GitHub':'';
