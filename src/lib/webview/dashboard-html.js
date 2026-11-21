@@ -537,6 +537,13 @@ function html(webview,{resumeLibrary=false}={}){
       <div id="architectCustomPanel" class="architect-custom-panel hidden" aria-label="Custom Stack existing application">
         <div class="architect-custom-heading"><strong>Custom Stack · Existing Repository</strong><span class="muted">Read-only scan before explicit install and run</span></div>
         <p id="architectCustomStatus" class="muted" role="status" aria-live="polite">Scan Repository analyzes application dependencies, local services and preview blockers. Fix actions always require confirmation.</p>
+        <div id="architectCustomRuntime" class="atgv-custom-runtime" data-state="unknown" role="status" aria-live="polite" aria-label="Custom Stack application runtime status">
+          <span class="atgv-custom-runtime-indicator" aria-hidden="true"></span>
+          <strong id="architectCustomRuntimeLabel">Application status not checked</strong>
+          <span id="architectCustomRuntimeDetail">Scan Repository inspects code; it does not start the application.</span>
+          <button id="architectCustomCheckStatus" class="secondary" type="button">Check Status</button>
+          <button id="architectCustomOpenPreview" class="secondary" type="button" disabled>Open Preview</button>
+        </div>
         <div class="atgv-custom-branch-row"><label for="architectCustomBranch">Local Git branch<select id="architectCustomBranch" aria-label="Custom Stack local Git branch"></select></label><button id="architectCustomSwitchBranch" class="secondary" type="button" disabled>Switch Branch</button><span id="architectCustomBranchStatus" class="muted" role="status"></span></div>
         <div class="architect-custom-controls">
           <label for="architectCustomTarget">Detected application<select id="architectCustomTarget" aria-label="Detected custom application"></select></label>
