@@ -5600,12 +5600,20 @@ function renderBAJiraBackedEpics(){
     send('recoverJiraOnlyBR',{projectId:activeId,brId:item.brId,jiraKey:item.key});
    });
    heading.append(recover);
+   const remove=brElement('button','secondary ba-jira-only-delete','Delete Jira BR');
+   remove.type='button';
+   remove.title='Eligible only when your Jira account ID matches this Epic Creator or Reporter AND Jira grants Delete Issues permission. Review all descendants first.';
+   remove.setAttribute('aria-label','Review deletion eligibility and complete Jira hierarchy for '+item.brId);
+   remove.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();
+    send('deleteJiraOnlyBROwned',{projectId:activeId,brId:item.brId,jiraKey:item.key});
+   });
+   heading.append(remove);
   }
   card.append(heading);
   const body=brElement('div','ba-completed-br-body');
   const info=brElement('div','ba-jira-recovery-info');
   info.append(brElement('small','muted',item.key+' · '+(item.status||'Status unknown')+' · '+item.linkedIssueCount+' Jira descendant(s) verified by parent links · Unlinked to local BR'));
-  info.append(brElement('small','muted ba-jira-evidence-help','Original 12 discovery answers and uploaded file are not stored in this project. Open the ATGV project folder that published this BR to access its evidence; Jira alone cannot reconstruct it.'));
+  info.append(brElement('small','muted ba-jira-evidence-help','Original discovery answers and uploaded files are not stored in this project. Recover from verified Confluence evidence when possible. A matching Jira Epic Creator or Reporter may request deletion of this Epic and its complete parent-linked hierarchy, with Jira permissions and confirmation.'));
   body.append(info);card.append(body);root.append(card);
  }
  if(rows.length>50)root.append(brElement('p','muted',String(rows.length-50)+' additional unlinked Epics: use the Jira inventory below.'));
