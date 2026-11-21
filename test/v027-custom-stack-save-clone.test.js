@@ -117,7 +117,7 @@ test('Custom Stack Save is enabled and no automatic scan runs on selection',()=>
  const git=read('src/developer-git.js'),repo=read('src/architect-repository.js');
  assert.match(ui,/save\.disabled=architectActionBusy\|\|!activeId/);
  assert.match(ui,/architectBegin\('architectSaveStack','Checking configured project repository/);
- assert.match(ui,/Choose Save Stack to create the project repository folder/);
+ assert.match(ui,/Choose Save Stack to verify or clone the configured GitHub checkout/);
  assert.match(host,/if\(id==='custom'\)/);
  assert.match(host,/architectRepository\.ensureCustom/);
  assert.match(host,/type:'architectCustomScanResult'/);
