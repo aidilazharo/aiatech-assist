@@ -51,8 +51,8 @@ test('unsafe markup and literal PDF delimiters are escaped, unsupported glyphs n
  const result=pdf.document({projectId:'P(01)',source:{...source,name:'Review (A) \\ B.pdf'},
   requirements:[{id:'BR-002',status:'draft',title:'<script>alert(1)</script> (test)',scope:'User-facing summary'}]});
  const text=result.toString('latin1');
- assert.match(text,/Review \\(A\\) \\\\ B/);
- assert.match(text,/<script>alert\\(1\\)<\/script>/);
+ assert.ok(text.includes('Review \\(A\\) \\\\ B'));
+ assert.ok(text.includes('<script>alert\\(1\\)</script>'));
  assert.ok(text.includes('/Type /Catalog'));
 });
 test('BA source UI removes redundant archive button, defaults preflight collapsed and preserves destructive safety',()=>{
