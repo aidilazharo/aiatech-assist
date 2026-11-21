@@ -2,6 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const file = path.join(__dirname, '..', 'package.json');
+const {nextVersion,requireIncrement}=require('../src/version-policy');
 function parseVersion(input) {
     const match = /^(\d{1,2})\.(\d{1,2})\.(\d{1,2})$/.exec(input || '');
     if (!match)
@@ -13,8 +14,9 @@ function parseVersion(input) {
 }
 if (require.main === module) {
     try {
-        const v = parseVersion(process.argv[2]);
         const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+        const v=parseVersion(process.argv[2]||nextVersion(manifest.version));
+        requireIncrement(manifest.version,v.semver);
         const priorDisplayVersion=manifest.atgvDisplayVersion;
         manifest.version = v.semver;
         manifest.atgvDisplayVersion = v.display;
