@@ -1,0 +1,54 @@
+/* Shared My Work AI: monochrome surface, white text, no coloured border. */
+#workView > #atgvMyWorkAi,
+#workView.role-progress-only > #atgvMyWorkAi.atgv-mywork-ai {
+  display:flex!important;flex-direction:column;justify-content:center;align-items:center;gap:14px;min-height:158px;
+  padding:23px 25px;margin:6px 0 19px;background:#000!important;color:#fff!important;text-align:center;
+  border:0!important;box-shadow:none!important;border-radius:10px;
+}
+#atgvMyWorkAi .atgv-mywork-ai-visual{width:104px;height:104px;flex:0 0 104px;display:grid;place-items:center;margin-inline:auto}
+#atgvMyWorkAi .atgv-mywork-ai-orb{
+  width:84px;height:84px;border-radius:50%;position:relative;opacity:1;
+  background:radial-gradient(ellipse at 56% 45%,#bbfaff 0,#0af2ff 9%,#0778df 33%,#092a93 65%,#020817 100%);
+  box-shadow:0 0 24px #0068ff88,inset 0 0 15px #9adfff88;
+  animation:atgv-orb-idle 4s ease-in-out infinite;transition:opacity .6s ease,transform .6s ease;
+}
+#atgvMyWorkAi .atgv-mywork-ai-orb:before,
+#atgvMyWorkAi .atgv-mywork-ai-orb:after{
+ content:"";position:absolute;left:9%;right:9%;top:38%;height:24%;border-radius:50%;
+ filter:blur(8px);transform:rotate(-18deg);background:linear-gradient(90deg,transparent,#96efff,#1084fb,transparent);
+ animation:atgv-orb-wave 3s ease-in-out infinite alternate;
+}
+#atgvMyWorkAi .atgv-mywork-ai-orb:after{transform:rotate(23deg);animation-direction:alternate-reverse;opacity:.7}
+#atgvMyWorkAi[data-state="thinking"] .atgv-mywork-ai-orb{
+ background:radial-gradient(ellipse at 52% 43%,#c7ffef 0,#19eab7 13%,#06a6e9 37%,#075cbd 66%,#06132c 100%);
+ box-shadow:0 0 26px #05d1c066,inset 0 0 18px #9bfff699;
+ animation:atgv-orb-thinking 1.1s ease-in-out infinite;
+}
+#atgvMyWorkAi[data-state="success"] .atgv-mywork-ai-orb{
+ background:radial-gradient(circle at 45% 46%,#fff 0,#a5ffca 13%,#13da79 34%,#087e43 73%,#001e10 100%);
+ box-shadow:0 0 31px #23f28c9c,inset 0 0 15px #d0ffe6;
+ animation:atgv-orb-success 1.25s ease-out both;
+}
+#atgvMyWorkAi[data-state="complete"] .atgv-mywork-ai-visual{display:none}
+#atgvMyWorkAi[data-state="complete"] .atgv-mywork-ai-orb{opacity:0;transform:scale(.72);animation:none}
+#atgvMyWorkAi .atgv-mywork-ai-content{width:100%;min-width:0;max-width:850px;margin-inline:auto}
+#atgvMyWorkAi .atgv-mywork-ai-content[hidden]{display:none!important}
+#atgvMyWorkAi .atgv-mywork-ai-title{font-size:13px;color:#fff;font-weight:750;letter-spacing:.025em;margin:0 0 7px}
+#atgvMyWorkAi .atgv-mywork-ai-text{color:#fff;font-size:13px;line-height:1.55;margin:0 auto;max-width:730px}
+#atgvMyWorkAi .atgv-mywork-ai-actions{display:flex;justify-content:center;gap:9px;flex-wrap:wrap;margin-top:15px}
+#atgvMyWorkAi button.atgv-mywork-ai-button{
+ color:#fff!important;background:#181818!important;border:1px solid #777!important;
+ border-radius:6px;padding:8px 13px;font-size:12px;font-weight:650;
+}
+#atgvMyWorkAi button.atgv-mywork-ai-button:hover{background:#303030!important}
+#atgvMyWorkAi button.atgv-mywork-ai-button:focus-visible{outline:2px solid #fff;outline-offset:2px}
+@keyframes atgv-orb-idle{0%,100%{transform:scale(.96)}50%{transform:scale(1.05)}}
+@keyframes atgv-orb-thinking{0%,100%{transform:scale(.96) rotate(-7deg)}50%{transform:scale(1.11) rotate(8deg)}}
+@keyframes atgv-orb-wave{0%{left:6%;right:24%;opacity:.6}100%{left:23%;right:4%;opacity:1}}
+@keyframes atgv-orb-success{0%{transform:scale(1);opacity:1}30%{transform:scale(1.14);opacity:1}64%{transform:scale(1.08);opacity:1}100%{transform:scale(.8);opacity:0}}
+@media(max-width:620px){
+ #workView > #atgvMyWorkAi{gap:12px;padding:19px 13px;align-items:center}
+ #atgvMyWorkAi .atgv-mywork-ai-visual{width:68px;height:68px;flex-basis:68px}
+ #atgvMyWorkAi .atgv-mywork-ai-orb{width:55px;height:55px}
+}
+@media(prefers-reduced-motion:reduce){#atgvMyWorkAi .atgv-mywork-ai-orb,#atgvMyWorkAi .atgv-mywork-ai-orb:before,#atgvMyWorkAi .atgv-mywork-ai-orb:after{animation:none!important;transition:none!important}}
