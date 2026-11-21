@@ -7983,6 +7983,8 @@ function architectBegin(action,message){
 let architectCustomInfo=null,architectCustomBusy=false,architectCustomRunning=false;
 let architectCustomProgressPercent=0,architectCustomProgressLabel='Ready to scan';
 let architectCustomOperation='',architectCustomStatusPending=false,architectCustomLastError='';
+// Distinguish a scan request sent from acknowledgement by the extension host.
+let architectCustomScanPending=false,architectCustomScanStartedAt=0,architectCustomHostResponseAt=0,architectCustomScanSequence=0;
 let architectCustomRuntime={projectId:'',checked:false,running:false,pid:null,previewUrl:'',relative:'',mockPreview:false,exitCode:null,reachable:null};
 function architectCustomRequestStatus(){
  if(!activeId||$('architectStackSelect')?.value!=='custom'||architectCustomStatusPending)return;
@@ -8128,11 +8130,24 @@ $('architectCustomPreviewUrl').addEventListener('input',()=>{
 });
 $('architectCustomScan').addEventListener('click',()=>{
  if(!activeId||architectCustomBusy||architectActionBusy)return;
- architectCustomBusy=true;architectCustomOperation='SCANNING REPOSITORY';architectCustomLastError='';
- architectCustomSetProgress(4,'Scanning repository manifests and service requirements');
- architectCustomNotify('Analyzing repository with manifest evidence and configured Solution Architect AI…');
- renderArchitectCustomPanel();send('architectCustomScan',{projectId:activeId});
+ architectCustomBusy=true;architectCustomScanPending=true;architectCustomOperation='SCANNING REPOSITORY';architectCustomLastError='';
+ architectCustomScanStartedAt=Date.now();architectCustomHostResponseAt=0;
+ architectCustomSetProgress(4,'Sending repository scan request to VS Code…');
+ architectCustomNotify('Scan requested. Awaiting extension-host acknowledgement; no application has been started.');
+ renderArchitectCustomPanel();send('architectCustomScan',{projectId:activeId,scanId:++architectCustomScanSequence});
 });
+// Never represent an unresponsive extension host as an actively running server.
+setInterval(()=>{
+ if(!architectCustomScanPending||!architectCustomBusy||!activeId||$('architectStackSelect')?.value!=='custom')return;
+ const elapsed=Math.floor((Date.now()-architectCustomScanStartedAt)/1000);
+ const silence=architectCustomHostResponseAt?Math.floor((Date.now()-architectCustomHostResponseAt)/1000):elapsed;
+ if(silence<12)return;
+ if(!architectCustomHostResponseAt)
+  architectCustomNotify('No extension-host progress response after '+elapsed+'s. The scan request was sent, but execution is not confirmed. Check the ATGV error log or run ATGV: Restart if this continues.','warning');
+ else
+  architectCustomNotify('Scan pending ('+elapsed+'s). Last extension-host update '+silence+'s ago: '+architectCustomProgressLabel+'. If stalled, check the ATGV error log.','warning');
+ architectCustomDrawRuntime();
+},5000);
 $('architectCustomPull').addEventListener('click',()=>{
  const current=architectCustomInfo?.projectId===activeId?architectCustomInfo:null;
  if(!current?.sha||architectCustomBusy||!current.clean)return;
@@ -8201,6 +8216,7 @@ $('architectCustomStop').addEventListener('click',()=>{
 window.addEventListener('message',event=>{
  const m=event.data||{};
  if(!activeId||m.projectId!==activeId)return;
+ if(m.scanId&&m.scanId!==architectCustomScanSequence)return; // Ignore stale scan/AI responses.
  if(m.type==='architectCustomStatusResult'){
   architectCustomStatusPending=false;
   architectCustomRuntime={...m.value,projectId:activeId};
@@ -8209,7 +8225,7 @@ window.addEventListener('message',event=>{
  }
  if(m.type==='architectCustomScanResult'||m.type==='architectCustomPullResult'||
     m.type==='architectCustomBranchResult'||m.type==='architectCustomInstallResult'){
-  architectCustomBusy=false;architectCustomOperation='';architectCustomLastError='';
+  architectCustomBusy=false;architectCustomScanPending=false;architectCustomOperation='';architectCustomLastError='';
   architectCustomRunning=!!m.value?.running;
   architectCustomInfo={...m.value,projectId:activeId,previewCustomized:false};
   const text=m.value?.pullMessage||m.value?.branchMessage||
@@ -8220,7 +8236,7 @@ window.addEventListener('message',event=>{
   renderArchitectCustomPanel();architectCustomRequestStatus();
  }
  if(m.type==='architectCustomError'){
-  architectCustomBusy=false;architectCustomOperation='';
+  architectCustomBusy=false;architectCustomScanPending=false;architectCustomOperation='';
   architectCustomLastError=String(m.message||'Custom Stack operation failed.').slice(0,250);
   if(m.logAvailable)architectRecordErrorLog(m);
   architectCustomNotify(m.message||'Custom Stack operation failed.','error');
@@ -8228,6 +8244,7 @@ window.addEventListener('message',event=>{
   renderArchitectCustomPanel();architectCustomRequestStatus();
  }
  if(m.type==='architectCustomProgress'){
+  if(m.scanId)architectCustomHostResponseAt=Date.now();
   const message=String(m.message||'Working with custom application…');
   if(/Verifying localhost|health at /i.test(message))architectCustomOperation='VERIFYING LOCALHOST HEALTH';
   else if(/Starting /i.test(message))architectCustomOperation='STARTING APPLICATION';
@@ -8236,6 +8253,14 @@ window.addEventListener('message',event=>{
   architectCustomNotify(message);
   architectCustomSetProgress(m.percent??Math.min(90,architectCustomProgressPercent+5),message);
   architectCustomDrawRuntime();
+ }
+ if(m.type==='architectCustomAiReviewResult'){
+  const current=architectCustomInfo?.projectId===activeId?architectCustomInfo:null;
+  if(current?.sha===m.sha&&current.analysis){
+   current.analysis.modelReview=m.review;
+   architectCustomNotify('Repository scan complete. '+(m.review?.label==='Manifest analysis'?'AI advice unavailable; verified manifest findings remain ready.':'AI advisory received; findings and recommended actions updated.'),'complete');
+   renderArchitectCustomPanel();
+  }
  }
  if(m.type==='architectCustomRunResult'){
   architectCustomBusy=false;architectCustomOperation='';architectCustomLastError='';
@@ -8263,7 +8288,7 @@ $('architectStackSelect').addEventListener('change',event=>{
  renderArchitectRequirements(project);
  renderArchitectCustomPanel();
  if(event.target.value==='custom'&&activeId){
-  architectCustomBusy=false;architectCustomInfo=null;architectCustomRunning=false;
+  architectCustomBusy=false;architectCustomScanPending=false;architectCustomInfo=null;architectCustomRunning=false;
   architectCustomSetProgress(0,'Ready to scan');
   architectCustomNotify('Choose Save Stack to verify or clone the configured GitHub checkout. Scan Repository for AI-assisted readiness guidance.');
   renderArchitectCustomPanel();
