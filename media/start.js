@@ -1068,7 +1068,7 @@ function navigate(destination){
   }
   // Navigate locally without an automatic dashboard/webview refresh.
   const isRole=visibleRoles().some(role=>role.id===destination);
-  const keepingWorkspace=isRole&&(view==='work'||view==='discovery');
+  const keepingWorkspace=isRole&&(view==='work'||view==='discovery'||view==='uxPreview');
   if(isRole&&activeId){usedRoleIds.add(destination);send('markRoleUsed',{roleId:destination});}
   selectedNav=destination==='role-workspace'||destination==='discovery'||keepingWorkspace?'role-workspace':
     isRole||destination==='sdlc-roles'?'sdlc-roles':
