@@ -25,7 +25,7 @@
     'ai-ml-engineer':{target:'roleStepFlow',fallback:'Review model evaluations, monitoring and data dependencies',action:'Review AI/ML Work'},
     'compliance-officer':{target:'roleStepFlow',fallback:'Review compliance evidence, risks and exceptions',action:'Review Compliance'}
   });
-  let signature='',project='',role='',pending=0,lastSnapshot=null,latest=null,lastAnswered=0;
+  let signature='',project='',role='',pending=0,lastSnapshot=null,latest=null,lastAnswered=0,dailyBrief=null;
   let requestTimer=null,successTimer=null,watchdogTimer=null;
   function clearTimers(){
     clearTimeout(requestTimer);clearTimeout(successTimer);clearTimeout(watchdogTimer);
@@ -63,7 +63,15 @@
     return {suggestion,action:info.action,target:info.target};
   }
   function navigateToWork(){
-    if(!project||!root()||root().closest('main')?.classList.contains('hidden'))return;
+    if(!root()||root().closest('main')?.classList.contains('hidden'))return;
+    if(!project||!role){if(typeof navigate==='function')navigate('projects');return;}
+    // A missing deadline/connection is an actionable settings prerequisite.
+    // Never route an unrelated AI-generated label to arbitrary commands.
+    const top=dailyBrief?.todayActions?.[0]?.label||'';
+    if(/^(?:Verify (?:Jira|Confluence)|Set or correct the project deadline)/.test(top)){
+      if(typeof navigate==='function')navigate('project-settings');
+      return;
+    }
     // Suggestions leave the AI-only My Work page and open the selected role's
     // existing workflow on the dedicated Role Workspace page.
     if(typeof navigate==='function')navigate(role==='business-analyst'?'discovery':'role-workspace');
@@ -71,6 +79,16 @@
     const element=byId(target);
     if(workspace&&!workspace.classList.contains('hidden')&&element&&!element.classList.contains('hidden'))
       element.scrollIntoView({behavior:'smooth',block:'start'});
+  }
+  function renderPersistentNext(){
+    const button=byId('atgvMyWorkAiNextButton'),summary=byId('atgvMyWorkAiNextSummary');
+    if(!button||!summary)return;
+    button.textContent='What to do next';
+    button.disabled=false;
+    const today=dailyBrief?.todayActions?.[0]?.label;
+    const fallback=latest?nextStep(latest).suggestion:'Open a project and select a role to start.';
+    summary.textContent=safe(today||fallback,180);
+    button.setAttribute('aria-label','What to do next: '+safe(today||fallback,150));
   }
   function actionButtons(label){
     const list=byId('atgvMyWorkAiActions');if(!list)return;
@@ -99,6 +117,7 @@
     if(typeof window.ATGVMyWorkChat?.showSuggestion==='function')window.ATGVMyWorkChat.showSuggestion(text);
     else byId('atgvMyWorkAiText').textContent=text;
     actionButtons(action||next.action);
+    renderPersistentNext();
     displayResults(true);
     if(error){state('idle');return;}
     state('success');
@@ -117,13 +136,16 @@
     };
     const newSignature=JSON.stringify(compact);
     if(newSignature===signature)return;
+    if(project!==compact.projectId||role!==compact.roleId)dailyBrief=null;
     signature=newSignature;latest=compact;project=compact.projectId;role=compact.roleId;
+    renderPersistentNext();
     const requestId=++pending;
     clearTimers();
     // Provide a verified navigation button immediately; the AI only refines the explanation.
     const next=nextStep(compact);
     byId('atgvMyWorkAiText').textContent=next.suggestion;
     actionButtons(next.action);
+    renderPersistentNext();
     displayResults(true);state('thinking');
     requestTimer=setTimeout(()=>{
       if(requestId!==pending)return;
@@ -140,10 +162,24 @@
       result(next.suggestion,next.action,true,requestId);
     },18000);
   }
+  byId('atgvMyWorkAiNextButton')?.addEventListener('click',navigateToWork);
+  renderPersistentNext();
   window.addEventListener('message',event=>{
     const msg=event.data||{};
-    if(msg.type!=='roleAiSuggestion'||msg.projectId!==project||msg.roleId!==role||msg.requestId!==pending)return;
-    result(msg.message,msg.actionLabel,msg.error===true,msg.requestId);
+    if(msg.projectId!==project||msg.roleId!==role)return;
+    if(msg.type==='roleAiDailyBrief'&&msg.requestId===pending){
+      dailyBrief=msg.brief&&typeof msg.brief==='object'?msg.brief:null;
+      renderPersistentNext();
+      return;
+    }
+    if(msg.type==='roleAiSuggestion'&&msg.requestId===pending)
+      result(msg.message,msg.actionLabel,msg.error===true,msg.requestId);
   });
-  window.ATGVMyWorkAI={update};
+  // A new visit rechecks today's recommendations rather than displaying a
+  // stale previous day's summary, without clearing the user's chat history.
+  window.ATGVMyWorkAI={update,refresh(){
+    signature='';
+    if(lastSnapshot)update(lastSnapshot);
+    else renderPersistentNext();
+  }};
 })();
