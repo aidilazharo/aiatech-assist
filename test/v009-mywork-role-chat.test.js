@@ -157,7 +157,7 @@ test('waveform still automatically animates, slows, sleeps and awakens without v
  assert.match(wave,/function pulse\(/);
  assert.match(wave,/function activity\(\)\{pulse\(1\);\}/);
  assert.match(wave,/lastActivity=performance\.now\(\)/);
- assert.doesNotMatch(wave,/label\.textContent/);
+ assert.doesNotMatch(wave,/atgvMyWorkAiWaveState|WAITING FOR ACTIVITY/);
 });
 test('reject overlong input and unknown role; chat handler remains read-only',async()=>{
  await assert.rejects(()=>chat.ask({projectId:'a',roleId:'solution-architect',message:'x'.repeat(4001),request:async()=>''}),/1–4000/);
