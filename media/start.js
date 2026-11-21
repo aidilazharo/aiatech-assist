@@ -5593,6 +5593,14 @@ function renderBAJiraBackedEpics(){
   open.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();openJiraIssueModal(item.key);});
   open.addEventListener('keydown',event=>event.stopPropagation());
   heading.append(open);
+  if(item.brId){
+   const recover=brElement('button','secondary ba-recover-confluence','Recover from Confluence');
+   recover.type='button';recover.title='Restore only from the verified Confluence Source Vault. No Jira issue is deleted.';
+   recover.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();
+    send('recoverJiraOnlyBR',{projectId:activeId,brId:item.brId,jiraKey:item.key});
+   });
+   heading.append(recover);
+  }
   card.append(heading);
   const body=brElement('div','ba-completed-br-body');
   const info=brElement('div','ba-jira-recovery-info');
