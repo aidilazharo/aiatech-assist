@@ -12,7 +12,7 @@ function api({write=true,reported=false}={}){
   if(method==='GET'&&suffix.startsWith('/git/ref/'))return {status:200,body:{object:{sha:'a'.repeat(40)}}};
   if(method==='POST'&&suffix==='/git/refs')return {status:write?201:403,body:{}};
   if(method==='DELETE'&&suffix.startsWith('/git/refs/'))return {status:204,body:null};
-  if(method==='GET'&&suffix.startsWith('/issues?'))return {status:200,body:reported?[{number:45,title:'Error in ATGV',html_url:'https://github.com/aidilazharo/aiatech-assist/issues/45'}]:[]};
+  if(method==='GET'&&suffix.startsWith('/issues?'))return {status:200,body:reported?[{number:45,title:'Error in ATGV',html_url:'https://github.com/aidilazharo/aiatech-assist/issues/45',body:'Known failure'}]:[]};
   throw Error('Unexpected API call: '+method+' '+suffix);
  };return {request,calls};
 }
