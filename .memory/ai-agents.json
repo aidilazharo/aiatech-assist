@@ -15,7 +15,12 @@
     "pull request",
     "continuous integration",
     "auto-merge",
-    "version"
+    "version",
+    "role boundaries",
+    "agent expertise",
+    "handoff",
+    "role switch",
+    "18 roles"
   ],
   "decisions": [
     {
@@ -32,6 +37,11 @@
       "id": "AGENT-0003",
       "status": "accepted",
       "decision": "For every completed ATGV source change, create the next sequential version and a PR. After verified tests, automatically merge eligible PRs into main, allow main-branch release automation to publish VSIX/source artifacts, and report any blocked PR accurately; never claim merge/release before confirmed."
+    },
+    {
+      "id": "AGENT-0004",
+      "status": "accepted",
+      "decision": "For all 18 SDLC agents and harnesses, use the selected role's trusted expertise and catalog skill. Informational cross-role questions remain answerable from the current role; explicit foreign-role deliverable creation requires a user-approved switch with a working target-role button. Never auto-switch or reassign roles. Follow .memory/role-boundaries.json and verify disabled-role handling and persistent next actions."
     }
   ]
 }
