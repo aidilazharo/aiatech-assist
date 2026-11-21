@@ -1,15 +1,15 @@
-# ATGV AIATECH Assist v0.0.19
+# ATGV AIATECH Assist v0.0.20
 
 ## Changes
 
-- Move the one existing My Work AI waveform canvas out of the scrollable content and into the application's real main header.
-- Align the waveform centerline precisely with the existing 3px top-bar bottom border (`#D31145`) instead of drawing a second red line in My Work.
-- Override the header's overflow clipping only on My Work; keep waveform and its CMYK/red transitions visible above the native red border.
-- Match the wave's fade-in and fade-out red to the exact header border color, while retaining the active CMYK transition.
-- Show header animation for My Work across all 18 roles, hide it on other pages, and resize the canvas on navigation.
-- Preserve the full-width borderless conversation, independently scrolling responses, fixed bottom chat input, RAG, Jira and Confluence activity awareness.
-- Update UI tests for header placement, unique canvas, native border alignment, stacking order, mobile dimensions, red/CMYK/red lifecycle and chat behavior.
+- Hide the generated GitHub project repository URL beneath Project Repository on the Start screen while preserving the editable repository, PAT and connection verification.
+- Always display a verified next-action navigation button immediately when the active role opens My Work, without waiting for AI or relying on provider availability.
+- Add explicit action labels and role workspace navigation for all 18 SDLC roles, maintaining read-only guidance and human approval for any changes.
+- Ground Business Analyst, Developer, Project Manager, Solution Architect and QA suggestions in live cross-user project activity when available.
+- Strengthen role chat prompts to distinguish verified project evidence from missing or stale sources.
+- Prepare integration with Library's v0.0.5 project snapshot and verified next-action contracts (these Library files remain declarative and do not authorize remote writes).
+- Add regression tests for hidden URL, 18 role actions, immediate buttons, and project-specific guidance.
 
 ## Verification
 
-Run the complete Node, UI, Windows and VSIX packaging workflow against the exact PR head. Merge only when required checks succeed, then publish the verified VSIX and source ZIP from main. Keep .memory files excluded from the distribution.
+Run complete Node regression, Windows and VSIX packaging checks; squash merge only after required CI passes. Publish verified VSIX from main. Keep source-only .memory out of released artifacts.
