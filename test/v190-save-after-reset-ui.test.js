@@ -11,9 +11,13 @@ function extract(name){
 }
 function mock(){
  const controls=Object.fromEntries(['architectStackSelect','architectSaveStack','architectResetStack','architectTestStack','architectApproveStack'].map(id=>[id,{value:'',disabled:false,title:''}]));
+ // New Saved Stack UI needs DOM class/ARIA stubs and its project-scoped state.
+ controls.architectSaveStack.classList={toggle(){}};
+ controls.architectSaveStack.setAttribute=()=>{};
  const context=vm.createContext({
   activeId:'project-a',techStacks:[{id:'react'},{id:'angular'}],
   architectStackDraft:{projectId:'',stackId:''},architectActionBusy:false,
+  architectSaveSelectionProjectId:'project-a',architectSaveSelectionChanged:false,
   $:id=>controls[id]
  });
  vm.runInContext(extract('architectStackSelection')+'\n'+extract('syncArchitectStackButtons'),context);
