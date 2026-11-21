@@ -392,13 +392,14 @@ function topNoticeRoute(message,error=false,override=null){
 // Keep the live waveform in whichever shell row is actually visible. Reparent the
 // existing canvas rather than restarting its animation or duplicating its state.
 function syncMyWorkHeaderWaveHost(){
+ if(typeof document==='undefined'||!document.body)return;
  const wave=$('myWorkHeaderWave'),header=$('appHeader'),notice=$('topNotification');
  if(!wave||!header||!notice)return;
  const inMyWork=document.body.classList.contains('atgv-mywork-chat-mode');
  const host=topNoticeCurrent&&inMyWork?notice:header;
  if(wave.parentElement!==host)host.appendChild(wave);
 }
-window.addEventListener('atgv:viewchange',syncMyWorkHeaderWaveHost);
+if(typeof window!=='undefined')window.addEventListener('atgv:viewchange',syncMyWorkHeaderWaveHost);
 function showTopNotification(item){
  topNoticeCurrent=item;
  syncMyWorkHeaderWaveHost();
