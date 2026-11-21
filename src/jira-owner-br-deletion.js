@@ -117,7 +117,8 @@ async function discover(config,token,epicKey,project,{request=requestJson,read=r
 async function preflight({register,brId,epicKey,projectId,config,token,request=requestJson,read=readIssue}){
  const identity=await getIdentity(config,token,request);
  const {id,key,project}=assertSelection({brId,epicKey,projectKey:identity.project});
- assertNotLocallyOwned(register,id,[key]);
+ // Do not prematurely reject this orphan's own child mappings. Verify the
+ // complete approved Jira hierarchy first and compare every stored mapping.
  const root=await read(config,token,key,request);
  const eligible=assertEpic(root,key,project,id,identity.accountId);
  const rows=await discover(config,token,key,project,{request,read});
