@@ -22,6 +22,7 @@ const repoSyncWorkspace=require('../../repo-sync-workspace');
 const atgvAiChat=require('../../atgv-ai-chat');
 const myWorkRoleChat=require('../../my-work-role-chat');
 const myWorkRag=require('../../my-work-rag-context');
+const {ProjectActivitySync,contextText:activityContextText}=require('../../project-activity-sync');
 const repoSyncNaming=require('../../repo-sync-pr');
 const {workState,toggleTask,openTaskDocument}=require('../../sdlc-work');
 const roleStepEngine=require('../../role-step-engine');
@@ -1012,6 +1013,52 @@ async function aiPull(){if(!activeProject)return;const epoch=activationEpoch,pro
 async function aiRunOnce(){if(aiServiceBusy||!activeProject)return {status:'busy'};aiServiceBusy=true;try{const root=aiRoot(),shared=await aiSharedClient(),provider=cfg().get('rag.provider','auto');if(!['ollama','openai-compatible'].includes(provider))throw Error('Unattended generation needs an approved Ollama or OpenAI-compatible endpoint, not interactive Copilot Auto. Configure RAG Provider.');const model=await activeAiTarget();const result=await aiOrchestrator.run({root,shared,model,onProgress:(message,percent)=>{dashboard?.webview.postMessage({type:'aiServiceProgress',message,percent});}});const memory=new aiMemory.ProjectMemory(root);try{const merged=await shared.mergeManifest(memory.manifest(activeProject.id),memory.get('shared-manifest',{}));memory.set('shared-manifest',merged);memory.set('shared-sync',new Date().toISOString());}catch(e){memory.queueOperation('manifest',memory.manifest(activeProject.id));report('AI memory sync queued: '+e.message);}finally{memory.close();}await dashboard?.webview.postMessage({type:'aiServiceProgress',message:'Completed: '+result.status,percent:100});return result;}finally{aiServiceBusy=false;await refreshDashboard().catch(()=>{});}}
 async function aiSchedule(){if(aiServiceTimer){clearInterval(aiServiceTimer);aiServiceTimer=null;}if(!activeProject)return;const settings=await aiServiceConfig.read(aiRoot());if(settings.enabled&&settings.mode==='vscode'){aiServiceTimer=setInterval(()=>{if(!aiServiceBusy)aiRunOnce().catch(e=>report('AI hourly service: '+e.message));},settings.interval*60000);aiServiceTimer.unref?.();}}
 const confluenceSourceConflictNotices=new Map();
+
+const activityWrites=new Set();
+const activityQueueKey=id=>'atgvAssist.activityQueue.'+id;
+async function flushProjectActivity(projectId){
+ if(activityWrites.has(projectId)||openingOffline||activeProject?.id!==projectId)return;
+ activityWrites.add(projectId);
+ try{
+  const config=effectiveConfig(activeProject);
+  if(!config.get('confluence.spaceKey')||!config.get('jira.projectKey'))return;
+  const token=await getAtlassianToken(activeProject);if(!token)return;
+  const service=new ProjectActivitySync({config,token,project:config.get('jira.projectKey')});
+  for(let n=0;n<10&&activeProject?.id===projectId;n++){
+   const batch=(context.workspaceState.get(activityQueueKey(projectId),[])||[]).slice(0,50);
+   if(!batch.length)break;
+   await service.appendMany(batch);
+   const current=context.workspaceState.get(activityQueueKey(projectId),[])||[];
+   await context.workspaceState.update(activityQueueKey(projectId),current.slice(batch.length));
+  }
+ }catch(error){report('Confluence project activity pending: '+String(error.message||error).slice(0,200));}
+ finally{activityWrites.delete(projectId);}
+}
+function queueProjectActivity(events){
+ const id=activeProject?.id;
+ if(!id||!Array.isArray(events)||!events.length)return;
+ void (async()=>{
+  const current=context.workspaceState.get(activityQueueKey(id),[])||[];
+  await context.workspaceState.update(activityQueueKey(id),[...current,...events].slice(-450));
+  await flushProjectActivity(id);
+ })().catch(error=>report('Project activity local queue: '+String(error.message||error).slice(0,180)));
+}
+function queueBRActivity(register){
+ queueProjectActivity((register?.brs||[]).filter(br=>/^BR-[0-9]{1,8}$/.test(String(br?.id||''))).slice(0,55)
+ .map(br=>({type:'br_changed',subject:br.id,status:String(br.status||'draft'),
+ title:String(br.title||''),revision:String(br.updatedAt||br.draftSavedAt||br.approvedAt||register.revision||''),
+ role:'business-analyst'})));
+}
+async function liveProjectActivity(projectId){
+ if(openingOffline||activeProject?.id!==projectId)return null;
+ try{
+  const config=effectiveConfig(activeProject);
+  if(!config.get('jira.projectKey'))return null;
+  const token=await getAtlassianToken(activeProject);if(!token)return null;
+  return await new ProjectActivitySync({config,token,project:config.get('jira.projectKey')}).awareness();
+ }catch(error){report('Project activity read unavailable: '+String(error.message||error).slice(0,160));return null;}
+}
+
 async function syncConfluenceSourceVault(projectId,reason='scheduled'){
  if(sourceVaultBusy||openingOffline||!registry||activeProject?.id!==projectId)return {skipped:'busy, offline, or project changed'};
  sourceVaultBusy=true;
@@ -1089,7 +1136,8 @@ async function activateProject(id){
   // Uploaded source originals and their project recovery manifest always sync
   // with the configured Confluence space, independent of Markdown auto-sync.
   if(!openingOffline){
-   sourceVaultTimer=setInterval(()=>{if(activeProject?.id===project.id)void syncConfluenceSourceVault(project.id,'periodic').catch(e=>report('Confluence source vault retry: '+e.message));},300000);
+   void flushProjectActivity(project.id);
+   sourceVaultTimer=setInterval(()=>{if(activeProject?.id===project.id){void syncConfluenceSourceVault(project.id,'periodic').catch(e=>report('Confluence source vault retry: '+e.message));void flushProjectActivity(project.id);}},300000);
    sourceVaultTimer.unref?.();
    void syncConfluenceSourceVault(project.id,'project-open').catch(async error=>{
     report('Confluence source recovery deferred: '+String(error.message||error));
@@ -3303,6 +3351,7 @@ async function generateBusinessRequirements(options={}){
   const updated=await brWorkflow.generated(registry,activeProject.id,register.revision,{discoveryRevision:saved.revision,requirements:proposal,riskAccepted:false,actor:await verifiedBAActor()});
   await recordBAProcess({stage:'generate',action:'source-only-simple-br',status:'needs-review',details:'Deterministic source-only draft generated; acceptance criteria not verified. Jira publication still requires BR approval.'});
   await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
+  queueBRActivity(updated);
   await notice('Simple BR draft created. Review and approve before publishing Jira Epic, Stories and Tasks. AI checks were skipped; no tests were run.');
   return;
  }
@@ -3396,6 +3445,7 @@ async function generateBusinessRequirements(options={}){
  const currentSaved=await discovery.load(registry,activeProject.id);if(currentSaved.revision!==saved.revision)throw Error('Discovery changed while generating BRs. Retry.');
  const updated=await brWorkflow.generated(registry,activeProject.id,register.revision,{discoveryRevision:saved.revision,requirements:proposed,riskAccepted,targetBrIds:focused,actor:await verifiedBAActor()});
  await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
+ queueBRActivity(updated);
  await notice('Generated '+proposed.length+' editable BR drafts. Review and approve each before Jira sync.');
 }
 async function verifyRoleDocumentImpactTarget(roleId,taskId,brId){
@@ -5356,7 +5406,7 @@ async function handleDashboardMessage(msg){
         const fresh=await collectDeveloperCompletion(msg.key,msg.requiredTypes,msg.accepted===true);
         if(!fresh.evaluation.ready||fresh.evaluation.revision!==details.evaluation.revision)throw Error('Jira, Git, or review evidence changed during confirmation. Verify again.');
         const value=await publishDeveloperCompletion(fresh);
-        await dashboard?.webview.postMessage({type:'developerDeliveryCompleted',projectId:activeProject.id,value});break;
+        await dashboard?.webview.postMessage({type:'developerDeliveryCompleted',projectId:activeProject.id,value});queueProjectActivity([{type:'development_completed',subject:details.key,status:'done',title:'Development completed',revision:String(details.evaluation.revision||''),role:'software-developer'}]);break;
       }
       case 'uxFrameworkRead':{
         requireOpened();const key=msg.key?developerArtifacts.safeKey(msg.key):'';
@@ -6618,6 +6668,7 @@ async function handleDashboardMessage(msg){
         local[key]={branch:result.branch,baseSha:result.baseSha||'',createdAt:new Date().toISOString()};
         await context.workspaceState.update('atgvAssist.developerStories.'+activeProject.id,local);
         await dashboard?.webview.postMessage({type:'developerBranch',value:{...result,key,summary}});
+        queueProjectActivity([{type:'development_started',subject:key,status:'started',title:summary,revision:result.branch,role:'software-developer'}]);
         const prompt=`Act as a senior developer. Start implementing Jira ${key} for technology stack ${stackId}. Produce a practical development proposal with exact file paths, code examples for key changes and unit tests, plus a sequence of small commits. The draft must be suitable for developer review, never claim files were written or tests passed. Summarize security and integration implications. Jira summary: ${summary}. Jira requirement: ${textFromAdf(issue.fields?.description||'').slice(0,14000)}. Repository branch: ${result.branch}. No existing source code was provided, so clearly mark assumptions and do not invent file contents.`;
         const answer=await aiAnswer(target,prompt,28000);
         await dashboard?.webview.postMessage({type:'devCopilotAI',value:{key,action:'start',text:String(answer).slice(0,28000),model:target.label,branch:result.branch}});
@@ -6675,7 +6726,7 @@ async function handleDashboardMessage(msg){
         const target=available.find(t=>t.id===String(msg.transitionId));if(!target)throw Error('Select a valid transition.');
         const yes=await uiWarning(`Transition Jira ${key} to ${target.to} using ${target.name}?`,{modal:true},'Update Jira');if(yes!=='Update Jira')break;
         const result=await jiraMove(effectiveConfig(activeProject),token,key,msg.transitionId,msg.expectedUpdated);
-        await dashboard?.webview.postMessage({type:'developerJiraAction',value:result});await notice('Jira moved: '+key+' → '+result.status);break;
+        await dashboard?.webview.postMessage({type:'developerJiraAction',value:result});queueProjectActivity([{type:'jira_status_changed',subject:key,status:result.status,title:'Jira task transitioned',revision:String(msg.expectedUpdated||''),role:'software-developer'}]);await notice('Jira moved: '+key+' → '+result.status);break;
       }
       case 'devPush':{
         requireOpened();require('../../architect-stack-approval').requireDeveloperApproval(activeProject);requireOnline();const folder=context.workspaceState.get('atgvAssist.localRepo.'+activeProject.id);if(!folder)throw Error('Choose a repository first.');
@@ -8189,7 +8240,7 @@ async function handleDashboardMessage(msg){
       }
       case 'brEdit':{
         requireOpened();await requireBAOwner('ba-br-'+msg.brId);approvedJiraPreviewRevision=null;const updated=await brWorkflow.edit(registry,activeProject.id,msg.revision,{brId:msg.brId,content:msg.content,actor:await verifiedBAActor()});
-        await dashboard?.webview.postMessage({type:'brUpdated',register:updated});break;
+        await dashboard?.webview.postMessage({type:'brUpdated',register:updated});queueBRActivity(updated);break;
       }
       case 'brBeginRevision':{
         requireOpened();const current=await brWorkflow.load(registry,activeProject.id);
@@ -8201,7 +8252,7 @@ async function handleDashboardMessage(msg){
         if(confirmation!=='Create Revision')break;
         approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;
         const updated=await brWorkflow.beginRevision(registry,activeProject.id,current.revision,{brId:target.id,actor:await verifiedBAActor()});
-        await dashboard?.webview.postMessage({type:'brUpdated',register:updated});await dashboard?.webview.postMessage({type:'brRevisionCreated',brId:target.id});break;
+        await dashboard?.webview.postMessage({type:'brUpdated',register:updated});queueBRActivity(updated);await dashboard?.webview.postMessage({type:'brRevisionCreated',brId:target.id});break;
       }
       case 'brSaveAndApprove':{
         requireOpened();await requireBAOwner('ba-br-'+msg.brId);
@@ -8239,7 +8290,7 @@ async function handleDashboardMessage(msg){
         if(yes!=='Approve BR'){await dashboard?.webview.postMessage({type:'baProgress',done:true});break;}
         const actor=await verifiedBAActor();
         approvedJiraPreviewRevision=null;const roles=await getRoleSettings(registry,activeProject.id);const updated=await brWorkflow.approve(registry,activeProject.id,msg.revision,{brId:msg.brId,actor,requireBusinessOwner:roles.enabled.includes('business-owner')});
-        await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
+        await dashboard?.webview.postMessage({type:'brUpdated',register:updated});queueBRActivity(updated);
         // Automatically stage the next blueprint impact assessment on approval.
         // Actual AI transfer requires explicit user consent.
         await publishBlueprintState();break;
@@ -9209,16 +9260,16 @@ async function handleDashboardMessage(msg){
               if(activeProject?.id!==projectId||store!==projectKnowledge)
                 throw Error('The active project changed. Retry your question.');
               const rag=myWorkRag.retrieve(projectKnowledge,msg.message,cfg().get('rag.maxChunks',5));
+              const activity=await liveProjectActivity(projectId);
+              const shared=!!(activity?.confluenceAvailable||activity?.jiraAvailable);
               const target=await activeAiTarget();
-              if(rag.sources.length){
-                const consent=await askAiSendConsent('Send '+rag.sources.length+
-                  ' excerpts from this project Knowledge & RAG index to '+target.label+
-                  ' for this read-only My Work chat response?');
-                if(!consent)return 'Sharing project knowledge was cancelled. No indexed excerpts were sent.';
+              if(rag.sources.length||shared){
+                const consent=await askAiSendConsent('Send '+rag.sources.length+' RAG excerpts and '+(shared?'live shared project status':'no live project status')+' to '+target.label+' for this read-only response?');
+                if(!consent)return 'Sharing project context was cancelled. No project evidence was sent.';
               }
               if(activeProject?.id!==projectId||store!==projectKnowledge)
                 throw Error('The active project changed. Retry your question.');
-              const result=await aiAnswer(target,prompt,7000,{system:rag.system});
+              const result=await aiAnswer(target,prompt,7000,{system:rag.system+'\n\n'+(activity?activityContextText(activity):'Live project activity unavailable; do not invent team progress.')});
               retrieved=rag.sources;
               return result;
             }
@@ -9266,6 +9317,8 @@ async function handleDashboardMessage(msg){
           roleId==='ux-designer'?'Open UI/UX Work':
           roleId==='software-developer'?'Open Development Work':
           roleId==='project-manager'?'Open Project Jira Work':'Open My Work';
+        const activity=await liveProjectActivity(projectId);
+        const sharedNext=roleId==='business-analyst'&&activity?.incompleteBRs?.length?'Resume '+activity.incompleteBRs[0].subject+' ('+activity.incompleteBRs[0].status+').':roleId==='project-manager'&&activity?.inProgress?.length?'Review active Jira '+activity.inProgress[0].key+' and its dependencies.':'';
         const groundedNext=roleId==='business-analyst'&&pendingRequirement
           ?'Continue '+pendingRequirement+' and review its next requirements milestone.':
           (roleId==='software-developer'||roleId==='ux-designer')&&pendingIssue
@@ -9283,7 +9336,7 @@ async function handleDashboardMessage(msg){
             'Never invent completion, Jira permissions, approvals, blockers, ticket IDs or results. '+
             'Do not give commands or promise actions have been executed. No markdown and no JSON.\nWORK SUMMARY: '+
             JSON.stringify(evidence);
-          const text=await aiAnswer(target,prompt,850);
+          const text=sharedNext||await aiAnswer(target,prompt,850);
           message=clean(text.replace(/\s+/g,' '),420);
           if(!message)throw Error('Empty AI suggestion');
         }catch(failure){
