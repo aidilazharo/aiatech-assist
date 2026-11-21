@@ -100,3 +100,45 @@ test('new errors are checked after an earlier empty noon scan',async()=>{
   assert.equal((await m.readLogs(path.join(root,'.atgv','src','error-logs'))).length,0);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+test('verified automatic maintenance PR is merged on idle scan after CI passes',async()=>{
+ const root=await mkdtemp(path.join(os.tmpdir(),'atgv-auto-merge-')),s=state(),mock=api();
+ try{
+  let merged=0;
+  const manager={store:{list:async()=>[
+   {id:'ready-pr',origin:'automatic',target:'extension',status:'published',repositoryUrl:'https://github.com/aidilazharo/aiatech-assist'},
+   {id:'unrelated',origin:'user',target:'extension',status:'published',repositoryUrl:'https://github.com/aidilazharo/aiatech-assist'}]},
+   merge:async(id,{token})=>{assert.equal(id,'ready-pr');assert.equal(token,'dummy-secret-not-real');merged++;return {status:'merged'};}};
+  const data=await m.runWindow({workspace:root,manager,
+    getRepository:async()=> 'https://github.com/aidilazharo/aiatech-assist',
+    getToken:async()=> 'dummy-secret-not-real',
+    isIdle:async()=>true,globalState:s,
+    zone:'Asia/Kuala_Lumpur',now:()=>new Date('2026-11-21T04:15:00Z'),request:mock.request});
+  assert.equal(data.status,'empty');
+  assert.equal(data.merged,1);
+  assert.equal(data.awaitingChecks,0);
+  assert.equal(merged,1);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+test('pending CI blocks auto-merge and delays the next version, preserving error logs',async()=>{
+ const root=await mkdtemp(path.join(os.tmpdir(),'atgv-auto-merge-')),s=state(),mock=api();
+ try{
+  const layout=await m.ensureLayout(root);
+  await m.writeLog(root,{target:'extension',category:'error',title:'Fix other bug',observed:'A new failing check'});
+  let reviewed=0;
+  const manager={store:{list:async()=>[
+   {id:'pending-pr',origin:'automatic',target:'extension',status:'published',repositoryUrl:'https://github.com/aidilazharo/aiatech-assist'}],
+   add:async()=>{throw Error('New version must not start until PR merged');}},
+   merge:async()=>{reviewed++;throw Error('GitHub checks are still running.');}};
+  const result=await m.runWindow({workspace:root,manager,
+    getRepository:async()=> 'https://github.com/aidilazharo/aiatech-assist',
+    getToken:async()=> 'dummy-secret-not-real',isIdle:async()=>true,
+    globalState:s,zone:'Asia/Kuala_Lumpur',
+    now:()=>new Date('2026-11-21T04:15:00Z'),request:mock.request});
+  assert.equal(result.status,'pending-pr');
+  assert.equal(result.merged,0);
+  assert.equal(result.awaitingChecks,1);
+  assert.equal(reviewed,1);
+  assert.equal((await m.readLogs(layout.logs)).length,1);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
