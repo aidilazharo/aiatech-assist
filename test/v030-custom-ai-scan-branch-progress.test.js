@@ -121,3 +121,17 @@ test('Host branch and AI scan handlers require confirmation, SHA pinning and nev
  assert.match(a,/percent:15/);
  assert.doesNotMatch(a,/git\s+push|pushStory|publishBootstrap/);
 });
+
+test('Custom Stack displays verified scan findings before optional AI and warns on silent host',()=>{
+ const ui=source('media/start.js'),host=source('src/lib/runtime/extension-runtime.js');
+ const scan=host.slice(host.indexOf("case 'architectCustomScan':{"),host.indexOf("case 'architectCustomPull':{"));
+ assert.ok(scan.indexOf("type:'architectCustomScanResult'")>=0);
+ assert.ok(scan.indexOf("type:'architectCustomScanResult'")<scan.indexOf('const raw=await aiAnswer('));
+ assert.match(scan,/type:'architectCustomAiReviewResult'/);
+ assert.match(scan,/scanId,percent,message/);
+ assert.match(ui,/architectCustomScanPending=true/);
+ assert.match(ui,/scanId:\+\+architectCustomScanSequence/);
+ assert.match(ui,/No extension-host progress response/);
+ assert.match(ui,/m\.type==='architectCustomAiReviewResult'/);
+ assert.match(ui,/architectCustomScanPending=false/);
+});
