@@ -959,8 +959,10 @@ async function idleMaintenanceTick(){
   if(result.status==='disabled-read-only'&&!idleImprovementNotified){
    idleImprovementNotified=true;
    void uiWarning('ATGV automatic improvement disabled: saved GitHub PAT has read-only access. All error logs were preserved. Update the PAT to recheck permissions.');
-  }else if(!['outside-window','empty','already-checked','busy','unavailable','credentials-unavailable','disabled-read-only'].includes(result.status))
-   report('Idle improvement: '+result.status+'; matched reports '+(result.duplicates||0)+'; PRs '+(result.prs||0));
+  }else if(!['outside-window','already-checked','busy','unavailable','credentials-unavailable','disabled-read-only'].includes(result.status) &&
+    (result.status!=='empty'||result.merged||result.awaitingChecks))
+   report('Idle improvement: '+result.status+'; matched reports '+(result.duplicates||0)+'; PRs '+(result.prs||0)+
+    '; merged '+(result.merged||0)+'; pending CI '+(result.awaitingChecks||0));
  }catch(error){report('Idle improvement stopped; logs retained: '+String(error.message||error).slice(0,350));}
  finally{idleImprovementBusy=false;}
 }
