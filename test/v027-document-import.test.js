@@ -79,7 +79,7 @@ test('UI exposes controlled import and review, prevents automatic overwrite and 
  assert.match(js,/area\.maxLength=100000/);assert.match(js,/check\.checked=!existing/);
  assert.match(js,/send\('importDiscovery',\{roleId:selectedRole\}\)/);assert.match(js,/save 12 questions/);
  assert.match(html,/askAiSendConsent\(/);assert.match(html,/aiSendConsentResponse/);
- const pkg=require('../package.json');assert.equal(pkg.atgvDisplayVersion,pkg.version.split('.').map((n,i)=>i===2?String(Number(n)).padStart(2,'0'):n).join('.'));
+ const pkg=require('../package.json');assert.equal(pkg.atgvDisplayVersion,pkg.version);
 });
 test('macOS extraction can use the platform PDFKit fallback if Poppler is missing',async()=>{
  let calls=0;
