@@ -161,6 +161,7 @@
   setBusy(false);
   const reply=addMessage('assistant',msg.text||'No response received.',true);
   const target=String(msg.suggestedRoleId||'');
+  const handoffRequest=submittedText;
   if(/^[a-z][a-z0-9-]{1,78}$/.test(target)&&msg.suggestedRoleName){
     const enabled=msg.suggestedRoleEnabled===true;
     const action=document.createElement('button');
