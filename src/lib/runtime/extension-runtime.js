@@ -9316,13 +9316,40 @@ async function handleDashboardMessage(msg){
         const incomplete=tasks.find(task=>!task.completed)?.activity||'';
         const pendingIssue=assigned.find(item=>!/^(done|closed|resolved)$/i.test(item.status))?.jiraKey||'';
         const pendingRequirement=requirements.find(item=>!/^(approved|published|complete|completed)$/i.test(item.status))?.id||'';
-        const actionLabel=roleId==='business-analyst'?'Open Business Requirements':
-          roleId==='solution-architect'?'Open Architecture Work':
-          roleId==='ux-designer'?'Open UI/UX Work':
-          roleId==='software-developer'?'Open Development Work':
-          roleId==='project-manager'?'Open Project Jira Work':'Open My Work';
+        const roleActionLabels={
+          'business-analyst':'Resume Business Requirements',
+          'solution-architect':'Review Architecture',
+          'ux-designer':'Continue UI/UX Design',
+          'software-developer':'Continue Development',
+          'project-manager':'Review Project Delivery',
+          'qa-engineer':'Review QA Work',
+          'product-owner':'Review Product Backlog',
+          'scrum-master':'Review Sprint Work',
+          'security-engineer':'Review Security Work',
+          'data-engineer':'Review Data Work',
+          'uat-tester':'Review UAT Work',
+          'technical-writer':'Review Documentation',
+          'operations-support':'Review Operations',
+          'release-manager':'Review Release Readiness',
+          'technical-lead':'Review Technical Work',
+          'business-owner':'Review Approval Work',
+          'ai-ml-engineer':'Review AI/ML Work',
+          'compliance-officer':'Review Compliance'
+        };
+        const actionLabel=roleActionLabels[roleId]||'Open Role Workspace';
         const activity=await liveProjectActivity(projectId);
-        const sharedNext=roleId==='business-analyst'&&activity?.incompleteBRs?.length?'Resume '+activity.incompleteBRs[0].subject+' ('+activity.incompleteBRs[0].status+').':roleId==='project-manager'&&activity?.inProgress?.length?'Review active Jira '+activity.inProgress[0].key+' and its dependencies.':'';
+        // Project-wide evidence comes from the live Confluence/Jira activity registry,
+        // not from the user's untrusted webview snapshot. Never treat missing data as done.
+        const sharedNext=roleId==='business-analyst'&&activity?.incompleteBRs?.length
+          ?'Resume '+activity.incompleteBRs[0].subject+' ('+activity.incompleteBRs[0].status+').':
+          roleId==='project-manager'&&activity?.inProgress?.length
+          ?'Review active Jira '+activity.inProgress[0].key+' and its dependencies.':
+          roleId==='software-developer'&&activity?.inProgress?.some(x=>x.developmentConfirmed)
+          ?'Review active development on '+activity.inProgress.find(x=>x.developmentConfirmed).key+' before starting another Jira task.':
+          roleId==='qa-engineer'&&activity?.inProgress?.length
+          ?'Check Acceptance Criteria and test coverage for '+activity.inProgress[0].key+'.':
+          roleId==='solution-architect'&&activity?.incompleteBRs?.length
+          ?'Review architecture impact of unfinished '+activity.incompleteBRs[0].subject+'.':'';
         const groundedNext=roleId==='business-analyst'&&pendingRequirement
           ?'Continue '+pendingRequirement+' and review its next requirements milestone.':
           (roleId==='software-developer'||roleId==='ux-designer')&&pendingIssue
