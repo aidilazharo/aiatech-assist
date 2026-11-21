@@ -6619,6 +6619,20 @@ $('baCRForm').addEventListener('submit',e=>{
  if(!paths.length){$('baCRAttention').textContent='No verified started issue is eligible. Resolve Jira history errors first.';return;}
  send('brChangeRequestCreate',{revision:brState.revision,paths,reason});
 });
+// Verified BA auto-claim is idempotent for each unassigned draft batch.
+// The host confirms live identity, ownership revision and current BR status.
+const baClaimBatches=new Set();
+function maybeAutoAssignBARequirements(){
+ if(!workspaceOpened||!activeId||selectedRole!=='business-analyst'||!['myWork','discovery'].includes(view)||
+    !baOwnerState?.me||baOwnerState.cached||baOwnerState.scope==='local')return;
+ const ids=(brState?.brs||[]).filter(br=>br.status==='draft'&&!br.archivedFromRestart&&
+   !baOwner('ba-br-'+br.id).ownerId&&!baOwner('ba-br-'+br.id).pending).map(br=>br.id).slice(0,100);
+ if(!ids.length)return;
+ const token=activeId+'|'+baOwnerState.me+'|'+ids.join(',');
+ if(baClaimBatches.has(token))return;
+ baClaimBatches.add(token);
+ send('baAutoClaimUnassigned',{projectId:activeId,roleId:'business-analyst',brIds:ids});
+}
 function renderBRs(){
  renderBAWorkDashboard();
  if(brFilterProjectId!==activeId){brActiveFilter='all';brFilterProjectId=activeId;}
@@ -6706,6 +6720,7 @@ function renderBRs(){
   root.append(card);
  }
  renderDiscoverySummary();renderChangeRequests();decorateBAActionButtons();
+ maybeAutoAssignBARequirements();
 }
 function brLine(ops,text,attributes){
  const value=String(text??'');const parts=value.split(/\r?\n/);
@@ -7240,6 +7255,10 @@ window.addEventListener('message',event=>{
   if(m.type==='knowledgeSyncProgress'){$('knowledgeSyncStatus').textContent=m.message||'Syncing…';$('overviewKnowledgeStatus').textContent=m.message||'Syncing…';return;}
   if(m.type==='knowledgeSyncResult'){$('knowledgeSync').disabled=false;$('overviewKnowledgeSync').disabled=false;renderKnowledgeState(m.summary||{});$('knowledgeSyncStatus').textContent=m.message+(m.errors?.length?' · '+m.errors.map(e=>e.source+': '+e.message).join(' · '):'');$('overviewKnowledgeStatus').textContent=$('knowledgeSyncStatus').textContent;return;}
   if(m.type==='baOwners'){if(m.projectId===activeId){baOwnerState=m;renderBAOwner();renderBRs();}return;}
+ if(m.type==='baAutoClaimResult'&&m.projectId===activeId){
+  if(m.failed?.length)status('Some unassigned BR drafts could not be auto-assigned: '+m.failed.slice(0,3).join('; '),true);
+  return;
+ }
   if(m.type==='baReviewConfirmResult'){
     // Cancelled consent, failed Jira verification or a saved-answer mismatch
     // must not strand the entire BA interface in a permanent busy state.
