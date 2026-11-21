@@ -11,13 +11,13 @@ const clients=require('../src/clients');
 const root=path.join(__dirname,'..');
 const read=file=>fs.readFileSync(path.join(root,file),'utf8');
 
-test('Confluence Cloud site base URL is canonicalized to /wiki even when Jira uses another Cloud site',()=>{
- const data=setup.validate({...setup.DEFAULTS,jiraUrl:'https://aidilazharo.atlassian.net',confluenceUrl:'https://aiamy-jira-azure.atlassian.net'});
- assert.equal(data.confluenceUrl,'https://aiamy-jira-azure.atlassian.net/wiki');
- const data2=setup.validate({...data,confluenceUrl:'https://aiamy-jira-azure.atlassian.net/wiki/'});
- assert.equal(data2.confluenceUrl,data.confluenceUrl);
+test('Start derives Confluence /wiki from the unified Atlassian site URL',()=>{
+ const data=setup.validate({...setup.DEFAULTS,jiraUrl:'https://aidilazharo.atlassian.net'});
+ assert.equal(data.jiraUrl,'https://aidilazharo.atlassian.net');
+ assert.equal(data.confluenceUrl,'https://aidilazharo.atlassian.net/wiki');
+ assert.equal(data.githubUrl,'https://github.com/aiamalaysia');
  for(const bad of ['https://other.example.com/wiki','https://other.atlassian.net/notwiki','http://other.atlassian.net/wiki']){
-  assert.throws(()=>setup.validate({...data,confluenceUrl:bad}));
+  assert.throws(()=>setup.validate({...data,jiraUrl:bad}));
  }
 });
 test('Existing extension settings support separate trusted Atlassian Cloud domains without allowing arbitrary hosts',()=>{
@@ -89,12 +89,12 @@ test('Start connections are compact two-per-row without the introductory paragra
  assert.doesNotMatch(form,/Suggested AIA values are provided below|Existing saved settings are retained|Jira and Confluence use the same Atlassian account and API token/);
  const fields=[...form.matchAll(/<div class="field(?: full)?"><label for="([^"]+)"/g)].map(x=>x[1]);
  assert.deepEqual(fields,[
-  'startupJiraUrl','startupConfluenceUrl',
-  'startupEmail','startupAtlassianToken',
-  'startupGithubUrl','startupGithubToken',
+  'startupJiraUrl','startupEmail','startupAtlassianToken',
+  'startupGithubUrl','startupProjectRepository','startupGithubToken',
  ]);
  assert.doesNotMatch(form,/id="startupLibraryZipUpload"|id="startupLibraryZipStatus"/,'Start hides Library UI');
- assert.doesNotMatch(form,/id="startupProjectRepo"|id="startupLibraryRepo"/);
+ assert.match(form,/id="startupProjectRepository"/);
+ assert.doesNotMatch(form,/id="startupLibraryRepo"/);
  assert.doesNotMatch(form,/class="field full"/);
  assert.match(css,/#startupConnectionForm \.atgv-startup-connection-grid\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
  assert.match(css,/@media\(max-width:740px\)\{#startupConnectionForm \.atgv-startup-connection-grid\{grid-template-columns:minmax\(0,1fr\)/);
