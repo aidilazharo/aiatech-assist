@@ -40,7 +40,7 @@ test('the global warning, ownership route and Confluence conflict protections ar
  assert.match(source,/function notifyTop\(message,/);
  assert.match(source,/topNoticeRoute\(content,error,route\)/);
  assert.match(source,/View Ownership/);
- assert.match(source,/if\(next==='myWork'\)target\.querySelector\('\.atgv-page-feedback'\)\?\.remove\(\)/);
+ assert.match(source,/if\(next==='myWork'\)target\.querySelector\?\.\('\.atgv-page-feedback'\)\?\.remove\(\)/);
  assert.match(html,/id="topNotification"/);
  assert.match(html,/id="myWorkView"/);
  assert.match(html,/id="atgvMyWorkAiChatForm"/);
