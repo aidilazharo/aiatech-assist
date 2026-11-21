@@ -91,7 +91,7 @@ test('saved multi-section report retains corrections beyond the aggregate previe
 });
 test('download filename is Windows-safe and has a TXT extension',()=>{
  assert.equal(report.filename('TC','GATE Project Initiation and Project Approval BRD Revised v1.1.docx'),'ATGV-Preflight-Analyst-TC-GATE-Project-Initiation-and-Project-Approval-BRD-Revised-v1.1.txt');
- assert.match(report.filename('T|C','../bad<name>?.pdf'),/^ATGV-Preflight-Analyst-T-C-bad-name-.txt$|^ATGV-Preflight-T-C-bad-name.txt$/);
+ assert.match(report.filename('T|C','../bad<name>?.pdf'),/^ATGV-Preflight-Analyst-T-C-bad-name-.txt$|^ATGV-Preflight-Analyst-T-C-bad-name.txt$/);
 });
 
 test('BA panel exposes TXT download; host captures checked sections and exports via VS Code',()=>{
