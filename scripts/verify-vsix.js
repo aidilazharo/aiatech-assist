@@ -37,7 +37,7 @@ async function main() {
         assert.ok(packageXml.includes('Path="extension/README.md"'));
         assert.equal(fs.readFileSync(path.join(root, 'README.md'), 'utf8').trim(), `**Version: ${manifest.atgvDisplayVersion}**\n\n**Author:** [Muhamad Aidil Azhar Salim](mailto:muhamadaidilazhar.salim@aia.com)`);
         assert.ok(!fs.existsSync(path.join(root, 'CHANGELOG.md')));
-        assert.equal(manifest.atgvDisplayVersion, manifest.version.split('.').map((n, i) => i === 2 ? String(Number(n)).padStart(2, '0') : n).join('.'));
+        assert.equal(manifest.atgvDisplayVersion, manifest.version);
         const expected = ['atgvAssist.ai', 'atgvAssist.refreshUnifiedArtifacts', 'atgvAssist.reportIssue', 'atgvAssist.reset', 'atgvAssist.restart', 'atgvAssist.start', 'atgvAssist.workspace'];
         assert.deepEqual(manifest.contributes.commands.map(c => c.command).sort(), expected);
         const commands = new Map(), registered = [];
