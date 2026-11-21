@@ -1,16 +1,13 @@
-# ATGV AIATECH Assist v0.0.16
+# ATGV AIATECH Assist v0.0.17
 
 ## Changes
 
-- Relocate the reactive AI waveform into the dedicated My Work top strip with a red bottom border.
-- Change the multicolor waveform to softly fading red/crimson animation, with a subtle idle pulse and support for reduced-motion preferences.
-- Reorganize My Work into three vertical zones: fixed AI waveform, independently scrolling AI results and conversation, and a bottom-anchored chat composer.
-- Scroll new and typed responses inside the center results pane instead of scrolling the entire page.
-- Preserve existing role-aware chat, project RAG, Confluence/Jira activity awareness, AI suggestions and navigation for all 18 roles.
-- Scope the fullscreen chat layout only to My Work, leaving Role Workspace and other ATGV pages unchanged.
-- Add responsive narrow/short viewport treatment, keyboard focus styles, and associated UI regression coverage.
-- Keep .memory guidance in source Git only and exclude it from VSIX and release archives.
+- Remove the four repository URL rows from ATGV: Start: Extension (required), Library (required), Extension releases (optional), and Library releases (optional).
+- Remove the now-unused startup repository list renderer, empty preview container, and related styling.
+- Preserve the GitHub organization and Project Repository input fields, the dynamic preview of the selected project's repository URL, PAT settings, connection permissions, and underlying extension/library synchronization.
+- Keep all project data, Jira/Confluence connections, developer workflows and AI chat behavior unchanged.
+- Add a regression test for the absent listing and for valid/invalid project repository previews.
 
-## Verification
+## Release validation
 
-Run Node regression tests, UI style checks, Windows reset/startup checks, and VSIX build/archive validation in GitHub Actions. Merge PR only when all required checks pass, then publish via the main branch release workflow.
+Run Node regression suite, UI checks, Windows verification and VSIX/archive checks on the exact PR head before merging. Publish verified VSIX, checksum and source ZIP from main after the required checks succeed. Keep .memory in Git development source only, excluded from distribution packages.
