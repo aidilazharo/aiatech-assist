@@ -2304,3 +2304,20 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 .atgv-workspace-breadcrumbs .atgv-breadcrumb-separator{color:var(--vscode-descriptionForeground,#9299a8);opacity:.85;user-select:none;font-weight:450}
 #discoveryView .modal-card > .atgv-workspace-breadcrumbs{margin:0 0 12px}
 @media(max-width:670px){.atgv-workspace-breadcrumbs{font-size:10px;gap:5px;margin-bottom:9px}}
+
+/* ATGV right content-pane black surface v0.0.7 */
+#contentPane.content-pane {
+  background:#000!important;
+  color:#f6f7fa;
+  --atgv-surface:#111419;
+  --atgv-line:#343b48;
+  --vscode-foreground:#f6f7fa;
+  --vscode-descriptionForeground:#b9c1ce;
+  --vscode-editor-background:#0b0e13;
+  --vscode-editorWidget-background:#141922;
+  --vscode-input-background:#141922;
+  --vscode-input-foreground:#f6f7fa;
+  --vscode-panel-border:#343b48;
+  --vscode-list-hoverBackground:#202733;
+}
+#contentPane.content-pane > main{color:inherit}
