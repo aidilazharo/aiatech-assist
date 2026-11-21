@@ -9,7 +9,7 @@ semver=pkg['version']
 parts=semver.split('.')
 if len(parts)!=3 or any(not x.isdigit() or str(int(x))!=x or not 0<=int(x)<=99 for x in parts):
     raise SystemExit('Invalid VSIX version; each SemVer part must be an integer 0..99 with no leading zeros')
-expected=f'{parts[0]}.{int(parts[1])}.{int(parts[2]):02d}'
+expected=semver
 if pkg.get('atgvDisplayVersion')!=expected:
     raise SystemExit('Display version does not match normalized SemVer version')
 xml=f'''<?xml version="1.0" encoding="utf-8"?>
