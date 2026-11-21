@@ -7998,8 +7998,6 @@ function architectCustomDrawRuntime(){
   state='working';title=architectCustomOperation||'WORKING';
   description=/confirm/i.test(title)?'Check the VS Code confirmation dialog; no application script runs until you approve.':
    'ATGV is processing this action. See Technology Stack progress above.';
- }else if(architectCustomLastError){
-  state='failed';title='LAST ACTION FAILED';description=architectCustomLastError;
  }else if(runtime?.checked&&runtime.running){
   const reachable=runtime.reachable;
   state=reachable===false?'working':'running';
@@ -8008,6 +8006,10 @@ function architectCustomDrawRuntime(){
    (runtime.pid?' · PID '+runtime.pid:'')+
    (runtime.previewUrl?' · '+runtime.previewUrl:'')+
    (reachable===false?' · Check logs / localhost health':'');
+ }else if(architectCustomLastError){
+  const cancelled=/cancelled|canceled/i.test(architectCustomLastError);
+  state=cancelled?'stopped':'failed';title=cancelled?'ACTION CANCELLED':'LAST ACTION FAILED';
+  description=architectCustomLastError;
  }else if(runtime?.checked){
   state='stopped';title='APPLICATION NOT RUNNING';
   description=Number.isInteger(runtime.exitCode)?'ATGV process exited with code '+runtime.exitCode+'. Check logs before restarting.':
