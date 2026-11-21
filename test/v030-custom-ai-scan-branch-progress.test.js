@@ -95,13 +95,18 @@ test('Custom Stack progress and branch/action controls are never hidden by the c
  const render=js.slice(js.indexOf("if(stackId==='custom'){",js.indexOf('function renderArchitectRequirements(project){')),js.indexOf("container.classList.toggle('hidden',!stack);",js.indexOf('function renderArchitectRequirements(project){')));
  assert.match(render,/architectCustomProgressPercent/);
  assert.doesNotMatch(render,/style.width='0%'/);
- for(const id of ['architectCustomProgress','architectCustomProgressFill','architectCustomProgressText','architectCustomActions','architectCustomFindings','architectCustomBranch','architectCustomSwitchBranch','architectCustomPull'])
+ // A single progress bar belongs in the Technology Stack header.
+ assert.equal((html.match(/id="architectStackProgress"/g)||[]).length,1);
+ assert.equal((html.match(/id="architectStackProgressFill"/g)||[]).length,1);
+ assert.doesNotMatch(html,/id="architectCustomProgress(?:Fill|Text)?"/);
+ for(const id of ['architectCustomActions','architectCustomFindings','architectCustomBranch','architectCustomSwitchBranch','architectCustomPull'])
   assert.match(html,new RegExp('id="'+id+'"'));
  assert.match(js,/architectCustomSetProgress\(100,'Repository analysis \/ preparation complete'\)/);
  assert.match(js,/architectCustomFixBranch/);
  assert.match(js,/architectCustomSwitchBranch/);
  assert.match(js,/if\(m.type==='architectCustomProgress'\)/);
- assert.match(css,/\.atgv-custom-progress-wrap/);
+ assert.doesNotMatch(css,/\.atgv-custom-progress-wrap/);
+ assert.doesNotMatch(js,/\$\('architectCustomProgress(?:Fill|Text)?'\)/);
 });
 test('Host branch and AI scan handlers require confirmation, SHA pinning and never push user project',()=>{
  const src=source('src/lib/runtime/extension-runtime.js');
