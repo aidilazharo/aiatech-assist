@@ -54,6 +54,9 @@ test('stopped and failed processes never enable Open Preview',()=>{
  assert.equal(drawRuntime({runtime:{running:false,exitCode:1}}).previewEnabled,false);
  assert.match(drawRuntime({runtime:{running:false,exitCode:1}}).detail,/exited with code 1/);
  assert.equal(drawRuntime({error:'Dependencies cannot be installed.'}).state,'failed');
+ assert.equal(drawRuntime({error:'Run cancelled by user.'}).title,'ACTION CANCELLED');
+ const live=drawRuntime({error:'Previous run failed',runtime:{running:true,reachable:true,previewUrl:'http://127.0.0.1:5173/'}});
+ assert.equal(live.title,'APPLICATION RUNNING','Live runtime evidence supersedes a stale failure');
 });
 test('single shared progress bar, runtime status controls, and real process verification are wired',()=>{
  assert.equal((html.match(/id="architectStackProgress"/g)||[]).length,1);
