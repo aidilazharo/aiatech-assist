@@ -2,8 +2,8 @@
   "name": "atgv-aiatech-assist",
   "displayName": "ATGV AIATECH Assist",
   "description": "",
-  "version": "0.0.3",
-  "atgvDisplayVersion": "0.0.3",
+  "version": "0.0.4",
+  "atgvDisplayVersion": "0.0.4",
   "publisher": "aia-my",
   "private": true,
   "license": "UNLICENSED",
@@ -177,6 +177,16 @@
           "type": "boolean",
           "default": true,
           "description": "Record slow startup prerequisite scans locally for performance investigation."
+        },
+        "atgvAssist.selfImprovement.autoMaintenanceEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run idle automatic coding improvement within 12:00–12:59 local time when VS Code is active. Tests saved GitHub PAT with real read/write operations and creates tested PRs without auto-merging."
+        },
+        "atgvAssist.selfImprovement.maintenanceTimeZone": {
+          "type": "string",
+          "default": "system",
+          "description": "Time zone for noon-to-1 PM coding maintenance. Use system for the computer's local timezone, or an IANA zone (e.g. Asia/Kuala_Lumpur)."
         }
       }
     }

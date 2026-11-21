@@ -21,6 +21,27 @@ test('local time slot obeys Malaysia noon and UTC difference',()=>{
  assert.equal(m.localSlot(new Date('2026-11-21T05:00:00Z'),'Asia/Kuala_Lumpur').hour,13);
  assert.equal(m.localSlot(new Date('2026-11-21T04:15:00Z'),'UTC').hour,4);
 });
+test('unified .atgv/src/error-logs captures and redacts runtime failures',async()=>{
+ const root=await mkdtemp(path.join(os.tmpdir(),'atgv-errors-'));
+ try{
+  const layout=await m.ensureLayout(root);
+  assert.equal(layout.logs,path.join(root,'.atgv','src','error-logs'));
+  assert.equal(layout.extension,path.join(root,'.atgv','src','extension'));
+  assert.equal(layout.library,path.join(root,'.atgv','src','library'));
+  await m.captureRuntimeError(root,'GitHub','GitHub API failed with token: github_pat_demo_test_token_12345');
+  await m.captureRuntimeError(root,'Jira','Jira request failed: HTTP 403');
+  await m.captureRuntimeError(root,'AI','AI model returned an exception');
+  await m.captureRuntimeError(root,'Developer','Developer tests failed');
+  await m.captureRuntimeError(root,'BA','BR mapping failed');
+  assert.equal((await m.readLogs(layout.logs)).length,5);
+  const names=await readdir(layout.logs);
+  assert.equal(names.length,5);
+  const raws=await Promise.all(names.map(n=>require('node:fs/promises').readFile(path.join(layout.logs,n),'utf8')));
+  assert.ok(raws.some(x=>x.includes('[REDACTED]')));
+  assert.ok(raws.every(x=>!x.includes('github_pat_demo_test_token_12345')));
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
 test('read/write PAT test creates and deletes a probe ref',async()=>{
  const mock=api(),res=await m.probePat(repo,'dummy-secret-not-real',{request:mock.request,random:()=> 'unit-test'});
  assert.equal(res.ok,true);
