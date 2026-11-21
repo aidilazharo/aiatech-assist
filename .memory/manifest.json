@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "kind": "atgv-decision-memory",
+  "version": 1,
+  "scope": "extension",
+  "categories": [
+    {
+      "id": "versioning",
+      "path": ".memory/versioning.json"
+    },
+    {
+      "id": "extension-details",
+      "path": ".memory/extension-details.json"
+    },
+    {
+      "id": "release-management",
+      "path": ".memory/release-management.json"
+    },
+    {
+      "id": "business-requirements",
+      "path": ".memory/business-requirements.json"
+    },
+    {
+      "id": "jira",
+      "path": ".memory/jira.json"
+    },
+    {
+      "id": "confluence",
+      "path": ".memory/confluence.json"
+    },
+    {
+      "id": "solution-architecture",
+      "path": ".memory/solution-architecture.json"
+    },
+    {
+      "id": "technology-stacks",
+      "path": ".memory/technology-stacks.json"
+    },
+    {
+      "id": "ui-ux",
+      "path": ".memory/ui-ux.json"
+    },
+    {
+      "id": "developer",
+      "path": ".memory/developer.json"
+    },
+    {
+      "id": "ai-agents",
+      "path": ".memory/ai-agents.json"
+    },
+    {
+      "id": "workspace",
+      "path": ".memory/workspace.json"
+    },
+    {
+      "id": "security",
+      "path": ".memory/security.json"
+    },
+    {
+      "id": "regression-testing",
+      "path": ".memory/regression-testing.json"
+    }
+  ],
+  "policy": "Curated accepted repository decisions only, never secret data; newer explicit user instructions, safety and human approvals always take precedence."
+}

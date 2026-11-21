@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "category": "versioning",
+  "keywords": [
+    "version",
+    "release",
+    "increment",
+    "semver",
+    "tag",
+    "patch"
+  ],
+  "decisions": [
+    {
+      "id": "VERSION-0001",
+      "status": "accepted",
+      "decision": "Release versions start at 0.0.0, increase by exactly one patch step with carry at 99, and must never exceed 99.99.99. Skips, downgrades and reuse are forbidden."
+    }
+  ],
+  "initialVersion": "0.0.0",
+  "maxVersion": "99.99.99",
+  "strategy": "single-step-base-100-carry"
+}

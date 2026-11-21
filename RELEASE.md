@@ -1,13 +1,13 @@
-# ATGV AIATECH Assist v0.0.0
+# ATGV AIATECH Assist v0.0.1
 
-## Clean release baseline
+## Changes
 
-- Restart extension SemVer at `0.0.0` while preserving extension code, project data contracts, Jira identities, source history and CI checks.
-- Keep a single overwritten `RELEASE.md` for each subsequent extension release.
-- Remove obsolete UI/UX release notes and unused HTML developer stepper preview.
-- Add one-time removal of historical GitHub Releases and their corresponding release tags, excluding the new v0.0.0 baseline release.
-- Preserve required bundled offline parser assets, active media and regression test fixtures.
+- Remove the VS Code extension description; keep it blank unless explicitly requested.
+- Introduce 14 curated AI decision-memory JSON categories and bounded context retrieval.
+- Enforce exact incremental release versions from 0.0.0 to 99.99.99 for all release paths.
+- Include decision memory in the VSIX and trusted library sync.
+- Overwrite the single RELEASE.md on every release.
 
-## Compatibility note
+## Validation
 
-Existing installations using the previous `0.4.x` version line may not automatically upgrade to a numerically lower `0.0.0` build. A manual installation or explicit migration will be required.
+- New regression tests and existing Linux/Windows packaging checks.
