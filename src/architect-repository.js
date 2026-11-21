@@ -88,28 +88,35 @@ async function ensureCustom(state,projectId,developerGit,options={}){
  let existing=await fs.lstat(dest).catch(error=>error.code==='ENOENT'?null:Promise.reject(error));
  if(existing&&(!existing.isDirectory()||existing.isSymbolicLink()))
   throw Error('Project repository destination is not a safe directory; no files were modified.');
- let mode='existing';
+ let mode='existing',checked=null;
  if(existing){
   const entries=await fs.readdir(dest);
   if(entries.length){
-   // An existing valid checkout is read-only at Save Stack. Its content can
-   // only be updated by the separately requested Pull Repository action.
-   const checked=await developerGit.repository(dest).catch(()=>null);
+   // Never clone over or reset a populated folder. When only .git is present,
+   // a verified fast-forward may restore missing tracked working-tree files.
+   checked=await developerGit.repository(dest).catch(()=>null);
    if(!checked)throw Error('Repository folder has existing files but is not a valid Git checkout. Preserve those files and select another folder manually.');
    if(!developerGit.matchesGithubRepo(checked.remote,owner,repoName))
     throw Error('Repository folder has an unexpected GitHub origin. Existing files were preserved.');
+   if(entries.length===1&&entries[0]==='.git'){
+    if(!checked.clean||!/^[a-f0-9]{40}$/i.test(String(checked.sha||'')))
+     throw Error('Git checkout has no verified clean HEAD; no automatic pull attempted.');
+    const safePull=options.pull||require('./architect-custom-pull').pull;
+    const result=await safePull(dest,{expectedSha:checked.sha,owner,name:repoName,driver:developerGit});
+    checked=await developerGit.repository(dest);
+    mode=result.updated?'pulled':'existing';
+   }
   }else mode='cloned';
  }else{
   await fs.mkdir(dest);
   mode='cloned';
  }
- let checked;
  if(mode==='cloned'){
   // cloneConfigured accepts an existing EMPTY destination only for this flow.
   const clone=await developerGit.cloneConfigured(parentReal,owner,repoName,
    options.githubBranch||'',{allowExistingEmpty:true});
   checked=await developerGit.repository(clone.root);
- }else checked=await developerGit.repository(dest);
+ }
  const relative=path.relative(root,checked.root);
  if(!relative||relative.startsWith('..')||path.isAbsolute(relative)||
     !developerGit.matchesGithubRepo(checked.remote,owner,repoName)||
