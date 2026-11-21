@@ -76,6 +76,16 @@ test('normal chat uses selected provider, bounded history and isolated roles',as
  assert.doesNotMatch(seen[2],/Review my BR/);
  assert.match(seen[2],/Project Manager/);
 });
+test('shared My Work waveform and chat follows every selected role without duplicate panels',()=>{
+ const ui=read('media/start.js'),wave=read('media/atgv-mywork-wave-chat.js'),html=read('src/lib/webview/dashboard-html.js');
+ assert.match(ui,/window\.ATGVMyWorkAI\?\.update\(\{/);
+ assert.match(ui,/projectId:activeId,roleId:role\.id,roleName:visibleRoleLabel\(role\)/);
+ assert.match(wave,/snapshot\.roleName\|\|nextRole/);
+ assert.match(wave,/roleAiChat/);
+ assert.match(wave,/transcript\.replaceChildren\(\)/);
+ assert.equal(html.match(/id="atgvMyWorkAiChatForm"/g)?.length,1);
+ assert.equal(html.match(/id="atgvMyWorkAiInput"/g)?.length,1);
+});
 test('reject overlong input and unknown role; chat handler remains read-only',async()=>{
  await assert.rejects(()=>chat.ask({projectId:'a',roleId:'solution-architect',message:'x'.repeat(4001),request:async()=>''}),/1–4000/);
  await assert.rejects(()=>chat.ask({projectId:'a',roleId:'unknown',message:'hello',request:async()=>''}),/Unsupported/);
