@@ -5,7 +5,19 @@
     "developer",
     "code",
     "testing",
-    "tdd"
+    "tdd",
+    "coding",
+    "agent",
+    "maintenance",
+    "pat",
+    "source",
+    "error"
   ],
-  "decisions": []
+  "decisions": [
+    {
+      "id": "DEVELOPER-0001",
+      "status": "accepted",
+      "decision": "Before proposing an automatic code fix, check the target GitHub issues and PR history for verified matching error evidence; use source .memory guidance, test modifications, and publish only verified changes."
+    }
+  ]
 }

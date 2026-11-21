@@ -71,5 +71,6 @@
       "library-source-zip"
     ],
     "verifyArchive": true
-  }
+  },
+  "purpose": "Git-source-only development guidance for AI when generating, editing, reviewing and fixing code. Never bundle .memory in distributed releases; all runtime errors are stored separately under .atgv/src/error-logs."
 }

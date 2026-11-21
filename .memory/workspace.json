@@ -5,7 +5,29 @@
     "workspace",
     "github",
     "branch",
-    "pull"
+    "pull",
+    "coding",
+    "agent",
+    "maintenance",
+    "pat",
+    "source",
+    "error"
   ],
-  "decisions": []
+  "decisions": [
+    {
+      "id": "WORKSPACE-0001",
+      "status": "accepted",
+      "decision": "Preserve the existing .atgv workspace and add src/extension, src/library and src/error-logs beneath it. Source folders contain verified Git checkouts; all ATGV errors must be collected centrally in src/error-logs."
+    },
+    {
+      "id": "WORKSPACE-0002",
+      "status": "accepted",
+      "decision": "When a verified GitHub issue or PR matches an error log, delete only that log. Retain unverified errors and archive successfully submitted PR evidence."
+    },
+    {
+      "id": "WORKSPACE-0003",
+      "status": "accepted",
+      "decision": "Use .atgv/src/error-logs as the unified sanitized error queue for startup, BA, Jira, Confluence, GitHub, Developer, Solution Architect, AI and runtime errors; preserve existing specialty diagnostics and archive submitted PR evidence."
+    }
+  ]
 }
