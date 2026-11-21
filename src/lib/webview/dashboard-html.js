@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.11';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.12';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -336,7 +336,6 @@ function html(webview,{resumeLibrary=false}={}){
     <section id="atgvMyWorkAi" class="atgv-mywork-ai" aria-label="AI recommendations and chat for the selected My Work role" data-state="idle">
       <div class="atgv-mywork-ai-visual">
         <canvas id="atgvMyWorkAiOrb" class="atgv-mywork-ai-wave" role="img" aria-label="Reactive multicolor AI waveform; sleeps when there is no activity"></canvas>
-        <div class="atgv-mywork-ai-wave-state" id="atgvMyWorkAiWaveState" aria-live="off">WAITING FOR ACTIVITY</div>
       </div>
       <div id="atgvMyWorkAiContent" class="atgv-mywork-ai-content" hidden>
         <h2 id="atgvMyWorkAiTitle" class="atgv-mywork-ai-title">AI · My Work</h2>
@@ -345,12 +344,11 @@ function html(webview,{resumeLibrary=false}={}){
       </div>
       <div id="atgvMyWorkAiConversation" class="atgv-mywork-ai-conversation" role="log" aria-label="Role AI conversation" aria-live="polite"></div>
       <form id="atgvMyWorkAiChatForm" class="atgv-mywork-ai-chat">
-        <label class="atgv-mywork-ai-chat-label" for="atgvMyWorkAiInput">CHAT WITH ATGV AI</label>
         <div class="atgv-mywork-ai-composer">
           <textarea id="atgvMyWorkAiInput" rows="2" maxlength="4000" placeholder="Ask about your current role or task…" autocomplete="off" aria-label="Message ATGV AI"></textarea>
           <button id="atgvMyWorkAiSend" type="submit" disabled>Send</button>
         </div>
-        <p id="atgvMyWorkAiChatStatus" class="atgv-mywork-ai-chat-status" role="status">Enter to send · Shift+Enter for a new line</p>
+        <p id="atgvMyWorkAiChatStatus" class="atgv-mywork-ai-chat-status" role="status" aria-live="polite"></p>
       </form>
     </section>
     <section id="baMyWorkDashboard" class="ba-my-work-dashboard hidden" aria-label="Business Analyst requirements overview">
@@ -459,7 +457,7 @@ function html(webview,{resumeLibrary=false}={}){
       <p class="ba-jira-inventory-note muted">BRs appear first. Other Jira issues created by your connected account follow, then remaining issues. Local BRs without a visible Jira Epic are labelled separately.</p>
     </section>
     <section id="pmDailyCockpit" class="pm-daily-cockpit hidden" aria-label="Project Manager daily delivery cockpit">
-      <div class="pm-dashboard-head"><div><h2>Daily Delivery Cockpit</h2><p class="muted">Project-wide Jira delivery activity, team workload and saved role schedules. Jira transitions require confirmation.</p></div><button id="pmRefreshJira" type="button" class="secondary">Refresh Jira</button></div>
+      <div class="pm-dashboard-head"><div><h2>Daily Delivery Cockpit</h2></div><button id="pmRefreshJira" type="button" class="secondary">Refresh Jira</button></div>
       <p id="pmDataStatus" class="muted pm-data-status" role="status" aria-live="polite">Connect Jira to load current delivery data.</p>
       <div id="pmMetricCards" class="pm-metrics" aria-label="Project delivery metrics"></div>
        <section id="pmJiraWorkspace" class="pm-panel" aria-label="Jira project work items">
