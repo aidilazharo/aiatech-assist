@@ -1218,7 +1218,8 @@ window.addEventListener('atgv:mywork-switch-role',event=>{
  const detail=event.detail||{},target=String(detail.targetRoleId||'');
  if(!workspaceOpened||!activeId||detail.projectId!==activeId||detail.fromRoleId!==selectedRole)return;
  if(!/^[a-z][a-z0-9-]{1,78}$/.test(target)||target===selectedRole)return;
- const candidate=(roleData.roles||[]).find(item=>item.id===target);
+ const candidate=(roleSettings.roles||[]).find(item=>item.id===target)||
+  (roleData.roles||[]).find(item=>item.id===target);
  if(!candidate){status('Requested specialist role is not available in this project catalog.',true);return;}
  if(!visibleRoles().some(item=>item.id===target)){
    status('Enable '+visibleRoleLabel(candidate)+' in Project Role Settings before switching.');
