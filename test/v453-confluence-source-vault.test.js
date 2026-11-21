@@ -209,6 +209,8 @@ test('Discovery timestamp-only rewrites do not create false Confluence baseline 
   const discovery=require('../src/ba-discovery');
   let answers=await discovery.load(a,'demo');
   answers=await discovery.save(a,'demo',{problem:'Same user-authored problem'},answers.revision);
+  const proof=path.join(path.dirname(a.fileFor('demo')),'documents','ux','baseline.png');
+  await fs.mkdir(path.dirname(proof),{recursive:true});await fs.writeFile(proof,'BASELINE VERIFIED');
   const first=new ConfluenceSourceVault({registry:a,projectId:'demo',config,token:'test-token'});
   assert.equal((await first.sync()).conflicts.length,0);
   const second=new ConfluenceSourceVault({registry:b,projectId:'demo',config,token:'test-token'});
