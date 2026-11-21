@@ -9,8 +9,15 @@
  const transcript=get('atgvMyWorkAiConversation'),resultsViewport=get('atgvMyWorkAiResults'),status=get('atgvMyWorkAiChatStatus');
  const suggestion=get('atgvMyWorkAiText');
  const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
+ // Red intro -> CMYK (cyan, magenta, yellow, key/graphite) -> red fade-out.
+ // Key is highlighted graphite so it remains visible against the black page.
+ const redRGB=[255,70,83],cmykRGB=[
+  [0,219,230],[230,36,187],[249,212,58],[110,125,143]
+ ];
+ const blendedRGBA=(target,mix,alpha)=>'rgba('+redRGB.map((v,i)=>
+  Math.round(v+(target[i]-v)*mix)).join(',')+','+alpha+')';
  let project='',role='',pendingId=0,sequence=0,pending=false;
- let w=300,h=150,last=0,phase=0,hue=354,energy=0,opacity=0,height=0,speed=0;
+ let w=300,h=150,last=0,phase=0,hue=354,energy=0,opacity=0,height=0,speed=0,colorMix=0;
  let lastActivity=performance.now(),ripples=[],writer=null,queue=[],thinkingBefore=false;
  const prefersReduced=window.matchMedia?.('(prefers-reduced-motion: reduce)');
  let reduceMotion=!!prefersReduced?.matches;
@@ -128,6 +135,8 @@
   height=smooth(height,targetHeight,engaged?6:3);
   opacity=smooth(opacity,targetOpacity,engaged?9:4);
   speed=smooth(speed,targetSpeed,engaged?5:2);
+  // Keep CMYK during active thinking and slow-down; shift back toward red as opacity fades.
+  colorMix=smooth(colorMix,engaged||idle<3.9?1:0,engaged?1.25:2.8);
   phase+=dt*speed;energy=Math.max(0,energy-dt*.66);
   if(ctx){
    ctx.clearRect(0,0,w,h);
@@ -135,20 +144,20 @@
     const mid=h*.48;
     const redBreath=reduceMotion?1:(.35+.65*(.5+.5*Math.sin(now*.0024)));
     const baseline=ctx.createLinearGradient(0,0,w,0);
-    baseline.addColorStop(0,'rgba(255,70,83,0)');
-    baseline.addColorStop(.5,'rgba(255,89,107,.8)');
-    baseline.addColorStop(1,'rgba(255,70,83,0)');
+    baseline.addColorStop(0,blendedRGBA(cmykRGB[0],colorMix,0));
+    baseline.addColorStop(.5,blendedRGBA(cmykRGB[0],colorMix,.8));
+    baseline.addColorStop(1,blendedRGBA(cmykRGB[0],colorMix,0));
     ctx.strokeStyle=baseline;ctx.lineWidth=.85;ctx.globalAlpha=opacity*redBreath;
     ctx.beginPath();ctx.moveTo(0,mid);ctx.lineTo(w,mid);ctx.stroke();
     if(height>.004&&!reduceMotion){
      for(let j=0;j<7;j++){
-      const color=(hue+j*.65+Math.sin(phase*.4+j)*2+360)%360;
+      const strand=cmykRGB[j%cmykRGB.length];
       const redGradient=ctx.createLinearGradient(0,0,w,0);
-      redGradient.addColorStop(0,'hsla('+color+',100%,63%,0)');
-      redGradient.addColorStop(.15,'hsla('+color+',100%,63%,.8)');
-      redGradient.addColorStop(.52,'hsla('+((color+3)%360)+',100%,70%,.95)');
-      redGradient.addColorStop(.85,'hsla('+((color+6)%360)+',100%,66%,.8)');
-      redGradient.addColorStop(1,'hsla('+color+',100%,63%,0)');
+      redGradient.addColorStop(0,blendedRGBA(strand,colorMix,0));
+      redGradient.addColorStop(.15,blendedRGBA(strand,colorMix,.8));
+      redGradient.addColorStop(.52,blendedRGBA(strand,colorMix,.95));
+      redGradient.addColorStop(.85,blendedRGBA(strand,colorMix,.8));
+      redGradient.addColorStop(1,blendedRGBA(strand,colorMix,0));
       ctx.strokeStyle=redGradient;ctx.lineWidth=j===0?2:1.25;
       for(const side of [-1,1]){
        ctx.beginPath();

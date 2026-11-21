@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.17';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.18';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -335,7 +335,7 @@ function html(webview,{resumeLibrary=false}={}){
     <section id="atgvMyWorkAi" class="atgv-mywork-ai" aria-label="AI recommendations and chat for the selected My Work role" data-state="idle">
       <div class="atgv-mywork-ai-topbar" aria-label="ATGV AI animation">
         <div class="atgv-mywork-ai-visual">
-          <canvas id="atgvMyWorkAiOrb" class="atgv-mywork-ai-wave" role="img" aria-label="Soft red AI waveform that fades in and out with activity"></canvas>
+          <canvas id="atgvMyWorkAiOrb" class="atgv-mywork-ai-wave" role="img" aria-label="AI waveform fades in red, changes to CMYK while active, and fades back to red"></canvas>
         </div>
       </div>
       <div id="atgvMyWorkAiResults" class="atgv-mywork-ai-results" role="region" aria-label="AI suggestions and conversation">
