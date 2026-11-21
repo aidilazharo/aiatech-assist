@@ -48,5 +48,5 @@ test('v415: rendered Start HTML does not inject the removed Library block',()=>{
  });
  const start=html.slice(html.indexOf('<form id="startupConnectionForm"'),html.indexOf('</form>',html.indexOf('<form id="startupConnectionForm"')));
  assert.doesNotMatch(start,/SDLC Library|startupLibraryZip|Managed by ATGV|Offline ZIP/);
- assert.match(start,/Jira, Confluence &amp; GitHub connections/);
+ assert.match(start,/Atlassian &amp; GitHub connections/);
 });
