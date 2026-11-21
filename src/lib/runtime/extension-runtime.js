@@ -4936,7 +4936,7 @@ async function atgvJobCheckpoint(projectId,command,{step,inputHash,outputHash,pe
 }
 
 function isLongRunningHostProcess(command){
- return /^(?:processDiscoverySources|generateBusinessRequirements|generateDrafts|applyDiscoveryReview|brJiraSync|brJiraPreview|brJiraApprove|brJiraScanExternal|brJiraRefreshWorkStates|brRoleTaskRepairPublish|developerBrRun|developerBrPreviewDraft|developerBrStartServer|devCopilotStart|designGenerate|designRegenerateAffected|uxPipelineGenerate|uxDesignGenerate|uxPublishFrontend|uxFrameworkSync|architectCustomRun|architectCustomScan|architectRecommend|architectValidate|architectRunServer|architectTestStack|architectBootstrap|architectCommit|architectPublish|architectSaveStack|architectCheckStackUpdates|architectPullStackUpdates|catalogPull|catalogCheck|catalogTest|syncDocuments|startupInstallModule|refreshConnectedSources|checkSoftwareUpdates|aiServiceRun|aiServiceInstall|pmJiraAssignableUsers|pmJiraSetAssignee|pmJiraTransition|pmApproveEffortBaseline|sync)$/.test(String(command||''));
+ return /^(?:processDiscoverySources|generateBusinessRequirements|generateDrafts|applyDiscoveryReview|brJiraSync|brJiraPreview|brJiraApprove|brJiraScanExternal|brJiraRefreshWorkStates|brRoleTaskRepairPublish|developerBrRun|developerBrPreviewDraft|developerBrStartServer|devCopilotStart|designGenerate|designRegenerateAffected|uxPipelineGenerate|uxDesignGenerate|uxPublishFrontend|uxFrameworkSync|architectCustomRun|architectCustomScan|architectCustomPull|architectRecommend|architectValidate|architectRunServer|architectTestStack|architectBootstrap|architectCommit|architectPublish|architectSaveStack|architectCheckStackUpdates|architectPullStackUpdates|catalogPull|catalogCheck|catalogTest|syncDocuments|startupInstallModule|refreshConnectedSources|checkSoftwareUpdates|aiServiceRun|aiServiceInstall|pmJiraAssignableUsers|pmJiraSetAssignee|pmJiraTransition|pmApproveEffortBaseline|sync)$/.test(String(command||''));
 }
 function hasActiveProjectProcess(id){
  return !!id&&([...activeHostProcesses.values()].some(job=>job.projectId===id)||activeDiscoveryMappingRun?.projectId===id);
@@ -6121,7 +6121,33 @@ async function handleDashboardMessage(msg){
         }
         break;
       }
-      case 'architectCustomRun':{
+      case 'architectCustomPull':{
+         const projectId=activeProject?.id||'';
+         try{
+           requireOpened();
+           if(msg.projectId!==projectId)throw Error('The project changed. Scan Repository again.');
+           const conf=effectiveConfig(activeProject);
+           const owner=String(conf.get('github.owner')||''),name=String(conf.get('github.repo')||'');
+           const root=await architectRepository.resolve(context.workspaceState,projectId,developerGit,{
+             projectRoot:aiRoot(),githubOwner:owner,githubRepo:name});
+           const result=await require('../../architect-custom-pull').pull(root,{
+             expectedSha:String(msg.expectedSha||''),owner,name});
+           const detected=await require('../../architect-custom-stack').scan(root);
+           const process=developerGit.localLogs();
+           detected.running=!!(process.running&&detected.targets.some(item=>
+             path.resolve(root,item.relative)===path.resolve(process.cwd||'')));
+           detected.pullMessage=result.message;
+           if(activeProject?.id===projectId)
+             await dashboard?.webview.postMessage({type:'architectCustomPullResult',projectId,value:detected});
+         }catch(error){
+           report('Custom Stack pull: '+error.message);
+           if(activeProject?.id===projectId)
+             await dashboard?.webview.postMessage({type:'architectCustomError',projectId,
+               message:String(error.message||error).slice(0,450)});
+         }
+         break;
+       }
+       case 'architectCustomRun':{
         const projectId=activeProject?.id||'';
         const notify=message=>activeProject?.id===projectId?dashboard?.webview.postMessage({type:'architectCustomProgress',projectId,message}):undefined;
         try{
