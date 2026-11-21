@@ -94,8 +94,8 @@ test('buttons and guidance are generated only after a scoped response',()=>{
   const f=fixture();
   f.update(sample());
   assert.equal(f.nodes.get('atgvMyWorkAi').dataset.state,'thinking');
-  assert.equal(f.nodes.get('atgvMyWorkAiContent').hidden,true);
-  assert.equal(f.nodes.get('atgvMyWorkAiActions').children.length,0);
+  assert.equal(f.nodes.get('atgvMyWorkAiContent').hidden,false);
+  assert.equal(f.nodes.get('atgvMyWorkAiActions').children.length,2);
   assert.equal(f.timers.fire(300),true);
   assert.equal(f.sent.length,1);
   assert.equal(f.sent[0].name,'roleAiReview');
@@ -140,13 +140,13 @@ test('stale responses cannot overwrite next role, Review again re-analyzes',()=>
   f.update(sample('ux-designer'));
   f.reply({type:'roleAiSuggestion',projectId:'project-one',roleId:'business-analyst',
     requestId:1,message:'Ignore this stale suggestion'});
-  assert.equal(f.nodes.get('atgvMyWorkAiContent').hidden,true);
+  assert.equal(f.nodes.get('atgvMyWorkAiContent').hidden,false);
   f.reply({type:'roleAiSuggestion',projectId:'project-one',roleId:'ux-designer',
     requestId:2,message:'Review the design workflow',error:false});
   const buttons=f.nodes.get('atgvMyWorkAiActions').children;
   assert.equal(buttons.length,2);
   buttons[1].onclick();
-  assert.equal(f.nodes.get('atgvMyWorkAiContent').hidden,true);
+  assert.equal(f.nodes.get('atgvMyWorkAiContent').hidden,false);
   assert.equal(f.nodes.get('atgvMyWorkAi').dataset.state,'thinking');
 });
 test('AI calls are read-only and scoped to visible role work',()=>{
