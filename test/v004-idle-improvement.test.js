@@ -84,3 +84,19 @@ test('outside noon window and busy process do not touch GitHub',async()=>{
   assert.equal(mock.calls.length,0);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+test('new errors are checked after an earlier empty noon scan',async()=>{
+ const root=await mkdtemp(path.join(os.tmpdir(),'atgv-noon-')),s=state(),mock=api({reported:true});
+ try{
+  const manager={run:async()=>{throw Error('Coding should not run')},store:{add:async()=>{throw Error('Coding should not run')}}};
+  const opts={workspace:root,manager,getRepository:async()=> 'https://github.com/aidilazharo/aiatech-assist',
+   getToken:async()=> 'dummy-secret-not-real',isIdle:async()=>true,globalState:s,
+   zone:'Asia/Kuala_Lumpur',now:()=>new Date('2026-11-21T04:15:00Z'),request:mock.request};
+  assert.equal((await m.runWindow(opts)).status,'empty');
+  await m.writeLog(root,{target:'extension',category:'error',title:'Error in ATGV',observed:'Known failure'});
+  const result=await m.runWindow(opts);
+  assert.equal(result.status,'complete');
+  assert.equal(result.duplicates,1);
+  assert.equal((await m.readLogs(path.join(root,'.atgv','src','error-logs'))).length,0);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
