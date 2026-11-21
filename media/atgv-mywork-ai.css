@@ -1,4 +1,4 @@
-/* ATGV v0.0.16: dedicated, full-height My Work AI page for all 18 roles.
+/* ATGV v0.0.18: dedicated, full-height My Work AI page for all 18 roles.
    Top = red fading waveform, center = independently scrollable guidance/chat,
    bottom = anchored composer. Other pages retain their existing layout. */
 body.atgv-mywork-chat-mode:not(.gate-mode) #contentPane.content-pane{
