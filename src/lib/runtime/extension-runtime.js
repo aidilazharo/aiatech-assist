@@ -7225,6 +7225,12 @@ async function handleDashboardMessage(msg){
                if(current.revision!==savedPlan.registerRevision)
                  throw Error('Local BR register changed; Jira deletion finished but local audit needs review.');
                const updated=await brWorkflow.write(registry,projectId,current.revision,next=>{
+                 // Remove only this orphaned BR's verified local Jira mappings.
+                 // Preserve Confluence links, uploaded originals and unrelated BRs.
+                 for(const path of Object.keys(next.synced||{}))
+                   if(path===savedPlan.brId||path.startsWith(savedPlan.brId+'/'))delete next.synced[path];
+                 for(const path of Object.keys(next.roleTaskMappings||{}))
+                   if(path===savedPlan.brId||path.startsWith(savedPlan.brId+'/'))delete next.roleTaskMappings[path];
                  next.deletedRequirements=next.deletedRequirements||[];
                  if(next.deletedRequirements.some(x=>x.id===savedPlan.brId))
                    throw Error('Another BR deletion record appeared. Reconcile the audit.');
