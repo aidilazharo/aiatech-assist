@@ -16,32 +16,26 @@ test('compact CMYK orb is a valid offline animated WebP with sixteen source fram
  assert.ok(image.length>2000 && image.length<16000,'orb should be lightweight');
 });
 
-test('My Work orb is resolved as a packaged VS Code webview asset',()=>{
+test('My Work animated waveform is packaged and no longer depends on orb playback',()=>{
  const html=read('src/lib/webview/dashboard-html.js');
  const css=read('media/atgv-mywork-ai.css');
- const packageScript=read('scripts/package-vsix.py');
- assert.match(html,/const myWorkOrbWebp=webview\.asWebviewUri\(vscode\.Uri\.joinPath\(context\.extensionUri,'media','atgv-mywork-orb-spin\.webp'\)\)/);
- assert.match(html,/--atgv-mywork-orb:url\(&quot;\$\{myWorkOrbWebp\}&quot;\)/);
- assert.match(css,/background-image:var\(--atgv-mywork-orb\)/);
- assert.match(packageScript,/for folder in \('src', 'assets', 'media'/);
- assert.match(packageScript,/'webp':'image\/webp'/);
- assert.doesNotMatch(css,/https?:\/\//,'local asset required');
+ const js=read('media/atgv-mywork-wave-chat.js');
+ const packaging=read('scripts/package-vsix.py');
+ assert.match(html,/atgv-mywork-wave-chat\.js/);
+ assert.match(html,/<canvas id="atgvMyWorkAiOrb"/);
+ assert.match(css,/canvas#atgvMyWorkAiOrb/);
+ assert.match(js,/requestAnimationFrame\(frame\)/);
+ assert.match(packaging,/for folder in \('src', 'assets', 'media'/);
+ assert.doesNotMatch(html,/--atgv-mywork-orb:url/);
 });
-
-test('small orb rotates smoothly in multiple axes, retaining success fade',()=>{
+test('waveform slows to a line, fades and supports reduced-motion environments',()=>{
+ const js=read('media/atgv-mywork-wave-chat.js');
  const css=read('media/atgv-mywork-ai.css');
- assert.match(css,/width:72px;height:72px/);
- assert.match(css,/width:58px;height:58px/);
- assert.match(css,/@keyframes atgv-orb-multiaxis-idle/);
- assert.match(css,/@keyframes atgv-orb-multiaxis-thinking/);
- assert.match(css,/rotateZ\(360deg\) rotateY\(0deg\) rotateX\(0deg\)/);
- assert.match(css,/animation:atgv-orb-multiaxis-thinking 3\.2s linear infinite/);
- assert.match(css,/animation:atgv-orb-success 1\.25s ease-out both/);
- assert.match(css,/data-state="complete"\] \.atgv-mywork-ai-visual\{display:none\}/);
+ for(const state of ['ACTIVE','SLOWING','LINE ONLY','FADING','SLEEPING'])assert.ok(js.includes(state));
+ assert.match(js,/requestAnimationFrame\(frame\)/);
+ assert.match(js,/prefers-reduced-motion/);
  assert.match(css,/@media\(prefers-reduced-motion:reduce\)/);
- assert.match(css,/background-image:radial-gradient/);
 });
-
 test('right content pane is black with contrast-preserving palette, sidebar untouched',()=>{
  const css=read('media/start.css');
  const main=read('src/lib/webview/dashboard-html.js');

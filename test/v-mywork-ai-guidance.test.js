@@ -57,26 +57,32 @@ const sample=(roleId='business-analyst')=>({
   tasks:[{title:'Discovery',done:false}],requirements:[{id:'BR-01',status:'draft'}],
   assigned:[{key:'TC-7',status:'In Progress'}]
 });
-test('panel is shared by all My Work roles and starts with only the centered orb',()=>{
+test('panel is shared by all My Work roles and includes a reactive canvas and chat',()=>{
   const begin=html.indexOf('<main id="workView"');
   const panel=html.indexOf('id="atgvMyWorkAi"',begin);
   const roles=html.indexOf('id="baMyWorkDashboard"',begin);
   assert.ok(begin>=0&&panel>begin&&roles>panel);
   assert.equal(html.match(/id="atgvMyWorkAi"/g)?.length,1);
   const section=html.slice(panel,roles);
+  assert.match(section,/<canvas id="atgvMyWorkAiOrb"/);
+  assert.match(section,/id="atgvMyWorkAiInput"/);
+  assert.match(section,/id="atgvMyWorkAiSend"/);
+  assert.match(section,/id="atgvMyWorkAiConversation"/);
   assert.match(section,/id="atgvMyWorkAiContent" class="atgv-mywork-ai-content" hidden/);
-  assert.doesNotMatch(section,/<textarea|<input|contenteditable/);
-  assert.match(css,/flex-direction:column;justify-content:center;align-items:center/);
   assert.match(css,/background:#000!important;color:#fff!important/);
   assert.match(css,/border:0!important/);
-  assert.match(css,/\.atgv-mywork-ai-content\[hidden\]/);
 });
-test('orb runs blue idle, blue-green thinking, green success and disappears',()=>{
-  for(const name of ['idle','thinking','success','complete'])assert.match(ui,new RegExp(name));
-  for(const name of ['thinking','success','complete'])assert.match(css,new RegExp('data-state="'+name+'"'));
-  assert.match(css,/atgv-orb-success 1\.25s/);
-  assert.match(css,/data-state="complete"\] \.atgv-mywork-ai-visual\{display:none\}/);
-  assert.match(css,/prefers-reduced-motion:reduce/);
+test('waveform wakes for text and fades through slowing, line and sleeping states',()=>{
+ const wave=read('media/atgv-mywork-wave-chat.js');
+ assert.match(wave,/LINE ONLY/);
+ assert.match(wave,/SLOWING/);
+ assert.match(wave,/FADING/);
+ assert.match(wave,/SLEEPING/);
+ assert.match(wave,/requestAnimationFrame\(frame\)/);
+ assert.match(wave,/Math\.random\(\)/);
+ assert.match(wave,/typewriter/);
+ assert.match(wave,/roleAiChat/);
+ assert.match(css,/prefers-reduced-motion:reduce/);
 });
 test('buttons and guidance are generated only after a scoped response',()=>{
   const f=fixture();
@@ -137,6 +143,6 @@ test('AI calls are read-only and scoped to visible role work',()=>{
   assert.match(ui,/send\('roleAiReview'/);
   assert.doesNotMatch(ui,/send\('(?:brJiraSync|pmJiraSetAssignee|architectApproveStack|uxPublishFrontend|delete|publish)'/);
   assert.match(host,/The AI cannot invoke commands/);
-  assert.equal(packageJson.version,'0.0.8');
-  assert.equal(packageJson.atgvDisplayVersion,'0.0.8');
+  assert.equal(packageJson.version,'0.0.9');
+  assert.equal(packageJson.atgvDisplayVersion,'0.0.9');
 });

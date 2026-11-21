@@ -1,19 +1,17 @@
-# ATGV AIATECH Assist v0.0.8
+# ATGV AIATECH Assist v0.0.9
 
 ## Changes
 
-- Rename Start Screen connection section to Atlassian & GitHub connections.
-- Use a single Atlassian URL (default `https://aiamy-jira-azure.atlassian.net`) to authenticate Jira and derived Confluence `/wiki` endpoints. Use the default Atlassian email `user.name@aia.com`.
-- Accept a GitHub organization URL such as `github.com/aiamalaysia`; normalize it to an HTTPS URL. Add Project Repository name (default `my-fow-technology-app-techassists`) and show its full organization/repository URL.
-- Map required Extension and Library source repositories to trusted `aidilazharo` or `aiamalaysia` owners; verify GitHub PAT read/write permissions and release-list access and a bounded authenticated release-download probe.
-- Check optional `aidilazharo/extension` and `aidilazharo/library` release repositories without blocking successful required connections.
-- Check each endpoint **sequentially**, reporting blue in-progress, green success and red failure bars at the connection status location; do not save settings or tokens when a required check fails.
-- Fix Confluence source-vault false baseline conflicts caused solely by regenerated Discovery timestamps and upload-only document metadata. Validate user-authored BRs, Discovery answers, original file byte checksums and Jira identities before recovering a missing baseline.
-- Preserve both versions and report differing categories when real Confluence/local changes exist. Never auto-overwrite a genuine conflict.
-- Keep `.memory` source-only and excluded from VSIX and source release ZIP.
+- Replace the My Work AI orb with a responsive Canvas waveform across Business Analyst, Solution Architect, UI/UX Designer, Developer, Project Manager, QA Engineer and UAT Tester.
+- React to keyboard input, AI reviews and displayed reply characters with randomized multicolor waves, ripples and changing wave height.
+- After inactivity, decelerate into a thin line and fade out; awaken smoothly on new typing or AI activity.
+- Add a persistent My Work chat composer with fast typewriter presentation and role-scoped message history.
+- Apply trusted extension-host AI role instructions to chat requests, with role-aware expertise including banking and financial services in Asia.
+- Answer "who are you" consistently according to the selected role without requiring an AI provider.
+- Keep the visible user message unmodified and make chat read-only; never alter Jira, Confluence or project files automatically.
 
 ## Tests
 
-- New cross-computer Confluence baseline recovery and genuine Discovery-conflict tests.
-- Updated startup UI and credential-verification tests for the new mappings and serial connection sequence.
-- Full Node regression, Windows startup, UI theme, VSIX integrity and source ZIP checks through GitHub Actions.
+- Validate role-specific identity, prompt isolation, bounded chat messages and selected-provider invocation.
+- Verify shared My Work markup, waveform sleep/wake behavior and accessible chat composer.
+- Run Node regression suite, UI checks, VSIX integrity and .memory exclusion checks in GitHub Actions.

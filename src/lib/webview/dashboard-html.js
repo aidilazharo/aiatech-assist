@@ -6,13 +6,13 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.8';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.9';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
   const myWorkAiJs=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-mywork-ai.js'));
+  const myWorkWaveChatJs=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-mywork-wave-chat.js'));
   const myWorkAiCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-mywork-ai.css'));
-  const myWorkOrbWebp=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-mywork-orb-spin.webp'));
   const studioJs=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','library-studio.js'));
   const studioCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','library-studio.css'));
   const cmAsset=name=>vendorAssets?webview.asWebviewUri(vscode.Uri.file(path.join(vendorAssets.dir,'codemirror',...name.split('/')))):null;
@@ -333,7 +333,26 @@ function html(webview,{resumeLibrary=false}={}){
   <main id="workView" class="hidden work-container">
     <div class="page-kicker">SDLC DELIVERY / ROLE WORKSPACE</div>
     <div class="view-heading work-head"><h1 id="workTitle">Business Analyst</h1><span id="workStage" class="pill hidden" aria-hidden="true">Discover & Define</span><div id="workSkill" class="atgv-work-skill" aria-label="SDLC Catalog role variant"><span id="workSkillRole" class="atgv-work-skill-role">BA</span><select id="workSkillSelect" class="atgv-work-skill-select" aria-label="BA catalog role variant" disabled><option value="">Not loaded</option></select></div></div>
-    <section id="atgvMyWorkAi" class="atgv-mywork-ai" aria-label="AI recommendations for your current role" data-state="idle"><div class="atgv-mywork-ai-visual"><div id="atgvMyWorkAiOrb" class="atgv-mywork-ai-orb" style="--atgv-mywork-orb:url(&quot;${myWorkOrbWebp}&quot;)" role="img" aria-label="AI ready"></div></div><div id="atgvMyWorkAiContent" class="atgv-mywork-ai-content" hidden><h2 id="atgvMyWorkAiTitle" class="atgv-mywork-ai-title">AI · My Work</h2><p id="atgvMyWorkAiText" class="atgv-mywork-ai-text" role="status" aria-live="polite"></p><div id="atgvMyWorkAiActions" class="atgv-mywork-ai-actions" aria-label="Suggested next actions"></div></div></section>
+    <section id="atgvMyWorkAi" class="atgv-mywork-ai" aria-label="AI recommendations and chat for the selected My Work role" data-state="idle">
+      <div class="atgv-mywork-ai-visual">
+        <canvas id="atgvMyWorkAiOrb" class="atgv-mywork-ai-wave" role="img" aria-label="Reactive multicolor AI waveform; sleeps when there is no activity"></canvas>
+        <div class="atgv-mywork-ai-wave-state" id="atgvMyWorkAiWaveState" aria-live="off">WAITING FOR ACTIVITY</div>
+      </div>
+      <div id="atgvMyWorkAiContent" class="atgv-mywork-ai-content" hidden>
+        <h2 id="atgvMyWorkAiTitle" class="atgv-mywork-ai-title">AI · My Work</h2>
+        <p id="atgvMyWorkAiText" class="atgv-mywork-ai-text" role="status" aria-live="polite"></p>
+        <div id="atgvMyWorkAiActions" class="atgv-mywork-ai-actions" aria-label="Suggested next actions"></div>
+      </div>
+      <div id="atgvMyWorkAiConversation" class="atgv-mywork-ai-conversation" role="log" aria-label="Role AI conversation" aria-live="polite"></div>
+      <form id="atgvMyWorkAiChatForm" class="atgv-mywork-ai-chat">
+        <label class="atgv-mywork-ai-chat-label" for="atgvMyWorkAiInput">CHAT WITH ATGV AI</label>
+        <div class="atgv-mywork-ai-composer">
+          <textarea id="atgvMyWorkAiInput" rows="2" maxlength="4000" placeholder="Ask about your current role or task…" autocomplete="off" aria-label="Message ATGV AI"></textarea>
+          <button id="atgvMyWorkAiSend" type="submit" disabled>Send</button>
+        </div>
+        <p id="atgvMyWorkAiChatStatus" class="atgv-mywork-ai-chat-status" role="status">Enter to send · Shift+Enter for a new line</p>
+      </form>
+    </section>
     <section id="baMyWorkDashboard" class="ba-my-work-dashboard hidden" aria-label="Business Analyst requirements overview">
       <div class="ba-my-work-head"><div><h2>Business Requirements</h2><p class="muted">Review requirements, approvals and action items. Open a requirement to continue the approved process.</p></div><button type="button" id="baMyWorkOpen">Open Business Requirements</button></div>
       <div id="baMyWorkMetrics" class="ba-my-work-metrics" aria-label="Business Requirements counts"></div>
@@ -751,7 +770,7 @@ function html(webview,{resumeLibrary=false}={}){
   <div id="guideMenu" class="guide-menu-overlay hidden" aria-hidden="true"><div class="guide-menu-card" role="dialog" aria-modal="true" aria-labelledby="guideMenuTitle"><div class="guide-title-row"><div><span class="guide-kicker">ATGV HELP</span><h2 id="guideMenuTitle">Interactive User Guide</h2><p class="muted">Step-by-step guidance on real controls. No code, Jira, or approval action is performed by this guide.</p></div><button type="button" id="guideMenuClose" class="secondary" aria-label="Close guide">✕</button></div><div id="guideMenuTours" class="guide-tour-list" role="group" aria-label="Available walkthroughs"></div><fieldset class="guide-mode-control"><legend>Guidance mode</legend><label><input type="radio" name="guideMode" value="explain" checked> Explain steps</label><label><input type="radio" name="guideMode" value="practice"> Practice safe navigation</label></fieldset><div class="guide-menu-footer"><span id="guideMenuStatus" class="muted" role="status"></span><button type="button" id="guideMenuStart">Start Guide</button></div></div></div>
   <div id="guideOverlay" class="guide-overlay hidden" aria-hidden="true"><div class="guide-shade" data-edge="top"></div><div class="guide-shade" data-edge="left"></div><div class="guide-shade" data-edge="right"></div><div class="guide-shade" data-edge="bottom"></div><div id="guideSpotlight" class="guide-spotlight"></div><div id="guideCard" class="guide-card" role="dialog" aria-modal="true" aria-labelledby="guideStepTitle" tabindex="-1"><div class="guide-card-top"><span id="guideStepCounter" class="guide-counter">Step 1 of 1</span><button type="button" id="guideClose" class="guide-close" aria-label="Close tutorial">✕</button></div><h2 id="guideStepTitle"></h2><p id="guideStepDescription"></p><p id="guideStepNote" class="guide-step-note hidden" role="status"></p><button id="guideStepTokenLink" type="button" class="guide-step-token-link hidden">Open official token page ↗</button><div class="guide-progress" aria-label="Tutorial progress"><div id="guideProgressFill"></div></div><div class="guide-card-actions"><button type="button" id="guideSkip" class="guide-skip">Skip tour</button><button type="button" id="guideBack" class="secondary">Back</button><button type="button" id="guideNext">Next</button></div></div></div>
   <div id="status" class="status hidden" role="status" aria-live="polite"></div>
-  </div></div>${quillJs?`<script src="${quillJs}"></script>`:''}${ganttJs?`<script src="${ganttJs}"></script>`:''}<script src="${diagramCanvas}"></script><script src="${ownershipFilters}"></script><script src="${ownershipPresentation}"></script><script src="${userGuideJs}"></script><script src="${aiChangeResolutionJs}"></script><script src="${baStageFlowJs}"></script><script src="${baProgressJs}"></script><script src="${workspaceBreadcrumbsJs}"></script><script src="${apiSimulatorJs}"></script><script src="${jiraOverviewJs}"></script><script src="${dataTablesJs}"></script><script src="${pmDeliveryJs}"></script><script src="${jiraWorkflowTablesJs}"></script><script src="${completedBrHistoryJs}"></script><script src="${baJiraEpicsJs}"></script><script src="${overviewSdlcJs}"></script><script src="${js}"></script><script src="${myWorkAiJs}"></script>${vendorAssets?cmFiles.map(file=>`<script src="${cmAsset(file)}"></script>`).join(''):''}<script src="${studioJs}"></script><script src="${userGuideControllerJs}"></script><script src="${assetBootJs}"></script></body></html>`;
+  </div></div>${quillJs?`<script src="${quillJs}"></script>`:''}${ganttJs?`<script src="${ganttJs}"></script>`:''}<script src="${diagramCanvas}"></script><script src="${ownershipFilters}"></script><script src="${ownershipPresentation}"></script><script src="${userGuideJs}"></script><script src="${aiChangeResolutionJs}"></script><script src="${baStageFlowJs}"></script><script src="${baProgressJs}"></script><script src="${workspaceBreadcrumbsJs}"></script><script src="${apiSimulatorJs}"></script><script src="${jiraOverviewJs}"></script><script src="${dataTablesJs}"></script><script src="${pmDeliveryJs}"></script><script src="${jiraWorkflowTablesJs}"></script><script src="${completedBrHistoryJs}"></script><script src="${baJiraEpicsJs}"></script><script src="${overviewSdlcJs}"></script><script src="${js}"></script><script src="${myWorkAiJs}"></script><script src="${myWorkWaveChatJs}"></script>${vendorAssets?cmFiles.map(file=>`<script src="${cmAsset(file)}"></script>`).join(''):''}<script src="${studioJs}"></script><script src="${userGuideControllerJs}"></script><script src="${assetBootJs}"></script></body></html>`;
 }
 return html;
 }

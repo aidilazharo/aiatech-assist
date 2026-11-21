@@ -20,6 +20,7 @@ const libraryUpdateVersion=require('../../library-update-version');
 const liveRemoteRefresh=require('../../live-remote-refresh');
 const repoSyncWorkspace=require('../../repo-sync-workspace');
 const atgvAiChat=require('../../atgv-ai-chat');
+const myWorkRoleChat=require('../../my-work-role-chat');
 const repoSyncNaming=require('../../repo-sync-pr');
 const {workState,toggleTask,openTaskDocument}=require('../../sdlc-work');
 const roleStepEngine=require('../../role-step-engine');
@@ -9183,6 +9184,35 @@ async function handleDashboardMessage(msg){
           else await toggleTask(registry,activeProject.id,msg.roleId,msg.taskId,msg.completed===true);
         }else await toggleTask(registry,activeProject.id,msg.roleId,msg.taskId,msg.completed===true);
         await refreshDashboard();await notice('Local SDLC checklist updated.');break;
+      }
+      case 'roleAiChat':{
+        // Chat messages are read-only and use trusted role instructions on the
+        // extension side. No hidden instructions are exposed in the webview.
+        requireOpened();
+        const projectId=activeProject.id;
+        if(String(msg.projectId||'')!==projectId)break;
+        const roleId=String(msg.roleId||'').slice(0,80);
+        const requestId=Number(msg.requestId);
+        const roleState=await workState(registry,projectId);
+        const role=roleState.roles.find(entry=>entry.id===roleId);
+        if(!role||!Number.isSafeInteger(requestId)||requestId<1)break;
+        let text='',error=false;
+        try{
+          text=await myWorkRoleChat.ask({
+            projectId,roleId,message:msg.message,
+            request:async prompt=>{
+              const target=await activeAiTarget();
+              return aiAnswer(target,prompt,7000);
+            }
+          });
+        }catch(failure){
+          error=true;
+          text='AI chat unavailable: '+String(failure.message||failure).slice(0,260);
+          report('My Work role AI chat unavailable: '+String(failure.message||failure).slice(0,160));
+        }
+        if(activeProject?.id===projectId)
+          await dashboard?.webview.postMessage({type:'roleAiChatReply',projectId,roleId,requestId,text,error});
+        break;
       }
       case 'roleAiReview':{
         // Automatic, read-only My Work guidance. The AI cannot invoke commands,
