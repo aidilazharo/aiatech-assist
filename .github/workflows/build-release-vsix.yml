@@ -128,6 +128,11 @@ jobs:
             exit 1
           fi
           echo "Verified: no .memory directory in the source ZIP" >> "$GITHUB_STEP_SUMMARY"
+          extracted="$(mktemp -d)"
+          trap 'rm -rf "$extracted"' EXIT
+          unzip -q "dist/${SOURCE_FILE}" -d "$extracted"
+          node --test "$extracted/ATGV-AIATECH-Assist-v${SOURCE_VERSION}-Source/test/v001-decision-memory.test.js" "$extracted/ATGV-AIATECH-Assist-v${SOURCE_VERSION}-Source/test/v002-release-memory-exclusion.test.js"
+          echo "Verified: extracted source ZIP tests passed without .memory" >> "$GITHUB_STEP_SUMMARY"
           (cd dist && sha256sum "${SOURCE_FILE}" > source.sha256)
           echo "Complete source ZIP: ${SOURCE_FILE}" >> "$GITHUB_STEP_SUMMARY"
 
