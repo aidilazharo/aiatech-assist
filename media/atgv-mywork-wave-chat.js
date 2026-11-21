@@ -51,6 +51,9 @@
   const nextProject=String(snapshot.projectId||''),nextRole=String(snapshot.roleId||'');
   if(project!==nextProject||role!==nextRole){
    project=nextProject;role=nextRole;pendingId=++sequence;pending=false;
+   // Reuse one shared chat UI for every enabled role; label the selected expert.
+   const chatLabel=panel.querySelector('.atgv-mywork-ai-chat-label');
+   if(chatLabel)chatLabel.textContent='CHAT WITH ATGV AI · '+String(snapshot.roleName||nextRole).slice(0,100);
    writer=null;queue.length=0;transcript.replaceChildren();input.value='';
    status.textContent='Role-aware AI assistant ready';button.disabled=true;pulse(1.3);
   }

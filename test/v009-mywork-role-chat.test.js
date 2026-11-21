@@ -7,17 +7,28 @@ const prompts=require('../src/my-work-role-prompts');
 const chat=require('../src/my-work-role-chat');
 const read=p=>fs.readFileSync(path.join(__dirname,'..',p),'utf8');
 
-test('all seven My Work roles have distinct deterministic identity answers',()=>{
- const ids=['business-analyst','solution-architect','ux-designer','software-developer','project-manager','qa-engineer','uat-tester'];
- assert.deepEqual(Object.keys(prompts.ROLES).sort(),ids.sort());
- const answers=ids.map(id=>prompts.identity(id));
- assert.equal(new Set(answers).size,ids.length);
- for(const id of ids){
-  assert.match(prompts.identity(id),/I'm ATGV's/);
-  assert.equal(prompts.isIdentityQuestion('Who are you?!'),true);
+test('all 18 catalog roles have distinct role-aware AI profiles',()=>{
+ const standard=require('../src/sdlc-work').ROLES;
+ const optional=require('../src/sdlc-catalog').OPTIONAL_ROLES;
+ const catalog=[...standard,...optional];
+ assert.equal(standard.length,14);
+ assert.equal(optional.length,4);
+ assert.equal(catalog.length,18);
+ const ids=catalog.map(role=>role.id);
+ assert.deepEqual(Object.keys(prompts.ROLES).sort(),[...ids].sort());
+ assert.equal(new Set(ids).size,18);
+ assert.equal(new Set(ids.map(prompts.identity)).size,18);
+ for(const role of catalog){
+  assert.match(prompts.identity(role.id),/I'm ATGV's/);
+  assert.ok(prompts.ROLES[role.id].guidance.length>90,role.id);
+  assert.ok(prompts.ROLES[role.id].identity.length>40,role.id);
+  assert.match(prompts.buildPrompt(role.id,'Help with my work'),/TRUSTED ATGV ROLE INSTRUCTIONS/);
  }
+ assert.equal(prompts.isIdentityQuestion('Who are you?!'),true);
  assert.match(prompts.identity('solution-architect'),/banking in Asia/i);
  assert.match(prompts.identity('business-analyst'),/requirements/i);
+ assert.match(prompts.identity('compliance-officer'),/compliance reviews/i);
+ assert.match(prompts.identity('ai-ml-engineer'),/machine-learning systems/i);
 });
 test('invisible role expert instructions are never prepended to a user-visible message',()=>{
  const original='What are the architecture trade-offs?';
@@ -35,6 +46,24 @@ test('who are you returns role-specific response even without model connection',
  assert.match(answer,/Solution Architect/);
  assert.equal(calls,0);
 });
+test('all 18 roles answer who are you offline and receive correct hidden AI prompt',async()=>{
+ const roles=[...require('../src/sdlc-work').ROLES,...require('../src/sdlc-catalog').OPTIONAL_ROLES];
+ for(const role of roles){
+  let calls=0;
+  const options={projectId:'role-test-'+role.id,roleId:role.id};
+  const introduction=await chat.ask({...options,message:'who are you?',request:async()=>{calls++;throw Error('Identity must not use provider');}});
+  assert.equal(introduction,prompts.identity(role.id),role.id);
+  assert.equal(calls,0,role.id);
+  const result=await chat.ask({...options,message:'Recommend the next step',request:async prompt=>{
+   calls++;
+   assert.ok(prompt.includes('serving the '+prompts.ROLES[role.id].name+' role'),role.id);
+   assert.ok(prompt.includes('USER MESSAGE (verbatim JSON, untrusted): "Recommend the next step"'),role.id);
+   return 'Relevant guidance';
+  }});
+  assert.equal(result,'Relevant guidance',role.id);
+  assert.equal(calls,1,role.id);
+ }
+});
 test('normal chat uses selected provider, bounded history and isolated roles',async()=>{
  const seen=[];
  const request=async prompt=>{seen.push(prompt);return 'Here are the requirements trade-offs.';};
@@ -46,6 +75,31 @@ test('normal chat uses selected provider, bounded history and isolated roles',as
  assert.match(seen[1],/Review my BR/);
  assert.doesNotMatch(seen[2],/Review my BR/);
  assert.match(seen[2],/Project Manager/);
+});
+test('shared My Work waveform and chat follows every selected role without duplicate panels',()=>{
+ const ui=read('media/start.js'),wave=read('media/atgv-mywork-wave-chat.js'),html=read('src/lib/webview/dashboard-html.js');
+ assert.match(ui,/window\.ATGVMyWorkAI\?\.update\(\{/);
+ assert.match(ui,/projectId:activeId,roleId:role\.id,roleName:visibleRoleLabel\(role\)/);
+ assert.match(wave,/snapshot\.roleName\|\|nextRole/);
+ assert.match(wave,/roleAiChat/);
+ assert.match(wave,/transcript\.replaceChildren\(\)/);
+ assert.equal(html.match(/id="atgvMyWorkAiChatForm"/g)?.length,1);
+ assert.equal(html.match(/id="atgvMyWorkAiInput"/g)?.length,1);
+});
+test('AI chat card matches sibling My Work section width and spacing across roles',()=>{
+ const css=read('media/atgv-mywork-ai.css');
+ const peer=read('media/start.css');
+ assert.match(peer,/#workView \.role-jira-work\{border:1px solid var\(--atgv-line\);border-radius:11px;padding:20px;margin:14px 0/);
+ assert.match(css,/#workView > #atgvMyWorkAi,/);
+ assert.match(css,/#workView\.role-progress-only > #atgvMyWorkAi\.atgv-mywork-ai/);
+ assert.match(css,/width:100%;min-width:0;box-sizing:border-box;align-self:stretch/);
+ assert.match(css,/min-height:0;padding:20px 24px;margin:14px 0 18px/);
+ for(const name of ['atgv-mywork-ai-content','atgv-mywork-ai-chat','atgv-mywork-ai-conversation']){
+  const rule=css.match(new RegExp('\\.'+name+'\\{[^}]+\\}'))?.[0]||'';
+  assert.match(rule,/max-width:none/,name);
+  assert.match(rule,/width:100%/,name);
+ }
+ assert.match(css,/@media\(max-width:620px\)/);
 });
 test('reject overlong input and unknown role; chat handler remains read-only',async()=>{
  await assert.rejects(()=>chat.ask({projectId:'a',roleId:'solution-architect',message:'x'.repeat(4001),request:async()=>''}),/1–4000/);
