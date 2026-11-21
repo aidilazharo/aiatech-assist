@@ -27,7 +27,7 @@ function compareVersions(left,right){
  return Math.sign(a.pre.length-b.pre.length);
 }
 const base=workspace=>path.join(workspace,'.atgv','offline-sdlc-library');
-const allowed=p=>['catalog.json','catalog.yaml','VERSION','README.md'].includes(p)||/^(roles|shared|tech-stacks|ai-harness|docs)\//.test(p);
+const allowed=p=>['catalog.json','catalog.yaml','VERSION','README.md'].includes(p)||/^(roles|shared|tech-stacks|ai-harness|docs)\//.test(p)||/^\.memory\/[a-z][a-z0-9-]*\.json$/.test(p);
 function safeName(p){
  if(!p||p.length>450||p.startsWith('/')||p.includes('\\')||p.includes('\0')||p.includes('\ufffd')||
     p.split('/').some(x=>!x||x==='.'||x==='..'||x.includes(':')||/[\x00-\x1f]/.test(x)))

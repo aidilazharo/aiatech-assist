@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "category": "release-management",
+  "keywords": [
+    "release",
+    "publish",
+    "release.md",
+    "notes"
+  ],
+  "decisions": [
+    {
+      "id": "RELEASE-0001",
+      "status": "accepted",
+      "decision": "Maintain only one root RELEASE.md per source repository; overwrite that file on each release."
+    }
+  ]
+}
