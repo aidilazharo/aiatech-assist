@@ -11,7 +11,7 @@ test('v415: Start has only account connection fields, no SDLC Library panel, upl
  const html=read('src/lib/webview/dashboard-html.js');
  const start=html.slice(html.indexOf('<form id="startupConnectionForm"'),html.indexOf('</form>',html.indexOf('<form id="startupConnectionForm"'))+7);
  assert.ok(start.startsWith('<form'),'Start connection form exists');
- for(const id of ['startupJiraUrl','startupConfluenceUrl','startupEmail','startupAtlassianToken','startupGithubUrl','startupGithubToken'])
+ for(const id of ['startupJiraUrl','startupEmail','startupAtlassianToken','startupGithubUrl','startupProjectRepository','startupGithubToken'])
   assert.ok(start.includes('id="'+id+'"'),id+' retained');
  for(const id of ['startupLibraryRepo','startupProjectRepo','startupLibraryZipUpload','startupLibraryZipStatus'])
   assert.ok(!start.includes('id="'+id+'"'),id+' removed');
