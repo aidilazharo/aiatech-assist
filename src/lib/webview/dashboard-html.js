@@ -54,6 +54,11 @@ function html(webview,{resumeLibrary=false}={}){
     <div class="brand-area"><span class="brand-logo-stack"><img src="${brand}" alt="ATGV" class="brand-logo"></span><span class="brand-identity"><span class="brand-name">AIATECH <b>ASSIST</b></span><span class="brand-versions">Extension v${extensionVersion}<span id="headerLibraryVersion"> · Library —</span></span></span></div>
     <div class="header-context"></div>
     <div class="header-end"><span id="headerUserName" class="header-user-name" title="Configured Jira email" aria-label="Configured user email">Not configured</span><button id="atgvJobsButton" type="button" class="guide-icon-button" aria-label="ATGV Workflow Jobs" title="Workflow Jobs and Recovery" aria-haspopup="dialog" aria-controls="atgvJobsDialog"><svg class="guide-help-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h8M8 17h4"/></svg></button><button id="reportIssue" type="button" class="guide-icon-button" aria-label="Report an issue" title="Report an Issue"><svg class="guide-help-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.5 0-3-.4-4.3-1.2L3 20l1.3-4A8.5 8.5 0 1 1 21 11.5Z"/><path d="M12 7.5v4.5M12 15.5h.01"/></svg></button><button id="guideHelp" type="button" class="guide-icon-button" aria-label="Open interactive user guide" title="Interactive User Guide" aria-haspopup="dialog" aria-controls="guideMenu"><svg class="guide-help-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.65 9a2.5 2.5 0 0 1 4.7 1.2c0 1.8-2.35 2-2.35 3.7"/><path d="M12 17.3h.01"/></svg></button></div>
+    <div id="myWorkHeaderWave" class="mywork-header-wave" aria-label="My Work AI animation">
+      <div class="mywork-header-wave-visual">
+        <canvas id="atgvMyWorkAiOrb" class="atgv-mywork-ai-wave" role="img" aria-label="AI waveform fades in header red, changes to CMYK while active, and fades back to header red"></canvas>
+      </div>
+    </div>
   </header>
   <div id="topNotification" class="top-notification hidden" role="status" aria-live="polite" aria-atomic="true"><span id="topNotificationIcon" class="top-notification-icon" aria-hidden="true">ⓘ</span><span id="topNotificationText" class="top-notification-text"></span><div class="top-notification-actions"><button id="topNotificationAction" type="button" class="top-notification-primary hidden"></button><button id="topNotificationDismiss" type="button" class="top-notification-dismiss" aria-label="Dismiss notification" title="Dismiss notification">×</button></div></div>
   <div id="atgvJobsDialog" class="modal-overlay hidden" aria-hidden="true"><div class="modal-card atgv-jobs-dialog" role="dialog" aria-modal="true" aria-labelledby="atgvJobsTitle"><div class="section-title"><h2 id="atgvJobsTitle">ATGV Workflow Jobs</h2><button id="atgvJobsClose" type="button" class="secondary">Close</button></div><p class="muted">Durable job status across Business Analyst, Solution Architect, UI/UX, Developer, Project Manager, setup, Workspace and external APIs. Retrying Jira or GitHub writes always requires remote reconciliation.</p><div class="atgv-jobs-controls"><button id="atgvJobsRefresh" type="button" class="secondary">Refresh Jobs</button><span id="atgvJobsSummary" class="muted" role="status" aria-live="polite">Open a project to view saved jobs.</span></div><div id="atgvJobsList" class="atgv-jobs-list" aria-live="polite"></div><p id="atgvJobsRecovery" class="muted" role="status" aria-live="polite"></p></div></div>
@@ -333,11 +338,6 @@ function html(webview,{resumeLibrary=false}={}){
   </main>
   <main id="myWorkView" class="hidden work-container atgv-mywork-ai-page" aria-label="My Work AI assistant">
     <section id="atgvMyWorkAi" class="atgv-mywork-ai" aria-label="AI recommendations and chat for the selected My Work role" data-state="idle">
-      <div class="atgv-mywork-ai-topbar" aria-label="ATGV AI animation">
-        <div class="atgv-mywork-ai-visual">
-          <canvas id="atgvMyWorkAiOrb" class="atgv-mywork-ai-wave" role="img" aria-label="AI waveform fades in red, changes to CMYK while active, and fades back to red"></canvas>
-        </div>
-      </div>
       <div id="atgvMyWorkAiResults" class="atgv-mywork-ai-results" role="region" aria-label="AI suggestions and conversation">
         <div id="atgvMyWorkAiContent" class="atgv-mywork-ai-content" hidden>
           <h2 id="atgvMyWorkAiTitle" class="atgv-mywork-ai-title">AI · My Work</h2>
