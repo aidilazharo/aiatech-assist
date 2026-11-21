@@ -101,7 +101,7 @@ test('Custom Stack progress and branch/action controls are never hidden by the c
  assert.doesNotMatch(html,/id="architectCustomProgress(?:Fill|Text)?"/);
  for(const id of ['architectCustomActions','architectCustomFindings','architectCustomBranch','architectCustomSwitchBranch','architectCustomPull'])
   assert.match(html,new RegExp('id="'+id+'"'));
- assert.match(js,/architectCustomSetProgress\(100,'Repository analysis \/ preparation complete'\)/);
+ assert.match(js,/architectCustomSetProgress\(100,'Repository scan \/ preparation complete \(not server startup\)'\)/);
  assert.match(js,/architectCustomFixBranch/);
  assert.match(js,/architectCustomSwitchBranch/);
  assert.match(js,/if\(m.type==='architectCustomProgress'\)/);
