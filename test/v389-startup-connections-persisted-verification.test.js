@@ -64,7 +64,8 @@ test('Changed endpoint, revoked token, missing catalog PAT or altered proof cann
  assert.equal(await x.stored(),null,'changed GitHub account owner invalidates saved proof');
  x.env.extensionSettings.github.owner='aiamalaysia';
  x.env.extensionSettings.github.repo='changed';
- assert.ok(await x.stored(),'project repository changes do not invalidate account verification');
+ assert.equal(await x.stored(),null,'project repository changes invalidate account setup verification');
+ x.env.extensionSettings.github.repo=setup.DEFAULTS.projectRepository;
  x.env.tokens.github='GIT-CHANGED';
  assert.equal(await x.stored(),null,'changed PAT invalidates saved proof');
  x.env.tokens.github='GIT';
