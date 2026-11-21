@@ -9,7 +9,11 @@
     "archive",
     "zip",
     "memory",
-    "vsix"
+    "vsix",
+    "auto-merge",
+    "pull request",
+    "checks",
+    "release workflow"
   ],
   "decisions": [
     {
@@ -26,6 +30,11 @@
       "id": "RELEASE-0003",
       "status": "accepted",
       "decision": "Run memory-sensitive tests on the extracted release archive with .memory excluded. Tests may validate the full source memory only when it exists in the Git checkout, and must also pass in standalone distribution ZIPs."
+    },
+    {
+      "id": "RELEASE-0004",
+      "status": "accepted",
+      "decision": "Every accepted source update requires its own next sequential ATGV version, reviewed branch and pull request; automatically squash-merge eligible PRs only after the complete required CI suite succeeds, GitHub branch protections permit merge, and the exact PR head SHA is verified. Never bypass failures or fabricate a release. On main-branch success publish the verified VSIX, checksum and source archive, with exactly one RELEASE.md."
     }
   ]
 }
