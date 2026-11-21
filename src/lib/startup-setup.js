@@ -1,40 +1,65 @@
 'use strict';
-const FIXED_LIBRARY_REPOSITORY='https://github.com/aidilazharo/tech-stacks-skills';
+// Trusted ATGV source repositories are selected by the configured GitHub owner.
+// Release mirrors are optional and must never be mistaken for a writable source.
+const FIXED_LIBRARY_REPOSITORY='https://github.com/aidilazharo/tech-stacks-skills'; // legacy helper
 const DEFAULTS=Object.freeze({
  jiraUrl:'https://aiamy-jira-azure.atlassian.net',
- confluenceUrl:'https://aiamy-jira-azure.atlassian.net/wiki',
  email:'user.name@aia.com',
- githubUrl:'https://github.com/aiamalaysia'
+ githubUrl:'github.com/aiamalaysia',
+ projectRepository:'my-fow-technology-app-techassists'
+});
+const RELEASES=Object.freeze({
+ extension:'https://github.com/aidilazharo/extension',
+ library:'https://github.com/aidilazharo/library'
+});
+const SOURCE_REPOS=Object.freeze({
+ aidilazharo:Object.freeze({
+  extension:'https://github.com/aidilazharo/aiatech-assist',
+  library:FIXED_LIBRARY_REPOSITORY
+ }),
+ aiamalaysia:Object.freeze({
+  extension:'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc',
+  library:'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills'
+ })
 });
 function githubRepo(input){
  const url=new URL(String(input||'').trim());
  if(url.protocol!=='https:'||url.hostname!=='github.com'||url.username||url.password||url.search||url.hash)throw Error('GitHub repository must use https://github.com/owner/repository.');
- const path=url.pathname.replace(/\/$/,'').split('/').filter(Boolean);
- if(path.length!==2||!path.every(p=>/^[A-Za-z0-9_.-]+$/.test(p)))throw Error('Invalid GitHub repository URL.');
- return {owner:path[0],repo:path[1].replace(/\.git$/,'')};
+ const names=url.pathname.replace(/\/$/,'').split('/').filter(Boolean);
+ if(names.length!==2||!names.every(name=>/^[A-Za-z0-9_.-]+$/.test(name)))throw Error('Invalid GitHub repository URL.');
+ return {owner:names[0],repo:names[1].replace(/\.git$/,'')};
+}
+function githubOrganization(input){
+ const raw=String(input||'').trim();
+ const url=new URL(/^https?:\/\//i.test(raw)?raw:'https://'+raw);
+ if(url.protocol!=='https:'||url.hostname!=='github.com'||url.port||url.search||url.hash||url.username||url.password||
+ !/^\/[A-Za-z0-9-]{1,39}\/?$/.test(url.pathname))throw Error('Use github.com/organization, without a repository or credentials.');
+ const owner=url.pathname.split('/').filter(Boolean)[0];
+ return {owner,url:'https://github.com/'+owner};
 }
 function validate(input){
  if(!input||typeof input!=='object'||Array.isArray(input))throw Error('Invalid startup connection form.');
- const data={};for(const key of Object.keys(DEFAULTS)){
-  const value=String(input[key]||'').trim();
-  if(!value||value.length>600)throw Error('Enter '+key+' before testing connections.');
-  data[key]=value;
- }
- for(const key of ['jiraUrl','confluenceUrl']){
-  const url=new URL(data[key]);
-  if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||!url.hostname.endsWith('.atlassian.net'))throw Error('Enter a secure Atlassian Cloud URL for '+key+'.');
-  if(key==='jiraUrl'&&url.pathname.replace(/\/$/,'')!=='')throw Error('Jira URL must be the site base URL.');
-  if(key==='confluenceUrl'){
-   if(!['','/wiki'].includes(url.pathname.replace(/\/$/,'')))throw Error('Confluence URL must be the site base URL or end in /wiki.');
-   data[key]=url.origin+'/wiki';
-  }
- }
- if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email))throw Error('Enter a valid Jira and Confluence account email.');
- const organization=new URL(data.githubUrl);
- if(organization.protocol!=='https:'||organization.hostname!=='github.com'||organization.search||organization.hash||organization.username||organization.password||!/^\/[A-Za-z0-9_.-]+\/?$/.test(organization.pathname))throw Error('Enter a GitHub organization URL.');
- const owner=organization.pathname.split('/').filter(Boolean)[0];
- // Library identity is fixed by ATGV, regardless of the configured account owner.
- const library=githubRepo(FIXED_LIBRARY_REPOSITORY);
- return {...data,owner,libraryRepoUrl:FIXED_LIBRARY_REPOSITORY,library};
+ const jiraUrl=String(input.jiraUrl||input.atlassianUrl||'').trim();
+ const email=String(input.email||'').trim();
+ const org=githubOrganization(input.githubUrl);
+ const projectRepository=String(input.projectRepository||DEFAULTS.projectRepository).trim();
+ if(!jiraUrl||jiraUrl.length>500||!email||email.length>250)throw Error('Enter Atlassian URL and Atlassian email.');
+ const site=new URL(jiraUrl);
+ if(site.protocol!=='https:'||site.username||site.password||site.port||site.search||site.hash||
+ !site.hostname.endsWith('.atlassian.net')||site.pathname.replace(/\/$/,'')!=='')
+ throw Error('Enter a valid Atlassian site URL (https://your-site.atlassian.net).');
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw Error('Enter a valid Atlassian email address.');
+ if(!/^[A-Za-z0-9_.-]{1,100}$/.test(projectRepository)||projectRepository.startsWith('.')||projectRepository.endsWith('.git'))
+ throw Error('Enter a valid Project Repository name, without organization or https://.');
+ const selected=SOURCE_REPOS[org.owner.toLowerCase()];
+ if(!selected)throw Error('ATGV extension/library mapping is not configured for '+org.owner+'. Supported GitHub owners: aidilazharo or aiamalaysia.');
+ const library=githubRepo(selected.library),extension=githubRepo(selected.extension);
+ return {
+  jiraUrl:site.origin,confluenceUrl:site.origin+'/wiki',email,githubUrl:org.url,owner:org.owner,
+  projectRepository,projectRepoUrl:org.url+'/'+projectRepository,
+  extensionRepoUrl:selected.extension,libraryRepoUrl:selected.library,
+  extension,library,extensionReleases:githubRepo(RELEASES.extension),
+  libraryReleases:githubRepo(RELEASES.library),extensionReleasesUrl:RELEASES.extension,libraryReleasesUrl:RELEASES.library
+ };
 }
-module.exports={DEFAULTS,FIXED_LIBRARY_REPOSITORY,githubRepo,validate};
+module.exports={DEFAULTS,FIXED_LIBRARY_REPOSITORY,SOURCE_REPOS,RELEASES,githubRepo,githubOrganization,validate};
