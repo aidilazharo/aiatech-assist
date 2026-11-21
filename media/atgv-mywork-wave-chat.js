@@ -49,8 +49,11 @@
  function addMessage(kind,text,animate=false){
   const node=document.createElement('div');
   node.className='atgv-mywork-ai-message '+kind;
+  const body=document.createElement('span');
+  body.className='atgv-mywork-ai-message-text';
+  node.appendChild(body);
   transcript.appendChild(node);
-  if(animate)typewriter(node,text);else node.textContent=String(text||'');
+  if(animate)typewriter(body,text);else body.textContent=String(text||'');
   transcript.scrollTop=transcript.scrollHeight;
   if(resultsViewport)resultsViewport.scrollTop=resultsViewport.scrollHeight;
   return node;
@@ -159,15 +162,16 @@
   const reply=addMessage('assistant',msg.text||'No response received.',true);
   const target=String(msg.suggestedRoleId||'');
   if(/^[a-z][a-z0-9-]{1,78}$/.test(target)&&msg.suggestedRoleName){
+    const enabled=msg.suggestedRoleEnabled===true;
     const action=document.createElement('button');
     action.type='button';action.className='atgv-mywork-ai-switch-role';
-    action.textContent='Switch to '+String(msg.suggestedRoleName).slice(0,80);
-    action.setAttribute('aria-label','Switch My Work chat role to '+String(msg.suggestedRoleName).slice(0,80));
+    action.textContent=(enabled?'Switch to ':'Open Role Settings for ')+String(msg.suggestedRoleName).slice(0,80);
+    action.setAttribute('aria-label',(enabled?'Switch My Work chat role to ':'Enable My Work role ')+String(msg.suggestedRoleName).slice(0,80));
     action.addEventListener('click',()=>{
       // Only an explicit user click may trigger role navigation. The target
       // is checked against enabled project roles by the main UI controller.
       window.dispatchEvent(new CustomEvent('atgv:mywork-switch-role',{
-        detail:{projectId:project,fromRoleId:role,targetRoleId:target,requestText:submittedText.slice(0,4000)}
+        detail:{projectId:project,fromRoleId:role,targetRoleId:target,requestText:submittedText.slice(0,4000),enabled}
       }));
     });
     reply.append(action);
