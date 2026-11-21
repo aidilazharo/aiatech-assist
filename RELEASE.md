@@ -1,13 +1,14 @@
-# ATGV AIATECH Assist v0.0.17
+# ATGV AIATECH Assist v0.0.18
 
 ## Changes
 
-- Remove the four repository URL rows from ATGV: Start: Extension (required), Library (required), Extension releases (optional), and Library releases (optional).
-- Remove the now-unused startup repository list renderer, empty preview container, and related styling.
-- Preserve the GitHub organization and Project Repository input fields, the dynamic preview of the selected project's repository URL, PAT settings, connection permissions, and underlying extension/library synchronization.
-- Keep all project data, Jira/Confluence connections, developer workflows and AI chat behavior unchanged.
-- Add a regression test for the absent listing and for valid/invalid project repository previews.
+- Render the My Work animated AI waveform above the bottom red divider with an explicit stacking order: divider z-index 1, waveform z-index 3, canvas z-index 4.
+- Use an isolated top-bar stacking context and allow overflow so the wave visibly crosses the red divider without clipping.
+- Align the waveform centerline to the divider on desktop, mobile and short-height views; reserve center results padding so chat text is not obscured.
+- Animate the waveform through the requested lifecycle: fade in red, transition to CMYK while AI is active, then fade CMYK back into red while fading out.
+- Retain the red divider, independently scrolling results, bottom chat composer, all 18 role prompts, Confluence/Jira project awareness and existing AI chat.
+- Add regression coverage for z-index precedence, responsive offsets, and the red/CMYK/red animation sequence.
 
-## Release validation
+## Verification
 
-Run Node regression suite, UI checks, Windows verification and VSIX/archive checks on the exact PR head before merging. Publish verified VSIX, checksum and source ZIP from main after the required checks succeed. Keep .memory in Git development source only, excluded from distribution packages.
+Run Node regression, Windows validation, UI checks and VSIX/archive packaging in CI before merging. Publish from main only after all checks pass, with .memory kept in source control but excluded from distributed VSIX and ZIP.
