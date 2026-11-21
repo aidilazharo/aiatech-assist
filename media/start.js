@@ -8199,36 +8199,56 @@ $('architectCustomStop').addEventListener('click',()=>{
 window.addEventListener('message',event=>{
  const m=event.data||{};
  if(!activeId||m.projectId!==activeId)return;
+ if(m.type==='architectCustomStatusResult'){
+  architectCustomStatusPending=false;
+  architectCustomRuntime={...m.value,projectId:activeId};
+  if(!architectCustomBusy)architectCustomRunning=!!m.value?.running;
+  renderArchitectCustomPanel();
+ }
  if(m.type==='architectCustomScanResult'||m.type==='architectCustomPullResult'||
     m.type==='architectCustomBranchResult'||m.type==='architectCustomInstallResult'){
-  architectCustomBusy=false;architectCustomRunning=!!m.value?.running;
+  architectCustomBusy=false;architectCustomOperation='';architectCustomLastError='';
+  architectCustomRunning=!!m.value?.running;
   architectCustomInfo={...m.value,projectId:activeId,previewCustomized:false};
   const text=m.value?.pullMessage||m.value?.branchMessage||
    (m.type==='architectCustomInstallResult'?'Dependencies installed; review the scan findings.':
     'Found '+(m.value?.recognized||0)+' application target(s). Review the detected services and recommended actions.');
-  architectCustomNotify(text,'complete');architectCustomSetProgress(100,'Repository analysis / preparation complete');
-  renderArchitectCustomPanel();
+  architectCustomNotify(text+' Scan complete does not mean the server is running.','complete');
+  architectCustomSetProgress(100,'Repository scan / preparation complete (not server startup)');
+  renderArchitectCustomPanel();architectCustomRequestStatus();
  }
  if(m.type==='architectCustomError'){
-  architectCustomBusy=false;if(m.logAvailable)architectRecordErrorLog(m);
+  architectCustomBusy=false;architectCustomOperation='';
+  architectCustomLastError=String(m.message||'Custom Stack operation failed.').slice(0,250);
+  if(m.logAvailable)architectRecordErrorLog(m);
   architectCustomNotify(m.message||'Custom Stack operation failed.','error');
   architectCustomSetProgress(architectCustomProgressPercent,'Operation stopped: review error');
-  renderArchitectCustomPanel();
+  renderArchitectCustomPanel();architectCustomRequestStatus();
  }
  if(m.type==='architectCustomProgress'){
-  architectCustomNotify(m.message||'Working with custom application…');
-  architectCustomSetProgress(m.percent??Math.min(90,architectCustomProgressPercent+5),m.message||'Working');
+  const message=String(m.message||'Working with custom application…');
+  if(/Verifying localhost|health at /i.test(message))architectCustomOperation='VERIFYING LOCALHOST HEALTH';
+  else if(/Starting /i.test(message))architectCustomOperation='STARTING APPLICATION';
+  else if(/installing|dependencies|npm /i.test(message))architectCustomOperation='INSTALLING DEPENDENCIES';
+  else if(architectCustomBusy&&architectCustomOperation!=='WAITING FOR VS CODE CONFIRMATION')architectCustomOperation='PROCESSING CUSTOM STACK';
+  architectCustomNotify(message);
+  architectCustomSetProgress(m.percent??Math.min(90,architectCustomProgressPercent+5),message);
+  architectCustomDrawRuntime();
  }
  if(m.type==='architectCustomRunResult'){
-  architectCustomBusy=false;architectCustomRunning=!!m.value?.running;
+  architectCustomBusy=false;architectCustomOperation='';architectCustomLastError='';
+  architectCustomRunning=!!m.value?.running;
+  if(m.value?.running)architectCustomRuntime={...architectCustomRuntime,projectId:activeId,checked:true,running:true,
+    previewUrl:String(m.value.url||''),mockPreview:!!m.value.mockPreview,reachable:true};
   architectCustomNotify(m.value?.message||'Custom Stack execution completed.',m.value?.running?'complete':'error');
   architectCustomSetProgress(m.value?.running?100:architectCustomProgressPercent,m.value?.running?'Local preview verified':'Run unsuccessful');
-  renderArchitectCustomPanel();
+  renderArchitectCustomPanel();architectCustomRequestStatus();
  }
  if(m.type==='architectCustomStopResult'){
-  architectCustomBusy=false;architectCustomRunning=false;
+  architectCustomBusy=false;architectCustomRunning=false;architectCustomOperation='';architectCustomLastError='';
+  architectCustomRuntime={...architectCustomRuntime,projectId:activeId,checked:true,running:false,reachable:null,previewUrl:''};
   architectCustomNotify(m.value?.message||'Custom Stack stopped.','complete');
-  architectCustomSetProgress(100,'Custom application stopped');renderArchitectCustomPanel();
+  architectCustomSetProgress(100,'Custom application stopped');renderArchitectCustomPanel();architectCustomRequestStatus();
  }
 });
 
