@@ -86,6 +86,21 @@ test('shared My Work waveform and chat follows every selected role without dupli
  assert.equal(html.match(/id="atgvMyWorkAiChatForm"/g)?.length,1);
  assert.equal(html.match(/id="atgvMyWorkAiInput"/g)?.length,1);
 });
+test('AI chat card matches sibling My Work section width and spacing across roles',()=>{
+ const css=read('media/atgv-mywork-ai.css');
+ const peer=read('media/start.css');
+ assert.match(peer,/#workView \.role-jira-work\{border:1px solid var\(--atgv-line\);border-radius:11px;padding:20px;margin:14px 0/);
+ assert.match(css,/#workView > #atgvMyWorkAi,/);
+ assert.match(css,/#workView\.role-progress-only > #atgvMyWorkAi\.atgv-mywork-ai/);
+ assert.match(css,/width:100%;min-width:0;box-sizing:border-box;align-self:stretch/);
+ assert.match(css,/min-height:0;padding:20px 24px;margin:14px 0 18px/);
+ for(const name of ['atgv-mywork-ai-content','atgv-mywork-ai-chat','atgv-mywork-ai-conversation']){
+  const rule=css.match(new RegExp('\\.'+name+'\\{[^}]+\\}'))?.[0]||'';
+  assert.match(rule,/max-width:none/,name);
+  assert.match(rule,/width:100%/,name);
+ }
+ assert.match(css,/@media\(max-width:620px\)/);
+});
 test('reject overlong input and unknown role; chat handler remains read-only',async()=>{
  await assert.rejects(()=>chat.ask({projectId:'a',roleId:'solution-architect',message:'x'.repeat(4001),request:async()=>''}),/1–4000/);
  await assert.rejects(()=>chat.ask({projectId:'a',roleId:'unknown',message:'hello',request:async()=>''}),/Unsupported/);
