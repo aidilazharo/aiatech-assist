@@ -31,7 +31,7 @@ test('other users are deduplicated by Jira ID, do not include current user and a
  ],'self','zara@company.example');
  assert.deepEqual(other,[{name:'Amira',roles:['Project Manager'],assignedJira:1}]);
 });
-test('today's priorities surface missing configuration before work and role-specific Jira tasks',()=>{
+test("today's priorities surface missing configuration before work and role-specific Jira tasks",()=>{
  const value=brief.build({
   identity:{email:'john.doe@company.example'},roleId:'business-analyst',roleName:'Business Analyst',
   deadline:'',now:new Date(2026,10,21),
