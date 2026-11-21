@@ -31,9 +31,9 @@ async function secureDirectory(dir){
 async function ensureLayout(workspace){
  if(!path.isAbsolute(workspace))throw Error('ATGV workspace path must be absolute.');
  const root=path.join(workspace,'.atgv'),src=path.join(root,'src');
- for(const dir of [root,src,path.join(src,'extension'),path.join(src,'library'),path.join(root,'error-logs')])
+ for(const dir of [root,src,path.join(src,'extension'),path.join(src,'library'),path.join(src,'error-logs')])
   await secureDirectory(dir);
- return {root,source:src,extension:path.join(src,'extension'),library:path.join(src,'library'),logs:path.join(root,'error-logs')};
+ return {root,source:src,extension:path.join(src,'extension'),library:path.join(src,'library'),logs:path.join(src,'error-logs')};
 }
 async function writeLog(workspace,report){
  const layout=await ensureLayout(workspace);
@@ -156,4 +156,12 @@ async function runWindow({workspace,manager,getRepository,getToken,isIdle,global
   return {status:'complete',processed,duplicates,prs,slot};
  });
 }
-module.exports={ensureLayout,writeLog,readLogs,localSlot,fingerprint,probePat,findReported,syncSource,runWindow,DAY_STATE,DISABLED_STATE};
+const ERROR_SIGNAL=/\b(?:error|errors|failed|failure|fatal|exception|crashed?|timeout|timed?\s+out|unauthoriz(?:ed|ation)|forbidden|permission denied|cannot|unable|HTTP\s+[45]\d\d|unreachable)\b/i;
+async function captureRuntimeError(workspace,source,message,{target='extension'}={}){
+ const text=String(message?.message||message||'').trim();
+ if(!workspace||!text||!ERROR_SIGNAL.test(text))return null;
+ // Avoid throwing or recursively reporting an error while writing this log.
+ return writeLog(workspace,{category:'error',target,title:'Error in '+String(source||'ATGV').slice(0,70),
+  screen:String(source||'ATGV').slice(0,80),observed:text.slice(0,3000)});
+}
+module.exports={ensureLayout,writeLog,readLogs,captureRuntimeError,localSlot,fingerprint,probePat,findReported,syncSource,runWindow,DAY_STATE,DISABLED_STATE};
