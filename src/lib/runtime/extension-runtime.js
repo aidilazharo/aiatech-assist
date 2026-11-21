@@ -998,6 +998,7 @@ async function aiSharedClient(){const {project,config}=current();const token=awa
 async function aiPull(){if(!activeProject)return;const epoch=activationEpoch,projectId=activeProject.id;try{const shared=await aiSharedClient(),remote=await shared.read();if(epoch!==activationEpoch||activeProject?.id!==projectId)return;const memory=new aiMemory.ProjectMemory(aiRoot());try{memory.importShared(remote.value.manifest,projectId);}finally{memory.close();}report('Confluence AI memory loaded for '+activeProject.id);}catch(e){report('Confluence AI memory deferred: '+e.message);}}
 async function aiRunOnce(){if(aiServiceBusy||!activeProject)return {status:'busy'};aiServiceBusy=true;try{const root=aiRoot(),shared=await aiSharedClient(),provider=cfg().get('rag.provider','auto');if(!['ollama','openai-compatible'].includes(provider))throw Error('Unattended generation needs an approved Ollama or OpenAI-compatible endpoint, not interactive Copilot Auto. Configure RAG Provider.');const model=await activeAiTarget();const result=await aiOrchestrator.run({root,shared,model,onProgress:(message,percent)=>{dashboard?.webview.postMessage({type:'aiServiceProgress',message,percent});}});const memory=new aiMemory.ProjectMemory(root);try{const merged=await shared.mergeManifest(memory.manifest(activeProject.id),memory.get('shared-manifest',{}));memory.set('shared-manifest',merged);memory.set('shared-sync',new Date().toISOString());}catch(e){memory.queueOperation('manifest',memory.manifest(activeProject.id));report('AI memory sync queued: '+e.message);}finally{memory.close();}await dashboard?.webview.postMessage({type:'aiServiceProgress',message:'Completed: '+result.status,percent:100});return result;}finally{aiServiceBusy=false;await refreshDashboard().catch(()=>{});}}
 async function aiSchedule(){if(aiServiceTimer){clearInterval(aiServiceTimer);aiServiceTimer=null;}if(!activeProject)return;const settings=await aiServiceConfig.read(aiRoot());if(settings.enabled&&settings.mode==='vscode'){aiServiceTimer=setInterval(()=>{if(!aiServiceBusy)aiRunOnce().catch(e=>report('AI hourly service: '+e.message));},settings.interval*60000);aiServiceTimer.unref?.();}}
+const confluenceSourceConflictNotices=new Map();
 async function syncConfluenceSourceVault(projectId,reason='scheduled'){
  if(sourceVaultBusy||openingOffline||!registry||activeProject?.id!==projectId)return {skipped:'busy, offline, or project changed'};
  sourceVaultBusy=true;
@@ -1015,8 +1016,19 @@ async function syncConfluenceSourceVault(projectId,reason='scheduled'){
     approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;jiraPreviewValidation=null;
     await refreshDashboard();
    }
-   if(result.conflicts?.length)await notice('Confluence source synchronization needs review: '+result.conflicts.slice(0,3).join('; ').slice(0,400),true);
-   else if(result.restored||result.downloaded||result.uploaded)await notice(note);
+   if(result.conflicts?.length){
+    // The periodic five-minute retry remains read-only, but do not show the
+    // same unresolved conflict notification again on every scheduled scan.
+    const fingerprint=sha(result.conflicts.join('\n'));
+    if(confluenceSourceConflictNotices.get(projectId)!==fingerprint){
+     confluenceSourceConflictNotices.set(projectId,fingerprint);
+     await notice('Confluence source synchronization needs review: '+result.conflicts.slice(0,3).join('; ').slice(0,400),true);
+    }
+   }else{
+    confluenceSourceConflictNotices.delete(projectId);
+    if(result.baselineRecovered)await notice('Confluence source baseline verified and recovered. Both copies are unchanged.');
+    else if(result.restored||result.downloaded||result.uploaded)await notice(note);
+   }
   }
   return result;
  }finally{sourceVaultBusy=false;}
