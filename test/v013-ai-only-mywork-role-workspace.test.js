@@ -12,14 +12,17 @@ const actions=read('media/atgv-mywork-ai.js');
 const routes=require('../media/workspace-breadcrumbs');
 const roles=[...require('../src/sdlc-work').ROLES,...require('../src/sdlc-catalog').OPTIONAL_ROLES];
 
-test('My Work is a separate top-level page containing only AI chat, animation and suggestions',()=>{
+test('My Work has isolated chat and suggestions with shared top-header AI animation',()=>{
  const start=html.indexOf('<main id="myWorkView"');
  const end=html.indexOf('</main>',start);
  const work=html.indexOf('<main id="workView"',end);
  assert.ok(start>0&&end>start&&work>end);
  const ai=html.slice(start,end),workspace=html.slice(work,html.indexOf('</main>',work));
  assert.match(ai,/id="atgvMyWorkAi"/);
- assert.match(ai,/id="atgvMyWorkAiOrb"/);
+ const header=html.slice(html.indexOf('<header class="app-header"'),html.indexOf('</header>')+9);
+ assert.match(header,/id="atgvMyWorkAiOrb"/);
+ assert.doesNotMatch(ai,/id="atgvMyWorkAiOrb"/);
+ assert.equal(html.match(/id="atgvMyWorkAiOrb"/g)?.length,1);
  assert.match(ai,/id="atgvMyWorkAiChatForm"/);
  assert.match(ai,/id="atgvMyWorkAiInput"/);
  assert.match(ai,/id="atgvMyWorkAiConversation"/);
