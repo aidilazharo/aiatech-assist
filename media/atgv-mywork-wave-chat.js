@@ -208,6 +208,7 @@
   if(msg.projectId!==project||msg.roleId!==role)return;
   if(msg.type==='roleAiDailyBrief'){
    if(!Number.isSafeInteger(msg.requestId)||msg.requestId<lastBriefRequest)return;
+   if(String(msg.brief?.today||'')!==dayLocal())return; // Ignore yesterday's delayed response.
    lastBriefRequest=msg.requestId;
    renderBrief(msg.brief);
    return;
