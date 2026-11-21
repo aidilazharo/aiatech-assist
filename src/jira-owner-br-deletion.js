@@ -32,9 +32,20 @@ function assertSelection({brId,epicKey,projectKey}){
 function assertNotLocallyOwned(register,id,keys){
  if((register.brs||[]).some(row=>row.id===id))throw Error('This BR already exists locally. Use the approved Delete Everywhere workflow instead.');
  if((register.deletedRequirements||[]).some(row=>row.id===id))throw Error('The BR has existing local deletion history. Reconcile that history before deleting Jira records.');
- const mapped=new Set([...Object.values(register.synced||{}),...Object.values(register.roleTaskMappings||{})].map(x=>x?.key).filter(Boolean));
- const conflict=keys.find(key=>mapped.has(key));
- if(conflict)throw Error('Jira '+conflict+' has existing local ownership mapping. Use Delete Everywhere or reconcile first.');
+ // A reset may preserve the selected orphan's Jira mapping but lose its BR
+ // source row. Such mappings are eligible only when every mapped issue still
+ // belongs to the exact reviewed Epic hierarchy. Never touch another BR's map.
+ const eligible=new Set(keys);
+ for(const [path,entry] of [...Object.entries(register.synced||{}),...Object.entries(register.roleTaskMappings||{})]){
+  const mapped=entry?.key;
+  if(!mapped)continue;
+  if(belongs(path,id)){
+   if(!eligible.has(mapped))
+    throw Error('Historical Jira mapping '+mapped+' is outside the selected Epic hierarchy. Reconcile before deletion.');
+  }else if(eligible.has(mapped)){
+   throw Error('Jira '+mapped+' belongs to another local BR mapping. Use Delete Everywhere or reconcile first.');
+  }
+ }
  if((register.pending&&Object.keys(register.pending).some(p=>belongs(p,id)))||
     (register.roleTaskPending&&Object.keys(register.roleTaskPending).some(p=>belongs(p,id))))
   throw Error('This Business Requirement has pending Jira operations. Resolve them before deletion.');
