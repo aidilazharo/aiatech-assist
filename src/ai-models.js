@@ -3,6 +3,7 @@ const path = require('node:path');
 const { validateUrl } = require('./utils');
 const { requestJson } = require('./clients');
 const { executeCodex } = require('./ai-provider-runtime');
+const {memoryForPrompt}=require('./decision-memory');
 function modelLabel(model) { return String(model?.name || model?.id || model?.model || 'AI model'); }
 function modelVendor(model) { return String(model?.vendor || model?.provider || 'VS Code'); }
 function modelIdentity(model) { return JSON.stringify({ vendor: modelVendor(model), id: String(model?.id || model?.model || model?.name || '') }); }
@@ -109,6 +110,8 @@ async function sendAiText({ vscodeApi, target, prompt, system = '', maxChars = 6
         throw Error('An AI model must be selected first.');
     if (signal?.aborted)
         throw Object.assign(new Error('AI request stopped.'), { name: 'AbortError' });
+    const decisions=memoryForPrompt(prompt);
+    if(decisions)prompt=String(prompt)+'\n\n'+decisions;
     let text = '';
     if (target.kind === 'vscode') {
         const cancellation = new vscodeApi.CancellationTokenSource();
