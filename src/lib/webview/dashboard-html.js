@@ -152,7 +152,7 @@ function html(webview,{resumeLibrary=false}={}){
        <div class="field"><label for="startupGithubUrl">GitHub organization URL</label><input type="text" inputmode="url" id="startupGithubUrl" placeholder="github.com/aiamalaysia" required></div>
        <div class="field"><label for="startupProjectRepository">Project Repository</label><input type="text" id="startupProjectRepository" placeholder="my-fow-technology-app-techassists" required><small class="muted" id="startupProjectRepositoryPreview" aria-live="polite">https://github.com/aiamalaysia/my-fow-technology-app-techassists</small></div>
        <div class="field"><label for="startupGithubToken">GitHub personal access token</label><input type="password" id="startupGithubToken" autocomplete="new-password" placeholder="Enter PAT or retain securely saved token"><button type="button" id="startupEditConnections" class="secondary hidden" aria-label="Edit Atlassian and GitHub connections">Edit</button></div>
-      </div><div id="startupRepositoryPreview" class="atgv-repo-preview" aria-label="GitHub source repositories" role="group"></div>
+      </div>
       <div class="atgv-startup-actions"><button type="submit" id="startupTestConnections">Test &amp; Save Connections</button><span id="startupConnectionMessage" role="status" aria-live="polite">Verify Atlassian and GitHub connections to continue.</span></div>
       <div id="startupConnectionProgress" class="atgv-connection-progress" aria-label="Sequential connection checks" role="group" aria-live="polite"></div>
       <details id="startupConnectionLogPanel" class="atgv-connection-log-panel" hidden aria-hidden="true">
