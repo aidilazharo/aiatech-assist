@@ -7982,6 +7982,45 @@ function architectBegin(action,message){
 }
 let architectCustomInfo=null,architectCustomBusy=false,architectCustomRunning=false;
 let architectCustomProgressPercent=0,architectCustomProgressLabel='Ready to scan';
+let architectCustomOperation='',architectCustomStatusPending=false,architectCustomLastError='';
+let architectCustomRuntime={projectId:'',checked:false,running:false,pid:null,previewUrl:'',relative:'',mockPreview:false,exitCode:null,reachable:null};
+function architectCustomRequestStatus(){
+ if(!activeId||$('architectStackSelect')?.value!=='custom'||architectCustomStatusPending)return;
+ architectCustomStatusPending=true;
+ send('architectCustomStatus',{projectId:activeId});
+}
+function architectCustomDrawRuntime(){
+ const root=$('architectCustomRuntime');if(!root)return;
+ const label=$('architectCustomRuntimeLabel'),detail=$('architectCustomRuntimeDetail');
+ const runtime=architectCustomRuntime.projectId===activeId?architectCustomRuntime:null;
+ let state='unknown',title='APPLICATION STATUS UNKNOWN',description='Use Check Status to verify whether an ATGV-managed application is running.';
+ if(architectCustomBusy){
+  state='working';title=architectCustomOperation||'WORKING';
+  description=/confirm/i.test(title)?'Check the VS Code confirmation dialog; no application script runs until you approve.':
+   'ATGV is processing this action. See Technology Stack progress above.';
+ }else if(architectCustomLastError){
+  state='failed';title='LAST ACTION FAILED';description=architectCustomLastError;
+ }else if(runtime?.checked&&runtime.running){
+  const reachable=runtime.reachable;
+  state=reachable===false?'working':'running';
+  title=reachable===false?'PROCESS RUNNING — PREVIEW NOT REACHABLE':'APPLICATION RUNNING';
+  description=(runtime.mockPreview?'MOCK DATA preview':'Real application')+
+   (runtime.pid?' · PID '+runtime.pid:'')+
+   (runtime.previewUrl?' · '+runtime.previewUrl:'')+
+   (reachable===false?' · Check logs / localhost health':'');
+ }else if(runtime?.checked){
+  state='stopped';title='APPLICATION NOT RUNNING';
+  description=runtime.exitCode!==null?'ATGV process exited with code '+runtime.exitCode+'. Check logs before restarting.':
+   (architectCustomInfo?.projectId===activeId?
+    'Scan complete, but NO server was started. Select Install & Run or Run Mock Preview.':
+    'Scan Repository identifies applications; it does not install or start them.');
+ }else if(runtime?.message){
+  state='unknown';description=runtime.message;
+ }
+ root.dataset.state=state;label.textContent=title;detail.textContent=description;
+ $('architectCustomCheckStatus').disabled=architectCustomStatusPending;
+ $('architectCustomOpenPreview').disabled=!(runtime?.running&&runtime.reachable===true&&runtime.previewUrl);
+}
 function architectCustomSetProgress(percent,label){
  if(Number.isFinite(Number(percent)))architectCustomProgressPercent=Math.min(100,Math.max(0,Math.round(Number(percent))));
  if(label)architectCustomProgressLabel=String(label).slice(0,180);
