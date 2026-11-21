@@ -48,12 +48,23 @@ test('the global warning, ownership route and Confluence conflict protections ar
  assert.equal(Object.keys(profiles).length,18);
 });
 
-test('other pages keep their inline feedback behaviour',()=>{
+test('non-error progress remains available on other role pages',()=>{
  let inserted=0;
- const pane={id:'landingView',querySelector:()=>null,querySelectorAll:()=>[],
+ const pane={id:'planningView',querySelector:()=>null,querySelectorAll:()=>[],
   insertBefore(){inserted++;},append(){inserted++;},firstChild:null};
  const {notice,created}=inlineNoticeFor(pane);
  notice('Overview updated',false);
  assert.equal(created(),1);
  assert.equal(inserted,1);
+});
+
+test('Overview omits redundant inline statuses, leaving global notices intact',()=>{
+ let removed=0;
+ const pane={id:'landingView',querySelector:()=>({remove(){removed++;}}),
+   insertBefore(){throw Error('Overview may not add an inline banner');}};
+ const {notice,created}=inlineNoticeFor(pane);
+ notice('Confluence sync needs review',true);
+ notice('Overview updated',false);
+ assert.equal(created(),0);
+ assert.equal(removed,2);
 });
