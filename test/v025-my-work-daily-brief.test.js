@@ -70,7 +70,7 @@ test('My Work next-action button is outside hidden AI response and stays actiona
  const ui=read('media/atgv-mywork-ai.js');
  assert.match(ui,/function renderPersistentNext/);
  assert.match(ui,/button\.disabled=false/);
- assert.match(ui,/navigate\('project-settings'\)/);
+ assert.match(ui,/target==='project-settings'/);
  assert.match(ui,/navigate\('projects'\)/);
  assert.match(ui,/byId\('atgvMyWorkAiNextButton'\)\?\.addEventListener\('click',navigateToWork\)/);
 });
