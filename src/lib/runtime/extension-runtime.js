@@ -346,8 +346,10 @@ function startupLibraryRepository(){
  const owner=String(extensionSettings?.github?.owner||'').toLowerCase();
  if(!owner)return startupSetup.FIXED_LIBRARY_REPOSITORY;
  const source=startupSetup.SOURCE_REPOS[owner];
- if(!source)throw Error('The configured GitHub owner has no trusted ATGV Library mapping.');
- return source.library;
+ // Existing project settings may use a custom GitHub repository owner. Keep
+ // their SDLC Catalog pinned to the legacy trusted source; only the Start
+ // account onboarding may change between the two verified source mappings.
+ return source?.library||startupSetup.FIXED_LIBRARY_REPOSITORY;
 }
 function catalogConfig(){
  const saved=context.globalState.get('atgvAssist.sdlcCatalog',sdlcCatalog.DEFAULT_CONFIG);
