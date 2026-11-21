@@ -5,7 +5,23 @@
     "agent",
     "copilot",
     "ai",
-    "memory"
+    "memory",
+    "coding",
+    "maintenance",
+    "pat",
+    "source",
+    "error"
   ],
-  "decisions": []
+  "decisions": [
+    {
+      "id": "AGENT-0001",
+      "status": "accepted",
+      "decision": "AI agents writing or modifying ATGV source must read relevant accepted .memory JSON decisions from the actual Git source checkout first. These files are development guidance, not installed extension runtime memory."
+    },
+    {
+      "id": "AGENT-0002",
+      "status": "accepted",
+      "decision": "Unattended improvement may start only during local 12:00–12:59 with ATGV idle; test changes and create a reviewed PR. Never auto-merge."
+    }
+  ]
 }
