@@ -3393,7 +3393,7 @@ async function generateBusinessRequirements(options={}){
   const currentSaved=await discovery.load(registry,activeProject.id);
   if(currentSaved.revision!==saved.revision)throw Error('Discovery changed during simplified BR generation.');
   const action='Continue';
-  const approval=await uiWarning('AI prepared '+proposal.length.toLocaleString('en-US')+' source-backed Business Requirements.\\n\\nContinue to save these as editable drafts for Business Analyst review? Cancel leaves the existing BRs and Jira untouched. Acceptance criteria and AI checks are NOT VERIFIED.',{modal:true,detail:'No Jira issues will be created or updated by generating drafts. Final Jira publication remains subject to explicit BR approval and Jira Preflight.'},action);
+  const approval=await uiWarning('AI prepared '+proposal.length.toLocaleString('en-US')+' source-backed Business Requirements.\n\nContinue to save these as editable drafts for Business Analyst review? Cancel leaves the existing BRs and Jira untouched. Acceptance criteria and AI checks are NOT VERIFIED.',{modal:true,detail:'No Jira issues will be created or updated by generating drafts. Final Jira publication remains subject to explicit BR approval and Jira Preflight.'},action);
   if(approval!==action){await dashboard?.webview.postMessage({type:'baProgress',task:'generate',done:true,message:'Generation cancelled. Existing Business Requirements and Jira unchanged.'});return;}
   const updated=await brWorkflow.generated(registry,activeProject.id,register.revision,{discoveryRevision:saved.revision,requirements:proposal,riskAccepted:false,actor:await verifiedBAActor()});
   // Only newly generated draft IDs are auto-claimed; existing BR owners are protected.
@@ -3495,7 +3495,7 @@ async function generateBusinessRequirements(options={}){
  // the actual validated array length (including accumulated Markdown groups).
  const proceed='Continue';
  const count=proposed.length;
- const confirmed=await uiWarning('AI generated '+count.toLocaleString('en-US')+' valid Business Requirement'+(count===1?'':'s')+'.\\n\\nContinue to save these as editable draft requirements for review?\\n\\nCancel keeps all existing approved BR revisions, drafts, Jira identities, and source documents unchanged.',{modal:true,detail:'Large sets are generated in source-backed groups to avoid model response limits. No Jira writes occur until the revised BRs are reviewed, approved, and pass Jira Preflight.'},proceed);
+ const confirmed=await uiWarning('AI generated '+count.toLocaleString('en-US')+' valid Business Requirement'+(count===1?'':'s')+'.\n\nContinue to save these as editable draft requirements for review?\n\nCancel keeps all existing approved BR revisions, drafts, Jira identities, and source documents unchanged.',{modal:true,detail:'Large sets are generated in source-backed groups to avoid model response limits. No Jira writes occur until the revised BRs are reviewed, approved, and pass Jira Preflight.'},proceed);
  if(confirmed!==proceed){await dashboard?.webview.postMessage({type:'baProgress',task:'generate',done:true,message:'Cancelled before saving '+count+' generated BRs. Existing BR and Jira data unchanged.'});return;}
  const currentSaved=await discovery.load(registry,activeProject.id);if(currentSaved.revision!==saved.revision)throw Error('Discovery changed while generating BRs. Retry.');
  const updated=await brWorkflow.generated(registry,activeProject.id,register.revision,{discoveryRevision:saved.revision,requirements:proposed,riskAccepted,targetBrIds:focused,actor:await verifiedBAActor()});
@@ -9263,24 +9263,37 @@ async function handleDashboardMessage(msg){
         try{await importDiscoveryDocument(msg.roleId);}catch(e){await dashboard?.webview.postMessage({type:'discoveryImportFailed',message:e.message});throw e;}
         break;
       }
+      case 'downloadISO29148BRPDF':
       case 'downloadWorkingBR':{
         const projectId=activeProject?.id||'';
         try{
-          requireOpened();if(msg.projectId!==projectId)throw Error('The Business Analyst project changed.');
+          requireOpened();
+          if(msg.projectId!==projectId)throw Error('The Business Analyst project changed.');
           await requireBAOwner('ba-discovery');
           const register=await brWorkflow.load(registry,projectId);
-          const evidence=(register.mappingCompleted?.preflights||[]).find(item=>item.workingBR&&(register.sourceDocuments||[]).some(doc=>doc.digest===item.digest));
+          const evidence=(register.mappingCompleted?.preflights||[]).find(item=>item.workingBR&&
+            (register.sourceDocuments||[]).some(doc=>doc.digest===item.digest));
           const source=(register.sourceDocuments||[]).find(doc=>doc.digest===evidence?.digest);
-          if(!source||evidence.workingBR.sourceDigest!==source.digest)throw Error('No current AI-updated working BR is available.');
+          if(!source||evidence.workingBR.sourceDigest!==source.digest)throw Error('No validated working BR source is available.');
           await sourceStore.originalBytes(registry,projectId,source);
-          const content=await baWorkingBr.read(registry,projectId,evidence.workingBR);
-          const suggestedName=baPreflightReports.filename(projectId,source.name).replace(/^ATGV-Preflight-/,'ATGV-Working-BR-').replace(/\.txt$/,'.md');
-          const destination=await vscode.window.showSaveDialog({title:'Download AI-updated Working BR (.md)',defaultUri:vscode.Uri.file(path.join(require('node:os').homedir(),suggestedName)),filters:{'Markdown document':['md']},saveLabel:'Download Working BR'});
-          if(activeProject?.id!==projectId)throw Error('The project changed. Please retry the download.');
-          if(destination){await vscode.workspace.fs.writeFile(destination,Buffer.from(content,'utf8'));await dashboard?.webview.postMessage({type:'discoveryWorkingBRDownloadResult',projectId,saved:true,filename:path.basename(destination.fsPath||suggestedName)});}
-          else await dashboard?.webview.postMessage({type:'discoveryWorkingBRDownloadResult',projectId,cancelled:true});
+          const workingText=await baWorkingBr.read(registry,projectId,evidence.workingBR);
+          const pdf=require('../../ba-iso29148-pdf').document({
+            projectId,source,workingText,requirements:register.brs,generatedAt:new Date().toISOString()
+          });
+          const safeProject=projectId.replace(/[^a-zA-Z0-9_-]/g,'-').slice(0,50);
+          const suggestedName='ATGV-ISO29148-Business-Requirements-'+safeProject+'.pdf';
+          const destination=await vscode.window.showSaveDialog({
+            title:'Download ISO 29148 Business Requirements (PDF)',
+            defaultUri:vscode.Uri.file(path.join(require('node:os').homedir(),suggestedName)),
+            filters:{'PDF document':['pdf']},saveLabel:'Download ISO 29148 Business Requirements'
+          });
+          if(activeProject?.id!==projectId)throw Error('Project changed; retry the PDF download.');
+          if(destination){
+            await vscode.workspace.fs.writeFile(destination,pdf);
+            await dashboard?.webview.postMessage({type:'discoveryWorkingBRDownloadResult',projectId,saved:true,filename:path.basename(destination.fsPath||suggestedName)});
+          }else await dashboard?.webview.postMessage({type:'discoveryWorkingBRDownloadResult',projectId,cancelled:true});
         }catch(error){
-          report('Working BR export: '+String(error.message||error));
+          report('ISO 29148 BRS PDF export: '+String(error.message||error));
           if(activeProject?.id===projectId)await dashboard?.webview.postMessage({type:'discoveryWorkingBRDownloadResult',projectId,error:String(error.message||error).slice(0,400)});
         }
         break;
@@ -9301,9 +9314,9 @@ async function handleDashboardMessage(msg){
           const content=baPreflightReports.format(report);
           const suggestedName=baPreflightReports.filename(projectId,report.documents[0].name);
           const destination=await vscode.window.showSaveDialog({
-            title:'Download AI Document Pre-flight Report (.txt)',
+            title:'Download Pre-flight Analyst (.txt)',
             defaultUri:vscode.Uri.file(path.join(require('node:os').homedir(),suggestedName)),
-            filters:{'Plain text files':['txt']},saveLabel:'Download Report'
+            filters:{'Plain text files':['txt']},saveLabel:'Download Pre-flight Analyst'
           });
           if(destination){
             await vscode.workspace.fs.writeFile(destination,Buffer.from(content,'utf8'));
