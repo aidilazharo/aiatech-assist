@@ -181,7 +181,7 @@
         "atgvAssist.selfImprovement.autoMaintenanceEnabled": {
           "type": "boolean",
           "default": true,
-          "description": "Run idle automatic coding improvement within 12:00–12:59 local time when VS Code is active. Tests saved GitHub PAT with real read/write operations and creates tested PRs without auto-merging."
+          "description": "Run idle automatic coding improvement within 12:00–12:59 local time when VS Code is active. Verify PAT read/write access, version every tested repair, create PRs and automatically merge only after required GitHub checks succeed."
         },
         "atgvAssist.selfImprovement.maintenanceTimeZone": {
           "type": "string",
