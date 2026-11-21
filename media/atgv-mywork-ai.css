@@ -1,6 +1,6 @@
 /* Shared My Work AI: monochrome surface, white text, no coloured border. */
 #workView > #atgvMyWorkAi,
-#workView.role-progress-only > #atgvMyWorkAi {
+#workView.role-progress-only > #atgvMyWorkAi.atgv-mywork-ai {
   display:flex!important;align-items:center;gap:22px;min-height:144px;
   padding:22px 25px;margin:6px 0 19px;background:#000!important;color:#fff!important;
   border:0!important;box-shadow:none!important;border-radius:10px;
