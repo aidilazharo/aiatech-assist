@@ -2355,3 +2355,7 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 /* Connection diagnostics remain available in the sanitized internal log and
    the existing unified error-log export, not as a visible Start screen panel. */
 #startupConnectionForm #startupConnectionLogPanel{display:none!important}
+
+/* Jira-only BR deletion is destructive: keep the request distinct from recovery. */
+.ba-jira-only-delete{color:var(--vscode-errorForeground,#f17a7a)!important;border-color:var(--vscode-inputValidation-errorBorder,#8b3636)!important}
+.ba-jira-only-delete:focus-visible{outline:2px solid var(--vscode-focusBorder,#007fd4);outline-offset:2px}

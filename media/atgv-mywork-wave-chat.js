@@ -17,6 +17,7 @@
  const blendedRGBA=(target,mix,alpha)=>'rgba('+redRGB.map((v,i)=>
   Math.round(v+(target[i]-v)*mix)).join(',')+','+alpha+')';
  let project='',role='',pendingId=0,sequence=0,pending=false;
+ let greetingNode=null,briefingNode=null,lastBriefRequest=0,submittedText='',handoffDraft='';
  let w=300,h=150,last=0,phase=0,hue=354,energy=0,opacity=0,height=0,speed=0,colorMix=0;
  let lastActivity=performance.now(),ripples=[],writer=null,queue=[],thinkingBefore=false;
  const prefersReduced=window.matchMedia?.('(prefers-reduced-motion: reduce)');
@@ -48,10 +49,14 @@
  function addMessage(kind,text,animate=false){
   const node=document.createElement('div');
   node.className='atgv-mywork-ai-message '+kind;
+  const body=document.createElement('span');
+  body.className='atgv-mywork-ai-message-text';
+  node.appendChild(body);
   transcript.appendChild(node);
-  if(animate)typewriter(node,text);else node.textContent=String(text||'');
+  if(animate)typewriter(body,text);else body.textContent=String(text||'');
   transcript.scrollTop=transcript.scrollHeight;
   if(resultsViewport)resultsViewport.scrollTop=resultsViewport.scrollHeight;
+  return node;
  }
  function setBusy(isBusy){
   pending=!!isBusy;button.disabled=pending||!input.value.trim();
@@ -65,14 +70,18 @@
    // Keep the role context accessible without displaying an extra chat heading.
    input.setAttribute('aria-label','Message ATGV AI · '+String(snapshot.roleName||nextRole).slice(0,100));
    writer=null;queue.length=0;transcript.replaceChildren();input.value='';
-   status.textContent='';button.disabled=true;pulse(1.3);
+   greetingNode=null;briefingNode=null;lastBriefRequest=0;
+   greetingNode=addMessage('assistant','Hello! I am reviewing your '+String(snapshot.roleName||'project')+' work for today.');
+   if(handoffDraft){input.value=handoffDraft.slice(0,4000);handoffDraft='';}
+   status.textContent='';button.disabled=!input.value.trim();pulse(1.3);
   }
  }
  if(window.ATGVMyWorkAI&&typeof window.ATGVMyWorkAI.update==='function'){
   const original=window.ATGVMyWorkAI.update;
   window.ATGVMyWorkAI.update=function(snapshot){scope(snapshot);return original(snapshot);};
  }
- window.ATGVMyWorkChat={showSuggestion(text){if(suggestion)typewriter(suggestion,text);}};
+ window.ATGVMyWorkChat={showSuggestion(text){if(suggestion)typewriter(suggestion,text);},
+  saveHandoffDraft(text){handoffDraft=String(text||'').slice(0,4000);}};
  input.addEventListener('input',()=>{
   pulse(.22+Math.min(1,input.value.length/380));
   button.disabled=pending||!input.value.trim();
@@ -81,6 +90,7 @@
   event.preventDefault();
   const userText=input.value.trim();
   if(!userText||!project||!role||pending)return;
+  submittedText=userText;
   addMessage('user',userText);input.value='';setBusy(true);activity();
   pendingId=++sequence;
   // Only the user-entered message crosses the webview boundary.
@@ -90,10 +100,83 @@
  input.addEventListener('keydown',event=>{
   if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();form.requestSubmit?.();}
  });
+ function section(parent,heading,body){
+  const wrapper=document.createElement('section');
+  const title=document.createElement('strong');
+  title.className='atgv-mywork-ai-brief-heading';title.textContent=heading;
+  const description=document.createElement('p');
+  description.className='atgv-mywork-ai-brief-copy';
+  description.textContent=String(body||'');
+  wrapper.append(title,description);parent.append(wrapper);
+  return wrapper;
+ }
+ function renderBrief(b){
+  if(!b||typeof b!=='object')return;
+  if(!greetingNode)greetingNode=addMessage('assistant','');
+  greetingNode.textContent=String(b.greeting||'Hello. Here are your priorities for today.').slice(0,380);
+  if(!briefingNode)briefingNode=addMessage('assistant','');
+  briefingNode.classList.add('atgv-mywork-ai-brief');
+  briefingNode.replaceChildren();
+  const health=b.health||{};
+  section(briefingNode,'Project health · '+String(health.label||'Not yet verified').slice(0,90),
+   String(health.detail||'Project delivery evidence is unavailable.').slice(0,540));
+  const teamTitle='Other project members · last recorded Jira/Confluence roles';
+  const team=Array.isArray(b.team)?b.team.slice(0,6):[];
+  if(team.length){
+   const block=section(briefingNode,teamTitle,'Recorded membership, not live online presence.');
+   const people=document.createElement('div');people.className='atgv-mywork-ai-team-list';
+   for(const user of team){
+    const person=document.createElement('div');person.className='atgv-mywork-ai-team-member';
+    const name=document.createElement('strong');name.textContent=String(user.name||'Project member').slice(0,90);
+    const detail=document.createElement('span');detail.textContent=
+     (Array.isArray(user.roles)?user.roles.slice(0,3).join(', '):'Role not verified')+
+     ' · '+Math.max(0,Number(user.assignedJira)||0)+' Jira task(s) last recorded';
+    person.append(name,detail);people.append(person);
+   }
+   block.append(people);
+  }else section(briefingNode,teamTitle,String(b.teamSummary||'Shared roster not verified').slice(0,220));
+  const items=Array.isArray(b.todayActions)?b.todayActions.slice(0,4):[];
+  const todayBlock=section(briefingNode,'Today’s work · '+String(b.today||'').slice(0,15),
+   items.length?'Choose the highest priority you can unblock first.':'Review your role workspace.');
+  const list=document.createElement('ol');list.className='atgv-mywork-ai-today-list';
+  for(const item of items){
+   const li=document.createElement('li'),itemTitle=document.createElement('strong'),reason=document.createElement('span');
+   itemTitle.textContent=String(item.label||'Review current work').slice(0,140);
+   reason.textContent=String(item.reason||'').slice(0,150);
+   li.append(itemTitle,reason);list.append(li);
+  }
+  todayBlock.append(list);
+  activity();
+ }
  window.addEventListener('message',event=>{
   const msg=event.data||{};
-  if(msg.type!=='roleAiChatReply'||msg.projectId!==project||msg.roleId!==role||msg.requestId!==pendingId)return;
-  setBusy(false);addMessage('assistant',msg.text||'No response received.',true);
+  if(msg.projectId!==project||msg.roleId!==role)return;
+  if(msg.type==='roleAiDailyBrief'){
+   if(!Number.isSafeInteger(msg.requestId)||msg.requestId<lastBriefRequest)return;
+   lastBriefRequest=msg.requestId;
+   renderBrief(msg.brief);
+   return;
+  }
+  if(msg.type!=='roleAiChatReply'||msg.requestId!==pendingId)return;
+  setBusy(false);
+  const reply=addMessage('assistant',msg.text||'No response received.',true);
+  const target=String(msg.suggestedRoleId||'');
+  const handoffRequest=submittedText;
+  if(/^[a-z][a-z0-9-]{1,78}$/.test(target)&&msg.suggestedRoleName){
+    const enabled=msg.suggestedRoleEnabled===true;
+    const action=document.createElement('button');
+    action.type='button';action.className='atgv-mywork-ai-switch-role';
+    action.textContent=(enabled?'Switch to ':'Open Role Settings for ')+String(msg.suggestedRoleName).slice(0,80);
+    action.setAttribute('aria-label',(enabled?'Switch My Work chat role to ':'Enable My Work role ')+String(msg.suggestedRoleName).slice(0,80));
+    action.addEventListener('click',()=>{
+      // Only an explicit user click may trigger role navigation. The target
+      // is checked against enabled project roles by the main UI controller.
+      window.dispatchEvent(new CustomEvent('atgv:mywork-switch-role',{
+        detail:{projectId:project,fromRoleId:role,targetRoleId:target,requestText:handoffRequest.slice(0,4000),enabled}
+      }));
+    });
+    reply.append(action);
+  }
   activity();
  });
  function frame(now){

@@ -1214,6 +1214,22 @@ $('sidebarRoleMenu').addEventListener('keydown',event=>{
 });
 document.addEventListener('click',event=>{if(!event.target.closest('.role-select-wrap'))closeRoleMenu();});
 $('sidebarRole').addEventListener('change',event=>navigate(event.target.value));
+window.addEventListener('atgv:mywork-switch-role',event=>{
+ const detail=event.detail||{},target=String(detail.targetRoleId||'');
+ if(!workspaceOpened||!activeId||detail.projectId!==activeId||detail.fromRoleId!==selectedRole)return;
+ if(!/^[a-z][a-z0-9-]{1,78}$/.test(target)||target===selectedRole)return;
+ const candidate=(roleSettings.roles||[]).find(item=>item.id===target)||
+  (roleData.roles||[]).find(item=>item.id===target);
+ if(!candidate){status('Requested specialist role is not available in this project catalog.',true);return;}
+ if(!visibleRoles().some(item=>item.id===target)){
+   status('Enable '+visibleRoleLabel(candidate)+' in Project Role Settings before switching.');
+   navigate('project-settings');
+   return;
+ }
+ window.ATGVMyWorkChat?.saveHandoffDraft?.(String(detail.requestText||'').slice(0,4000));
+ // Only this explicit button press changes the active role; never auto-assign.
+ navigate(target);
+});
 function renderOverviewJira(){
  const tools=globalThis.ATGVJiraOverview;
  const data=tools?tools.summarize(brState?.synced):{count:0,byType:{},issues:[]};
@@ -5600,12 +5616,20 @@ function renderBAJiraBackedEpics(){
     send('recoverJiraOnlyBR',{projectId:activeId,brId:item.brId,jiraKey:item.key});
    });
    heading.append(recover);
+   const remove=brElement('button','secondary ba-jira-only-delete','Delete Jira BR');
+   remove.type='button';
+   remove.title='Eligible only when your Jira account ID matches this Epic Creator or Reporter AND Jira grants Delete Issues permission. Review all descendants first.';
+   remove.setAttribute('aria-label','Review deletion eligibility and complete Jira hierarchy for '+item.brId);
+   remove.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();
+    send('deleteJiraOnlyBROwned',{projectId:activeId,brId:item.brId,jiraKey:item.key});
+   });
+   heading.append(remove);
   }
   card.append(heading);
   const body=brElement('div','ba-completed-br-body');
   const info=brElement('div','ba-jira-recovery-info');
   info.append(brElement('small','muted',item.key+' · '+(item.status||'Status unknown')+' · '+item.linkedIssueCount+' Jira descendant(s) verified by parent links · Unlinked to local BR'));
-  info.append(brElement('small','muted ba-jira-evidence-help','Original 12 discovery answers and uploaded file are not stored in this project. Open the ATGV project folder that published this BR to access its evidence; Jira alone cannot reconstruct it.'));
+  info.append(brElement('small','muted ba-jira-evidence-help','Original 12 discovery answers and uploaded file are not stored in this project; Jira alone cannot reconstruct it. Recover from verified Confluence evidence when possible. A matching Jira Epic Creator or Reporter may request deletion of this Epic and its complete parent-linked hierarchy, with Jira permissions and confirmation.'));
   body.append(info);card.append(body);root.append(card);
  }
  if(rows.length>50)root.append(brElement('p','muted',String(rows.length-50)+' additional unlinked Epics: use the Jira inventory below.'));
@@ -7826,6 +7850,20 @@ window.addEventListener('message',event=>{
  }
 });
 
+// User-facing progress for permanent Jira-only BR deletion; never treat a
+// partial failure as completion, and refresh the inventory after confirmed success.
+window.addEventListener('message',event=>{
+ const m=event.data||{};
+ if(!activeId||m.projectId!==activeId)return;
+ if(m.type==='jiraOnlyBRDeletionProgress'){
+  status('Deleting verified Jira BR hierarchy: '+String(m.key||'')+' ('+Number(m.deleted||0)+'/'+Number(m.total||0)+')');
+ }else if(m.type==='jiraOnlyBRDeletionCompleted'){
+  status('Jira-only '+String(m.brId||'BR')+' deleted: '+Number(m.deleted||0)+' confirmed Jira issues. Refreshing Jira…');
+  ensureBAJiraInventory(true);
+ }else if(m.type==='jiraOnlyBRDeletionError'){
+  status('Jira BR deletion blocked: '+String(m.message||'Refresh the BR and review Jira permissions.'));
+ }
+});
 function developerStatus(message){const target=$('devExecutionStatus');if(target)target.textContent=String(message||'');}
 function devSetStep(id,message){const element=$(id);if(element)element.textContent=message;}
 

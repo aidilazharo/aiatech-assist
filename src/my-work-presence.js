@@ -7,7 +7,8 @@ const {htmlToText}=require('./utils');
 const {ConfluenceUserDatabase,normalizeRows}=require('./confluence-user-database');
 const escape=value=>String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const clean=(value,n=180)=>String(value||'').trim().slice(0,n);
-const ROLES=Object.freeze({'business-analyst':'Business Analyst','solution-architect':'Solution Architect','ux-designer':'UI/UX Designer','software-developer':'Developer','project-manager':'Project Manager','qa-engineer':'QA Engineer','uat-tester':'UAT Tester'});
+const {ROLES:ROLE_PROMPTS}=require('./my-work-role-prompts');
+const ROLES=Object.freeze(Object.fromEntries(Object.entries(ROLE_PROMPTS).map(([id,role])=>[id,role.name])));
 function displayName(email,preferred=''){
  const name=clean(preferred);
  if(name)return name;

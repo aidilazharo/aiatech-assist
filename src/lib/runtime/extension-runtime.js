@@ -55,6 +55,7 @@ let pmLatestSnapshot=null;
 const remoteBRDeletion=require('../../remote-br-deletion');
 const brDeletionPreview=require('../../br-deletion-preview');
 const orphanJiraCleanup=require('../../orphaned-jira-cleanup');
+const jiraOwnerBRDeletion=require('../../jira-owner-br-deletion');
 const jiraLinkReconciliation=require('../../jira-link-reconciliation');
 const startupJiraReconciliation=require('../../startup-jira-reconciliation');
 const resetEverywhere=require('../../reset-everywhere');
@@ -70,6 +71,8 @@ const startupInstall=require('../startup-install');
 const installCache=require('../../library-install-cache');
 const startupDiagnostics=require('../startup-diagnostics');
 const myWorkPresence=require('../../my-work-presence');
+const myWorkDailyBrief=require('../../my-work-daily-brief');
+const myWorkRoleSkillRouter=require('../../my-work-role-skill-router');
 const {SelfImprovement}=require('../../self-improvement');
 const idleImprovement=require('../../idle-improvement');
 const selfImprovementView=require('../../self-improvement-view');
@@ -7177,6 +7180,94 @@ async function handleDashboardMessage(msg){
         break;
       }
       case 'openAtgvAi':{await atgvAiChat.open(vscode,{runtimeRoot:aiRuntimeRoot(),onLog:report});break;}
+       case 'deleteJiraOnlyBROwned':{
+         const projectId=activeProject?.id||'';
+         if(remoteBRDeletionBusy)throw Error('A remote Jira deletion or recovery is in progress.');
+         remoteBRDeletionBusy=true;
+         try{
+           requireOpened();requireOnline();
+           if(!projectId||msg.projectId!==projectId)throw Error('Project changed. Reopen the Jira-only Business Requirement.');
+           const brId=String(msg.brId||''),epicKey=String(msg.jiraKey||'');
+           const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
+           const original=await brWorkflow.load(registry,projectId);
+           const state=await jiraOwnerBRDeletion.readJobs(registry,projectId);
+           const candidates=state.jobs.filter(job=>job.kind==='creator-reporter-jira-only-br'&&
+             job.plan?.projectId===projectId&&job.plan?.epicKey===epicKey&&job.status!=='completed');
+           if(candidates.length>1)throw Error('Multiple unfinished Jira deletion jobs exist for this Epic. Review the audit before proceeding.');
+           let job=candidates[0]||null,plan;
+           if(job){
+             plan=job.plan;
+             if(plan.brId!==brId||plan.registerRevision!==original.revision)
+               throw Error('The existing Jira deletion job no longer matches this BR. Reconcile before proceeding.');
+             const uncertain=plan.rows.filter(row=>job.results?.[row.key]?.status==='attempting');
+             if(uncertain.length)
+               throw Error('Some Jira deletions may have been interrupted: '+uncertain.map(x=>x.key).join(', ')+'. Verify the remote result manually before retrying.');
+           }else{
+             plan=await jiraOwnerBRDeletion.preflight({
+               register:original,brId,epicKey,projectId,config,token});
+             job=jiraOwnerBRDeletion.createJob(plan);
+           }
+           const review=jiraOwnerBRDeletion.preview(plan,job);
+           const document=await vscode.workspace.openTextDocument({language:'markdown',content:review.detail});
+           await vscode.window.showTextDocument(document,{preview:false,preserveFocus:true});
+           const decision=await uiWarning(review.summary,{modal:true},'Continue to Permanent Jira Deletion');
+           if(decision!=='Continue to Permanent Jira Deletion')break;
+           const phrase='DELETE BR '+plan.brId+' '+plan.epicKey;
+           const typed=await uiInput({
+             prompt:'Permanently delete '+plan.rows.length+' Jira issues including Epic '+plan.epicKey+
+               ' and all reviewed descendants. This cannot be undone. Type exactly: '+phrase,
+             placeHolder:phrase,ignoreFocusOut:true});
+           if(typed!==phrase){await notice('Jira-only BR deletion cancelled. No issues were deleted.');break;}
+           if(activeProject?.id!==projectId)throw Error('Project changed during deletion approval.');
+           if(!candidates.length){state.jobs.push(job);await jiraOwnerBRDeletion.saveJobs(registry,projectId,state);}
+           const result=await jiraOwnerBRDeletion.execute({
+             registry,projectId,job,config,token,loadRegister:()=>brWorkflow.load(registry,projectId),
+             finalize:async savedPlan=>{
+               const current=await brWorkflow.load(registry,projectId);
+               if(current.revision!==savedPlan.registerRevision)
+                 throw Error('Local BR register changed; Jira deletion finished but local audit needs review.');
+               const updated=await brWorkflow.write(registry,projectId,current.revision,next=>{
+                 // Remove only this orphaned BR's verified local Jira mappings.
+                 // Preserve Confluence links, uploaded originals and unrelated BRs.
+                 for(const path of Object.keys(next.synced||{}))
+                   if(path===savedPlan.brId||path.startsWith(savedPlan.brId+'/'))delete next.synced[path];
+                 for(const path of Object.keys(next.roleTaskMappings||{}))
+                   if(path===savedPlan.brId||path.startsWith(savedPlan.brId+'/'))delete next.roleTaskMappings[path];
+                 next.deletedRequirements=next.deletedRequirements||[];
+                 if(next.deletedRequirements.some(x=>x.id===savedPlan.brId))
+                   throw Error('Another BR deletion record appeared. Reconcile the audit.');
+                 next.deletedRequirements.push({
+                   id:savedPlan.brId,at:new Date().toISOString(),
+                   title:savedPlan.rows.find(x=>x.key===savedPlan.epicKey)?.summary||savedPlan.brId,
+                   epicKey:savedPlan.epicKey,source:'verified-jira-creator-reporter',
+                   actorAccountId:savedPlan.actorId,matchedField:savedPlan.eligibility.match,
+                   remoteRecordsPreserved:false,remoteDeletionStatus:'creator-reporter-jira-only-deleted',
+                   jiraIssues:savedPlan.rows.map(x=>({key:x.key,parentKey:x.parentKey,issueType:x.type}))
+                 });
+                 next.events=(next.events||[]).concat({
+                   at:new Date().toISOString(),action:'jira-only-br-deleted-by-creator-reporter',
+                   brId:savedPlan.brId,jiraKey:savedPlan.epicKey,actorId:savedPlan.actorId,
+                   issueKeys:savedPlan.rows.map(x=>x.key)
+                 }).slice(-200);
+               });
+               await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
+             },
+             onProgress:async progress=>{
+               report('Jira-only BR deletion '+plan.brId+': '+progress.key+' ('+progress.deleted+'/'+progress.total+')');
+               await dashboard?.webview.postMessage({type:'jiraOnlyBRDeletionProgress',projectId,...progress});
+             }
+           });
+           await dashboard?.webview.postMessage({type:'jiraOnlyBRDeletionCompleted',projectId,brId,epicKey,deleted:plan.rows.length});
+           await notice('Jira-only '+brId+' deleted: '+plan.rows.length+
+             ' verified Epic/descendant issues. Confluence and unrelated Jira items were preserved.');
+           if(activeProject?.id===projectId)await refreshDashboard();
+         }catch(error){
+           report('Jira Creator/Reporter BR deletion failed: '+String(error.message||error));
+           await dashboard?.webview.postMessage({type:'jiraOnlyBRDeletionError',projectId,message:String(error.message||error).slice(0,450)});
+           await notice('Jira BR deletion blocked: '+String(error.message||error).slice(0,350),true);
+         }finally{remoteBRDeletionBusy=false;}
+         break;
+       }
        case 'recoverJiraOnlyBR':{
          const projectId=activeProject?.id||'';
          try{
@@ -9359,6 +9450,23 @@ async function handleDashboardMessage(msg){
         const roleState=await workState(registry,projectId);
         const role=roleState.roles.find(entry=>entry.id===roleId);
         if(!role||!Number.isSafeInteger(requestId)||requestId<1)break;
+        // Route cross-role artifact requests BEFORE making an AI/provider call.
+        // The user's other enabled roles do not change the active-chat scope.
+        const skillRoute=myWorkRoleSkillRouter.route(roleId,msg.message);
+        if(skillRoute){
+          const text=myWorkRoleSkillRouter.response(skillRoute);
+          const roleSettingsForHandoff=await getRoleSettings(registry,projectId);
+          const allowed=Array.isArray(roleSettingsForHandoff?.enabled)&&
+            roleSettingsForHandoff.enabled.includes(skillRoute.targetRoleId);
+          if(activeProject?.id===projectId)
+            await dashboard?.webview.postMessage({
+              type:'roleAiChatReply',projectId,roleId,requestId,text,error:false,
+              suggestedRoleId:skillRoute.targetRoleId,
+              suggestedRoleName:skillRoute.targetRoleName,
+              suggestedRoleEnabled:allowed
+            });
+          break;
+        }
         let text='',error=false,retrieved=[];
         // The Knowledge & RAG page and My Work chat share this active-project
         // store. Never perform a cross-project search or trust retrieved text
@@ -9408,20 +9516,29 @@ async function handleDashboardMessage(msg){
         if(!role||!Number.isSafeInteger(requestId)||requestId<1)break;
         const input=msg.context&&typeof msg.context==='object'?msg.context:{};
         const clean=(value,max=120)=>String(value??'').replace(/[\x00-\x1f]/g,' ').trim().slice(0,max);
-        const allowedTasks=new Set((role.tasks||[]).map(task=>String(task.label)));
-        const tasks=(Array.isArray(input.tasks)?input.tasks:[]).slice(0,16)
-          .filter(task=>allowedTasks.has(String(task?.title||'')))
-          .map(task=>({activity:clean(task.title),completed:task.done===true}));
-        const assigned=(Array.isArray(input.assigned)?input.assigned:[]).slice(0,8)
+        // The webview snapshot is only a refresh signal. Checklist completion
+        // and BR approval status must come from the extension host's saved state.
+        const authoritativeProgress=snapshot.progress?.[roleId]||{};
+        const tasks=(role.tasks||[]).slice(0,16).map(task=>({
+          activity:clean(task.label),completed:authoritativeProgress[task.id]===true
+        }));
+        let requirements=[];
+        if(roleId==='business-analyst'){
+          const localBR=await brWorkflow.load(registry,projectId);
+          requirements=(localBR.brs||[]).slice(0,10).map(item=>({
+            id:clean(item.id,40),status:clean(item.status,35)
+          })).filter(item=>/^BR-[0-9]{1,6}$/.test(item.id));
+        }
+        // Jira items arriving via webview are provisional until cross-checked
+        // against the verified user's shared Jira assignment register below.
+        const provisionalAssigned=(Array.isArray(input.assigned)?input.assigned:[]).slice(0,8)
           .filter(item=>/^[A-Z][A-Z0-9_]{1,20}-[0-9]+$/.test(String(item?.key||'')))
           .map(item=>({jiraKey:clean(item.key,40),status:clean(item.status,45)}));
-        const requirements=roleId==='business-analyst'?(Array.isArray(input.requirements)?input.requirements:[])
-          .slice(0,10).filter(item=>/^BR-[0-9]{1,6}$/.test(String(item?.id||'')))
-          .map(item=>({id:clean(item.id,40),status:clean(item.status,35)})):[];
+        let assigned=provisionalAssigned;
         const evidence={role:clean(role.label,100),progress:clean(input.progress,30),
           recommendedNext:clean(input.next,180),tasks,assigned,requirements};
         const incomplete=tasks.find(task=>!task.completed)?.activity||'';
-        const pendingIssue=assigned.find(item=>!/^(done|closed|resolved)$/i.test(item.status))?.jiraKey||'';
+        let pendingIssue=assigned.find(item=>!/^(done|closed|resolved)$/i.test(item.status))?.jiraKey||'';
         const pendingRequirement=requirements.find(item=>!/^(approved|published|complete|completed)$/i.test(item.status))?.id||'';
         const roleActionLabels={
           'business-analyst':'Resume Business Requirements',
@@ -9445,6 +9562,62 @@ async function handleDashboardMessage(msg){
         };
         const actionLabel=roleActionLabels[roleId]||'Open Role Workspace';
         const activity=await liveProjectActivity(projectId);
+        // The daily brief is deterministic, grounded in the actual configured
+        // project and Jira identity. It is not supplied by the webview or AI.
+        // Missing network evidence stays explicitly unavailable.
+        const dailyProject=await registry.read(projectId);
+        const dailyConfig=effectiveConfig(dailyProject);
+        let verifiedPerson={email:String(dailyConfig.get('jira.email')||'').slice(0,250)},
+            projectUsers=null,tokenAvailable=false;
+        try{
+          const dailyToken=await getAtlassianToken(dailyProject);
+          tokenAvailable=!!dailyToken;
+          if(dailyToken){
+            const jobs=[
+              requestJson(baseAtlassian(dailyConfig)+'/rest/api/3/myself',
+                {token:dailyToken,basicEmail:dailyConfig.get('jira.email')}),
+              dailyConfig.get('confluence.spaceKey')
+               ?myWorkPresence.snapshot(dailyConfig,dailyToken,
+                 validProjectKey(dailyConfig.get('jira.projectKey')))
+               :Promise.resolve(null)
+            ];
+            const [personResult,usersResult]=await Promise.allSettled(jobs);
+            if(personResult.status==='fulfilled'&&personResult.value?.accountId)
+              verifiedPerson={
+                accountId:personResult.value.accountId,
+                displayName:personResult.value.displayName||'',
+                email:personResult.value.emailAddress||verifiedPerson.email
+              };
+            if(usersResult.status==='fulfilled')projectUsers=usersResult.value;
+            const myRow=(projectUsers?.rows||[]).find(user=>
+              verifiedPerson.accountId&&user.id===verifiedPerson.accountId);
+            if(myRow){
+              // Jira assignment search in My Work Users is server-originated.
+              // Exclude client-supplied issue statuses once authoritative data exists.
+              assigned=[...String(myRow.tasks||'').matchAll(/\b([A-Z][A-Z0-9_]{0,20}-\d+)\s*\(([^)]+)\)/g)]
+                .slice(0,8).map(entry=>({
+                  jiraKey:clean(entry[1],40),status:clean(entry[2],45)
+                }));
+            }
+          }
+        }catch(error){
+          report('My Work daily brief identity/roster unavailable: '+String(error.message||error).slice(0,150));
+        }
+        evidence.assigned=assigned;
+        pendingIssue=assigned.find(item=>!/^(done|closed|resolved)$/i.test(item.status))?.jiraKey||'';
+        const dailyBrief=myWorkDailyBrief.build({
+          identity:verifiedPerson,projectName:dailyProject.name||projectId,
+          roleId,roleName:role.label,deadline:dailyProject.schedule?.endDate||'',
+          tasks,assigned,requirements,activity,roster:projectUsers,
+          config:{
+            jiraConfigured:!!dailyConfig.get('jira.projectKey')&&tokenAvailable,
+            confluenceConfigured:!!dailyConfig.get('confluence.spaceKey')
+          }
+        });
+        if(activeProject?.id===projectId)
+          await dashboard?.webview.postMessage({
+            type:'roleAiDailyBrief',projectId,roleId,requestId,brief:dailyBrief
+          });
         // Project-wide evidence comes from the live Confluence/Jira activity registry,
         // not from the user's untrusted webview snapshot. Never treat missing data as done.
         const sharedNext=roleId==='business-analyst'&&activity?.incompleteBRs?.length
@@ -9471,9 +9644,11 @@ async function handleDashboardMessage(msg){
           const prompt='You are ATGV My Work role assistant. Only analyze the supplied role-scoped work summary. '+
             'Always give one concise, immediately actionable next-step suggestion in plain English (maximum 2 sentences), even if everything appears complete. '+
             'Reference a real incomplete task or assigned ticket when possible; otherwise recommend checking the next role workflow step. '+
+            'Give role-specific advice about schedule recovery when a deadline exists, or prioritize today\'s confirmed tasks and missing settings. '+
+            'Do not assert whole-project health from role-scoped tasks or guess team members. '+
             'Never invent completion, Jira permissions, approvals, blockers, ticket IDs or results. '+
             'Do not give commands or promise actions have been executed. No markdown and no JSON.\nWORK SUMMARY: '+
-            JSON.stringify(evidence);
+            JSON.stringify({...evidence,deadlineHealth:dailyBrief.health,today:dailyBrief.today,todayPriorities:dailyBrief.todayActions});
           const text=sharedNext||await aiAnswer(target,prompt,850);
           message=clean(text.replace(/\s+/g,' '),420);
           if(!message)throw Error('Empty AI suggestion');

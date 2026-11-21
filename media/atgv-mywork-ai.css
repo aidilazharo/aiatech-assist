@@ -172,3 +172,46 @@ body.atgv-mywork-chat-mode:not(.gate-mode) #topNotification #myWorkHeaderWave.my
 @media(max-height:400px){
   #topNotification #myWorkHeaderWave .mywork-header-wave-visual{height:42px;bottom:-20px}
 }
+
+
+/* Persistent role-aware Next Action dock: never hidden with AI response. */
+#atgvMyWorkAi .atgv-mywork-ai-next-bar{
+  flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;
+  gap:16px;padding:10px clamp(12px,2vw,24px);
+  background:#0c1118;border-top:1px solid #28313c;min-width:0;
+}
+#atgvMyWorkAi .atgv-mywork-ai-next-summary{
+  flex:1 1 auto;min-width:0;font-size:12px;line-height:1.5;color:#c4d2e2;
+  overflow-wrap:anywhere;
+}
+#atgvMyWorkAi button.atgv-mywork-ai-next-button{
+  flex:0 0 auto;display:block!important;background:#153858!important;
+  color:#f6fbff!important;border:1px solid #4e9fd7!important;
+  padding:9px 15px;border-radius:8px;font-weight:700;font-size:12px;
+}
+#atgvMyWorkAi button.atgv-mywork-ai-next-button:hover{background:#215681!important}
+#atgvMyWorkAi .atgv-mywork-ai-brief{font-size:12px;line-height:1.6}
+#atgvMyWorkAi .atgv-mywork-ai-brief section{margin:0 0 18px}
+#atgvMyWorkAi .atgv-mywork-ai-brief-heading{
+  display:block;font-size:12px;color:#f0f5fc;margin-bottom:4px;
+}
+#atgvMyWorkAi .atgv-mywork-ai-brief-copy{margin:0 0 8px;color:#b3becd;white-space:pre-wrap}
+#atgvMyWorkAi .atgv-mywork-ai-team-list{
+  display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 6px;
+}
+#atgvMyWorkAi .atgv-mywork-ai-team-member{
+  display:flex;flex-direction:column;gap:3px;min-width:140px;max-width:300px;
+  background:#121c27;border-left:2px solid #409ac8;border-radius:3px;
+  padding:7px 10px;overflow-wrap:anywhere;
+}
+#atgvMyWorkAi .atgv-mywork-ai-team-member strong{color:#e2f2ff;font-weight:700}
+#atgvMyWorkAi .atgv-mywork-ai-team-member span{color:#9aafc7}
+#atgvMyWorkAi .atgv-mywork-ai-today-list{margin:6px 0;padding-left:23px}
+#atgvMyWorkAi .atgv-mywork-ai-today-list li{padding:2px 0 7px;color:#f1f4fa}
+#atgvMyWorkAi .atgv-mywork-ai-today-list li span{
+  display:block;font-size:11px;color:#9eacba;margin-top:2px;
+}
+@media(max-width:620px){
+ #atgvMyWorkAi .atgv-mywork-ai-next-bar{flex-wrap:wrap;gap:8px}
+ #atgvMyWorkAi button.atgv-mywork-ai-next-button{width:100%}
+}
