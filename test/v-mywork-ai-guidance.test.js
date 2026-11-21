@@ -147,7 +147,7 @@ test('stale responses cannot overwrite next role, Review again re-analyzes',()=>
   assert.equal(f.nodes.get('atgvMyWorkAi').dataset.state,'thinking');
 });
 test('AI calls are read-only and scoped to visible role work',()=>{
-  assert.match(start,/if\(view==='myWork'\|\|view==='work'\|\|view==='discovery'\)window\.ATGVMyWorkAI\?\.update/);
+  assert.match(start,/if\(view==='myWork'\)window\.ATGVMyWorkAI\?\.update/);
   assert.match(host,/case 'roleAiReview'/);
   assert.match(host,/requireOpened\(\)/);
   assert.match(host,/activeAiTarget\(\)/);
