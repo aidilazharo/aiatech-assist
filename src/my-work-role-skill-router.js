@@ -69,9 +69,9 @@ function route(currentRoleId,message){
  // A request to review a specialist's design or dependency is not an
  // instruction to create that specialist's deliverable. Likewise, project
  // management questions must remain answerable from the active role.
- if(/^(?:please\\s+)?(?:review|explain|summarize|discuss|compare|assess|evaluate|inspect|advise|audit|clarify|describe)\\b/i.test(input)&&
-    !/\\b(?:create|make|generate|produce|build|implement|draw|write|redesign|modify|update|fix|draft|render|prototype)\\b/i.test(input))return null;
- if(/^(?:what|why|when|where|who|which|should|is|are|how\\s+(?:does|will|can))\\b/i.test(input))return null;
+ if(/^(?:please\s+)?(?:review|explain|summarize|discuss|compare|assess|evaluate|inspect|advise|audit|clarify|describe)\b/i.test(input)&&
+    !/\b(?:create|make|generate|produce|build|implement|draw|write|redesign|modify|update|fix|draft|render|prototype)\b/i.test(input))return null;
+ if(/^(?:what|why|when|where|who|which|should|is|are|how\s+(?:does|will|can))\b/i.test(input))return null;
  const candidates=DOMAIN.filter(entry=>entry.patterns.some(pattern=>pattern.test(input)));
  // Multiple distinct domains in one request need clarification rather than
  // silently choosing one role. Project review/advice stays in the current role.
