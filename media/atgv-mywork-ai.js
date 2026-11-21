@@ -62,35 +62,29 @@
     else suggestion=info.fallback+'.';
     return {suggestion,action:info.action,target:info.target};
   }
-  function navigateToWork(){
+  function navigateToWork(item=null){
     if(!root()||root().closest('main')?.classList.contains('hidden'))return;
     if(!project||!role){if(typeof navigate==='function')navigate('projects');return;}
-    // A missing deadline/connection is an actionable settings prerequisite.
-    // Never route an unrelated AI-generated label to arbitrary commands.
-    const target=dailyBrief?.todayActions?.[0]?.target||'';
-    // Host-originated, allowlisted navigation targets only. AI text is never
-    // interpreted as a command or a destination.
-    if(target==='project-settings'||target==='projects'){
-      if(typeof navigate==='function')navigate(target);
+    const selected=item&&typeof item==='object'?item:null;
+    const candidate=selected?.target||'';
+    const target=['project-settings','projects','role-workspace','discovery'].includes(candidate)
+      ?candidate:role==='business-analyst'?'discovery':'role-workspace';
+    const jiraKey=/^[A-Z][A-Z0-9_]{0,20}-[0-9]{1,12}$/.test(String(selected?.jiraKey||''))
+      ?String(selected.jiraKey):'';
+    const brId=/^BR-[0-9]{1,8}$/.test(String(selected?.brId||''))?String(selected.brId):'';
+    // Only the verified project/role route is allowed. Main navigation checks
+    // enabled roles and opens Jira through its separately secured issue modal.
+    if(selected){
+      window.dispatchEvent(new CustomEvent('atgv:mywork-open-task',{
+        detail:{projectId:project,roleId:role,target,jiraKey,brId}
+      }));
       return;
     }
-    // Suggestions leave the AI-only My Work page and open the selected role's
-    // existing workflow on the dedicated Role Workspace page.
-    if(typeof navigate==='function')navigate(target==='discovery'?'discovery':role==='business-analyst'?'discovery':'role-workspace');
+    if(typeof navigate==='function')navigate(role==='business-analyst'?'discovery':'role-workspace');
     const workspace=byId('workView'),workflowTarget=routes[role]?.target||'roleStepFlow';
     const element=byId(workflowTarget);
     if(workspace&&!workspace.classList.contains('hidden')&&element&&!element.classList.contains('hidden'))
       element.scrollIntoView({behavior:'smooth',block:'start'});
-  }
-  function renderPersistentNext(){
-    const button=byId('atgvMyWorkAiNextButton'),summary=byId('atgvMyWorkAiNextSummary');
-    if(!button||!summary)return;
-    button.textContent='What to do next';
-    button.disabled=false;
-    const today=dailyBrief?.todayActions?.[0]?.label;
-    const fallback=latest?nextStep(latest).suggestion:'Open a project and select a role to start.';
-    summary.textContent=safe(today||fallback,180);
-    button.setAttribute('aria-label','What to do next: '+safe(today||fallback,150));
   }
   function actionButtons(label){
     const list=byId('atgvMyWorkAiActions');if(!list)return;
@@ -99,7 +93,7 @@
     primary.type='button';
     primary.textContent=safe(label,90)||nextStep(latest).action;
     primary.className='atgv-mywork-ai-button';
-    primary.addEventListener('click',navigateToWork);
+    primary.addEventListener('click',()=>navigateToWork());
     list.append(primary);
     const again=document.createElement('button');
     again.type='button';again.textContent='Review again';
@@ -119,7 +113,6 @@
     if(typeof window.ATGVMyWorkChat?.showSuggestion==='function')window.ATGVMyWorkChat.showSuggestion(text);
     else byId('atgvMyWorkAiText').textContent=text;
     actionButtons(action||next.action);
-    renderPersistentNext();
     displayResults(true);
     if(error){state('idle');return;}
     state('success');
@@ -140,7 +133,6 @@
     if(newSignature===signature)return;
     if(project!==compact.projectId||role!==compact.roleId)dailyBrief=null;
     signature=newSignature;latest=compact;project=compact.projectId;role=compact.roleId;
-    renderPersistentNext();
     const requestId=++pending;
     clearTimers();
     // Provide a verified navigation button immediately; the AI only refines the explanation.
@@ -163,14 +155,12 @@
       result(next.suggestion,next.action,true,requestId);
     },18000);
   }
-  byId('atgvMyWorkAiNextButton')?.addEventListener('click',navigateToWork);
-  renderPersistentNext();
+  // Per-task navigation replaces the persistent generic next-action bar.
   window.addEventListener('message',event=>{
     const msg=event.data||{};
     if(msg.projectId!==project||msg.roleId!==role)return;
     if(msg.type==='roleAiDailyBrief'&&msg.requestId===pending){
       dailyBrief=msg.brief&&typeof msg.brief==='object'?msg.brief:null;
-      renderPersistentNext();
       return;
     }
     if(msg.type==='roleAiSuggestion'&&msg.requestId===pending)
@@ -178,10 +168,10 @@
   });
   // A new visit rechecks today's recommendations rather than displaying a
   // stale previous day's summary, without clearing the user's chat history.
-  window.ATGVMyWorkAI={update,refresh(){
+  window.ATGVMyWorkAI={update,openTask:navigateToWork,refresh(){
     signature='';
     if(lastSnapshot)update(lastSnapshot);
-    else renderPersistentNext();
+    // No generic persistent action is displayed when no project is loaded.
   }};
   let visibleLast=false;
   window.addEventListener('atgv:viewchange',()=>{
