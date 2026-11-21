@@ -6103,6 +6103,40 @@ async function handleDashboardMessage(msg){
         await dashboard?.webview.postMessage({type:'architectStackState',value:{message:stopped.message+' Technology stack force-reset. Checkout is on '+result.baseBranch+'; previous bootstrap branch is preserved. '+(result.preservedWorkBranch?'Development branch '+result.preservedWorkBranch+' and its commits are preserved. ':'')+(result.recoveryStash?'Local changes are recoverable in Git stash '+result.recoveryStash.slice(0,12)+'. ':'')+(result.recovery?'Recovered older bootstrap branch ('+result.recovery+'). ':'')+(archive.archived.length?archive.archived.length+' previous stack record(s) archived. ':'')+'Choose a stack and click Save Stack to generate fresh catalog files on a new branch.'}});
         break;
       }
+      case 'architectCustomStatus':{
+        const projectId=activeProject?.id||'';
+        if(!projectId||msg.projectId!==projectId)break;
+        try{
+          requireOpened();
+          const conf=effectiveConfig(activeProject);
+          const root=await architectRepository.resolve(context.workspaceState,projectId,developerGit,{
+            projectRoot:aiRoot(),githubOwner:conf.get('github.owner'),githubRepo:conf.get('github.repo')});
+          const info=developerGit.localLogs();
+          const cwd=typeof info.cwd==='string'?path.resolve(info.cwd):'';
+          const belongs=!!cwd&&(cwd===path.resolve(root)||cwd.startsWith(path.resolve(root)+path.sep));
+          const running=!!(belongs&&info.running);
+          const value={checked:true,running,pid:running?info.pid:null,relative:belongs?String(info.relative||''):'',
+            previewUrl:running?String(info.previewUrl||''):'',mockPreview:running&&info.mockPreview===true,
+            exitCode:belongs&&Number.isInteger(info.exitCode)?info.exitCode:null,
+            signal:belongs?String(info.signal||''):'',reachable:null};
+          // An alive Node process is not necessarily a healthy HTTP application.
+          // Probe ONLY the validated loopback URL and refuse redirects.
+          if(running&&value.previewUrl){
+            try{
+              const safe=require('../../architect-custom-stack').loopbackPreview(value.previewUrl);
+              const res=await fetch(safe,{method:'GET',redirect:'manual',signal:AbortSignal.timeout(2600)});
+              value.reachable=res.status>=200&&res.status<400;
+            }catch{value.reachable=false;}
+          }
+          if(activeProject?.id===projectId)
+            await dashboard?.webview.postMessage({type:'architectCustomStatusResult',projectId,value});
+        }catch(error){
+          if(activeProject?.id===projectId)
+            await dashboard?.webview.postMessage({type:'architectCustomStatusResult',projectId,
+              value:{checked:false,running:false,message:'Unable to check application process: '+String(error.message||error).slice(0,170)}});
+        }
+        break;
+      }
       case 'architectCustomScan':{
         const projectId=activeProject?.id||'';
         const progress=async(percent,message)=>activeProject?.id===projectId?
