@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.12';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.13';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -120,6 +120,7 @@ function html(webview,{resumeLibrary=false}={}){
       <div class="nav-label">WORKSPACE</div>
       <button type="button" class="nav-item current" data-nav="overview"><span class="nav-icon">▦</span>Overview</button>
       <button type="button" class="nav-item" data-nav="sdlc-roles"><span class="nav-icon">◉</span>My Work</button>
+      <button type="button" class="nav-item" data-nav="role-workspace"><span class="nav-icon">▣</span>Role Workspace</button>
       <button type="button" class="nav-item" data-nav="flow"><span class="nav-icon">↻</span>SDLC</button>
       <button type="button" class="nav-item" data-nav="documents"><span class="nav-icon">▤</span>Documents</button>
       <button type="button" class="nav-item" data-nav="planning"><span class="nav-icon">▥</span>Solution Designs</button>
@@ -330,9 +331,7 @@ function html(webview,{resumeLibrary=false}={}){
     <details class="ext-settings-accordion" id="settingsServiceGroup" data-requirement="optional"><summary><span>Project AI Background Service</span><span class="ext-settings-badge" id="settingsServiceGroupState" data-state="optional">Optional</span></summary><div class="ext-settings-content"><section class="ai-service-panel" aria-label="AI Background Service"><div class="section-title"><span id="aiServiceBadge" class="pill">Disabled</span></div><p class="muted">Persistent SQLite memory, shared Confluence coordination, and controlled SDLC draft proposals. Independent mode requires an approved unattended endpoint and separately provisioned OS credentials.</p><div class="ai-service-fields"><label><input id="aiServiceEnabled" type="checkbox"> Enable hourly automation</label><label>Interval (minutes)<input id="aiServiceInterval" type="number" min="15" max="1440" value="60"></label><label>Execution mode<select id="aiServiceMode"><option value="vscode">While VS Code is open</option><option value="independent">Independent OS scheduler</option></select></label></div><div class="stack actions"><button id="aiServiceSave">Save Service Settings</button><button id="aiServiceInstall" class="secondary">Install OS Scheduler</button><button id="aiServiceRemove" class="secondary">Remove OS Scheduler</button><button id="aiServiceRun" class="secondary">Run Check Now</button><button id="aiServiceRefresh" class="secondary">Refresh</button></div><div id="aiServiceProgress" class="ai-service-progress" role="status" aria-live="polite"><span id="aiServiceProgressText">Idle</span><div class="progress-track"><div id="aiServiceProgressBar" class="progress-fill" style="width:0%"></div></div></div><div id="aiServiceSummary" class="muted" role="status">Open a project to view memory and worker status.</div><h3>Execution History</h3><div id="aiServiceHistory" class="ai-service-queue"></div><h3>Failed Tasks &amp; Retry</h3><div id="aiServiceFailures" class="ai-service-queue"></div></section></div></details>
   </div>
   </main>
-  <main id="workView" class="hidden work-container">
-    <div class="page-kicker">SDLC DELIVERY / ROLE WORKSPACE</div>
-    <div class="view-heading work-head"><h1 id="workTitle">Business Analyst</h1><span id="workStage" class="pill hidden" aria-hidden="true">Discover & Define</span><div id="workSkill" class="atgv-work-skill" aria-label="SDLC Catalog role variant"><span id="workSkillRole" class="atgv-work-skill-role">BA</span><select id="workSkillSelect" class="atgv-work-skill-select" aria-label="BA catalog role variant" disabled><option value="">Not loaded</option></select></div></div>
+  <main id="myWorkView" class="hidden work-container atgv-mywork-ai-page" aria-label="My Work AI assistant">
     <section id="atgvMyWorkAi" class="atgv-mywork-ai" aria-label="AI recommendations and chat for the selected My Work role" data-state="idle">
       <div class="atgv-mywork-ai-visual">
         <canvas id="atgvMyWorkAiOrb" class="atgv-mywork-ai-wave" role="img" aria-label="Reactive multicolor AI waveform; sleeps when there is no activity"></canvas>
@@ -351,6 +350,11 @@ function html(webview,{resumeLibrary=false}={}){
         <p id="atgvMyWorkAiChatStatus" class="atgv-mywork-ai-chat-status" role="status" aria-live="polite"></p>
       </form>
     </section>
+  </main>
+  <main id="workView" class="hidden work-container">
+    <div class="page-kicker">SDLC DELIVERY / ROLE WORKSPACE</div>
+    <div class="view-heading work-head"><h1 id="workTitle">Business Analyst</h1><span id="workStage" class="pill hidden" aria-hidden="true">Discover & Define</span><div id="workSkill" class="atgv-work-skill" aria-label="SDLC Catalog role variant"><span id="workSkillRole" class="atgv-work-skill-role">BA</span><select id="workSkillSelect" class="atgv-work-skill-select" aria-label="BA catalog role variant" disabled><option value="">Not loaded</option></select></div></div>
+
     <section id="baMyWorkDashboard" class="ba-my-work-dashboard hidden" aria-label="Business Analyst requirements overview">
       <div class="ba-my-work-head"><div><h2>Business Requirements</h2><p class="muted">Review requirements, approvals and action items. Open a requirement to continue the approved process.</p></div><button type="button" id="baMyWorkOpen">Open Business Requirements</button></div>
       <div id="baMyWorkMetrics" class="ba-my-work-metrics" aria-label="Business Requirements counts"></div>
