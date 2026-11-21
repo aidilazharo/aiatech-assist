@@ -53,11 +53,11 @@ test('right content pane is black with contrast-preserving palette, sidebar unto
  assert.doesNotMatch(css,/#contentPane\.content-pane[^}]+\.sidebar\{/);
 });
 
-test('release retains a single source-only .memory and correct v0.0.7 metadata',()=>{
+test('release retains source-only .memory and current ATGV version metadata',()=>{
  const pkg=JSON.parse(read('package.json'));
- assert.equal(pkg.version,'0.0.7');
- assert.equal(pkg.atgvDisplayVersion,'0.0.7');
- assert.match(read('README.md'),/\*\*Version: 0\.0\.7\*\*/);
- assert.match(read('RELEASE.md'),/ATGV AIATECH Assist v0\.0\.7/);
+ assert.match(pkg.version,/^\d+\.\d+\.\d+$/);
+ assert.equal(pkg.atgvDisplayVersion,pkg.version);
+ assert.ok(read('README.md').includes('**Version: '+pkg.version+'**'));
+ assert.ok(read('RELEASE.md').includes('ATGV AIATECH Assist v'+pkg.version));
  assert.match(read('.gitattributes'),/^\.memory export-ignore$/m);
 });
