@@ -215,6 +215,18 @@ async function execute({registry,projectId,job,config,token,loadRegister,finaliz
   return identity;
  };
  try{
+  // Re-scan the complete hierarchy immediately before the FIRST destructive
+  // request. If an unseen Story/Task/Subtask appeared after preview, no
+  // partial deletion is allowed to begin.
+  if(!Object.values(saved.results||{}).some(x=>x.status==='deleted'||x.status==='attempting')){
+   await verify();
+   const currentRows=await discover(config,token,plan.epicKey,plan.projectKey,{request,read});
+   const signature=rows=>JSON.stringify(rows.map(x=>[
+    x.key,x.parentKey,x.issueId,x.type,x.status,x.updated,x.fingerprint
+   ]));
+   if(signature(currentRows)!==signature(plan.rows))
+    throw Error('Jira Epic hierarchy changed after deletion preview. Review all issues again; nothing deleted.');
+  }
   for(const row of plan.rows){
    if(saved.results[row.key]?.status==='deleted')continue;
    if(saved.results[row.key]?.status==='attempting')
