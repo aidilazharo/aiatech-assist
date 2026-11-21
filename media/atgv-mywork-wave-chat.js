@@ -17,7 +17,7 @@
  const blendedRGBA=(target,mix,alpha)=>'rgba('+redRGB.map((v,i)=>
   Math.round(v+(target[i]-v)*mix)).join(',')+','+alpha+')';
  let project='',role='',pendingId=0,sequence=0,pending=false;
- let greetingNode=null,briefingNode=null,lastBriefRequest=0;
+ let greetingNode=null,briefingNode=null,lastBriefRequest=0,submittedText='',handoffDraft='';
  let w=300,h=150,last=0,phase=0,hue=354,energy=0,opacity=0,height=0,speed=0,colorMix=0;
  let lastActivity=performance.now(),ripples=[],writer=null,queue=[],thinkingBefore=false;
  const prefersReduced=window.matchMedia?.('(prefers-reduced-motion: reduce)');
@@ -69,14 +69,16 @@
    writer=null;queue.length=0;transcript.replaceChildren();input.value='';
    greetingNode=null;briefingNode=null;lastBriefRequest=0;
    greetingNode=addMessage('assistant','Hello! I am reviewing your '+String(snapshot.roleName||'project')+' work for today.');
-   status.textContent='';button.disabled=true;pulse(1.3);
+   if(handoffDraft){input.value=handoffDraft.slice(0,4000);handoffDraft='';}
+   status.textContent='';button.disabled=!input.value.trim();pulse(1.3);
   }
  }
  if(window.ATGVMyWorkAI&&typeof window.ATGVMyWorkAI.update==='function'){
   const original=window.ATGVMyWorkAI.update;
   window.ATGVMyWorkAI.update=function(snapshot){scope(snapshot);return original(snapshot);};
  }
- window.ATGVMyWorkChat={showSuggestion(text){if(suggestion)typewriter(suggestion,text);}};
+ window.ATGVMyWorkChat={showSuggestion(text){if(suggestion)typewriter(suggestion,text);},
+  saveHandoffDraft(text){handoffDraft=String(text||'').slice(0,4000);}};
  input.addEventListener('input',()=>{
   pulse(.22+Math.min(1,input.value.length/380));
   button.disabled=pending||!input.value.trim();
@@ -85,6 +87,7 @@
   event.preventDefault();
   const userText=input.value.trim();
   if(!userText||!project||!role||pending)return;
+  submittedText=userText;
   addMessage('user',userText);input.value='';setBusy(true);activity();
   pendingId=++sequence;
   // Only the user-entered message crosses the webview boundary.
@@ -152,7 +155,23 @@
    return;
   }
   if(msg.type!=='roleAiChatReply'||msg.requestId!==pendingId)return;
-  setBusy(false);addMessage('assistant',msg.text||'No response received.',true);
+  setBusy(false);
+  const reply=addMessage('assistant',msg.text||'No response received.',true);
+  const target=String(msg.suggestedRoleId||'');
+  if(/^[a-z][a-z0-9-]{1,78}$/.test(target)&&msg.suggestedRoleName){
+    const action=document.createElement('button');
+    action.type='button';action.className='atgv-mywork-ai-switch-role';
+    action.textContent='Switch to '+String(msg.suggestedRoleName).slice(0,80);
+    action.setAttribute('aria-label','Switch My Work chat role to '+String(msg.suggestedRoleName).slice(0,80));
+    action.addEventListener('click',()=>{
+      // Only an explicit user click may trigger role navigation. The target
+      // is checked against enabled project roles by the main UI controller.
+      window.dispatchEvent(new CustomEvent('atgv:mywork-switch-role',{
+        detail:{projectId:project,fromRoleId:role,targetRoleId:target,requestText:submittedText.slice(0,4000)}
+      }));
+    });
+    reply.append(action);
+  }
   activity();
  });
  function frame(now){
