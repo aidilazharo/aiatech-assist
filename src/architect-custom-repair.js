@@ -38,7 +38,22 @@ async function analyse(root,inspection,{fsApi=fs}={}){
    }
   }
   const lockfile=await Promise.all(['package-lock.json','pnpm-lock.yaml','yarn.lock'].map(async x=>!!(await safeRead(path.join(cwd,x))))).then(x=>x.some(Boolean));
-  inventory.push({relative:target.relative,framework:target.framework,kind:target.kind,dependencyNames:dependencyNames.slice(0,55),scripts,envKeys:exampleNames.slice(0,50),lockfile,installed:target.installed});
+  // Bounded static configuration evidence for the configured Solution Architect AI.
+  // Never inspect actual .env files or credential stores.
+  const configEvidence=[];
+  for(const name of ['vite.config.ts','vite.config.js','vite.config.mjs','src/main.ts','src/app.factory.ts','src/config/env.ts','src/app.module.ts','server/index.mjs']){
+   const raw=await safeRead(path.join(cwd,...name.split('/')));
+   if(!raw)continue;
+   // Strip string assignments to plausible secrets before submitting any excerpt.
+   const sanitized=raw.slice(0,2000)
+    .replace(/((?:token|secret|password|client_secret|api_key)\s*[:=]\s*['"`])[^'"\n`]+/gi,'$1[REDACTED]');
+   configEvidence.push({file:name,excerpt:sanitized.slice(0,1100)});
+  }
+  inventory.push({relative:target.relative,framework:target.framework,kind:target.kind,dependencyNames:dependencyNames.slice(0,55),scripts,envKeys:exampleNames.slice(0,50),lockfile,installed:target.installed,
+   nodeEngine:String(pkg.engines?.node||'').slice(0,50),configEvidence});
+  if(vite&&configEvidence.some(x=>x.file.startsWith('vite.config.')&&/proxy\s*:/.test(x.excerpt)))
+   observations.push({level:'warning',code:'api-proxy',target:target.relative,
+    message:'Vite development proxy references an external API process. Frontend alone will not satisfy its API calls; use a separate mock service for offline UI preview.'});
   if(target.kind==='npm'&&!target.installed)observations.push({level:'warning',code:'dependencies',target:target.relative,message:'Dependencies are not installed in this checkout.'});
   if(isDb)observations.push({level:'warning',code:'database',target:target.relative,message:'Database adapter detected. A real database and environment configuration may be required.'});
   if(usesAuth||/SAML_|OKTA_|OIDC_/.test(exampleNames.join(' ')))observations.push({level:'warning',code:'authentication',target:target.relative,message:'Authentication integration detected. A mock preview can bypass external identity services for UI review only.'});
