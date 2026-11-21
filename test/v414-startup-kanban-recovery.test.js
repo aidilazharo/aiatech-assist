@@ -8,13 +8,13 @@ const root=path.join(__dirname,'..');
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');
 const setup=require('../src/lib/startup-setup');
 
-test('v414: fixed Library source and project repository moves out of Start',()=>{
+test('v414: GitHub source is trusted and Project Repository is part of Start',()=>{
  const parsed=setup.validate({...setup.DEFAULTS,projectRepoUrl:'https://github.com/evil/ignored',libraryRepoUrl:'https://github.com/evil/ignored'});
- assert.equal(parsed.libraryRepoUrl,'https://github.com/aidilazharo/tech-stacks-skills');
+ assert.equal(parsed.libraryRepoUrl,setup.SOURCE_REPOS.aiamalaysia.library);
  assert.equal(parsed.project,undefined);
  const html=read('src/lib/webview/dashboard-html.js');
  const start=html.slice(html.indexOf('<form id="startupConnectionForm"'),html.indexOf('</form>',html.indexOf('<form id="startupConnectionForm"')));
- assert.doesNotMatch(start,/id="startupProjectRepo"|id="startupLibraryRepo"/);
+ assert.match(start,/id="startupProjectRepository"/);assert.doesNotMatch(start,/id="startupLibraryRepo"/);
  assert.doesNotMatch(start,/id="startupLibraryZipUpload"|id="startupLibraryZipStatus"|atgv-library-source-label/);
  assert.match(html,/id="projectGithubRepositoryUrl"/);
  const ui=read('media/start.js'),host=read('src/lib/runtime/extension-runtime.js');
