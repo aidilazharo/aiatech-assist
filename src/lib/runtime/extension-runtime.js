@@ -9540,6 +9540,10 @@ async function handleDashboardMessage(msg){
         const snapshot=await workState(registry,projectId);
         const role=snapshot.roles.find(entry=>entry.id===roleId);
         if(!role||!Number.isSafeInteger(requestId)||requestId<1)break;
+        // Refresh live project evidence without replacing the webview or
+        // delaying the deterministic My Work brief. Throttle on repeated opens.
+        void refreshLiveRemoteData({reason:'my-work-entry'}).catch(error=>
+          report('My Work live refresh: '+String(error.message||error).slice(0,180)));
         const input=msg.context&&typeof msg.context==='object'?msg.context:{};
         const clean=(value,max=120)=>String(value??'').replace(/[\x00-\x1f]/g,' ').trim().slice(0,max);
         // The webview snapshot is only a refresh signal. Checklist completion
