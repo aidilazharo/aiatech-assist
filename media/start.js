@@ -1214,6 +1214,29 @@ $('sidebarRoleMenu').addEventListener('keydown',event=>{
 });
 document.addEventListener('click',event=>{if(!event.target.closest('.role-select-wrap'))closeRoleMenu();});
 $('sidebarRole').addEventListener('change',event=>navigate(event.target.value));
+window.addEventListener('atgv:mywork-open-task',event=>{
+ const detail=event.detail||{},target=String(detail.target||'');
+ // A task button may only navigate from the currently selected project and role.
+ if(!workspaceOpened||!activeId||view!=='myWork'||
+    detail.projectId!==activeId||detail.roleId!==selectedRole||
+    !visibleRoles().some(item=>item.id===selectedRole))return;
+ if(!['role-workspace','discovery','project-settings'].includes(target))return;
+ if(target==='discovery'&&selectedRole!=='business-analyst')return;
+ if(target==='project-settings'&&selectedRole!=='project-manager')return;
+ const jiraKey=String(detail.jiraKey||''),brId=String(detail.brId||'');
+ navigate(target);
+ if(target==='role-workspace'&&/^[A-Z][A-Z0-9_]{0,20}-[0-9]{1,12}$/.test(jiraKey))
+  openJiraIssueModal(jiraKey);
+ if(target==='discovery'&&/^BR-[0-9]{1,8}$/.test(brId)){
+  // Navigate to the Business Requirements workflow. Select the requested BR
+  // only when it remains in the project's currently verified local list.
+  const requirement=activeBusinessRequirements().find(item=>item.id===brId);
+  if(requirement){
+   baBreadcrumbAtRequirements=true;
+   renderDiscovery();
+  }
+ }
+});
 window.addEventListener('atgv:mywork-switch-role',event=>{
  const detail=event.detail||{},target=String(detail.targetRoleId||'');
  if(!workspaceOpened||!activeId||detail.projectId!==activeId||detail.fromRoleId!==selectedRole)return;
