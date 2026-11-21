@@ -77,6 +77,8 @@ test('cross-role switch requires a user-clickable event, enabled role verificati
  assert.match(ui,/saveHandoffDraft/);
  assert.match(nav,/window\.addEventListener\('atgv:mywork-switch-role'/);
  assert.match(nav,/visibleRoles\(\)\.some\(item=>item\.id===target\)/);
+ assert.match(nav,/roleSettings\.roles/);
+ assert.match(ui,/const handoffRequest=submittedText/);
  assert.match(nav,/navigate\('project-settings'\)/);
  assert.match(nav,/navigate\(target\)/);
  assert.match(nav,/saveHandoffDraft\?\./);
