@@ -9455,11 +9455,15 @@ async function handleDashboardMessage(msg){
         const skillRoute=myWorkRoleSkillRouter.route(roleId,msg.message);
         if(skillRoute){
           const text=myWorkRoleSkillRouter.response(skillRoute);
+          const roleSettingsForHandoff=await getRoleSettings(registry,projectId);
+          const allowed=Array.isArray(roleSettingsForHandoff?.enabled)&&
+            roleSettingsForHandoff.enabled.includes(skillRoute.targetRoleId);
           if(activeProject?.id===projectId)
             await dashboard?.webview.postMessage({
               type:'roleAiChatReply',projectId,roleId,requestId,text,error:false,
               suggestedRoleId:skillRoute.targetRoleId,
-              suggestedRoleName:skillRoute.targetRoleName
+              suggestedRoleName:skillRoute.targetRoleName,
+              suggestedRoleEnabled:allowed
             });
           break;
         }
