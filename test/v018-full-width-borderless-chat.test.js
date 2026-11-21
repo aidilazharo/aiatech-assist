@@ -46,11 +46,13 @@ test('Chat input is bottom anchored and neither messages nor composer have card 
  assert.ok(page.indexOf('id="atgvMyWorkAiResults"')>0);
  assert.ok(page.indexOf('id="atgvMyWorkAiChatForm"')>page.indexOf('id="atgvMyWorkAiResults"'));
 });
-test('Red divider remains beneath the higher-priority waveform',()=>{
- const divider=rule('#atgvMyWorkAi .atgv-mywork-ai-topbar::after');
- const visual=rule('#atgvMyWorkAi .atgv-mywork-ai-visual');
- const canvas=rule('#atgvMyWorkAi canvas#atgvMyWorkAiOrb');
- assert.match(divider,/z-index:1/);
+test('Actual header red line remains beneath waveform without a duplicate divider',()=>{
+ const carrier=rule('#appHeader #myWorkHeaderWave.mywork-header-wave');
+ const visual=rule('#appHeader #myWorkHeaderWave .mywork-header-wave-visual');
+ const canvas=rule('#appHeader #myWorkHeaderWave canvas#atgvMyWorkAiOrb');
+ assert.match(carrier,/bottom:-3px/);
  assert.match(visual,/z-index:3/);
  assert.match(canvas,/z-index:4/);
+ assert.doesNotMatch(css,/atgv-mywork-ai-topbar::after/);
+ assert.match(read('media/start.css'),/\.app-header\{border-bottom:3px solid #D31145\}/);
 });
