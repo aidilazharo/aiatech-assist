@@ -1,15 +1,16 @@
-# ATGV AIATECH Assist v0.0.20
+# ATGV AIATECH Assist v0.0.21
 
-## Changes
+## Fixes
 
-- Hide the generated GitHub project repository URL beneath Project Repository on the Start screen while preserving the editable repository, PAT and connection verification.
-- Always display a verified next-action navigation button immediately when the active role opens My Work, without waiting for AI or relying on provider availability.
-- Add explicit action labels and role workspace navigation for all 18 SDLC roles, maintaining read-only guidance and human approval for any changes.
-- Ground Business Analyst, Developer, Project Manager, Solution Architect and QA suggestions in live cross-user project activity when available.
-- Strengthen role chat prompts to distinguish verified project evidence from missing or stale sources.
-- Prepare integration with Library's v0.0.5 project snapshot and verified next-action contracts (these Library files remain declarative and do not authorize remote writes).
-- Add regression tests for hidden URL, 18 role actions, immediate buttons, and project-specific guidance.
+- Keep the same animated My Work waveform visible above the active global notification by moving its canvas between the normal top bar and the notification row without restarting the animation.
+- Preserve the red-to-CMYK animation, responsive layout, warning actions and dismiss controls.
+- Remove the blue Overview breadcrumb, PROJECT OVERVIEW kicker and redundant Overview heading inside the right-hand content pane. The sidebar Overview route remains unchanged.
+- Suppress duplicated inline error messages in every right-hand page while preserving the global notification, actionable buttons and diagnostic logging.
+- Preserve the Confluence page/attachment and SQLite synchronization with conflict review. Confluence Database row writes are not exposed by the public API; never replace approved data or silently claim database row synchronization.
+- Add focused UI regression tests and explicitly exclude .memory from VSIX artifacts.
 
 ## Verification
 
-Run complete Node regression, Windows and VSIX packaging checks; squash merge only after required CI passes. Publish verified VSIX from main. Keep source-only .memory out of released artifacts.
+Run Node, Windows, UI, and VSIX packaging gates on this PR head before merging.
+Do not publish a release until checks pass.
+

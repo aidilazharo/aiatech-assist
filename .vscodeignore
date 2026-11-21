@@ -3,3 +3,5 @@ test/**
 scripts/**
 .git/**
 *.vsix
+**/.memory/**
+.memory/**

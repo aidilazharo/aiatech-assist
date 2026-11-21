@@ -31,11 +31,12 @@ test('v320: phase progress uses only verified local task flags, not invented app
  assert.ok(out.every(p=>Number.isFinite(p.percent)&&p.percent>=0&&p.percent<=100));
  assert.deepEqual(phases.aggregate(null,null).map(x=>x.state),Array(7).fill('untracked'));
 });
-test('v320: Overview renders circles immediately beneath title and loads helper before app',()=>{
- const title=source.indexOf('<h1>Overview</h1>');
+test('v320: Overview keeps phase circles before metric tiles without duplicate title',()=>{
+ const intro=source.indexOf('class="overview-intro"');
  const circles=source.indexOf('id="overviewPhaseCircles"');
  const summary=source.indexOf('id="overviewProgress"');
- assert.ok(title>=0&&circles>title&&summary>circles,'progress circles should appear under Overview title and before metric tiles');
+ assert.ok(intro>=0&&circles>intro&&summary>circles,'phase circles must precede the metric tiles');
+ assert.ok(!source.slice(intro,circles).includes('<h1>Overview</h1>'),'redundant title should be removed');
  assert.match(source,/overviewSdlcJs=webview\.asWebviewUri/);
  assert.ok(source.indexOf('<script src="${overviewSdlcJs}"></script>')<source.indexOf('<script src="${js}"></script>'));
  assert.match(webview,/renderOverviewSdlcPhases\(\);/);

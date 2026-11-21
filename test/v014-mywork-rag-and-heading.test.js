@@ -65,7 +65,7 @@ test('My Work blue breadcrumb title is suppressed without removing the sidebar r
  const start=js.indexOf('function renderWorkspaceBreadcrumbs(){');
  const end=js.indexOf('\nfunction setView(next){',start);
  const handler=js.slice(start,end);
- assert.match(handler,/if\(view==='myWork'\)\{/);
+ assert.match(handler,/if\(view==='myWork'\|\|view==='landing'\)\{/);
  assert.match(handler,/active\.querySelector\('\.atgv-workspace-breadcrumbs'\)\?\.remove\(\)/);
  assert.match(handler,/active\.classList\.remove\('has-workspace-breadcrumb'\)/);
  assert.match(html,/data-nav="sdlc-roles"[^>]*>[\s\S]{0,100}My Work<\/button>/);

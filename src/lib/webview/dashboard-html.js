@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.20';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.21';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -184,8 +184,7 @@ function html(webview,{resumeLibrary=false}={}){
     </section>
    </main>
    <main id="landingView" class="hidden">
-    <div class="page-kicker">PROJECT OVERVIEW</div>
-    <div class="overview-intro"><div class="overview-heading"><h1>Overview</h1><p id="overviewHealthDetail" class="muted overview-progress-detail">Progress is based on completed SDLC tasks</p></div><div class="overview-project-health" role="status" aria-live="polite"><span id="overviewStatus" class="project-health-badge neutral">Not Scheduled</span><small id="overviewSchedule">Set project dates in Settings</small></div></div>
+    <div class="overview-intro"><div class="overview-heading"><p id="overviewHealthDetail" class="muted overview-progress-detail">Progress is based on completed SDLC tasks</p></div><div class="overview-project-health" role="status" aria-live="polite"><span id="overviewStatus" class="project-health-badge neutral">Not Scheduled</span><small id="overviewSchedule">Set project dates in Settings</small></div></div>
     <div class="overview-phase-section" aria-label="Seven SDLC phases and local task progress">
       <div class="overview-phase-heading"><strong>SDLC phases</strong><span id="overviewPhaseSummary" class="muted" role="status">Loading phase progress...</span></div>
       <div id="overviewPhaseCircles" class="overview-phase-grid" role="group" aria-label="Seven SDLC phase progress indicators"></div>
