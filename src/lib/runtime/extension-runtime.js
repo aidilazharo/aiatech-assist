@@ -6233,7 +6233,9 @@ async function handleDashboardMessage(msg){
           if(activeProject?.id===projectId){
             const status=checkout.mode==='cloned'
               ?'Custom Stack saved. The project repository folder was created or verified empty and the configured GitHub repository cloned at '+checkout.root+'.'
-              :'Custom Stack saved. Existing verified checkout preserved at '+checkout.root+'. Use Pull Repository to update its code.';
+              :checkout.mode==='pulled'
+               ?'Custom Stack saved. Missing source files restored through a verified fast-forward of the configured GitHub repository at '+checkout.root+'.'
+               :'Custom Stack saved. Existing verified checkout preserved at '+checkout.root+'. Use Pull Repository to update its code.';
             await dashboard?.webview.postMessage({type:'architectStackState',value:{message:status}});
             await dashboard?.webview.postMessage({type:'architectCustomScanResult',projectId,value:detected});
           }
