@@ -9104,6 +9104,54 @@ async function handleDashboardMessage(msg){
         }else await toggleTask(registry,activeProject.id,msg.roleId,msg.taskId,msg.completed===true);
         await refreshDashboard();await notice('Local SDLC checklist updated.');break;
       }
+      case 'roleAiReview':{
+        // Automatic, read-only My Work guidance. The AI cannot invoke commands,
+        // approve decisions, update issues or alter any project artifacts.
+        requireOpened();
+        if(String(msg.projectId||'')!==activeProject.id)break;
+        const projectId=activeProject.id;
+        const roleId=String(msg.roleId||'').slice(0,80);
+        const requestId=Number(msg.requestId);
+        const snapshot=await workState(registry,projectId);
+        const role=snapshot.roles.find(entry=>entry.id===roleId);
+        if(!role||!Number.isSafeInteger(requestId)||requestId<1)break;
+        const input=msg.context&&typeof msg.context==='object'?msg.context:{};
+        const clean=(value,max=120)=>String(value??'').replace(/[\\x00-\\x1f]/g,' ').trim().slice(0,max);
+        const allowedTasks=new Set((role.tasks||[]).map(task=>String(task.label)));
+        const tasks=(Array.isArray(input.tasks)?input.tasks:[]).slice(0,16)
+          .filter(task=>allowedTasks.has(String(task?.title||'')))
+          .map(task=>({activity:clean(task.title),completed:task.done===true}));
+        const assigned=(Array.isArray(input.assigned)?input.assigned:[]).slice(0,8)
+          .filter(item=>/^[A-Z][A-Z0-9_]{1,20}-[0-9]+$/.test(String(item?.key||'')))
+          .map(item=>({jiraKey:clean(item.key,40),status:clean(item.status,45)}));
+        const requirements=roleId==='business-analyst'?(Array.isArray(input.requirements)?input.requirements:[])
+          .slice(0,10).filter(item=>/^BR-[0-9]{1,6}$/.test(String(item?.id||'')))
+          .map(item=>({id:clean(item.id,40),status:clean(item.status,35)})):[];
+        const evidence={role:clean(role.label,100),progress:clean(input.progress,30),
+          recommendedNext:clean(input.next,180),tasks,assigned,requirements};
+        let message='',error=false;
+        try{
+          const target=await activeAiTarget();
+          const prompt='You are ATGV My Work role assistant. Only analyze the supplied role-scoped work summary. '+
+            'Write one concise, practical recommendation in plain English (maximum 2 sentences). '+
+            'Reference a real incomplete task or assigned ticket when possible; otherwise recommend checking the next role workflow step. '+
+            'Never invent completion, Jira permissions, approvals, blockers, ticket IDs or results. '+
+            'Do not give commands or promise actions have been executed. No markdown and no JSON.\\nWORK SUMMARY: '+
+            JSON.stringify(evidence);
+          const text=await aiAnswer(target,prompt,850);
+          message=clean(text.replace(/\\s+/g,' '),420);
+          if(!message)throw Error('Empty AI suggestion');
+        }catch(failure){
+          error=true;
+          report('My Work AI guidance unavailable: '+clean(failure.message,180));
+          message='AI review is currently unavailable. '+(evidence.recommendedNext
+            ?'Based on your recorded progress, continue with: '+evidence.recommendedNext+'.'
+            :'Open your current role workflow to choose the next step.');
+        }
+        if(activeProject?.id===projectId)
+          await dashboard?.webview.postMessage({type:'roleAiSuggestion',projectId,roleId,requestId,message,error});
+        break;
+      }
       case 'roleStepLoadScope':{
         requireOpened();
         const roles=(await workState(registry,activeProject.id)).roles;
