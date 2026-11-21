@@ -67,7 +67,10 @@ test('panel is shared by all My Work roles and includes a reactive canvas and ch
   assert.doesNotMatch(html.slice(workspace,html.indexOf('</main>',workspace)),/id="atgvMyWorkAi"/);
   assert.equal(html.match(/id="atgvMyWorkAi"/g)?.length,1);
   const section=html.slice(panel,roles);
-  assert.match(section,/<canvas id="atgvMyWorkAiOrb"/);
+  const header=html.slice(html.indexOf('<header class="app-header"'),html.indexOf('</header>')+9);
+  assert.match(header,/<canvas id="atgvMyWorkAiOrb"/);
+  assert.doesNotMatch(section,/<canvas id="atgvMyWorkAiOrb"/);
+  assert.equal(html.match(/id="atgvMyWorkAiOrb"/g)?.length,1);
   assert.match(section,/id="atgvMyWorkAiInput"/);
   assert.match(section,/id="atgvMyWorkAiSend"/);
   assert.match(section,/id="atgvMyWorkAiConversation"/);
