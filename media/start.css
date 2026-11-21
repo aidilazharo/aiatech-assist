@@ -2323,9 +2323,6 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 #contentPane.content-pane > main{color:inherit}
 
 /* v0.0.8: sequential, accessible Atlassian/GitHub connection verification. */
-#startupConnectionForm #startupProjectRepositoryPreview{
- color:#abbcd1;font-size:11px;overflow-wrap:anywhere;margin-top:5px;
-}
 #startupConnectionForm .atgv-connection-progress{display:grid;gap:8px;margin:13px 0 6px}
 #startupConnectionForm .atgv-connection-progress-item{
  display:grid;gap:4px;padding:6px 9px;border-radius:6px;background:#111923;color:#f3f7ff;

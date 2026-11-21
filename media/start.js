@@ -8223,14 +8223,9 @@ function renderStartupScanPlaceholders(){
 }
 function startupPayload(){return Object.fromEntries(Object.entries(startupFieldMap).map(([key,id])=>[key,$(id).value.trim()]));}
 function updateStartupRepositoryPreview(){
- const raw=$('startupGithubUrl').value.trim().replace(/^https?:\/\//i,'').replace(/\/$/,'');
- const owner=/^github\.com\/([a-z0-9-]{1,39})$/i.exec(raw)?.[1]||'';
- const project=$('startupProjectRepository').value.trim();
- // Retain the configured project repository URL and all connection checks.
- // The separate extension, library, and release repository listing was
- // purely informational and is intentionally absent from the Start screen.
- $('startupProjectRepositoryPreview').textContent=owner&&/^[a-z0-9_.-]+$/i.test(project)?
-  'https://github.com/'+owner+'/'+project:'Enter a valid GitHub organization and project repository.';
+ // Keep the connection field and value for validation, but never display the repository URL.
+ const preview=$('startupProjectRepositoryPreview');
+ if(preview){preview.textContent='';preview.hidden=true;}
 }
 // Display only the current sequential check. Successful checks vanish immediately;
 // retain a failed/offline check until it is fixed, but never show idle cards.

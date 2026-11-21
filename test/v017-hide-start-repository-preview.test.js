@@ -20,23 +20,17 @@ test('Start screen does not display extension and library repository URL listing
  for(const id of ['startupGithubUrl','startupProjectRepository','startupGithubToken','startupProjectRepositoryPreview','startupTestConnections','startupConnectionProgress'])
   assert.match(html,new RegExp('id="'+id+'"'));
 });
-test('Active project repository URL preview still updates without extra source rows',()=>{
+test('Start never displays a derived project repository URL but retains connection fields',()=>{
+ const html=read('src/lib/webview/dashboard-html.js');
  const js=read('media/start.js');
+ assert.ok(html.includes('id="startupProjectRepositoryPreview" hidden></small>'));
+ assert.ok(!html.includes('https://github.com/aiamalaysia/my-fow-technology-app-techassists'));
  const start=js.indexOf('function updateStartupRepositoryPreview(){');
  const end=js.indexOf('\n// Display only the current sequential check.',start);
  assert.ok(start>0&&end>start);
- const nodes={
-  startupGithubUrl:{value:'https://github.com/aiamalaysia/'},
-  startupProjectRepository:{value:'project-repo'},
-  startupProjectRepositoryPreview:{textContent:''}
- };
- const ctx={'$':id=>{
-  assert.ok(nodes[id],'Unexpected startup preview lookup: '+id);
-  return nodes[id];
- }};
- vm.runInNewContext(js.slice(start,end)+'\nupdateStartupRepositoryPreview();',ctx);
- assert.equal(nodes.startupProjectRepositoryPreview.textContent,'https://github.com/aiamalaysia/project-repo');
- nodes.startupGithubUrl.value='not-a-github-organization';
- vm.runInNewContext(js.slice(start,end)+'\nupdateStartupRepositoryPreview();',ctx);
- assert.equal(nodes.startupProjectRepositoryPreview.textContent,'Enter a valid GitHub organization and project repository.');
+ const nodes={startupProjectRepositoryPreview:{textContent:'old URL',hidden:false}};
+ vm.runInNewContext(js.slice(start,end)+'\nupdateStartupRepositoryPreview();',{'$':id=>nodes[id]});
+ assert.equal(nodes.startupProjectRepositoryPreview.textContent,'');
+ assert.equal(nodes.startupProjectRepositoryPreview.hidden,true);
+ assert.match(html,/id="startupProjectRepository"/);
 });
