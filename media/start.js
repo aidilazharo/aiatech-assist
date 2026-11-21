@@ -8098,13 +8098,17 @@ window.addEventListener('message',event=>{
 
 // ATGV first-run setup lives on the Start page. The upgrade modal below is
 // reserved exclusively for VSIX releases, not catalog or setup notifications.
-const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluenceUrl',email:'startupEmail',
- githubUrl:'startupGithubUrl'};
+const startupFieldMap={jiraUrl:'startupJiraUrl',email:'startupEmail',githubUrl:'startupGithubUrl',
+ projectRepository:'startupProjectRepository'};
 let startupFormInitialized=false,startupPrereqRequested=false,startupConnectionVerified=false,startupSetupRequired=true,startupReturnToConnections=false;
 let startupConnectionEditSnapshot=null;
 let startupConnectionCheckSequence=0,startupConnectionCheckPending=false,startupConnectionHealthStarted=false,startupConnectionHealthError=false;
 const startupConnectionCheckResults=new Map();
-const STARTUP_CONNECTION_CHECK_LABELS=[['jira','Jira API'],['confluence','Confluence API'],['github','GitHub API'],['organization','GitHub organization'],['library','SDLC Library API']];
+const STARTUP_CONNECTION_CHECK_LABELS=[
+ ['jira','Jira API'],['confluence','Confluence API'],['github','GitHub account'],['organization','GitHub organization'],
+ ['extension','Extension · read/write/releases'],['library','Library · read/write/releases'],
+ ['extension-releases','Extension releases · optional'],['library-releases','Library releases · optional']
+];
 let startupVerifying=false,startupScanComplete=false,startupPage=0,startupInstallingModule='';
 let startupLastInstalledTool='';
 let startupStackData=null,startupOpenStackId='',startupStackPriorFocus=null;
@@ -8198,6 +8202,53 @@ function renderStartupScanPlaceholders(){
  }
 }
 function startupPayload(){return Object.fromEntries(Object.entries(startupFieldMap).map(([key,id])=>[key,$(id).value.trim()]));}
+function updateStartupRepositoryPreview(){
+ const raw=$('startupGithubUrl').value.trim().replace(/^https?:\/\//i,'').replace(/\/$/,'');
+ const owner=/^github\.com\/([a-z0-9-]{1,39})$/i.exec(raw)?.[1]||'';
+ const project=$('startupProjectRepository').value.trim();
+ $('startupProjectRepositoryPreview').textContent=owner&&/^[a-z0-9_.-]+$/i.test(project)?
+  'https://github.com/'+owner+'/'+project:'Enter a valid GitHub organization and project repository.';
+ const map={
+  aidilazharo:['aidilazharo/aiatech-assist','aidilazharo/tech-stacks-skills'],
+  aiamalaysia:['aiamalaysia/my-fow-technology-app-techassists-dev-sdlc','aiamalaysia/my-fow-technology-app-techassists-enterprise-skills']
+ };
+ const paths=map[owner.toLowerCase()]||[];
+ const preview=$('startupRepositoryPreview');if(!preview)return;
+ preview.replaceChildren();
+ for(const [label,value] of [
+  ['Extension (required)',paths[0]],
+  ['Library (required)',paths[1]],
+  ['Extension releases (optional)','aidilazharo/extension'],
+  ['Library releases (optional)','aidilazharo/library']
+ ]){
+  const row=document.createElement('div');row.className='atgv-repo-preview-item';
+  const title=document.createElement('span');title.textContent=label;
+  const address=document.createElement('code');address.textContent=value?'https://github.com/'+value:'Select aidilazharo or aiamalaysia';
+  row.append(title,address);preview.append(row);
+ }
+}
+function renderStartupConnectionProgress(){
+ const el=$('startupConnectionProgress');if(!el)return;
+ el.replaceChildren();
+ const checks=[...startupConnectionCheckResults.values()];
+ for(const check of checks){
+  const row=document.createElement('div');row.className='atgv-connection-progress-item';
+  row.dataset.state=check.state;
+  const head=document.createElement('div');head.className='atgv-connection-progress-head';
+  const name=document.createElement('strong');name.textContent=check.label;
+  const status=document.createElement('span');
+  status.textContent=check.state==='ok'?'Successful':check.state==='error'?'Failed':check.state==='pending'?'Checking…':'Waiting';
+  head.append(name,status);
+  const track=document.createElement('div');track.className='atgv-connection-progress-track';
+  track.setAttribute('role','progressbar');track.setAttribute('aria-label',check.label);
+  track.setAttribute('aria-valuemin','0');track.setAttribute('aria-valuemax','100');
+  if(check.state!=='pending')track.setAttribute('aria-valuenow',check.state==='idle'?'0':'100');
+  const fill=document.createElement('div');fill.className='atgv-connection-progress-fill';
+  track.append(fill);
+  const details=document.createElement('small');details.textContent=check.state==='ok'||check.state==='error'?check.message||'':check.url||'';
+  row.append(head,track,details);el.append(row);
+ }
+}
 function renderStartupConnectionChecks(){
  const list=$('startupConnectionChecks');
  const expanded=new Set([...list.querySelectorAll('details[open]')].map(row=>row.dataset.checkId));
@@ -8215,6 +8266,7 @@ function renderStartupConnectionChecks(){
   item.append(summary,detail);list.append(item);
  }
  updateStartupIssueSummary();
+ renderStartupConnectionProgress();
 }
 function renderStartupConnectionLog(entries){
  const root=$('startupConnectionLogList');
@@ -8252,7 +8304,7 @@ function resetStartupConnectionChecks(){
 function beginStartupConnectionChecks(){
  startupConnectionCheckPending=true;startupConnectionCheckResults.clear();
  for(const [id,label] of STARTUP_CONNECTION_CHECK_LABELS)
-  startupConnectionCheckResults.set(id,{id,label,state:'pending',message:'Checking…'});
+  startupConnectionCheckResults.set(id,{id,label,state:'idle',message:'Waiting for sequential verification…'});
  renderStartupConnectionChecks();return ++startupConnectionCheckSequence;
 }
 function checkSavedStartupConnections(){
@@ -8333,7 +8385,7 @@ function renderStartupPage(){
  editButton.classList.toggle('hidden',!startupConnectionVerified&&!startupConnectionEditSnapshot);
  editButton.disabled=startupVerifying;
  editButton.textContent=startupConnectionEditSnapshot?'Cancel':'Edit';
- editButton.setAttribute('aria-label',startupConnectionEditSnapshot?'Cancel editing connections':'Edit Jira, Confluence and GitHub connections');
+ editButton.setAttribute('aria-label',startupConnectionEditSnapshot?'Cancel editing connections':'Edit Atlassian and GitHub connections');
  $('startupComputerCard').classList.toggle('hidden',startupPage!==0);
  $('startupConnectionForm').classList.toggle('hidden',startupPage!==1);
  $('startupPrevious').classList.toggle('hidden',startupPage===0);
@@ -8364,6 +8416,8 @@ function renderStartupConfig(config){
   const saved=config.saved||{},defaults=config.defaults||{};
   updateHeaderUserName(saved.email||extensionSettings.jira?.email);
   for(const [key,id] of Object.entries(startupFieldMap))$(id).value=saved[key]||defaults[key]||'';
+  $('startupGithubUrl').value=$('startupGithubUrl').value.replace(/^https?:\/\//i,'');
+  updateStartupRepositoryPreview();
   // Restore verified state before rendering the wizard so "Next: Search Project"
   // is enabled immediately after restarting the extension or VS Code.
   startupConnectionVerified=config.verified===true;
@@ -8523,7 +8577,9 @@ function toggleStartupConnectionEdit(){
  if(startupConnectionEditSnapshot)$('startupJiraUrl').focus();
 }
 $('startupEditConnections').addEventListener('click',toggleStartupConnectionEdit);
-for(const id of Object.values(startupFieldMap))$(id).addEventListener('input',invalidateStartupConnection);
+for(const id of Object.values(startupFieldMap))$(id).addEventListener('input',()=>{
+ updateStartupRepositoryPreview();invalidateStartupConnection();
+});
 for(const id of ['startupAtlassianToken','startupGithubToken'])$(id).addEventListener('input',invalidateStartupConnection);
 $('startupStackModalClose').addEventListener('click',closeStartupStackModal);
 $('startupStackModalDone').addEventListener('click',closeStartupStackModal);
@@ -8664,7 +8720,11 @@ window.addEventListener('message',event=>{
   $('startupConnectionLogMessage').textContent=message.message||'Connection log is unavailable.';
  }
  if(message.type==='startupConnectionCheck'&&message.requestId===startupConnectionCheckSequence&&message.check?.id){
-  if(startupConnectionCheckResults.has(message.check.id)){startupConnectionCheckResults.set(message.check.id,message.check);renderStartupConnectionChecks();}
+  if(startupConnectionCheckResults.has(message.check.id)){
+   startupConnectionCheckResults.set(message.check.id,message.check);
+   renderStartupConnectionChecks();
+   if(message.check.state==='pending')$('startupConnectionMessage').textContent='Checking '+message.check.label+'…';
+  }
  }
  if(message.type==='startupConnectionHealthResult'&&message.requestId===startupConnectionCheckSequence){
   startupConnectionCheckPending=false;
