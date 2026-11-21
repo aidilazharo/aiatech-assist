@@ -5,13 +5,22 @@
     "release",
     "publish",
     "release.md",
-    "notes"
+    "notes",
+    "archive",
+    "zip",
+    "memory",
+    "vsix"
   ],
   "decisions": [
     {
       "id": "RELEASE-0001",
       "status": "accepted",
       "decision": "Maintain only one root RELEASE.md per source repository; overwrite that file on each release."
+    },
+    {
+      "id": "RELEASE-0002",
+      "status": "accepted",
+      "decision": "Keep .memory JSON decisions in Git source repositories only. Never distribute the .memory directory inside extension VSIX, extension source ZIP, Library source ZIP, public release assets or build artifacts. Verify each archive before publication."
     }
   ]
 }

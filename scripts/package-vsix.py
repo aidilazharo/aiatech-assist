@@ -48,7 +48,7 @@ MIME={
 
 
 files=['package.json','README.md']
-for folder in ('src', 'assets', 'media', 'resources', 'design-system', '.memory'):
+for folder in ('src', 'assets', 'media', 'resources', 'design-system'):
     files += sorted(p.relative_to(root).as_posix() for p in (root/folder).rglob('*')
                     if p.is_file() and p.name not in ('README.md', 'CHANGELOG.md', '.DS_Store'))
 
@@ -106,6 +106,8 @@ with tempfile.TemporaryDirectory(prefix='atgv-vsix-stage-') as staging:
     # Measure the actual compressed ZIP members, not estimated source bytes.
     with zipfile.ZipFile(output,'r') as z:
         members=[entry for entry in z.infolist() if entry.filename.startswith('extension/')]
+        if any(entry.filename.startswith('extension/.memory/') for entry in members):
+            raise SystemExit('Release safety policy: .memory must not be included in VSIX')
         details=[{'path':entry.filename[len('extension/'):],
                   'sourceBytes':(root/entry.filename[len('extension/'):]).stat().st_size,
                   'packagedBytes':entry.file_size,
