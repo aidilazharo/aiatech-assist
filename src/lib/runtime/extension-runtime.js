@@ -6206,6 +6206,39 @@ async function handleDashboardMessage(msg){
         requireOpened();architectErrorLogs.begin(activeProject.id,'save');
         const id=String(msg.stackId||''),stackGate=require('../../architect-stack-approval');
         stackGate.selection(id,'');
+        if(id==='custom'){
+          // Save only the Custom Stack selection and recover a missing/empty
+          // Git checkout. No catalog skeleton, package installation, project
+          // execution or remote push is permitted on this action.
+          const projectId=activeProject.id,current=await registry.read(projectId);
+          if(!current)throw Error('The selected project no longer exists.');
+          if(current.techStackPrepared?.stackId&&current.techStackPrepared.stackId!=='custom')
+            throw Error('A different technology stack has prepared Git work. Reset Tech Stack with its safety review before saving Custom Stack.');
+          const config=effectiveConfig(activeProject);
+          const checkout=await architectRepository.ensureCustom(context.workspaceState,projectId,developerGit,{
+            projectRoot:aiRoot(),githubOwner:config.get('github.owner'),
+            githubRepo:config.get('github.repo'),githubBranch:config.get('github.branch'),
+            catalogRepositoryUrl:catalogConfig().repositoryUrl
+          });
+          const updated=await registry.update(projectId,{...current,
+            techStackId:'custom',techStackCompanionId:'',
+            techStackPrepared:null,techStackValidation:null,
+            techStackServerVerification:null,techStackApproval:null});
+          activeProject=updated;
+          const detected=await require('../../architect-custom-stack').scan(checkout.root);
+          const process=developerGit.localLogs();
+          detected.running=!!(process.running&&detected.targets.some(item=>
+            path.resolve(checkout.root,item.relative)===path.resolve(process.cwd||'')));
+          await refreshDashboard();
+          if(activeProject?.id===projectId){
+            const status=checkout.mode==='cloned'
+              ?'Custom Stack saved. The project repository folder was created or verified empty and the configured GitHub repository cloned at '+checkout.root+'.'
+              :'Custom Stack saved. Existing verified checkout preserved at '+checkout.root+'. Use Pull Repository to update its code.';
+            await dashboard?.webview.postMessage({type:'architectStackState',value:{message:status}});
+            await dashboard?.webview.postMessage({type:'architectCustomScanResult',projectId,value:detected});
+          }
+          break;
+        }
         const root=await architectRepository.ensure(context.workspaceState,activeProject.id,developerGit,{projectRoot:aiRoot(),githubOwner:effectiveConfig(activeProject).get('github.owner'),githubRepo:effectiveConfig(activeProject).get('github.repo'),githubBranch:effectiveConfig(activeProject).get('github.branch'),catalogRepositoryUrl:catalogConfig().repositoryUrl});
         const current=await registry.read(activeProject.id);if(!current)throw Error('Project not found.');
         const oldId=current.techStackPrepared?.stackId||'';
