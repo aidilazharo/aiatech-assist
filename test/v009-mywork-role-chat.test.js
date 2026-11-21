@@ -97,7 +97,7 @@ test('My Work layout uses a red waveform top bar, central results, and anchored 
  const composer=main.indexOf('id="atgvMyWorkAiChatForm"');
  assert.ok(top>=0&&results>top&&composer>results);
  assert.match(main,/atgv-mywork-ai-wave/);
- assert.match(main,/Soft red AI waveform that fades in and out/);
+ assert.match(main,/AI waveform fades in red, changes to CMYK while active, and fades back to red/);
  assert.match(css,/#myWorkView > #atgvMyWorkAi,/);
  assert.match(css,/#myWorkView > #atgvMyWorkAi\.atgv-mywork-ai/);
  assert.match(css,/border-bottom:2px solid #dc303f/);
