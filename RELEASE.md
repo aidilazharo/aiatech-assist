@@ -24,6 +24,15 @@
 - Refresh deterministic briefings from the extension host; do not expose hidden role prompts or use AI-generated links for navigation.
 - Include all 18 SDLC roles in the project user roster rather than limiting it to seven roles.
 
+## All 18 role-specific AI agents and source-only harness memory
+
+- Register accepted 18-role ownership and handoff decisions in `.memory/role-boundaries.json`, `.memory/ai-agents.json` and `AGENTS.md`, without bundling coding memory in the VSIX.
+- Use the active role’s own expert persona and Library role/SKILL.md; review questions about other roles remain in the current role.
+- Route explicit requests to create another specialist’s exclusive deliverable before contacting the AI model. For example, a Project Manager creating a UI mockup receives **Switch to UI/UX Designer**, not a mockup created under PM.
+- Keep role changes entirely user-initiated, verify whether the target specialist is enabled, offer Role Settings for disabled roles, and preserve the original request as an unsent draft.
+- Never automatically reassign roles, transfer private chat history, or bypass independent approval/permission checks. Preserve a persistent **What to do next** button for every role.
+- Extend role ownership and UI regression tests to all 18 specialist roles and informational cross-team exceptions.
+
 ## Regression and release verification
 
 - Add tests covering Creator match, Reporter match, denial for unrelated account, Jira permission checks, ownership conflicts, cross-project descendants, changed issue detection, deepest-first deletion and exact user confirmation.
