@@ -4,6 +4,7 @@
 const {requestJson,baseAtlassian,baseConfluence,getConfluenceSpace,getConfluencePage,writeConfluence}=require('./clients');
 const {validProjectKey}=require('./remote-actions');
 const {htmlToText}=require('./utils');
+const {ConfluenceUserDatabase,normalizeRows}=require('./confluence-user-database');
 const escape=value=>String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const clean=(value,n=180)=>String(value||'').trim().slice(0,n);
 const ROLES=Object.freeze({'business-analyst':'Business Analyst','solution-architect':'Solution Architect','ux-designer':'UI/UX Designer','software-developer':'Developer','project-manager':'Project Manager','qa-engineer':'QA Engineer','uat-tester':'UAT Tester'});
@@ -18,8 +19,10 @@ function extractRows(body){
  for(const match of String(body||'').matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)){
   const cells=[...match[1].matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi)].map(x=>x[1]);
   if(![3,4].includes(cells.length)||/<th\b/i.test(match[1]))continue;
-  const email=clean((cells[0].match(/<small\b[^>]*>([^<]*)<\/small>/i)||[])[1],250);
-  const name=clean(htmlToText(cells[0].replace(/<small\b[^>]*>[\s\S]*?<\/small>/gi,'')),180);
+  const rawName=clean(htmlToText(cells[0].replace(/<small\b[^>]*>[\s\S]*?<\/small>/gi,'')),250);
+  const embeddedEmail=(rawName.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)||[])[0]||'';
+  const email=clean((cells[0].match(/<small\b[^>]*>([^<]*)<\/small>/i)||[])[1]||embeddedEmail,250).toLowerCase();
+  const name=clean(rawName.replace(embeddedEmail,'').trim(),180)||displayName(email);
   const roles=clean(htmlToText(cells[1]),500).split(/\s*;\s*/).filter(Boolean);
   const tasks=clean(htmlToText(cells[2]),1200);
   // Confluence storage may strip data-* attributes. Fourth-column text is durable.
@@ -27,7 +30,9 @@ function extractRows(body){
   if(!email&&!id)continue;
   rows.push({id:clean(id,200),email,name,roles:[...new Set(roles)],tasks});
  }
- return rows.slice(0,400);
+ const canonical=normalizeRows(rows);
+ if(canonical.conflicts.length)throw Error('Confluence roster identity conflict: '+canonical.conflicts.join('; '));
+ return canonical.rows;
 }
 function renderRows(rows){
  return '<p>ATGV My Work user register. Names and roles originate from signed-in Jira identities and actual My Work visits. Jira tasks reflect the latest verified user visit.</p>'+
@@ -70,7 +75,17 @@ async function assignedTasks(config,token,projectKey,{request=requestJson,maxPag
 }
 async function snapshot(config,token,projectKey){
  const found=await locate(config,token,projectKey);
- const rows=extractRows(found.page?.body?.storage?.value||'');
+ let rows=extractRows(found.page?.body?.storage?.value||'');
+ let registryWarning='',databaseId='';
+ try{
+  const db=await new ConfluenceUserDatabase(config,token,projectKey).read();
+  if(db.db){
+   const normalized=normalizeRows([...rows,...db.rows]);
+   if(normalized.conflicts.length)throw Error(normalized.conflicts.join('; '));
+   rows=normalized.rows;databaseId=String(db.db.id);
+  }
+ }catch(error){registryWarning='Confluence Database v2 unavailable: '+clean(error.message,180);}
+
  let assignmentWarning='';
  if(rows.length){
   try{
@@ -82,7 +97,16 @@ async function snapshot(config,token,projectKey){
    if(truncated)assignmentWarning='Jira task search stopped at the 2,000-issue safety limit.';
   }catch(error){assignmentWarning='Live Jira assignments unavailable: '+clean(error.message,180);}
  }
- return {rows,pageId:String(found.page?.id||''),spaceKey:found.space.key,updatedAt:found.page?.version?.createdAt||'',assignmentWarning};
+ return {rows,pageId:String(found.page?.id||''),spaceKey:found.space.key,updatedAt:found.page?.version?.createdAt||'',assignmentWarning,registryWarning,databaseId};
+}
+async function syncDatabase(config,token,projectKey,rows){
+ try{
+  const result=await new ConfluenceUserDatabase(config,token,projectKey).upsert(rows);
+  return {databaseId:result.databaseId,registryWarning:''};
+ }catch(error){
+  // The verified Confluence page is still saved; don't disguise a v2 failure.
+  return {databaseId:'',registryWarning:'Database v2 sync needs attention: '+clean(error.message,180)};
+ }
 }
 async function visit(config,token,{projectKey,roleId}){
  const role=ROLES[roleId];if(!role)throw Error('Unknown role cannot be added to the register.');
@@ -91,7 +115,7 @@ async function visit(config,token,{projectKey,roleId}){
  if(!me?.accountId)throw Error('Jira did not verify the current user.');
  const email=clean(me.emailAddress||config.get('jira.email'),250).toLowerCase();
  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw Error('User email is unavailable. The Confluence register was not changed.');
- const name=displayName(email)||clean(me.displayName)||'Unknown';
+ const name=displayName(email,me.displayName);
  const project=validProjectKey(projectKey);
  let tasks='No assigned task';
  try{
@@ -105,14 +129,19 @@ async function visit(config,token,{projectKey,roleId}){
   const {space,page,name:pageName}=await locate(config,token,project);
   const rows=extractRows(page?.body?.storage?.value||'');
   const current=rows.find(x=>x.id===me.accountId||x.email.toLowerCase()===email);
+  if(current?.id&&current.id!==me.accountId)throw Error('Email is already linked to a different verified Atlassian account. Manual reconciliation required.');
   const unchanged=!!current&&current.id===me.accountId&&current.email===email&&current.name===name&&current.tasks===tasks&&current.roles.includes(role);
-  if(unchanged)return {rows,pageId:String(page?.id||''),spaceKey:space.key,updatedAt:page?.version?.createdAt||''};
+  if(unchanged){
+   const db=await syncDatabase(config,token,project,rows);
+   return {rows,pageId:String(page?.id||''),spaceKey:space.key,updatedAt:page?.version?.createdAt||'',...db};
+  }
   if(current){current.id=me.accountId;current.email=email;current.name=name;current.tasks=tasks;current.roles=[...new Set([...current.roles,role])];}
   else rows.push({id:me.accountId,email,name,roles:[role],tasks});
   rows.sort((a,b)=>a.name.localeCompare(b.name));
   try{
    const saved=await writeConfluence(config,token,{pageId:page?.id,spaceId:space.id,title:pageName,bodyHtml:renderRows(rows),version:page?.version?.number});
-   return {rows,pageId:String(saved.id||page?.id||''),spaceKey:space.key,updatedAt:new Date().toISOString()};
+   const db=await syncDatabase(config,token,project,rows);
+   return {rows,pageId:String(saved.id||page?.id||''),spaceKey:space.key,updatedAt:new Date().toISOString(),...db};
   }catch(error){
    if(/version conflict|HTTP (409|412)/i.test(error.message)&&attempt<2)continue;
    throw error;
