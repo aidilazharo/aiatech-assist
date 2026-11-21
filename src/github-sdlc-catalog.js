@@ -62,7 +62,7 @@ function validPath(raw) {
         throw Error('Unsafe catalog path.');
     return raw;
 }
-function relevantPath(p) { return p === 'catalog.json' || p === 'VERSION' || p === 'README.md' || p === 'catalog.yaml' || p.startsWith('roles/') || p.startsWith('shared/') || p.startsWith('tech-stacks/'); }
+function relevantPath(p) { return p === 'catalog.json' || p === 'VERSION' || p === 'README.md' || p === 'catalog.yaml' || p.startsWith('roles/') || p.startsWith('shared/') || p.startsWith('tech-stacks/') || /^\.memory\/[a-z][a-z0-9-]*\.json$/.test(p); }
 function blobSha(buffer) { return crypto.createHash('sha1').update(Buffer.from(`blob ${buffer.length}\0`)).update(buffer).digest('hex'); }
 function parseSimpleYaml(raw) {
     const output = {}, rows = String(raw).split(/\r?\n/);
