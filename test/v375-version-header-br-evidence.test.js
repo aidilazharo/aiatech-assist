@@ -43,7 +43,7 @@ test('available version and update modal are strictly versions, no SHA as a vers
  assert.match(block,/message\.remoteVersion/);
  assert.match(block,/\('libraryUpdateNext'\)\.textContent=latest\?'v'\+latest/);
  assert.doesNotMatch(block,/message\.remoteSha|message\.installedSha/);
- assert.match(ui,/Library release: v/);
+ assert.match(ui,/Library public release: v/);
  assert.match(ui,/Library v\$\{remote\.version\} available/);
 });
 test('extension and library versions are directly under AIATECH ASSIST on both screens',()=>{
