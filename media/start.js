@@ -3857,7 +3857,7 @@ function renderRoleWork(){
   }
   // Share role-scoped, minimal progress metadata with the read-only My Work AI.
   // No document contents, credentials, other users' tasks or hidden workflow actions.
-  window.ATGVMyWorkAI?.update({
+  if(view==='work'||view==='discovery')window.ATGVMyWorkAI?.update({
     projectId:activeId,roleId:role.id,roleName:visibleRoleLabel(role),
     progress:$('rolePercent')?.textContent||'',
     next:$('roleNext')?.textContent||'',
