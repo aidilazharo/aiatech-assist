@@ -145,7 +145,6 @@
     const next=nextStep(compact);
     byId('atgvMyWorkAiText').textContent=next.suggestion;
     actionButtons(next.action);
-    renderPersistentNext();
     displayResults(true);state('thinking');
     requestTimer=setTimeout(()=>{
       if(requestId!==pending)return;
