@@ -6,12 +6,13 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.6';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.7';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
   const myWorkAiJs=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-mywork-ai.js'));
   const myWorkAiCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-mywork-ai.css'));
+  const myWorkOrbWebp=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-mywork-orb-spin.webp'));
   const studioJs=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','library-studio.js'));
   const studioCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','library-studio.css'));
   const cmAsset=name=>vendorAssets?webview.asWebviewUri(vscode.Uri.file(path.join(vendorAssets.dir,'codemirror',...name.split('/')))):null;
@@ -330,7 +331,7 @@ function html(webview,{resumeLibrary=false}={}){
   <main id="workView" class="hidden work-container">
     <div class="page-kicker">SDLC DELIVERY / ROLE WORKSPACE</div>
     <div class="view-heading work-head"><h1 id="workTitle">Business Analyst</h1><span id="workStage" class="pill hidden" aria-hidden="true">Discover & Define</span><div id="workSkill" class="atgv-work-skill" aria-label="SDLC Catalog role variant"><span id="workSkillRole" class="atgv-work-skill-role">BA</span><select id="workSkillSelect" class="atgv-work-skill-select" aria-label="BA catalog role variant" disabled><option value="">Not loaded</option></select></div></div>
-    <section id="atgvMyWorkAi" class="atgv-mywork-ai" aria-label="AI recommendations for your current role" data-state="idle"><div class="atgv-mywork-ai-visual"><div id="atgvMyWorkAiOrb" class="atgv-mywork-ai-orb" role="img" aria-label="AI ready"></div></div><div id="atgvMyWorkAiContent" class="atgv-mywork-ai-content" hidden><h2 id="atgvMyWorkAiTitle" class="atgv-mywork-ai-title">AI · My Work</h2><p id="atgvMyWorkAiText" class="atgv-mywork-ai-text" role="status" aria-live="polite"></p><div id="atgvMyWorkAiActions" class="atgv-mywork-ai-actions" aria-label="Suggested next actions"></div></div></section>
+    <section id="atgvMyWorkAi" class="atgv-mywork-ai" aria-label="AI recommendations for your current role" data-state="idle"><div class="atgv-mywork-ai-visual"><div id="atgvMyWorkAiOrb" class="atgv-mywork-ai-orb" style="--atgv-mywork-orb:url(&quot;${myWorkOrbWebp}&quot;)" role="img" aria-label="AI ready"></div></div><div id="atgvMyWorkAiContent" class="atgv-mywork-ai-content" hidden><h2 id="atgvMyWorkAiTitle" class="atgv-mywork-ai-title">AI · My Work</h2><p id="atgvMyWorkAiText" class="atgv-mywork-ai-text" role="status" aria-live="polite"></p><div id="atgvMyWorkAiActions" class="atgv-mywork-ai-actions" aria-label="Suggested next actions"></div></div></section>
     <section id="baMyWorkDashboard" class="ba-my-work-dashboard hidden" aria-label="Business Analyst requirements overview">
       <div class="ba-my-work-head"><div><h2>Business Requirements</h2><p class="muted">Review requirements, approvals and action items. Open a requirement to continue the approved process.</p></div><button type="button" id="baMyWorkOpen">Open Business Requirements</button></div>
       <div id="baMyWorkMetrics" class="ba-my-work-metrics" aria-label="Business Requirements counts"></div>
