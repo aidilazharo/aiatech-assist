@@ -47,6 +47,9 @@ test('host checks services sequentially, enforces write PAT for sources and sepa
  assert.match(host,/await spec\.check\(\)/);
  assert.match(host,/await onProgress\(value\)/);
  assert.match(host,/meta\.permissions\?\.push!==true/);
+ assert.match(host,/await verifyReleaseAssetDownload\(url,asset\.id\)/);
+ assert.match(host,/redirect:'manual'/);
+ assert.match(host,/release-assets\|github-releases\|objects/);
  assert.match(host,/check\.required&&check\.state==='error'/);
  assert.match(host,/extension-releases/);
  assert.match(host,/library-releases/);
