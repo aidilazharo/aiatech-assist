@@ -17,6 +17,7 @@
  const blendedRGBA=(target,mix,alpha)=>'rgba('+redRGB.map((v,i)=>
   Math.round(v+(target[i]-v)*mix)).join(',')+','+alpha+')';
  let project='',role='',pendingId=0,sequence=0,pending=false;
+ let greetingNode=null,briefingNode=null,lastBriefRequest=0;
  let w=300,h=150,last=0,phase=0,hue=354,energy=0,opacity=0,height=0,speed=0,colorMix=0;
  let lastActivity=performance.now(),ripples=[],writer=null,queue=[],thinkingBefore=false;
  const prefersReduced=window.matchMedia?.('(prefers-reduced-motion: reduce)');
@@ -52,6 +53,7 @@
   if(animate)typewriter(node,text);else node.textContent=String(text||'');
   transcript.scrollTop=transcript.scrollHeight;
   if(resultsViewport)resultsViewport.scrollTop=resultsViewport.scrollHeight;
+  return node;
  }
  function setBusy(isBusy){
   pending=!!isBusy;button.disabled=pending||!input.value.trim();
@@ -65,6 +67,8 @@
    // Keep the role context accessible without displaying an extra chat heading.
    input.setAttribute('aria-label','Message ATGV AI · '+String(snapshot.roleName||nextRole).slice(0,100));
    writer=null;queue.length=0;transcript.replaceChildren();input.value='';
+   greetingNode=null;briefingNode=null;lastBriefRequest=0;
+   greetingNode=addMessage('assistant','Hello! I am reviewing your '+String(snapshot.roleName||'project')+' work for today.');
    status.textContent='';button.disabled=true;pulse(1.3);
   }
  }
@@ -90,9 +94,64 @@
  input.addEventListener('keydown',event=>{
   if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();form.requestSubmit?.();}
  });
+ function section(parent,heading,body){
+  const wrapper=document.createElement('section');
+  const title=document.createElement('strong');
+  title.className='atgv-mywork-ai-brief-heading';title.textContent=heading;
+  const description=document.createElement('p');
+  description.className='atgv-mywork-ai-brief-copy';
+  description.textContent=String(body||'');
+  wrapper.append(title,description);parent.append(wrapper);
+  return wrapper;
+ }
+ function renderBrief(b){
+  if(!b||typeof b!=='object')return;
+  if(!greetingNode)greetingNode=addMessage('assistant','');
+  greetingNode.textContent=String(b.greeting||'Hello. Here are your priorities for today.').slice(0,380);
+  if(!briefingNode)briefingNode=addMessage('assistant','');
+  briefingNode.classList.add('atgv-mywork-ai-brief');
+  briefingNode.replaceChildren();
+  const health=b.health||{};
+  section(briefingNode,'Project health · '+String(health.label||'Not yet verified').slice(0,90),
+   String(health.detail||'Project delivery evidence is unavailable.').slice(0,540));
+  const teamTitle='Other project members · last recorded Jira/Confluence roles';
+  const team=Array.isArray(b.team)?b.team.slice(0,6):[];
+  if(team.length){
+   const block=section(briefingNode,teamTitle,'Recorded membership, not live online presence.');
+   const people=document.createElement('div');people.className='atgv-mywork-ai-team-list';
+   for(const user of team){
+    const person=document.createElement('div');person.className='atgv-mywork-ai-team-member';
+    const name=document.createElement('strong');name.textContent=String(user.name||'Project member').slice(0,90);
+    const detail=document.createElement('span');detail.textContent=
+     (Array.isArray(user.roles)?user.roles.slice(0,3).join(', '):'Role not verified')+
+     ' · '+Math.max(0,Number(user.assignedJira)||0)+' Jira task(s) last recorded';
+    person.append(name,detail);people.append(person);
+   }
+   block.append(people);
+  }else section(briefingNode,teamTitle,String(b.teamSummary||'Shared roster not verified').slice(0,220));
+  const items=Array.isArray(b.todayActions)?b.todayActions.slice(0,4):[];
+  const todayBlock=section(briefingNode,'Today’s work · '+String(b.today||'').slice(0,15),
+   items.length?'Choose the highest priority you can unblock first.':'Review your role workspace.');
+  const list=document.createElement('ol');list.className='atgv-mywork-ai-today-list';
+  for(const item of items){
+   const li=document.createElement('li'),label=document.createElement('strong'),reason=document.createElement('span');
+   label.textContent=String(item.label||'Review current work').slice(0,140);
+   reason.textContent=String(item.reason||'').slice(0,150);
+   li.append(label,reason);list.append(li);
+  }
+  todayBlock.append(list);
+  activity();
+ }
  window.addEventListener('message',event=>{
   const msg=event.data||{};
-  if(msg.type!=='roleAiChatReply'||msg.projectId!==project||msg.roleId!==role||msg.requestId!==pendingId)return;
+  if(msg.projectId!==project||msg.roleId!==role)return;
+  if(msg.type==='roleAiDailyBrief'){
+   if(!Number.isSafeInteger(msg.requestId)||msg.requestId<lastBriefRequest)return;
+   lastBriefRequest=msg.requestId;
+   renderBrief(msg.brief);
+   return;
+  }
+  if(msg.type!=='roleAiChatReply'||msg.requestId!==pendingId)return;
   setBusy(false);addMessage('assistant',msg.text||'No response received.',true);
   activity();
  });
