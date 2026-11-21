@@ -15,5 +15,5 @@ test('source-only memory is committed and export-ignore applies to its directory
   assert.match(attr,/export-ignore: set/);
  }
  const pkg=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
- assert.equal(pkg.description,'');assert.match(pkg.version,/^[0-9]+\\.[0-9]+\\.[0-9]+$/);
+ assert.equal(pkg.description,'');assert.match(pkg.version,/^[0-9]+\.[0-9]+\.[0-9]+$/);
 });
