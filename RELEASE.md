@@ -1,17 +1,19 @@
-# ATGV AIATECH Assist v0.0.13
+# ATGV AIATECH Assist v0.0.14
 
 ## Changes
 
-- Separate My Work into an AI-only page for all 18 built-in SDLC roles. Keep the reactive multicolor waveform, fast typewriter, role-aware AI suggestions and chat composer together.
-- Add a dedicated Role Workspace page, accessible from the sidebar, for the role's existing dashboards, requirements, Jira items, architecture bootstrap, UI/UX workspace, developer tasks, project management, role progress, readiness, handoffs and other workflows.
-- Preserve existing role-specific workflow DOM, element IDs, approvals, Jira operations, AI prompts, status updates and unsaved-work guards by keeping their content in the existing work container.
-- Make selecting a role from My Work open its AI-only page; when changing roles inside Role Workspace, keep the user in the workflow page.
-- Route AI next-action buttons to the correct BA or role workspace and preserve UX Design Preview return navigation.
-- Update breadcrumbs to My Work / Role Workspace / role or Business Requirement / ticket, maintaining valid navigation to previous pages.
-- Preserve read-only AI chat and per-project/per-role conversation boundaries.
+- Fix duplicate Confluence source synchronization conflict messages on the AI-only My Work page.
+- Keep the global top notification as the single visible warning, including the View Ownership action and existing safeguards against publishing unresolved source conflicts.
+- Suppress page-level feedback on My Work, including previously inserted duplicate warnings when returning to that page.
+- Preserve existing inline feedback on Role Workspace and other application pages.
+- Keep My Work's AI animation and 18 role-specific chat profiles, but hide the redundant blue "My Work" breadcrumb title on the AI-only page.
+- Connect the read-only My Work AI chat to the existing active-project Knowledge & RAG index, retrieving up to six relevant knowledge excerpts from synchronized Jira, Confluence and local project documents.
+- Add retrieved source references to AI chat responses and instruct the selected model to cite supplied project evidence, treat source text as untrusted, and mark unsupported assertions or unresolved source conflicts.
+- Keep project-scoped RAG context isolated across project changes and use the extension's existing AI-send consent pathway before sending retrieved excerpts to the selected provider.
 
 ## Validation
 
-- Verify the AI-only My Work markup has no role task/workflow controls and Role Workspace preserves all existing role sections.
-- Verify all 18 roles and both sidebar routes, BA workflows, developer/architect/PM/UIUX paths, role switching, AI suggestions and breadcrumbs.
-- Run full Node regression, Windows startup, UI theme, verified VSIX, source ZIP, checksum and source-only .memory exclusion before releasing.
+- Add regression tests for the AI-only My Work page receiving Confluence conflict and other status messages with no duplicate inline warning.
+- Verify My Work does not display the blue breadcrumb title, RAG excerpt retrieval is project-scoped and bounded, model prompts receive untrusted evidence and source references remain visible.
+- Verify global notification rendering and Ownership action remain intact, and other pages retain feedback.
+- Run full Node tests, Windows checks, UI validation, build/VSIX integrity and source-only .memory exclusions before merge and publication.
