@@ -345,6 +345,10 @@ function html(webview,{resumeLibrary=false}={}){
         </div>
         <div id="atgvMyWorkAiConversation" class="atgv-mywork-ai-conversation" role="log" aria-label="Role AI conversation" aria-live="polite"></div>
       </div>
+      <div id="atgvMyWorkAiNextBar" class="atgv-mywork-ai-next-bar" aria-label="Persistent next action">
+        <span id="atgvMyWorkAiNextSummary" class="atgv-mywork-ai-next-summary" role="status" aria-live="polite">Open your project to review the next role task.</span>
+        <button type="button" id="atgvMyWorkAiNextButton" class="atgv-mywork-ai-next-button">What to do next</button>
+      </div>
       <form id="atgvMyWorkAiChatForm" class="atgv-mywork-ai-chat">
         <div class="atgv-mywork-ai-composer">
           <textarea id="atgvMyWorkAiInput" rows="2" maxlength="4000" placeholder="Ask about your current role or task…" autocomplete="off" aria-label="Message ATGV AI"></textarea>
