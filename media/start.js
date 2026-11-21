@@ -4774,7 +4774,24 @@ function renderSoftwareUpdates(data,force=false){
   data.latest?`Extension v${data.latest.version} available (installed v${version}). Release: ${data.latest.tag}.`:
   data.extensionLastCheck?`Installed extension v${version}${latestVersion?' · latest public release v'+latestVersion:' · no public release found'}${checked}`:
   `Installed extension: v${version}; not checked yet.`;
- $('softwareLibraryStatus').textContent=data.libraryError?`Library: ${data.libraryError}`:data.libraryLatest?`Library release: v${data.libraryLatest}${data.libraryLatestAvailable?'. Pull Library Files to install the verified source archive.':'; verified ZIP or checksum not available.'}`:'Library: no public release yet.';
+ const installedLibrary=data.libraryInstalledVersion||catalogState?.installed?.version||'';
+ const sourceLibrary=data.librarySourceVersion||catalogState?.remote?.version||'';
+ const mirrorLibrary=data.libraryLatest||'';
+ const compareSemver=(a,b)=>{
+  const aa=semverParts(a),bb=semverParts(b);
+  if(!aa||!bb)return null;
+  for(let i=0;i<3;i++)if(aa[i]!==bb[i])return aa[i]>bb[i]?1:-1;
+  return 0;
+ };
+ const mirrorBehind=!!installedLibrary&&compareSemver(mirrorLibrary,installedLibrary)<0;
+ const sourceBehind=!!installedLibrary&&compareSemver(sourceLibrary,installedLibrary)<0;
+ const sourceAhead=!!installedLibrary&&compareSemver(sourceLibrary,installedLibrary)>0;
+ $('softwareLibraryStatus').textContent=data.libraryError?`Library: ${data.libraryError}`:
+  sourceAhead?`Library source main v${sourceLibrary} is newer than active v${installedLibrary}. Pull Library Files to verify and update the selected source.`:
+  mirrorBehind?`Active Library v${installedLibrary} is newer than public mirror v${mirrorLibrary}. ${sourceLibrary?'Selected source main v'+sourceLibrary+(sourceBehind?' is also older.':' is verified.'):'Check selected GitHub source main for newer commits.'} No downgrade available.`:
+  installedLibrary&&mirrorLibrary&&compareSemver(mirrorLibrary,installedLibrary)===0?`Active Library v${installedLibrary} matches the verified public release. Check selected source main for updates.`:
+  data.libraryLatest?`Library public release: v${mirrorLibrary}${data.libraryLatestAvailable?'. Pull Library Files to check source main first and install only a newer verified version.':'; verified ZIP or checksum is unavailable or the installed Library is newer.'}`:
+  `Library: no public release yet. Check selected GitHub source main for updates.`;
  $('viewExtensionRelease').disabled=!data.extensionLatest;
  $('installExtensionRelease').disabled=!data.latest;
  $('checkSoftwareUpdates').disabled=!!data.busy;
@@ -4793,8 +4810,8 @@ $('checkSoftwareUpdates').addEventListener('click',()=>{
 $('pullLibraryFiles').addEventListener('click',()=>{
  if(softwareLibraryPulling||!!catalogBusyUI||!!catalogState?.busy)return;
  renderSoftwareLibraryPullProgress({stage:'running',percent:0,
-  title:'Starting verified library release download…',
-  message:'Requesting public SDLC Library releases. The ZIP and SHA-256 checksum must both pass verification.'});
+  title:'Checking selected GitHub Library source…',
+  message:'Verifying the selected organization’s Library main branch first, then checking the public release mirror as a fallback. No downgrades.'});
  send('catalogPull');
 });
 $('viewExtensionRelease').addEventListener('click',()=>send('viewExtensionRelease'));
