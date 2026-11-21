@@ -9116,7 +9116,7 @@ async function handleDashboardMessage(msg){
         const role=snapshot.roles.find(entry=>entry.id===roleId);
         if(!role||!Number.isSafeInteger(requestId)||requestId<1)break;
         const input=msg.context&&typeof msg.context==='object'?msg.context:{};
-        const clean=(value,max=120)=>String(value??'').replace(/[\\x00-\\x1f]/g,' ').trim().slice(0,max);
+        const clean=(value,max=120)=>String(value??'').replace(/[\x00-\x1f]/g,' ').trim().slice(0,max);
         const allowedTasks=new Set((role.tasks||[]).map(task=>String(task.label)));
         const tasks=(Array.isArray(input.tasks)?input.tasks:[]).slice(0,16)
           .filter(task=>allowedTasks.has(String(task?.title||'')))
@@ -9136,10 +9136,10 @@ async function handleDashboardMessage(msg){
             'Write one concise, practical recommendation in plain English (maximum 2 sentences). '+
             'Reference a real incomplete task or assigned ticket when possible; otherwise recommend checking the next role workflow step. '+
             'Never invent completion, Jira permissions, approvals, blockers, ticket IDs or results. '+
-            'Do not give commands or promise actions have been executed. No markdown and no JSON.\\nWORK SUMMARY: '+
+            'Do not give commands or promise actions have been executed. No markdown and no JSON.\nWORK SUMMARY: '+
             JSON.stringify(evidence);
           const text=await aiAnswer(target,prompt,850);
-          message=clean(text.replace(/\\s+/g,' '),420);
+          message=clean(text.replace(/\s+/g,' '),420);
           if(!message)throw Error('Empty AI suggestion');
         }catch(failure){
           error=true;
