@@ -90,8 +90,8 @@ test('AI chat card matches sibling My Work section width and spacing across role
  const css=read('media/atgv-mywork-ai.css');
  const peer=read('media/start.css');
  assert.match(peer,/#workView \.role-jira-work\{border:1px solid var\(--atgv-line\);border-radius:11px;padding:20px;margin:14px 0/);
- assert.match(css,/#workView > #atgvMyWorkAi,/);
- assert.match(css,/#workView\.role-progress-only > #atgvMyWorkAi\.atgv-mywork-ai/);
+ assert.match(css,/#myWorkView > #atgvMyWorkAi,/);
+ assert.match(css,/#myWorkView > #atgvMyWorkAi\.atgv-mywork-ai/);
  assert.match(css,/width:100%;min-width:0;box-sizing:border-box;align-self:stretch/);
  assert.match(css,/min-height:0;padding:20px 24px;margin:14px 0 18px/);
  for(const name of ['atgv-mywork-ai-content','atgv-mywork-ai-chat','atgv-mywork-ai-conversation']){
