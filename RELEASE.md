@@ -14,6 +14,16 @@
 - Record the completed Jira-only deletion in the local BR history to prevent accidental rediscovery or an unsafe re-restore.
 - **No Confluence source documents, pages, Jira issues outside the verified Epic hierarchy, or unrelated projects are deleted.**
 
+## Personalized My Work daily briefing and persistent Next Action
+
+- Greet the signed-in user on opening My Work using a best-effort friendly name derived from their Jira email, with verified Jira display name as a fallback and no email address exposed in the greeting.
+- Evaluate saved project deadlines against visible unfinished role work and available Jira activity. Present delivery-health assessments with evidence limitations instead of inventing a project forecast.
+- Highlight other distinct Jira/Confluence project members, their recorded roles, and summarized assigned Jira task counts. Never claim that roster entries indicate a user is online.
+- Suggest today's role-specific pending work and missing Jira/Confluence/deadline settings.
+- Always show the **What to do next** button outside the AI-response container, including while AI is thinking or offline. Route to verified project settings, the selected role workspace, or project selection.
+- Refresh deterministic briefings from the extension host; do not expose hidden role prompts or use AI-generated links for navigation.
+- Include all 18 SDLC roles in the project user roster rather than limiting it to seven roles.
+
 ## Regression and release verification
 
 - Add tests covering Creator match, Reporter match, denial for unrelated account, Jira permission checks, ownership conflicts, cross-project descendants, changed issue detection, deepest-first deletion and exact user confirmation.
