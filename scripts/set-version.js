@@ -15,6 +15,7 @@ if (require.main === module) {
     try {
         const v = parseVersion(process.argv[2]);
         const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+        const priorDisplayVersion=manifest.atgvDisplayVersion;
         manifest.version = v.semver;
         manifest.atgvDisplayVersion = v.display;
         fs.writeFileSync(file, JSON.stringify(manifest, null, 2) + '\n');
@@ -23,6 +24,11 @@ if (require.main === module) {
         const release=path.join(root,'RELEASE.md');
         const previous=fs.readFileSync(readme,'utf8');
         fs.writeFileSync(readme,previous.replace(/^\*\*Version: [^*]+\*\*/m,'**Version: '+v.semver+'**'));
+        const dashboard=path.join(root,'src','lib','webview','dashboard-html.js');
+        const source=fs.readFileSync(dashboard,'utf8');
+        const previousLiteral="atgvDisplayVersion :'"+String(priorDisplayVersion||'')+"'";
+        if(!source.includes(previousLiteral))throw Error('Dashboard source version did not match previous manifest.');
+        fs.writeFileSync(dashboard,source.replace(previousLiteral,"atgvDisplayVersion :'"+v.semver+"'"));
         fs.writeFileSync(release,'# ATGV AIATECH Assist v'+v.semver+'\n\n## Changes\n\n- Describe verified changes in this release.\n\n## Validation\n\n- Record Node regressions, Windows checks, VSIX verification and release provenance.\n');
 
         console.log(`Saved display version ${v.display} (VS Code SemVer ${v.semver})`);
