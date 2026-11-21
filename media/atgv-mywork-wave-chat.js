@@ -140,10 +140,10 @@
    items.length?'Choose the highest priority you can unblock first.':'Review your role workspace.');
   const list=document.createElement('ol');list.className='atgv-mywork-ai-today-list';
   for(const item of items){
-   const li=document.createElement('li'),label=document.createElement('strong'),reason=document.createElement('span');
-   label.textContent=String(item.label||'Review current work').slice(0,140);
+   const li=document.createElement('li'),itemTitle=document.createElement('strong'),reason=document.createElement('span');
+   itemTitle.textContent=String(item.label||'Review current work').slice(0,140);
    reason.textContent=String(item.reason||'').slice(0,150);
-   li.append(label,reason);list.append(li);
+   li.append(itemTitle,reason);list.append(li);
   }
   todayBlock.append(list);
   activity();
