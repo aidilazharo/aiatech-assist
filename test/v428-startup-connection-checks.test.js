@@ -27,10 +27,10 @@ function pageFixture(){
  };
  const segment=(start,end)=>{const a=ui.indexOf(start),b=ui.indexOf(end,a);assert.ok(a>=0&&b>a,start);return ui.slice(a,b);};
  const source=[
-  "const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluenceUrl',email:'startupEmail',githubUrl:'startupGithubUrl'};",
+  "const startupFieldMap={jiraUrl:'startupJiraUrl',email:'startupEmail',githubUrl:'startupGithubUrl',projectRepository:'startupProjectRepository'};",
   "let startupSetupRequired=true,startupPage=1,startupVerifying=false,startupInstallingModule='',startupConnectionVerified=false,startupConnectionEditSnapshot=null,startupScanComplete=true,startupFormInitialized=false,startupReturnToConnections=false,startupPrereqRequested=true,startupOpenStackId='',startupCopilotModalOpen=false;",
   "let startupConnectionCheckSequence=0,startupConnectionCheckPending=false,startupConnectionHealthStarted=false,startupConnectionHealthError=false;const startupConnectionCheckResults=new Map();",
-  "const STARTUP_CONNECTION_CHECK_LABELS=[['jira','Jira API'],['confluence','Confluence API'],['github','GitHub API'],['organization','GitHub organization'],['library','SDLC Library API']];function updateStartupIssueSummary(){}",
+  "const STARTUP_CONNECTION_CHECK_LABELS=[['jira','Jira API'],['confluence','Confluence API'],['github','GitHub account'],['organization','GitHub organization'],['extension','Extension · read/write/releases'],['library','Library · read/write/releases'],['extension-releases','Extension releases · optional'],['library-releases','Library releases · optional']];function updateStartupIssueSummary(){}",
   "let startupAutoNotice='',startupAutoEnabled=false,startupAutoProject=null,startupAutoStage='';let gateBusy=false,gateError='',workspaceOpened=false,opening={phase:'search'};",
   "function stopStartupAuto(){startupAutoEnabled=false;} function beginStartupAuto(){}",
   segment('function startupRing(', 'function updateStartupStackProgress('),
@@ -48,15 +48,15 @@ function pageFixture(){
  const create=new Function('$','document','read','send','updateHeaderUserName','extensionSettings','startupScanPercent','renderStartupScanPlaceholders',source);
  return {node,sent,page:create(node,document,id=>node(id).value,(type,extra)=>sent.push({type,...extra}),()=>{},{jira:{}},()=>{},()=>{})};
 }
-const config={required:true,verified:true,saved:{jiraUrl:'https://example.atlassian.net',confluenceUrl:'https://example.atlassian.net/wiki',email:'person@example.com',githubUrl:'https://github.com/example'},defaults:setup.DEFAULTS};
+const config={required:true,verified:true,saved:{jiraUrl:'https://example.atlassian.net',email:'person@example.com',githubUrl:'https://github.com/aiamalaysia',projectRepository:'my-fow-technology-app-techassists'},defaults:setup.DEFAULTS};
 test('Edit is below the GitHub token field and verified startup checks run automatically',()=>{
  const token=html.indexOf('id="startupGithubToken"'),button=html.indexOf('id="startupEditConnections"');
  assert.ok(token>0&&button>token&&button<html.indexOf('</div>',token));
  const {node,sent,page}=pageFixture();
  page.renderStartupConfig(config);
  assert.equal(sent.at(-1).type,'startupCheckConnections');
- assert.deepEqual(Object.keys(sent.at(-1).settings).sort(),['confluenceUrl','email','githubUrl','jiraUrl']);
- assert.equal(node('startupConnectionChecks').children.length,5);
+ assert.deepEqual(Object.keys(sent.at(-1).settings).sort(),['email','githubUrl','jiraUrl','projectRepository']);
+ assert.equal(node('startupConnectionChecks').children.length,8);
  assert.equal(node('startupConnectionChecks').children[0].tag,'details');
  assert.equal(node('startupConnectionChecks').children[0].children[0]._atgvProgress.number.textContent,'0%');
  assert.equal(node('startupEditConnections').textContent,'Edit');
@@ -71,7 +71,7 @@ test('Editing stops automatic opening, keeps edits through stale state, and canc
  assert.equal(page.isAuto(),false);assert.equal(page.isVerified(),false);
  assert.equal(node('startupProceed').disabled,true);
  assert.equal(node('startupTestConnections').disabled,false);
- for(const id of ['startupJiraUrl','startupConfluenceUrl','startupEmail','startupAtlassianToken','startupGithubUrl','startupGithubToken'])assert.equal(node(id).disabled,false,id);
+ for(const id of ['startupJiraUrl','startupEmail','startupAtlassianToken','startupGithubUrl','startupProjectRepository','startupGithubToken'])assert.equal(node(id).disabled,false,id);
  node('startupJiraUrl').value='https://other.atlassian.net';node('startupAtlassianToken').value='temporary-atl';
  node('startupGithubToken').value='temporary-git';
  page.renderStartupConfig(config);
