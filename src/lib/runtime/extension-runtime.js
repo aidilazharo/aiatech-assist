@@ -9129,11 +9129,27 @@ async function handleDashboardMessage(msg){
           .map(item=>({id:clean(item.id,40),status:clean(item.status,35)})):[];
         const evidence={role:clean(role.label,100),progress:clean(input.progress,30),
           recommendedNext:clean(input.next,180),tasks,assigned,requirements};
+        const incomplete=tasks.find(task=>!task.completed)?.activity||'';
+        const pendingIssue=assigned.find(item=>!/^(done|closed|resolved)$/i.test(item.status))?.jiraKey||'';
+        const pendingRequirement=requirements.find(item=>!/^(approved|published|complete|completed)$/i.test(item.status))?.id||'';
+        const actionLabel=roleId==='business-analyst'?'Open Business Requirements':
+          roleId==='solution-architect'?'Open Architecture Work':
+          roleId==='ux-designer'?'Open UI/UX Work':
+          roleId==='software-developer'?'Open Development Work':
+          roleId==='project-manager'?'Open Project Jira Work':'Open My Work';
+        const groundedNext=roleId==='business-analyst'&&pendingRequirement
+          ?'Continue '+pendingRequirement+' and review its next requirements milestone.':
+          (roleId==='software-developer'||roleId==='ux-designer')&&pendingIssue
+          ?'Continue '+pendingIssue+' and review its next assigned step.':
+          evidence.recommendedNext&&!/^(all local activities completed|business requirement flow completed)$/i.test(evidence.recommendedNext)
+          ?'Continue with '+evidence.recommendedNext+'.':
+          incomplete?'Review and complete '+incomplete+'.':
+          'Review the current '+evidence.role+' workspace for your next assigned task.';
         let message='',error=false;
         try{
           const target=await activeAiTarget();
           const prompt='You are ATGV My Work role assistant. Only analyze the supplied role-scoped work summary. '+
-            'Write one concise, practical recommendation in plain English (maximum 2 sentences). '+
+            'Always give one concise, immediately actionable next-step suggestion in plain English (maximum 2 sentences), even if everything appears complete. '+
             'Reference a real incomplete task or assigned ticket when possible; otherwise recommend checking the next role workflow step. '+
             'Never invent completion, Jira permissions, approvals, blockers, ticket IDs or results. '+
             'Do not give commands or promise actions have been executed. No markdown and no JSON.\nWORK SUMMARY: '+
@@ -9144,12 +9160,11 @@ async function handleDashboardMessage(msg){
         }catch(failure){
           error=true;
           report('My Work AI guidance unavailable: '+clean(failure.message,180));
-          message='AI review is currently unavailable. '+(evidence.recommendedNext
-            ?'Based on your recorded progress, continue with: '+evidence.recommendedNext+'.'
-            :'Open your current role workflow to choose the next step.');
+          // An unavailable provider must not leave the role without a next step.
+          message=groundedNext;
         }
         if(activeProject?.id===projectId)
-          await dashboard?.webview.postMessage({type:'roleAiSuggestion',projectId,roleId,requestId,message,error});
+          await dashboard?.webview.postMessage({type:'roleAiSuggestion',projectId,roleId,requestId,message,actionLabel,error});
         break;
       }
       case 'roleStepLoadScope':{
