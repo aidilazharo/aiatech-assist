@@ -19,7 +19,7 @@ test('v414: fixed Library source and project repository moves out of Start',()=>
  assert.match(html,/id="projectGithubRepositoryUrl"/);
  const ui=read('media/start.js'),host=read('src/lib/runtime/extension-runtime.js');
  assert.match(ui,/projectGithubRepositoryUrl'\)\.value/);
- assert.match(host,/repositoryUrl:startupSetup.FIXED_LIBRARY_REPOSITORY/);
+ assert.match(host,/repositoryUrl:startupLibraryRepository\(\)/);
  assert.doesNotMatch(host,/for\(const repo of \[data.project\]\)/);
 });
 
