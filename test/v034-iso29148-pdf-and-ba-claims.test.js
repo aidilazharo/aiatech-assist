@@ -5,7 +5,7 @@ const pdf=require('../src/ba-iso29148-pdf');
 const read=relative=>fs.readFileSync(path.join(__dirname,'..',relative),'utf8');
 const sha='a'.repeat(64);
 const source={name:'GATE Project Approval v1.1.docx',digest:sha,byteDigest:'b'.repeat(64)};
-const working=['# Business Requirements','## Draft','Validated spelling correction.','~~~text',
+const working=['# Business Requirements','## Draft','~~~text','Validated spelling correction.',
  'Business case from verified source.','Approval rules must be reviewed.','~~~',
  '## Provisional Standards Guidance','Provisional advice is NOT business policy.'].join('\n');
 test('ISO 29148 BRS PDF has a valid self-contained cross-reference structure and populated source evidence',()=>{
