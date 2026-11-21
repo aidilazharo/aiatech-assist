@@ -84,7 +84,8 @@ async function findReported(repo,token,log,{request=github.githubRequest}={}){
  for(let page=1;page<=5;page++){
   const r=await request(repo,token,'GET','/issues?state=all&per_page=100&page='+page);
   if(r.status!==200||!Array.isArray(r.body))throw Error('GitHub issue search unavailable; error logs preserved.');
-  for(const x of r.body)if(x&&(String(x.body||'').includes('ATGV-ERR-'+log.fingerprint)||sameTitle(x.title,log.title)))
+  for(const x of r.body)if(x&&(String(x.body||'').includes('ATGV-ERR-'+log.fingerprint)||
+    (sameTitle(x.title,log.title)&&normalized(log.observed).length>=8&&normalized(x.body).includes(normalized(log.observed).slice(0,200)))))
    return {number:x.number,url:x.html_url||''};
   if(r.body.length<100)return null;
  }
