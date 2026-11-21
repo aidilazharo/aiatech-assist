@@ -8,6 +8,8 @@
 - Prevent the repaired baseline from failing a second stale-hash upload check in the same synchronization run.
 - Preserve both local and Confluence versions without overwriting when real content differs; show the affected content categories.
 - Prevent duplicate periodic conflict popups while retaining status, error logs and safety checks.
+- Update source-only `.memory` guidance so every accepted source change creates a sequential release and eligible PRs automatically squash-merge after required CI passes.
+- Align AGENTS.md and idle maintenance release policies; never bypass failing checks, GitHub branch protections or PAT security.
 - Keep all `.memory` development guidance in source only, excluded from downloadable VSIX and source ZIP releases.
 
 ## Validation
