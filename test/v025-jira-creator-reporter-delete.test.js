@@ -126,7 +126,7 @@ test('changed issue content after approval stops all deletion',async t=>{
  await deletion.saveJobs(registry,projectId,{schema:1,jobs:[job]});
  h.map.get('TC-837').fields.summary='Changed since approval';
  await assert.rejects(deletion.execute({registry,projectId,job,config,token:'token',request:h.request,
-  read:h.read,loadRegister:async()=>register(),finalize:async()=>{}}),/content changed after preview/);
+  read:h.read,loadRegister:async()=>register(),finalize:async()=>{}}),/hierarchy changed after deletion preview|content changed after preview/);
  assert.equal(h.deleted.length,0);
 });
 test('new child Story discovered after preview stops deletion before any remote DELETE',async t=>{
