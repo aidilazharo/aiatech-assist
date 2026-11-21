@@ -212,35 +212,53 @@ async function pushStory(root, key) {
 }
 async function inspectScripts(root) {
     const repo = await repository(root);
-    const locations = ['', 'apps/web', 'services/api'];
+    // Discover real npm/.NET/Maven application folders, including common
+    // multi-app repositories such as ReactTS_Frontend + NestJS_Backend.
+    // Never recurse through dependency trees, symlinks, Git internals or docs.
+    const locations = new Set(['', 'apps/web', 'services/api']);
+    const excluded = new Set(['node_modules','dist','build','coverage','docs','test','tests','e2e','src','scripts','public','assets','vendor','fixtures','.git','.atgv']);
+    const acceptable = name => /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,79}$/.test(name) && !excluded.has(name.toLowerCase());
+    const children = async folder => (await fs.readdir(folder,{withFileTypes:true}).catch(error=>error.code==='ENOENT'?[]:Promise.reject(error)))
+        .filter(entry=>entry.isDirectory() && !entry.isSymbolicLink() && acceptable(entry.name)).slice(0,80);
+    for (const entry of await children(repo.root)) {
+        locations.add(entry.name);
+        if (['apps','services','packages'].includes(entry.name.toLowerCase()))
+            for (const child of await children(path.join(repo.root,entry.name)))
+                locations.add(entry.name+'/'+child.name);
+    }
     const items = [];
     for (const relative of locations) {
-        const folder = path.join(repo.root, relative);
-        const packageFile = path.join(folder, 'package.json');
+        const folder = path.resolve(repo.root,relative);
+        const stats = await fs.lstat(folder).catch(error=>error.code==='ENOENT'?null:Promise.reject(error));
+        if(!stats?.isDirectory()||stats.isSymbolicLink())continue;
+        const real=await fs.realpath(folder);
+        if(real!==repo.root&&!real.startsWith(repo.root+path.sep))continue;
+        const packageFile = path.join(real, 'package.json');
         let pkg = null;
         try {
             pkg = JSON.parse(await fs.readFile(packageFile, 'utf8'));
         }
         catch (e) {
-            if (e.code !== 'ENOENT')
-                throw e;
+            if (e.code !== 'ENOENT')throw e;
         }
         if (pkg) {
             const scripts = Object.keys(pkg.scripts || {});
-            items.push({ relative, kind: 'npm', scripts: scripts.filter(s => ['dev', 'start', 'test', 'build'].includes(s)), installed: !!await fs.stat(path.join(folder, 'node_modules')).then(x => x.isDirectory(), () => false) });
+            const supported = scripts.filter(s => ['dev', 'start:dev', 'start', 'test', 'build'].includes(s));
+            items.push({ relative, kind: 'npm', scripts:supported,
+                installed: !!await fs.stat(path.join(real,'node_modules')).then(x=>x.isDirectory(),()=>false) });
         }
-        else if (await fs.readdir(folder).then(x => x.some(n => n.endsWith('.csproj')), () => false))
+        else if (await fs.readdir(real).then(x=>x.some(n=>n.endsWith('.csproj')),()=>false))
             items.push({ relative, kind: 'dotnet', scripts: ['build', 'test', 'run'], installed: true });
-        else if (await fs.stat(path.join(folder, 'pom.xml')).then(() => true, () => false))
+        else if (await fs.stat(path.join(real,'pom.xml')).then(()=>true,()=>false))
             items.push({ relative, kind: 'maven', scripts: ['build', 'test', 'run'], installed: true });
     }
-    return { repo, targets: items };
+    return {repo,targets:items};
 }
 function approvedCommand(target, operation) {
     if (!['test', 'build', 'run'].includes(operation))
         throw Error('Unsupported local operation.');
     if (target.kind === 'npm') {
-        const script = operation === 'run' ? (target.scripts.includes('dev') ? 'dev' : 'start') : operation;
+        const script = operation === 'run' ? (target.scripts.includes('dev') ? 'dev' : target.scripts.includes('start:dev') ? 'start:dev' : 'start') : operation;
         if (!target.scripts.includes(script))
             throw Error('Project does not define a ' + script + ' script.');
         if (!target.installed)
@@ -312,7 +330,7 @@ async function previewCommand(cmd,target,cwd,previewUrl,proxyOverlay=null){
   throw Error('Preview override requires a valid localhost HTTP port.');
  if(target.kind!=='npm')return cmd;
  const pkg=JSON.parse(await fs.readFile(path.join(cwd,'package.json'),'utf8'));
- const scriptName=target.scripts.includes('dev')?'dev':'start';
+ const scriptName=target.scripts.includes('dev')?'dev':target.scripts.includes('start:dev')?'start:dev':'start';
  const script=String(pkg.scripts?.[scriptName]||'').trim();
  const known=script.match(/^concurrently -k "(vite|ng serve) --host 127\.0\.0\.1 --port (\d+)" "(node server\/index\.mjs)"$/);
  if(known){
@@ -329,9 +347,29 @@ async function previewCommand(cmd,target,cwd,previewUrl,proxyOverlay=null){
  if(proxyOverlay)throw Error('The legacy API proxy cannot be overridden by an unrecognized launch command. Approved project files were not modified.');
  return cmd;
 }
+// Mock Preview installs only a transient Vite config. It does not modify the
+// application's source files, use production API credentials, or launch a DB.
+async function createViteMockOverlay(repoRoot,cwd,port){
+ if(!Number.isInteger(port)||port<1||port>65535)throw Error('Mock Preview needs a localhost port.');
+ const configFile=(await Promise.all(['vite.config.ts','vite.config.mts','vite.config.js','vite.config.mjs'].map(async name=>
+   await fs.lstat(path.join(cwd,name)).then(st=>st.isFile()&&!st.isSymbolicLink()?name:null,()=>null)))).find(Boolean);
+ if(!configFile)throw Error('Mock Preview requires a local Vite configuration.');
+ const gitExclude=await git(repoRoot,'rev-parse','--git-path','info/exclude');
+ const excludePath=path.isAbsolute(gitExclude)?gitExclude:path.join(repoRoot,gitExclude);
+ const old=await fs.readFile(excludePath,'utf8').catch(error=>error.code==='ENOENT'?'':Promise.reject(error));
+ const marker='vite.config.atgv-mock-runtime-*.mts';
+ if(!old.includes(marker)){
+   await fs.mkdir(path.dirname(excludePath),{recursive:true});
+   await fs.appendFile(excludePath,(old.endsWith('\n')?'':'\n')+'# ATGV ephemeral local Mock Preview\n'+marker+'\n');
+ }
+ const file='vite.config.atgv-mock-runtime-'+crypto.randomUUID()+'.mts',location=path.join(cwd,file);
+ const config=require('./stack-mock-preview').render({source:configFile,port});
+ await fs.writeFile(location,config,{flag:'wx',mode:0o600});
+ return {file,location,kind:'mock'};
+}
 let activeProcess = null;
 let lastProcess = null;
-async function runLocal(root, { relative = '', env = {}, previewUrl = '', apiPort = null } = {}) {
+async function runLocal(root, { relative = '', env = {}, previewUrl = '', apiPort = null, mockPreview = false } = {}) {
     if (activeProcess && activeProcess.child.exitCode === null)
         throw Error('An application is already running. Stop it before starting another.');
     const info = await inspectScripts(root), target = info.targets.find(t => t.relative === relative);
@@ -346,8 +384,14 @@ async function runLocal(root, { relative = '', env = {}, previewUrl = '', apiPor
         throw Error('ATGV API port must be a valid local port distinct from the frontend.');
     const apiSource=await fs.readFile(path.join(cwd,'server/index.mjs'),'utf8').catch(()=>'');
     const viteSource=await fs.readFile(path.join(cwd,'vite.config.ts'),'utf8').catch(()=>'');
-    runtimeProxy=await createRuntimeProxyOverlay(info.repo.root,cwd,selectedApiPort,viteSource);
-    try{cmd=await previewCommand(approvedCommand(target,'run'),target,cwd,previewUrl,runtimeProxy);}
+    if(mockPreview){
+        if(!previewUrl||target.kind!=='npm'||selectedApiPort!==null)throw Error('Mock Preview needs a selected local Vite application and its preview URL.');
+        runtimeProxy=await createViteMockOverlay(info.repo.root,cwd,port);
+    }else runtimeProxy=await createRuntimeProxyOverlay(info.repo.root,cwd,selectedApiPort,viteSource);
+    try{
+        cmd=mockPreview?npmCommand(['exec','--offline','--','vite','--host','127.0.0.1','--port',String(port),'--strictPort','--config',runtimeProxy.file]):
+          await previewCommand(approvedCommand(target,'run'),target,cwd,previewUrl,runtimeProxy);
+    }
     catch(error){if(runtimeProxy)await fs.rm(runtimeProxy.location,{force:true}).catch(()=>{});throw error;}
     const instanceId=apiSource.includes('ATGV_INSTANCE_ID')?crypto.randomUUID():'';
     const runtimeEnv={
@@ -359,7 +403,7 @@ async function runLocal(root, { relative = '', env = {}, previewUrl = '', apiPor
     let child;
     try{child=spawn(cmd.bin, cmd.args, { cwd, env: { ...process.env, ...env, ...runtimeEnv }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], shell: false, detached: process.platform !== 'win32' });}
     catch(error){if(runtimeProxy)await fs.rm(runtimeProxy.location,{force:true}).catch(()=>{});throw error;}
-    const entry = { child, cwd, previewUrl, apiPort:selectedApiPort, instanceId, runtimeProxy, command:diagnostic.commandLine(cmd.bin,cmd.args), logs: '', head: info.repo.sha, relative, exitCode:null, signal:null };
+    const entry = { child, cwd, previewUrl, apiPort:selectedApiPort, instanceId, runtimeProxy, mockPreview:!!mockPreview, command:diagnostic.commandLine(cmd.bin,cmd.args), logs: '', head: info.repo.sha, relative, exitCode:null, signal:null };
     activeProcess = entry;
     lastProcess = entry;
     const read = (label,data) => { entry.logs = (entry.logs + '['+label+'] '+String(data)).slice(-256*1024); };
@@ -406,7 +450,7 @@ if(entry.child.exitCode===null&&entry.child.signalCode===null)
  throw Error('ATGV-managed process did not exit; it remains tracked.');
 if(activeProcess===entry)activeProcess=null;
 return { stopped: true, logs: entry.logs }; }
-function localLogs() { const entry=activeProcess||lastProcess;return entry ? { running: !!activeProcess&&entry.child.exitCode === null && entry.child.signalCode === null, pid:entry.child.pid, logs: entry.logs, cwd: entry.cwd, relative: entry.relative, head: entry.head, command:entry.command, previewUrl:entry.previewUrl, apiPort:entry.apiPort, instanceId:entry.instanceId, exitCode:entry.exitCode, signal:entry.signal } : { running: false, pid:null, logs: '' }; }
+function localLogs() { const entry=activeProcess||lastProcess;return entry ? { running: !!activeProcess&&entry.child.exitCode === null && entry.child.signalCode === null, pid:entry.child.pid, logs: entry.logs, cwd: entry.cwd, relative: entry.relative, head: entry.head, command:entry.command, previewUrl:entry.previewUrl, apiPort:entry.apiPort, instanceId:entry.instanceId, mockPreview:entry.mockPreview===true, exitCode:entry.exitCode, signal:entry.signal } : { running: false, pid:null, logs: '' }; }
 function readinessFlags({hasRepo=false, clean=false, matched=false, baseFound=false, stackId='', targets=[]}={}) {
   const blockers=[];
   if(!stackId) blockers.push('Solution Architect has not selected a technology stack');
