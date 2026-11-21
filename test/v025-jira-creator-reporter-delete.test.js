@@ -86,7 +86,10 @@ test('Jira Delete Issues permission is mandatory even for the Creator',async()=>
 test('conflicting local BRs and mapped Jira items are protected',async()=>{
  const h=harness();
  await assert.rejects(plan(h,{...register(),brs:[{id:brId}]}),/exists locally/);
- await assert.rejects(plan(h,{...register(),synced:{other:{key:'TC-836'}}}),/existing local ownership mapping/);
+ await assert.rejects(plan(h,{...register(),synced:{other:{key:'TC-836'}}}),/another local BR mapping/);
+ const own=await plan(h,{...register(),synced:{'BR-004':{key:'TC-834'},'BR-004/story':{key:'TC-835'}}});
+ assert.equal(own.rows.length,4,'a missing local BR may retain its original Jira mappings');
+ await assert.rejects(plan(h,{...register(),synced:{'BR-004/unrelated':{key:'TC-999'}}}),/outside the selected Epic hierarchy/);
  assert.equal(h.deleted.length,0);
 });
 test('cross-project or unexpected Jira child blocks deletion before any remote writes',async()=>{
