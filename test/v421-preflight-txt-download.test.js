@@ -90,8 +90,8 @@ test('saved multi-section report retains corrections beyond the aggregate previe
  assert.match(txt,/Working text after correction: Item 19 name/);
 });
 test('download filename is Windows-safe and has a TXT extension',()=>{
- assert.equal(report.filename('TC','GATE Project Initiation and Project Approval BRD Revised v1.1.docx'),'ATGV-Preflight-TC-GATE-Project-Initiation-and-Project-Approval-BRD-Revised-v1.1.txt');
- assert.match(report.filename('T|C','../bad<name>?.pdf'),/^ATGV-Preflight-T-C-bad-name-.txt$|^ATGV-Preflight-T-C-bad-name.txt$/);
+ assert.equal(report.filename('TC','GATE Project Initiation and Project Approval BRD Revised v1.1.docx'),'ATGV-Preflight-Analyst-TC-GATE-Project-Initiation-and-Project-Approval-BRD-Revised-v1.1.txt');
+ assert.match(report.filename('T|C','../bad<name>?.pdf'),/^ATGV-Preflight-Analyst-T-C-bad-name-.txt$|^ATGV-Preflight-T-C-bad-name.txt$/);
 });
 
 test('BA panel exposes TXT download; host captures checked sections and exports via VS Code',()=>{
@@ -102,7 +102,7 @@ test('BA panel exposes TXT download; host captures checked sections and exports 
  const host=fs.readFileSync(path.join(root,'src/lib/runtime/extension-runtime.js'),'utf8');
  const css=fs.readFileSync(path.join(root,'media/start.css'),'utf8');
  assert.match(markup,/id="baPreflightDownload"[^>]*disabled/);
- assert.match(markup,/Download Pre-flight \(\.txt\)/);
+ assert.match(markup,/Download Pre-flight Analyst/);
  assert.match(ui,/\$\('baPreflightDownload'\)\.addEventListener\('click'/);
  assert.match(ui,/send\('downloadDocumentPreflight',\{projectId:activeId\}\)/);
  assert.match(ui,/reportAvailable:true/);
@@ -113,4 +113,9 @@ test('BA panel exposes TXT download; host captures checked sections and exports 
  assert.match(host,/baPreflightReports\.format\(/);
  assert.match(host,/vscode\.workspace\.fs\.writeFile\(destination,Buffer\.from\(content,'utf8'\)\)/);
  assert.match(css,/#discoveryView #baPreflightDownload/);
+ assert.match(markup,/<details id="baSourcePreflight"/);
+ assert.match(markup,/Download ISO 29148 Business Requirements/);
+ assert.match(ui,/send\('downloadISO29148BRPDF',\{projectId:activeId\}\)/);
+ assert.match(host,/case 'downloadISO29148BRPDF':/);
+ assert.match(host,/require\('\.\.\/\.\.\/ba-iso29148-pdf'\)\.document\(/);
 });
