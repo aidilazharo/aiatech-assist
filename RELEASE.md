@@ -1,15 +1,16 @@
-# ATGV AIATECH Assist v0.0.22
+# ATGV AIATECH Assist v0.0.23
 
-## Changes
+## Critical Windows Reset repair
 
-- Select extension and Library source repositories from the configured GitHub organization, with exact owner-specific mappings for aidilazharo and aiamalaysia.
-- Always use aidilazharo/extension and aidilazharo/library as public distribution repositories, regardless of selected organization.
-- Prioritize the selected owner's verified Library main branch when pulling. Verify VERSION, catalog.json and the pinned Git commit.
-- Never downgrade a newer installed Library to an older source or mirror snapshot; do not treat a public Library mirror as an aiamalaysia source.
-- Fallback to the checksum-verified public Library mirror only for the matching aidilazharo source if private source access is unavailable.
-- Check the selected Library source during explicit Check Updates and clearly distinguish source/main, installed and release mirror versions.
-- Add routing and source-check regression tests for both organizations and no-downgrade controls.
+- Fix EPERM and EACCES errors during promotion of staged .atgv folders, using bounded retries and a safe exclusive-copy fallback.
+- Replace the destructive delete-first flow with a transactional directory swap: hold original .atgv and projects in verified rollback storage until the new directories are validated.
+- Roll back both local directories if staging promotion fails, without deleting original user work or modifying remote Jira, Confluence or GitHub data.
+- Detect leftover .atgv-reset-staging-* directories from earlier interrupted Resets before starting a new destructive operation.
+- When a v0.0.22 reset left .atgv absent and the projects folder empty, restore verified staged .atgv and project folders, then halt for user inspection before any new Reset.
+- Refuse to overwrite existing files or guess about conflicts; preserve staging and report recovery locations for manual review.
+- Defer noncritical cache/staging cleanup failures instead of reporting an already-committed reset as an incomplete replacement.
+- Add regression tests for Windows lock simulation, exclusive copy fallback, successful replacement, rollback on partial failure, old-stage recovery and conflict refusal.
 
-## Release verification
+## Verification
 
-Require Node regression, UI, Windows and VSIX packaging checks to pass before merge. Keep .memory excluded from distributed archives.
+Do not merge or release until Node regression, Windows reset check, UI validation and VSIX packaging all pass. Never include .memory in the VSIX or release ZIP.
