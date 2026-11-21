@@ -550,11 +550,10 @@ function workspaceBreadcrumbContext(){
 }
 function workspaceBreadcrumbAction(action){
  if(!action)return;
- if(action==='my-work'||action==='br-home'){
-  if(view!=='discovery'){
-   navigate(action==='my-work'&&view==='uxPreview'?'ux-designer':'sdlc-roles');
-   return;
-  }
+ if(action==='my-work'){navigate('sdlc-roles');return;}
+ if(action==='role-workspace'){navigate('role-workspace');return;}
+ if(action==='br-home'){
+  if(view!=='discovery'){navigate('discovery');return;}
   // Modals may contain unsaved edits: never discard them to navigate.
   if(brEditing&&!closeBREditor())return;
   if(baRequirementModalTarget)closeBARequirementModal();
@@ -1069,20 +1068,25 @@ function navigate(destination){
   }
   // Navigate locally without an automatic dashboard/webview refresh.
   const isRole=visibleRoles().some(role=>role.id===destination);
+  const keepingWorkspace=isRole&&(view==='work'||view==='discovery');
   if(isRole&&activeId){usedRoleIds.add(destination);send('markRoleUsed',{roleId:destination});}
-  selectedNav=isRole||destination==='discovery'?'sdlc-roles':destination==='project-settings'||destination==='tech'?'settings':destination;
+  selectedNav=destination==='role-workspace'||destination==='discovery'||keepingWorkspace?'role-workspace':
+    isRole||destination==='sdlc-roles'?'sdlc-roles':
+    destination==='project-settings'||destination==='tech'?'settings':destination;
   for(const button of document.querySelectorAll('.sidebar [data-nav]')){
     const active=button.dataset.nav===selectedNav;
     button.classList.toggle('current',active);
     if(active)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current');
   }
   if(isRole){if(selectedRole!==destination)selectedHandoffBrId=null;selectedRole=destination;renderSidebarRole();}
-  if(isRole||destination==='sdlc-roles'){
+  if(isRole||destination==='sdlc-roles'||destination==='role-workspace'){
     if(!visibleRoles().some(role=>role.id===selectedRole))selectedRole=visibleRoles()[0]?.id||'business-analyst';
     const baWorkspace=selectedRole==='business-analyst';
-    if(baWorkspace)baBreadcrumbAtRequirements=false;
-    setView(baWorkspace?'discovery':'work');renderSidebarRole();renderRoleWork();
-    if(baWorkspace){renderDiscovery();refreshAIChangeResolution();}
+    const openWorkspace=destination==='role-workspace'||keepingWorkspace;
+    if(baWorkspace&&openWorkspace)baBreadcrumbAtRequirements=false;
+    setView(openWorkspace?(baWorkspace?'discovery':'work'):'myWork');
+    renderSidebarRole();renderRoleWork();
+    if(baWorkspace&&openWorkspace){renderDiscovery();refreshAIChangeResolution();}
     renderRoleTimeline();ensurePMJiraInventory(true);ensureBAJiraInventory(true);send('roleHandoffOwners');return;
   }
   if(destination==='overview'){setView('landing');$('overviewGanttDetails').open=false;send('loadPlanning');send('myWorkRosterRefresh',{projectId:activeId,roleId:selectedRole});return;}
@@ -3857,7 +3861,7 @@ function renderRoleWork(){
   }
   // Share role-scoped, minimal progress metadata with the read-only My Work AI.
   // No document contents, credentials, other users' tasks or hidden workflow actions.
-  if(view==='work'||view==='discovery')window.ATGVMyWorkAI?.update({
+  if(view==='myWork'||view==='work'||view==='discovery')window.ATGVMyWorkAI?.update({
     projectId:activeId,roleId:role.id,roleName:visibleRoleLabel(role),
     progress:$('rolePercent')?.textContent||'',
     next:$('roleNext')?.textContent||'',
