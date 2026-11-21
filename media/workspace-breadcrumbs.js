@@ -28,7 +28,8 @@
   'security-engineer':'Security Engineer','data-engineer':'Data Engineer',
   'uat-tester':'UAT Tester','release-manager':'Release Manager',
   'technical-writer':'Technical Writer','operations-support':'Operations Support',
-  'business-owner':'Business Owner','business-analyst':'Business Analyst'
+  'business-owner':'Business Owner','business-analyst':'Business Analyst',
+  'ai-ml-engineer':'AI / ML Engineer','compliance-officer':'Compliance / Risk Officer'
  });
  const segment=(label,action=null)=>({label,action});
  const clean=x=>String(x??'').replace(/[\x00-\x1f]/g,' ').trim().slice(0,160);
