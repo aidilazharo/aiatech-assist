@@ -62,10 +62,12 @@ function document(spec={}){
  function check(height=22){if(!page||y-height<62)newPage();}
  function heading(value,level=1){
   const size=level===1?15:11.5;
-  check(level===1?48:35);
+  const lines=wrap(value,level===1?56:73).filter(Boolean);
+  check((level===1?44:31)+Math.max(0,lines.length-1)*size*1.25);
   y-=level===1?21:16;
-  if(level===1){text(value,M,y,size,{bold:true,color:NAVY});y-=8;line(M,y,RIGHT,y,[0.83,0.87,0.91],.65);y-=12;}
-  else{text(value,M,y,size,{bold:true,color:BLUE});y-=12;}
+  for(const headingLine of lines){text(headingLine,M,y,size,{bold:true,color:level===1?NAVY:BLUE});y-=size*1.22;}
+  if(level===1){y-=4;line(M,y,RIGHT,y,[0.83,0.87,0.91],.65);y-=12;}
+  else y-=9;
  }
  function paragraph(value,{indent=0,muted=false,small=false}={}){
   const size=small?8.6:10,step=small?12.2:14.6,max=Math.floor((RIGHT-M-indent)/(size*.53));
