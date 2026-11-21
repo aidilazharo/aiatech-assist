@@ -1,19 +1,17 @@
-# ATGV AIATECH Assist v0.0.14
+# ATGV AIATECH Assist v0.0.15
 
 ## Changes
 
-- Fix duplicate Confluence source synchronization conflict messages on the AI-only My Work page.
-- Keep the global top notification as the single visible warning, including the View Ownership action and existing safeguards against publishing unresolved source conflicts.
-- Suppress page-level feedback on My Work, including previously inserted duplicate warnings when returning to that page.
-- Preserve existing inline feedback on Role Workspace and other application pages.
-- Keep My Work's AI animation and 18 role-specific chat profiles, but hide the redundant blue "My Work" breadcrumb title on the AI-only page.
-- Connect the read-only My Work AI chat to the existing active-project Knowledge & RAG index, retrieving up to six relevant knowledge excerpts from synchronized Jira, Confluence and local project documents.
-- Add retrieved source references to AI chat responses and instruct the selected model to cite supplied project evidence, treat source text as untrusted, and mark unsupported assertions or unresolved source conflicts.
-- Keep project-scoped RAG context isolated across project changes and use the extension's existing AI-send consent pathway before sending retrieved excerpts to the selected provider.
+- Add a project-scoped Confluence activity registry for all ATGV roles with version-checked updates, bounded metadata, and optimistic concurrency retries.
+- Synchronize newly generated and edited BR drafts, revisions and approvals as lightweight project activity.
+- Capture developer branch starts, developer-initiated Jira transitions, and verified delivery completion events.
+- Queue project activity locally when Confluence is unavailable and retry on project open and the existing periodic synchronization interval.
+- Ground My Work role chat in current shared project events plus live Jira issue state, without confusing an In Progress ticket with a confirmed development start.
+- Provide proactive read-only Resume BR suggestions for Business Analysts and active Jira review suggestions for Project Managers.
+- Preserve existing project documents, Jira and GitHub as authoritative sources, and require AI-provider sharing consent for project activity metadata.
+- Keep source-only .memory excluded from release packages.
 
 ## Validation
 
-- Add regression tests for the AI-only My Work page receiving Confluence conflict and other status messages with no duplicate inline warning.
-- Verify My Work does not display the blue breadcrumb title, RAG excerpt retrieval is project-scoped and bounded, model prompts receive untrusted evidence and source references remain visible.
-- Verify global notification rendering and Ownership action remain intact, and other pages retain feedback.
-- Run full Node tests, Windows checks, UI validation, build/VSIX integrity and source-only .memory exclusions before merge and publication.
+- Add Node regression coverage for project isolation, Confluence page creation, optimistic concurrency, idempotent updates, project-scoped Jira activity, and invalid event rejection.
+- Execute the complete GitHub CI test, platform and VSIX verification workflows before merging and publishing.
