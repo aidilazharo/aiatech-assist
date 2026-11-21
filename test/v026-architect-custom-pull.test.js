@@ -43,14 +43,17 @@ test('divergent branch refuses unsafe merge and preserves local commit',async()=
  await assert.rejects(pull('/safe/project',args(x)),/diverged/);
  assert.equal(x.calls.some(x=>x.startsWith('merge --ff-only')),false);
 });
-test('Custom Stack button toggles after scan and re-scans after successful pull',()=>{
+test('Custom Stack keeps Scan and Pull separate and re-scans after successful pull',()=>{
  const ui=read('media/start.js'),host=read('src/lib/runtime/extension-runtime.js'),html=read('src/lib/webview/dashboard-html.js');
- assert.match(ui,/current\?'Pull Repository':'Scan Repository'/);
- assert.match(ui,/send\('architectCustomPull',\{projectId:activeId,expectedSha:scanned.sha\}\)/);
+ assert.match(ui,/\$\('architectCustomScan'\)\.textContent='Scan Repository'/);
+ assert.match(ui,/\$\('architectCustomPull'\)\.disabled=/);
+ assert.match(ui,/send\('architectCustomPull',\{projectId:activeId,expectedSha:current.sha\}\)/);
+ assert.match(ui,/send\('architectCustomScan',\{projectId:activeId\}\)/);
  assert.match(ui,/m.type==='architectCustomPullResult'/);
  assert.match(host,/case 'architectCustomPull':/);
  assert.match(host,/architectRepository\.resolve/);
  assert.match(host,/require\('\.\.\/\.\.\/architect-custom-pull'\)\.pull/);
  assert.match(host,/require\('\.\.\/\.\.\/architect-custom-stack'\)\.scan\(root\)/);
  assert.match(html,/id="architectCustomScan"/);
+ assert.match(html,/id="architectCustomPull"/);
 });

@@ -349,7 +349,7 @@ async function previewCommand(cmd,target,cwd,previewUrl,proxyOverlay=null){
 }
 // Mock Preview installs only a transient Vite config. It does not modify the
 // application's source files, use production API credentials, or launch a DB.
-async function createViteMockOverlay(repoRoot,cwd,port){
+async function createViteMockOverlay(repoRoot,cwd,port,mockDatabase=false){
  if(!Number.isInteger(port)||port<1||port>65535)throw Error('Mock Preview needs a localhost port.');
  const configFile=(await Promise.all(['vite.config.ts','vite.config.mts','vite.config.js','vite.config.mjs'].map(async name=>
    await fs.lstat(path.join(cwd,name)).then(st=>st.isFile()&&!st.isSymbolicLink()?name:null,()=>null)))).find(Boolean);
@@ -363,13 +363,13 @@ async function createViteMockOverlay(repoRoot,cwd,port){
    await fs.appendFile(excludePath,(old.endsWith('\n')?'':'\n')+'# ATGV ephemeral local Mock Preview\n'+marker+'\n');
  }
  const file='vite.config.atgv-mock-runtime-'+crypto.randomUUID()+'.mts',location=path.join(cwd,file);
- const config=require('./stack-mock-preview').render({source:configFile,port});
+ const config=require('./stack-mock-preview').render({source:configFile,port,mockDatabase});
  await fs.writeFile(location,config,{flag:'wx',mode:0o600});
  return {file,location,kind:'mock'};
 }
 let activeProcess = null;
 let lastProcess = null;
-async function runLocal(root, { relative = '', env = {}, previewUrl = '', apiPort = null, mockPreview = false } = {}) {
+async function runLocal(root, { relative = '', env = {}, previewUrl = '', apiPort = null, mockPreview = false, mockDatabase = false } = {}) {
     if (activeProcess && activeProcess.child.exitCode === null)
         throw Error('An application is already running. Stop it before starting another.');
     const info = await inspectScripts(root), target = info.targets.find(t => t.relative === relative);
@@ -386,7 +386,7 @@ async function runLocal(root, { relative = '', env = {}, previewUrl = '', apiPor
     const viteSource=await fs.readFile(path.join(cwd,'vite.config.ts'),'utf8').catch(()=>'');
     if(mockPreview){
         if(!previewUrl||target.kind!=='npm'||selectedApiPort!==null)throw Error('Mock Preview needs a selected local Vite application and its preview URL.');
-        runtimeProxy=await createViteMockOverlay(info.repo.root,cwd,port);
+        runtimeProxy=await createViteMockOverlay(info.repo.root,cwd,port,!!mockDatabase);
     }else runtimeProxy=await createRuntimeProxyOverlay(info.repo.root,cwd,selectedApiPort,viteSource);
     try{
         cmd=mockPreview?npmCommand(['exec','--offline','--','vite','--host','127.0.0.1','--port',String(port),'--strictPort','--config',runtimeProxy.file]):

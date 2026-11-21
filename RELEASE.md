@@ -1,19 +1,18 @@
-# ATGV AIATECH Assist v0.0.29
+# ATGV AIATECH Assist v0.0.30
 
-## Technology Stack — Custom Stack
-- Discover npm/.NET/Maven apps in verified repo root, first-level folders and common two-level apps/services/packages paths instead of only the three fixed catalog paths. Avoid symlinks, generated folders and directory escapes.
-- Detect both ReactTS_Frontend and NestJS_Backend in AIA TechCockpit and use NestJS `start:dev` when no conventional `dev` or `start` script is available.
-- Discover the actual NestJS versioned health endpoint at `http://127.0.0.1:3000/api/v1/health`.
-- Allow dependency installation in verified nested application directories. Do not overwrite or push project code.
-- Add an explicitly confirmed **Run Mock Preview** button for detected Vite apps. It installs the selected frontend dependencies and runs on localhost using a temporary Vite configuration with a simulated session and read-only API stubs; mock requests cannot reach the real backend.
-- Unknown API endpoints respond with HTTP 501 rather than reporting fake success. Show a permanent MOCK DATA preview label.
-- The mock flow does not approve the technology stack, access the database, replace real integration testing, or claim that the backend started.
+## Custom Stack — AI readiness analysis
+- **Scan Repository** always re-analyzes verified local application folders; **Pull Repository** remains a separate, fast-forward-only action.
+- Collect bounded manifest, non-secret environment-key and application configuration evidence and optionally ask the configured Solution Architect AI model for advisory risks. When AI is unavailable, manifest analysis remains available.
+- Show evidence-based blockers and recommended actions: **Mock Services**, **Mock Database** (synthetic fixtures, Vite only), **Install Dependencies**, and **Create Fix Branch**.
+- Scan is read-only; branch creation/install/mock execution need their own user interaction and host confirmation.
 
-## Save Stack button
-- Blue and enabled for a new/changed technology-stack selection.
-- Green, labeled **Saved Stack**, and disabled after the selected stack is successfully saved; the state survives My Work rerenders and project switches.
-- Only a user selection change enables the blue action again. Failed/cancelled saves remain eligible for retry.
+## Custom Stack — progress and local Git branch controls
+- Fix the catalog progress renderer unconditionally clearing the bar for Custom Stack.
+- Add a dedicated accessible live progress indicator that updates during scan, dependency checks, mock startup, Git pull, local fix branch creation and health verification.
+- Add a local branch selector and **Switch Branch** button. Block dirty worktrees, unknown branches, changed SHA, and active ATGV processes.
+- **Create Fix Branch** creates a local `fix/atgv-custom-stack-<commit-prefix>` branch from the verified clean source and commits only isolated `atgv-preview/` mock services, synthetic database fixtures and setup guidance. Does **not** push to GitHub, overwrite project code, connect to PostgreSQL/Okta, or claim that the production application was fixed.
+- `main` remains untouched. Preview mocks are not evidence for real backend, security, integration or approval testing.
 
-## Verification
-- Add regression checks for nested monorepo detection, dependency path validation, mock preview isolation and Save Stack state.
-- Full Node, UI and Windows tests, VSIX packaging and release validation must pass before merge/release.
+## Validation
+- New regression tests cover TechCockpit-like React/Vite + NestJS/MikroORM source evidence, progress, simulated database behavior, local fix branch creation and switching, SHA pinning and clean-worktree protections.
+- GitHub Actions must pass before merging or publishing the VSIX.
