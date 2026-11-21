@@ -51,7 +51,7 @@ async function scan(root,{driver=developer,fsApi=fs}={}){
  return {root:found.repo.root,sha:String(found.repo.sha||''),branch:String(found.repo.branch||''),clean:found.repo.clean===true,
   targets:entries,recognized:entries.length,ready:entries.some(entry=>entry.runnable)};
 }
-async function run(root,{sha,relative='',previewUrl,mock=false,onProgress=async()=>{},driver=developer,helper=dependencies,bootstrapApi=bootstrap}={}){
+async function run(root,{sha,relative='',previewUrl,mock=false,mockDatabase=false,onProgress=async()=>{},driver=developer,helper=dependencies,bootstrapApi=bootstrap}={}){
  const check=await scan(root,{driver});
  if(!/^[a-f0-9]{40}$/.test(String(sha||''))||check.sha!==sha)throw Error('Project Git revision changed after the scan. Scan the Custom Stack again.');
  const selected=check.targets.find(t=>t.relative===relative);
@@ -70,12 +70,12 @@ async function run(root,{sha,relative='',previewUrl,mock=false,onProgress=async(
  await onProgress('Starting '+selected.framework+' from '+(selected.relative||'repository root')+'…');
  let started=false;
  try{
-  await driver.runLocal(root,{relative:selected.relative,previewUrl:url,...(mock?{mockPreview:true}:{})});started=true;
+  await driver.runLocal(root,{relative:selected.relative,previewUrl:url,...(mock?{mockPreview:true,mockDatabase:!!mockDatabase}:{})});started=true;
   await onProgress('Verifying localhost health at '+url+'…');
   await bootstrapApi.waitForHttp(url,()=>driver.localLogs().running,60000,driver.localLogs().instanceId||'');
   const current=driver.localLogs();
   if(!current.running||path.resolve(current.cwd||'')!==path.resolve(cwd))throw Error('The custom application stopped or switched during health verification.');
-  return {running:true,url,framework:selected.framework,relative:selected.relative,sha,mockPreview:mock,message:mock?'MOCK DATA · Local Vite preview running at '+url+'. External APIs and databases are NOT connected. No source files were committed.':'Custom Stack running at '+url+'. No Git branch, commit or push was created.'};
+  return {running:true,url,framework:selected.framework,relative:selected.relative,sha,mockPreview:mock,mockDatabase:!!(mock&&mockDatabase),message:mock?'MOCK DATA · Local Vite preview running at '+url+'. '+(mockDatabase?'Synthetic database fixtures enabled. ':'')+'External APIs and real databases are NOT connected. No source files were committed.':'Custom Stack running at '+url+'. No Git branch, commit or push was created.'};
  }catch(error){
   if(started)await driver.stopLocal().catch(()=>{});
   throw error;
