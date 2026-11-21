@@ -76,6 +76,7 @@ async function stageFreshWorkspace({workspace,projects,connections,catalogConfig
       await sdlcCatalog.syncGitWorkspace(catalogConfig,catalogToken,stagedWorkspace);
     }
     const registry=new ProjectRegistry(stagedWorkspace);
+    await registry.ensureRoot(); // Also stage a real, empty projects root when no project exists.
     for(const project of projects){
       const fresh=await registry.create(restoredProject(project));
       await scaffoldProject(stagedWorkspace,fresh);
