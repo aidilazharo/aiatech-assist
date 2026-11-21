@@ -6160,18 +6160,19 @@ async function handleDashboardMessage(msg){
           if(inspection.sha!==msg.sha)throw Error('Git commit changed after the scan. Scan Repository again.');
           const chosen=inspection.targets.find(row=>row.relative===msg.relative&&row.runnable);
           if(!chosen)throw Error('The selected repository target has no supported run command.');
+          const mock=msg.mock===true;
+          if(mock&&!chosen.mockable)throw Error('Mock Preview is available only for detected Vite applications.');
           const url=custom.loopbackPreview(msg.previewUrl||chosen.previewUrl);
-          const action='Install & Run Custom Stack';
+          const action=mock?'Run Mock Preview':'Install & Run Custom Stack';
           const allowed=await uiWarning('Custom Stack detected '+chosen.framework+' in '+(chosen.relative||'repository root')+
            '.\n\nGit revision: '+inspection.sha.slice(0,12)+'\nPreview: '+url+
-           '\n\nATGV will execute dependency installation/restore and the existing project '+chosen.runScript+
-           ' script on this computer. Package installation may modify local dependency files. No project skeleton will be copied, and ATGV will not commit, push or approve this project automatically. Only the ATGV-managed process can be stopped by this screen. Continue?',
+           (mock?'\n\nMOCK DATA: ATGV will install the selected Vite frontend dependencies, start Vite on localhost with temporary mock API handlers, and simulate a demo sign-in. No PostgreSQL, Okta, or real application backend is used. Unimplemented API requests return 501 and are never forwarded. A visible mock label is displayed. This is NOT a security, integration or approval test. Continue?':'\n\nATGV will execute dependency installation/restore and the existing project '+chosen.runScript+' script on this computer. Package installation may modify local dependency files. No project skeleton will be copied, and ATGV will not commit, push or approve this project automatically. Only the ATGV-managed process can be stopped by this screen. Continue?'),
            {modal:true},action);
           if(allowed!==action){
             await dashboard?.webview.postMessage({type:'architectCustomError',projectId,message:'Custom Stack run cancelled. No scripts were executed.'});break;
           }
           architectErrorLogs.begin(projectId,'custom-stack');
-          const result=await custom.run(root,{sha:inspection.sha,relative:chosen.relative,previewUrl:url,
+          const result=await custom.run(root,{sha:inspection.sha,relative:chosen.relative,previewUrl:url,mock,
            onProgress:async message=>{architectErrorLogs.append(projectId,'custom-stack',message);await notify(message);}});
           if(activeProject?.id===projectId){
             await vscode.env.openExternal(vscode.Uri.parse(result.url)).catch(error=>report('Custom Stack browser: '+error.message));

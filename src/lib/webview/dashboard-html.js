@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.28';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.29';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -542,6 +542,7 @@ function html(webview,{resumeLibrary=false}={}){
           <label for="architectCustomPreviewUrl">Local preview URL<input id="architectCustomPreviewUrl" type="url" spellcheck="false" value="http://127.0.0.1:3000/" placeholder="http://127.0.0.1:3000/"></label>
           <button id="architectCustomScan" class="secondary" type="button">Scan Repository</button>
           <button id="architectCustomRun" type="button" disabled>Install &amp; Run</button>
+          <button id="architectCustomMockRun" class="secondary" type="button" disabled title="Launch a local Vite UI with simulated login and read-only API responses">Run Mock Preview</button>
           <button id="architectCustomStop" class="secondary" type="button" disabled>Stop</button>
         </div>
         <p id="architectCustomDetails" class="muted">Select Custom Stack to inspect an existing checkout. Running project scripts requires confirmation.</p>

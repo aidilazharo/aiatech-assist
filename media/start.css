@@ -2359,3 +2359,8 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 /* Jira-only BR deletion is destructive: keep the request distinct from recovery. */
 .ba-jira-only-delete{color:var(--vscode-errorForeground,#f17a7a)!important;border-color:var(--vscode-inputValidation-errorBorder,#8b3636)!important}
 .ba-jira-only-delete:focus-visible{outline:2px solid var(--vscode-focusBorder,#007fd4);outline-offset:2px}
+
+/* Technology Stack Save is actionable in blue, and permanently green/disabled
+   for the saved selection. Override global disabled grayscale/opacity rules. */
+#workView #architectSaveStack:not(:disabled):not(.atgv-stack-saved){background:var(--vscode-button-background,#1473bd)!important;color:var(--vscode-button-foreground,#fff)!important;opacity:1;filter:none}
+#workView #architectSaveStack.atgv-stack-saved:disabled{background:#138c50!important;border-color:#138c50!important;color:#fff!important;opacity:1!important;filter:none!important;cursor:not-allowed;box-shadow:none}
