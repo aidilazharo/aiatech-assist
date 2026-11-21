@@ -577,6 +577,13 @@ function renderWorkspaceBreadcrumbs(){
  const id=view==='landing'?'landingView':view==='discovery'?'workView':view+'View';
  const active=$(id);
  if(!active||active.classList.contains('hidden'))return;
+ // My Work is the AI-only landing: no duplicate blue title/breadcrumb.
+ // Keep the sidebar's My Work navigation label and the breadcrumbs on Role Workspace.
+ if(view==='myWork'){
+  active.querySelector('.atgv-workspace-breadcrumbs')?.remove();
+  active.classList.remove('has-workspace-breadcrumb');
+  return;
+ }
  const trail=ATGVWorkspaceBreadcrumbs.trail(workspaceBreadcrumbContext());
  const build=container=>{
   if(!container)return;
@@ -642,7 +649,7 @@ function setView(next){
     baViewedStep='start';
   }
   for(const page of pages)page.classList.toggle('hidden',page!==target);
-  if(next==='myWork')target.querySelector('.atgv-page-feedback')?.remove();
+  if(next==='myWork')target.querySelector?.('.atgv-page-feedback')?.remove();
   // The BR workspace is embedded above the Jira inventory in BA My Work.
   // Keep its logical 'discovery' mode so existing save/approval and error guards work.
   $('discoveryView').classList.toggle('hidden',next!=='discovery');
