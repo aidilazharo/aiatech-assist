@@ -182,4 +182,10 @@
     if(lastSnapshot)update(lastSnapshot);
     else renderPersistentNext();
   }};
+  let visibleLast=false;
+  window.addEventListener('atgv:viewchange',()=>{
+    const visible=!!root()&&!root().closest('main')?.classList.contains('hidden');
+    if(visible&&!visibleLast)window.ATGVMyWorkAI.refresh();
+    visibleLast=visible;
+  });
 })();
