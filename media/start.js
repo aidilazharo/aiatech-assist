@@ -8226,26 +8226,11 @@ function updateStartupRepositoryPreview(){
  const raw=$('startupGithubUrl').value.trim().replace(/^https?:\/\//i,'').replace(/\/$/,'');
  const owner=/^github\.com\/([a-z0-9-]{1,39})$/i.exec(raw)?.[1]||'';
  const project=$('startupProjectRepository').value.trim();
+ // Retain the configured project repository URL and all connection checks.
+ // The separate extension, library, and release repository listing was
+ // purely informational and is intentionally absent from the Start screen.
  $('startupProjectRepositoryPreview').textContent=owner&&/^[a-z0-9_.-]+$/i.test(project)?
   'https://github.com/'+owner+'/'+project:'Enter a valid GitHub organization and project repository.';
- const map={
-  aidilazharo:['aidilazharo/aiatech-assist','aidilazharo/tech-stacks-skills'],
-  aiamalaysia:['aiamalaysia/my-fow-technology-app-techassists-dev-sdlc','aiamalaysia/my-fow-technology-app-techassists-enterprise-skills']
- };
- const paths=map[owner.toLowerCase()]||[];
- const preview=$('startupRepositoryPreview');if(!preview)return;
- preview.replaceChildren();
- for(const [label,value] of [
-  ['Extension (required)',paths[0]],
-  ['Library (required)',paths[1]],
-  ['Extension releases (optional)','aidilazharo/extension'],
-  ['Library releases (optional)','aidilazharo/library']
- ]){
-  const row=document.createElement('div');row.className='atgv-repo-preview-item';
-  const title=document.createElement('span');title.textContent=label;
-  const address=document.createElement('code');address.textContent=value?'https://github.com/'+value:'Select aidilazharo or aiamalaysia';
-  row.append(title,address);preview.append(row);
- }
 }
 // Display only the current sequential check. Successful checks vanish immediately;
 // retain a failed/offline check until it is fixed, but never show idle cards.

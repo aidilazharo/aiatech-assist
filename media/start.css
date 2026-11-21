@@ -2323,18 +2323,6 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 #contentPane.content-pane > main{color:inherit}
 
 /* v0.0.8: sequential, accessible Atlassian/GitHub connection verification. */
-#startupConnectionForm .atgv-repo-preview{
- display:grid;gap:5px;margin-top:12px;min-width:0;background:transparent;
-}
-#startupConnectionForm .atgv-repo-preview-item{
- display:flex;align-items:center;gap:12px;justify-content:space-between;
- font-size:11px;padding:6px 9px;border-bottom:1px solid #303641;min-width:0;
-}
-#startupConnectionForm .atgv-repo-preview-item span{color:#dce5f5;font-weight:600;white-space:nowrap}
-#startupConnectionForm .atgv-repo-preview-item code{
- color:#c4d3ed;font-family:var(--vscode-editor-font-family,monospace);
- overflow-wrap:anywhere;white-space:normal;text-align:right;font-size:10px;
-}
 #startupConnectionForm #startupProjectRepositoryPreview{
  color:#abbcd1;font-size:11px;overflow-wrap:anywhere;margin-top:5px;
 }
@@ -2360,7 +2348,7 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 #startupConnectionForm .atgv-connection-progress-item[data-state="ok"] .atgv-connection-progress-head span{color:#72e5a7}
 #startupConnectionForm .atgv-connection-progress-item[data-state="error"] .atgv-connection-progress-head span{color:#ff828f}
 @keyframes atgv-connection-scan{from{transform:translateX(-110%)}to{transform:translateX(295%)}}
-@media(max-width:640px){#startupConnectionForm .atgv-repo-preview-item{align-items:flex-start;flex-direction:column;gap:3px}#startupConnectionForm .atgv-repo-preview-item code{text-align:left}}
+
 @media(prefers-reduced-motion:reduce){#startupConnectionForm .atgv-connection-progress-fill{animation:none!important}}
 
 /* v0.0.10: Keep completed and queued connection checks out of the Start UI.
