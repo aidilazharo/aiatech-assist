@@ -17,7 +17,7 @@ test('release version increments one step with base-100 carry and hard upper bou
 test('extension metadata is blank and AI decisions are curated',()=>{
  const pkg=require('../package.json');
  assert.equal(pkg.description,'');
- assert.match(pkg.version,/^[0-9]+\\.[0-9]+\\.[0-9]+$/);
+ assert.match(pkg.version,/^[0-9]+\.[0-9]+\.[0-9]+$/);
  assert.equal(pkg.atgvDisplayVersion,pkg.version);
  const manifestPath=path.join(root,'.memory/manifest.json');
  if(fs.existsSync(manifestPath)){
