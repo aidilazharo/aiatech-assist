@@ -67,16 +67,18 @@
     if(!project||!role){if(typeof navigate==='function')navigate('projects');return;}
     // A missing deadline/connection is an actionable settings prerequisite.
     // Never route an unrelated AI-generated label to arbitrary commands.
-    const top=dailyBrief?.todayActions?.[0]?.label||'';
-    if(/^(?:Verify (?:Jira|Confluence)|Set or correct the project deadline)/.test(top)){
-      if(typeof navigate==='function')navigate('project-settings');
+    const target=dailyBrief?.todayActions?.[0]?.target||'';
+    // Host-originated, allowlisted navigation targets only. AI text is never
+    // interpreted as a command or a destination.
+    if(target==='project-settings'||target==='projects'){
+      if(typeof navigate==='function')navigate(target);
       return;
     }
     // Suggestions leave the AI-only My Work page and open the selected role's
     // existing workflow on the dedicated Role Workspace page.
-    if(typeof navigate==='function')navigate(role==='business-analyst'?'discovery':'role-workspace');
-    const workspace=byId('workView'),target=routes[role]?.target||'roleStepFlow';
-    const element=byId(target);
+    if(typeof navigate==='function')navigate(target==='discovery'?'discovery':role==='business-analyst'?'discovery':'role-workspace');
+    const workspace=byId('workView'),workflowTarget=routes[role]?.target||'roleStepFlow';
+    const element=byId(workflowTarget);
     if(workspace&&!workspace.classList.contains('hidden')&&element&&!element.classList.contains('hidden'))
       element.scrollIntoView({behavior:'smooth',block:'start'});
   }

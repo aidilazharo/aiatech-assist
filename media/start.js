@@ -2281,7 +2281,7 @@ function syncArchitectStackButtons(project){
  const canRequestApproval=!!(saved&&tested&&prepared?.remotePushed===true);
  const save=$('architectSaveStack');
  if(stackId==='custom'){
-  save.disabled=true;save.textContent='Save Stack';save.title='Custom Stack does not overwrite a catalogue-managed stack. Use Scan Repository and Install & Run.';
+  save.disabled=true;save.textContent='Save Stack';save.title='Custom Stack does not overwrite a catalogue-managed stack. Use Scan Repository, then Pull Repository to update a clean checkout, and Install & Run.';
   $('architectResetStack').disabled=true;
   $('architectTestStack').disabled=true;
   $('architectApproveStack').disabled=true;
@@ -7962,6 +7962,8 @@ function renderArchitectCustomPanel(){
  if(selected){select.value=selected.relative;const preview=$('architectCustomPreviewUrl');if(!preview.value||!current?.previewCustomized)preview.value=selected.previewUrl;}
  select.disabled=architectCustomBusy||!current?.ready;
  $('architectCustomScan').disabled=architectCustomBusy||!activeId;
+ $('architectCustomScan').textContent=current?'Pull Repository':'Scan Repository';
+ $('architectCustomScan').title=current?'Fetch and fast-forward the current clean branch from its verified GitHub origin':'Scan the configured local checkout without altering files';
  $('architectCustomRun').disabled=architectCustomBusy||!current?.ready||architectCustomRunning;
  $('architectCustomStop').disabled=architectCustomBusy||!architectCustomRunning;
  if(current){
@@ -7982,9 +7984,17 @@ $('architectCustomPreviewUrl').addEventListener('input',()=>{
 });
 $('architectCustomScan').addEventListener('click',()=>{
  if(!activeId||architectCustomBusy)return;
- architectCustomBusy=true;architectCustomInfo=null;architectCustomRunning=false;
- architectCustomNotify('Scanning the configured project repository without changing its files…');
- renderArchitectCustomPanel();send('architectCustomScan',{projectId:activeId});
+ const scanned=architectCustomInfo?.projectId===activeId?architectCustomInfo:null;
+ architectCustomBusy=true;
+ if(scanned){
+  architectCustomNotify('Checking configured GitHub origin and pulling latest code with fast-forward only…');
+  renderArchitectCustomPanel();
+  send('architectCustomPull',{projectId:activeId,expectedSha:scanned.sha});
+ }else{
+  architectCustomInfo=null;architectCustomRunning=false;
+  architectCustomNotify('Scanning the configured project repository without changing its files…');
+  renderArchitectCustomPanel();send('architectCustomScan',{projectId:activeId});
+ }
 });
 $('architectCustomRun').addEventListener('click',()=>{
  if(!activeId||architectCustomBusy||!architectCustomInfo?.ready)return;
@@ -8005,6 +8015,12 @@ window.addEventListener('message',event=>{
   architectCustomBusy=false;architectCustomRunning=!!m.value?.running;
   architectCustomInfo={...m.value,projectId:activeId,previewCustomized:false};
   architectCustomNotify(m.value?.ready?('Found '+m.value.recognized+' application target(s). Select the target and local preview URL, then Install & Run.'):'No runnable application was identified at the supported repository locations.',m.value?.ready?'complete':'error');
+  renderArchitectCustomPanel();
+ }
+ if(m.type==='architectCustomPullResult'){
+  architectCustomBusy=false;architectCustomRunning=!!m.value?.running;
+  architectCustomInfo={...m.value,projectId:activeId,previewCustomized:false};
+  architectCustomNotify(m.value?.pullMessage||'Repository synchronized with its verified GitHub origin.','complete');
   renderArchitectCustomPanel();
  }
  if(m.type==='architectCustomError'){architectCustomBusy=false;if(m.logAvailable)architectRecordErrorLog(m);architectCustomNotify(m.message||'Custom Stack operation failed.','error');renderArchitectCustomPanel();}

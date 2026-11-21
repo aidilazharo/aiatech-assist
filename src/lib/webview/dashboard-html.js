@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.25';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.26';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -536,7 +536,7 @@ function html(webview,{resumeLibrary=false}={}){
       <div class="architect-simple-fields"><label for="architectStackSelect" class="architect-stack-picker"><span class="sr-only">Technology stack</span><select id="architectStackSelect" aria-label="Project technology stack"><option value="">Choose a technology stack</option></select></label><button id="architectSaveStack" type="button">Save Stack</button><button id="architectStopInstall" type="button" class="secondary" disabled>Stop Install</button><button id="architectResetStack" type="button" class="secondary">Reset Tech Stack</button><button id="architectReviewGitChanges" type="button" class="secondary">Review Git Changes</button><button type="button" id="architectDownloadUnifiedLog" class="secondary atgv-icon-only" disabled aria-label="Download unified technology stack error log" title="Download unified technology stack error log"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m-4-4 4 4 4-4M5 17v4h14v-4"/></svg></button><button type="button" id="architectDownloadDependencyHistory" class="secondary">Download Dependency History</button></div>
       <div id="architectCustomPanel" class="architect-custom-panel hidden" aria-label="Custom Stack existing application">
         <div class="architect-custom-heading"><strong>Custom Stack · Existing Repository</strong><span class="muted">Read-only scan before explicit install and run</span></div>
-        <p id="architectCustomStatus" class="muted" role="status" aria-live="polite">Scan the configured project Git checkout to identify its runtime and scripts. No starter files will be copied.</p>
+        <p id="architectCustomStatus" class="muted" role="status" aria-live="polite">Scan the configured project Git checkout. Once scanned, Pull Repository fetches and fast-forwards the verified origin branch only when the checkout is clean. Local changes are preserved.</p>
         <div class="architect-custom-controls">
           <label for="architectCustomTarget">Detected application<select id="architectCustomTarget" aria-label="Detected custom application"></select></label>
           <label for="architectCustomPreviewUrl">Local preview URL<input id="architectCustomPreviewUrl" type="url" spellcheck="false" value="http://127.0.0.1:3000/" placeholder="http://127.0.0.1:3000/"></label>
