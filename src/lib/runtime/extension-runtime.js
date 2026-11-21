@@ -67,6 +67,7 @@ const installCache=require('../../library-install-cache');
 const startupDiagnostics=require('../startup-diagnostics');
 const myWorkPresence=require('../../my-work-presence');
 const {SelfImprovement}=require('../../self-improvement');
+const idleImprovement=require('../../idle-improvement');
 const selfImprovementView=require('../../self-improvement-view');
 const copilotRepairSdk=require('../../copilot-repair-sdk');
 const jiraControl=require('../../jira-change-control');
@@ -884,7 +885,7 @@ async function setLlmToken(){
   invalidateModelStatus();await refreshDashboard();
   uiInformation('Model provider API key saved securely.');
 }
-let selfImprovementManager=null;
+let selfImprovementManager=null,idleImprovementTimer=null,idleImprovementBusy=false,idleImprovementNotified=false;
 let architectInstallAbort=null;
 function captureLocalIssue(command,error,category='error'){
  if(!selfImprovementManager||!context?.globalStorageUri?.fsPath)return;
@@ -892,7 +893,10 @@ function captureLocalIssue(command,error,category='error'){
  if(!cfg().get(setting,true))return;
  const screen=String(command||'ATGV').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,80)||'ATGV';
  const title=category==='performance'?'Slow '+screen:'Error in '+screen;
- void selfImprovementManager.store.add({category,target:'extension',title,screen,observed:String(error?.message||error||'Unknown failure')},{origin:'automatic'}).catch(e=>report('Issue recorder: '+e.message));
+ const item={category,target:'extension',title,screen,observed:String(error?.message||error||'Unknown failure')};
+ void selfImprovementManager.store.add(item,{origin:'automatic'}).catch(e=>report('Issue recorder: '+e.message));
+ const workspace=getWorkspace()?.uri.fsPath;
+ if(workspace)void idleImprovement.writeLog(workspace,item).catch(e=>report('Error-log capture: '+e.message));
 }
 function openIssueReport(screen=''){
  if(!selfImprovementManager)throw Error('Issue reporting is not ready yet.');
@@ -902,6 +906,50 @@ function openIssueReport(screen=''){
   onSdkInstalled:()=>invalidateModelStatus()
  });
 }
+// Periodic maintenance is bound to an active, trusted VS Code workspace.
+// Never silently starts a background OS service or automatically merges a PR.
+async function idleMaintenanceIsIdle(){
+ return !selfImprovementManager?.busy&&!aiServiceBusy&&!catalogBusy&&!jiraSyncBusy&&
+  !jiraMonitorBusy&&!autoSyncBusy&&!sourceVaultBusy&&!softwareCheckBusy&&!liveRemoteBusy&&
+  !remoteBRDeletionBusy&&!localBackupBusy&&!roleRepairBusy&&!openingLocked&&
+  !developerBrRun&&!architectInstallAbort&&!activeHostProcesses.size&&
+  !vscode.workspace.textDocuments?.some(doc=>doc.isDirty);
+}
+async function idleMaintenanceTick(){
+ const workspace=getWorkspace()?.uri.fsPath;
+ if(!workspace||!context||idleImprovementBusy||
+  cfg().get('selfImprovement.autoMaintenanceEnabled',true)!==true||
+  vscode.workspace.isTrusted===false)return;
+ idleImprovementBusy=true;
+ try{
+  const zone=String(cfg().get('selfImprovement.maintenanceTimeZone','system')||'system');
+  if(idleImprovement.localSlot(new Date(),zone).hour!==12)return;
+  if(!await copilotRepairSdk.installed(context.globalStorageUri.fsPath))return;
+  const result=await idleImprovement.runWindow({
+   workspace,manager:selfImprovementManager,globalState:context.globalState,zone,
+   isIdle:idleMaintenanceIsIdle,
+   getRepository:async target=>target==='extension'?extensionSourceRepository:catalogConfig().repositoryUrl,
+   getToken:async()=>githubIssueAccessToken({interactive:false}),
+   progress:message=>{report('Idle improvement: '+String(message).slice(0,220));return Promise.resolve();}
+  });
+  if(result.status==='disabled-read-only'&&!idleImprovementNotified){
+   idleImprovementNotified=true;
+   void uiWarning('ATGV automatic improvement disabled: saved GitHub PAT has read-only access. All error logs were preserved. Update the PAT to recheck permissions.');
+  }else if(!['outside-window','empty','already-checked','busy','unavailable','credentials-unavailable','disabled-read-only'].includes(result.status))
+   report('Idle improvement: '+result.status+'; matched reports '+(result.duplicates||0)+'; PRs '+(result.prs||0));
+ }catch(error){report('Idle improvement stopped; logs retained: '+String(error.message||error).slice(0,350));}
+ finally{idleImprovementBusy=false;}
+}
+function startIdleMaintenance(){
+ if(idleImprovementTimer)clearInterval(idleImprovementTimer);
+ const workspace=getWorkspace()?.uri.fsPath;
+ if(!workspace)return;
+ void idleImprovement.ensureLayout(workspace).catch(error=>report('ATGV .atgv/src setup: '+error.message));
+ idleImprovementTimer=setInterval(()=>void idleMaintenanceTick(),60000);
+ idleImprovementTimer.unref?.();
+ void idleMaintenanceTick();
+}
+
 async function guarded(fn){try{return await fn();}catch(e){captureLocalIssue('ATGV',e);report('ERROR '+e.message);uiError('ATGV AIATECH Assist: '+e.message);return undefined;}}
 const withProgress=(title,fn)=>dashboard?fn():vscode.window.withProgress({location:vscode.ProgressLocation.Notification,title,cancellable:false},fn);
 async function initialize(){
@@ -9672,12 +9720,12 @@ function activate(ctx){
   const ai=()=>atgvAiChat.open(vscode,{runtimeRoot:aiRuntimeRoot(),onLog:report});
   const actions={start,workspace,ai,restart,reset,refreshUnifiedArtifacts,reportIssue};
   for(const [name,fn] of Object.entries(actions))ctx.subscriptions.push(vscode.commands.registerCommand('atgvAssist.'+name,async(...args)=>{await ready;return guarded(()=>fn(...args));}));
-  ctx.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(()=>{++startupSequence;ready=initialize().then(()=>dashboard?start({skipReload:true}):undefined).catch(e=>report('Workspace change: '+e.message));}));
+  ctx.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(()=>{++startupSequence;ready=initialize().then(()=>{startIdleMaintenance();return dashboard?start({skipReload:true}):undefined;}).catch(e=>report('Workspace change: '+e.message));}));
   if(vscode.workspace.onDidChangeConfiguration)ctx.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e=>{if(e.affectsConfiguration('atgvAssist.rag')||e.affectsConfiguration('atgvAssist.ai')){invalidateModelStatus();refreshDashboard().catch(err=>report('Model settings: '+err.message));}}));
   if(vscode.lm?.onDidChangeChatModels)ctx.subscriptions.push(vscode.lm.onDidChangeChatModels(()=>{invalidateModelStatus();refreshDashboard().catch(err=>report('Model availability: '+err.message));}));
-  ready.then(()=>{scheduleCatalogChecks();scheduleSoftwareUpdates();}).catch(e=>report('Catalog/update monitor: '+e.message));
+  ready.then(()=>{scheduleCatalogChecks();scheduleSoftwareUpdates();startIdleMaintenance();}).catch(e=>report('Catalog/update monitor: '+e.message));
   void installationStartup().catch(e=>{captureLocalIssue('installationStartup',e);report('Install/start workflow: '+e.message);uiError('ATGV startup: '+e.message);});
   report('ATGV extension activated. Run ATGV: Start to manage workspace projects.');
 }
-function deactivate(){if(liveRemoteTimer){clearInterval(liveRemoteTimer);liveRemoteTimer=null;}if(catalogWatch){clearInterval(catalogWatch);catalogWatch=null;}if(softwareUpdateTimer)clearInterval(softwareUpdateTimer);if(softwareStartupTimer)clearTimeout(softwareStartupTimer);void developerGit.stopLocal().catch(()=>{});}
+function deactivate(){if(idleImprovementTimer){clearInterval(idleImprovementTimer);idleImprovementTimer=null;}if(liveRemoteTimer){clearInterval(liveRemoteTimer);liveRemoteTimer=null;}if(catalogWatch){clearInterval(catalogWatch);catalogWatch=null;}if(softwareUpdateTimer)clearInterval(softwareUpdateTimer);if(softwareStartupTimer)clearTimeout(softwareStartupTimer);void developerGit.stopLocal().catch(()=>{});}
 module.exports={activate,deactivate};
