@@ -105,7 +105,9 @@ test('Host progress reflects actual pull and verification milestones before comp
   'offlineLibrary.inspectZip','offlineLibrary.importZip','refreshDashboard',
   "progress('completed',100","progress('failed',completedStage"])
   assert.ok(segment.includes(key),key);
- assert.ok(segment.indexOf('sdlcCatalog.syncGitWorkspace')<segment.indexOf("progress('completed',100"),'source checkout completes before source success');
+ const sourceCheckout=segment.indexOf('sdlcCatalog.syncGitWorkspace');
+ const sourceCompletion=segment.indexOf("progress('completed',100",sourceCheckout);
+ assert.ok(sourceCheckout>=0&&sourceCompletion>sourceCheckout,'source checkout completes before its own success; an already-newer no-op may complete earlier');
  assert.ok(segment.lastIndexOf('offlineLibrary.importZip')<segment.lastIndexOf("progress('completed',100"),'mirror fallback import completes before its success');
  assert.ok(segment.lastIndexOf('refreshDashboard()')<segment.lastIndexOf("progress('completed',100"),'workspace refresh precedes final completion');
  assert.match(host,/case 'libraryUpdateRetry':/);
