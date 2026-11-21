@@ -9498,16 +9498,25 @@ async function handleDashboardMessage(msg){
         if(!role||!Number.isSafeInteger(requestId)||requestId<1)break;
         const input=msg.context&&typeof msg.context==='object'?msg.context:{};
         const clean=(value,max=120)=>String(value??'').replace(/[\x00-\x1f]/g,' ').trim().slice(0,max);
-        const allowedTasks=new Set((role.tasks||[]).map(task=>String(task.label)));
-        const tasks=(Array.isArray(input.tasks)?input.tasks:[]).slice(0,16)
-          .filter(task=>allowedTasks.has(String(task?.title||'')))
-          .map(task=>({activity:clean(task.title),completed:task.done===true}));
-        const assigned=(Array.isArray(input.assigned)?input.assigned:[]).slice(0,8)
+        // The webview snapshot is only a refresh signal. Checklist completion
+        // and BR approval status must come from the extension host's saved state.
+        const authoritativeProgress=snapshot.progress?.[roleId]||{};
+        const tasks=(role.tasks||[]).slice(0,16).map(task=>({
+          activity:clean(task.label),completed:authoritativeProgress[task.id]===true
+        }));
+        let requirements=[];
+        if(roleId==='business-analyst'){
+          const localBR=await brWorkflow.load(registry,projectId);
+          requirements=(localBR.brs||[]).slice(0,10).map(item=>({
+            id:clean(item.id,40),status:clean(item.status,35)
+          })).filter(item=>/^BR-[0-9]{1,6}$/.test(item.id));
+        }
+        // Jira items arriving via webview are provisional until cross-checked
+        // against the verified user's shared Jira assignment register below.
+        const provisionalAssigned=(Array.isArray(input.assigned)?input.assigned:[]).slice(0,8)
           .filter(item=>/^[A-Z][A-Z0-9_]{1,20}-[0-9]+$/.test(String(item?.key||'')))
           .map(item=>({jiraKey:clean(item.key,40),status:clean(item.status,45)}));
-        const requirements=roleId==='business-analyst'?(Array.isArray(input.requirements)?input.requirements:[])
-          .slice(0,10).filter(item=>/^BR-[0-9]{1,6}$/.test(String(item?.id||'')))
-          .map(item=>({id:clean(item.id,40),status:clean(item.status,35)})):[];
+        let assigned=provisionalAssigned;
         const evidence={role:clean(role.label,100),progress:clean(input.progress,30),
           recommendedNext:clean(input.next,180),tasks,assigned,requirements};
         const incomplete=tasks.find(task=>!task.completed)?.activity||'';
@@ -9562,6 +9571,16 @@ async function handleDashboardMessage(msg){
                 email:personResult.value.emailAddress||verifiedPerson.email
               };
             if(usersResult.status==='fulfilled')projectUsers=usersResult.value;
+            const myRow=(projectUsers?.rows||[]).find(user=>
+              verifiedPerson.accountId&&user.id===verifiedPerson.accountId);
+            if(myRow){
+              // Jira assignment search in My Work Users is server-originated.
+              // Exclude client-supplied issue statuses once authoritative data exists.
+              assigned=[...String(myRow.tasks||'').matchAll(/\b([A-Z][A-Z0-9_]{0,20}-\d+)\s*\(([^)]+)\)/g)]
+                .slice(0,8).map(entry=>({
+                  jiraKey:clean(entry[1],40),status:clean(entry[2],45)
+                }));
+            }
           }
         }catch(error){
           report('My Work daily brief identity/roster unavailable: '+String(error.message||error).slice(0,150));
