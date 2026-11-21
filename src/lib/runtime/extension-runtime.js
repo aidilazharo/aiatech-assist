@@ -21,6 +21,7 @@ const liveRemoteRefresh=require('../../live-remote-refresh');
 const repoSyncWorkspace=require('../../repo-sync-workspace');
 const atgvAiChat=require('../../atgv-ai-chat');
 const myWorkRoleChat=require('../../my-work-role-chat');
+const myWorkRag=require('../../my-work-rag-context');
 const repoSyncNaming=require('../../repo-sync-pr');
 const {workState,toggleTask,openTaskDocument}=require('../../sdlc-work');
 const roleStepEngine=require('../../role-step-engine');
@@ -9196,15 +9197,33 @@ async function handleDashboardMessage(msg){
         const roleState=await workState(registry,projectId);
         const role=roleState.roles.find(entry=>entry.id===roleId);
         if(!role||!Number.isSafeInteger(requestId)||requestId<1)break;
-        let text='',error=false;
+        let text='',error=false,retrieved=[];
+        // The Knowledge & RAG page and My Work chat share this active-project
+        // store. Never perform a cross-project search or trust retrieved text
+        // as executable instructions.
+        const projectKnowledge=store;
         try{
           text=await myWorkRoleChat.ask({
             projectId,roleId,message:msg.message,
             request:async prompt=>{
+              if(activeProject?.id!==projectId||store!==projectKnowledge)
+                throw Error('The active project changed. Retry your question.');
+              const rag=myWorkRag.retrieve(projectKnowledge,msg.message,cfg().get('rag.maxChunks',5));
               const target=await activeAiTarget();
-              return aiAnswer(target,prompt,7000);
+              if(rag.sources.length){
+                const consent=await askAiSendConsent('Send '+rag.sources.length+
+                  ' excerpts from this project Knowledge & RAG index to '+target.label+
+                  ' for this read-only My Work chat response?');
+                if(!consent)return 'Sharing project knowledge was cancelled. No indexed excerpts were sent.';
+              }
+              if(activeProject?.id!==projectId||store!==projectKnowledge)
+                throw Error('The active project changed. Retry your question.');
+              const result=await aiAnswer(target,prompt,7000,{system:rag.system});
+              retrieved=rag.sources;
+              return result;
             }
           });
+          if(retrieved.length)text+=myWorkRag.references(retrieved);
         }catch(failure){
           error=true;
           text='AI chat unavailable: '+String(failure.message||failure).slice(0,260);
