@@ -2,14 +2,15 @@
 #workView > #atgvMyWorkAi,
 #workView.role-progress-only > #atgvMyWorkAi.atgv-mywork-ai{
  display:flex!important;flex-direction:column;align-items:stretch;justify-content:center;
- gap:10px;min-height:260px;padding:14px 20px 18px;margin:8px 0 20px;
+ gap:10px;width:100%;min-width:0;box-sizing:border-box;align-self:stretch;
+ min-height:0;padding:20px 24px;margin:14px 0 18px;
  background:#000!important;color:#fff!important;border:0!important;box-shadow:none!important;
- border-radius:10px;max-width:100%;text-align:left
+ border-radius:11px;max-width:none;text-align:left
 }
-#atgvMyWorkAi .atgv-mywork-ai-visual{width:100%;height:150px;display:block;position:relative}
+#atgvMyWorkAi .atgv-mywork-ai-visual{width:100%;min-width:0;height:118px;display:block;position:relative}
 #atgvMyWorkAi canvas#atgvMyWorkAiOrb{display:block;width:100%;height:100%;background:transparent;border:0;pointer-events:none}
 #atgvMyWorkAi .atgv-mywork-ai-wave-state{position:absolute;bottom:3px;left:0;right:0;text-align:center;font-size:10px;letter-spacing:.12em;color:#91a0b1}
-#atgvMyWorkAi .atgv-mywork-ai-content{width:100%;max-width:850px;margin:0 auto}
+#atgvMyWorkAi .atgv-mywork-ai-content{width:100%;min-width:0;max-width:none;margin:0}
 #atgvMyWorkAi .atgv-mywork-ai-content[hidden]{display:none!important}
 #atgvMyWorkAi .atgv-mywork-ai-title{font-size:12px;color:#d8e4f0;font-weight:700;letter-spacing:.04em;margin:2px 0 7px}
 #atgvMyWorkAi .atgv-mywork-ai-text{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.65;color:#f1f5f9;margin:0}
@@ -17,7 +18,7 @@
 #atgvMyWorkAi button.atgv-mywork-ai-button{color:#fff!important;background:#191d26!important;border:1px solid #515b6a!important;border-radius:7px;padding:7px 12px;font-size:12px;font-weight:600}
 #atgvMyWorkAi button.atgv-mywork-ai-button:hover{background:#2d3440!important}
 #atgvMyWorkAi button:focus-visible,#atgvMyWorkAi textarea:focus-visible{outline:2px solid #70d4ff!important;outline-offset:2px}
-#atgvMyWorkAi .atgv-mywork-ai-chat{width:100%;max-width:850px;margin:5px auto 0}
+#atgvMyWorkAi .atgv-mywork-ai-chat{width:100%;min-width:0;max-width:none;margin:5px 0 0}
 #atgvMyWorkAi .atgv-mywork-ai-chat-label{display:block;margin-bottom:7px;font-size:10px;font-weight:700;letter-spacing:.1em;color:#a0b2c2}
 #atgvMyWorkAi .atgv-mywork-ai-composer{display:flex;align-items:flex-end;gap:9px;background:#11161d;border:1px solid #343f4c;border-radius:9px;padding:9px}
 #atgvMyWorkAi .atgv-mywork-ai-composer:focus-within{border-color:#69d6ed}
@@ -26,10 +27,10 @@
 #atgvMyWorkAi button#atgvMyWorkAiSend{border:0;background:#dff4ff;color:#101821;font-size:12px;font-weight:750;border-radius:7px;padding:10px 14px;cursor:pointer}
 #atgvMyWorkAi button#atgvMyWorkAiSend:disabled{opacity:.45;cursor:not-allowed}
 #atgvMyWorkAi .atgv-mywork-ai-chat-status{margin:7px 2px 0;font-size:11px;color:#8da0ae;min-height:1em}
-#atgvMyWorkAi .atgv-mywork-ai-conversation{max-height:310px;overflow:auto;display:flex;flex-direction:column;gap:8px;width:100%;max-width:850px;margin:2px auto 0}
+#atgvMyWorkAi .atgv-mywork-ai-conversation{max-height:310px;overflow:auto;display:flex;flex-direction:column;gap:8px;width:100%;min-width:0;max-width:none;margin:2px 0 0}
 #atgvMyWorkAi .atgv-mywork-ai-conversation:empty{display:none}
 #atgvMyWorkAi .atgv-mywork-ai-message{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55;font-size:12.5px;max-width:94%;padding:9px 12px;border-radius:9px}
 #atgvMyWorkAi .atgv-mywork-ai-message.user{align-self:flex-end;background:#202935;color:#fff}
 #atgvMyWorkAi .atgv-mywork-ai-message.assistant{align-self:flex-start;background:#111821;border:1px solid #293542;color:#e7f0f7}
-@media(max-width:620px){#workView > #atgvMyWorkAi{padding:10px 11px 14px}#atgvMyWorkAi .atgv-mywork-ai-visual{height:116px}}
+@media(max-width:620px){#workView > #atgvMyWorkAi,#workView.role-progress-only > #atgvMyWorkAi.atgv-mywork-ai{padding:12px;margin:12px 0 16px}#atgvMyWorkAi .atgv-mywork-ai-visual{height:104px}}
 @media(prefers-reduced-motion:reduce){#atgvMyWorkAi canvas#atgvMyWorkAiOrb{transition:none!important}}
