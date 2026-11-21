@@ -155,6 +155,9 @@ async function runWindow({workspace,manager,getRepository,getToken,isIdle,global
   if(!await isIdle())return {status:'busy'};
   const prior=await mergePublished({manager,getRepository,getToken,isIdle,globalState,request,progress});
   const logs=await readLogs(layout.logs);
+  // One published PR per target baseline: never start another patch version
+  // while the previous one is waiting for CI, permission or review.
+  if(prior.awaitingChecks)return {status:'pending-pr',processed:0,duplicates:0,prs:0,slot,...prior};
   if(!logs.length){await globalState.update(DAY_STATE,slot.day);return {status:'empty',...prior};}
   let processed=0,duplicates=0,prs=0;
   for(const log of logs.slice(0,maxLogs)){
