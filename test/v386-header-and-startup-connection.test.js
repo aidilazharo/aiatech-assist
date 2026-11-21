@@ -33,7 +33,7 @@ function createPageHarness(){
   return nodes.get(id);
  };
  const create=new Function('$',[
-  "const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluenceUrl',email:'startupEmail',githubUrl:'startupGithubUrl'};",
+  "const startupFieldMap={jiraUrl:'startupJiraUrl',email:'startupEmail',githubUrl:'startupGithubUrl',projectRepository:'startupProjectRepository'};",
   "let startupSetupRequired=true,startupPage=1,startupVerifying=false,startupInstallingModule='',startupScanComplete=true,startupConnectionVerified=true,startupConnectionEditSnapshot=null,startupOpenStackId='',startupCopilotModalOpen=false;",
   "let startupAutoNotice='',startupAutoEnabled=false,startupConnectionCheckPending=false,startupConnectionHealthError=false;",
   ui.slice(start,end),

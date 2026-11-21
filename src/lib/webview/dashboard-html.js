@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.7';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.8';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -144,14 +144,16 @@ function html(webview,{resumeLibrary=false}={}){
        </details>
        <p id="startupInstallFeedback" class="atgv-startup-install-feedback muted" role="status" aria-live="polite"></p>
       </div>
-      <form id="startupConnectionForm" class="atgv-startup-card hidden"><h3>Jira, Confluence &amp; GitHub connections</h3><div class="form-grid atgv-startup-connection-grid">
-       <div class="field"><label for="startupJiraUrl">Jira URL</label><input type="url" id="startupJiraUrl" placeholder="https://aiamy-jira-azure.atlassian.net" required></div>
-       <div class="field"><label for="startupConfluenceUrl">Confluence URL</label><input type="url" id="startupConfluenceUrl" placeholder="https://aiamy-jira-azure.atlassian.net/wiki" required></div>
-       <div class="field"><label for="startupEmail">Jira &amp; Confluence email</label><input type="email" id="startupEmail" placeholder="user.name@aia.com" required></div>
+      <form id="startupConnectionForm" class="atgv-startup-card hidden"><h3>Atlassian &amp; GitHub connections</h3><div class="form-grid atgv-startup-connection-grid">
+       <div class="field"><label for="startupJiraUrl">Atlassian URL</label><input type="url" id="startupJiraUrl" placeholder="https://aiamy-jira-azure.atlassian.net" required></div>
+       <div class="field"><label for="startupEmail">Atlassian email</label><input type="email" id="startupEmail" placeholder="user.name@aia.com" required></div>
        <div class="field"><label for="startupAtlassianToken">Atlassian API token</label><input type="password" id="startupAtlassianToken" autocomplete="new-password" placeholder="Enter token or retain securely saved token"></div>
-       <div class="field"><label for="startupGithubUrl">GitHub organization URL</label><input type="url" id="startupGithubUrl" placeholder="https://github.com/aiamalaysia" required></div>
-       <div class="field"><label for="startupGithubToken">GitHub personal access token</label><input type="password" id="startupGithubToken" autocomplete="new-password" placeholder="Enter PAT or retain securely saved token"><button type="button" id="startupEditConnections" class="secondary hidden" aria-label="Edit Jira, Confluence and GitHub connections">Edit</button></div>
-      </div><div class="atgv-startup-actions"><button type="submit" id="startupTestConnections">Test &amp; Save Connections</button><span id="startupConnectionMessage" role="status" aria-live="polite">Verify Jira, Confluence, and your GitHub account to continue.</span></div>
+       <div class="field"><label for="startupGithubUrl">GitHub organization URL</label><input type="text" inputmode="url" id="startupGithubUrl" placeholder="github.com/aiamalaysia" required></div>
+       <div class="field"><label for="startupProjectRepository">Project Repository</label><input type="text" id="startupProjectRepository" placeholder="my-fow-technology-app-techassists" required><small class="muted" id="startupProjectRepositoryPreview" aria-live="polite">https://github.com/aiamalaysia/my-fow-technology-app-techassists</small></div>
+       <div class="field"><label for="startupGithubToken">GitHub personal access token</label><input type="password" id="startupGithubToken" autocomplete="new-password" placeholder="Enter PAT or retain securely saved token"><button type="button" id="startupEditConnections" class="secondary hidden" aria-label="Edit Atlassian and GitHub connections">Edit</button></div>
+      </div><div id="startupRepositoryPreview" class="atgv-repo-preview" aria-label="GitHub source repositories" role="group"></div>
+      <div class="atgv-startup-actions"><button type="submit" id="startupTestConnections">Test &amp; Save Connections</button><span id="startupConnectionMessage" role="status" aria-live="polite">Verify Atlassian and GitHub connections to continue.</span></div>
+      <div id="startupConnectionProgress" class="atgv-connection-progress" aria-label="Sequential connection checks" role="group" aria-live="polite"></div>
       <details id="startupConnectionLogPanel" class="atgv-connection-log-panel">
         <summary>Connection diagnostics <span id="startupConnectionLogCount" class="muted">Open to view saved checks and errors</span></summary>
         <div class="atgv-connection-log-toolbar"><p class="muted">Local diagnostic history for Jira, Confluence, GitHub, and the catalog API. Tokens, account emails, request headers and response bodies are never logged.</p>

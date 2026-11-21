@@ -230,7 +230,7 @@ async function recordStartupConnectionResults(result,{mode='check',elapsedMs=0}=
   });
  }
  await recordStartupDiagnostic({
-  stage:'connection-result',tool:'Jira, Confluence & GitHub',
+  stage:'connection-result',tool:'Atlassian & GitHub',
   status:result?.success?'verified':mode==='check'?'needs-attention':'not-saved',
   durationMs:elapsedMs,
   detail:result?.success?'All required connection checks completed; credentials are not logged.':
@@ -248,7 +248,7 @@ async function recordStartupConnectionError(error,mode){
 async function exportStartupConnectionDiagnostics(){
  const content=await startupDiagnostics.connectionReport(context.globalStorageUri.fsPath);
  const uri=await vscode.window.showSaveDialog({
-  title:'Save Jira, Confluence & GitHub Connection Log',
+  title:'Save Atlassian & GitHub Connection Log',
   defaultUri:vscode.Uri.file(path.join(require('node:os').homedir(),'atgv-connection-diagnostics.txt')),
   filters:{'Text logs':['txt','log']},saveLabel:'Save Connection Log'
  });
@@ -342,10 +342,19 @@ async function prepareVendorAssets({syncIfMissing=false}={}){
   return installedVendorAssets;
 }
 const uxCatalogAutoRefreshAt = new Map(); // Avoid repeated background Git pulls per workspace.
+function startupLibraryRepository(){
+ const owner=String(extensionSettings?.github?.owner||'').toLowerCase();
+ if(!owner)return startupSetup.FIXED_LIBRARY_REPOSITORY;
+ const source=startupSetup.SOURCE_REPOS[owner];
+ // Existing project settings may use a custom GitHub repository owner. Keep
+ // their SDLC Catalog pinned to the legacy trusted source; only the Start
+ // account onboarding may change between the two verified source mappings.
+ return source?.library||startupSetup.FIXED_LIBRARY_REPOSITORY;
+}
 function catalogConfig(){
  const saved=context.globalState.get('atgvAssist.sdlcCatalog',sdlcCatalog.DEFAULT_CONFIG);
- // All SDLC Catalog operations must use the fixed source, even with older settings.
- return sdlcCatalog.normalizeConfig({...saved,repositoryUrl:startupSetup.FIXED_LIBRARY_REPOSITORY,ref:'main'});
+ // Never silently use another owner's SDLC Library with the active PAT.
+ return sdlcCatalog.normalizeConfig({...saved,repositoryUrl:startupLibraryRepository(),ref:'main'});
 }
 async function catalogToken(config,{interactive=false,enteredToken=''}={}){
   if(config.authentication==='public')return '';
@@ -1398,8 +1407,9 @@ const STARTUP_VERIFIED_SECRET='atgvAssist.startupConnections.verified';
 // or plain extension settings. It binds the precise saved endpoints to both PATs.
 function startupSavedConnectionFields(){
  const saved=extensionSettings||{};
- return {jiraUrl:saved.jira?.baseUrl||'',confluenceUrl:saved.confluence?.baseUrl||'',email:saved.jira?.email||'',
-  githubUrl:saved.github?.owner?'https://github.com/'+saved.github.owner:''};
+ return {jiraUrl:saved.jira?.baseUrl||'',email:saved.jira?.email||'',
+  githubUrl:saved.github?.owner?'github.com/'+saved.github.owner:'',
+  projectRepository:saved.github?.repo||startupSetup.DEFAULTS.projectRepository};
 }
 async function storedStartupVerification(){
  try{
@@ -1468,9 +1478,9 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
  const settings=normalizeExtensionSettings({...extensionSettings,
   jira:{...extensionSettings.jira,baseUrl:data.jiraUrl,email:data.email},
   confluence:{...extensionSettings.confluence,baseUrl:data.confluenceUrl},
-  // Do not set a project repository during account onboarding.
-  github:{...extensionSettings.github,owner:data.owner,
-   repo:extensionSettings.github?.owner?.toLowerCase()===data.owner.toLowerCase()?extensionSettings.github.repo||'':'',branch:''}});
+  // Save the requested default Project Repository name for future project
+  // configuration. No project is cloned or written by this setup test.
+  github:{...extensionSettings.github,owner:data.owner,repo:data.projectRepository,branch:''}});
  const config=projectConfig(null,settings,cfg());
  const atlIdentity={endpoint:validateUrl(data.jiraUrl),email:data.email};
  const gitIdentity={endpoint:validateUrl(config.get('github.apiUrl')),email:''};
@@ -1481,55 +1491,111 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
  const gitHeaders={Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'};
  const libraryConf=sdlcCatalog.normalizeConfig({repositoryUrl:data.libraryRepoUrl,ref:'main',authentication:'token',autoCheck:true,offlineCache:true});
  let library,offlineFallback=null;
- const jiraApi=data.jiraUrl.replace(/\/$/,'')+'/rest/api/3/myself';
- const confluenceApi=data.confluenceUrl.replace(/\/$/,'')+'/api/v2/spaces';
+ const jiraApi=data.jiraUrl+'/rest/api/3/myself';
+ const confluenceApi=data.confluenceUrl+'/api/v2/spaces';
  const accountApi='https://api.github.com/user';
- const organizationApi=`https://api.github.com/users/${encodeURIComponent(data.owner)}`;
- const libraryApi=`https://api.github.com/repos/${encodeURIComponent(data.library.owner)}/${encodeURIComponent(data.library.repo)}`;
- const specifications=[
-  ['jira','Jira API',jiraApi,async()=>{
-   if(!atlassian){await requestJson(jiraApi);throw Error('Atlassian token required');}
-   await testJiraConnection(config,atlassian);
-  }],
-  ['confluence','Confluence API',confluenceApi,async()=>{
-   const spaces=await requestJson(confluenceApi+'?limit=1',{token:atlassian,basicEmail:data.email});
-   if(!atlassian)throw Error('Atlassian token required');
-   if(!Array.isArray(spaces?.results))throw Error('Unexpected Confluence response');
-  }],
-  ['github','GitHub API',accountApi,async()=>{
-   const user=await requestJson(accountApi,{token:github,headers:gitHeaders});
-   if(!github)throw Error('GitHub token required');
-   if(!user?.login)throw Error('Unexpected GitHub account response');
-  }],
-  ['organization','GitHub organization',organizationApi,async()=>{
-   const org=await requestJson(organizationApi,{token:github,headers:gitHeaders});
-   if(String(org?.login||'').toLowerCase()!==data.owner.toLowerCase())throw Error('Unexpected GitHub organization response');
-  }],
-  ['library','SDLC Library',libraryApi,async()=>{
-   try{
-    const detail=await requestJson(libraryApi,{token:github,headers:gitHeaders});
-    if(String(detail.full_name||'').toLowerCase()!==(data.library.owner+'/'+data.library.repo).toLowerCase())throw Error('Unexpected SDLC Library repository identity.');
-    library=await sdlcCatalog.remoteInfo(libraryConf,github);
-    if(!library?.sha)throw Error('SDLC Library main branch was not accessible.');
-   }catch(error){
-    const workspace=typeof getWorkspace==='function'?getWorkspace()?.uri.fsPath:null;
-    if(workspace)offlineFallback=await offlineLibrary.imported(workspace,data.libraryRepoUrl);
-    if(!offlineFallback)throw error;
-    library={offline:true};return {offline:true};
+ const organizationApi='https://api.github.com/users/'+encodeURIComponent(data.owner);
+ const repoApi=repo=>'https://api.github.com/repos/'+encodeURIComponent(repo.owner)+'/'+encodeURIComponent(repo.repo);
+ // Probe only the first byte of a published release asset. The PAT is
+ // sent solely to api.github.com, NEVER to redirected object storage.
+ const verifyReleaseAssetDownload=async(repoUrl,assetId)=>{
+  const endpoint=repoUrl+'/releases/assets/'+assetId;
+  const response=await fetch(endpoint,{method:'GET',redirect:'manual',
+   headers:{Authorization:'Bearer '+github,Accept:'application/octet-stream',
+    'X-GitHub-Api-Version':'2022-11-28',Range:'bytes=0-0'},
+   signal:AbortSignal.timeout(20000)});
+  if([301,302,303,307,308].includes(response.status)){
+   const location=response.headers.get('location');
+   if(!location)throw Error('Release asset download redirect had no location.');
+   const url=new URL(location);
+   if(url.protocol!=='https:'||url.username||url.password||url.port||
+     !/^(?:release-assets|github-releases|objects)\.githubusercontent\.com$/.test(url.hostname))
+     throw Error('GitHub release asset redirected to an untrusted download host.');
+   const copy=await fetch(url.toString(),{method:'GET',redirect:'error',
+    headers:{Range:'bytes=0-0'},signal:AbortSignal.timeout(20000)});
+   if(!copy.ok)throw Error('Release download probe returned HTTP '+copy.status);
+   await copy.body?.cancel().catch(()=>{});
+   return;
+  }
+  if(!response.ok||/json/i.test(response.headers.get('content-type')||''))
+   throw Error('Release binary download probe did not return authenticated asset bytes (HTTP '+response.status+').');
+  await response.body?.cancel().catch(()=>{});
+ };
+ const validatedGithub=async(url,{requiredWrite=false,checkRelease=true}={})=>{
+  if(!github)throw Error('GitHub PAT is required for repository verification.');
+  const meta=await requestJson(url,{token:github,headers:gitHeaders});
+  const identity=url.replace('https://api.github.com/repos/','').toLowerCase();
+  if(String(meta?.full_name||'').toLowerCase()!==identity)throw Error('Unexpected GitHub repository identity.');
+  if(requiredWrite&&(meta.permissions?.push!==true||meta.permissions?.pull===false))
+   throw Error('GitHub PAT does not verify read/write access (Contents: read/write and Pull requests: read/write required).');
+  if(checkRelease){
+   const releases=await requestJson(url+'/releases?per_page=1',{token:github,headers:gitHeaders});
+   if(!Array.isArray(releases))throw Error('GitHub release listing was not accessible.');
+   const release=releases[0],asset=release?.assets?.find(item=>Number.isSafeInteger(item.id)&&item.id>0);
+   if(asset){
+    const detail=await requestJson(url+'/releases/assets/'+asset.id,{token:github,headers:gitHeaders});
+    if(!detail||Number(detail.id)!==asset.id)throw Error('GitHub release asset access was not verified.');
+    await verifyReleaseAssetDownload(url,asset.id);
    }
-  }]
+   return {releases:releases.length,asset:!!asset};
+  }
+  return {};
+ };
+ const specifications=[
+  {id:'jira',label:'Jira API',url:jiraApi,required:true,check:async()=>{
+   if(!atlassian)throw Error('Atlassian token required');
+   await testJiraConnection(config,atlassian);
+  }},
+  {id:'confluence',label:'Confluence API',url:confluenceApi,required:true,check:async()=>{
+   if(!atlassian)throw Error('Atlassian token required');
+   const spaces=await requestJson(confluenceApi+'?limit=1',{token:atlassian,basicEmail:data.email});
+   if(!Array.isArray(spaces?.results))throw Error('Unexpected Confluence response');
+  }},
+  {id:'github',label:'GitHub account',url:accountApi,required:true,check:async()=>{
+   if(!github)throw Error('GitHub token required');
+   const user=await requestJson(accountApi,{token:github,headers:gitHeaders});
+   if(!user?.login)throw Error('Unexpected GitHub account response');
+  }},
+  {id:'organization',label:'GitHub organization',url:organizationApi,required:true,check:async()=>{
+   const org=await requestJson(organizationApi,{token:github,headers:gitHeaders});
+   if(String(org?.login||'').toLowerCase()!==data.owner.toLowerCase())throw Error('Unexpected GitHub owner response');
+  }},
+  {id:'extension',label:'Extension · read/write/releases',url:repoApi(data.extension),required:true,
+   check:()=>validatedGithub(repoApi(data.extension),{requiredWrite:true})},
+  {id:'library',label:'Library · read/write/releases',url:repoApi(data.library),required:true,check:async()=>{
+   const capabilities=await validatedGithub(repoApi(data.library),{requiredWrite:true});
+   library=await sdlcCatalog.remoteInfo(libraryConf,github);
+   if(!library?.sha)throw Error('Library main branch cannot be verified.');
+   return capabilities;
+  }},
+  {id:'extension-releases',label:'Extension releases · optional',url:repoApi(data.extensionReleases),required:false,
+   check:()=>validatedGithub(repoApi(data.extensionReleases))},
+  {id:'library-releases',label:'Library releases · optional',url:repoApi(data.libraryReleases),required:false,
+   check:()=>validatedGithub(repoApi(data.libraryReleases))}
  ];
- // Every service is checked even when another one fails. No settings or tokens
- // are changed until all required checks have completed successfully.
- const checks=await Promise.all(specifications.map(async([id,label,url,check])=>{
-  let result;
-  try{const value=await check();result={id,label,url,state:value?.offline?'offline':'ok',message:value?.offline?'Remote unavailable; verified offline Library available.':'Reachable and verified.'};}
-  catch(error){result={id,label,url,state:'error',message:startupConnectionFailure(error)};}
-  try{Promise.resolve(onProgress(result)).catch(()=>{});}catch{}
-  return result;
- }));
- if(checks.some(check=>check.state==='error'))return {success:false,checks,message:'Some connections need attention. No changes were saved.'};
- if(!save)return {success:true,checks,message:offlineFallback?'Connections checked. The Library is available offline.':'Jira, Confluence and GitHub API connections verified.'};
+ // Deliberately serial: the UI receives one blue progress row at a time.
+ // All required checks are read-only. Optional mirror failures do not block
+ // saving, and tokens/headers never enter the returned check messages.
+ const checks=[];
+ for(const spec of specifications){
+  await onProgress({id:spec.id,label:spec.label,url:spec.url,state:'pending',
+   required:spec.required,message:'Checking '+spec.label+'…'});
+  let value;
+  try{
+   const info=await spec.check();
+   value={id:spec.id,label:spec.label,url:spec.url,required:spec.required,state:'ok',
+    message:info?.asset?'Read/write and authenticated release download verified.':info?.releases===0?
+     'Repository access verified. No published release assets to download yet.':'Reachable and verified.'};
+  }catch(error){
+   value={id:spec.id,label:spec.label,url:spec.url,required:spec.required,state:'error',
+    message:startupConnectionFailure(error)};
+  }
+  checks.push(value);
+  await onProgress(value);
+ }
+ if(checks.some(check=>check.required&&check.state==='error'))
+  return {success:false,checks,message:'Required Atlassian or GitHub source checks failed. No changes were saved.'};
+ if(!save)return {success:true,checks,message:'Atlassian and GitHub sources verified. Optional release mirrors are reported separately.'};
  // Do not store raw tokens in extension settings or send them to the webview.
  await context.globalState.update('atgvAssist.extensionSettings',settings);
  if(enteredAtlassian)await storeToken(globalSecretKey('atlassian'),atlIdentity,atlassian);
@@ -1545,8 +1611,8 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
  await context.secrets.store(STARTUP_VERIFIED_SECRET,JSON.stringify({
   signature:persistedSignature,tokenDigest:sha(atlassian+'\\0'+github)
  }));
- return {success:true,checks,librarySha:library.sha?.slice(0,12)||'offline',
-  message:offlineFallback?'Jira, Confluence and GitHub account verified. The fixed SDLC Library is available from validated ZIP v'+offlineFallback.version+'. Settings saved.':'Jira and Confluence authenticated; GitHub account and fixed SDLC Library verified. Configure a project repository later in Project Settings.'};
+ return {success:true,checks,librarySha:library.sha?.slice(0,12)||'',
+  message:'Jira and Confluence authenticated; GitHub account, extension and Library verified. Project repository: '+data.projectRepoUrl+'.'};
 }
 async function dashboardState(){
   const projects=registry?await registry.list():[];
@@ -7520,7 +7586,7 @@ async function handleDashboardMessage(msg){
         break;
       }
       case 'catalogSave':{
-        const config=sdlcCatalog.normalizeConfig({...msg.config,repositoryUrl:startupSetup.FIXED_LIBRARY_REPOSITORY,ref:'main'});
+        const config=sdlcCatalog.normalizeConfig({...msg.config,repositoryUrl:startupLibraryRepository(),ref:'main'});
         if(!config.repositoryUrl)throw Error('Enter the central GitHub SDLC Catalog repository URL.');
         if(config.authentication==='token'&&!String(msg.token||'').trim()&&!await context.secrets.get('atgvAssist.sdlcCatalogToken'))throw Error('Enter a read-only GitHub token.');
         if(config.authentication==='token'&&String(msg.token||'').trim())await context.secrets.store('atgvAssist.sdlcCatalogToken',String(msg.token).trim());
@@ -7546,7 +7612,7 @@ async function handleDashboardMessage(msg){
         break;
       }
       case 'catalogTest':{
-        const config=sdlcCatalog.normalizeConfig({...msg.config,repositoryUrl:startupSetup.FIXED_LIBRARY_REPOSITORY,ref:'main'});
+        const config=sdlcCatalog.normalizeConfig({...msg.config,repositoryUrl:startupLibraryRepository(),ref:'main'});
         const token=await catalogToken(config,{interactive:true,enteredToken:msg.token});
         const info=await sdlcCatalog.remoteInfo(config,token);
         await dashboard?.webview.postMessage({type:'catalogAction',action:'test',success:true,message:`Connected to ${info.repository}${info.private?' (private)':''}; commit ${info.sha.slice(0,12)}.`});break;

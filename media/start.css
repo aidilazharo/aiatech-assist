@@ -2321,3 +2321,44 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
   --vscode-list-hoverBackground:#202733;
 }
 #contentPane.content-pane > main{color:inherit}
+
+/* v0.0.8: sequential, accessible Atlassian/GitHub connection verification. */
+#startupConnectionForm .atgv-repo-preview{
+ display:grid;gap:5px;margin-top:12px;min-width:0;background:transparent;
+}
+#startupConnectionForm .atgv-repo-preview-item{
+ display:flex;align-items:center;gap:12px;justify-content:space-between;
+ font-size:11px;padding:6px 9px;border-bottom:1px solid #303641;min-width:0;
+}
+#startupConnectionForm .atgv-repo-preview-item span{color:#dce5f5;font-weight:600;white-space:nowrap}
+#startupConnectionForm .atgv-repo-preview-item code{
+ color:#c4d3ed;font-family:var(--vscode-editor-font-family,monospace);
+ overflow-wrap:anywhere;white-space:normal;text-align:right;font-size:10px;
+}
+#startupConnectionForm #startupProjectRepositoryPreview{
+ color:#abbcd1;font-size:11px;overflow-wrap:anywhere;margin-top:5px;
+}
+#startupConnectionForm .atgv-connection-progress{display:grid;gap:8px;margin:13px 0 6px}
+#startupConnectionForm .atgv-connection-progress-item{
+ display:grid;gap:4px;padding:6px 9px;border-radius:6px;background:#111923;color:#f3f7ff;
+}
+#startupConnectionForm .atgv-connection-progress-head{display:flex;gap:12px;align-items:center;justify-content:space-between;font-size:11px}
+#startupConnectionForm .atgv-connection-progress-head strong{font-weight:650}
+#startupConnectionForm .atgv-connection-progress-head span{color:#aebbcf}
+#startupConnectionForm .atgv-connection-progress-item small{font-size:10px;color:#aebbcf;overflow-wrap:anywhere}
+#startupConnectionForm .atgv-connection-progress-track{
+ position:relative;overflow:hidden;height:7px;border-radius:5px;background:#253343;
+}
+#startupConnectionForm .atgv-connection-progress-fill{
+ width:0;height:100%;border-radius:5px;background:#328bff;transition:width .24s linear;
+}
+#startupConnectionForm .atgv-connection-progress-item[data-state="pending"] .atgv-connection-progress-fill{
+ width:36%;animation:atgv-connection-scan 1.1s linear infinite;
+}
+#startupConnectionForm .atgv-connection-progress-item[data-state="ok"] .atgv-connection-progress-fill{width:100%;background:#2bb874;animation:none}
+#startupConnectionForm .atgv-connection-progress-item[data-state="error"] .atgv-connection-progress-fill{width:100%;background:#e45362;animation:none}
+#startupConnectionForm .atgv-connection-progress-item[data-state="ok"] .atgv-connection-progress-head span{color:#72e5a7}
+#startupConnectionForm .atgv-connection-progress-item[data-state="error"] .atgv-connection-progress-head span{color:#ff828f}
+@keyframes atgv-connection-scan{from{transform:translateX(-110%)}to{transform:translateX(295%)}}
+@media(max-width:640px){#startupConnectionForm .atgv-repo-preview-item{align-items:flex-start;flex-direction:column;gap:3px}#startupConnectionForm .atgv-repo-preview-item code{text-align:left}}
+@media(prefers-reduced-motion:reduce){#startupConnectionForm .atgv-connection-progress-fill{animation:none!important}}

@@ -18,8 +18,8 @@ function hostFixture(){
   verified:false,
   extensionSettings:{
    jira:{baseUrl:saved.jiraUrl,email:saved.email},
-   confluence:{baseUrl:saved.confluenceUrl},
-   github:{owner:'aiamalaysia',repo:'my-fow-technology-app-techassists-enterprise-cockpit'}
+   confluence:{baseUrl:saved.jiraUrl+'/wiki'},
+   github:{owner:'aiamalaysia',repo:saved.projectRepository}
   }
  };
  const sandbox={
@@ -64,7 +64,8 @@ test('Changed endpoint, revoked token, missing catalog PAT or altered proof cann
  assert.equal(await x.stored(),null,'changed GitHub account owner invalidates saved proof');
  x.env.extensionSettings.github.owner='aiamalaysia';
  x.env.extensionSettings.github.repo='changed';
- assert.ok(await x.stored(),'project repository changes do not invalidate account verification');
+ assert.equal(await x.stored(),null,'project repository changes invalidate account setup verification');
+ x.env.extensionSettings.github.repo=setup.DEFAULTS.projectRepository;
  x.env.tokens.github='GIT-CHANGED';
  assert.equal(await x.stored(),null,'changed PAT invalidates saved proof');
  x.env.tokens.github='GIT';
@@ -95,9 +96,10 @@ function webviewFixture(){
  const z=ui.indexOf('function renderStartupStackReadiness(',a);
  assert.ok(a>0&&z>a);
  const source=[
-  "const startupFieldMap={jiraUrl:'startupJiraUrl',confluenceUrl:'startupConfluenceUrl',email:'startupEmail',githubUrl:'startupGithubUrl'};",
+  "const startupFieldMap={jiraUrl:'startupJiraUrl',email:'startupEmail',githubUrl:'startupGithubUrl',projectRepository:'startupProjectRepository'};",
   "let startupSetupRequired=true,startupPage=0,startupVerifying=false,startupInstallingModule='',startupConnectionVerified=false,startupConnectionEditSnapshot=null,startupScanComplete=true,startupFormInitialized=false,startupReturnToConnections=false,startupPrereqRequested=false,startupOpenStackId='',startupCopilotModalOpen=false; let gateBusy=false,gateError='',workspaceOpened=false,opening={phase:'search'};",
   "let startupAutoNotice='',startupAutoEnabled=false,startupAutoProject=null,startupAutoStage='',startupConnectionHealthStarted=false,startupConnectionHealthError=false,startupConnectionCheckPending=false; function beginStartupAuto(){} function resetStartupConnectionChecks(){} function checkSavedStartupConnections(){startupConnectionHealthStarted=true;}",
+  'function updateStartupRepositoryPreview(){}',
   ui.slice(a,z),
   "return {renderStartupConfig,renderStartupPage,getPage:()=>startupPage,isVerified:()=>startupConnectionVerified,setOpening:p=>opening={phase:p},setGateBusy:v=>gateBusy=v,setGateError:v=>gateError=v};"
  ].join('\n');
@@ -113,7 +115,7 @@ test('Verified settings restore locked fields, hidden Test & Save and enabled Ne
  assert.equal(find('startupProceed').disabled,false);
  assert.equal(find('startupTestConnections').disabled,true);
  assert.equal(find('startupTestConnections').classList.contains('hidden'),true);
- for(const id of ['startupJiraUrl','startupConfluenceUrl','startupEmail','startupAtlassianToken','startupGithubUrl','startupGithubToken'])
+ for(const id of ['startupJiraUrl','startupEmail','startupAtlassianToken','startupGithubUrl','startupProjectRepository','startupGithubToken'])
   assert.equal(find(id).disabled,true,id);
  assert.match(find('startupConnectionMessage').textContent,/already verified and saved/);
 });
