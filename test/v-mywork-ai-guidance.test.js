@@ -58,10 +58,13 @@ const sample=(roleId='business-analyst')=>({
   assigned:[{key:'TC-7',status:'In Progress'}]
 });
 test('panel is shared by all My Work roles and includes a reactive canvas and chat',()=>{
-  const begin=html.indexOf('<main id="workView"');
+  const begin=html.indexOf('<main id="myWorkView"');
   const panel=html.indexOf('id="atgvMyWorkAi"',begin);
-  const roles=html.indexOf('id="baMyWorkDashboard"',begin);
-  assert.ok(begin>=0&&panel>begin&&roles>panel);
+  const end=html.indexOf('</main>',begin);
+  const workspace=html.indexOf('<main id="workView"');
+  const roles=html.indexOf('id="baMyWorkDashboard"',workspace);
+  assert.ok(begin>=0&&panel>begin&&panel<end&&end<workspace&&roles>workspace);
+  assert.doesNotMatch(html.slice(workspace,html.indexOf('</main>',workspace)),/id="atgvMyWorkAi"/);
   assert.equal(html.match(/id="atgvMyWorkAi"/g)?.length,1);
   const section=html.slice(panel,roles);
   assert.match(section,/<canvas id="atgvMyWorkAiOrb"/);
@@ -103,7 +106,16 @@ test('buttons and guidance are generated only after a scoped response',()=>{
   assert.equal(f.timers.fire(1250),true);
   assert.equal(f.nodes.get('atgvMyWorkAi').dataset.state,'complete');
   f.nodes.get('atgvMyWorkAiActions').children[0].onclick();
-  assert.ok(f.calls.includes('scroll'));
+  assert.ok(f.calls.includes('navigate:discovery'));
+});
+test('AI suggestions open Role Workspace for non-BA roles and do not scroll hidden work sections',()=>{
+ const f=fixture();
+ f.update(sample('software-developer'));f.timers.fire(300);
+ f.reply({type:'roleAiSuggestion',projectId:'project-one',roleId:'software-developer',requestId:1,
+  message:'Open the development task.',actionLabel:'Open Development Work',error:false});
+ f.nodes.get('atgvMyWorkAiActions').children[0].onclick();
+ assert.ok(f.calls.includes('navigate:role-workspace'));
+ assert.equal(f.calls.includes('scroll'),false);
 });
 test('all roles have grounded suggestions when no provider response arrives',()=>{
   for(const roleId of ['business-analyst','solution-architect','ux-designer',
@@ -135,7 +147,7 @@ test('stale responses cannot overwrite next role, Review again re-analyzes',()=>
   assert.equal(f.nodes.get('atgvMyWorkAi').dataset.state,'thinking');
 });
 test('AI calls are read-only and scoped to visible role work',()=>{
-  assert.match(start,/if\(view==='work'\|\|view==='discovery'\)window\.ATGVMyWorkAI\?\.update/);
+  assert.match(start,/if\(view==='myWork'\|\|view==='work'\|\|view==='discovery'\)window\.ATGVMyWorkAI\?\.update/);
   assert.match(host,/case 'roleAiReview'/);
   assert.match(host,/requireOpened\(\)/);
   assert.match(host,/activeAiTarget\(\)/);
