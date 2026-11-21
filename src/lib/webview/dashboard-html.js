@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.9';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.10';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -154,7 +154,7 @@ function html(webview,{resumeLibrary=false}={}){
       </div><div id="startupRepositoryPreview" class="atgv-repo-preview" aria-label="GitHub source repositories" role="group"></div>
       <div class="atgv-startup-actions"><button type="submit" id="startupTestConnections">Test &amp; Save Connections</button><span id="startupConnectionMessage" role="status" aria-live="polite">Verify Atlassian and GitHub connections to continue.</span></div>
       <div id="startupConnectionProgress" class="atgv-connection-progress" aria-label="Sequential connection checks" role="group" aria-live="polite"></div>
-      <details id="startupConnectionLogPanel" class="atgv-connection-log-panel">
+      <details id="startupConnectionLogPanel" class="atgv-connection-log-panel" hidden aria-hidden="true">
         <summary>Connection diagnostics <span id="startupConnectionLogCount" class="muted">Open to view saved checks and errors</span></summary>
         <div class="atgv-connection-log-toolbar"><p class="muted">Local diagnostic history for Jira, Confluence, GitHub, and the catalog API. Tokens, account emails, request headers and response bodies are never logged.</p>
           <div class="stack"><button id="startupConnectionLogRefresh" type="button" class="secondary">Refresh Log</button><button id="startupConnectionLogDownload" type="button" class="secondary">Download Logs (.txt)</button></div></div>
