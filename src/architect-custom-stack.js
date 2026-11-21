@@ -19,7 +19,7 @@ function framework(target,pkg){
  if(target.kind==='maven')return {name:'Java / Maven / Spring Boot',preview:'http://127.0.0.1:8080/api/health'};
  const dep={...pkg?.dependencies,...pkg?.devDependencies};
  if(dep['@angular/core'])return {name:'Angular',preview:'http://127.0.0.1:4200/'};
- if(dep['@nestjs/core'])return {name:'NestJS',preview:'http://127.0.0.1:3000/api/health'};
+ if(dep['@nestjs/core'])return {name:'NestJS',preview:'http://127.0.0.1:3000/api/v1/health'};
  if(dep.next)return {name:'Next.js',preview:'http://127.0.0.1:3000/'};
  if(dep.vite)return {name:dep.react?'React / Vite':'Vite',preview:'http://127.0.0.1:5173/'};
  if(dep.react)return {name:'React',preview:'http://127.0.0.1:3000/'};
@@ -33,7 +33,7 @@ async function scan(root,{driver=developer,fsApi=fs}={}){
  const entries=[];
  for(const target of found.targets||[]){
   const rel=String(target.relative||'');
-  if(!['','apps/web','services/api'].includes(rel))throw Error('Unsupported application location in custom scan.');
+  if(rel.startsWith('/')||rel.includes('\\')||rel.includes('//')||rel.split('/').length>3||rel.split('/').some(x=>x==='.'||x==='..'||x.startsWith('.')))throw Error('Unsupported application location in custom scan.');
   const cwd=path.join(found.repo.root,rel);
   let pkg=null;
   if(target.kind==='npm'){
@@ -43,18 +43,20 @@ async function scan(root,{driver=developer,fsApi=fs}={}){
   const info=framework(target,pkg);
   const scripts=Array.isArray(target.scripts)?target.scripts:[];
   entries.push({relative:rel||'',kind:target.kind,framework:info.name,previewUrl:loopbackPreview(info.preview),
-   installed:!!target.installed,scripts,runScript:target.kind==='npm'?(scripts.includes('dev')?'dev':scripts.includes('start')?'start':''):'run',
-   runnable:target.kind==='npm'?(scripts.includes('dev')||scripts.includes('start')):['dotnet','maven'].includes(target.kind),
+   installed:!!target.installed,scripts,runScript:target.kind==='npm'?(scripts.includes('dev')?'dev':scripts.includes('start:dev')?'start:dev':scripts.includes('start')?'start':''):'run',
+   runnable:target.kind==='npm'?(scripts.includes('dev')||scripts.includes('start:dev')||scripts.includes('start')):['dotnet','maven'].includes(target.kind),
+   mockable:target.kind==='npm'&&!!({...pkg?.dependencies,...pkg?.devDependencies}).vite,
    packageName:String(pkg?.name||'').slice(0,100)});
  }
  return {root:found.repo.root,sha:String(found.repo.sha||''),branch:String(found.repo.branch||''),clean:found.repo.clean===true,
   targets:entries,recognized:entries.length,ready:entries.some(entry=>entry.runnable)};
 }
-async function run(root,{sha,relative='',previewUrl,onProgress=async()=>{},driver=developer,helper=dependencies,bootstrapApi=bootstrap}={}){
+async function run(root,{sha,relative='',previewUrl,mock=false,onProgress=async()=>{},driver=developer,helper=dependencies,bootstrapApi=bootstrap}={}){
  const check=await scan(root,{driver});
  if(!/^[a-f0-9]{40}$/.test(String(sha||''))||check.sha!==sha)throw Error('Project Git revision changed after the scan. Scan the Custom Stack again.');
  const selected=check.targets.find(t=>t.relative===relative);
  if(!selected||!selected.runnable)throw Error('Select a detected application with a dev, start or run command.');
+ if(mock&&!selected.mockable)throw Error('Mock Preview is only supported for detected Vite applications.');
  const url=loopbackPreview(previewUrl||selected.previewUrl);
  const cwd=path.join(check.root,selected.relative);
  const existing=driver.localLogs();
@@ -68,12 +70,12 @@ async function run(root,{sha,relative='',previewUrl,onProgress=async()=>{},drive
  await onProgress('Starting '+selected.framework+' from '+(selected.relative||'repository root')+'…');
  let started=false;
  try{
-  await driver.runLocal(root,{relative:selected.relative,previewUrl:url});started=true;
+  await driver.runLocal(root,{relative:selected.relative,previewUrl:url,...(mock?{mockPreview:true}:{})});started=true;
   await onProgress('Verifying localhost health at '+url+'…');
   await bootstrapApi.waitForHttp(url,()=>driver.localLogs().running,60000,driver.localLogs().instanceId||'');
   const current=driver.localLogs();
   if(!current.running||path.resolve(current.cwd||'')!==path.resolve(cwd))throw Error('The custom application stopped or switched during health verification.');
-  return {running:true,url,framework:selected.framework,relative:selected.relative,sha,message:'Custom Stack running at '+url+'. No Git branch, commit or push was created.'};
+  return {running:true,url,framework:selected.framework,relative:selected.relative,sha,mockPreview:mock,message:mock?'MOCK DATA · Local Vite preview running at '+url+'. External APIs and databases are NOT connected. No source files were committed.':'Custom Stack running at '+url+'. No Git branch, commit or push was created.'};
  }catch(error){
   if(started)await driver.stopLocal().catch(()=>{});
   throw error;
