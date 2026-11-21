@@ -74,7 +74,9 @@ class ConfluenceUserDatabase{
   const value=property?.value;
   if(property&&(!value||value.schema!==1||value.projectKey!==this.projectKey||String(value.spaceId)!==String(space.id)))
    throw Error('Confluence roster property does not match this project/space.');
-  const normalized=normalizeRows(value?.rows||[]);
+  if(property&&!Array.isArray(value.rows))
+    throw Error('Confluence Database v2 roster property has no valid rows array. No users were overwritten.');
+   const normalized=normalizeRows(value?.rows||[]);
   if(normalized.conflicts.length)throw Error(normalized.conflicts.join('; '));
   return {space,db:database,property,rows:normalized.rows};
  }
