@@ -22,7 +22,9 @@ test('extension metadata is blank and AI decisions are curated',()=>{
  const manifestPath=path.join(root,'.memory/manifest.json');
  if(fs.existsSync(manifestPath)){
   const index=JSON.parse(fs.readFileSync(manifestPath,'utf8'));
-  assert.equal(index.schema,1);assert.equal(index.categories.length,14);
+  assert.equal(index.schema,1);assert.equal(index.categories.length,15);
+  assert.ok(index.categories.some(x=>x.id==='role-boundaries'&&x.path==='.memory/role-boundaries.json'));
+  assert.match(memoryForPrompt('role skill switch handoff expertise'),/18 SDLC|18 role|18-role/i);
   for(const item of index.categories){assert.match(item.path,/^\.memory\/[a-z][a-z0-9-]*\.json$/);const d=JSON.parse(fs.readFileSync(path.join(root,item.path),'utf8'));assert.equal(d.category,item.id);}
   assert.match(memoryForPrompt('version release increment'),/99\.99\.99/);
   assert.match(memoryForPrompt('extension description details'),/description stays empty/);
