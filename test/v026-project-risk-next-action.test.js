@@ -35,7 +35,7 @@ test('project delivery guidance responds to blockers without inventing a forecas
  const out=brief.build({roleId:'project-manager',roleName:'Project Manager',
   deadline:'2026-12-25',now:new Date(2026,10,21),activity:{jiraAvailable:true,risk},
   config:{jiraConfigured:true,confluenceConfigured:true}});
- assert.equal(out.todayActions[0].label,'Review blocker TC-9');
+ assert.equal(out.todayActions[0].label,'Coordinate blocker TC-9');
  assert.equal(out.todayActions[0].target,'role-workspace');
  assert.match(out.health.detail,/not a complete project forecast/);
 });
