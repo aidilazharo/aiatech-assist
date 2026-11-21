@@ -470,7 +470,7 @@ function atgvInlineNotice(message,error=false){
  // never repeated in the right-hand content pane. Overview has no inline notices.
  if(error||pane.id==='landingView'){
   pane.querySelector('.atgv-page-feedback')?.remove();
-  const inline=pane.querySelector('#baInlineStatus');
+  const inline=pane.id==='discoveryView'?pane.querySelector('#baInlineStatus'):null;
   if(inline){inline.textContent='';inline.classList.add('hidden');}
   return;
  }
