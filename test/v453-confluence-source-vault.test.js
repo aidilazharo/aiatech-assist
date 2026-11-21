@@ -141,3 +141,60 @@ test('runtime wires Confluence upload, new-machine recovery, five-minute retry a
  assert.match(host,/if\(result\.restored\)\{/);
  assert.match(ui,/m\.type==='confluenceSourceVault'/);
 });
+
+test('missing local Confluence baseline is reconstructed from identical verified content, not an invented hash',async()=>fixture(async({a,b})=>{
+ const remote=fakeConfluence(),previous=global.fetch;global.fetch=remote.handle;
+ try{
+  const register=await br.load(a,'demo');
+  await br.write(a,'demo',register.revision,next=>{
+   next.brs=[{id:'BR-001',status:'draft',title:'Baseline test',features:[]}];
+  });
+  const localFile=path.join(path.dirname(a.fileFor('demo')),'documents','ux','reference.png');
+  await fs.mkdir(path.dirname(localFile),{recursive:true});
+  await fs.writeFile(localFile,Buffer.from('VERIFIED BASELINE IMAGE'));
+  const first=new ConfluenceSourceVault({registry:a,projectId:'demo',config,token:'test-token'});
+  const initial=await first.sync();
+  assert.equal(initial.conflicts.length,0,JSON.stringify(initial.conflicts));
+  const second=new ConfluenceSourceVault({registry:b,projectId:'demo',config,token:'test-token'});
+  const downloaded=await second.sync();
+  assert.equal(downloaded.restored,true);
+  // Simulate an upgrade/reinstall losing only the local journal. The verified
+  // content is still present, even though the restore audit event differs.
+  await fs.rm(second.stateFile);
+  const beforeWrites=remote.calls.filter(x=>x.method==='POST').length;
+  const recovered=await second.sync();
+  assert.equal(recovered.baselineRecovered,true,JSON.stringify(recovered));
+  assert.deepEqual(recovered.conflicts,[]);
+  assert.equal(recovered.uploaded,0);
+  assert.equal(remote.calls.filter(x=>x.method==='POST').length,beforeWrites,'recovery is read-only');
+  assert.ok(JSON.parse(await fs.readFile(second.stateFile,'utf8')).remoteHash);
+  const next=await second.sync();
+  assert.equal(next.conflicts.length,0,'recovered history prevents repeat false alarms');
+  assert.equal(next.uploaded,0);
+ }finally{global.fetch=previous;}
+}));
+test('genuinely different Confluence and local BRs remain protected without history',async()=>fixture(async({a,b})=>{
+ const remote=fakeConfluence(),previous=global.fetch;global.fetch=remote.handle;
+ try{
+  let state=await br.load(a,'demo');
+  state=await br.write(a,'demo',state.revision,next=>{
+   next.brs=[{id:'BR-001',status:'draft',title:'REMOTE TITLE',features:[]}];
+  });
+  const proof=path.join(path.dirname(a.fileFor('demo')),'documents','ux','proof.png');
+  await fs.mkdir(path.dirname(proof),{recursive:true});await fs.writeFile(proof,'REMOTE ORIGINAL');
+  const first=new ConfluenceSourceVault({registry:a,projectId:'demo',config,token:'test-token'});
+  await first.sync();
+  const second=new ConfluenceSourceVault({registry:b,projectId:'demo',config,token:'test-token'});
+  assert.equal((await second.sync()).restored,true);
+  await fs.rm(second.stateFile);
+  state=await br.load(b,'demo');
+  await br.write(b,'demo',state.revision,next=>{next.brs[0].title='LOCAL EDIT';});
+  const prior=Buffer.from(remote.objects.get('ATGV-project-demo-source-state.json').bytes);
+  const conflicts=await second.sync();
+  assert.equal(conflicts.baselineRecovered,undefined);
+  assert.ok(conflicts.conflicts.some(x=>/Business Requirements/.test(x)),JSON.stringify(conflicts));
+  assert.equal((await br.load(b,'demo')).brs[0].title,'LOCAL EDIT');
+  assert.deepEqual(remote.objects.get('ATGV-project-demo-source-state.json').bytes,prior);
+  assert.equal(await fs.readFile(proof,'utf8'),'REMOTE ORIGINAL');
+ }finally{global.fetch=previous;}
+}));

@@ -10,7 +10,12 @@
     "maintenance",
     "pat",
     "source",
-    "error"
+    "error",
+    "merge",
+    "pull request",
+    "continuous integration",
+    "auto-merge",
+    "version"
   ],
   "decisions": [
     {
@@ -21,7 +26,12 @@
     {
       "id": "AGENT-0002",
       "status": "accepted",
-      "decision": "Unattended improvement may start only during local 12:00–12:59 with ATGV idle; test changes and create a reviewed PR. Never auto-merge."
+      "decision": "Unattended improvement may start only during local 12:00–12:59 while ATGV is idle, with verified GitHub PAT read/write access. Create a versioned change and PR, then automatically squash-merge the PR after all required GitHub checks have passed; never bypass failing, missing, pending or blocked checks."
+    },
+    {
+      "id": "AGENT-0003",
+      "status": "accepted",
+      "decision": "For every completed ATGV source change, create the next sequential version and a PR. After verified tests, automatically merge eligible PRs into main, allow main-branch release automation to publish VSIX/source artifacts, and report any blocked PR accurately; never claim merge/release before confirmed."
     }
   ]
 }

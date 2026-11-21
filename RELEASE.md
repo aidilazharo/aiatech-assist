@@ -1,16 +1,18 @@
-# ATGV AIATECH Assist v0.0.5
+# ATGV AIATECH Assist v0.0.6
 
 ## Changes
 
-- Add a shared, read-only AI next-step assistant at the top of My Work for all configured SDLC roles, including Business Analyst, Solution Architect, UI/UX Designer, Developer and Project Manager.
-- Center the blue idle / blue-green thinking orb above all guidance; generate no suggestion text or buttons until a recommendation is available.
-- Present concise role-scoped suggestions grounded in current task progress and assigned work; provide safe navigation buttons without chat input or automatic workflow mutations.
-- Display a green success animation when AI analysis succeeds and fade the orb away, preserving the suggestion and buttons.
-- Always show a progress-based next step if the AI provider is unavailable or unresponsive; support a manual Review again action.
-- Use a plain black panel with white text, no colored border, and reduced-motion support.
-- Preserve source-only .memory exclusion from VSIX and source release artifacts.
+- Fix false Confluence source synchronization conflicts when a local project's baseline journal is missing after an upgrade, reinstall or computer transfer.
+- Verify matching Business Requirements, Discovery answers, source document identities, uploaded-file checksums and safe local originals before rebuilding a missing baseline.
+- Ignore only Confluence-restore audit events and local revision/transient state for baseline comparison; preserve actual user work and approved Jira identities.
+- Prevent the repaired baseline from failing a second stale-hash upload check in the same synchronization run.
+- Preserve both local and Confluence versions without overwriting when real content differs; show the affected content categories.
+- Prevent duplicate periodic conflict popups while retaining status, error logs and safety checks.
+- Update source-only `.memory` guidance so every accepted source change creates a sequential release and eligible PRs automatically squash-merge after required CI passes.
+- Align AGENTS.md and idle maintenance release policies; never bypass failing checks, GitHub branch protections or PAT security.
+- Keep all `.memory` development guidance in source only, excluded from downloadable VSIX and source ZIP releases.
 
 ## Validation
 
-- My Work AI regression tests: layout, timing, navigation, fallback and provider error handling.
-- Full Node regression suite, Windows startup/reset checks, UI theme check, VSIX integrity and source ZIP memory-exclusion checks via GitHub Actions.
+- Confluence vault regression tests for cross-computer restore, verified missing-baseline recovery, real divergent BR protection, attachment checksums and unsafe ID rejection.
+- Complete Node regression suite, Windows startup checks, UI theme checks, VSIX and source ZIP verification in GitHub Actions.

@@ -79,6 +79,48 @@ async function snapshot(registry,projectId){
  await traverse(dir);
  return {register:normalized,discovery,documents:[...docs.values()],files};
 }
+// A missing local sync journal can be rebuilt ONLY from an independently
+// verified, content-identical project. Do not compare manifest upload timestamps,
+// attachment IDs or register revisions; they are not project content.
+// Every other BR field, Discovery answer, document identity and file checksum
+// must match exactly. This never merges unrelated edits.
+function stable(value){
+ if(Array.isArray(value))return value.map(stable);
+ if(plain(value))return Object.fromEntries(Object.keys(value).sort().map(k=>[k,stable(value[k])]));
+ return value;
+}
+function comparableSnapshot(data){
+ const register=cleanRecord(data.register);
+ // brWorkflow.write() rebuilds these three derived structures whenever a
+ // remote register is restored. Their timestamps and regenerated graph
+ // revisions are not independently authored requirements. All BRs, approvals,
+ // Jira identities, decisions and source evidence remain strictly compared.
+ delete register.canonical;
+ delete register.traceability;
+ delete register.changeHistory;
+ // This event is created solely by a verified remote restore. It does not
+ // change BR contents and must not stop the baseline from being rebuilt.
+ register.events=(register.events||[]).filter(event=>event?.action!=='confluence-source-vault-restored');
+ const documents=(data.documents||[]).map(d=>({
+  name:d.name,digest:d.digest,byteDigest:d.byteDigest,storedName:d.storedName,
+  uploadedAt:d.uploadedAt||'',version:Number(d.version||1)
+ })).sort((a,b)=>a.storedName.localeCompare(b.storedName));
+ const files=(data.files||[]).map(f=>({
+  relative:f.relative,byteDigest:f.byteDigest,attachment:f.attachment,bytes:f.bytes
+ })).sort((a,b)=>a.relative.localeCompare(b.relative));
+ return stable({register,discovery:data.discovery||null,documents,files});
+}
+function sameProjectContent(local,remote){
+ return JSON.stringify(comparableSnapshot(local))===JSON.stringify(comparableSnapshot(remote));
+}
+function contentDifferences(local,remote){
+ const a=comparableSnapshot(local),b=comparableSnapshot(remote),changes=[];
+ for(const [name,label] of [['register','Business Requirements'],['discovery','Discovery answers'],
+  ['documents','source documents'],['files','uploaded project files']]){
+  if(JSON.stringify(a[name])!==JSON.stringify(b[name]))changes.push(label);
+ }
+ return changes;
+}
 function snapshotHash(snapshot){return sha(Buffer.from(JSON.stringify(snapshot)));}
 async function safeWrite(file,bytes,expected){
  if(!DIGEST.test(expected)||sha(bytes)!==expected)throw Error('Confluence download checksum mismatch. Original upload was not restored.');
@@ -292,10 +334,21 @@ class ConfluenceSourceVault{
     result=await this.restore(manifest,remoteHash,space,pageId,items,{allowRegister:false});
     if(remoteChanged)result.conflicts.push('Remote project revisions changed while this machine also has local edits. Local BR data is preserved for reconciliation.');
     else if(!currentHistory.remoteHash){
-     const same=JSON.stringify(cleanRecord(local.register))===JSON.stringify(cleanRecord(manifest.register))&&
-      (local.discovery||'')===(manifest.discovery||'');
-     if(same&&!result.conflicts.length)await this.recordHistory(space.id,remoteHash);
-     else result.conflicts.push('This local project has no verified common Confluence baseline. Preserve both versions for manual reconciliation.');
+     // An incomplete journal is recoverable when remote originals are verified,
+     // and the local and remote state are identical after excluding sync-only
+     // revision/event noise. This is a read-only bootstrap, not a forced push.
+     const verifiedLocal=await snapshot(this.registry,this.projectId);
+     if(!result.conflicts.length&&sameProjectContent(verifiedLocal,manifest)){
+      await this.recordHistory(space.id,remoteHash);
+      result.baselineRecovered=true;
+      // Do not fall through to the upload check with the STALE journal read
+      // at the start of this operation: that would misidentify a clean match
+      // as a conflict because remoteHash hashes the manifest, not a snapshot.
+      return result;
+     }
+     const differences=contentDifferences(verifiedLocal,manifest);
+     result.conflicts.push('Confluence contains different '+(differences.join(', ')||'source bytes')+
+      '. Both copies are preserved; review these differences before publishing.');
     }
    }
   }
@@ -335,4 +388,4 @@ class ConfluenceSourceVault{
   return result;
  }
 }
-module.exports={ConfluenceSourceVault,validateManifest,isSafeRelative,snapshotHash,validDocument,validAttachmentId:id=>ATTACHMENT_ID.test(String(id??''))};
+module.exports={ConfluenceSourceVault,validateManifest,isSafeRelative,snapshotHash,sameProjectContent,contentDifferences,validDocument,validAttachmentId:id=>ATTACHMENT_ID.test(String(id??''))};
