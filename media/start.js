@@ -2304,7 +2304,9 @@ function syncArchitectStackButtons(project){
  const canRequestApproval=!!(saved&&tested&&prepared?.remotePushed===true);
  const save=$('architectSaveStack');
  if(stackId==='custom'){
-  save.disabled=true;save.textContent='Save Stack';save.title='Custom Stack does not overwrite a catalogue-managed stack. Use Scan Repository, then Pull Repository to update a clean checkout, and Install & Run.';
+  save.disabled=architectActionBusy||!activeId;
+  save.textContent='Save Stack';
+  save.title='Save Custom Stack: clone the configured project GitHub repository into its missing or empty repository folder. Never overwrite existing files.';
   $('architectResetStack').disabled=true;
   $('architectTestStack').disabled=true;
   $('architectApproveStack').disabled=true;
@@ -7964,7 +7966,7 @@ function architectBegin(action,message){
  renderArchitectRequirements(projects.find(p=>p.id===activeId));
  $('architectBootstrapStatus').textContent=message;
  for(const id of ['architectSaveStack','architectResetStack','architectTestStack','architectApproveStack'])$(id).disabled=true;
- $('architectStopInstall').disabled=action!=='architectSaveStack';
+ $('architectStopInstall').disabled=action!=='architectSaveStack'||$('architectStackSelect').value==='custom';
  send(action,{stackId:$('architectStackSelect').value});return true;
 }
 let architectCustomInfo=null,architectCustomBusy=false,architectCustomRunning=false;
@@ -7984,7 +7986,8 @@ function renderArchitectCustomPanel(){
  const selected=(current?.targets||[]).find(t=>t.relative===previous&&t.runnable)||(current?.targets||[]).find(t=>t.runnable);
  if(selected){select.value=selected.relative;const preview=$('architectCustomPreviewUrl');if(!preview.value||!current?.previewCustomized)preview.value=selected.previewUrl;}
  select.disabled=architectCustomBusy||!current?.ready;
- $('architectCustomScan').disabled=architectCustomBusy||!activeId;
+ $('architectCustomScan').disabled=architectCustomBusy||architectActionBusy||!activeId||
+  projects.find(p=>p.id===activeId)?.techStackId!=='custom';
  $('architectCustomScan').textContent=current?'Pull Repository':'Scan Repository';
  $('architectCustomScan').title=current?'Fetch and fast-forward the current clean branch from its verified GitHub origin':'Scan the configured local checkout without altering files';
  $('architectCustomRun').disabled=architectCustomBusy||!current?.ready||architectCustomRunning;
@@ -8066,9 +8069,9 @@ $('architectStackSelect').addEventListener('change',event=>{
  renderArchitectRequirements(project);
  renderArchitectCustomPanel();
  if(event.target.value==='custom'&&activeId){
-  architectCustomBusy=true;architectCustomInfo=null;architectCustomRunning=false;
-  architectCustomNotify('Scanning the configured project repository…');
-  renderArchitectCustomPanel();send('architectCustomScan',{projectId:activeId});
+  architectCustomBusy=false;architectCustomInfo=null;architectCustomRunning=false;
+  architectCustomNotify('Choose Save Stack to create the project repository folder if missing or empty and clone the configured GitHub source. Existing files are preserved.');
+  renderArchitectCustomPanel();
  }
 });
 $('architectReviewGitChanges').addEventListener('click',()=>{if(activeId&&!architectActionBusy)send('architectReviewGitChanges');});
@@ -8077,8 +8080,11 @@ $('architectResetStack').addEventListener('click',()=>{
  architectBegin('architectResetStack','Checking checkout and requesting reset confirmation…');
 });
 $('architectSaveStack').addEventListener('click',()=>{
- if(!$('architectStackSelect').value||$('architectStackSelect').value==='custom'){architectLastMessage='Choose a catalogue technology stack to Save, or use Scan Repository for Custom Stack.';$('architectBootstrapStatus').textContent=architectLastMessage;return;}
- architectBegin('architectSaveStack','Checking main, preparing the skeleton, installing, testing, launching and pushing…');
+ if(!$('architectStackSelect').value){architectLastMessage='Choose a technology stack before saving.';$('architectBootstrapStatus').textContent=architectLastMessage;return;}
+ if($('architectStackSelect').value==='custom'){
+  architectCustomInfo=null;architectCustomRunning=false;
+  architectBegin('architectSaveStack','Checking configured project repository folder and cloning GitHub code only when missing or empty…');
+ }else architectBegin('architectSaveStack','Checking main, preparing the skeleton, installing, testing, launching and pushing…');
 });
 $('architectStopInstall').addEventListener('click',()=>{if(architectActionBusy&&architectPendingAction==='architectSaveStack'){$('architectStopInstall').disabled=true;send('architectStopInstall');}});
 $('architectDownloadDependencyHistory').addEventListener('click',()=>send('architectDownloadDependencyHistory'));
@@ -8210,7 +8216,8 @@ window.addEventListener('message',event=>{
  if(msg.type==='architectStackState'){
    const info=msg.value||{};if(info.message){architectLastMessage=info.message;$('architectApprovalStatus').textContent=info.message;$('architectBootstrapStatus').textContent=info.message;}
    const live=architectChecklistSession($('architectStackSelect').value);
-   if(architectPendingAction==='architectSaveStack')for(const id of ['git','toolchain','scaffold','api','orm','sqlite','dependencies','tests','build','server','push'])live.completed.add(id);
+   if(architectPendingAction==='architectSaveStack'&&$('architectStackSelect').value!=='custom')
+     for(const id of ['git','toolchain','scaffold','api','orm','sqlite','dependencies','tests','build','server','push'])live.completed.add(id);
    if(architectPendingAction==='architectTestStack')for(const id of ['dependencies','tests','build','server'])live.completed.add(id);
    if(['architectSaveStack','architectTestStack'].includes(architectPendingAction)){
      const current=techStacks.find(item=>item.id===$('architectStackSelect').value);
