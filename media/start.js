@@ -7834,6 +7834,20 @@ window.addEventListener('message',event=>{
  }
 });
 
+// User-facing progress for permanent Jira-only BR deletion; never treat a
+// partial failure as completion, and refresh the inventory after confirmed success.
+window.addEventListener('message',event=>{
+ const m=event.data||{};
+ if(!activeId||m.projectId!==activeId)return;
+ if(m.type==='jiraOnlyBRDeletionProgress'){
+  status('Deleting verified Jira BR hierarchy: '+String(m.key||'')+' ('+Number(m.deleted||0)+'/'+Number(m.total||0)+')');
+ }else if(m.type==='jiraOnlyBRDeletionCompleted'){
+  status('Jira-only '+String(m.brId||'BR')+' deleted: '+Number(m.deleted||0)+' confirmed Jira issues. Refreshing Jira…');
+  ensureBAJiraInventory(true);
+ }else if(m.type==='jiraOnlyBRDeletionError'){
+  status('Jira BR deletion blocked: '+String(m.message||'Refresh the BR and review Jira permissions.'));
+ }
+});
 function developerStatus(message){const target=$('devExecutionStatus');if(target)target.textContent=String(message||'');}
 function devSetStep(id,message){const element=$(id);if(element)element.textContent=message;}
 
