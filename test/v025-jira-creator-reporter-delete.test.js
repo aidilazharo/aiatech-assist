@@ -129,6 +129,20 @@ test('changed issue content after approval stops all deletion',async t=>{
   read:h.read,loadRegister:async()=>register(),finalize:async()=>{}}),/content changed after preview/);
  assert.equal(h.deleted.length,0);
 });
+test('new child Story discovered after preview stops deletion before any remote DELETE',async t=>{
+ const h=harness(),p=await plan(h);
+ const dir=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-owned-epic-newchild-'));
+ t.after(()=>fs.rm(dir,{recursive:true,force:true}));
+ const registry={fileFor:()=>path.join(dir,'documents','requirements','br-register.json')};
+ const job=deletion.createJob(p);
+ await deletion.saveJobs(registry,projectId,{schema:1,jobs:[job]});
+ h.map.set('TC-838',issue('TC-838',epicKey,'Story'));
+ await assert.rejects(deletion.execute({
+  registry,projectId,job,config,token:'token',request:h.request,read:h.read,
+  loadRegister:async()=>register(),finalize:async()=>{}
+ }),/hierarchy changed after deletion preview/);
+ assert.equal(h.deleted.length,0);
+});
 test('user interface offers deletion review and runtime requires typed confirmation plus Creator/Reporter checks',()=>{
  const ui=source(path.join(root,'media/start.js'),'utf8');
  const host=source(path.join(root,'src/lib/runtime/extension-runtime.js'),'utf8');
