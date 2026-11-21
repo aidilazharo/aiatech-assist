@@ -50,30 +50,24 @@ test('document, project and design preview paths show meaningful parents and sup
  assert.deepEqual(labels({view:'library'}),['Library Studio']);
  assert.equal(labels({view:'documentEditor',documentTitle:'X'.repeat(500)})[1].length,160);
 });
-test('webview loads the route model before start.js and renders safe accessible buttons',()=>{
+test('right pane removes breadcrumbs without damaging page headings or active workflow',()=>{
  const html=read('src/lib/webview/dashboard-html.js'),ui=read('media/start.js'),css=read('media/start.css');
  assert.match(html,/const workspaceBreadcrumbsJs=webview\.asWebviewUri/);
- assert.ok(html.indexOf('<script src="${workspaceBreadcrumbsJs}"></script>')<
-  html.indexOf('<script src="${js}"></script>'));
  assert.match(ui,/function renderWorkspaceBreadcrumbs\(\)/);
- assert.match(ui,/document\.createElement\('nav'\)/);
- assert.match(ui,/nav\.setAttribute\('aria-label','Breadcrumb'\)/);
- assert.match(ui,/item\.setAttribute\('aria-current','page'\)/);
- assert.match(ui,/item\.textContent=segment\.label/);
- assert.match(ui,/item\.addEventListener\('click',\(\)=>workspaceBreadcrumbAction\(segment\.action\)\)/);
- assert.match(css,/\.atgv-workspace-breadcrumbs \.atgv-breadcrumb-link:focus-visible/);
- assert.match(css,/main\.has-workspace-breadcrumb > \.page-kicker\{display:none!important\}/);
+ const body=ui.slice(ui.indexOf('function renderWorkspaceBreadcrumbs(){'),ui.indexOf('\nfunction setView(next){'));
+ assert.match(body,/document\.querySelectorAll\('#contentPane > main, #brEditModal/);
+ assert.match(body,/node=>node\.remove\(\)/);
+ assert.match(body,/root\.classList\.remove\('has-workspace-breadcrumb'\)/);
+ assert.doesNotMatch(body,/createElement\('nav'\)|createElement\('button'\)/);
+ assert.match(css,/#contentPane \.atgv-workspace-breadcrumbs/);
+ assert.match(html,/id="workTitle"/);
+ assert.match(html,/id="operationsView"/);
 });
-test('breadcrumbs follow real navigation, BR editor, completed BR modal and documents',()=>{
+test('legacy route model remains available for internal workflow navigation without rendering breadcrumbs',()=>{
  const ui=read('media/start.js');
  assert.match(ui,/view=next;\s*if\(typeof renderWorkspaceBreadcrumbs==='function'\)renderWorkspaceBreadcrumbs\(\)/);
  assert.match(ui,/baBreadcrumbAtRequirements=action==='br-home'/);
  assert.match(ui,/if\(brEditing&&!closeBREditor\(\)\)return/);
  assert.match(ui,/baBreadcrumbAtRequirements=true;/);
- assert.match(ui,/const dialogs=\[\['brEditModal'/);
- assert.match(ui,/const overlay=\$\(modalId\),card=overlay\?\.querySelector\(selector\)/);
  assert.match(ui,/documentTitle:view==='documentEditor'/);
- assert.match(ui,/if\(typeof renderWorkspaceBreadcrumbs==='function'\)renderWorkspaceBreadcrumbs\(\);\s*\$\('baRequirementModalClose'\)\.focus/);
- assert.match(ui,/\$\('brEditModal'\)\.classList\.add\('hidden'\);[^\n]*renderWorkspaceBreadcrumbs\(\)/);
- assert.match(ui,/\$\('docEditorTitle'\)\.textContent=doc.title;\$\('docEditorPath'\)\.textContent=doc.path;\s*if\(typeof renderWorkspaceBreadcrumbs==='function'\)renderWorkspaceBreadcrumbs\(\)/);
 });
