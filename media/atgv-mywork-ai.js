@@ -51,13 +51,13 @@
   }
   function navigateToWork(){
     if(!project||!root()||root().closest('main')?.classList.contains('hidden'))return;
-    const target=routes[role]?.target||'roleStepFlow';
+    // Suggestions leave the AI-only My Work page and open the selected role's
+    // existing workflow on the dedicated Role Workspace page.
+    if(typeof navigate==='function')navigate(role==='business-analyst'?'discovery':'role-workspace');
+    const workspace=byId('workView'),target=routes[role]?.target||'roleStepFlow';
     const element=byId(target);
-    if(element&&!element.classList.contains('hidden')){
+    if(workspace&&!workspace.classList.contains('hidden')&&element&&!element.classList.contains('hidden'))
       element.scrollIntoView({behavior:'smooth',block:'start'});
-      return;
-    }
-    if(typeof navigate==='function')navigate(role==='business-analyst'?'discovery':role);
   }
   function actionButtons(label){
     const list=byId('atgvMyWorkAiActions');if(!list)return;
