@@ -12,15 +12,18 @@ const diagnostic=require('./stack-process-diagnostics');
 const {npmCommand,mavenCommand}=require('./platform-process');
 const recovery=require('./dependency-recovery');
 const execute=promisify(execFile);
-const ALLOWED=new Set(['','apps/web','services/api']);
 const LIMIT=8*1024*1024;
 function commandFor(name,args){return name==='npm'?npmCommand(args):name==='mvn'?mavenCommand(args):{bin:name,args};}
 async function isFile(file){const st=await fs.lstat(file).catch(()=>null);return Boolean(st?.isFile()&&!st.isSymbolicLink());}
 async function directory(root,relative){
- if(!ALLOWED.has(relative)||relative.includes('..'))throw Error('Unsupported application directory.');
+ if(typeof relative!=='string'||relative.length>180||
+   relative.split('/').length>3||relative.split('/').some(part=>part==='.'||part==='..'||part.startsWith('.')||part&&!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,79}$/.test(part))||
+   relative.startsWith('/')||relative.includes('\\')||relative.includes('//'))throw Error('Unsupported application directory.');
  const base=await fs.realpath(root),cwd=path.resolve(base,relative),st=await fs.lstat(cwd);
  if(!st.isDirectory()||st.isSymbolicLink()||!(cwd===base||cwd.startsWith(base+path.sep)))throw Error('Unsafe application directory.');
- return cwd;
+ const real=await fs.realpath(cwd);
+ if(real!==base&&!real.startsWith(base+path.sep))throw Error('Unsafe application directory (symlink escape).');
+ return real;
 }
 async function npmManifest(cwd){
  if(!await isFile(path.join(cwd,'package.json')))throw Error('Missing application package.json.');
