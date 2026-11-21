@@ -17,7 +17,9 @@ const TARGETS=new Set(['extension','library']);
 const TEXT=/\.(?:js|mjs|cjs|ts|tsx|jsx|json|html|css|md|ya?ml|py|cs|xml)$/i;
 const BLOCKED_DIRS=new Set(['.git','node_modules','dist','build','coverage','.atgv','.venv','venv','.cache']);
 const SENSITIVE=/(?:^|\/)(?:\.env(?:\..*)?|\.npmrc|\.pypirc|credentials\.json|id_rsa|id_ed25519|[^/]+\.(?:pem|key|p12|pfx|jks|keystore))$/i;
-const PROTECTED=/^(?:\.github\/workflows\/|package(?:-lock)?\.json$|npm-shrinkwrap\.json$|VERSION$|catalog\.json$|README\.md$|RELEASE\.md$)/i;
+const {nextVersion}=require('./version-policy');
+const {memoryForPrompt}=require('./decision-memory');
+const PROTECTED=/^(?:\.memory\/|\.github\/workflows\/|package(?:-lock)?\.json$|npm-shrinkwrap\.json$|VERSION$|catalog\.json$|README\.md$|RELEASE\.md$)/i;
 const sha=value=>crypto.createHash('sha256').update(value).digest('hex');
 function redact(value,max=1500){
  return String(value??'').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g,' ')
@@ -132,16 +134,15 @@ async function applyChanges(root,plan,trackedPaths){
  for(const item of items)await fs.writeFile(item.full,item.next,'utf8');
  return items.map(x=>x.relative);
 }
-function nextVersion(version){const m=/^(\d+)\.(\d+)\.(\d+)$/.exec(String(version||''));if(!m)throw Error('Source version is not semantic.');let a=Number(m[1]),b=Number(m[2]),c=Number(m[3])+1;if(c>99){b++;c=0;}if(b>99){a++;b=0;}if(a>99)throw Error('Version limit reached.');return [a,b,c].join('.');}
 async function updateVersion(root,target,issue,summary){
  if(target==='extension'){
-  const p=path.join(root,'package.json'),pkg=JSON.parse(await fs.readFile(p,'utf8'));const old=pkg.version,version=nextVersion(old),parts=version.split('.');pkg.version=version;pkg.atgvDisplayVersion=parts[0]+'.'+parts[1]+'.'+parts[2].padStart(2,'0');
+  const p=path.join(root,'package.json'),pkg=JSON.parse(await fs.readFile(p,'utf8'));const old=pkg.version,version=nextVersion(old);pkg.version=version;pkg.atgvDisplayVersion=version;
   const readmePath=path.join(root,'README.md'),readme=await fs.readFile(readmePath,'utf8');if(!readme.includes('**Version: '+old+'**'))throw Error('Extension README version does not match package.json.');
   const htmlPath=path.join(root,'src/lib/webview/dashboard-html.js'),html=await fs.readFile(htmlPath,'utf8');const fallback=":"+"'"+old+"'";if(!html.includes(fallback))throw Error('Dashboard version fallback does not match package.json.');
   await fs.writeFile(p,JSON.stringify(pkg,null,2)+'\n');await fs.writeFile(readmePath,readme.replace('**Version: '+old+'**','**Version: '+version+'**'));await fs.writeFile(htmlPath,html.replace(fallback,":"+"'"+version+"'"));
   await fs.writeFile(path.join(root,'RELEASE.md'),'<!-- Replace this file with the latest release notes for each release. -->\n\n# ATGV AIATECH Assist v'+version+'\n\n- '+redact(summary||issue.title,350).replace(/\n/g,' ')+'\n');return version;
  }
- const vf=path.join(root,'VERSION'),mf=path.join(root,'catalog.json'),old=(await fs.readFile(vf,'utf8')).trim(),raw=await fs.readFile(mf,'utf8'),manifest=JSON.parse(raw);if(manifest.version!==old)throw Error('Library VERSION and catalog.json disagree.');const version=nextVersion(old);const updated=raw.replace(/("version"\s*:\s*")([^"]+)(")/,(_,a,b,c)=>a+version+c);if(updated===raw)throw Error('Cannot update Library catalog version.');await fs.writeFile(vf,version+'\n');await fs.writeFile(mf,updated);return version;
+ const vf=path.join(root,'VERSION'),mf=path.join(root,'catalog.json'),old=(await fs.readFile(vf,'utf8')).trim(),raw=await fs.readFile(mf,'utf8'),manifest=JSON.parse(raw);if(manifest.version!==old)throw Error('Library VERSION and catalog.json disagree.');const version=nextVersion(old);const updated=raw.replace(/("version"\s*:\s*")([^"]+)(")/,(_,a,b,c)=>a+version+c);if(updated===raw)throw Error('Cannot update Library catalog version.');await fs.writeFile(vf,version+'\n');await fs.writeFile(mf,updated);await fs.writeFile(path.join(root,'RELEASE.md'),'# ATGV SDLC Library v'+version+'\n\n## Changes\n\n- '+redact(summary||issue.title,350).replace(/\n/g,' ')+'\n');return version;
 }
 async function runCheck(bin,args,{cwd,onProgress=()=>{},timeout=600000,spawnImpl=spawn}={}){
  return new Promise((resolve,reject)=>{
