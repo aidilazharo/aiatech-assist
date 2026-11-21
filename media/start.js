@@ -2186,10 +2186,12 @@ function renderArchitectRequirements(project){
  const stack=techStacks.find(item=>item.id===stackId);
  const container=$('architectRequiredComponents');
  if(stackId==='custom'){
+  // Custom Stack has its own scan/repair lifecycle; never hide or zero its progress.
   container.classList.add('hidden');
-  $('architectStackProgressFill').style.width='0%';
-  $('architectStackProgress').setAttribute('aria-valuenow','0');
-  $('architectStackProgressText').textContent='Custom Stack · scan the existing Git repository, then install and run after approval.';
+  const percent=Math.min(100,Math.max(0,Number(architectCustomProgressPercent)||0));
+  $('architectStackProgressFill').style.width=percent+'%';
+  $('architectStackProgress').setAttribute('aria-valuenow',String(percent));
+  $('architectStackProgressText').textContent='Custom Stack · '+(architectCustomProgressLabel||'Ready to scan')+' · '+percent+'%';
   return;
  }
  container.classList.toggle('hidden',!stack);
@@ -7979,6 +7981,16 @@ function architectBegin(action,message){
  send(action,{stackId:$('architectStackSelect').value});return true;
 }
 let architectCustomInfo=null,architectCustomBusy=false,architectCustomRunning=false;
+let architectCustomProgressPercent=0,architectCustomProgressLabel='Ready to scan';
+function architectCustomSetProgress(percent,label){
+ if(Number.isFinite(Number(percent)))architectCustomProgressPercent=Math.min(100,Math.max(0,Math.round(Number(percent))));
+ if(label)architectCustomProgressLabel=String(label).slice(0,180);
+ const fill=$('architectCustomProgressFill'),bar=$('architectCustomProgress'),title=$('architectCustomProgressText');
+ if(fill)fill.style.width=architectCustomProgressPercent+'%';
+ if(bar)bar.setAttribute('aria-valuenow',String(architectCustomProgressPercent));
+ if(title)title.textContent=architectCustomProgressLabel+' · '+architectCustomProgressPercent+'%';
+ if($('architectStackSelect')?.value==='custom')renderArchitectRequirements(projects.find(p=>p.id===activeId));
+}
 function renderArchitectCustomPanel(){
  const panel=$('architectCustomPanel');if(!panel)return;
  const isCustom=$('architectStackSelect').value==='custom';
@@ -7997,11 +8009,48 @@ function renderArchitectCustomPanel(){
  select.disabled=architectCustomBusy||!current?.ready;
  $('architectCustomScan').disabled=architectCustomBusy||architectActionBusy||!activeId||
   projects.find(p=>p.id===activeId)?.techStackId!=='custom';
- $('architectCustomScan').textContent=current?'Pull Repository':'Scan Repository';
- $('architectCustomScan').title=current?'Fetch and fast-forward the current clean branch from its verified GitHub origin':'Scan the configured local checkout without altering files';
+ $('architectCustomScan').textContent='Scan Repository';
+ $('architectCustomScan').title='Re-analyze the current verified repository, dependencies, environment and service blockers';
+ $('architectCustomPull').disabled=architectCustomBusy||architectActionBusy||!current?.sha||!current?.clean||architectCustomRunning;
  $('architectCustomRun').disabled=architectCustomBusy||!current?.ready||architectCustomRunning;
  $('architectCustomMockRun').disabled=architectCustomBusy||!current?.ready||architectCustomRunning||!selected?.mockable;
  $('architectCustomStop').disabled=architectCustomBusy||!architectCustomRunning;
+ const branchSelect=$('architectCustomBranch'),priorBranch=branchSelect.value;
+ branchSelect.replaceChildren();
+ for(const name of current?.branches?.items||[]){
+  const option=document.createElement('option');option.value=name;option.textContent=name;
+  branchSelect.append(option);
+ }
+ if((current?.branches?.items||[]).includes(priorBranch))branchSelect.value=priorBranch;
+ else if(current?.branches?.current)branchSelect.value=current.branches.current;
+ branchSelect.disabled=architectCustomBusy||!current?.branches?.items?.length;
+ $('architectCustomSwitchBranch').disabled=architectCustomBusy||architectCustomRunning||!current?.clean||!branchSelect.value||branchSelect.value===current?.branch;
+ $('architectCustomBranchStatus').textContent=current?.branch?'Current: '+current.branch:'No branch selected';
+ const actions=$('architectCustomActions');actions.replaceChildren();
+ for(const action of current?.analysis?.actions||[]){
+  const button=document.createElement('button');button.type='button';button.className='secondary';
+  button.dataset.customAction=action.id;button.textContent=action.label;button.title=action.detail||action.label;
+  button.disabled=architectCustomBusy||architectCustomRunning||
+   (action.id==='fix-branch'&&!current.clean)||
+   ((action.id==='mock-services'||action.id==='mock-database')&&!selected?.mockable);
+  actions.append(button);
+ }
+ const findings=$('architectCustomFindings');findings.replaceChildren();
+ if(current?.analysis){
+  const heading=document.createElement('strong');heading.textContent='Repository readiness · '+(current.analysis.source||'manifest evidence');
+  findings.append(heading);
+  const review=current.analysis.modelReview;
+  if(review?.summary){
+   const note=document.createElement('p');note.className='muted';note.textContent='AI advisory ('+(review.label||'')+'): '+review.summary;
+   findings.append(note);
+  }
+  for(const issue of [...(current.analysis.observations||[]),...(review?.findings||[])].slice(0,22)){
+   const node=document.createElement('div');node.className='atgv-custom-finding';
+   node.dataset.level=issue.level||'info';
+   node.textContent=(issue.level==='error'?'!':issue.level==='warning'?'⚠':'•')+' '+(issue.target?issue.target+' · ':'')+issue.message;
+   findings.append(node);
+  }
+ }
  if(current){
   $('architectCustomDetails').textContent=current.targets.map(t=>(t.relative||'Root')+': '+t.framework+' · '+t.kind+' · '+(t.scripts?.join(', ')||'native build/test/run')+(t.installed?' · dependencies present':' · dependencies may need installation')).join(' | ')+' · Git '+(current.sha||'').slice(0,12)+' · '+(current.clean?'clean checkout':'uncommitted edits present; no files will be committed');
  }
@@ -8019,18 +8068,50 @@ $('architectCustomPreviewUrl').addEventListener('input',()=>{
  if(architectCustomInfo?.projectId===activeId)architectCustomInfo.previewCustomized=true;
 });
 $('architectCustomScan').addEventListener('click',()=>{
- if(!activeId||architectCustomBusy)return;
- const scanned=architectCustomInfo?.projectId===activeId?architectCustomInfo:null;
+ if(!activeId||architectCustomBusy||architectActionBusy)return;
  architectCustomBusy=true;
- if(scanned){
-  architectCustomNotify('Checking configured GitHub origin and pulling latest code with fast-forward only…');
-  renderArchitectCustomPanel();
-  send('architectCustomPull',{projectId:activeId,expectedSha:scanned.sha});
- }else{
-  architectCustomInfo=null;architectCustomRunning=false;
-  architectCustomNotify('Scanning the configured project repository without changing its files…');
-  renderArchitectCustomPanel();send('architectCustomScan',{projectId:activeId});
- }
+ architectCustomSetProgress(4,'Scanning repository manifests and service requirements');
+ architectCustomNotify('Analyzing repository with manifest evidence and configured Solution Architect AI…');
+ renderArchitectCustomPanel();send('architectCustomScan',{projectId:activeId});
+});
+$('architectCustomPull').addEventListener('click',()=>{
+ const current=architectCustomInfo?.projectId===activeId?architectCustomInfo:null;
+ if(!current?.sha||architectCustomBusy||!current.clean)return;
+ architectCustomBusy=true;architectCustomSetProgress(8,'Checking GitHub origin');
+ architectCustomNotify('Checking clean local checkout and pulling latest verified Git branch…');
+ renderArchitectCustomPanel();send('architectCustomPull',{projectId:activeId,expectedSha:current.sha});
+});
+$('architectCustomSwitchBranch').addEventListener('click',()=>{
+ const current=architectCustomInfo?.projectId===activeId?architectCustomInfo:null;
+ if(!current?.sha||architectCustomBusy||!current.clean)return;
+ architectCustomBusy=true;architectCustomSetProgress(10,'Reviewing Git branch switch');
+ architectCustomNotify('Confirm switching to an existing local branch…');
+ renderArchitectCustomPanel();
+ send('architectCustomSwitchBranch',{projectId:activeId,expectedSha:current.sha,branch:$('architectCustomBranch').value});
+});
+$('architectCustomBranch').addEventListener('change',()=>renderArchitectCustomPanel());
+$('architectCustomActions').addEventListener('click',event=>{
+ const button=event.target?.closest?.('button[data-custom-action]');
+ const current=architectCustomInfo?.projectId===activeId?architectCustomInfo:null;
+ if(!button||!current||architectCustomBusy||architectCustomRunning)return;
+ const action=button.dataset.customAction;
+ const selected=current.targets.find(t=>t.relative===$('architectCustomTarget').value);
+ let message='';
+ if(action==='fix-branch'){
+  message='Review the host confirmation to create a local preview fix branch without changing main.';
+  send('architectCustomFixBranch',{projectId:activeId,expectedSha:current.sha});
+ }else if(action==='install-dependencies'){
+  const target=selected?.kind==='npm'&&!selected.installed?selected:current.targets.find(t=>t.kind==='npm'&&!t.installed);
+  if(!target)return;
+  message='Review the host confirmation to install locked dependencies for '+target.relative+'.';
+  send('architectCustomInstall',{projectId:activeId,sha:current.sha,relative:target.relative});
+ }else if(['mock-services','mock-database'].includes(action)&&selected?.mockable){
+  message='Review confirmation for '+(action==='mock-database'?'synthetic database and service':'mock service')+' preview.';
+  send('architectCustomRun',{projectId:activeId,sha:current.sha,relative:selected.relative,
+   previewUrl:$('architectCustomPreviewUrl').value.trim(),mock:true,mockDatabase:action==='mock-database'});
+ }else return;
+ architectCustomBusy=true;architectCustomSetProgress(10,action==='fix-branch'?'Preparing fix branch':action==='install-dependencies'?'Checking dependencies':'Preparing mock preview');
+ architectCustomNotify(message);renderArchitectCustomPanel();
 });
 $('architectCustomRun').addEventListener('click',()=>{
  if(!activeId||architectCustomBusy||!architectCustomInfo?.ready)return;
@@ -8056,27 +8137,36 @@ $('architectCustomStop').addEventListener('click',()=>{
 window.addEventListener('message',event=>{
  const m=event.data||{};
  if(!activeId||m.projectId!==activeId)return;
- if(m.type==='architectCustomScanResult'){
+ if(m.type==='architectCustomScanResult'||m.type==='architectCustomPullResult'||
+    m.type==='architectCustomBranchResult'||m.type==='architectCustomInstallResult'){
   architectCustomBusy=false;architectCustomRunning=!!m.value?.running;
   architectCustomInfo={...m.value,projectId:activeId,previewCustomized:false};
-  architectCustomNotify(m.value?.ready?('Found '+m.value.recognized+' application target(s). Select the target and local preview URL, then Install & Run.'):'No runnable application was identified at the supported repository locations.',m.value?.ready?'complete':'error');
+  const text=m.value?.pullMessage||m.value?.branchMessage||
+   (m.type==='architectCustomInstallResult'?'Dependencies installed; review the scan findings.':
+    'Found '+(m.value?.recognized||0)+' application target(s). Review the detected services and recommended actions.');
+  architectCustomNotify(text,'complete');architectCustomSetProgress(100,'Repository analysis / preparation complete');
   renderArchitectCustomPanel();
  }
- if(m.type==='architectCustomPullResult'){
-  architectCustomBusy=false;architectCustomRunning=!!m.value?.running;
-  architectCustomInfo={...m.value,projectId:activeId,previewCustomized:false};
-  architectCustomNotify(m.value?.pullMessage||'Repository synchronized with its verified GitHub origin.','complete');
+ if(m.type==='architectCustomError'){
+  architectCustomBusy=false;if(m.logAvailable)architectRecordErrorLog(m);
+  architectCustomNotify(m.message||'Custom Stack operation failed.','error');
+  architectCustomSetProgress(architectCustomProgressPercent,'Operation stopped: review error');
   renderArchitectCustomPanel();
  }
- if(m.type==='architectCustomError'){architectCustomBusy=false;if(m.logAvailable)architectRecordErrorLog(m);architectCustomNotify(m.message||'Custom Stack operation failed.','error');renderArchitectCustomPanel();}
- if(m.type==='architectCustomProgress'){architectCustomNotify(m.message||'Working with custom application…');}
+ if(m.type==='architectCustomProgress'){
+  architectCustomNotify(m.message||'Working with custom application…');
+  architectCustomSetProgress(m.percent??Math.min(90,architectCustomProgressPercent+5),m.message||'Working');
+ }
  if(m.type==='architectCustomRunResult'){
   architectCustomBusy=false;architectCustomRunning=!!m.value?.running;
   architectCustomNotify(m.value?.message||'Custom Stack execution completed.',m.value?.running?'complete':'error');
+  architectCustomSetProgress(m.value?.running?100:architectCustomProgressPercent,m.value?.running?'Local preview verified':'Run unsuccessful');
   renderArchitectCustomPanel();
  }
  if(m.type==='architectCustomStopResult'){
-  architectCustomBusy=false;architectCustomRunning=false;architectCustomNotify(m.value?.message||'Custom Stack stopped.','complete');renderArchitectCustomPanel();
+  architectCustomBusy=false;architectCustomRunning=false;
+  architectCustomNotify(m.value?.message||'Custom Stack stopped.','complete');
+  architectCustomSetProgress(100,'Custom application stopped');renderArchitectCustomPanel();
  }
 });
 
@@ -8090,7 +8180,8 @@ $('architectStackSelect').addEventListener('change',event=>{
  renderArchitectCustomPanel();
  if(event.target.value==='custom'&&activeId){
   architectCustomBusy=false;architectCustomInfo=null;architectCustomRunning=false;
-  architectCustomNotify('Choose Save Stack to create the project repository folder if missing or empty and clone the configured GitHub source. Existing files are preserved.');
+  architectCustomSetProgress(0,'Ready to scan');
+  architectCustomNotify('Choose Save Stack to verify or clone the configured GitHub checkout. Scan Repository for AI-assisted readiness guidance.');
   renderArchitectCustomPanel();
  }
 });
