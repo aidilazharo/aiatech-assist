@@ -1,16 +1,29 @@
-# ATGV AIATECH Assist v0.0.23
+# ATGV AIATECH Assist v0.0.24
 
-## Critical Windows Reset repair
+## My Work Users — Confluence Database API v2 and DataTables
 
-- Fix EPERM and EACCES errors during promotion of staged .atgv folders, using bounded retries and a safe exclusive-copy fallback.
-- Replace the destructive delete-first flow with a transactional directory swap: hold original .atgv and projects in verified rollback storage until the new directories are validated.
-- Roll back both local directories if staging promotion fails, without deleting original user work or modifying remote Jira, Confluence or GitHub data.
-- Detect leftover .atgv-reset-staging-* directories from earlier interrupted Resets before starting a new destructive operation.
-- When a v0.0.22 reset left .atgv absent and the projects folder empty, restore verified staged .atgv and project folders, then halt for user inspection before any new Reset.
-- Refuse to overwrite existing files or guess about conflicts; preserve staging and report recovery locations for manual review.
-- Defer noncritical cache/staging cleanup failures instead of reporting an already-committed reset as an incomplete replacement.
-- Add regression tests for Windows lock simulation, exclusive copy fallback, successful replacement, rollback on partial failure, old-stage recovery and conflict refusal.
+- Register one verified Atlassian account per identity and safely reconcile duplicated legacy email/name rows.
+- Use project-scoped Confluence Database v2 `GET /databases/{id}`, `POST /databases`, and versioned `/databases/{id}/properties` for structured My Work user records.
+- Retain the existing human-readable Confluence page register for compatibility and Project Manager permissions; report Database v2 synchronization failures instead of hiding them.
+- Add a Project Manager–authorized **Add Verified User** control. Verify the Jira account ID and assignment permission, without assigning any SDLC role on another user's behalf.
+- Replace the static roster with offline ATGV DataTables search, sortable columns, five-row pagination and a bounded Jira-task preview.
 
-## Verification
+## BR evidence recovery and destructive Reset protection
 
-Do not merge or release until Node regression, Windows reset check, UI validation and VSIX packaging all pass. Never include .memory in the VSIX or release ZIP.
+- Add **Recover from Confluence** for Jira-only BRs such as TC-834, with user confirmation and a strict BR-to-Epic mapping check against the source vault manifest.
+- Verify current Jira Epic identity and Confluence source checksums; reject missing evidence, mismatched project identity, duplicate Jira keys and conflicting local ownership.
+- Restore only the selected BR's mappings and archived source metadata. Do not fabricate missing discovery answers, overwrite other local BRs or delete remote Jira issues during recovery.
+- Preserve the existing **Delete Everywhere** permission, ownership and confirmation checks; use them only after a BR is genuinely restored.
+- Block destructive ATGV Reset for projects with uploaded originals until Confluence source-vault upload and subsequent read verification succeed.
+- Continue to preserve divergent local and Confluence copies for manual reconciliation.
+
+## Technical and security notes
+
+- The documented v2 Database GET endpoint returns metadata, not native Confluence database table rows. ATGV stores the versioned roster in Database Content Properties API v2.
+- Confluence CQL is used only to locate an existing database ID because the linked Database API does not provide a listing endpoint.
+- Experimental or unavailable v2 operations report a warning; they do not silently wipe the legacy Confluence register.
+- Keep `.memory` excluded from distributable VSIX and source ZIP assets.
+
+## Verification gate
+
+Run the complete Node.js regression suite, Windows Reset checks, UI theme validation and VSIX packaging on the pull request. **Do not merge or publish a release unless all required checks pass.** A live Atlassian test of experimental Database v2 endpoints remains necessary before claiming production compatibility.
