@@ -101,6 +101,43 @@ test('AI chat card matches sibling My Work section width and spacing across role
  }
  assert.match(css,/@media\(max-width:620px\)/);
 });
+test('My Work and PM pages omit activity captions and chat explanatory text',()=>{
+ const html=read('src/lib/webview/dashboard-html.js');
+ const wave=read('media/atgv-mywork-wave-chat.js');
+ const css=read('media/atgv-mywork-ai.css');
+ const removed=[
+  'WAITING FOR ACTIVITY',
+  'Enter to send · Shift+Enter for a new line',
+  'CHAT WITH ATGV AI',
+  'Project-wide Jira delivery activity, team workload and saved role schedules. Jira transitions require confirmation.'
+ ];
+ for(const phrase of removed){
+  assert.equal(html.includes(phrase),false,'HTML contains removed UI text: '+phrase);
+  assert.equal(wave.includes(phrase),false,'runtime recreates removed UI text: '+phrase);
+ }
+ assert.doesNotMatch(html,/id="atgvMyWorkAiWaveState"/);
+ assert.doesNotMatch(wave,/atgvMyWorkAiWaveState/);
+ assert.doesNotMatch(css,/\.atgv-mywork-ai-wave-state\{/);
+ assert.doesNotMatch(html,/<label class="atgv-mywork-ai-chat-label"/);
+ assert.doesNotMatch(css,/\.atgv-mywork-ai-chat-label\{/);
+ assert.match(html,/id="atgvMyWorkAiChatForm"/);
+ assert.match(html,/id="atgvMyWorkAiInput"[^>]*aria-label="Message ATGV AI"/);
+ assert.match(wave,/input\.setAttribute\('aria-label'/);
+ assert.match(wave,/form\.addEventListener\('submit'/);
+ assert.match(wave,/input\.addEventListener\('keydown'/);
+ assert.match(css,/clip:rect\(0,0,0,0\)!important/);
+ assert.match(html,/id="pmDailyCockpit"/);
+ assert.match(html,/id="pmRefreshJira"/);
+});
+test('waveform still automatically animates, slows, sleeps and awakens without visible activity labels',()=>{
+ const wave=read('media/atgv-mywork-wave-chat.js');
+ for(const phase of ['SLOWING','LINE ONLY','FADING','SLEEPING'])assert.ok(wave.includes(phase));
+ assert.match(wave,/requestAnimationFrame\(frame\)/);
+ assert.match(wave,/function pulse\(/);
+ assert.match(wave,/function activity\(\)\{pulse\(1\);\}/);
+ assert.match(wave,/lastActivity=performance\.now\(\)/);
+ assert.doesNotMatch(wave,/label\.textContent/);
+});
 test('reject overlong input and unknown role; chat handler remains read-only',async()=>{
  await assert.rejects(()=>chat.ask({projectId:'a',roleId:'solution-architect',message:'x'.repeat(4001),request:async()=>''}),/1–4000/);
  await assert.rejects(()=>chat.ask({projectId:'a',roleId:'unknown',message:'hello',request:async()=>''}),/Unsupported/);
