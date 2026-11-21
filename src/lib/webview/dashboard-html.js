@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.15';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion  :'0.0.16';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -333,15 +333,19 @@ function html(webview,{resumeLibrary=false}={}){
   </main>
   <main id="myWorkView" class="hidden work-container atgv-mywork-ai-page" aria-label="My Work AI assistant">
     <section id="atgvMyWorkAi" class="atgv-mywork-ai" aria-label="AI recommendations and chat for the selected My Work role" data-state="idle">
-      <div class="atgv-mywork-ai-visual">
-        <canvas id="atgvMyWorkAiOrb" class="atgv-mywork-ai-wave" role="img" aria-label="Reactive multicolor AI waveform; sleeps when there is no activity"></canvas>
+      <div class="atgv-mywork-ai-topbar" aria-label="ATGV AI animation">
+        <div class="atgv-mywork-ai-visual">
+          <canvas id="atgvMyWorkAiOrb" class="atgv-mywork-ai-wave" role="img" aria-label="Soft red AI waveform that fades in and out with activity"></canvas>
+        </div>
       </div>
-      <div id="atgvMyWorkAiContent" class="atgv-mywork-ai-content" hidden>
-        <h2 id="atgvMyWorkAiTitle" class="atgv-mywork-ai-title">AI · My Work</h2>
-        <p id="atgvMyWorkAiText" class="atgv-mywork-ai-text" role="status" aria-live="polite"></p>
-        <div id="atgvMyWorkAiActions" class="atgv-mywork-ai-actions" aria-label="Suggested next actions"></div>
+      <div id="atgvMyWorkAiResults" class="atgv-mywork-ai-results" role="region" aria-label="AI suggestions and conversation">
+        <div id="atgvMyWorkAiContent" class="atgv-mywork-ai-content" hidden>
+          <h2 id="atgvMyWorkAiTitle" class="atgv-mywork-ai-title">AI · My Work</h2>
+          <p id="atgvMyWorkAiText" class="atgv-mywork-ai-text" role="status" aria-live="polite"></p>
+          <div id="atgvMyWorkAiActions" class="atgv-mywork-ai-actions" aria-label="Suggested next actions"></div>
+        </div>
+        <div id="atgvMyWorkAiConversation" class="atgv-mywork-ai-conversation" role="log" aria-label="Role AI conversation" aria-live="polite"></div>
       </div>
-      <div id="atgvMyWorkAiConversation" class="atgv-mywork-ai-conversation" role="log" aria-label="Role AI conversation" aria-live="polite"></div>
       <form id="atgvMyWorkAiChatForm" class="atgv-mywork-ai-chat">
         <div class="atgv-mywork-ai-composer">
           <textarea id="atgvMyWorkAiInput" rows="2" maxlength="4000" placeholder="Ask about your current role or task…" autocomplete="off" aria-label="Message ATGV AI"></textarea>
