@@ -115,7 +115,7 @@ async function runWindow({workspace,manager,getRepository,getToken,isIdle,global
  if(!workspace||!manager||!globalState)return {status:'unavailable'};
  if(!await isIdle())return {status:'busy'};
  const layout=await ensureLayout(workspace);
- if(globalState.get(DAY_STATE,'')===slot.day)return {status:'already-checked'};
+ // Re-scan throughout the noon hour: new errors can arrive after an earlier empty check.
  return withLock(path.join(layout.root,'maintenance'),async()=>{
   if(!await isIdle())return {status:'busy'};
   const logs=await readLogs(layout.logs);
