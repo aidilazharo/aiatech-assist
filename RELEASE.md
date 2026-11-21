@@ -1,17 +1,15 @@
-# ATGV AIATECH Assist v0.0.9
+# ATGV AIATECH Assist v0.0.10
 
 ## Changes
 
-- Replace the My Work AI orb with a responsive Canvas waveform across Business Analyst, Solution Architect, UI/UX Designer, Developer, Project Manager, QA Engineer and UAT Tester.
-- React to keyboard input, AI reviews and displayed reply characters with randomized multicolor waves, ripples and changing wave height.
-- After inactivity, decelerate into a thin line and fade out; awaken smoothly on new typing or AI activity.
-- Add a persistent My Work chat composer with fast typewriter presentation and role-scoped message history.
-- Apply trusted extension-host AI role instructions to chat requests, with role-aware expertise including banking and financial services in Asia.
-- Answer "who are you" consistently according to the selected role without requiring an AI provider.
-- Keep the visible user message unmodified and make chat read-only; never alter Jira, Confluence or project files automatically.
+- Start-screen Jira, Confluence and GitHub verification now shows only the currently running check, not all eight checks at once.
+- Hide a check immediately when it succeeds. Show the next sequential check as verification progresses.
+- Retain a failed or offline check for troubleshooting until verified successfully; keep full check results in the host for saved-credentials gating.
+- Remove the visible Connection diagnostics panel from the startup screen without disabling sanitized diagnostic capture or the existing unified log export.
+- Collapse empty progress containers so successful verification no longer leaves blank rows.
 
-## Tests
+## Validation
 
-- Validate role-specific identity, prompt isolation, bounded chat messages and selected-provider invocation.
-- Verify shared My Work markup, waveform sleep/wake behavior and accessible chat composer.
-- Run Node regression suite, UI checks, VSIX integrity and .memory exclusion checks in GitHub Actions.
+- Startup UI regression covers idle, pending, success, error and repaired checks, including one-at-a-time progress.
+- Diagnostics regression verifies the section stays hidden and host logging/export remains available.
+- Full regression suite, Windows startup tests, UI theme, VSIX and source ZIP integrity are enforced by GitHub Actions.
