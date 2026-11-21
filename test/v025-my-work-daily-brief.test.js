@@ -55,8 +55,9 @@ test('deadline pressure and active role tasks are surfaced without claiming comp
   roster:{rows:[]},config:{jiraConfigured:true,confluenceConfigured:true}
  });
  assert.equal(value.health.code,'at-risk');
- assert.match(value.todayActions[0].label,/recovery/);
- assert.match(value.todayActions[1].label,/TC-758/);
+ assert.match(value.health.detail,/recovery/);
+ assert.ok(value.todayActions.some(item=>/TC-758/.test(item.label)));
+ assert.ok(value.todayActions.every(item=>item.target!=='project-settings'));
  assert.equal(value.teamSummary,'No other distinct verified members listed');
 });
 test('My Work daily tasks have a standalone section and no generic What to do next dock',()=>{
@@ -80,5 +81,5 @@ test('daily brief is based on host-verified account, saved schedule and shared r
  assert.match(wave,/renderBrief\(msg\.brief\)/);
  assert.match(wave,/greetingNode\.textContent=/);
  assert.match(wave,/atgv-mywork-ai-team-member/);
- assert.match(wave,/Today’s work/);
+ assert.match(wave,/Today’s tasks/);
 });
