@@ -1,18 +1,16 @@
-# ATGV AIATECH Assist v0.0.6
+# ATGV AIATECH Assist v0.0.7
 
 ## Changes
 
-- Fix false Confluence source synchronization conflicts when a local project's baseline journal is missing after an upgrade, reinstall or computer transfer.
-- Verify matching Business Requirements, Discovery answers, source document identities, uploaded-file checksums and safe local originals before rebuilding a missing baseline.
-- Ignore only Confluence-restore audit events and local revision/transient state for baseline comparison; preserve actual user work and approved Jira identities.
-- Prevent the repaired baseline from failing a second stale-hash upload check in the same synchronization run.
-- Preserve both local and Confluence versions without overwriting when real content differs; show the affected content categories.
-- Prevent duplicate periodic conflict popups while retaining status, error logs and safety checks.
-- Update source-only `.memory` guidance so every accepted source change creates a sequential release and eligible PRs automatically squash-merge after required CI passes.
-- Align AGENTS.md and idle maintenance release policies; never bypass failing checks, GitHub branch protections or PAT security.
-- Keep all `.memory` development guidance in source only, excluded from downloadable VSIX and source ZIP releases.
+- Replace the CSS-only My Work AI orb with the requested small, continuously looping 16-frame CMYK-style image animation featuring colliding cyan, magenta, blue, green and yellow light ribbons.
+- Ship the optimized 64 × 64 animated WebP inside the extension for secure offline VS Code webview playback; resolve it with the approved webview URI and CSP.
+- Add smooth continuous multi-axis CSS rotation to the animated orb: slower while idle and more energetic while thinking; fade to a green-tinted success state and disappear while preserving the recommended next step.
+- Keep the orb centered above the AI suggestion and user-controlled action buttons for all roles. No chat input or automatic Jira approval, publication or deletion.
+- Set the right-hand ATGV content pane to a black background and provide compatible high-contrast text and dark content surfaces while leaving the navigation sidebar alone.
+- Preserve reduced-motion fallback, source-only .memory guidance and all existing security gates.
 
 ## Validation
 
-- Confluence vault regression tests for cross-computer restore, verified missing-baseline recovery, real divergent BR protection, attachment checksums and unsafe ID rejection.
-- Complete Node regression suite, Windows startup checks, UI theme checks, VSIX and source ZIP verification in GitHub Actions.
+- Verify the packaged animated WebP is a valid RIFF/WEBP animated asset with 16 frames and a strict size budget.
+- Test My Work role guidance, deferred action buttons, centered animation, accessible reduced-motion state, black right content pane and release metadata.
+- Run the full Node regression suite, Windows checks, UI theme verification, VSIX packaging and source ZIP provenance checks through GitHub Actions.
