@@ -149,4 +149,54 @@ async function visit(config,token,{projectKey,roleId}){
  }
  throw Error('Concurrent Confluence edits prevented the register from being saved.');
 }
-module.exports={ROLES,displayName,title,extractRows,renderRows,locate,assignedTasks,snapshot,visit};
+// PMs may register a verified Jira identity; project roles are never assigned
+// by this operation. The user acquires roles only on their own My Work visit.
+async function addUser(config,token,{projectKey,accountId}){
+ const project=validProjectKey(projectKey),id=clean(accountId,200);
+ if(!id||!/*account*/ /^[A-Za-z0-9:_-]{4,200}$/.test(id))throw Error('Enter a valid Atlassian account ID.');
+ const auth={token,basicEmail:config.get('jira.email')},site=baseAtlassian(config);
+ const [self,perms]=await Promise.all([
+  requestJson(site+'/rest/api/3/myself',auth),
+  requestJson(site+'/rest/api/3/mypermissions?projectKey='+encodeURIComponent(project)+'&permissions=ASSIGN_ISSUES',auth)
+ ]);
+ if(!self?.accountId||perms.permissions?.ASSIGN_ISSUES?.havePermission!==true)
+  throw Error('Only a verified Jira user with Assign Issues permission can register project users.');
+ const actor=await locate(config,token,project);
+ const roster=extractRows(actor.page?.body?.storage?.value||'');
+ if(!roster.some(x=>x.id===self.accountId&&x.roles.includes('Project Manager')))
+  throw Error('Enter Project Manager My Work and confirm your Jira identity before adding users.');
+ const person=await requestJson(site+'/rest/api/3/user?accountId='+encodeURIComponent(id),auth);
+ if(person?.accountId!==id||person.active===false)throw Error('Jira could not verify an active user with this account ID.');
+ const email=clean(person.emailAddress,250).toLowerCase();
+ const name=clean(person.displayName)||displayName(email)||id;
+ for(let attempt=0;attempt<3;attempt++){
+  const {space,page,name:pageName}=await locate(config,token,project);
+  const rows=extractRows(page?.body?.storage?.value||'');
+  const old=rows.find(x=>x.id===id);
+  if(!old){
+   if(email&&rows.some(x=>x.email===email&&x.id&&x.id!==id))
+    throw Error('Email belongs to a different Jira account ID. Reconcile before adding.');
+   rows.push({id,email,name,roles:[],tasks:'No assigned task'});
+  }else{
+   old.name=name;
+   if(email)old.email=email;
+  }
+  const normalized=normalizeRows(rows);
+  if(normalized.conflicts.length)throw Error(normalized.conflicts.join('; '));
+  try{
+   const saved=await writeConfluence(config,token,{
+    pageId:page?.id,spaceId:space.id,title:pageName,
+    bodyHtml:renderRows(normalized.rows),version:page?.version?.number
+   });
+   const database=await syncDatabase(config,token,project,normalized.rows);
+   const refreshed=await snapshot(config,token,project);
+   return {...refreshed,pageId:String(saved?.id||page?.id||''),databaseId:database.databaseId||refreshed.databaseId,
+    registryWarning:database.registryWarning||refreshed.registryWarning,reason:'added-user'};
+  }catch(error){
+   if(/version conflict|HTTP (409|412)/i.test(error.message)&&attempt<2)continue;
+   throw error;
+  }
+ }
+ throw Error('Concurrent Confluence edits prevented the user from being registered.');
+}
+module.exports={ROLES,displayName,title,extractRows,renderRows,locate,assignedTasks,snapshot,visit,addUser};
