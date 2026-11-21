@@ -2136,6 +2136,9 @@ function setupDeveloperFocusedLayout(){ $('workView')?.classList.remove('atgv-de
 // The developer task list is sourced from Jira assignee=currentUser(), not
 // simulated/copied from the BR register, and it never reassigns issues.
 let architectLastMessage='', architectActionBusy=false;
+// Save state tracks the selected project and stays locked after a verified save
+// until the user explicitly changes the technology-stack selection.
+let architectSaveSelectionProjectId='',architectSaveSelectionChanged=false,architectSavePendingSelection=null;
 // Live status is scoped to the selected project and remote catalog stack.
 // An item is never reported as ready merely because it is listed in the catalog.
 let architectChecklistLive={projectId:'',stackId:'',completed:new Set(),active:'',failed:''};
@@ -2303,10 +2306,17 @@ function syncArchitectStackButtons(project){
  const serverVerified=!!(saved&&tested&&architectServerRequirementReady(project,stackId));
  const canRequestApproval=!!(saved&&tested&&prepared?.remotePushed===true);
  const save=$('architectSaveStack');
+ if(architectSaveSelectionProjectId!==activeId){
+  architectSaveSelectionProjectId=activeId;architectSaveSelectionChanged=false;
+ }
+ const persisted=stackId==='custom'?project?.techStackId==='custom':saved;
+ const locked=!!(stackId&&persisted&&!architectSaveSelectionChanged);
+ save.classList.toggle('atgv-stack-saved',locked);
+ save.setAttribute('aria-label',locked?'Technology stack saved. Change the selection to enable Save Stack.':'Save selected technology stack');
+ save.disabled=architectActionBusy||!activeId||!stackId||locked;
+ save.textContent=locked?'Saved Stack':switching?'Switch & Save Stack':'Save Stack';
  if(stackId==='custom'){
-  save.disabled=architectActionBusy||!activeId;
-  save.textContent='Save Stack';
-  save.title='Save Custom Stack: clone the configured project GitHub repository into its missing or empty repository folder. Never overwrite existing files.';
+  save.title=locked?'Custom Stack saved. Change the stack selection to save again.':'Save Custom Stack: clone the configured project GitHub repository into its missing or empty repository folder. Never overwrite existing files.';
   $('architectResetStack').disabled=true;
   $('architectTestStack').disabled=true;
   $('architectApproveStack').disabled=true;
@@ -2314,9 +2324,7 @@ function syncArchitectStackButtons(project){
  }
  // A different prepared stack can be replaced only through a confirmed,
  // clean-checkout Git reset. Keep the action available and explain that path.
- save.disabled=architectActionBusy||!activeId||!stackId;
- save.textContent=switching?'Switch & Save Stack':'Save Stack';
- save.title=switching?'Review Git safety checks and confirm switching from '+prepared.stackId+' to '+stackId+'. Previous branches remain intact.':'';
+ save.title=locked?'Technology stack saved. Change the selection to save again.':switching?'Review Git safety checks and confirm switching from '+prepared.stackId+' to '+stackId+'. Previous branches remain intact.':'';
  $('architectResetStack').disabled=architectActionBusy||!project?.techStackId;
  $('architectTestStack').disabled=architectActionBusy||!saved||approved;
  // Leave the action available once Save and Test & Run have been verified.
@@ -7956,6 +7964,7 @@ $('architectServerToggle').addEventListener('click',()=>architectServerAction(ar
 function architectBegin(action,message){
  if(architectActionBusy)return false;
  architectActionBusy=true;architectPendingAction=action;architectLastMessage=message;
+ if(action==='architectSaveStack')architectSavePendingSelection={projectId:activeId,stackId:$('architectStackSelect').value};
  processActivityUpsert('stack','Technology Stack',message,'running');
  const live=architectChecklistSession($('architectStackSelect').value);
  live.failed='';
@@ -8072,6 +8081,7 @@ window.addEventListener('message',event=>{
 });
 
 $('architectStackSelect').addEventListener('change',event=>{
+ architectSaveSelectionProjectId=activeId;architectSaveSelectionChanged=true;
  architectStackDraft={projectId:activeId,stackId:event.target.value};
  architectChecklistSession(event.target.value);
  const project=projects.find(p=>p.id===activeId);
@@ -8239,6 +8249,11 @@ window.addEventListener('message',event=>{
      architectStackDraft={projectId:activeId,stackId:''};
      $('architectStackSelect').value='';
    }
+   if(architectPendingAction==='architectSaveStack'&&architectSavePendingSelection?.projectId===activeId&&
+      architectSavePendingSelection.stackId===$('architectStackSelect').value){
+      architectSaveSelectionProjectId=activeId;architectSaveSelectionChanged=false;
+   }
+   architectSavePendingSelection=null;
    live.active='';live.failed='';architectPendingAction='';
    $('architectStopInstall').disabled=true;architectActionBusy=false;renderRoleWork();
  }
@@ -8246,7 +8261,7 @@ window.addEventListener('message',event=>{
    if(msg.type==='architectStackError'&&msg.logAvailable)architectRecordErrorLog(msg);
    const live=architectChecklistSession($('architectStackSelect').value);
    if(msg.type==='architectStackError')live.failed=msg.failedStep||live.active||'dependencies';
-   live.active='';architectPendingAction='';architectActionBusy=false;$('architectStopInstall').disabled=true;
+   live.active='';architectPendingAction='';architectActionBusy=false;architectSavePendingSelection=null;$('architectStopInstall').disabled=true;
    architectLastMessage=(msg.type==='architectStackCancelled'?'':'Stack action failed: ')+(msg.message||'');
    renderArchitectRequirements(projects.find(p=>p.id===activeId));
    $('architectBootstrapStatus').textContent=architectLastMessage;
