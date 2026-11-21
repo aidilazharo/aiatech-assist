@@ -9901,6 +9901,17 @@ async function reset(){
   // after their underlying files are deleted, especially on Windows.
   if(vscode.workspace.textDocuments?.some(doc=>doc.isDirty&&doc.uri?.scheme==='file'&&insideFolder(doc.uri.fsPath,workspace)))
     throw Error('Close or discard unsaved ATGV workspace editors before Reset. No files were deleted.');
+  // Older versions could delete original local folders before Windows denied
+  // promotion of the freshly staged .atgv. Recover that verified staging first
+  // and STOP instead of starting a second destructive Reset.
+  const recovered=await localReset.recoverInterruptedReset(workspace);
+  if(recovered){
+    await initialize();
+    await refreshDashboard();
+    const details=recovered.warnings?.length?' Staging cleanup requires review: '+recovered.warnings.join('; '):'';
+    await uiWarning('ATGV recovered '+recovered.projects+' project(s) from interrupted Reset staging. Earlier local-only changes may already have been lost by the previous attempt. Review your project files and Git state before running Reset again.'+details,{modal:true},'OK');
+    return;
+  }
   await localReset.checkOwnedWorkspaceLibrary(workspace);
   const projects=await registry.list();
   const connections=projects.map(project=>({id:project.id,...localReset.remoteCheckout(project,extensionSettings,cfg())}));
@@ -9924,7 +9935,8 @@ async function reset(){
     if(jiraMonitorTimer){clearInterval(jiraMonitorTimer);jiraMonitorTimer=null;}
     ++activationEpoch;activeProject=undefined;store=undefined;
     destructionStarted=true;
-    await localReset.replaceLocalWorkspace({workspace,registry,...staged,storageRoot:context.globalStorageUri.fsPath,workspaceHash:workspaceHash()});
+    const replacement=await localReset.replaceLocalWorkspace({workspace,registry,...staged,storageRoot:context.globalStorageUri.fsPath,workspaceHash:workspaceHash()});
+    if(replacement.warnings?.length)for(const warning of replacement.warnings)report('ATGV Reset cleanup: '+warning);
     staged=null;
     // Clear only per-project runtime selections. All extension-wide settings,
     // configured accounts, tokens and SDLC Catalog connection details survive.
