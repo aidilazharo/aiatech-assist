@@ -1494,6 +1494,31 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
  const accountApi='https://api.github.com/user';
  const organizationApi='https://api.github.com/users/'+encodeURIComponent(data.owner);
  const repoApi=repo=>'https://api.github.com/repos/'+encodeURIComponent(repo.owner)+'/'+encodeURIComponent(repo.repo);
+ // Probe only the first byte of a published release asset. The PAT is
+ // sent solely to api.github.com, NEVER to redirected object storage.
+ const verifyReleaseAssetDownload=async(repoUrl,assetId)=>{
+  const endpoint=repoUrl+'/releases/assets/'+assetId;
+  const response=await fetch(endpoint,{method:'GET',redirect:'manual',
+   headers:{Authorization:'Bearer '+github,Accept:'application/octet-stream',
+    'X-GitHub-Api-Version':'2022-11-28',Range:'bytes=0-0'},
+   signal:AbortSignal.timeout(20000)});
+  if([301,302,303,307,308].includes(response.status)){
+   const location=response.headers.get('location');
+   if(!location)throw Error('Release asset download redirect had no location.');
+   const url=new URL(location);
+   if(url.protocol!=='https:'||url.username||url.password||url.port||
+     !/^(?:release-assets|github-releases|objects)\.githubusercontent\.com$/.test(url.hostname))
+     throw Error('GitHub release asset redirected to an untrusted download host.');
+   const copy=await fetch(url.toString(),{method:'GET',redirect:'error',
+    headers:{Range:'bytes=0-0'},signal:AbortSignal.timeout(20000)});
+   if(!copy.ok)throw Error('Release download probe returned HTTP '+copy.status);
+   await copy.body?.cancel().catch(()=>{});
+   return;
+  }
+  if(!response.ok||/json/i.test(response.headers.get('content-type')||''))
+   throw Error('Release binary download probe did not return authenticated asset bytes (HTTP '+response.status+').');
+  await response.body?.cancel().catch(()=>{});
+ };
  const validatedGithub=async(url,{requiredWrite=false,checkRelease=true}={})=>{
   if(!github)throw Error('GitHub PAT is required for repository verification.');
   const meta=await requestJson(url,{token:github,headers:gitHeaders});
@@ -1508,6 +1533,7 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
    if(asset){
     const detail=await requestJson(url+'/releases/assets/'+asset.id,{token:github,headers:gitHeaders});
     if(!detail||Number(detail.id)!==asset.id)throw Error('GitHub release asset access was not verified.');
+    await verifyReleaseAssetDownload(url,asset.id);
    }
    return {releases:releases.length,asset:!!asset};
   }
@@ -1556,7 +1582,7 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
   try{
    const info=await spec.check();
    value={id:spec.id,label:spec.label,url:spec.url,required:spec.required,state:'ok',
-    message:info?.asset?'Read/write and release-asset metadata verified.':info?.releases===0?
+    message:info?.asset?'Read/write and authenticated release download verified.':info?.releases===0?
      'Repository access verified. No published release assets to download yet.':'Reachable and verified.'};
   }catch(error){
    value={id:spec.id,label:spec.label,url:spec.url,required:spec.required,state:'error',
