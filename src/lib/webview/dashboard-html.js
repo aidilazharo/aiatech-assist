@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.32';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.33';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -129,7 +129,7 @@ function html(webview,{resumeLibrary=false}={}){
       <button type="button" class="nav-item" data-nav="flow"><span class="nav-icon">↻</span>SDLC</button>
       <button type="button" class="nav-item" data-nav="documents"><span class="nav-icon">▤</span>Documents</button>
       <button type="button" class="nav-item" data-nav="planning"><span class="nav-icon">▥</span>Solution Designs</button>
-      <button type="button" class="nav-item" data-nav="library"><span class="nav-icon">▤</span>Library Studio</button>
+      <button type="button" class="nav-item" data-nav="library" id="navLibraryStudio" hidden aria-hidden="true" tabindex="-1"><span class="nav-icon">▤</span>Library Studio</button>
       <button type="button" class="nav-item" data-nav="knowledge"><span class="nav-icon">◎</span>Knowledge & RAG</button>
       <button type="button" class="nav-item" data-nav="operations"><span class="nav-icon">⚑</span>Approvals & Handoffs</button>
       <button id="headerModel" type="button" class="header-model-status sidebar-model-status inactive" aria-haspopup="dialog" aria-controls="modelPicker" title="Choose AI model"><span class="model-dot" aria-hidden="true"></span><span id="headerModelName">LLM</span><span id="headerModelState">Not active</span><span aria-hidden="true">⌄</span></button>

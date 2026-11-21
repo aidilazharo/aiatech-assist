@@ -48,16 +48,16 @@ test('chat copy has a foreground layer and safe clearance below the header wavef
  const shell=css.match(/#myWorkView > #atgvMyWorkAi,\s*#myWorkView > #atgvMyWorkAi\.atgv-mywork-ai\{([^}]+)\}/)?.[1]||'';
  const results=css.match(/#atgvMyWorkAi \.atgv-mywork-ai-results\{([^}]+)\}/)?.[1]||'';
  // The header clearance is OUTSIDE the scrolling region, not scrolling padding.
- assert.match(shell,/padding:94px 0 0/);
+ assert.match(shell,/padding:42px 0 0/);
  assert.match(shell,/overflow:hidden/);
  assert.match(results,/padding:0 clamp\(12px,2vw,24px\) 26px/);
  assert.match(results,/scroll-padding-top:0/);
  assert.match(results,/overflow-y:auto/);
  assert.match(results,/isolation:isolate/);
  assert.match(css,/#atgvMyWorkAi \.atgv-mywork-ai-results > \.atgv-mywork-ai-conversation\{\s*position:relative;z-index:1/);
- assert.match(css,/#myWorkView > #atgvMyWorkAi\.atgv-mywork-ai\{padding-top:76px\}/);
+ assert.match(css,/#myWorkView > #atgvMyWorkAi\.atgv-mywork-ai\{padding-top:34px\}/);
  assert.match(css,/padding:0 12px 20px;scroll-padding-top:0/);
- assert.match(css,/#myWorkView > #atgvMyWorkAi\.atgv-mywork-ai\{padding-top:54px\}/);
+ assert.match(css,/#myWorkView > #atgvMyWorkAi\.atgv-mywork-ai\{padding-top:24px\}/);
  assert.match(css,/padding-top:0;scroll-padding-top:0/);
  // The animated border remains pointer-transparent and above the red divider.
  assert.match(css,/#topNotification #myWorkHeaderWave \.mywork-header-wave-visual\{[^}]+pointer-events:none/);

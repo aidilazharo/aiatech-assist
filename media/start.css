@@ -2399,3 +2399,9 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 #workView .atgv-custom-runtime[data-state="failed"] .atgv-custom-runtime-indicator{background:#e66c74}
 @keyframes atgv-runtime-pulse{50%{opacity:.35;transform:scale(.7)}}
 @media(prefers-reduced-motion:reduce){#workView .atgv-custom-runtime-indicator{animation:none!important}}
+
+/* v0.0.33: do not render duplicate blue breadcrumbs in workspace content. */
+#contentPane .atgv-workspace-breadcrumbs,
+#brEditModal .atgv-workspace-breadcrumbs,
+#baRequirementModal .atgv-workspace-breadcrumbs{display:none!important}
+.sidebar .nav-item[data-nav="library"][hidden]{display:none!important}

@@ -16,8 +16,9 @@ body.atgv-mywork-chat-mode:not(.gate-mode) #contentPane.content-pane{
   display:flex!important;flex-direction:column;align-items:stretch;justify-content:flex-start;
   flex:1 1 auto;height:100%;min-height:0;width:100%;min-width:0;
   box-sizing:border-box;align-self:stretch;overflow:hidden;
-  /* Permanent non-scrolling clearance: messages cannot cross into the header waveform. */
-  padding:94px 0 0;margin:0;background:#000!important;color:#fff!important;
+  /* Only reserve the ~38px waveform overhang plus a small safety margin; the
+     old 94px clearance created an apparent black overlay above chat. */
+  padding:42px 0 0;margin:0;background:#000!important;color:#fff!important;
   border:0!important;box-shadow:none!important;border-radius:0;max-width:none;text-align:left;
 }
 /* My Work waveform is painted on the ACTUAL main header bottom border (#D31145).
@@ -136,14 +137,14 @@ body.atgv-mywork-chat-mode:not(.gate-mode) #appHeader .header-end{
 }
 @media(max-width:620px){
   #appHeader #myWorkHeaderWave .mywork-header-wave-visual{left:10px;right:10px;height:58px;bottom:-29px}
-  #myWorkView > #atgvMyWorkAi.atgv-mywork-ai{padding-top:76px}
+  #myWorkView > #atgvMyWorkAi.atgv-mywork-ai{padding-top:34px}
   #atgvMyWorkAi .atgv-mywork-ai-results{padding:0 12px 20px;scroll-padding-top:0}
   #atgvMyWorkAi .atgv-mywork-ai-chat{padding:10px 10px 14px}
   #atgvMyWorkAi .atgv-mywork-ai-message{max-width:none;width:100%}
 }
 @media(max-height:400px){
   #appHeader #myWorkHeaderWave .mywork-header-wave-visual{height:42px;bottom:-20px}
-  #myWorkView > #atgvMyWorkAi.atgv-mywork-ai{padding-top:54px}
+  #myWorkView > #atgvMyWorkAi.atgv-mywork-ai{padding-top:24px}
   #atgvMyWorkAi .atgv-mywork-ai-results{padding-top:0;scroll-padding-top:0}
   #atgvMyWorkAi .atgv-mywork-ai-chat{padding-block:6px}
 }

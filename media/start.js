@@ -593,57 +593,13 @@ function workspaceBreadcrumbAction(action){
  if(action==='ux-work'){navigate('ux-designer');return;}
  navigate(action);
 }
+// Workspace pages now use their own page headings. Do not render duplicate
+// blue navigation trails in the right pane or its modal dialogs.
 function renderWorkspaceBreadcrumbs(){
- if(typeof ATGVWorkspaceBreadcrumbs==='undefined')return;
- const id=view==='landing'?'landingView':view==='discovery'?'workView':view+'View';
- const active=$(id);
- if(!active||active.classList.contains('hidden'))return;
- // My Work is the AI-only landing: no duplicate blue title/breadcrumb.
- // Keep the sidebar's My Work navigation label and the breadcrumbs on Role Workspace.
- if(view==='myWork'||view==='landing'){
-  active.querySelector('.atgv-workspace-breadcrumbs')?.remove();
-  active.classList.remove('has-workspace-breadcrumb');
-  return;
- }
- const trail=ATGVWorkspaceBreadcrumbs.trail(workspaceBreadcrumbContext());
- const build=container=>{
-  if(!container)return;
-  let nav=[...container.children].find(el=>el.classList?.contains('atgv-workspace-breadcrumbs'));
-  if(!nav){nav=document.createElement('nav');nav.className='atgv-workspace-breadcrumbs';
-   nav.setAttribute('aria-label','Breadcrumb');
-   container.insertBefore(nav,container.firstChild);
-  }
-  const signature=JSON.stringify(trail);
-  if(nav.dataset.route===signature)return;
-  nav.dataset.route=signature;nav.replaceChildren();
-  for(const [i,segment] of trail.entries()){
-   if(i){const sep=document.createElement('span');sep.className='atgv-breadcrumb-separator';
-    sep.textContent='/';sep.setAttribute('aria-hidden','true');nav.append(sep);}
-   const leaf=i===trail.length-1;
-   const item=document.createElement(!leaf&&segment.action?'button':'span');
-   item.className=leaf?'atgv-breadcrumb-current':'atgv-breadcrumb-link';
-   item.textContent=segment.label;
-   if(leaf)item.setAttribute('aria-current','page');
-   if(item.tagName==='BUTTON'){
-    item.type='button';item.title='Go to '+segment.label;
-    item.addEventListener('click',()=>workspaceBreadcrumbAction(segment.action));
-   }
-   nav.append(item);
-  }
-  container.classList.add('has-workspace-breadcrumb');
- };
- build(active);
- // Show the full My Work / Business Requirement / BR-ID path inside a dialog.
- // A breadcrumb only behind a modal cannot be seen or used by the reader.
- const dialogs=[['brEditModal','.br-edit-card'],['baRequirementModal','.ba-requirement-modal-card']];
- for(const [modalId,selector] of dialogs){
-  const overlay=$(modalId),card=overlay?.querySelector(selector);
-  if(!card)continue;
-  if(view==='discovery'&&!overlay.classList.contains('hidden'))build(card);
-  else{
-   const old=[...card.children].find(el=>el.classList?.contains('atgv-workspace-breadcrumbs'));
-   old?.remove();card.classList.remove('has-workspace-breadcrumb');
-  }
+ const roots=document.querySelectorAll('#contentPane > main, #brEditModal .br-edit-card, #baRequirementModal .ba-requirement-modal-card');
+ for(const root of roots){
+  root.querySelectorAll('.atgv-workspace-breadcrumbs').forEach(node=>node.remove());
+  root.classList.remove('has-workspace-breadcrumb');
  }
 }
 
@@ -1066,7 +1022,7 @@ function updateState(msg){
   else if(view==='project')renderTechStacks();
   if(opening.phase==='open'){
     if(!workspaceOpened){workspaceOpened=true;gateBusy=false;gateError='';document.body.classList.remove('gate-mode');$('extensionToProjectSettings').disabled=!activeId;renderSidebarRole();navigate('sdlc-roles');}
-    if(restoreLibraryAfterVendorSync&&workspaceOpened){restoreLibraryAfterVendorSync=false;navigate('library');}
+    if(restoreLibraryAfterVendorSync&&workspaceOpened){restoreLibraryAfterVendorSync=false;if(canUseLibraryStudio())navigate('library');}
   }else if(view!=='settings'&&view!=='project'){
     // Do not reset gateBusy on every background dashboard update. A refresh
     // can arrive between click and Jira/Confluence verification.
@@ -1096,6 +1052,10 @@ function navigate(destination){
   if(view==='planning'&&designDirty&&destination!=='planning'){status('Save your design draft before leaving this screen.',true);return;}
   if(view==='planning'&&diagramDirty&&destination!=='planning'){status('Save your diagram before switching screens. Changes have not been written to disk.',true);return;}
   if(view==='library'&&destination!=='library'&&window.atgvLibraryStudio?.isDirty()){status('Save or restore your local library edits before leaving Library Studio.',true);return;}
+  if(destination==='library'&&!canUseLibraryStudio()){
+    status('Library Studio is only available in the Developer role. Switch to Developer to open it.',true);
+    return;
+  }
   if(destination==='projects'){
     if(workspaceOpened){send('openingBack');return;}
     showGate();return;
@@ -1185,6 +1145,31 @@ function applyRoleNavigationTheme(roleId){
 }
 function visibleRoles(){const enabled=new Set(roleSettings.enabled||[]),order=roleSettings.order||[];return (roleData.roles||[]).filter(role=>enabled.has(role.id)).sort((a,b)=>{const ai=order.indexOf(a.id),bi=order.indexOf(b.id);return (ai<0?999:ai)-(bi<0?999:bi);});}
 function visibleRoleLabel(role){return role.id==='ux-designer'?'UI/UX Designer':role.label;}
+// Visibility and navigation must both follow the active role, not the set of
+// roles a user happens to be assigned.
+function canUseLibraryStudio(){
+ return selectedRole==='software-developer'&&visibleRoles().some(role=>role.id==='software-developer');
+}
+function syncLibraryStudioVisibility(){
+ const link=document.querySelector('.sidebar [data-nav="library"]');
+ if(!link)return;
+ const allowed=!!workspaceOpened&&canUseLibraryStudio();
+ link.hidden=!allowed;
+ link.classList.toggle('hidden',!allowed);
+ link.setAttribute('aria-hidden',String(!allowed));
+ link.tabIndex=allowed?0:-1;
+ // When a role is removed by project settings, never leave Library Studio on
+ // screen for an unauthorized role. The in-memory editor draft is untouched.
+ if(!allowed&&view==='library'){
+  selectedNav='sdlc-roles';
+  for(const nav of document.querySelectorAll('.sidebar [data-nav]')){
+   const current=nav.dataset.nav==='sdlc-roles';
+   nav.classList.toggle('current',current);
+   if(current)nav.setAttribute('aria-current','page');else nav.removeAttribute('aria-current');
+  }
+  setView('myWork');
+ }
+}
 function renderSidebarRole(){
  const picker=$('sidebarRole'),roles=visibleRoles(),root=$('sidebarRoleMenu');
  picker.replaceChildren();root.replaceChildren();
@@ -1200,6 +1185,7 @@ function renderSidebarRole(){
  const active=roles.find(x=>x.id===selectedRole);
  $('sidebarRoleCurrent').textContent=active?visibleRoleLabel(active):'Choose role';
  applyRoleNavigationTheme(selectedRole);
+ syncLibraryStudioVisibility();
  $('sidebarRoleTrigger').disabled=!workspaceOpened;
  if(!workspaceOpened)closeRoleMenu();
 }

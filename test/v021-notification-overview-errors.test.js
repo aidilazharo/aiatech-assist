@@ -34,7 +34,9 @@ test('Overview has no duplicate heading or breadcrumb in content pane',()=>{
  const pane=html.slice(html.indexOf('<main id="landingView"'),html.indexOf('<main id="settingsView"'));
  assert.ok(pane.includes('id="overviewHealthDetail"'));
  assert.doesNotMatch(pane,/<h1>Overview<\/h1>|<div class="page-kicker">PROJECT OVERVIEW<\/div>/);
- assert.match(ui,/if\(view==='myWork'\|\|view==='landing'\)\{/);
+ const cleanup=ui.slice(ui.indexOf('function renderWorkspaceBreadcrumbs(){'),ui.indexOf('function setView(next){'));
+ assert.ok(cleanup.includes("root.classList.remove('has-workspace-breadcrumb')"));
+ assert.ok(cleanup.includes('node=>node.remove()'));
 });
 
 test('all right pane error notices are suppressed without hiding global notifications',()=>{

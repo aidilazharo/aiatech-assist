@@ -60,16 +60,19 @@ test('My Work role chat host uses project index, read-only AI system grounding a
  assert.doesNotMatch(handler,/store\.replace|store\.clear|writeConfluence|updateJira|publish\(/);
 });
 
-test('My Work blue breadcrumb title is suppressed without removing the sidebar role selector',()=>{
+test('all right-pane pages and dialogs remove duplicate blue breadcrumb components',()=>{
  const js=read('media/start.js'),html=read('src/lib/webview/dashboard-html.js');
+ const css=read('media/start.css');
  const start=js.indexOf('function renderWorkspaceBreadcrumbs(){');
  const end=js.indexOf('\nfunction setView(next){',start);
  const handler=js.slice(start,end);
- assert.match(handler,/if\(view==='myWork'\|\|view==='landing'\)\{/);
- assert.match(handler,/active\.querySelector\('\.atgv-workspace-breadcrumbs'\)\?\.remove\(\)/);
- assert.match(handler,/active\.classList\.remove\('has-workspace-breadcrumb'\)/);
+ assert.match(handler,/querySelectorAll\('#contentPane > main, #brEditModal/);
+ assert.match(handler,/querySelectorAll\('\.atgv-workspace-breadcrumbs'\)/);
+ assert.match(handler,/node=>node\.remove\(\)/);
+ assert.match(handler,/root\.classList\.remove\('has-workspace-breadcrumb'\)/);
+ assert.doesNotMatch(handler,/document\.createElement\('nav'\)/);
+ assert.match(css,/#contentPane \.atgv-workspace-breadcrumbs/);
  assert.match(html,/data-nav="sdlc-roles"[^>]*>[\s\S]{0,100}My Work<\/button>/);
  assert.match(html,/id="myWorkView"/);
- assert.match(html,/id="atgvMyWorkAiOrb"/);
  assert.match(html,/id="atgvMyWorkAiChatForm"/);
 });

@@ -1,14 +1,14 @@
-# ATGV AIATECH Assist v0.0.32
+# ATGV AIATECH Assist v0.0.33
 
-## Custom Stack — responsive repository scanning
+## Workspace navigation and My Work layout
 
-- Display verified application targets, dependencies, Git branches and safe remediation actions before optional AI advisory completes.
-- AI review arrives as a separate update, tied to the Git revision and scan request; ignore stale scan results.
-- Show immediate scan-request feedback, confirmed extension-host milestones and a single Technology Stack progress bar.
-- If the host is silent for 12 seconds, report elapsed time and last known phase, with diagnostic steps instead of implying server execution.
-- Keep application runtime separate: scan completion never means the application is running.
+- Remove duplicate blue breadcrumb trails from all right-pane pages and BR dialogs. Keep native page headings and workflow safeguards.
+- Fix excessive black band above My Work chat by reducing the original 94px clearance to 42px on desktop, 34px narrow layouts and 24px short-height layouts while avoiding waveform overlap.
+- Only display Library Studio for the currently active **Developer** (`software-developer`) role. Hide it from keyboard navigation when the role is not active.
+- Block direct Library Studio navigation for other roles and prevent automatic restoration from bypassing the active-role gate.
+- Leave SDLC, Documents, Solution Designs, Knowledge & RAG and Approvals & Handoffs navigation intact; their consolidation remains a proposal.
 
 ## Verification
 
-- Regression checks cover early manifest delivery, AI updates, stale scan events and silent-host warnings.
-- Preserve read-only scanning, local fix branches and explicit confirmation for installation/mocking.
+- Update regression tests for breadcrumb removal and safe My Work waveform/chat clearance.
+- Validate role-filtered Library Studio navigation, Node regression tests, Windows checks and VSIX packaging before merging.
