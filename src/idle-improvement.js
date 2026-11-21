@@ -1,6 +1,6 @@
 'use strict';
 // Development-only AI maintenance: noon local time, only when ATGV is idle.
-// Never auto-merges, and never puts .memory in distributable packages.
+// Auto-merges only after verified required CI, never packages .memory.
 const fs=require('node:fs/promises');
 const path=require('node:path');
 const crypto=require('node:crypto');
@@ -108,6 +108,41 @@ async function syncSource(folder,repo,token,{run}={}){
  if(!memory?.isFile()||memory.isSymbolicLink())throw Error('Source .memory manifest is missing or unsafe; cannot code without development guidance.');
  return folder;
 }
+// Poll only PRs created by the trusted ATGV maintenance worker. The manager
+// verifies exact head/base SHAs, required GitHub checks and branch protection;
+// no unchecked or user-authored PRs are merged by this process.
+async function mergePublished({manager,getRepository,getToken,isIdle,globalState,request,progress,limit=5}={}){
+ if(typeof manager?.store?.list!=='function'||typeof manager.merge!=='function')return {merged:0,awaitingChecks:0};
+ const jobs=(await manager.store.list()).filter(x=>x.origin==='automatic'&&x.status==='published').slice(0,limit);
+ let merged=0,awaitingChecks=0;
+ for(const item of jobs){
+  if(!await isIdle())break;
+  const url=await getRepository(item.target),token=await getToken(item.target);
+  if(!url||!token){awaitingChecks++;continue;}
+  const repo=repoSync.githubUrl(url);
+  if(repo.name.toLowerCase()!==repoSync.githubUrl(item.repositoryUrl).name.toLowerCase()){
+   await progress('Pending PR repository differs from configured source; no merge attempted.');
+   awaitingChecks++;continue;
+  }
+  const disabled=globalState.get(DISABLED_STATE,{});
+  if(disabled[item.target]===tokenHash(token)){awaitingChecks++;continue;}
+  const access=await probePat(repo,token,{request});
+  if(!access.ok){
+   if(access.readOnly)await globalState.update(DISABLED_STATE,{...disabled,[item.target]:tokenHash(token)});
+   awaitingChecks++;await progress('Pending PR merge deferred: GitHub read/write permission unavailable.');
+   continue;
+  }
+  try{
+   await manager.merge(item.id,{token,onProgress:progress});
+   merged++;await progress('Verified PR merged; main-branch release workflow will publish the version.');
+  }catch(error){
+   awaitingChecks++;
+   // Preserve the original PR. Never bypass pending, failed or missing CI.
+   await progress('Pending PR remains unmerged: '+String(error?.message||error).slice(0,180));
+  }
+ }
+ return {merged,awaitingChecks};
+}
 async function runWindow({workspace,manager,getRepository,getToken,isIdle,globalState,zone='system',
  now=()=>new Date(),request=github.githubRequest,progress=()=>{},maxLogs=10}={}){
  const slot=localSlot(now(),zone);
@@ -118,8 +153,9 @@ async function runWindow({workspace,manager,getRepository,getToken,isIdle,global
  // Re-scan throughout the noon hour: new errors can arrive after an earlier empty check.
  return withLock(path.join(layout.root,'maintenance'),async()=>{
   if(!await isIdle())return {status:'busy'};
+  const prior=await mergePublished({manager,getRepository,getToken,isIdle,globalState,request,progress});
   const logs=await readLogs(layout.logs);
-  if(!logs.length){await globalState.update(DAY_STATE,slot.day);return {status:'empty'};}
+  if(!logs.length){await globalState.update(DAY_STATE,slot.day);return {status:'empty',...prior};}
   let processed=0,duplicates=0,prs=0;
   for(const log of logs.slice(0,maxLogs)){
    if(localSlot(now(),zone).hour!==12)break;
@@ -150,10 +186,15 @@ async function runWindow({workspace,manager,getRepository,getToken,isIdle,global
    await manager.publish(issue.id,{token,onProgress:progress});
    const archive=path.join(layout.logs,'processed');await secureDirectory(archive);
    await fs.rename(log.file,path.join(archive,path.basename(log.file)));
-   processed++;prs++;await progress('Verified branch pushed and PR created; no automatic merge.');
+   processed++;prs++;await progress('Verified branch pushed and PR created. Waiting for required GitHub checks to merge.');
+   // Only one new PR per tick prevents multiple releases racing from the same
+   // main revision and accidentally reusing an identical version.
+   break;
   }
+  const next=prs?await mergePublished({manager,getRepository,getToken,isIdle,globalState,request,progress}):{merged:0,awaitingChecks:0};
   if(processed===logs.length)await globalState.update(DAY_STATE,slot.day);
-  return {status:'complete',processed,duplicates,prs,slot};
+  return {status:'complete',processed,duplicates,prs,slot,
+    merged:prior.merged+next.merged,awaitingChecks:next.awaitingChecks};
  });
 }
 const ERROR_SIGNAL=/\b(?:error|errors|failed|failure|fatal|exception|crashed?|timeout|timed?\s+out|unauthoriz(?:ed|ation)|forbidden|permission denied|cannot|unable|HTTP\s+[45]\d\d|unreachable)\b/i;
@@ -164,4 +205,4 @@ async function captureRuntimeError(workspace,source,message,{target='extension'}
  return writeLog(workspace,{category:'error',target,title:'Error in '+String(source||'ATGV').slice(0,70),
   screen:String(source||'ATGV').slice(0,80),observed:text.slice(0,3000)});
 }
-module.exports={ensureLayout,writeLog,readLogs,captureRuntimeError,localSlot,fingerprint,probePat,findReported,syncSource,runWindow,DAY_STATE,DISABLED_STATE};
+module.exports={ensureLayout,writeLog,readLogs,captureRuntimeError,localSlot,fingerprint,probePat,findReported,syncSource,runWindow,mergePublished,DAY_STATE,DISABLED_STATE};
