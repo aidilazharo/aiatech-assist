@@ -1,20 +1,21 @@
-# ATGV AIATECH Assist v0.0.26
+# ATGV AIATECH Assist v0.0.27
 
-## Solution Architect — Custom Stack Scan / Pull Repository
-- **Scan Repository** toggles to **Pull Repository** after verifying the configured project Git checkout.
-- Pull verifies the GitHub origin, checked-out branch, exact scanned SHA, clean worktree, and that no ATGV-managed app is running.
-- Fetch the current origin branch and fast-forward only. Divergent histories, dirty files, detached HEADs, mismatched origins and concurrent repository changes are blocked.
-- Automatically re-scan the fetched source and show the resulting revision. No reset, rebase, force, stash, commit or push is performed.
+## Solution Architect — Custom Stack
+- Selecting Custom Stack enables **Save Stack**. The prior automatic scan is deferred until after Save.
+- Save Stack creates the project's `repository` folder when absent and clones the configured GitHub owner/repository into a missing or completely empty repository destination.
+- Existing tracked/untracked project files are preserved. An existing valid checkout is accepted without an automatic update; use **Pull Repository** explicitly to fetch newer commits safely.
+- Reject symlinks, nonempty non-Git folders, mismatched GitHub origins, a catalog repo used as the project repo, and switching from a previously prepared stack without the reset review.
+- The Save action neither installs dependencies nor executes project code, commits, pushes, resets, or force updates Git.
+- Scan after Save populates detected application targets. Existing **Scan Repository → Pull Repository** remains available once saved.
 
-## AI guidance and project delivery evidence
-- Read up to 40 recent, project-scoped Jira items and flag evidence of blocked, overdue and unassigned issues, without treating the limited sample as a complete forecast.
-- Provide deadline-aware risk guidance and role-specific action suggestions; explicitly distinguish unknown capacity and critical path.
-- Route **What to do next** using trusted host-supplied navigation targets instead of parsing displayed recommendation text.
-- Refresh Jira/Confluence read-only state on My Work entry with existing throttling, without replacing the webview or interrupting chat.
-- Reject malformed Confluence Database v2 roster properties without overwriting existing users.
-- Preserve all 18 role-boundary policies, source-only .memory guidance, project RAG and guarded Jira Creator/Reporter deletion.
+## My Work — 18 specialist agents
+- Remove the generic persistent **What to do next** bar.
+- Render Today's Tasks in a separate section, each with a navigation button to the relevant project settings, Business Requirement workflow, Jira issue, or role workspace.
+- Separate project-management settings and shared project delivery risks from each specialist's personal task list.
+- Exclude completed workflow tasks and finished Jira tickets when My Work is refreshed.
+- Keep role-scoped, in-memory AI conversation history for only the current local calendar day and clear the visible transcript and AI history at midnight.
 
-## Release verification
-- Regression tests cover repository fast-forward safety, the Custom Stack button, bounded Jira risk, trusted next-action routing and Confluence schema validation.
-- Require passing Node tests, UI checks, Windows regression tests and verified VSIX packaging before merging the PR.
-- Experimental Confluence v2 permissions and AIA Malaysia mirrors still need live-environment verification.
+## Verification
+- Add regression tests for absent/empty folder clones, dirty/non-Git folders, unexpected origins, 18-role task separation, task completion, safe task navigation, and midnight chat reset.
+- Merge only after the full Node, Windows, UI and VSIX release checks are successful.
+- Live GitHub private repository cloning depends on configured Git credential support. No PAT is written into Git URLs or repository files.
