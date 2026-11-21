@@ -17,6 +17,11 @@ async function main() {
         assert.equal(extract.status, 0, extract.stderr || 'Failed to extract VSIX');
         const root = path.join(temp, 'extension');
         const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+        assert.ok(!fs.existsSync(path.join(root,'.memory')), 'Source-only .memory must not be included in VSIX');
+        const runtimePolicy=require(path.join(root,'src','version-policy.js'));
+        assert.equal(runtimePolicy.nextVersion('0.0.1'),'0.0.2','Runtime version-policy must not depend on excluded .memory');
+        const runtimeMemory=require(path.join(root,'src','decision-memory.js'));
+        assert.equal(runtimeMemory.memoryForPrompt('versioning release'),'', 'Installed runtime must tolerate excluded source-only .memory');
         // SortableJS is provided only by the SHA-256-pinned SDLC Library.
         const lock=JSON.parse(fs.readFileSync(path.join(root,'src','vendor-library-lock.json'),'utf8'));
         assert.equal(lock.version,'1.0.1');

@@ -17,7 +17,7 @@ test('release version increments one step with base-100 carry and hard upper bou
 test('extension metadata is blank and AI decisions are curated',()=>{
  const pkg=require('../package.json');
  assert.equal(pkg.description,'');
- assert.equal(pkg.version,'0.0.1');
+ assert.equal(pkg.version,'0.0.2');
  assert.equal(pkg.atgvDisplayVersion,pkg.version);
  const index=require('../.memory/manifest.json');
  assert.equal(index.schema,1);assert.equal(index.categories.length,14);
@@ -26,6 +26,9 @@ test('extension metadata is blank and AI decisions are curated',()=>{
  assert.match(memoryForPrompt('extension description details'),/description stays empty/);
  assert.doesNotMatch(memoryForPrompt('weather tomorrow'),/description stays empty/);
  assert.ok(memoryForPrompt('version release').length<=3200);
- assert.match(fs.readFileSync(path.join(root,'scripts/package-vsix.py'),'utf8'),/\.memory/);
+ const packager=fs.readFileSync(path.join(root,'scripts/package-vsix.py'),'utf8');
+ assert.doesNotMatch(packager,/'design-system', '\.memory'/);
+ assert.match(packager,/Release safety policy: \.memory must not be included in VSIX/);
+ assert.match(fs.readFileSync(path.join(root,'.gitattributes'),'utf8'),/^\.memory export-ignore$/m);
  const sync=fs.readFileSync(path.join(root,'src/github-sdlc-catalog.js'),'utf8');assert.match(sync,/\.memory/);
 });

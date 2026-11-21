@@ -61,5 +61,15 @@
       "path": ".memory/regression-testing.json"
     }
   ],
-  "policy": "Curated accepted repository decisions only, never secret data; newer explicit user instructions, safety and human approvals always take precedence."
+  "policy": "Curated accepted repository decisions only, never secret data; newer explicit user instructions, safety and human approvals always take precedence.",
+  "releasePackaging": {
+    "sourceOnly": true,
+    "excludeDirectory": ".memory",
+    "artifactTypes": [
+      "VSIX",
+      "extension-source-zip",
+      "library-source-zip"
+    ],
+    "verifyArchive": true
+  }
 }

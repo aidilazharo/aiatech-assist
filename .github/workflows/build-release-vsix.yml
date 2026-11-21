@@ -123,6 +123,11 @@ jobs:
           git archive --format=zip --prefix="ATGV-AIATECH-Assist-v${SOURCE_VERSION}-Source/" -o "dist/${SOURCE_FILE}" HEAD
           test -s "dist/${SOURCE_FILE}"
           unzip -tqq "dist/${SOURCE_FILE}"
+          if unzip -Z1 "dist/${SOURCE_FILE}" | grep -E '(^|/)\.memory(/|$)'; then
+            echo "ERROR: .memory must not be distributed in the extension source ZIP" >&2
+            exit 1
+          fi
+          echo "Verified: no .memory directory in the source ZIP" >> "$GITHUB_STEP_SUMMARY"
           (cd dist && sha256sum "${SOURCE_FILE}" > source.sha256)
           echo "Complete source ZIP: ${SOURCE_FILE}" >> "$GITHUB_STEP_SUMMARY"
 
