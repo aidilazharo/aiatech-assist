@@ -7991,6 +7991,7 @@ function renderArchitectCustomPanel(){
  $('architectCustomScan').textContent=current?'Pull Repository':'Scan Repository';
  $('architectCustomScan').title=current?'Fetch and fast-forward the current clean branch from its verified GitHub origin':'Scan the configured local checkout without altering files';
  $('architectCustomRun').disabled=architectCustomBusy||!current?.ready||architectCustomRunning;
+ $('architectCustomMockRun').disabled=architectCustomBusy||!current?.ready||architectCustomRunning||!selected?.mockable;
  $('architectCustomStop').disabled=architectCustomBusy||!architectCustomRunning;
  if(current){
   $('architectCustomDetails').textContent=current.targets.map(t=>(t.relative||'Root')+': '+t.framework+' · '+t.kind+' · '+(t.scripts?.join(', ')||'native build/test/run')+(t.installed?' · dependencies present':' · dependencies may need installation')).join(' | ')+' · Git '+(current.sha||'').slice(0,12)+' · '+(current.clean?'clean checkout':'uncommitted edits present; no files will be committed');
@@ -8027,6 +8028,15 @@ $('architectCustomRun').addEventListener('click',()=>{
  architectCustomBusy=true;architectCustomNotify('Review the host confirmation before installing dependencies and running project scripts…');
  renderArchitectCustomPanel();
  send('architectCustomRun',{projectId:activeId,sha:architectCustomInfo.sha,relative:$('architectCustomTarget').value,previewUrl:$('architectCustomPreviewUrl').value.trim()});
+});
+$('architectCustomMockRun').addEventListener('click',()=>{
+ if(!activeId||architectCustomBusy||!architectCustomInfo?.ready)return;
+ const selected=architectCustomInfo.targets.find(t=>t.relative===$('architectCustomTarget').value);
+ if(!selected?.mockable)return;
+ architectCustomBusy=true;
+ architectCustomNotify('Mock Preview uses fake sign-in and local API stubs. Review and confirm before installing frontend dependencies…');
+ renderArchitectCustomPanel();
+ send('architectCustomRun',{projectId:activeId,sha:architectCustomInfo.sha,relative:selected.relative,previewUrl:$('architectCustomPreviewUrl').value.trim(),mock:true});
 });
 $('architectCustomStop').addEventListener('click',()=>{
  if(!activeId||architectCustomBusy||!architectCustomRunning)return;
