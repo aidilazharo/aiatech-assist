@@ -81,5 +81,5 @@ test('daily brief is based on host-verified account, saved schedule and shared r
  assert.match(wave,/renderBrief\(msg\.brief\)/);
  assert.match(wave,/greetingNode\.textContent=/);
  assert.match(wave,/atgv-mywork-ai-team-member/);
- assert.match(wave,/Today’s tasks/);
+ assert.match(wave,/tasksTitle\.textContent='Today/);
 });
