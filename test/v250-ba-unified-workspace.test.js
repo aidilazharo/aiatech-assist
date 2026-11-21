@@ -26,7 +26,7 @@ test('Business Requirement is embedded once above All Jira Project Items inside 
 
 test('BA uses the embedded BR route and hides duplicate summary and role progress, other roles keep steps',()=>{
  assert.match(ui,/next==='discovery'\?'workView':next\+'View'/);
- assert.match(ui,/setView\(baWorkspace\?'discovery':'work'\)/);
+ assert.match(ui,/setView\(openWorkspace\?\(baWorkspace\?'discovery':'work'\):'myWork'\)/);
  assert.match(ui,/\$\('discoveryView'\)\.classList\.toggle\('hidden',next!=='discovery'\)/);
  assert.match(css,/#workView\.role-ba-simplified > \.role-overview\{display:none!important\}/);
  assert.match(css,/#workView\.role-ba-simplified #baMyWorkDashboard\{display:none!important\}/);

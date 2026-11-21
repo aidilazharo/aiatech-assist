@@ -7,7 +7,7 @@ const vm=require('node:vm');
 const root=path.join(__dirname,'..');
 const html=fs.readFileSync(path.join(root,'test/generated/extension-source.txt'),'utf8');
 const start=fs.readFileSync(path.join(root,'media/start.js'),'utf8');
-const allViews=['gate','landing','settings','project','work','uxPreview','documents','documentEditor','planning','discovery','flow','operations','knowledge','library'];
+const allViews=['gate','landing','settings','project','myWork','work','uxPreview','documents','documentEditor','planning','discovery','flow','operations','knowledge','library'];
 const viewId=view=>view==='landing'?'landingView':view+'View';
 
 test('every workspace view including SDLC Readiness has valid id and hidden initial class',()=>{
@@ -25,7 +25,7 @@ test('every workspace view including SDLC Readiness has valid id and hidden init
 });
 
 test('every sidebar menu routes to a dedicated workspace page',()=>{
-  const routes={overview:'landing', 'sdlc-roles':'work',flow:'flow',documents:'documents',planning:'planning',knowledge:'knowledge',library:'library',operations:'operations',settings:'settings'};
+  const routes={overview:'landing', 'sdlc-roles':'myWork','role-workspace':'work',flow:'flow',documents:'documents',planning:'planning',knowledge:'knowledge',library:'library',operations:'operations',settings:'settings'};
   for(const [route,page] of Object.entries(routes)){
     assert.match(html,new RegExp('data-nav="'+route+'"'),'sidebar has route '+route);
     assert.match(html,new RegExp('<main id="'+viewId(page)+'"'),'route '+route+' points to actual page');

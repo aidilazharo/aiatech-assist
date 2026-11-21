@@ -8,6 +8,7 @@
  const PAGE=Object.freeze({
   gate:[['Projects',null]],
   landing:[['Overview',null]],
+  myWork:[['My Work',null]],
   settings:[['Settings',null]],
   project:[['Settings','settings'],['Project Settings',null]],
   library:[['Library Studio',null]],
@@ -16,7 +17,7 @@
   flow:[['SDLC','flow'],['Readiness',null]],
   operations:[['Approvals & Handoffs',null]],
   knowledge:[['Knowledge & RAG',null]],
-  uxPreview:[['My Work','my-work'],['UI/UX Designer','ux-work'],['Design Preview',null]],
+  uxPreview:[['My Work','my-work'],['Role Workspace','role-workspace'],['UI/UX Designer','ux-work'],['Design Preview',null]],
   documentEditor:[['Documents','documents'],['Document',null]]
  });
  const ROLES=Object.freeze({
@@ -27,7 +28,8 @@
   'security-engineer':'Security Engineer','data-engineer':'Data Engineer',
   'uat-tester':'UAT Tester','release-manager':'Release Manager',
   'technical-writer':'Technical Writer','operations-support':'Operations Support',
-  'business-owner':'Business Owner','business-analyst':'Business Analyst'
+  'business-owner':'Business Owner','business-analyst':'Business Analyst',
+  'ai-ml-engineer':'AI / ML Engineer','compliance-officer':'Compliance / Risk Officer'
  });
  const segment=(label,action=null)=>({label,action});
  const clean=x=>String(x??'').replace(/[\x00-\x1f]/g,' ').trim().slice(0,160);
@@ -40,7 +42,7 @@
  function trail(state={}){
   const current=clean(state.view);
   if(current==='discovery'){
-   const result=[segment('My Work','my-work')];
+   const result=[segment('My Work','my-work'),segment('Role Workspace','role-workspace')];
    const id=requirementId(state.brId);
    if(state.rootOnly!==true&&(clean(state.stage)!=='start'||id||state.requirementOpen===true))
     result.push(segment('Business Requirement','br-home'));
@@ -50,7 +52,7 @@
    return result;
   }
   if(current==='work'){
-   const result=[segment('My Work',null)];
+   const result=[segment('My Work','my-work'),segment('Role Workspace','role-workspace')];
    const role=ROLES[clean(state.roleId)];
    if(role)result.push(segment(role,null));
    const ticket=requirementId(state.brId);
@@ -65,7 +67,7 @@
   }
   if(current==='uxPreview'){
    const key=requirementId(state.brId);
-   if(key)result.splice(2,0,segment(key));
+   if(key)result.splice(3,0,segment(key));
   }
   return result;
  }

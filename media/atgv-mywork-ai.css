@@ -1,6 +1,6 @@
 /* Shared, responsive My Work waveform and role-aware chat for all SDLC roles. */
-#workView > #atgvMyWorkAi,
-#workView.role-progress-only > #atgvMyWorkAi.atgv-mywork-ai{
+#myWorkView > #atgvMyWorkAi,
+#myWorkView > #atgvMyWorkAi.atgv-mywork-ai{
  display:flex!important;flex-direction:column;align-items:stretch;justify-content:center;
  gap:10px;width:100%;min-width:0;box-sizing:border-box;align-self:stretch;
  min-height:0;padding:20px 24px;margin:14px 0 18px;
@@ -30,5 +30,10 @@
 #atgvMyWorkAi .atgv-mywork-ai-message{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55;font-size:12.5px;max-width:94%;padding:9px 12px;border-radius:9px}
 #atgvMyWorkAi .atgv-mywork-ai-message.user{align-self:flex-end;background:#202935;color:#fff}
 #atgvMyWorkAi .atgv-mywork-ai-message.assistant{align-self:flex-start;background:#111821;border:1px solid #293542;color:#e7f0f7}
-@media(max-width:620px){#workView > #atgvMyWorkAi,#workView.role-progress-only > #atgvMyWorkAi.atgv-mywork-ai{padding:12px;margin:12px 0 16px}#atgvMyWorkAi .atgv-mywork-ai-visual{height:104px}}
+@media(max-width:620px){#myWorkView > #atgvMyWorkAi,#myWorkView > #atgvMyWorkAi.atgv-mywork-ai{padding:12px;margin:12px 0 16px}#atgvMyWorkAi .atgv-mywork-ai-visual{height:104px}}
 @media(prefers-reduced-motion:reduce){#atgvMyWorkAi canvas#atgvMyWorkAiOrb{transition:none!important}}
+
+/* My Work stays AI-only: the Role Workspace styling remains in #workView. */
+#myWorkView.atgv-mywork-ai-page{width:100%;min-width:0;box-sizing:border-box;padding:12px 18px}
+#myWorkView > #atgvMyWorkAi{width:100%;min-width:0}
+@media(max-width:620px){#myWorkView.atgv-mywork-ai-page{padding:8px}}
