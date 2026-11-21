@@ -139,3 +139,35 @@ body.atgv-mywork-chat-mode:not(.gate-mode) #appHeader .header-end{
 @media(prefers-reduced-motion:reduce){
   #appHeader canvas#atgvMyWorkAiOrb{transition:none!important}
 }
+
+
+/* v0.0.21 — a global notification replaces the header row. The same live
+   canvas is reparented into the notification so it stays on top of the real
+   red bottom divider rather than disappearing with #appHeader.hidden. */
+body.atgv-mywork-chat-mode:not(.gate-mode) #topNotification.top-notification{
+  position:relative;overflow:visible!important;z-index:20;
+}
+#topNotification #myWorkHeaderWave.mywork-header-wave{
+  display:none;position:absolute;left:0;right:0;bottom:-3px;height:0;
+  z-index:21;overflow:visible;pointer-events:none;
+}
+body.atgv-mywork-chat-mode:not(.gate-mode) #topNotification #myWorkHeaderWave.mywork-header-wave{
+  display:block;
+}
+#topNotification #myWorkHeaderWave .mywork-header-wave-visual{
+  display:block;position:absolute;left:clamp(220px,20vw,330px);
+  right:clamp(12px,2vw,24px);bottom:-38px;height:76px;
+  min-width:0;z-index:3;overflow:visible;pointer-events:none;
+}
+#topNotification #myWorkHeaderWave canvas#atgvMyWorkAiOrb{
+  display:block;position:relative;z-index:4;width:100%;height:100%;
+  background:transparent;border:0;pointer-events:none;
+}
+@media(max-width:620px){
+  #topNotification #myWorkHeaderWave .mywork-header-wave-visual{
+    left:10px;right:10px;height:58px;bottom:-29px;
+  }
+}
+@media(max-height:400px){
+  #topNotification #myWorkHeaderWave .mywork-header-wave-visual{height:42px;bottom:-20px}
+}
