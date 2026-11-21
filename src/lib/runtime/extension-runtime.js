@@ -9520,7 +9520,7 @@ async function handleDashboardMessage(msg){
         const evidence={role:clean(role.label,100),progress:clean(input.progress,30),
           recommendedNext:clean(input.next,180),tasks,assigned,requirements};
         const incomplete=tasks.find(task=>!task.completed)?.activity||'';
-        const pendingIssue=assigned.find(item=>!/^(done|closed|resolved)$/i.test(item.status))?.jiraKey||'';
+        let pendingIssue=assigned.find(item=>!/^(done|closed|resolved)$/i.test(item.status))?.jiraKey||'';
         const pendingRequirement=requirements.find(item=>!/^(approved|published|complete|completed)$/i.test(item.status))?.id||'';
         const roleActionLabels={
           'business-analyst':'Resume Business Requirements',
@@ -9585,6 +9585,8 @@ async function handleDashboardMessage(msg){
         }catch(error){
           report('My Work daily brief identity/roster unavailable: '+String(error.message||error).slice(0,150));
         }
+        evidence.assigned=assigned;
+        pendingIssue=assigned.find(item=>!/^(done|closed|resolved)$/i.test(item.status))?.jiraKey||'';
         const dailyBrief=myWorkDailyBrief.build({
           identity:verifiedPerson,projectName:dailyProject.name||projectId,
           roleId,roleName:role.label,deadline:dailyProject.schedule?.endDate||'',
