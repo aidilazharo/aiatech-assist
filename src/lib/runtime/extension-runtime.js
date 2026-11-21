@@ -817,7 +817,7 @@ const report=text=>{
  // Do not store raw requests, user details, tokens or API response bodies.
  const note=String(text||'');
  const unifiedRoot=getWorkspace()?.uri.fsPath;
- if(unifiedRoot&&/\b(?:error|failed|failure|fatal|exception|crash|timeout|timed out|unauthorized|forbidden|permission denied|cannot|unable|HTTP [45][0-9][0-9])\b/i.test(note)){
+ if(unifiedRoot&&fsSync.existsSync(path.join(unifiedRoot,'.atgv'))&&/\b(?:error|failed|failure|fatal|exception|crash|timeout|timed out|unauthorized|forbidden|permission denied|cannot|unable|HTTP [45][0-9][0-9])\b/i.test(note)){
   const channel=/confluence/i.test(note)?'Confluence':/jira/i.test(note)?'Jira':/github/i.test(note)?'GitHub':
    /business analyst|\bBA\b|preflight|mapping/i.test(note)?'Business Analyst':
    /developer|build|test suite/i.test(note)?'Developer':/architect|tech stack/i.test(note)?'Solution Architect':
@@ -920,7 +920,7 @@ function captureLocalIssue(command,error,category='error'){
  const item={category,target:'extension',title,screen,observed:String(error?.message||error||'Unknown failure')};
  void selfImprovementManager.store.add(item,{origin:'automatic'}).catch(e=>report('Issue recorder: '+e.message));
  const workspace=getWorkspace()?.uri.fsPath;
- if(workspace)void idleImprovement.writeLog(workspace,item).catch(e=>report('Error-log capture: '+e.message));
+ if(workspace&&fsSync.existsSync(path.join(workspace,'.atgv')))void idleImprovement.writeLog(workspace,item).catch(e=>report('Error-log capture: '+e.message));
 }
 function openIssueReport(screen=''){
  if(!selfImprovementManager)throw Error('Issue reporting is not ready yet.');
@@ -941,7 +941,7 @@ async function idleMaintenanceIsIdle(){
 }
 async function idleMaintenanceTick(){
  const workspace=getWorkspace()?.uri.fsPath;
- if(!workspace||!context||idleImprovementBusy||
+ if(!workspace||!fsSync.existsSync(path.join(workspace,'.atgv'))||!context||idleImprovementBusy||
   cfg().get('selfImprovement.autoMaintenanceEnabled',true)!==true||
   vscode.workspace.isTrusted===false)return;
  idleImprovementBusy=true;
@@ -968,7 +968,7 @@ function startIdleMaintenance(){
  if(idleImprovementTimer)clearInterval(idleImprovementTimer);
  const workspace=getWorkspace()?.uri.fsPath;
  if(!workspace)return;
- void idleImprovement.ensureLayout(workspace).catch(error=>report('ATGV .atgv/src setup: '+error.message));
+ if(fsSync.existsSync(path.join(workspace,'.atgv')))void idleImprovement.ensureLayout(workspace).catch(error=>report('ATGV .atgv/src setup: '+error.message));
  idleImprovementTimer=setInterval(()=>void idleMaintenanceTick(),60000);
  idleImprovementTimer.unref?.();
  void idleMaintenanceTick();
@@ -7664,6 +7664,7 @@ async function handleDashboardMessage(msg){
       }
       case 'openingInitialize':{
         const result=await guardedOpeningStep(()=>withProgress('ATGV: Initializing project files',()=>initializeOpeningProject()));
+        if(getWorkspace()?.uri.fsPath&&fsSync.existsSync(path.join(getWorkspace().uri.fsPath,'.atgv')))await idleImprovement.ensureLayout(getWorkspace().uri.fsPath);
         await refreshDashboard();await notice(result);break;
       }
       case 'openingOpen':{
