@@ -140,7 +140,7 @@ test('Save Stack remains green and disabled after save, re-enables blue on user 
  instance.project('another-project');
  instance.render({techStackId:'react',techStackPrepared:{stackId:'react'}});
  assert.equal(elements.architectSaveStack.disabled,true);
- assert.match(css,/#workView #architectSaveStack\.atgv-stack-saved:disabled\{[^}]+background:#138c50!important/);
+ assert.match(css,/#workView #architectSaveStack\.atgv-stack-saved:disabled\{[^}]*background:#138c50!important/);
  assert.match(js,/architectSavePendingSelection\.stackId===\$\('architectStackSelect'\)\.value/);
  assert.match(js,/architectSaveSelectionChanged=true/);
 });
