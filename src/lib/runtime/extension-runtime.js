@@ -55,6 +55,7 @@ let pmLatestSnapshot=null;
 const remoteBRDeletion=require('../../remote-br-deletion');
 const brDeletionPreview=require('../../br-deletion-preview');
 const orphanJiraCleanup=require('../../orphaned-jira-cleanup');
+const jiraOwnerBRDeletion=require('../../jira-owner-br-deletion');
 const jiraLinkReconciliation=require('../../jira-link-reconciliation');
 const startupJiraReconciliation=require('../../startup-jira-reconciliation');
 const resetEverywhere=require('../../reset-everywhere');
@@ -7177,6 +7178,88 @@ async function handleDashboardMessage(msg){
         break;
       }
       case 'openAtgvAi':{await atgvAiChat.open(vscode,{runtimeRoot:aiRuntimeRoot(),onLog:report});break;}
+       case 'deleteJiraOnlyBROwned':{
+         const projectId=activeProject?.id||'';
+         if(remoteBRDeletionBusy)throw Error('A remote Jira deletion or recovery is in progress.');
+         remoteBRDeletionBusy=true;
+         try{
+           requireOpened();requireOnline();
+           if(!projectId||msg.projectId!==projectId)throw Error('Project changed. Reopen the Jira-only Business Requirement.');
+           const brId=String(msg.brId||''),epicKey=String(msg.jiraKey||'');
+           const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
+           const original=await brWorkflow.load(registry,projectId);
+           const state=await jiraOwnerBRDeletion.readJobs(registry,projectId);
+           const candidates=state.jobs.filter(job=>job.kind==='creator-reporter-jira-only-br'&&
+             job.plan?.projectId===projectId&&job.plan?.epicKey===epicKey&&job.status!=='completed');
+           if(candidates.length>1)throw Error('Multiple unfinished Jira deletion jobs exist for this Epic. Review the audit before proceeding.');
+           let job=candidates[0]||null,plan;
+           if(job){
+             plan=job.plan;
+             if(plan.brId!==brId||plan.registerRevision!==original.revision)
+               throw Error('The existing Jira deletion job no longer matches this BR. Reconcile before proceeding.');
+             const uncertain=plan.rows.filter(row=>job.results?.[row.key]?.status==='attempting');
+             if(uncertain.length)
+               throw Error('Some Jira deletions may have been interrupted: '+uncertain.map(x=>x.key).join(', ')+'. Verify the remote result manually before retrying.');
+           }else{
+             plan=await jiraOwnerBRDeletion.preflight({
+               register:original,brId,epicKey,projectId,config,token});
+             job=jiraOwnerBRDeletion.createJob(plan);
+           }
+           const review=jiraOwnerBRDeletion.preview(plan,job);
+           const document=await vscode.workspace.openTextDocument({language:'markdown',content:review.detail});
+           await vscode.window.showTextDocument(document,{preview:false,preserveFocus:true});
+           const decision=await uiWarning(review.summary,{modal:true},'Continue to Permanent Jira Deletion');
+           if(decision!=='Continue to Permanent Jira Deletion')break;
+           const phrase='DELETE BR '+plan.brId+' '+plan.epicKey;
+           const typed=await uiInput({
+             prompt:'Permanently delete '+plan.rows.length+' Jira issues including Epic '+plan.epicKey+
+               ' and all reviewed descendants. This cannot be undone. Type exactly: '+phrase,
+             placeHolder:phrase,ignoreFocusOut:true});
+           if(typed!==phrase){await notice('Jira-only BR deletion cancelled. No issues were deleted.');break;}
+           if(activeProject?.id!==projectId)throw Error('Project changed during deletion approval.');
+           if(!candidates.length){state.jobs.push(job);await jiraOwnerBRDeletion.saveJobs(registry,projectId,state);}
+           const result=await jiraOwnerBRDeletion.execute({
+             registry,projectId,job,config,token,loadRegister:()=>brWorkflow.load(registry,projectId),
+             finalize:async savedPlan=>{
+               const current=await brWorkflow.load(registry,projectId);
+               if(current.revision!==savedPlan.registerRevision)
+                 throw Error('Local BR register changed; Jira deletion finished but local audit needs review.');
+               const updated=await brWorkflow.write(registry,projectId,current.revision,next=>{
+                 next.deletedRequirements=next.deletedRequirements||[];
+                 if(next.deletedRequirements.some(x=>x.id===savedPlan.brId))
+                   throw Error('Another BR deletion record appeared. Reconcile the audit.');
+                 next.deletedRequirements.push({
+                   id:savedPlan.brId,at:new Date().toISOString(),
+                   title:savedPlan.rows.find(x=>x.key===savedPlan.epicKey)?.summary||savedPlan.brId,
+                   epicKey:savedPlan.epicKey,source:'verified-jira-creator-reporter',
+                   actorAccountId:savedPlan.actorId,matchedField:savedPlan.eligibility.match,
+                   remoteRecordsPreserved:false,remoteDeletionStatus:'creator-reporter-jira-only-deleted',
+                   jiraIssues:savedPlan.rows.map(x=>({key:x.key,parentKey:x.parentKey,issueType:x.type}))
+                 });
+                 next.events=(next.events||[]).concat({
+                   at:new Date().toISOString(),action:'jira-only-br-deleted-by-creator-reporter',
+                   brId:savedPlan.brId,jiraKey:savedPlan.epicKey,actorId:savedPlan.actorId,
+                   issueKeys:savedPlan.rows.map(x=>x.key)
+                 }).slice(-200);
+               });
+               await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
+             },
+             onProgress:async progress=>{
+               report('Jira-only BR deletion '+plan.brId+': '+progress.key+' ('+progress.deleted+'/'+progress.total+')');
+               await dashboard?.webview.postMessage({type:'jiraOnlyBRDeletionProgress',projectId,...progress});
+             }
+           });
+           await dashboard?.webview.postMessage({type:'jiraOnlyBRDeletionCompleted',projectId,brId,epicKey,deleted:plan.rows.length});
+           await notice('Jira-only '+brId+' deleted: '+plan.rows.length+
+             ' verified Epic/descendant issues. Confluence and unrelated Jira items were preserved.');
+           if(activeProject?.id===projectId)await refreshDashboard();
+         }catch(error){
+           report('Jira Creator/Reporter BR deletion failed: '+String(error.message||error));
+           await dashboard?.webview.postMessage({type:'jiraOnlyBRDeletionError',projectId,message:String(error.message||error).slice(0,450)});
+           await notice('Jira BR deletion blocked: '+String(error.message||error).slice(0,350),true);
+         }finally{remoteBRDeletionBusy=false;}
+         break;
+       }
        case 'recoverJiraOnlyBR':{
          const projectId=activeProject?.id||'';
          try{
