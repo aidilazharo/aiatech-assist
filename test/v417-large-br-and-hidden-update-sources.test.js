@@ -74,8 +74,8 @@ test('v417: Section 8 shows update buttons and status, not fixed release URLs or
  assert.doesNotMatch(section,/software-update-sources|Extension release:|SDLC Library release:/);
  assert.doesNotMatch(section,/https:\/\/github\.com\/aidilazharo\/(?:aiatech-assist|tech-stacks-skills)\/releases\/latest/);
  const host=read('src/lib/runtime/extension-runtime.js');
- assert.match(host,/releaseRepositoryUrl:releaseUpdater\.PINNED_RELEASE_URL/);
- assert.match(host,/libraryReleaseUrl:libraryReleaseUpdater\.LATEST_URL/);
+ assert.match(host,/releaseRepositoryUrl:startupSetup\.RELEASES\.extension/);
+ assert.match(host,/libraryReleaseUrl:startupSetup\.RELEASES\.library/);
  assert.match(host,/60\*60\*1000/);
  assert.match(require('../package.json').version,/^\d+\.\d+\.\d+$/);
 });
