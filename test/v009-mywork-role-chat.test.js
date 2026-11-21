@@ -100,7 +100,7 @@ test('My Work layout uses a red waveform top bar, central results, and anchored 
  assert.match(main,/AI waveform fades in red, changes to CMYK while active, and fades back to red/);
  assert.match(css,/#myWorkView > #atgvMyWorkAi,/);
  assert.match(css,/#myWorkView > #atgvMyWorkAi\.atgv-mywork-ai/);
- assert.match(css,/border-bottom:2px solid #dc303f/);
+ assert.match(css,/background:#dc303f/);
  assert.match(css,/\.atgv-mywork-ai-results\{/);
  assert.match(css,/flex:1 1 auto/);
  assert.match(css,/overflow-y:auto/);
