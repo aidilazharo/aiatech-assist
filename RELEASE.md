@@ -1,16 +1,16 @@
-# ATGV AIATECH Assist v0.0.11
+# ATGV AIATECH Assist v0.0.12
 
 ## Changes
 
-- Expand the shared My Work AI chat from 7 to all 18 built-in SDLC roles, including the four optional roles when enabled in Role Management.
-- Add host-only, role-specific expert prompts and unique "who are you?" introductions for Product Owner, Scrum Master, Security Engineer, Data Engineer / DBA, Technical Writer, Operations / Support, Release / DevOps, Technical Lead, Business Owner / Approver, AI / ML Engineer and Compliance / Risk Officer.
-- Retain existing role prompts for Business Analyst, Solution Architect, UI/UX Designer, Developer, Project Manager, QA Engineer and UAT Tester.
-- Keep user-visible chat messages free from injected role instructions, scoped history per role and project, and responses tied to the selected AI provider.
-- Continue to use the shared animated multicolor waveform, rapid response typewriter, idle fade and auto-wake behavior throughout My Work.
-- Preserve human approval gates, the read-only chat boundary and the ability to enable/disable optional roles independently.
+- Remove the visible AI waveform activity captions (including "WAITING FOR ACTIVITY", "SLOWING", "LINE ONLY", "FADING" and other status labels) from the shared My Work AI interface.
+- Preserve animated multicolor waveform reactions, automatic idle fade/sleep, AI response typewriter and wake on user input.
+- Remove the visible "CHAT WITH ATGV AI" heading and the "Enter to send · Shift+Enter for a new line" helper under the chat composer.
+- Keep the input accessible with a role-specific screen-reader label and a visually hidden live status for response generation.
+- Remove the Project Manager Daily Delivery Cockpit explanatory sentence about project-wide Jira delivery activity and Jira transition confirmation, leaving the actual dashboard and confirmation behavior unchanged.
+- Apply the cleanup to the shared chat used by all 18 built-in My Work roles.
 
 ## Validation
 
-- Test that the 18 registered built-in role IDs exactly match all 18 AI profiles and introductions.
-- Verify "who are you" without an AI connection for every role; verify model-request expert prompts and isolated conversations for every role.
-- Run full regression, Windows validation, theme checks, VSIX compilation, source ZIP and .memory exclusion in GitHub Actions.
+- Verify removed copy cannot be reintroduced by JavaScript after user input, role switching or AI activity.
+- Verify the shared chat form, keyboard handling, role-scoped AI prompts and waveform sleep/wake behavior remain operational.
+- Run the full Node test suite, Windows checks, VSIX packaging, theme validation, source ZIP checks and exclusion of source-only .memory guidance before publication.
