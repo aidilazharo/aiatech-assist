@@ -86,20 +86,34 @@ test('shared My Work waveform and chat follows every selected role without dupli
  assert.equal(html.match(/id="atgvMyWorkAiChatForm"/g)?.length,1);
  assert.equal(html.match(/id="atgvMyWorkAiInput"/g)?.length,1);
 });
-test('AI chat card matches sibling My Work section width and spacing across roles',()=>{
+test('My Work layout uses a red waveform top bar, central results, and anchored bottom composer across all roles',()=>{
  const css=read('media/atgv-mywork-ai.css');
- const peer=read('media/start.css');
- assert.match(peer,/#workView \.role-jira-work\{border:1px solid var\(--atgv-line\);border-radius:11px;padding:20px;margin:14px 0/);
+ const page=read('src/lib/webview/dashboard-html.js');
+ const ui=read('media/start.js');
+ const wave=read('media/atgv-mywork-wave-chat.js');
+ const main=page.slice(page.indexOf('<main id="myWorkView"'),page.indexOf('<main id="workView"'));
+ const top=main.indexOf('class="atgv-mywork-ai-topbar"');
+ const results=main.indexOf('id="atgvMyWorkAiResults"');
+ const composer=main.indexOf('id="atgvMyWorkAiChatForm"');
+ assert.ok(top>=0&&results>top&&composer>results);
+ assert.match(main,/atgv-mywork-ai-wave/);
+ assert.match(main,/Soft red AI waveform that fades in and out/);
  assert.match(css,/#myWorkView > #atgvMyWorkAi,/);
- assert.match(css,/#myWorkView > #atgvMyWorkAi\.atgv-mywork-ai/);
- assert.match(css,/width:100%;min-width:0;box-sizing:border-box;align-self:stretch/);
- assert.match(css,/min-height:0;padding:20px 24px;margin:14px 0 18px/);
- for(const name of ['atgv-mywork-ai-content','atgv-mywork-ai-chat','atgv-mywork-ai-conversation']){
-  const rule=css.match(new RegExp('\\.'+name+'\\{[^}]+\\}'))?.[0]||'';
-  assert.match(rule,/max-width:none/,name);
-  assert.match(rule,/width:100%/,name);
- }
- assert.match(css,/@media\(max-width:620px\)/);
+ assert.match(css,/#myWorkView > #atgvMyWorkAi\\.atgv-mywork-ai/);
+ assert.match(css,/border-bottom:2px solid #dc303f/);
+ assert.match(css,/\\.atgv-mywork-ai-results\\{/);
+ assert.match(css,/flex:1 1 auto/);
+ assert.match(css,/overflow-y:auto/);
+ assert.match(css,/\\.atgv-mywork-ai-chat\\{/);
+ assert.match(css,/flex:0 0 auto/);
+ assert.match(css,/max-width:none/);
+ assert.match(css,/@media\\(max-width:620px\\)/);
+ assert.match(ui,/document\\.body\\.classList\\.toggle\\('atgv-mywork-chat-mode',next==='myWork'\\)/);
+ assert.match(css,/body\\.atgv-mywork-chat-mode:not\\(\\.gate-mode\\) #contentPane/);
+ assert.match(wave,/const redBreath=reduceMotion\\?1/);
+ assert.match(wave,/redGradient\\.addColorStop/);
+ assert.doesNotMatch(wave,/rainbow\\.addColorStop/);
+ assert.match(wave,/resultsViewport\\.scrollTop=resultsViewport\\.scrollHeight/);
 });
 test('My Work and PM pages omit activity captions and chat explanatory text',()=>{
  const html=read('src/lib/webview/dashboard-html.js');
