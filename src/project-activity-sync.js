@@ -136,7 +136,8 @@ class ProjectActivitySync{
    key:i.key,status:clean(i.fields?.status?.name,50),summary:clean(i.fields?.summary,140),
    assignee:clean(i.fields?.assignee?.displayName,110),
    updated:clean(i.fields?.updated,45),
-   developmentConfirmed:records.some(r=>r.subject===i.key&&r.type==='development_started')
+   developmentConfirmed:(state?.events||[]).some(r=>r.subject===i.key&&r.type==='development_started'&&!
+   (state.events||[]).some(v=>v.subject===i.key&&v.type==='development_completed'&&v.at>=r.at))
   }));
   const activity=(state?.events||[]).slice(-12).reverse().map(e=>({
    type:e.type,subject:e.subject,status:e.status,title:e.title,role:e.role,at:e.at,
