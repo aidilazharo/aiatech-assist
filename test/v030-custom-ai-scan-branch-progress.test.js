@@ -92,7 +92,7 @@ test('Mock Database only adds opt-in synthetic responses and never connects to P
 });
 test('Custom Stack progress and branch/action controls are never hidden by the catalog renderer',()=>{
  const js=source('media/start.js'),html=source('src/lib/webview/dashboard-html.js'),css=source('media/start.css');
- const render=js.slice(js.indexOf('function renderArchitectRequirements(project){'),js.indexOf('const live=architectChecklistSession(stackId);',js.indexOf('function renderArchitectRequirements(project){')));
+ const render=js.slice(js.indexOf("if(stackId==='custom'){",js.indexOf('function renderArchitectRequirements(project){')),js.indexOf("container.classList.toggle('hidden',!stack);",js.indexOf('function renderArchitectRequirements(project){')));
  assert.match(render,/architectCustomProgressPercent/);
  assert.doesNotMatch(render,/style.width='0%'/);
  for(const id of ['architectCustomProgress','architectCustomProgressFill','architectCustomProgressText','architectCustomActions','architectCustomFindings','architectCustomBranch','architectCustomSwitchBranch','architectCustomPull'])
