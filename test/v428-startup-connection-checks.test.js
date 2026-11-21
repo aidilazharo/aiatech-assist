@@ -129,12 +129,17 @@ function hostFixture(failures={}){
   storeToken:async()=>writes.push('token'),
   testJiraConnection:async()=>{events.push('jira');if(failures.jira)throw failures.jira;return {displayName:'Tester'};},
   requestJson:async url=>{
-   const id=url.includes('/api/v2/spaces')?'confluence':url.endsWith('/user')?'github':url.includes('/users/')?'organization':url.includes('/repos/')?'library':'jira-probe';
+   const id=url.includes('/api/v2/spaces')?'confluence':url.endsWith('/user')?'github':url.includes('/users/')?'organization':url.includes('/releases?')?'releases':url.includes('/repos/')?'library':'jira-probe';
    events.push(id);if(failures[id])throw failures[id];
    if(id==='confluence')return {results:[]};
    if(id==='github')return {login:'tester'};
    if(id==='organization')return {login:'aiamalaysia'};
-   if(id==='library')return {full_name:'aidilazharo/tech-stacks-skills'};
+   if(id==='releases')return [];
+   if(id==='library'){
+    const match=url.match(/\/repos\/([^/]+)\/([^/]+)$/);
+    if(!match)throw Error('Unexpected GitHub repository resource '+url);
+    return {full_name:match[1]+'/'+match[2],permissions:{pull:true,push:true}};
+   }
    return {};
   },
   sdlcCatalog:{normalizeConfig:c=>c,remoteInfo:async()=>({sha:'1234567890123456789012345678901234567890'})},
@@ -150,7 +155,7 @@ test('All service checks complete after multiple failures, with meaningful safe 
  const network=Object.assign(new Error('fetch failed'),{cause:{code:'ENOTFOUND'}});
  const h=hostFixture({jira:new Error('HTTP 401 bad token test-atl'),confluence:new Error('HTTP 404 no access'),github:network});
  const result=await h.run();
- assert.equal(result.success,false);assert.equal(result.checks.length,5);assert.equal(h.progress.length,5);
+ assert.equal(result.success,false);assert.equal(result.checks.length,8);assert.equal(h.progress.length,16);
  for(const id of ['jira','confluence','github','organization','library'])assert.ok(h.events.includes(id),id);
  assert.match(result.checks.find(x=>x.id==='jira').message,/HTTP 401/);
  assert.match(result.checks.find(x=>x.id==='confluence').message,/HTTP 404/);
@@ -161,7 +166,7 @@ test('All service checks complete after multiple failures, with meaningful safe 
 test('Automatic connection health check uses saved credentials without changing settings or tokens',async()=>{
  const h=hostFixture();
  const result=await h.context.testAndSaveStartupConnections({settings:setup.DEFAULTS},{save:false,onProgress:item=>h.progress.push(item)});
- assert.equal(result.success,true);assert.equal(result.checks.length,5);
+ assert.equal(result.success,true);assert.equal(result.checks.length,8);
  assert.ok(result.checks.every(check=>check.state==='ok'));
  assert.deepEqual(h.writes,[]);assert.equal(h.context.startupSessionVerified,true);
  assert.equal(h.context.startupVerifiedSignature,'old');
