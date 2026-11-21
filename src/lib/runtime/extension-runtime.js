@@ -72,6 +72,7 @@ const installCache=require('../../library-install-cache');
 const startupDiagnostics=require('../startup-diagnostics');
 const myWorkPresence=require('../../my-work-presence');
 const myWorkDailyBrief=require('../../my-work-daily-brief');
+const myWorkRoleSkillRouter=require('../../my-work-role-skill-router');
 const {SelfImprovement}=require('../../self-improvement');
 const idleImprovement=require('../../idle-improvement');
 const selfImprovementView=require('../../self-improvement-view');
@@ -9449,6 +9450,19 @@ async function handleDashboardMessage(msg){
         const roleState=await workState(registry,projectId);
         const role=roleState.roles.find(entry=>entry.id===roleId);
         if(!role||!Number.isSafeInteger(requestId)||requestId<1)break;
+        // Route cross-role artifact requests BEFORE making an AI/provider call.
+        // The user's other enabled roles do not change the active-chat scope.
+        const skillRoute=myWorkRoleSkillRouter.route(roleId,msg.message);
+        if(skillRoute){
+          const text=myWorkRoleSkillRouter.response(skillRoute);
+          if(activeProject?.id===projectId)
+            await dashboard?.webview.postMessage({
+              type:'roleAiChatReply',projectId,roleId,requestId,text,error:false,
+              suggestedRoleId:skillRoute.targetRoleId,
+              suggestedRoleName:skillRoute.targetRoleName
+            });
+          break;
+        }
         let text='',error=false,retrieved=[];
         // The Knowledge & RAG page and My Work chat share this active-project
         // store. Never perform a cross-project search or trust retrieved text
