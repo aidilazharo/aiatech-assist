@@ -52,8 +52,15 @@ body.atgv-mywork-chat-mode:not(.gate-mode) #appHeader .header-end{
   display:flex;flex-direction:column;justify-content:flex-start;flex:1 1 auto;
   gap:18px;width:100%;min-width:0;min-height:0;overflow-y:auto;overflow-x:hidden;
   overscroll-behavior:contain;scrollbar-width:thin;
-  position:relative;z-index:0;padding:52px clamp(12px,2vw,24px) 26px;
+  position:relative;z-index:0;isolation:isolate;
+  /* Reserve vertical room for the header waveform extending below its red divider. */
+  padding:94px clamp(12px,2vw,24px) 26px;scroll-padding-top:94px;
   background:#000;border:0!important;border-radius:0;box-shadow:none;max-width:none;
+}
+#atgvMyWorkAi .atgv-mywork-ai-results > .atgv-mywork-ai-content,
+#atgvMyWorkAi .atgv-mywork-ai-results > .atgv-mywork-ai-tasks,
+#atgvMyWorkAi .atgv-mywork-ai-results > .atgv-mywork-ai-conversation{
+  position:relative;z-index:1; /* Text stays in a consistent readable foreground layer. */
 }
 #atgvMyWorkAi .atgv-mywork-ai-content{
   width:100%;min-width:0;max-width:none;flex:0 0 auto;margin:0;
@@ -127,13 +134,13 @@ body.atgv-mywork-chat-mode:not(.gate-mode) #appHeader .header-end{
 }
 @media(max-width:620px){
   #appHeader #myWorkHeaderWave .mywork-header-wave-visual{left:10px;right:10px;height:58px;bottom:-29px}
-  #atgvMyWorkAi .atgv-mywork-ai-results{padding:42px 12px 20px}
+  #atgvMyWorkAi .atgv-mywork-ai-results{padding:76px 12px 20px;scroll-padding-top:76px}
   #atgvMyWorkAi .atgv-mywork-ai-chat{padding:10px 10px 14px}
   #atgvMyWorkAi .atgv-mywork-ai-message{max-width:none;width:100%}
 }
 @media(max-height:400px){
   #appHeader #myWorkHeaderWave .mywork-header-wave-visual{height:42px;bottom:-20px}
-  #atgvMyWorkAi .atgv-mywork-ai-results{padding-top:30px}
+  #atgvMyWorkAi .atgv-mywork-ai-results{padding-top:54px;scroll-padding-top:54px}
   #atgvMyWorkAi .atgv-mywork-ai-chat{padding-block:6px}
 }
 @media(prefers-reduced-motion:reduce){
@@ -174,22 +181,33 @@ body.atgv-mywork-chat-mode:not(.gate-mode) #topNotification #myWorkHeaderWave.my
 }
 
 
-/* Persistent role-aware Next Action dock: never hidden with AI response. */
-#atgvMyWorkAi .atgv-mywork-ai-next-bar{
-  flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;
-  gap:16px;padding:10px clamp(12px,2vw,24px);
-  background:#0c1118;border-top:1px solid #28313c;min-width:0;
+/* Standalone daily task cards. They are separate from the chat transcript. */
+#atgvMyWorkAi .atgv-mywork-ai-tasks{
+  flex:0 0 auto;display:flex;flex-direction:column;gap:12px;
+  width:100%;min-width:0;padding:16px clamp(14px,2vw,24px);
+  box-sizing:border-box;background:#0f141b;border:1px solid #34404f;
+  border-radius:10px;
 }
-#atgvMyWorkAi .atgv-mywork-ai-next-summary{
-  flex:1 1 auto;min-width:0;font-size:12px;line-height:1.5;color:#c4d2e2;
-  overflow-wrap:anywhere;
+#atgvMyWorkAi .atgv-mywork-ai-tasks[hidden]{display:none!important}
+#atgvMyWorkAi .atgv-mywork-ai-tasks h2{
+  font-size:14px;line-height:1.4;font-weight:700;color:#f0f4fa;margin:0;
 }
-#atgvMyWorkAi button.atgv-mywork-ai-next-button{
-  flex:0 0 auto;display:block!important;background:#153858!important;
-  color:#f6fbff!important;border:1px solid #4e9fd7!important;
-  padding:9px 15px;border-radius:8px;font-weight:700;font-size:12px;
+#atgvMyWorkAi .atgv-mywork-ai-task-list{display:flex;flex-direction:column;gap:10px}
+#atgvMyWorkAi .atgv-mywork-ai-task-card{
+  display:flex;align-items:center;justify-content:space-between;gap:14px;
+  padding:11px 12px;background:#171d26;border:1px solid #34404f;border-radius:8px;
+  min-width:0;
 }
-#atgvMyWorkAi button.atgv-mywork-ai-next-button:hover{background:#215681!important}
+#atgvMyWorkAi .atgv-mywork-ai-task-details{display:flex;flex-direction:column;gap:4px;min-width:0;overflow-wrap:anywhere}
+#atgvMyWorkAi .atgv-mywork-ai-task-details strong{color:#f0f4fa;font-size:12.5px}
+#atgvMyWorkAi .atgv-mywork-ai-task-details span{color:#a8b9c9;font-size:11.5px}
+#atgvMyWorkAi button.atgv-mywork-ai-task-open{
+  flex:0 0 auto;padding:8px 12px;border-radius:7px;
+  background:#153858!important;color:#f6fbff!important;
+  border:1px solid #4e9fd7!important;font-size:12px;font-weight:700;
+}
+#atgvMyWorkAi button.atgv-mywork-ai-task-open:hover{background:#215681!important}
+#atgvMyWorkAi .atgv-mywork-ai-task-empty{color:#a8b9c9;margin:0;font-size:12px}
 #atgvMyWorkAi .atgv-mywork-ai-brief{font-size:12px;line-height:1.6}
 #atgvMyWorkAi .atgv-mywork-ai-brief section{margin:0 0 18px}
 #atgvMyWorkAi .atgv-mywork-ai-brief-heading{
@@ -212,6 +230,6 @@ body.atgv-mywork-chat-mode:not(.gate-mode) #topNotification #myWorkHeaderWave.my
   display:block;font-size:11px;color:#9eacba;margin-top:2px;
 }
 @media(max-width:620px){
- #atgvMyWorkAi .atgv-mywork-ai-next-bar{flex-wrap:wrap;gap:8px}
- #atgvMyWorkAi button.atgv-mywork-ai-next-button{width:100%}
+ #atgvMyWorkAi .atgv-mywork-ai-task-card{align-items:stretch;flex-direction:column}
+ #atgvMyWorkAi button.atgv-mywork-ai-task-open{align-self:flex-start}
 }

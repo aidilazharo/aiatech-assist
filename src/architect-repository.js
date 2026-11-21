@@ -65,4 +65,67 @@ async function ensure(state,projectId,developerGit,options={}){
  }
  return checked.root;
 }
-module.exports={resolve,ensure};
+// Custom Stack Save creates only an absent/empty project repository folder,
+// then clones the configured GitHub source. Never overwrite a nonempty folder,
+// accept symlinks, auto-reset a checkout, or run downloaded project code.
+async function ensureCustom(state,projectId,developerGit,options={}){
+ const owner=String(options.githubOwner||''),repoName=String(options.githubRepo||'');
+ if(!state||!projectId||!options.projectRoot||
+    !/^[A-Za-z0-9-]{1,39}$/.test(owner)||
+    !/^[-.A-Za-z0-9_]{1,100}$/.test(repoName)||['.','..'].includes(repoName))
+  throw Error('Choose a valid GitHub owner and project repository in Settings before Save Stack.');
+ const catalog=String(options.catalogRepositoryUrl||'').trim().match(/^https:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/i);
+ if(catalog&&catalog[1].toLowerCase()===owner.toLowerCase()&&catalog[2].toLowerCase()===repoName.toLowerCase())
+  throw Error('The SDLC Catalog is not a project source repository. Configure a separate project GitHub repository.');
+ const root=await fs.realpath(options.projectRoot);
+ const parent=path.join(root,'repository');
+ await fs.mkdir(parent,{recursive:true});
+ const parentReal=await fs.realpath(parent);
+ const sub=path.relative(root,parentReal);
+ if(sub!=='repository'||path.isAbsolute(sub))
+  throw Error('Repository folder resolves outside the active ATGV project.');
+ const dest=path.join(parentReal,repoName);
+ let existing=await fs.lstat(dest).catch(error=>error.code==='ENOENT'?null:Promise.reject(error));
+ if(existing&&(!existing.isDirectory()||existing.isSymbolicLink()))
+  throw Error('Project repository destination is not a safe directory; no files were modified.');
+ let mode='existing',checked=null;
+ if(existing){
+  const entries=await fs.readdir(dest);
+  if(entries.length){
+   // Never clone over or reset a populated folder. When only .git is present,
+   // a verified fast-forward may restore missing tracked working-tree files.
+   checked=await developerGit.repository(dest).catch(()=>null);
+   if(!checked)throw Error('Repository folder has existing files but is not a valid Git checkout. Preserve those files and select another folder manually.');
+   if(!developerGit.matchesGithubRepo(checked.remote,owner,repoName))
+    throw Error('Repository folder has an unexpected GitHub origin. Existing files were preserved.');
+   if(entries.length===1&&entries[0]==='.git'){
+    if(!checked.clean||!/^[a-f0-9]{40}$/i.test(String(checked.sha||'')))
+     throw Error('Git checkout has no verified clean HEAD; no automatic pull attempted.');
+    const safePull=options.pull||require('./architect-custom-pull').pull;
+    const result=await safePull(dest,{expectedSha:checked.sha,owner,name:repoName,driver:developerGit});
+    checked=await developerGit.repository(dest);
+    mode=result.updated?'pulled':'existing';
+   }
+  }else mode='cloned';
+ }else{
+  await fs.mkdir(dest);
+  mode='cloned';
+ }
+ if(mode==='cloned'){
+  // cloneConfigured accepts an existing EMPTY destination only for this flow.
+  const clone=await developerGit.cloneConfigured(parentReal,owner,repoName,
+   options.githubBranch||'',{allowExistingEmpty:true});
+  checked=await developerGit.repository(clone.root);
+ }
+ const relative=path.relative(root,checked.root);
+ if(!relative||relative.startsWith('..')||path.isAbsolute(relative)||
+    !developerGit.matchesGithubRepo(checked.remote,owner,repoName)||
+    path.resolve(checked.root)!==path.resolve(dest))
+  throw Error('The project checkout path or configured GitHub origin did not pass verification.');
+ if(typeof state.update==='function'){
+  await state.update('atgvAssist.localRepo.'+projectId,checked.root);
+  await state.update('atgvAssist.bootstrapRepo.'+projectId,checked.root);
+ }
+ return {root:checked.root,branch:checked.branch,sha:checked.sha,mode};
+}
+module.exports={resolve,ensure,ensureCustom};

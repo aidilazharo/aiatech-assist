@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.26';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.27';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -343,11 +343,11 @@ function html(webview,{resumeLibrary=false}={}){
           <p id="atgvMyWorkAiText" class="atgv-mywork-ai-text" role="status" aria-live="polite"></p>
           <div id="atgvMyWorkAiActions" class="atgv-mywork-ai-actions" aria-label="Suggested next actions"></div>
         </div>
+        <section id="atgvMyWorkToday" class="atgv-mywork-ai-tasks" aria-label="Today's outstanding tasks" hidden>
+          <h2 id="atgvMyWorkTodayTitle">Today's tasks</h2>
+          <div id="atgvMyWorkTodayList" class="atgv-mywork-ai-task-list" role="list"></div>
+        </section>
         <div id="atgvMyWorkAiConversation" class="atgv-mywork-ai-conversation" role="log" aria-label="Role AI conversation" aria-live="polite"></div>
-      </div>
-      <div id="atgvMyWorkAiNextBar" class="atgv-mywork-ai-next-bar" aria-label="Persistent next action">
-        <span id="atgvMyWorkAiNextSummary" class="atgv-mywork-ai-next-summary" role="status" aria-live="polite">Open your project to review the next role task.</span>
-        <button type="button" id="atgvMyWorkAiNextButton" class="atgv-mywork-ai-next-button">What to do next</button>
       </div>
       <form id="atgvMyWorkAiChatForm" class="atgv-mywork-ai-chat">
         <div class="atgv-mywork-ai-composer">

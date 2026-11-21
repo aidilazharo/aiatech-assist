@@ -35,20 +35,21 @@ test('project delivery guidance responds to blockers without inventing a forecas
  const out=brief.build({roleId:'project-manager',roleName:'Project Manager',
   deadline:'2026-12-25',now:new Date(2026,10,21),activity:{jiraAvailable:true,risk},
   config:{jiraConfigured:true,confluenceConfigured:true}});
- assert.equal(out.todayActions[0].label,'Review blocker TC-9');
+ assert.equal(out.todayActions[0].label,'Coordinate blocker TC-9');
  assert.equal(out.todayActions[0].target,'role-workspace');
  assert.match(out.health.detail,/not a complete project forecast/);
 });
 
-test('daily next actions have deterministic allowlisted navigation targets',()=>{
+test('role task navigation has bounded host-validated destinations',()=>{
  const ui=source('media/atgv-mywork-ai.js');
- assert.match(ui,/todayActions\?\.\[0\]\?\.target/);
- assert.match(ui,/target==='project-settings'/);
+ assert.match(ui,/\['project-settings','projects','role-workspace','discovery'\]/);
+ assert.match(ui,/atgv:mywork-open-task/);
  const br=brief.build({roleId:'business-analyst',roleName:'Business Analyst',
   requirements:[{id:'BR-001',status:'Draft'}],deadline:'2026-12-21',
   config:{jiraConfigured:true,confluenceConfigured:true}});
  assert.equal(br.todayActions[0].target,'discovery');
- assert.equal(brief.build({config:{jiraConfigured:false}}).todayActions[0].target,'project-settings');
+ assert.equal(brief.build({roleId:'project-manager',config:{jiraConfigured:false}}).todayActions[0].target,'project-settings');
+ assert.deepEqual(brief.build({roleId:'qa-engineer',config:{jiraConfigured:false}}).todayActions,[]);
 });
 
 test('Confluence roster and role AI fail closed on malformed or stale evidence',()=>{

@@ -73,29 +73,76 @@ function build({
 }={}){
  const today=dayLocal(now),name=guessedName(identity.email,identity.displayName);
  const greeting='Hello, '+name+'. Here is your '+clean(roleName||'project',80)+' briefing for '+now.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+'.';
- const pendingTasks=(Array.isArray(tasks)?tasks:[]).filter(t=>t&&!t.completed).map(t=>clean(t.activity||t.title,130)).filter(Boolean);
- const pendingIssues=(Array.isArray(assigned)?assigned:[]).filter(x=>x?.jiraKey&&!finished(x.status)).slice(0,10);
- const pendingRequirements=(Array.isArray(requirements)?requirements:[]).filter(x=>x?.id&&!finished(x.status)).slice(0,10);
- const sharedIssues=Array.isArray(activity?.inProgress)?activity.inProgress:[],sharedBRs=Array.isArray(activity?.incompleteBRs)?activity.incompleteBRs:[];
+ // Role tasks are from the host's selected-role checklist, not project-wide
+ // Jira activity. Shared health evidence must not become everyone's tasks.
+ const pendingTasks=(Array.isArray(tasks)?tasks:[])
+  .filter(item=>item&&item.completed!==true)
+  .map((item,index)=>({
+    id:clean(item.id||item.taskId||'step-'+index,60),
+    title:clean(item.activity||item.title,130)
+  })).filter(item=>item.title);
+ const pendingIssues=(Array.isArray(assigned)?assigned:[])
+  .filter(item=>item?.jiraKey&&!finished(item.status)).slice(0,10);
+ const pendingRequirements=roleId==='business-analyst'?
+  (Array.isArray(requirements)?requirements:[])
+   .filter(item=>item?.id&&!finished(item.status)).slice(0,10):[];
+ const sharedIssues=Array.isArray(activity?.inProgress)?activity.inProgress:[];
  const h=health({deadline,today,outstanding:pendingTasks.length+pendingRequirements.length,
   openJira:sharedIssues.length,knownWork:tasks.length>0||!!activity?.jiraAvailable,
   risk:activity?.jiraAvailable?activity.risk:null});
  const team=summarizeOtherUsers(roster?.rows||[],identity.accountId,identity.email);
- const todayActions=[];
- const add=(label,reason,target='role-workspace')=>{if(todayActions.length<4&&!todayActions.some(x=>x.label===label))todayActions.push({label,reason,target});};
- if(!config.jiraConfigured)add('Verify Jira connection','Project Jira settings are missing or incomplete','project-settings');
- if(!config.confluenceConfigured)add('Verify Confluence synchronization','Project Confluence space is not configured','project-settings');
- if(!deadline||h.code==='needs-setting')add('Set or correct the project deadline','Schedule health needs a valid target date','project-settings');
- if(h.daysRemaining!==null&&h.daysRemaining<=0)add('Review delivery recovery or sign-off','The configured project deadline has arrived or passed');
- if(activity?.jiraAvailable&&Array.isArray(activity.risk?.blockers)&&activity.risk.blockers.length)
-  add('Review blocker '+clean(activity.risk.blockers[0].key,35),'Verified Jira blocker; coordinate with its owner');
- if(activity?.jiraAvailable&&Array.isArray(activity.risk?.overdue)&&activity.risk.overdue.length)
-  add('Review overdue '+clean(activity.risk.overdue[0].key,35),'Verified Jira due date has passed');
- if(roleId==='business-analyst'&&pendingRequirements.length)add('Continue '+pendingRequirements[0].id,'Unfinished Business Requirement','discovery');
- if(pendingIssues.length)add('Review '+pendingIssues[0].jiraKey,'Assigned Jira issue '+clean(pendingIssues[0].status,35));
- if(pendingTasks.length)add('Complete '+pendingTasks[0],'Unfinished '+clean(roleName||roleId,50)+' workflow');
- if(roleId==='project-manager'&&sharedIssues.length)add('Review '+clean(sharedIssues[0].key,35)+' with its owner','Project-wide Jira work in progress');
- if(todayActions.length===0)add('Review your role workspace and confirm priorities','No urgent verified task was identified; check the current workflow');
+ const todayActions=[],seen=new Set();
+ const add=(kind,key,label,reason,target='role-workspace',options={})=>{
+  const id=clean(kind+':'+key,180);
+  if(todayActions.length>=6||seen.has(id))return;
+  seen.add(id);
+  todayActions.push({
+   id,kind,label:clean(label,140),reason:clean(reason,160),target,
+   ...(options.jiraKey?{jiraKey:clean(options.jiraKey,40)}:{}),
+   ...(options.brId?{brId:clean(options.brId,40)}:{})
+  });
+ };
+ // Project-level setup and schedule belong to the project governance role.
+ // Other specialists see delivery risks in Project Health, not as identical
+ // personal task prompts which displace their assigned work.
+ if(roleId==='project-manager'){
+  if(!config.jiraConfigured)add('settings','jira','Verify Jira connection',
+   'Project Jira integration needs attention','project-settings');
+  if(!config.confluenceConfigured)add('settings','confluence','Verify Confluence synchronization',
+   'Project Confluence space is not configured','project-settings');
+  if(!deadline||h.code==='needs-setting')add('settings','deadline','Set or correct the project deadline',
+   'Schedule health needs a valid target date','project-settings');
+  if(h.daysRemaining!==null&&h.daysRemaining<=0)
+   add('governance','delivery','Review delivery recovery or sign-off',
+    'Project deadline reached; check the delivery gate');
+  if(activity?.jiraAvailable){
+   for(const issue of (activity.risk?.blockers||[]).slice(0,1))
+    add('jira',issue.key,'Coordinate blocker '+clean(issue.key,35),
+     'Verified Jira blocker needs owner coordination','role-workspace',{jiraKey:issue.key});
+   for(const issue of (activity.risk?.overdue||[]).slice(0,1))
+    add('jira',issue.key,'Review overdue '+clean(issue.key,35),
+     'Verified Jira deadline has passed','role-workspace',{jiraKey:issue.key});
+  }
+ }
+ if(roleId==='business-analyst'){
+  for(const requirement of pendingRequirements)
+   add('br',requirement.id,'Continue '+clean(requirement.id,40),
+    'Unfinished Business Requirement','discovery',{brId:requirement.id});
+ }
+ // Assigned Jira tickets are a personal role task only when the host has
+ // independently matched the role-specific UI inventory to the user's
+ // verified Jira assignment. Other roles must not inherit those tickets.
+ if(['software-developer','ux-designer'].includes(roleId)){
+  for(const issue of pendingIssues)
+   add('jira',issue.jiraKey,'Review '+clean(issue.jiraKey,40),
+    'Verified role-linked Jira issue · '+clean(issue.status,35),
+    'role-workspace',{jiraKey:issue.jiraKey});
+ }
+ for(const task of pendingTasks)
+  add('checklist',task.id,'Complete '+task.title,
+   'Unfinished '+clean(roleName||roleId,50)+' checklist item');
+ // No synthetic task is inserted after completion. Newly verified
+ // outstanding tasks appear when the host refreshes the role brief.
  return {
   projectName:clean(projectName,120),today,name,greeting,health:h,team,
   teamAvailable:!!roster,teamSummary:roster?(team.length?team.length+' other recorded project member(s)':'No other distinct verified members listed'):'Shared My Work Users roster unavailable',

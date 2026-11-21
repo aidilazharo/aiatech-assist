@@ -16,7 +16,8 @@ test('all 18 Library roles have explicit verified next-action navigation in My W
  }
  assert.match(ui,/actionButtons\(next\.action\);\s*displayResults\(true\);state\('thinking'\)/);
  assert.match(ui,/if\(requestId!==pending\|\|lastAnswered===requestId\)return/);
- assert.match(ui,/target==='discovery'/);
+ assert.match(ui,/atgv:mywork-open-task/);
+ assert.match(read('media/start.js'),/window\.addEventListener\('atgv:mywork-open-task'/);
  assert.doesNotMatch(ui,/send\('(brJiraSync|pmJiraSetAssignee|architectApproveStack|uxPublishFrontend|delete|publish)'/);
 });
 test('Start screen suppresses project URL and preserves editable repository connection',()=>{

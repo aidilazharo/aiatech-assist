@@ -42,3 +42,16 @@ test('waveform blends from exact header red to CMYK and back to header red',()=>
  assert.match(js,/requestAnimationFrame\(frame\)/);
  assert.match(js,/prefers-reduced-motion: reduce/);
 });
+
+test('chat copy has a foreground layer and safe clearance below the header waveform',()=>{
+ const css=read('media/atgv-mywork-ai.css');
+ const results=css.match(/#atgvMyWorkAi \.atgv-mywork-ai-results\{([^}]+)\}/)?.[1]||'';
+ assert.match(results,/padding:94px/);
+ assert.match(results,/scroll-padding-top:94px/);
+ assert.match(results,/isolation:isolate/);
+ assert.match(css,/#atgvMyWorkAi \.atgv-mywork-ai-results > \.atgv-mywork-ai-conversation\{\s*position:relative;z-index:1/);
+ assert.match(css,/padding:76px 12px 20px;scroll-padding-top:76px/);
+ assert.match(css,/padding-top:54px;scroll-padding-top:54px/);
+ // The animated border remains pointer-transparent and above the red divider.
+ assert.match(css,/#topNotification #myWorkHeaderWave \.mywork-header-wave-visual\{[^}]+pointer-events:none/);
+});

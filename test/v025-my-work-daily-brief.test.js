@@ -31,20 +31,19 @@ test('other users are deduplicated by Jira ID, do not include current user and a
  ],'self','zara@company.example');
  assert.deepEqual(other,[{name:'Amira',roles:['Project Manager'],assignedJira:1}]);
 });
-test("today's priorities surface missing configuration before work and role-specific Jira tasks",()=>{
- const value=brief.build({
-  identity:{email:'john.doe@company.example'},roleId:'business-analyst',roleName:'Business Analyst',
-  deadline:'',now:new Date(2026,10,21),
-  tasks:[{activity:'Map BR document',completed:false}],
-  requirements:[{id:'BR-004',status:'Draft'}],
-  config:{jiraConfigured:false,confluenceConfigured:false}
- });
- const labels=value.todayActions.map(x=>x.label);
- assert.deepEqual(labels.slice(0,3),[
+test("project governance settings remain Project Manager tasks, not Business Analyst tasks",()=>{
+ const shared={identity:{email:'john.doe@company.example'},deadline:'',
+  now:new Date(2026,10,21),config:{jiraConfigured:false,confluenceConfigured:false}};
+ const pm=brief.build({...shared,roleId:'project-manager',roleName:'Project Manager'});
+ assert.deepEqual(pm.todayActions.slice(0,3).map(x=>x.label),[
   'Verify Jira connection','Verify Confluence synchronization','Set or correct the project deadline'
  ]);
- assert.equal(value.health.code,'unverified');
- assert.equal(value.todayActions.length,4);
+ const ba=brief.build({...shared,roleId:'business-analyst',roleName:'Business Analyst',
+  tasks:[{id:'discovery',activity:'Discovery notes',completed:false}],
+  requirements:[{id:'BR-004',status:'Draft'}]});
+ assert.deepEqual(ba.todayActions.map(x=>x.label),['Continue BR-004','Complete Discovery notes']);
+ assert.equal(ba.health.code,'unverified');
+ assert.ok(ba.todayActions.every(x=>x.target!=='project-settings'));
 });
 test('deadline pressure and active role tasks are surfaced without claiming completed team work',()=>{
  const value=brief.build({
@@ -56,23 +55,21 @@ test('deadline pressure and active role tasks are surfaced without claiming comp
   roster:{rows:[]},config:{jiraConfigured:true,confluenceConfigured:true}
  });
  assert.equal(value.health.code,'at-risk');
- assert.match(value.todayActions[0].label,/recovery/);
- assert.match(value.todayActions[1].label,/TC-758/);
+ assert.match(value.health.detail,/recovery/);
+ assert.ok(value.todayActions.some(item=>/TC-758/.test(item.label)));
+ assert.ok(value.todayActions.every(item=>item.target!=='project-settings'));
  assert.equal(value.teamSummary,'No other distinct verified members listed');
 });
-test('My Work next-action button is outside hidden AI response and stays actionable offline',()=>{
- const html=read('src/lib/webview/dashboard-html.js');
+test('My Work daily tasks have a standalone section and no generic What to do next dock',()=>{
+ const html=read('src/lib/webview/dashboard-html.js'),wave=read('media/atgv-mywork-wave-chat.js');
  const start=html.indexOf('id="atgvMyWorkAiContent"'),end=html.indexOf('id="atgvMyWorkAiChatForm"');
- const next=html.indexOf('id="atgvMyWorkAiNextButton"');
- assert.ok(start>=0&&end>start&&next>start&&next<end);
- assert.ok(html.indexOf('id="atgvMyWorkAiConversation"')<next);
- assert.match(html,/id="atgvMyWorkAiNextButton"[^>]*>What to do next<\/button>/);
- const ui=read('media/atgv-mywork-ai.js');
- assert.match(ui,/function renderPersistentNext/);
- assert.match(ui,/button\.disabled=false/);
- assert.match(ui,/target==='project-settings'/);
- assert.match(ui,/navigate\('projects'\)/);
- assert.match(ui,/byId\('atgvMyWorkAiNextButton'\)\?\.addEventListener\('click',navigateToWork\)/);
+ const tasks=html.indexOf('id="atgvMyWorkToday"'),chat=html.indexOf('id="atgvMyWorkAiConversation"');
+ assert.ok(start>=0&&end>start&&tasks>start&&chat>tasks&&end>chat);
+ assert.doesNotMatch(html,/id="atgvMyWorkAiNextButton"/);
+ assert.match(html,/id="atgvMyWorkTodayList"/);
+ assert.match(wave,/button\.textContent='Go to task'/);
+ assert.match(wave,/window\.ATGVMyWorkAI\?\.openTask\?\.\(item\)/);
+ assert.match(wave,/tasksList\.replaceChildren\(\)/);
 });
 test('daily brief is based on host-verified account, saved schedule and shared roster, not the chat prompt',()=>{
  const host=read('src/lib/runtime/extension-runtime.js');
@@ -84,5 +81,5 @@ test('daily brief is based on host-verified account, saved schedule and shared r
  assert.match(wave,/renderBrief\(msg\.brief\)/);
  assert.match(wave,/greetingNode\.textContent=/);
  assert.match(wave,/atgv-mywork-ai-team-member/);
- assert.match(wave,/Today’s work/);
+ assert.match(wave,/tasksTitle\.textContent='Today/);
 });

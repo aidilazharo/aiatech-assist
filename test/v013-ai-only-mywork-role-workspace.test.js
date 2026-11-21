@@ -51,7 +51,7 @@ test('shared role selection opens AI and Role Workspace without changing existin
  assert.match(script,/if\(destination==='discovery'\)/);
  assert.match(script,/baBreadcrumbAtRequirements=true/);
  assert.match(script,/const openWorkspace=destination==='role-workspace'\|\|keepingWorkspace/);
- assert.match(actions,/navigate\(target==='discovery'/);
+ assert.match(actions,/atgv:mywork-open-task/);
  assert.match(actions,/workspace&&!workspace\.classList\.contains\('hidden'\)/);
 });
 

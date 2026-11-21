@@ -6206,6 +6206,41 @@ async function handleDashboardMessage(msg){
         requireOpened();architectErrorLogs.begin(activeProject.id,'save');
         const id=String(msg.stackId||''),stackGate=require('../../architect-stack-approval');
         stackGate.selection(id,'');
+        if(id==='custom'){
+          // Save only the Custom Stack selection and recover a missing/empty
+          // Git checkout. No catalog skeleton, package installation, project
+          // execution or remote push is permitted on this action.
+          const projectId=activeProject.id,current=await registry.read(projectId);
+          if(!current)throw Error('The selected project no longer exists.');
+          if(current.techStackPrepared?.stackId&&current.techStackPrepared.stackId!=='custom')
+            throw Error('A different technology stack has prepared Git work. Reset Tech Stack with its safety review before saving Custom Stack.');
+          const config=effectiveConfig(activeProject);
+          const checkout=await architectRepository.ensureCustom(context.workspaceState,projectId,developerGit,{
+            projectRoot:aiRoot(),githubOwner:config.get('github.owner'),
+            githubRepo:config.get('github.repo'),githubBranch:config.get('github.branch'),
+            catalogRepositoryUrl:catalogConfig().repositoryUrl
+          });
+          const updated=await registry.update(projectId,{...current,
+            techStackId:'custom',techStackCompanionId:'',
+            techStackPrepared:null,techStackValidation:null,
+            techStackServerVerification:null,techStackApproval:null});
+          activeProject=updated;
+          const detected=await require('../../architect-custom-stack').scan(checkout.root);
+          const process=developerGit.localLogs();
+          detected.running=!!(process.running&&detected.targets.some(item=>
+            path.resolve(checkout.root,item.relative)===path.resolve(process.cwd||'')));
+          await refreshDashboard();
+          if(activeProject?.id===projectId){
+            const status=checkout.mode==='cloned'
+              ?'Custom Stack saved. The project repository folder was created or verified empty and the configured GitHub repository cloned at '+checkout.root+'.'
+              :checkout.mode==='pulled'
+               ?'Custom Stack saved. Missing source files restored through a verified fast-forward of the configured GitHub repository at '+checkout.root+'.'
+               :'Custom Stack saved. Existing verified checkout preserved at '+checkout.root+'. Use Pull Repository to update its code.';
+            await dashboard?.webview.postMessage({type:'architectStackState',value:{message:status}});
+            await dashboard?.webview.postMessage({type:'architectCustomScanResult',projectId,value:detected});
+          }
+          break;
+        }
         const root=await architectRepository.ensure(context.workspaceState,activeProject.id,developerGit,{projectRoot:aiRoot(),githubOwner:effectiveConfig(activeProject).get('github.owner'),githubRepo:effectiveConfig(activeProject).get('github.repo'),githubBranch:effectiveConfig(activeProject).get('github.branch'),catalogRepositoryUrl:catalogConfig().repositoryUrl});
         const current=await registry.read(activeProject.id);if(!current)throw Error('Project not found.');
         const oldId=current.techStackPrepared?.stackId||'';
@@ -9550,7 +9585,7 @@ async function handleDashboardMessage(msg){
         // and BR approval status must come from the extension host's saved state.
         const authoritativeProgress=snapshot.progress?.[roleId]||{};
         const tasks=(role.tasks||[]).slice(0,16).map(task=>({
-          activity:clean(task.label),completed:authoritativeProgress[task.id]===true
+          id:clean(task.id,60),activity:clean(task.label),completed:authoritativeProgress[task.id]===true
         }));
         let requirements=[];
         if(roleId==='business-analyst'){
@@ -9564,7 +9599,7 @@ async function handleDashboardMessage(msg){
         const provisionalAssigned=(Array.isArray(input.assigned)?input.assigned:[]).slice(0,8)
           .filter(item=>/^[A-Z][A-Z0-9_]{1,20}-[0-9]+$/.test(String(item?.key||'')))
           .map(item=>({jiraKey:clean(item.key,40),status:clean(item.status,45)}));
-        let assigned=provisionalAssigned;
+        let assigned=[]; // The cross-role Jira roster is not evidence of this role's ownership.
         const evidence={role:clean(role.label,100),progress:clean(input.progress,30),
           recommendedNext:clean(input.next,180),tasks,assigned,requirements};
         const incomplete=tasks.find(task=>!task.completed)?.activity||'';
@@ -9624,10 +9659,14 @@ async function handleDashboardMessage(msg){
             if(myRow){
               // Jira assignment search in My Work Users is server-originated.
               // Exclude client-supplied issue statuses once authoritative data exists.
-              assigned=[...String(myRow.tasks||'').matchAll(/\b([A-Z][A-Z0-9_]{0,20}-\d+)\s*\(([^)]+)\)/g)]
-                .slice(0,8).map(entry=>({
-                  jiraKey:clean(entry[1],40),status:clean(entry[2],45)
-                }));
+              const liveStatuses=new Map([...String(myRow.tasks||'')
+                .matchAll(/\b([A-Z][A-Z0-9_]{0,20}-\d+)\s*\(([^)]+)\)/g)]
+                .slice(0,100).map(match=>[match[1],clean(match[2],45)]));
+              // Only issues on the active role's UI inventory AND independently
+              // verified as assigned to this user may become role task prompts.
+              assigned=['software-developer','ux-designer'].includes(roleId)
+                ?provisionalAssigned.filter(item=>liveStatuses.has(item.jiraKey))
+                  .map(item=>({...item,status:liveStatuses.get(item.jiraKey)})):[];
             }
           }
         }catch(error){
@@ -9674,7 +9713,9 @@ async function handleDashboardMessage(msg){
           const prompt='You are ATGV My Work role assistant. Only analyze the supplied role-scoped work summary. '+
             'Always give one concise, immediately actionable next-step suggestion in plain English (maximum 2 sentences), even if everything appears complete. '+
             'Reference a real incomplete task or assigned ticket when possible; otherwise recommend checking the next role workflow step. '+
-            'Give role-specific advice about schedule recovery when a deadline exists, or prioritize today\'s confirmed tasks and missing settings. '+
+            'Give role-specific advice grounded in this role\'s own unfinished tasks and assignments. '+
+             'Shared project deadlines, integration settings and team risks are context, not universal personal tasks. '+
+             'Only the Project Manager should be prompted to set the project deadline or project integrations. '+
             'Do not assert whole-project health from role-scoped tasks or guess team members. '+
             'Never invent completion, Jira permissions, approvals, blockers, ticket IDs or results. '+
             'Do not give commands or promise actions have been executed. No markdown and no JSON.\nWORK SUMMARY: '+

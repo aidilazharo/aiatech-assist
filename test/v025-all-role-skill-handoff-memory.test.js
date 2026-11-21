@@ -89,5 +89,5 @@ test('the role switch button remains intact while the assistant is typewriting',
  assert.match(code,/node\.appendChild\(body\)/);
  assert.match(code,/typewriter\(body,text\)/);
  assert.match(code,/reply\.append\(action\)/);
- assert.match(read('src/lib/webview/dashboard-html.js'),/id="atgvMyWorkAiNextButton"/);
+ assert.match(read('src/lib/webview/dashboard-html.js'),/id="atgvMyWorkTodayList"/);
 });
