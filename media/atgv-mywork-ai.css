@@ -1,11 +1,11 @@
 /* Shared My Work AI: monochrome surface, white text, no coloured border. */
 #workView > #atgvMyWorkAi,
 #workView.role-progress-only > #atgvMyWorkAi.atgv-mywork-ai {
-  display:flex!important;align-items:center;gap:22px;min-height:144px;
-  padding:22px 25px;margin:6px 0 19px;background:#000!important;color:#fff!important;
+  display:flex!important;flex-direction:column;justify-content:center;align-items:center;gap:14px;min-height:158px;
+  padding:23px 25px;margin:6px 0 19px;background:#000!important;color:#fff!important;text-align:center;
   border:0!important;box-shadow:none!important;border-radius:10px;
 }
-#atgvMyWorkAi .atgv-mywork-ai-visual{width:104px;height:104px;flex:0 0 104px;display:grid;place-items:center}
+#atgvMyWorkAi .atgv-mywork-ai-visual{width:104px;height:104px;flex:0 0 104px;display:grid;place-items:center;margin-inline:auto}
 #atgvMyWorkAi .atgv-mywork-ai-orb{
   width:84px;height:84px;border-radius:50%;position:relative;opacity:1;
   background:radial-gradient(ellipse at 56% 45%,#bbfaff 0,#0af2ff 9%,#0778df 33%,#092a93 65%,#020817 100%);
@@ -27,13 +27,15 @@
 #atgvMyWorkAi[data-state="success"] .atgv-mywork-ai-orb{
  background:radial-gradient(circle at 45% 46%,#fff 0,#a5ffca 13%,#13da79 34%,#087e43 73%,#001e10 100%);
  box-shadow:0 0 31px #23f28c9c,inset 0 0 15px #d0ffe6;
- animation:atgv-orb-success .9s ease-out both;
+ animation:atgv-orb-success 1.25s ease-out both;
 }
+#atgvMyWorkAi[data-state="complete"] .atgv-mywork-ai-visual{display:none}
 #atgvMyWorkAi[data-state="complete"] .atgv-mywork-ai-orb{opacity:0;transform:scale(.72);animation:none}
-#atgvMyWorkAi .atgv-mywork-ai-content{flex:1;min-width:0}
+#atgvMyWorkAi .atgv-mywork-ai-content{width:100%;min-width:0;max-width:850px;margin-inline:auto}
+#atgvMyWorkAi .atgv-mywork-ai-content[hidden]{display:none!important}
 #atgvMyWorkAi .atgv-mywork-ai-title{font-size:13px;color:#fff;font-weight:750;letter-spacing:.025em;margin:0 0 7px}
-#atgvMyWorkAi .atgv-mywork-ai-text{color:#fff;font-size:13px;line-height:1.55;max-width:850px;margin:0}
-#atgvMyWorkAi .atgv-mywork-ai-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:15px}
+#atgvMyWorkAi .atgv-mywork-ai-text{color:#fff;font-size:13px;line-height:1.55;margin:0 auto;max-width:730px}
+#atgvMyWorkAi .atgv-mywork-ai-actions{display:flex;justify-content:center;gap:9px;flex-wrap:wrap;margin-top:15px}
 #atgvMyWorkAi button.atgv-mywork-ai-button{
  color:#fff!important;background:#181818!important;border:1px solid #777!important;
  border-radius:6px;padding:8px 13px;font-size:12px;font-weight:650;
@@ -43,9 +45,9 @@
 @keyframes atgv-orb-idle{0%,100%{transform:scale(.96)}50%{transform:scale(1.05)}}
 @keyframes atgv-orb-thinking{0%,100%{transform:scale(.96) rotate(-7deg)}50%{transform:scale(1.11) rotate(8deg)}}
 @keyframes atgv-orb-wave{0%{left:6%;right:24%;opacity:.6}100%{left:23%;right:4%;opacity:1}}
-@keyframes atgv-orb-success{0%{transform:scale(1);opacity:1}50%{transform:scale(1.16);opacity:1}100%{transform:scale(1);opacity:1}}
+@keyframes atgv-orb-success{0%{transform:scale(1);opacity:1}30%{transform:scale(1.14);opacity:1}64%{transform:scale(1.08);opacity:1}100%{transform:scale(.8);opacity:0}}
 @media(max-width:620px){
- #workView > #atgvMyWorkAi{gap:12px;padding:15px 13px;align-items:flex-start}
+ #workView > #atgvMyWorkAi{gap:12px;padding:19px 13px;align-items:center}
  #atgvMyWorkAi .atgv-mywork-ai-visual{width:68px;height:68px;flex-basis:68px}
  #atgvMyWorkAi .atgv-mywork-ai-orb{width:55px;height:55px}
 }
