@@ -81,7 +81,9 @@
     const next=nextStep(latest);
     const supplied=safe(message,420);
     byId('atgvMyWorkAiTitle').textContent='AI · '+latest.roleName+' · Next step';
-    byId('atgvMyWorkAiText').textContent=supplied||next.suggestion;
+    const text=supplied||next.suggestion;
+    if(typeof window.ATGVMyWorkChat?.showSuggestion==='function')window.ATGVMyWorkChat.showSuggestion(text);
+    else byId('atgvMyWorkAiText').textContent=text;
     actionButtons(action||next.action);
     displayResults(true);
     if(error){state('idle');return;}
