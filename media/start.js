@@ -5375,6 +5375,8 @@ function renderSourcePreflight(){
  if(!info)return;
  const phase=info.phase||'checking',running=['preflight','repair','checking'].includes(phase);
  panel.dataset.phase=running?'running':phase;
+ // Each new preflight phase defaults collapsed; reopening is the user's choice.
+ if(panel.dataset.lastPhase!==phase){panel.open=false;panel.dataset.lastPhase=phase;}
  $('baSourcePreflightTitle').textContent=running?'AI document preflight · checking…':phase==='ready'?'AI document preflight · ready':phase==='blocked'?'AI document preflight · needs attention':'AI document preflight';
  $('baSourcePreflightMessage').textContent=info.summary||'Checking source quality and potential Developer RED/GREEN test blockers without changing the original uploaded file.';
  const fixes=Array.isArray(info.applied)?info.applied.length:0;
@@ -5402,7 +5404,7 @@ $('baPreflightDownload').addEventListener('click',()=>{
 });
 $('baWorkingBrDownload').addEventListener('click',()=>{
  if($('baWorkingBrDownload').disabled||!activeId)return;
- $('baWorkingBrDownload').disabled=true;send('downloadWorkingBR',{projectId:activeId});
+ $('baWorkingBrDownload').disabled=true;send('downloadISO29148BRPDF',{projectId:activeId});
 });
 function renderSourceDocuments(){
  const root=$('sourceDocuments');root.replaceChildren();
@@ -5439,16 +5441,12 @@ function renderSourceDocuments(){
     setDiscoveryImportBusy(true,'Select the updated document; old evidence and Jira remain unchanged until validation succeeds…');
     send('replaceDiscoverySource',{roleId:selectedRole,digest:doc.digest,revision:brState.revision});
   });
-  const archive=document.createElement('button');archive.type='button';archive.className='secondary ba-process-btn';
-  archive.textContent='Remove Source';archive.title='Remove this document from active sources and archive evidence. Existing approved BRs and all Jira issues remain unchanged.';
-  archive.disabled=!!baBusyTask||!!sourceRemoving||brDeletionBusy||!baCanEdit('ba-discovery')||Object.keys(brState?.pending||{}).length>0;
-  archive.addEventListener('click',()=>{if(archive.disabled)return;sourceRemoving=true;archive.disabled=true;send('archiveDiscoverySourceSafe',{digest:doc.digest,revision:brState.revision});});
   const remove=document.createElement('button');remove.type='button';remove.className='secondary ba-process-btn archive-remote-delete br-danger';
-  remove.textContent='Delete Everywhere';remove.title='Destructive: permanently delete this source and its linked BR/Jira/Confluence content, subject to separate confirmation. Use Remove Source or Replace & Reprocess instead to preserve Jira.';
+  remove.textContent='Delete';remove.title='Destructive: permanently delete this source and its linked BR/Jira/Confluence records after verification and separate confirmation. Replace & Reprocess retains existing approvals and Jira.';
   remove.dataset.brDeleteAction='true';
   remove.disabled=!!baBusyTask||!!sourceRemoving||brDeletionBusy||!baCanEdit('ba-discovery');
   remove.addEventListener('click',()=>{if(remove.disabled)return;requestBRDeletion({target:'active-source',digest:doc.digest,revision:brState.revision});});
-  actions.append(replace,archive,remove);item.append(selector,info,actions);root.append(item);
+  actions.append(replace,remove);item.append(selector,info,actions);root.append(item);
  }
  renderArchivedSources();
  renderSourceSelection();
