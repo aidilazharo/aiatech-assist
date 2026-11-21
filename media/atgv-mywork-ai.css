@@ -1,4 +1,4 @@
-/* ATGV v0.0.18: dedicated, full-height My Work AI page for all 18 roles.
+/* ATGV v0.0.19: dedicated, full-height My Work AI page for all 18 roles.
    Top = red fading waveform, center = independently scrollable guidance/chat,
    bottom = anchored composer. Other pages retain their existing layout. */
 body.atgv-mywork-chat-mode:not(.gate-mode) #contentPane.content-pane{
@@ -19,27 +19,34 @@ body.atgv-mywork-chat-mode:not(.gate-mode) #contentPane.content-pane{
   padding:0;margin:0;background:#000!important;color:#fff!important;
   border:0!important;box-shadow:none!important;border-radius:0;max-width:none;text-align:left;
 }
-/* The canvas must paint ON TOP of the red divider, not below its stacking layer.
-   Offset the waveform so its centerline overlaps the divider without clipping. */
-#atgvMyWorkAi .atgv-mywork-ai-topbar{
-  position:relative;isolation:isolate;z-index:2;
-  display:flex;align-items:center;flex:0 0 92px;height:92px;min-height:0;width:100%;min-width:0;
-  padding:5px clamp(16px,3vw,36px);background:#000;
-  border:0;box-shadow:none;overflow:visible;
+/* My Work waveform is painted on the ACTUAL main header bottom border (#D31145).
+   No second red divider is drawn inside the chat content. The app header has
+   overflow:hidden in the base theme; override it only while My Work is active. */
+body.atgv-mywork-chat-mode:not(.gate-mode) #appHeader.app-header{
+  position:relative;z-index:40;overflow:visible!important;
 }
-#atgvMyWorkAi .atgv-mywork-ai-topbar::after{
-  content:"";position:absolute;left:0;right:0;bottom:0;height:2px;
-  background:#dc303f;box-shadow:0 0 10px rgba(220,48,63,.35);
-  z-index:1;pointer-events:none;
+#appHeader #myWorkHeaderWave.mywork-header-wave{
+  display:none;position:absolute;left:0;right:0;bottom:-3px;height:0;
+  z-index:21;overflow:visible;pointer-events:none;
 }
-#atgvMyWorkAi .atgv-mywork-ai-visual{
-  display:block;position:absolute;left:clamp(16px,3vw,36px);right:clamp(16px,3vw,36px);
-  bottom:-38px;width:auto;min-width:0;height:76px;z-index:3;
-  pointer-events:none;overflow:visible;
+body.atgv-mywork-chat-mode:not(.gate-mode) #appHeader #myWorkHeaderWave.mywork-header-wave{
+  display:block;
 }
-#atgvMyWorkAi canvas#atgvMyWorkAiOrb{
+/* Wave centerline: 76 * .52 - 38 = 1.52px above the header's bottom edge.
+   The native 3px border's centerline is 1.5px above the edge. */
+#appHeader #myWorkHeaderWave .mywork-header-wave-visual{
+  display:block;position:absolute;
+  left:clamp(220px,20vw,330px);right:clamp(12px,2vw,24px);
+  bottom:-38px;height:76px;min-width:0;z-index:3;overflow:visible;
+  pointer-events:none;
+}
+#appHeader #myWorkHeaderWave canvas#atgvMyWorkAiOrb{
   display:block;position:relative;z-index:4;width:100%;height:100%;
   background:transparent;border:0;pointer-events:none;
+}
+body.atgv-mywork-chat-mode:not(.gate-mode) #appHeader .brand-area,
+body.atgv-mywork-chat-mode:not(.gate-mode) #appHeader .header-end{
+  position:relative;z-index:30;
 }
 #atgvMyWorkAi .atgv-mywork-ai-results{
   display:flex;flex-direction:column;justify-content:flex-start;flex:1 1 auto;
@@ -119,20 +126,16 @@ body.atgv-mywork-chat-mode:not(.gate-mode) #contentPane.content-pane{
   clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important;
 }
 @media(max-width:620px){
-  #atgvMyWorkAi .atgv-mywork-ai-topbar{
-    flex-basis:72px;height:72px;padding-inline:10px;
-  }
-  #atgvMyWorkAi .atgv-mywork-ai-visual{left:10px;right:10px;height:58px;bottom:-29px}
+  #appHeader #myWorkHeaderWave .mywork-header-wave-visual{left:10px;right:10px;height:58px;bottom:-29px}
   #atgvMyWorkAi .atgv-mywork-ai-results{padding:42px 12px 20px}
   #atgvMyWorkAi .atgv-mywork-ai-chat{padding:10px 10px 14px}
   #atgvMyWorkAi .atgv-mywork-ai-message{max-width:none;width:100%}
 }
 @media(max-height:400px){
-  #atgvMyWorkAi .atgv-mywork-ai-topbar{height:50px;flex-basis:50px}
-  #atgvMyWorkAi .atgv-mywork-ai-visual{height:42px;bottom:-21px}
+  #appHeader #myWorkHeaderWave .mywork-header-wave-visual{height:42px;bottom:-20px}
   #atgvMyWorkAi .atgv-mywork-ai-results{padding-top:30px}
   #atgvMyWorkAi .atgv-mywork-ai-chat{padding-block:6px}
 }
 @media(prefers-reduced-motion:reduce){
-  #atgvMyWorkAi canvas#atgvMyWorkAiOrb{transition:none!important}
+  #appHeader canvas#atgvMyWorkAiOrb{transition:none!important}
 }

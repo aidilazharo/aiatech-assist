@@ -11,7 +11,7 @@
  const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
  // Red intro -> CMYK (cyan, magenta, yellow, key/graphite) -> red fade-out.
  // Key is highlighted graphite so it remains visible against the black page.
- const redRGB=[255,70,83],cmykRGB=[
+ const redRGB=[211,17,69],cmykRGB=[
   [0,219,230],[230,36,187],[249,212,58],[110,125,143]
  ];
  const blendedRGBA=(target,mix,alpha)=>'rgba('+redRGB.map((v,i)=>
@@ -28,11 +28,13 @@
   canvas.width=Math.round(w*d);canvas.height=Math.round(h*d);ctx?.setTransform(d,0,0,d,0,0);
  }
  const resizeObserver=typeof ResizeObserver==='function'?new ResizeObserver(resize):null;
- resizeObserver?.observe(canvas);window.addEventListener('resize',resize);resize();
+ resizeObserver?.observe(canvas);window.addEventListener('resize',resize);
+ // The header canvas is hidden on other pages; measure it again on entering My Work.
+ window.addEventListener('atgv:viewchange',resize);resize();
  function pulse(power=1){
   lastActivity=performance.now();
   energy=clamp(energy+power*.35,0,1.8);
-  // All seven strands stay within the red/crimson palette.
+  // Restart in the actual header red (#D31145) before blending into CMYK.
   hue=351+Math.random()*8;
   ripples.push({x:w*(.2+Math.random()*.6),age:0,power:clamp(power,.2,2)});
   if(ripples.length>12)ripples.shift();

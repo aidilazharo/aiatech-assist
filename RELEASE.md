@@ -1,15 +1,15 @@
-# ATGV AIATECH Assist v0.0.18
+# ATGV AIATECH Assist v0.0.19
 
 ## Changes
 
-- Render the My Work animated AI waveform above the bottom red divider with an explicit stacking order: divider z-index 1, waveform z-index 3, canvas z-index 4.
-- Use an isolated top-bar stacking context and allow overflow so the wave visibly crosses the red divider without clipping.
-- Align the waveform centerline to the divider on desktop, mobile and short-height views; reserve center results padding so chat text is not obscured.
-- Animate the waveform through the requested lifecycle: fade in red, transition to CMYK while AI is active, then fade CMYK back into red while fading out.
-- Expand the My Work conversation to the full available width and height without surrounding cards, message borders, chat-pane borders or composer frames; keep the input fixed at the bottom and the conversation independently scrollable.
-- Retain the red divider, independently scrolling results, bottom chat composer, all 18 role prompts, Confluence/Jira project awareness and existing AI chat.
-- Add regression coverage for z-index precedence, responsive offsets, the red/CMYK/red sequence, and borderless full-area chat.
+- Move the one existing My Work AI waveform canvas out of the scrollable content and into the application's real main header.
+- Align the waveform centerline precisely with the existing 3px top-bar bottom border (`#D31145`) instead of drawing a second red line in My Work.
+- Override the header's overflow clipping only on My Work; keep waveform and its CMYK/red transitions visible above the native red border.
+- Match the wave's fade-in and fade-out red to the exact header border color, while retaining the active CMYK transition.
+- Show header animation for My Work across all 18 roles, hide it on other pages, and resize the canvas on navigation.
+- Preserve the full-width borderless conversation, independently scrolling responses, fixed bottom chat input, RAG, Jira and Confluence activity awareness.
+- Update UI tests for header placement, unique canvas, native border alignment, stacking order, mobile dimensions, red/CMYK/red lifecycle and chat behavior.
 
 ## Verification
 
-Run Node regression, Windows validation, UI checks and VSIX/archive packaging in CI before merging. Publish from main only after all checks pass, with .memory kept in source control but excluded from distributed VSIX and ZIP.
+Run the complete Node, UI, Windows and VSIX packaging workflow against the exact PR head. Merge only when required checks succeed, then publish the verified VSIX and source ZIP from main. Keep .memory files excluded from the distribution.

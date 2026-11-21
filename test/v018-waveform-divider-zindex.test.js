@@ -6,32 +6,39 @@ const path=require('node:path');
 const root=path.resolve(__dirname,'..');
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');
 
-test('My Work canvas z-index stays above the red divider at all supported sizes',()=>{
- const css=read('media/atgv-mywork-ai.css'),html=read('src/lib/webview/dashboard-html.js');
- const top=css.match(/#atgvMyWorkAi \.atgv-mywork-ai-topbar\{([^}]+)\}/)?.[1]||'';
- const divider=css.match(/#atgvMyWorkAi \.atgv-mywork-ai-topbar::after\{([^}]+)\}/)?.[1]||'';
- const visual=css.match(/#atgvMyWorkAi \.atgv-mywork-ai-visual\{([^}]+)\}/)?.[1]||'';
- const canvas=css.match(/#atgvMyWorkAi canvas#atgvMyWorkAiOrb\{([^}]+)\}/)?.[1]||'';
+test('My Work canvas overlays the actual #D31145 header border on all screen sizes',()=>{
+ const css=read('media/atgv-mywork-ai.css'),appCss=read('media/start.css');
+ const html=read('src/lib/webview/dashboard-html.js');
+ const header=html.slice(html.indexOf('<header class="app-header"'),html.indexOf('</header>')+9);
+ const main=html.slice(html.indexOf('<main id="myWorkView"'),html.indexOf('<main id="workView"'));
+ const headerRule=css.match(/body\.atgv-mywork-chat-mode:not\(\.gate-mode\) #appHeader\.app-header\{([^}]+)\}/)?.[1]||'';
+ const carrier=css.match(/#appHeader #myWorkHeaderWave\.mywork-header-wave\{([^}]+)\}/)?.[1]||'';
+ const visual=css.match(/#appHeader #myWorkHeaderWave \.mywork-header-wave-visual\{([^}]+)\}/)?.[1]||'';
+ const canvas=css.match(/#appHeader #myWorkHeaderWave canvas#atgvMyWorkAiOrb\{([^}]+)\}/)?.[1]||'';
  const priority=rule=>Number(/z-index:(\d+)/.exec(rule)?.[1]||0);
- assert.match(top,/position:relative/);
- assert.match(top,/overflow:visible/);
- assert.match(top,/isolation:isolate/);
- assert.match(divider,/position:absolute/);
- assert.match(divider,/bottom:0/);
- assert.match(divider,/background:#dc303f/);
- assert.ok(priority(visual)>priority(divider),'waveform wrapper must overlay red border');
- assert.ok(priority(canvas)>priority(divider),'canvas must overlay red border');
+ assert.match(appCss,/\.app-header\{border-bottom:3px solid #D31145\}/);
+ assert.match(headerRule,/overflow:visible!important/);
+ assert.match(carrier,/bottom:-3px/);
+ assert.match(carrier,/overflow:visible/);
  assert.match(visual,/bottom:-38px/);
- assert.match(css,/#atgvMyWorkAi \.atgv-mywork-ai-visual\{left:10px;right:10px;height:58px;bottom:-29px\}/);
- assert.match(css,/#atgvMyWorkAi \.atgv-mywork-ai-visual\{height:42px;bottom:-21px\}/);
- assert.match(html,/AI waveform fades in red, changes to CMYK while active, and fades back to red/);
+ assert.match(visual,/height:76px/);
+ assert.ok(priority(visual)>0,'waveform must overlay the real header border');
+ assert.ok(priority(canvas)>priority(visual),'canvas must overlay the waveform carrier');
+ assert.match(header,/id="myWorkHeaderWave"/);
+ assert.match(header,/id="atgvMyWorkAiOrb"/);
+ assert.doesNotMatch(main,/id="atgvMyWorkAiOrb"|atgv-mywork-ai-topbar/);
+ assert.doesNotMatch(css,/\.atgv-mywork-ai-topbar::after/);
+ assert.doesNotMatch(css,/background:#dc303f/);
+ assert.match(css,/#appHeader #myWorkHeaderWave \.mywork-header-wave-visual\{left:10px;right:10px;height:58px;bottom:-29px\}/);
+ assert.match(css,/#appHeader #myWorkHeaderWave \.mywork-header-wave-visual\{height:42px;bottom:-20px\}/);
 });
-test('waveform transitions from red to CMYK on activity and returns to red with fade-out',()=>{
+test('waveform blends from exact header red to CMYK and back to header red',()=>{
  const js=read('media/atgv-mywork-wave-chat.js');
- assert.match(js,/const redRGB=\[255,70,83\],cmykRGB=/);
+ assert.match(js,/const redRGB=\[211,17,69\],cmykRGB=/);
  assert.match(js,/\[0,219,230\],\[230,36,187\],\[249,212,58\],\[110,125,143\]/);
  assert.match(js,/colorMix=smooth\(colorMix,engaged\|\|idle<3\.9\?1:0/);
  assert.match(js,/redGradient\.addColorStop\(0,blendedRGBA\(strand,colorMix,0\)\)/);
+ assert.match(js,/window\.addEventListener\('atgv:viewchange',resize\)/);
  assert.match(js,/requestAnimationFrame\(frame\)/);
  assert.match(js,/prefers-reduced-motion: reduce/);
 });

@@ -86,21 +86,27 @@ test('shared My Work waveform and chat follows every selected role without dupli
  assert.equal(html.match(/id="atgvMyWorkAiChatForm"/g)?.length,1);
  assert.equal(html.match(/id="atgvMyWorkAiInput"/g)?.length,1);
 });
-test('My Work layout uses a red waveform top bar, central results, and anchored bottom composer across all roles',()=>{
+test('My Work waveform follows native header red border, with central results and bottom chat',()=>{
  const css=read('media/atgv-mywork-ai.css');
+ const headerCSS=read('media/start.css');
  const page=read('src/lib/webview/dashboard-html.js');
  const ui=read('media/start.js');
  const wave=read('media/atgv-mywork-wave-chat.js');
+ const header=page.slice(page.indexOf('<header class="app-header"'),page.indexOf('</header>')+9);
  const main=page.slice(page.indexOf('<main id="myWorkView"'),page.indexOf('<main id="workView"'));
- const top=main.indexOf('class="atgv-mywork-ai-topbar"');
+ assert.match(header,/id="myWorkHeaderWave"/);
+ assert.match(header,/id="atgvMyWorkAiOrb"/);
+ assert.match(header,/AI waveform fades in header red, changes to CMYK while active, and fades back to header red/);
+ assert.doesNotMatch(main,/id="atgvMyWorkAiOrb"|atgv-mywork-ai-topbar/);
  const results=main.indexOf('id="atgvMyWorkAiResults"');
  const composer=main.indexOf('id="atgvMyWorkAiChatForm"');
- assert.ok(top>=0&&results>top&&composer>results);
- assert.match(main,/atgv-mywork-ai-wave/);
- assert.match(main,/AI waveform fades in red, changes to CMYK while active, and fades back to red/);
+ assert.ok(results>=0&&composer>results);
+ assert.match(headerCSS,/\.app-header\{border-bottom:3px solid #D31145\}/);
+ assert.match(css,/#appHeader #myWorkHeaderWave\.mywork-header-wave/);
+ assert.match(css,/body\.atgv-mywork-chat-mode:not\(\.gate-mode\) #appHeader/);
+ assert.doesNotMatch(css,/background:#dc303f/);
  assert.match(css,/#myWorkView > #atgvMyWorkAi,/);
  assert.match(css,/#myWorkView > #atgvMyWorkAi\.atgv-mywork-ai/);
- assert.match(css,/background:#dc303f/);
  assert.match(css,/\.atgv-mywork-ai-results\{/);
  assert.match(css,/flex:1 1 auto/);
  assert.match(css,/overflow-y:auto/);
@@ -110,6 +116,7 @@ test('My Work layout uses a red waveform top bar, central results, and anchored 
  assert.match(css,/@media\(max-width:620px\)/);
  assert.match(ui,/document\.body\?\.classList\?\.toggle\?\.\('atgv-mywork-chat-mode',next==='myWork'\)/);
  assert.match(css,/body\.atgv-mywork-chat-mode:not\(\.gate-mode\) #contentPane/);
+ assert.match(wave,/const redRGB=\[211,17,69\]/);
  assert.match(wave,/const redBreath=reduceMotion\?1/);
  assert.match(wave,/redGradient\.addColorStop/);
  assert.doesNotMatch(wave,/rainbow\.addColorStop/);
