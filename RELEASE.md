@@ -1,16 +1,15 @@
-# ATGV AIATECH Assist v0.0.21
+# ATGV AIATECH Assist v0.0.22
 
-## Fixes
+## Changes
 
-- Keep the same animated My Work waveform visible above the active global notification by moving its canvas between the normal top bar and the notification row without restarting the animation.
-- Preserve the red-to-CMYK animation, responsive layout, warning actions and dismiss controls.
-- Remove the blue Overview breadcrumb, PROJECT OVERVIEW kicker and redundant Overview heading inside the right-hand content pane. The sidebar Overview route remains unchanged.
-- Suppress duplicated inline error messages in every right-hand page while preserving the global notification, actionable buttons and diagnostic logging.
-- Preserve the Confluence page/attachment and SQLite synchronization with conflict review. Confluence Database row writes are not exposed by the public API; never replace approved data or silently claim database row synchronization.
-- Add focused UI regression tests and explicitly exclude .memory from VSIX artifacts.
+- Select extension and Library source repositories from the configured GitHub organization, with exact owner-specific mappings for aidilazharo and aiamalaysia.
+- Always use aidilazharo/extension and aidilazharo/library as public distribution repositories, regardless of selected organization.
+- Prioritize the selected owner's verified Library main branch when pulling. Verify VERSION, catalog.json and the pinned Git commit.
+- Never downgrade a newer installed Library to an older source or mirror snapshot; do not treat a public Library mirror as an aiamalaysia source.
+- Fallback to the checksum-verified public Library mirror only for the matching aidilazharo source if private source access is unavailable.
+- Check the selected Library source during explicit Check Updates and clearly distinguish source/main, installed and release mirror versions.
+- Add routing and source-check regression tests for both organizations and no-downgrade controls.
 
-## Verification
+## Release verification
 
-Run Node, Windows, UI, and VSIX packaging gates on this PR head before merging.
-Do not publish a release until checks pass.
-
+Require Node regression, UI, Windows and VSIX packaging checks to pass before merge. Keep .memory excluded from distributed archives.

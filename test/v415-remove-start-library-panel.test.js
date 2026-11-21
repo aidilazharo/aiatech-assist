@@ -30,8 +30,8 @@ test('v415: Library source and optional offline ZIP import remain in trusted hos
  assert.equal(setup.FIXED_LIBRARY_REPOSITORY,'https://github.com/aidilazharo/tech-stacks-skills');
  assert.match(host,/case 'importLibraryZip':/);
  assert.match(host,/offlineLibrary\.importZip/);
- assert.match(host,/releaseRepositoryUrl:releaseUpdater\.PINNED_RELEASE_URL/);
- assert.match(host,/libraryReleaseUrl:libraryReleaseUpdater\.LATEST_URL/);
+ assert.match(host,/releaseRepositoryUrl:startupSetup\.RELEASES\.extension/);
+ assert.match(host,/libraryReleaseUrl:startupSetup\.RELEASES\.library/);
  assert.match(require('../package.json').version,/^\d+\.\d+\.\d+$/);
 });
 test('v415: rendered Start HTML does not inject the removed Library block',()=>{

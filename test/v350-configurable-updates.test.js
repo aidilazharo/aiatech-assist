@@ -92,8 +92,8 @@ test('extension and library release sources are immutable; both check every hour
  const ui=read('media/start.js');
  const library=require('../src/lib/updates/library-release-updater');
  assert.equal(library.LATEST_URL,'https://github.com/aidilazharo/tech-stacks-skills/releases/latest');
- assert.match(runtime,/releaseRepositoryUrl:releaseUpdater\.PINNED_RELEASE_URL/);
- assert.match(runtime,/libraryReleaseUrl:libraryReleaseUpdater\.LATEST_URL/);
+ assert.match(runtime,/releaseRepositoryUrl:startupSetup\.RELEASES\.extension/);
+ assert.match(runtime,/libraryReleaseUrl:startupSetup\.RELEASES\.library/);
  assert.match(runtime,/60\*60\*1000/);
  assert.doesNotMatch(runtime,/6\*60\*60\*1000/);
  for(const id of ['softwareReleaseRepositoryUrl','softwareLibraryRepositoryUrl','saveSoftwareUpdateSources'])
