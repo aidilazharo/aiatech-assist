@@ -655,7 +655,7 @@ function setView(next){
   $('discoveryView').classList.toggle('hidden',next!=='discovery');
   view=next;
   // Only My Work owns a three-zone, full-height chat layout; all role work pages retain normal scrolling.
-  document.body.classList.toggle('atgv-mywork-chat-mode',next==='myWork');
+  document.body?.classList?.toggle?.('atgv-mywork-chat-mode',next==='myWork');
   if(typeof renderWorkspaceBreadcrumbs==='function')renderWorkspaceBreadcrumbs();
   $('contentPane').scrollTop=0;
   window.dispatchEvent(new Event('atgv:viewchange'));
