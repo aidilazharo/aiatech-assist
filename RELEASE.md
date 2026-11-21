@@ -1,18 +1,16 @@
-# ATGV AIATECH Assist v0.0.30
+# ATGV AIATECH Assist v0.0.31
 
-## Custom Stack — AI readiness analysis
-- **Scan Repository** always re-analyzes verified local application folders; **Pull Repository** remains a separate, fast-forward-only action.
-- Collect bounded manifest, non-secret environment-key and application configuration evidence and optionally ask the configured Solution Architect AI model for advisory risks. When AI is unavailable, manifest analysis remains available.
-- Show evidence-based blockers and recommended actions: **Mock Services**, **Mock Database** (synthetic fixtures, Vite only), **Install Dependencies**, and **Create Fix Branch**.
-- Scan is read-only; branch creation/install/mock execution need their own user interaction and host confirmation.
+## Custom Stack — one progress bar and visible runtime health
 
-## Custom Stack — progress and local Git branch controls
-- Fix the catalog progress renderer unconditionally clearing the bar for Custom Stack.
-- Add a dedicated accessible live progress indicator that updates during scan, dependency checks, mock startup, Git pull, local fix branch creation and health verification.
-- Add a local branch selector and **Switch Branch** button. Block dirty worktrees, unknown branches, changed SHA, and active ATGV processes.
-- **Create Fix Branch** creates a local `fix/atgv-custom-stack-<commit-prefix>` branch from the verified clean source and commits only isolated `atgv-preview/` mock services, synthetic database fixtures and setup guidance. Does **not** push to GitHub, overwrite project code, connect to PostgreSQL/Okta, or claim that the production application was fixed.
-- `main` remains untouched. Preview mocks are not evidence for real backend, security, integration or approval testing.
+- Remove the duplicate scan/repair progress bar inside Custom Stack and continue using the original Technology Stack progress bar for every operation.
+- Add a separate **Application Runtime Status** line that distinguishes read-only repository scan completion from actual application execution.
+- Display **APPLICATION NOT RUNNING**, **WAITING FOR VS CODE CONFIRMATION**, **INSTALLING DEPENDENCIES**, **STARTING APPLICATION**, **APPLICATION RUNNING**, **PROCESS RUNNING — PREVIEW NOT REACHABLE**, or **LAST ACTION FAILED** according to live process state.
+- Check the actual ATGV-managed local Node/Vite process and probe only validated localhost URLs. Show PID, mock-versus-real process type and preview URL when healthy. Never infer a running server from scan progress.
+- Add **Check Status** and **Open Preview** controls. Open Preview is enabled only for a running, reachable localhost application belonging to the selected project.
+- Refresh runtime status after scan, install, start, stop, errors and while the ATGV-managed process is running.
+- Keep all existing branch, AI readiness and mock-service actions and prevent scan completion alone from implying app readiness.
 
-## Validation
-- New regression tests cover TechCockpit-like React/Vite + NestJS/MikroORM source evidence, progress, simulated database behavior, local fix branch creation and switching, SHA pinning and clean-worktree protections.
-- GitHub Actions must pass before merging or publishing the VSIX.
+## Verification
+
+- Add regression tests ensuring scan completion does not imply a started server, confirmation gating is visible, localhost health is checked, and a single progress bar is present.
+- GitHub CI runs regression tests, Windows checks, VSIX build and package verification before merge and prerelease publication.

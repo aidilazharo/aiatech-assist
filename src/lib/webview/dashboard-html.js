@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.30';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.31';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -537,7 +537,13 @@ function html(webview,{resumeLibrary=false}={}){
       <div id="architectCustomPanel" class="architect-custom-panel hidden" aria-label="Custom Stack existing application">
         <div class="architect-custom-heading"><strong>Custom Stack · Existing Repository</strong><span class="muted">Read-only scan before explicit install and run</span></div>
         <p id="architectCustomStatus" class="muted" role="status" aria-live="polite">Scan Repository analyzes application dependencies, local services and preview blockers. Fix actions always require confirmation.</p>
-        <div class="atgv-custom-progress-wrap" aria-label="Custom Stack operation progress"><div id="architectCustomProgress" class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Custom Stack scan and preparation progress"><div id="architectCustomProgressFill" class="progress-fill" style="width:0%"></div></div><span id="architectCustomProgressText" class="muted">Ready to scan · 0%</span></div>
+        <div id="architectCustomRuntime" class="atgv-custom-runtime" data-state="unknown" role="status" aria-live="polite" aria-label="Custom Stack application runtime status">
+          <span class="atgv-custom-runtime-indicator" aria-hidden="true"></span>
+          <strong id="architectCustomRuntimeLabel">Application status not checked</strong>
+          <span id="architectCustomRuntimeDetail">Scan Repository inspects code; it does not start the application.</span>
+          <button id="architectCustomCheckStatus" class="secondary" type="button">Check Status</button>
+          <button id="architectCustomOpenPreview" class="secondary" type="button" disabled>Open Preview</button>
+        </div>
         <div class="atgv-custom-branch-row"><label for="architectCustomBranch">Local Git branch<select id="architectCustomBranch" aria-label="Custom Stack local Git branch"></select></label><button id="architectCustomSwitchBranch" class="secondary" type="button" disabled>Switch Branch</button><span id="architectCustomBranchStatus" class="muted" role="status"></span></div>
         <div class="architect-custom-controls">
           <label for="architectCustomTarget">Detected application<select id="architectCustomTarget" aria-label="Detected custom application"></select></label>
