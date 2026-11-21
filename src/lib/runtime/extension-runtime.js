@@ -6103,6 +6103,28 @@ async function handleDashboardMessage(msg){
         await dashboard?.webview.postMessage({type:'architectStackState',value:{message:stopped.message+' Technology stack force-reset. Checkout is on '+result.baseBranch+'; previous bootstrap branch is preserved. '+(result.preservedWorkBranch?'Development branch '+result.preservedWorkBranch+' and its commits are preserved. ':'')+(result.recoveryStash?'Local changes are recoverable in Git stash '+result.recoveryStash.slice(0,12)+'. ':'')+(result.recovery?'Recovered older bootstrap branch ('+result.recovery+'). ':'')+(archive.archived.length?archive.archived.length+' previous stack record(s) archived. ':'')+'Choose a stack and click Save Stack to generate fresh catalog files on a new branch.'}});
         break;
       }
+      case 'architectCustomOpenPreview':{
+        const projectId=activeProject?.id||'';
+        if(!projectId||msg.projectId!==projectId)break;
+        try{
+          requireOpened();
+          const conf=effectiveConfig(activeProject);
+          const root=await architectRepository.resolve(context.workspaceState,projectId,developerGit,{
+            projectRoot:aiRoot(),githubOwner:conf.get('github.owner'),githubRepo:conf.get('github.repo')});
+          const live=developerGit.localLogs();
+          const cwd=typeof live.cwd==='string'?path.resolve(live.cwd):'';
+          if(!live.running||!cwd||!(cwd===path.resolve(root)||cwd.startsWith(path.resolve(root)+path.sep)))
+            throw Error('No ATGV-managed application is running in the selected project.');
+          const safe=require('../../architect-custom-stack').loopbackPreview(live.previewUrl);
+          const response=await fetch(safe,{method:'GET',redirect:'manual',signal:AbortSignal.timeout(2500)});
+          if(!response.ok)throw Error('Application process is running but localhost preview is not healthy (HTTP '+response.status+').');
+          await vscode.env.openExternal(vscode.Uri.parse(safe));
+        }catch(error){
+          if(activeProject?.id===projectId)
+            await dashboard?.webview.postMessage({type:'architectCustomError',projectId,message:'Open Preview: '+String(error.message||error).slice(0,220)});
+        }
+        break;
+      }
       case 'architectCustomStatus':{
         const projectId=activeProject?.id||'';
         if(!projectId||msg.projectId!==projectId)break;
@@ -6125,7 +6147,7 @@ async function handleDashboardMessage(msg){
             try{
               const safe=require('../../architect-custom-stack').loopbackPreview(value.previewUrl);
               const res=await fetch(safe,{method:'GET',redirect:'manual',signal:AbortSignal.timeout(2600)});
-              value.reachable=res.status>=200&&res.status<400;
+              value.reachable=res.ok;
             }catch{value.reachable=false;}
           }
           if(activeProject?.id===projectId)
