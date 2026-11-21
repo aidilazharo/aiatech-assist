@@ -447,6 +447,12 @@ function dismissObsoleteBARestartNotice(){
 
 function atgvInlineNotice(message,error=false){
  const pane=document.querySelector('#contentPane > main:not(.hidden)');if(!pane||pane.id==='gateView')return;
+ // The AI-only My Work page displays global warnings in the top notification.
+ // Never duplicate them inside the chat page; clean up any previous inline copy.
+ if(pane.id==='myWorkView'){
+  pane.querySelector('.atgv-page-feedback')?.remove();
+  return;
+ }
  if(pane.id==='discoveryView'){
   const notice=$('baInlineStatus');if(!notice)return;
   if(error){notice.textContent='';notice.classList.add('hidden');return;} // Errors are shown once in the top notification.
@@ -636,6 +642,7 @@ function setView(next){
     baViewedStep='start';
   }
   for(const page of pages)page.classList.toggle('hidden',page!==target);
+  if(next==='myWork')target.querySelector('.atgv-page-feedback')?.remove();
   // The BR workspace is embedded above the Jira inventory in BA My Work.
   // Keep its logical 'discovery' mode so existing save/approval and error guards work.
   $('discoveryView').classList.toggle('hidden',next!=='discovery');
