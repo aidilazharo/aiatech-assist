@@ -1,29 +1,22 @@
-# ATGV AIATECH Assist v0.0.24
+# ATGV AIATECH Assist v0.0.25
 
-## My Work Users — Confluence Database API v2 and DataTables
+## Jira-only BR deletion by verified Creator or Reporter
 
-- Register one verified Atlassian account per identity and safely reconcile duplicated legacy email/name rows.
-- Use project-scoped Confluence Database v2 `GET /databases/{id}`, `POST /databases`, and versioned `/databases/{id}/properties` for structured My Work user records.
-- Retain the existing human-readable Confluence page register for compatibility and Project Manager permissions; report Database v2 synchronization failures instead of hiding them.
-- Add a Project Manager–authorized **Add Verified User** control. Verify the Jira account ID and assignment permission, without assigning any SDLC role on another user's behalf.
-- Replace the static roster with offline ATGV DataTables search, sortable columns, five-row pagination and a bounded Jira-task preview.
+- When a Business Requirement exists in Jira but the original local register was deleted or reset, show **Delete Jira BR** next to **Recover from Confluence**.
+- Authorize the deletion request if the signed-in Jira account ID exactly matches either the Epic's `creator.accountId` or `reporter.accountId`.
+- Independently require the Jira project **Browse Projects** and **Delete Issues** permissions; matching Creator/Reporter alone never bypasses Jira authorization.
+- Verify the project, Jira Epic issue type, BR identifier in the Epic summary and each descendant's real `parent` link.
+- Include the Epic and every discovered parent-linked Feature, User Story, Task, Subtask or other issue type in the complete, read-only Markdown deletion preview.
+- Require a warning modal and an exact typed phrase `DELETE BR <BR-ID> <EPIC-KEY>` before any deletion.
+- Journal remote attempts and process deepest descendants first, explicitly setting `deleteSubtasks=false` to avoid unreviewed cascade deletion.
+- Fail closed on missing permissions, a different signed-in account, cross-project children, changed issue identity, unexpected children, incomplete pagination, duplicate keys, or a divergent local BR register.
+- Abort uncertain partial deletions for manual reconciliation rather than automatically repeating potentially successful destructive requests.
+- Record the completed Jira-only deletion in the local BR history to prevent accidental rediscovery or an unsafe re-restore.
+- **No Confluence source documents, pages, Jira issues outside the verified Epic hierarchy, or unrelated projects are deleted.**
 
-## BR evidence recovery and destructive Reset protection
+## Regression and release verification
 
-- Add **Recover from Confluence** for Jira-only BRs such as TC-834, with user confirmation and a strict BR-to-Epic mapping check against the source vault manifest.
-- Verify current Jira Epic identity and Confluence source checksums; reject missing evidence, mismatched project identity, duplicate Jira keys and conflicting local ownership.
-- Restore only the selected BR's mappings and archived source metadata. Do not fabricate missing discovery answers, overwrite other local BRs or delete remote Jira issues during recovery.
-- Preserve the existing **Delete Everywhere** permission, ownership and confirmation checks; use them only after a BR is genuinely restored.
-- Block destructive ATGV Reset for projects with uploaded originals until Confluence source-vault upload and subsequent read verification succeed.
-- Continue to preserve divergent local and Confluence copies for manual reconciliation.
-
-## Technical and security notes
-
-- The documented v2 Database GET endpoint returns metadata, not native Confluence database table rows. ATGV stores the versioned roster in Database Content Properties API v2.
-- Confluence CQL is used only to locate an existing database ID because the linked Database API does not provide a listing endpoint.
-- Experimental or unavailable v2 operations report a warning; they do not silently wipe the legacy Confluence register.
-- Keep `.memory` excluded from distributable VSIX and source ZIP assets.
-
-## Verification gate
-
-Run the complete Node.js regression suite, Windows Reset checks, UI theme validation and VSIX packaging on the pull request. **Do not merge or publish a release unless all required checks pass.** A live Atlassian test of experimental Database v2 endpoints remains necessary before claiming production compatibility.
+- Add tests covering Creator match, Reporter match, denial for unrelated account, Jira permission checks, ownership conflicts, cross-project descendants, changed issue detection, deepest-first deletion and exact user confirmation.
+- Preserve ATGV v0.0.24 Confluence Database v2 roster, User DataTables, source-vault recovery and Reset backup safeguards.
+- Run the full Node test suite, Windows Reset checks, UI validation and VSIX build before merge and release.
+- Never bundle `.memory` in published extension binaries or source archives.
