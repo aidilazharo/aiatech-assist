@@ -8010,7 +8010,7 @@ function architectCustomDrawRuntime(){
    (reachable===false?' · Check logs / localhost health':'');
  }else if(runtime?.checked){
   state='stopped';title='APPLICATION NOT RUNNING';
-  description=runtime.exitCode!==null?'ATGV process exited with code '+runtime.exitCode+'. Check logs before restarting.':
+  description=Number.isInteger(runtime.exitCode)?'ATGV process exited with code '+runtime.exitCode+'. Check logs before restarting.':
    (architectCustomInfo?.projectId===activeId?
     'Scan complete, but NO server was started. Select Install & Run or Run Mock Preview.':
     'Scan Repository identifies applications; it does not install or start them.');
