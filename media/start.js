@@ -389,8 +389,19 @@ function topNoticeRoute(message,error=false,override=null){
  if(/jira/.test(value))return {label:'Jira Preview',action:()=>openBAWorkflowStep('jiraPreview')};
  return error?{label:'Dismiss',action:closeTopNotification}:null;
 }
+// Keep the live waveform in whichever shell row is actually visible. Reparent the
+// existing canvas rather than restarting its animation or duplicating its state.
+function syncMyWorkHeaderWaveHost(){
+ const wave=$('myWorkHeaderWave'),header=$('appHeader'),notice=$('topNotification');
+ if(!wave||!header||!notice)return;
+ const inMyWork=document.body.classList.contains('atgv-mywork-chat-mode');
+ const host=topNoticeCurrent&&inMyWork?notice:header;
+ if(wave.parentElement!==host)host.appendChild(wave);
+}
+window.addEventListener('atgv:viewchange',syncMyWorkHeaderWaveHost);
 function showTopNotification(item){
  topNoticeCurrent=item;
+ syncMyWorkHeaderWaveHost();
  const target=$('topNotification');target.classList.remove('hidden','error','success','info');
  target.classList.add(item.error?'error':item.success?'success':'info');
  const severity=item.error?'error':item.success?'success':'warning';
@@ -414,6 +425,7 @@ function closeTopNotification(){
  if(next){showTopNotification(next);return;}
  $('topNotification').classList.add('hidden');
  $('appHeader').classList.remove('hidden');
+ syncMyWorkHeaderWaveHost();
 }
 function notifyTop(message,{error=false,success=false,route=null,persistent=false}={}){
  const content=String(message||'').trim();if(!content)return;
@@ -451,6 +463,14 @@ function atgvInlineNotice(message,error=false){
  // Never duplicate them inside the chat page; clean up any previous inline copy.
  if(pane.id==='myWorkView'){
   pane.querySelector('.atgv-page-feedback')?.remove();
+  return;
+ }
+ // Errors are presented once in the global notification (and diagnostic logs),
+ // never repeated in the right-hand content pane. Overview has no inline notices.
+ if(error||pane.id==='landingView'){
+  pane.querySelector('.atgv-page-feedback')?.remove();
+  const inline=pane.querySelector('#baInlineStatus');
+  if(inline){inline.textContent='';inline.classList.add('hidden');}
   return;
  }
  if(pane.id==='discoveryView'){
@@ -579,7 +599,7 @@ function renderWorkspaceBreadcrumbs(){
  if(!active||active.classList.contains('hidden'))return;
  // My Work is the AI-only landing: no duplicate blue title/breadcrumb.
  // Keep the sidebar's My Work navigation label and the breadcrumbs on Role Workspace.
- if(view==='myWork'){
+ if(view==='myWork'||view==='landing'){
   active.querySelector('.atgv-workspace-breadcrumbs')?.remove();
   active.classList.remove('has-workspace-breadcrumb');
   return;
