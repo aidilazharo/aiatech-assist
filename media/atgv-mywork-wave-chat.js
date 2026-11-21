@@ -172,7 +172,7 @@
       // Only an explicit user click may trigger role navigation. The target
       // is checked against enabled project roles by the main UI controller.
       window.dispatchEvent(new CustomEvent('atgv:mywork-switch-role',{
-        detail:{projectId:project,fromRoleId:role,targetRoleId:target,requestText:submittedText.slice(0,4000),enabled}
+        detail:{projectId:project,fromRoleId:role,targetRoleId:target,requestText:handoffRequest.slice(0,4000),enabled}
       }));
     });
     reply.append(action);
