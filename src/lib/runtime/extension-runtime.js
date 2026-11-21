@@ -7176,6 +7176,19 @@ async function handleDashboardMessage(msg){
         break;
       }
       case 'openAtgvAi':{await atgvAiChat.open(vscode,{runtimeRoot:aiRuntimeRoot(),onLog:report});break;}
+       case 'myWorkRosterAddUser':{
+         try{
+           requireOpened();requireOnline();
+           if(msg.projectId!==activeProject.id)throw Error('Project changed. Reopen the roster.');
+           const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
+           const projectKey=validProjectKey(config.get('jira.projectKey'));
+           const result=await myWorkPresence.addUser(config,token,{projectKey,accountId:msg.accountId});
+           await dashboard?.webview.postMessage({type:'myWorkRoster',projectId:activeProject.id,...result});
+         }catch(error){
+           await dashboard?.webview.postMessage({type:'myWorkRosterError',projectId:activeProject?.id,message:String(error.message||error).slice(0,280)});
+         }
+         break;
+       }
        case 'myWorkRosterRefresh':{
          try{
            requireOpened();requireOnline();
