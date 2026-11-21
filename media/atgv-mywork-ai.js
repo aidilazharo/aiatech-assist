@@ -6,13 +6,26 @@
   const root=()=>byId('atgvMyWorkAi');
   const safe=(value,max=480)=>String(value==null?'':value).replace(/[\x00-\x1f]/g,' ').trim().slice(0,max);
   const routes=Object.freeze({
-    'business-analyst':{target:'discoveryView',fallback:'Review your Business Requirements',action:'Continue Business Requirements'},
-    'solution-architect':{target:'architectBootstrap',fallback:'Review the selected technology stack and the next architecture approval prerequisite',action:'Continue Architecture'},
-    'ux-designer':{target:'uxDesignWorkspace',fallback:'Review your assigned design and complete the next UI/UX workflow step',action:'Continue UI/UX Design'},
-    'software-developer':{target:'developerTaskDashboard',fallback:'Review your assigned Jira work and continue the next development step',action:'Continue Development'},
-    'project-manager':{target:'pmDailyCockpit',fallback:'Review assigned Jira work, blockers and project delivery progress',action:'Review Jira Work'}
+    'business-analyst':{target:'discoveryView',fallback:'Review current requirements and resume the next unfinished BR',action:'Resume Business Requirements'},
+    'solution-architect':{target:'architectBootstrap',fallback:'Review approved requirements and architecture prerequisites',action:'Review Architecture'},
+    'ux-designer':{target:'uxDesignWorkspace',fallback:'Review assigned design tasks and developer handoff',action:'Continue UI/UX Design'},
+    'software-developer':{target:'developerTaskDashboard',fallback:'Review assigned Jira tickets and your active development branch',action:'Continue Development'},
+    'project-manager':{target:'pmDailyCockpit',fallback:'Review delivery progress and Jira blockers',action:'Review Project Delivery'},
+    'qa-engineer':{target:'roleStepFlow',fallback:'Review Acceptance Criteria and pending test coverage',action:'Review QA Work'},
+    'product-owner':{target:'roleStepFlow',fallback:'Review the prioritized backlog and decision dependencies',action:'Review Product Backlog'},
+    'scrum-master':{target:'roleStepFlow',fallback:'Review sprint impediments and team dependencies',action:'Review Sprint Work'},
+    'security-engineer':{target:'roleStepFlow',fallback:'Review threat assessments and outstanding security evidence',action:'Review Security Work'},
+    'data-engineer':{target:'roleStepFlow',fallback:'Review data model, migrations and data quality tasks',action:'Review Data Work'},
+    'uat-tester':{target:'roleStepFlow',fallback:'Review UAT scenarios and business sign-off evidence',action:'Review UAT Work'},
+    'technical-writer':{target:'roleStepFlow',fallback:'Review documentation gaps and release notes',action:'Review Documentation'},
+    'operations-support':{target:'roleStepFlow',fallback:'Review operations readiness, monitoring and incidents',action:'Review Operations'},
+    'release-manager':{target:'roleStepFlow',fallback:'Review release gates, test evidence and rollback',action:'Review Release Readiness'},
+    'technical-lead':{target:'roleStepFlow',fallback:'Review implementation risks and pending code reviews',action:'Review Technical Work'},
+    'business-owner':{target:'roleStepFlow',fallback:'Review business decisions and outstanding approvals',action:'Review Approval Work'},
+    'ai-ml-engineer':{target:'roleStepFlow',fallback:'Review model evaluations, monitoring and data dependencies',action:'Review AI/ML Work'},
+    'compliance-officer':{target:'roleStepFlow',fallback:'Review compliance evidence, risks and exceptions',action:'Review Compliance'}
   });
-  let signature='',project='',role='',pending=0,lastSnapshot=null,latest=null;
+  let signature='',project='',role='',pending=0,lastSnapshot=null,latest=null,lastAnswered=0;
   let requestTimer=null,successTimer=null,watchdogTimer=null;
   function clearTimers(){
     clearTimeout(requestTimer);clearTimeout(successTimer);clearTimeout(watchdogTimer);
@@ -76,6 +89,7 @@
   }
   function result(message,action,error,requestId){
     if(requestId!==pending||!latest||!root())return;
+    lastAnswered=requestId;
     clearTimeout(watchdogTimer);
     clearTimeout(successTimer);
     const next=nextStep(latest);
@@ -106,9 +120,11 @@
     signature=newSignature;latest=compact;project=compact.projectId;role=compact.roleId;
     const requestId=++pending;
     clearTimers();
-    byId('atgvMyWorkAiText').textContent='';
-    byId('atgvMyWorkAiActions').replaceChildren();
-    displayResults(false);state('thinking');
+    // Provide a verified navigation button immediately; the AI only refines the explanation.
+    const next=nextStep(compact);
+    byId('atgvMyWorkAiText').textContent=next.suggestion;
+    actionButtons(next.action);
+    displayResults(true);state('thinking');
     requestTimer=setTimeout(()=>{
       if(requestId!==pending)return;
       if(typeof send==='function')send('roleAiReview',{projectId:project,roleId:role,context:compact,requestId});
@@ -119,7 +135,7 @@
     },300);
     // Even if the provider is offline or never returns, offer a grounded next step.
     watchdogTimer=setTimeout(()=>{
-      if(requestId!==pending||!byId('atgvMyWorkAiContent')?.hidden)return;
+      if(requestId!==pending||lastAnswered===requestId)return;
       const next=nextStep(compact);
       result(next.suggestion,next.action,true,requestId);
     },18000);
