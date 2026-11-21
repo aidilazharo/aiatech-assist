@@ -71,5 +71,6 @@
       "library-source-zip"
     ],
     "verifyArchive": true
-  }
+  },
+  "purpose": "Source-only guidance for AI when planning, writing, reviewing, fixing or updating source code. Read from a verified Git checkout before coding; never use as end-user runtime memory."
 }
