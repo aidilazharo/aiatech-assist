@@ -23,7 +23,7 @@ test('roles are consolidated to one left navigation item and moved into the cont
     assert.ok(!html.includes('data-nav="'+id+'"'),id+' should not appear in left navigation');
   }
   const left=html.match(/<aside class="sidebar"[\s\S]*?<\/aside>/)?.[0]||'';
-  assert.equal((left.match(/data-nav=/g)||[]).length,9,'Eight work areas and one unified Settings entry');
+  assert.equal((left.match(/data-nav=/g)||[]).length,10,'Nine work areas, including Role Workspace, and one unified Settings entry');
   assert.doesNotMatch(left,/data-nav="(projects|discovery|tech)"/);
   assert.doesNotMatch(html,/id="roleSwitcher"|id="activate"|id="scaffold"/);
   assert.doesNotMatch(html,/id="workDiscovery"/);
