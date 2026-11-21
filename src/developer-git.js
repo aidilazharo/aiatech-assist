@@ -183,12 +183,16 @@ async function publishBootstrap(root, base = 'main') {
     await git(root, 'push', '--set-upstream', 'origin', repo.branch);
     return { ...repo, base, baseSha: localBase, published: true };
 }
-async function cloneConfigured(parent, owner, name, branch = '') {
+async function cloneConfigured(parent, owner, name, branch = '', {allowExistingEmpty=false} = {}) {
     if (!/^[a-zA-Z0-9-]{1,39}$/.test(owner) || !/^[-.a-zA-Z0-9_]{1,100}$/.test(name) || name === '.' || name === '..')
         throw Error('Invalid GitHub repository identity.');
     const root = await fs.realpath(parent), dest = path.join(root, name);
-    if (await fs.lstat(dest).then(() => true, () => false))
-        throw Error('Clone target already exists; open the existing repository instead.');
+    const existing=await fs.lstat(dest).catch(error=>error.code==='ENOENT'?null:Promise.reject(error));
+    if(existing){
+        if(!allowExistingEmpty||!existing.isDirectory()||existing.isSymbolicLink()||
+           (await fs.readdir(dest)).length!==0)
+            throw Error('Clone target exists and is not an explicitly approved empty directory. No files were overwritten.');
+    }
     const address = `https://github.com/${owner}/${name}.git`;
     const { validGithubBranch } = require('./projects');
     const selected=validGithubBranch(branch);
