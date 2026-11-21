@@ -9,7 +9,7 @@ const labels=(state)=>breadcrumbs.trail(state).map(x=>x.label);
 test('every workspace main page has a breadcrumb route and a nonempty final label',()=>{
  const html=read('src/lib/webview/dashboard-html.js');
  const actual=[...html.matchAll(/<main id="([^"]+)"/g)].map(x=>x[1]);
- const expected=['gateView','landingView','settingsView','projectView','workView','uxPreviewView',
+ const expected=['gateView','landingView','settingsView','projectView','myWorkView','workView','uxPreviewView',
   'libraryView','documentsView','documentEditorView','planningView','flowView','operationsView','knowledgeView'];
  assert.deepEqual(actual,expected);
  for(const id of expected){
@@ -19,15 +19,17 @@ test('every workspace main page has a breadcrumb route and a nonempty final labe
   assert.equal(trail.at(-1).action,null,'current page cannot lead to a different page: '+id);
  }
 });
-test('My Work > Business Requirement > selected BR changes for BR-01 and BR-02',()=>{
- assert.deepEqual(labels({view:'discovery',stage:'start',rootOnly:true}),['My Work']);
- assert.deepEqual(labels({view:'discovery',stage:'start',requirementOpen:true}),['My Work','Business Requirement']);
- assert.deepEqual(labels({view:'discovery',stage:'generate'}),['My Work','Business Requirement']);
+test('My Work > Role Workspace > Business Requirement > selected BR changes for BR-01 and BR-02',()=>{
+ assert.deepEqual(labels({view:'myWork'}),['My Work']);
+ assert.deepEqual(labels({view:'discovery',stage:'start',rootOnly:true}),['My Work','Role Workspace']);
+ assert.deepEqual(labels({view:'discovery',stage:'start',requirementOpen:true}),['My Work','Role Workspace','Business Requirement']);
+ assert.deepEqual(labels({view:'discovery',stage:'generate'}),['My Work','Role Workspace','Business Requirement']);
  for(const id of ['BR-01','BR-02','BR-001','BR-012']){
-  assert.deepEqual(labels({view:'discovery',stage:'start',brId:id}),['My Work','Business Requirement',id]);
+  assert.deepEqual(labels({view:'discovery',stage:'start',brId:id}),['My Work','Role Workspace','Business Requirement',id]);
  }
- assert.deepEqual(labels({view:'discovery',stage:'generate',rootOnly:true}),['My Work']);
- assert.equal(breadcrumbs.trail({view:'discovery',stage:'generate',brId:'BR-02'})[1].action,'br-home');
+ assert.deepEqual(labels({view:'discovery',stage:'generate',rootOnly:true}),['My Work','Role Workspace']);
+ assert.equal(breadcrumbs.trail({view:'discovery',stage:'generate',brId:'BR-02'})[1].action,'role-workspace');
+ assert.equal(breadcrumbs.trail({view:'discovery',stage:'generate',brId:'BR-02'})[2].action,'br-home');
  assert.equal(breadcrumbs.trail({view:'discovery',stage:'generate',brId:'BR-02'}).at(-1).action,null);
 });
 test('local and Jira-only requirement detail paths are normalized without guessing identities',()=>{
@@ -36,7 +38,7 @@ test('local and Jira-only requirement detail paths are normalized without guessi
  assert.equal(breadcrumbs.requirementId('no suitable key'),'');
  assert.equal(breadcrumbs.requirementId('../br-02'), 'BR-02');
  assert.deepEqual(labels({view:'discovery',stage:'start',brId:'TC-715',requirementOpen:true}),
-  ['My Work','Business Requirement','TC-715']);
+  ['My Work','Role Workspace','Business Requirement','TC-715']);
 });
 test('document, project and design preview paths show meaningful parents and support long labels',()=>{
  assert.deepEqual(labels({view:'documentEditor',documentTitle:'Architecture Design v2.1'}),
@@ -44,7 +46,7 @@ test('document, project and design preview paths show meaningful parents and sup
  assert.deepEqual(labels({view:'project'}),['Settings','Project Settings']);
  assert.deepEqual(labels({view:'flow'}),['SDLC','Readiness']);
  assert.deepEqual(labels({view:'uxPreview',brId:'TC-715'}),
-  ['My Work','UI/UX Designer','TC-715','Design Preview']);
+  ['My Work','Role Workspace','UI/UX Designer','TC-715','Design Preview']);
  assert.deepEqual(labels({view:'library'}),['Library Studio']);
  assert.equal(labels({view:'documentEditor',documentTitle:'X'.repeat(500)})[1].length,160);
 });
