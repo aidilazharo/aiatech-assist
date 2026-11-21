@@ -91,6 +91,13 @@ function stable(value){
 }
 function comparableSnapshot(data){
  const register=cleanRecord(data.register);
+ // brWorkflow.write() rebuilds these three derived structures whenever a
+ // remote register is restored. Their timestamps and regenerated graph
+ // revisions are not independently authored requirements. All BRs, approvals,
+ // Jira identities, decisions and source evidence remain strictly compared.
+ delete register.canonical;
+ delete register.traceability;
+ delete register.changeHistory;
  // This event is created solely by a verified remote restore. It does not
  // change BR contents and must not stop the baseline from being rebuilt.
  register.events=(register.events||[]).filter(event=>event?.action!=='confluence-source-vault-restored');
