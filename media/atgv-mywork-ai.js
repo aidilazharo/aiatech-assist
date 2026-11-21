@@ -77,8 +77,8 @@
     // Suggestions leave the AI-only My Work page and open the selected role's
     // existing workflow on the dedicated Role Workspace page.
     if(typeof navigate==='function')navigate(target==='discovery'?'discovery':role==='business-analyst'?'discovery':'role-workspace');
-    const workspace=byId('workView'),target=routes[role]?.target||'roleStepFlow';
-    const element=byId(target);
+    const workspace=byId('workView'),workflowTarget=routes[role]?.target||'roleStepFlow';
+    const element=byId(workflowTarget);
     if(workspace&&!workspace.classList.contains('hidden')&&element&&!element.classList.contains('hidden'))
       element.scrollIntoView({behavior:'smooth',block:'start'});
   }
