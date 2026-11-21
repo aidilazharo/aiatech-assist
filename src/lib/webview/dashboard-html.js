@@ -536,16 +536,21 @@ function html(webview,{resumeLibrary=false}={}){
       <div class="architect-simple-fields"><label for="architectStackSelect" class="architect-stack-picker"><span class="sr-only">Technology stack</span><select id="architectStackSelect" aria-label="Project technology stack"><option value="">Choose a technology stack</option></select></label><button id="architectSaveStack" type="button">Save Stack</button><button id="architectStopInstall" type="button" class="secondary" disabled>Stop Install</button><button id="architectResetStack" type="button" class="secondary">Reset Tech Stack</button><button id="architectReviewGitChanges" type="button" class="secondary">Review Git Changes</button><button type="button" id="architectDownloadUnifiedLog" class="secondary atgv-icon-only" disabled aria-label="Download unified technology stack error log" title="Download unified technology stack error log"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m-4-4 4 4 4-4M5 17v4h14v-4"/></svg></button><button type="button" id="architectDownloadDependencyHistory" class="secondary">Download Dependency History</button></div>
       <div id="architectCustomPanel" class="architect-custom-panel hidden" aria-label="Custom Stack existing application">
         <div class="architect-custom-heading"><strong>Custom Stack · Existing Repository</strong><span class="muted">Read-only scan before explicit install and run</span></div>
-        <p id="architectCustomStatus" class="muted" role="status" aria-live="polite">Scan the configured project Git checkout. Once scanned, Pull Repository fetches and fast-forwards the verified origin branch only when the checkout is clean. Local changes are preserved.</p>
+        <p id="architectCustomStatus" class="muted" role="status" aria-live="polite">Scan Repository analyzes application dependencies, local services and preview blockers. Fix actions always require confirmation.</p>
+        <div class="atgv-custom-progress-wrap" aria-label="Custom Stack operation progress"><div id="architectCustomProgress" class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Custom Stack scan and preparation progress"><div id="architectCustomProgressFill" class="progress-fill" style="width:0%"></div></div><span id="architectCustomProgressText" class="muted">Ready to scan · 0%</span></div>
+        <div class="atgv-custom-branch-row"><label for="architectCustomBranch">Local Git branch<select id="architectCustomBranch" aria-label="Custom Stack local Git branch"></select></label><button id="architectCustomSwitchBranch" class="secondary" type="button" disabled>Switch Branch</button><span id="architectCustomBranchStatus" class="muted" role="status"></span></div>
         <div class="architect-custom-controls">
           <label for="architectCustomTarget">Detected application<select id="architectCustomTarget" aria-label="Detected custom application"></select></label>
           <label for="architectCustomPreviewUrl">Local preview URL<input id="architectCustomPreviewUrl" type="url" spellcheck="false" value="http://127.0.0.1:3000/" placeholder="http://127.0.0.1:3000/"></label>
           <button id="architectCustomScan" class="secondary" type="button">Scan Repository</button>
+          <button id="architectCustomPull" class="secondary" type="button" disabled>Pull Repository</button>
           <button id="architectCustomRun" type="button" disabled>Install &amp; Run</button>
           <button id="architectCustomMockRun" class="secondary" type="button" disabled title="Launch a local Vite UI with simulated login and read-only API responses">Run Mock Preview</button>
           <button id="architectCustomStop" class="secondary" type="button" disabled>Stop</button>
         </div>
-        <p id="architectCustomDetails" class="muted">Select Custom Stack to inspect an existing checkout. Running project scripts requires confirmation.</p>
+        <div id="architectCustomActions" class="atgv-custom-actions" role="group" aria-label="Recommended Custom Stack actions"></div>
+        <div id="architectCustomFindings" class="atgv-custom-findings" aria-label="Repository analysis findings" role="status"></div>
+        <p id="architectCustomDetails" class="muted">Select Custom Stack and scan the repository to identify requirements and safe remediation options.</p>
       </div>
       <div id="architectRequiredComponents" class="architect-required-components hidden" aria-label="Required technology stack components">
         <div class="architect-requirement-heading">
