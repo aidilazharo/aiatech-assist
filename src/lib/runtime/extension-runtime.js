@@ -1015,6 +1015,7 @@ async function aiSchedule(){if(aiServiceTimer){clearInterval(aiServiceTimer);aiS
 const confluenceSourceConflictNotices=new Map();
 
 const activityWrites=new Set();
+let activityQueueSerial=Promise.resolve();
 const activityQueueKey=id=>'atgvAssist.activityQueue.'+id;
 async function flushProjectActivity(projectId){
  if(activityWrites.has(projectId)||openingOffline||activeProject?.id!==projectId)return;
@@ -1037,11 +1038,13 @@ async function flushProjectActivity(projectId){
 function queueProjectActivity(events){
  const id=activeProject?.id;
  if(!id||!Array.isArray(events)||!events.length)return;
- void (async()=>{
+ // Serialize enqueue/flush so simultaneous roles do not overwrite queued events.
+ activityQueueSerial=activityQueueSerial.catch(()=>{}).then(async()=>{
   const current=context.workspaceState.get(activityQueueKey(id),[])||[];
-  await context.workspaceState.update(activityQueueKey(id),[...current,...events].slice(-450));
+  if(current.length+events.length>450)throw Error('Pending activity queue is full; preserve the current queue and retry synchronization.');
+  await context.workspaceState.update(activityQueueKey(id),[...current,...events]);
   await flushProjectActivity(id);
- })().catch(error=>report('Project activity local queue: '+String(error.message||error).slice(0,180)));
+ }).catch(error=>report('Project activity local queue: '+String(error.message||error).slice(0,180)));
 }
 function queueBRActivity(register){
  queueProjectActivity((register?.brs||[]).filter(br=>/^BR-[0-9]{1,8}$/.test(String(br?.id||''))).slice(0,55)
@@ -9235,6 +9238,7 @@ async function handleDashboardMessage(msg){
           if(selected.brId!=='project')await handoffProgress.toggle(registry,activeProject.id,msg.roleId,selected.brId,selected.brRevision,msg.taskId,msg.completed===true);
           else await toggleTask(registry,activeProject.id,msg.roleId,msg.taskId,msg.completed===true);
         }else await toggleTask(registry,activeProject.id,msg.roleId,msg.taskId,msg.completed===true);
+        queueProjectActivity([{type:'role_task_changed',subject:'PROJECT',status:msg.completed===true?'completed':'incomplete',title:String(msg.taskId||'').slice(0,90),revision:new Date().toISOString(),role:String(msg.roleId||'').slice(0,60)}]);
         await refreshDashboard();await notice('Local SDLC checklist updated.');break;
       }
       case 'roleAiChat':{
