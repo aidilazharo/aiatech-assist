@@ -758,6 +758,9 @@ async function checkSoftwareUpdates({prompt=false,interactive=false,force=false,
  softwareCheckBusy=true;await publishUpdateStatus();
  const config=updatePreferences();const errors=[];
  try{
+  // An explicit Check Updates must also inspect the owner-selected main branch.
+  // Public release mirrors can legitimately lag and must not replace source metadata.
+  if(force&&!catalogBusy)await catalogCheck({interactive:false});
   await Promise.all([
    (force||config.autoCheckExtension)?checkExtensionRelease({interactive}).catch(e=>errors.push('Extension: '+e.message)):Promise.resolve(),
    (force||config.autoCheckLibrary)?checkLibraryRelease({interactive}).catch(e=>errors.push('Library: '+e.message)):Promise.resolve()
