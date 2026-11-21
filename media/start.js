@@ -3855,6 +3855,16 @@ function renderRoleWork(){
       const button=document.createElement('button');button.className='secondary task-action';button.textContent=files[task.id]?'Open document':(task.sourceOnly?'View location':'Create document');button.disabled=!activeId;button.addEventListener('click',()=>send('openTaskDocument',{roleId:role.id,taskId:task.id}));row.append(button);}
     root.append(row);
   }
+  // Share role-scoped, minimal progress metadata with the read-only My Work AI.
+  // No document contents, credentials, other users' tasks or hidden workflow actions.
+  window.ATGVMyWorkAI?.update({
+    projectId:activeId,roleId:role.id,roleName:visibleRoleLabel(role),
+    progress:$('rolePercent')?.textContent||'',
+    next:$('roleNext')?.textContent||'',
+    tasks:(role.tasks||[]).map(task=>({title:task.label,done:progress[task.id]===true})),
+    assigned:((role.id==='software-developer'||role.id==='ux-designer')&&Array.isArray(roleJiraItems)?roleJiraItems.filter(item=>item.mine):[]).map(item=>({key:item.key,status:item.status})),
+    requirements:role.id==='business-analyst'?activeBusinessRequirements().map(item=>({id:item.id,status:item.status})):[]
+  });
 }
 function renderUnifiedDocumentRepository(){
  const docs=unifiedRepository?.documents||[],summary=$('unifiedDocumentSummary'),root=$('unifiedDocumentTable'),proposals=$('unifiedProposalList');
