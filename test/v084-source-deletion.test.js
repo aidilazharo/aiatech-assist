@@ -56,11 +56,11 @@ test('archiving a published BR source preserves approved revision and existing J
  assert.equal(updated.archivedSources[0].digest,a);
  await assert.rejects(br.archiveSource(registry,'demo',updated.revision,{digest:a}),/changed or removed/);
 }));
-test('webview offers archive/delete and restore controls with preserved document selections',()=>{
+test('webview offers replacement and verified Delete while archive/restore remains internal',()=>{
  const html=read('test/generated/extension-source.txt'),ui=read('media/start.js'),css=read('media/start.css');
  assert.match(html,/id="discoveryImport" class="ba-source-icon-btn" title="Upload Word, PDF or Excel workbook"/);
- assert.match(ui,/remove.textContent='Delete Everywhere'/);
- assert.match(ui,/archive.textContent='Remove Source'/);
+ assert.match(ui,/remove.textContent='Delete'/);
+ assert.doesNotMatch(ui,/archive.textContent='Remove Source'/);
  assert.match(ui,/replace.textContent='Replace & Reprocess'/);
  assert.match(ui,/deleteBREverywhere/);
  assert.match(html,/id="archivedSources"/);

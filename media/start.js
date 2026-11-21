@@ -5375,6 +5375,8 @@ function renderSourcePreflight(){
  if(!info)return;
  const phase=info.phase||'checking',running=['preflight','repair','checking'].includes(phase);
  panel.dataset.phase=running?'running':phase;
+ // Each new preflight phase defaults collapsed; reopening is the user's choice.
+ if(panel.dataset.lastPhase!==phase){panel.open=false;panel.dataset.lastPhase=phase;}
  $('baSourcePreflightTitle').textContent=running?'AI document preflight · checking…':phase==='ready'?'AI document preflight · ready':phase==='blocked'?'AI document preflight · needs attention':'AI document preflight';
  $('baSourcePreflightMessage').textContent=info.summary||'Checking source quality and potential Developer RED/GREEN test blockers without changing the original uploaded file.';
  const fixes=Array.isArray(info.applied)?info.applied.length:0;
@@ -5402,7 +5404,7 @@ $('baPreflightDownload').addEventListener('click',()=>{
 });
 $('baWorkingBrDownload').addEventListener('click',()=>{
  if($('baWorkingBrDownload').disabled||!activeId)return;
- $('baWorkingBrDownload').disabled=true;send('downloadWorkingBR',{projectId:activeId});
+ $('baWorkingBrDownload').disabled=true;send('downloadISO29148BRPDF',{projectId:activeId});
 });
 function renderSourceDocuments(){
  const root=$('sourceDocuments');root.replaceChildren();
@@ -5439,16 +5441,12 @@ function renderSourceDocuments(){
     setDiscoveryImportBusy(true,'Select the updated document; old evidence and Jira remain unchanged until validation succeeds…');
     send('replaceDiscoverySource',{roleId:selectedRole,digest:doc.digest,revision:brState.revision});
   });
-  const archive=document.createElement('button');archive.type='button';archive.className='secondary ba-process-btn';
-  archive.textContent='Remove Source';archive.title='Remove this document from active sources and archive evidence. Existing approved BRs and all Jira issues remain unchanged.';
-  archive.disabled=!!baBusyTask||!!sourceRemoving||brDeletionBusy||!baCanEdit('ba-discovery')||Object.keys(brState?.pending||{}).length>0;
-  archive.addEventListener('click',()=>{if(archive.disabled)return;sourceRemoving=true;archive.disabled=true;send('archiveDiscoverySourceSafe',{digest:doc.digest,revision:brState.revision});});
   const remove=document.createElement('button');remove.type='button';remove.className='secondary ba-process-btn archive-remote-delete br-danger';
-  remove.textContent='Delete Everywhere';remove.title='Destructive: permanently delete this source and its linked BR/Jira/Confluence content, subject to separate confirmation. Use Remove Source or Replace & Reprocess instead to preserve Jira.';
+  remove.textContent='Delete';remove.title='Destructive: permanently delete this source and its linked BR/Jira/Confluence records after verification and separate confirmation. Replace & Reprocess retains existing approvals and Jira.';
   remove.dataset.brDeleteAction='true';
   remove.disabled=!!baBusyTask||!!sourceRemoving||brDeletionBusy||!baCanEdit('ba-discovery');
   remove.addEventListener('click',()=>{if(remove.disabled)return;requestBRDeletion({target:'active-source',digest:doc.digest,revision:brState.revision});});
-  actions.append(replace,archive,remove);item.append(selector,info,actions);root.append(item);
+  actions.append(replace,remove);item.append(selector,info,actions);root.append(item);
  }
  renderArchivedSources();
  renderSourceSelection();
@@ -6621,6 +6619,20 @@ $('baCRForm').addEventListener('submit',e=>{
  if(!paths.length){$('baCRAttention').textContent='No verified started issue is eligible. Resolve Jira history errors first.';return;}
  send('brChangeRequestCreate',{revision:brState.revision,paths,reason});
 });
+// Verified BA auto-claim is idempotent for each unassigned draft batch.
+// The host confirms live identity, ownership revision and current BR status.
+const baClaimBatches=new Set();
+function maybeAutoAssignBARequirements(){
+ if(!workspaceOpened||!activeId||selectedRole!=='business-analyst'||!['myWork','discovery'].includes(view)||
+    !baOwnerState?.me||baOwnerState.cached||baOwnerState.scope==='local')return;
+ const ids=(brState?.brs||[]).filter(br=>br.status==='draft'&&!br.archivedFromRestart&&
+   !baOwner('ba-br-'+br.id).ownerId&&!baOwner('ba-br-'+br.id).pending).map(br=>br.id).slice(0,100);
+ if(!ids.length)return;
+ const token=activeId+'|'+baOwnerState.me+'|'+ids.join(',');
+ if(baClaimBatches.has(token))return;
+ baClaimBatches.add(token);
+ send('baAutoClaimUnassigned',{projectId:activeId,roleId:'business-analyst',brIds:ids});
+}
 function renderBRs(){
  renderBAWorkDashboard();
  if(brFilterProjectId!==activeId){brActiveFilter='all';brFilterProjectId=activeId;}
@@ -6708,6 +6720,7 @@ function renderBRs(){
   root.append(card);
  }
  renderDiscoverySummary();renderChangeRequests();decorateBAActionButtons();
+ maybeAutoAssignBARequirements();
 }
 function brLine(ops,text,attributes){
  const value=String(text??'');const parts=value.split(/\r?\n/);
@@ -7242,6 +7255,10 @@ window.addEventListener('message',event=>{
   if(m.type==='knowledgeSyncProgress'){$('knowledgeSyncStatus').textContent=m.message||'Syncing…';$('overviewKnowledgeStatus').textContent=m.message||'Syncing…';return;}
   if(m.type==='knowledgeSyncResult'){$('knowledgeSync').disabled=false;$('overviewKnowledgeSync').disabled=false;renderKnowledgeState(m.summary||{});$('knowledgeSyncStatus').textContent=m.message+(m.errors?.length?' · '+m.errors.map(e=>e.source+': '+e.message).join(' · '):'');$('overviewKnowledgeStatus').textContent=$('knowledgeSyncStatus').textContent;return;}
   if(m.type==='baOwners'){if(m.projectId===activeId){baOwnerState=m;renderBAOwner();renderBRs();}return;}
+ if(m.type==='baAutoClaimResult'&&m.projectId===activeId){
+  if(m.failed?.length)status('Some unassigned BR drafts could not be auto-assigned: '+m.failed.slice(0,3).join('; '),true);
+  return;
+ }
   if(m.type==='baReviewConfirmResult'){
     // Cancelled consent, failed Jira verification or a saved-answer mismatch
     // must not strand the entire BA interface in a permanent busy state.

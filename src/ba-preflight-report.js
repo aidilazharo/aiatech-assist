@@ -60,7 +60,7 @@ function fromSaved(projectId,documents,saved){
 function filename(projectId,sourceName){
  const base=path.basename(clean(sourceName,180)).replace(/\.(pdf|docx)$/i,'').replace(/[^a-z0-9_.-]+/gi,'-').replace(/^[.-]+|[.-]+$/g,'').slice(0,64)||'document';
  const project=clean(projectId,80).replace(/[^a-z0-9_-]+/gi,'-').slice(0,40)||'project';
- return 'ATGV-Preflight-'+project+'-'+base+'.txt';
+ return 'ATGV-Preflight-Analyst-'+project+'-'+base+'.txt';
 }
 function format(session,{generatedAt=new Date().toISOString()}={}){
  if(!session?.documents?.length||!session.entries?.length)throw Error('No completed preflight findings are available to download yet.');

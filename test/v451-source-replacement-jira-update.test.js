@@ -54,12 +54,12 @@ test('stale revision, identical content, wrong digest and pending Jira operation
  await assert.rejects(br.addSources(reg,'demo',stale,[source('v2.pdf',newer)],{replacementDigest:old}),/changed/);
  assert.equal((await br.load(reg,'demo')).sourceDocuments[0].digest,old);
 }));
-test('UI exposes explicit safe replacement and archive, retains destructive deletion as separate choice',()=>{
+test('UI exposes safe replacement and Delete; legacy archival handler is still retained',()=>{
  const ui=fsSync.readFileSync(path.join(__dirname,'../media/start.js'),'utf8');
  const host=fsSync.readFileSync(path.join(__dirname,'../src/lib/runtime/extension-runtime.js'),'utf8');
  assert.match(ui,/replace.textContent='Replace & Reprocess'/);
- assert.match(ui,/archive.textContent='Remove Source'/);
- assert.match(ui,/remove.textContent='Delete Everywhere'/);
+ assert.doesNotMatch(ui,/archive.textContent='Remove Source'/);
+ assert.match(ui,/remove.textContent='Delete'/);
  assert.match(ui,/send\('replaceDiscoverySource',\{roleId:selectedRole,digest:doc.digest,revision:brState.revision\}\)/);
  assert.match(host,/case 'archiveDiscoverySourceSafe':/);
  assert.match(host,/case 'replaceDiscoverySource':/);

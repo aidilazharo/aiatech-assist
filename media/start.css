@@ -2405,3 +2405,12 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 #brEditModal .atgv-workspace-breadcrumbs,
 #baRequirementModal .atgv-workspace-breadcrumbs{display:none!important}
 .sidebar .nav-item[data-nav="library"][hidden]{display:none!important}
+
+/* v0.0.34 - preflight findings start collapsed; user expands details when needed. */
+#discoveryView details#baSourcePreflight > summary.ba-source-preflight-toggle{display:flex;align-items:center;gap:10px;cursor:pointer;list-style:none;user-select:none;min-height:28px}
+#discoveryView details#baSourcePreflight > summary.ba-source-preflight-toggle::-webkit-details-marker{display:none}
+#discoveryView details#baSourcePreflight .ba-source-preflight-toggle strong{font-size:13px;flex:1;overflow-wrap:anywhere}
+#discoveryView details#baSourcePreflight .ba-source-preflight-chevron{font-size:14px;color:var(--vscode-descriptionForeground,#aeb6bf);transition:transform .2s}
+#discoveryView details#baSourcePreflight[open] .ba-source-preflight-chevron{transform:rotate(180deg)}
+#discoveryView details#baSourcePreflight .ba-source-preflight-body{padding-top:12px}
+#discoveryView details#baSourcePreflight .ba-source-preflight-header{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
