@@ -8227,25 +8227,32 @@ function updateStartupRepositoryPreview(){
   row.append(title,address);preview.append(row);
  }
 }
+// Display only the current sequential check. Successful checks vanish immediately;
+// retain a failed/offline check until it is fixed, but never show idle cards.
+function visibleStartupConnectionCheck(){
+ const checks=[...startupConnectionCheckResults.values()];
+ return checks.find(check=>check.state==='pending')||
+  checks.find(check=>check.state==='error'||check.state==='offline')||null;
+}
 function renderStartupConnectionProgress(){
  const el=$('startupConnectionProgress');if(!el)return;
  el.replaceChildren();
- const checks=[...startupConnectionCheckResults.values()];
- for(const check of checks){
+ const check=visibleStartupConnectionCheck();
+ for(const current of check?[check]:[]){
   const row=document.createElement('div');row.className='atgv-connection-progress-item';
-  row.dataset.state=check.state;
+  row.dataset.state=current.state;
   const head=document.createElement('div');head.className='atgv-connection-progress-head';
-  const name=document.createElement('strong');name.textContent=check.label;
+  const name=document.createElement('strong');name.textContent=current.label;
   const status=document.createElement('span');
-  status.textContent=check.state==='ok'?'Successful':check.state==='error'?'Failed':check.state==='pending'?'Checking…':'Waiting';
+  status.textContent=current.state==='ok'?'Successful':current.state==='error'?'Failed':current.state==='pending'?'Checking…':'Waiting';
   head.append(name,status);
   const track=document.createElement('div');track.className='atgv-connection-progress-track';
-  track.setAttribute('role','progressbar');track.setAttribute('aria-label',check.label);
+  track.setAttribute('role','progressbar');track.setAttribute('aria-label',current.label);
   track.setAttribute('aria-valuemin','0');track.setAttribute('aria-valuemax','100');
-  if(check.state!=='pending')track.setAttribute('aria-valuenow',check.state==='idle'?'0':'100');
+  if(current.state!=='pending')track.setAttribute('aria-valuenow',current.state==='idle'?'0':'100');
   const fill=document.createElement('div');fill.className='atgv-connection-progress-fill';
   track.append(fill);
-  const details=document.createElement('small');details.textContent=check.state==='ok'||check.state==='error'?check.message||'':check.url||'';
+  const details=document.createElement('small');details.textContent=current.state==='ok'||current.state==='error'?current.message||'':current.url||'';
   row.append(head,track,details);el.append(row);
  }
 }
@@ -8253,7 +8260,7 @@ function renderStartupConnectionChecks(){
  const list=$('startupConnectionChecks');
  const expanded=new Set([...list.querySelectorAll('details[open]')].map(row=>row.dataset.checkId));
  list.replaceChildren();
- for(const check of startupConnectionCheckResults.values()){
+ for(const check of [visibleStartupConnectionCheck()].filter(Boolean)){
   const item=document.createElement('details');item.className='atgv-permission-row atgv-connection-check';item.dataset.checkId=check.id;
   item.dataset.state=check.state==='ok'?'ready':check.state==='error'||check.state==='offline'?'error':'pending';item.open=expanded.has(check.id);
   const summary=document.createElement('summary');summary.className='atgv-permission-step';
