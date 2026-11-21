@@ -2383,3 +2383,19 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 #workView .atgv-custom-finding[data-level="error"]{border-color:#ce5e60}
 #workView .atgv-custom-finding[data-level="info"]{border-color:#4e96ca}
 @media(max-width:620px){#workView .atgv-custom-branch-row label{flex-basis:100%;max-width:none}#workView .atgv-custom-actions button{flex:1 1 130px}}
+
+/* Separate scan completion from the actual localhost process state. */
+#workView .atgv-custom-runtime{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;margin:10px 0;border:1px solid #465260;border-radius:6px;background:#171c24;color:#dbe6ef;font-size:12px}
+#workView .atgv-custom-runtime strong{font-size:12px}
+#workView .atgv-custom-runtime #architectCustomRuntimeDetail{flex:1 1 230px;min-width:0;color:#b2c1d2;overflow-wrap:anywhere;font-size:11px}
+#workView .atgv-custom-runtime button{min-height:30px;padding:5px 10px;font-size:11px}
+#workView .atgv-custom-runtime-indicator{flex:none;width:9px;height:9px;border-radius:50%;background:#7c8490}
+#workView .atgv-custom-runtime[data-state="running"]{border-color:#237d55;background:#11231c}
+#workView .atgv-custom-runtime[data-state="running"] .atgv-custom-runtime-indicator{background:#34c979}
+#workView .atgv-custom-runtime[data-state="working"]{border-color:#bf913e;background:#252017}
+#workView .atgv-custom-runtime[data-state="working"] .atgv-custom-runtime-indicator{background:#e3ab42;animation:atgv-runtime-pulse 1.3s ease-in-out infinite}
+#workView .atgv-custom-runtime[data-state="stopped"] .atgv-custom-runtime-indicator{background:#d97f72}
+#workView .atgv-custom-runtime[data-state="failed"]{border-color:#ba6060;background:#281c20}
+#workView .atgv-custom-runtime[data-state="failed"] .atgv-custom-runtime-indicator{background:#e66c74}
+@keyframes atgv-runtime-pulse{50%{opacity:.35;transform:scale(.7)}}
+@media(prefers-reduced-motion:reduce){#workView .atgv-custom-runtime-indicator{animation:none!important}}
