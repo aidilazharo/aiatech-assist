@@ -47,7 +47,7 @@ test('shared role selection opens AI and Role Workspace without changing existin
  assert.match(script,/if\(view==='myWork'\|\|view==='work'\|\|view==='discovery'\)window\.ATGVMyWorkAI\?\.update/);
  assert.match(script,/if\(destination==='discovery'\)/);
  assert.match(script,/baBreadcrumbAtRequirements=true/);
- assert.match(script,/if\(destination==='role-workspace'\|\|keepingWorkspace/);
+ assert.match(script,/const openWorkspace=destination==='role-workspace'\|\|keepingWorkspace/);
  assert.match(actions,/navigate\(role==='business-analyst'\?'discovery':'role-workspace'\)/);
  assert.match(actions,/workspace&&!workspace\.classList\.contains\('hidden'\)/);
 });
