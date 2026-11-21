@@ -116,10 +116,12 @@ function document(spec={}){
   heading(sub,2);empty('Business Analyst to classify and validate this information from the source and stakeholder decisions. Do not treat technical design defaults as business policy.');
  }
  heading('4 Business operational requirements');
- for(const sub of ['4.1 Business processes','4.2 Operational policies and rules','4.3 Operational constraints','4.4 Operational modes and quality']){
+ for(const sub of ['4.1 Business processes','4.2 Business operational policies and rules','4.3 Business operational constraints','4.4 Business operational modes','4.5 Business operational quality','4.6 Business structure']){
   heading(sub,2);empty('See the source-backed requirement records below. Detailed policy or operational mode is pending explicit evidence or stakeholder confirmation.');
  }
- heading('5 Business requirements register and acceptance');
+ heading('5 Preliminary operational concept of proposed system');
+ empty('No proposed operational concept has been approved from the verified source. The Solution Architect and Business Analyst must validate expected actors, workflows, interfaces and operating assumptions.');
+ heading('6 Business requirements register and acceptance');
  if(!brs.length)empty('No generated BR records have been saved. This source-backed draft requires mapping, AI review and Business Analyst approval.');
  for(const br of brs){
   heading((br.id||'BR')+' - '+(br.title||'Untitled requirement'));
@@ -140,7 +142,7 @@ function document(spec={}){
    }
   }
  }
- heading('6 Traceability, verification and approval');
+ heading('7 Traceability, verification and approval');
  field('Source name',fileName.slice(0,65));
  field('Source digest',valid.test(String(source.digest||''))?source.digest.slice(0,28)+'...':'Not recorded');
  field('Testing','NOT RUN');
