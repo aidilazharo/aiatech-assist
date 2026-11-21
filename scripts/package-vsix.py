@@ -48,7 +48,7 @@ MIME={
 
 
 files=['package.json','README.md']
-for folder in ('src', 'assets', 'media', 'resources', 'design-system'):
+for folder in ('src', 'assets', 'media', 'resources', 'design-system', '.memory'):
     files += sorted(p.relative_to(root).as_posix() for p in (root/folder).rglob('*')
                     if p.is_file() and p.name not in ('README.md', 'CHANGELOG.md', '.DS_Store'))
 
