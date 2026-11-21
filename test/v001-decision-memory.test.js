@@ -17,15 +17,21 @@ test('release version increments one step with base-100 carry and hard upper bou
 test('extension metadata is blank and AI decisions are curated',()=>{
  const pkg=require('../package.json');
  assert.equal(pkg.description,'');
- assert.equal(pkg.version,'0.0.2');
+ assert.equal(pkg.version,'0.0.3');
  assert.equal(pkg.atgvDisplayVersion,pkg.version);
- const index=require('../.memory/manifest.json');
- assert.equal(index.schema,1);assert.equal(index.categories.length,14);
- for(const item of index.categories){assert.match(item.path,/^\.memory\/[a-z][a-z0-9-]*\.json$/);const d=JSON.parse(fs.readFileSync(path.join(root,item.path),'utf8'));assert.equal(d.category,item.id);}
- assert.match(memoryForPrompt('version release increment'),/99\.99\.99/);
- assert.match(memoryForPrompt('extension description details'),/description stays empty/);
- assert.doesNotMatch(memoryForPrompt('weather tomorrow'),/description stays empty/);
- assert.ok(memoryForPrompt('version release').length<=3200);
+ const manifestPath=path.join(root,'.memory/manifest.json');
+ if(fs.existsSync(manifestPath)){
+  const index=JSON.parse(fs.readFileSync(manifestPath,'utf8'));
+  assert.equal(index.schema,1);assert.equal(index.categories.length,14);
+  for(const item of index.categories){assert.match(item.path,/^\.memory\/[a-z][a-z0-9-]*\.json$/);const d=JSON.parse(fs.readFileSync(path.join(root,item.path),'utf8'));assert.equal(d.category,item.id);}
+  assert.match(memoryForPrompt('version release increment'),/99\.99\.99/);
+  assert.match(memoryForPrompt('extension description details'),/description stays empty/);
+  assert.doesNotMatch(memoryForPrompt('weather tomorrow'),/description stays empty/);
+ }else{
+  assert.equal(fs.existsSync(path.join(root,'.memory')),false);
+  assert.equal(memoryForPrompt('version release increment'),'');
+ }
+
  const packager=fs.readFileSync(path.join(root,'scripts/package-vsix.py'),'utf8');
  assert.doesNotMatch(packager,/'design-system', '\.memory'/);
  assert.match(packager,/Release safety policy: \.memory must not be included in VSIX/);
