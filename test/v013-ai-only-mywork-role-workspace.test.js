@@ -44,7 +44,7 @@ test('shared role selection opens AI and Role Workspace without changing existin
  assert.match(script,/const keepingWorkspace=isRole&&\(view==='work'\|\|view==='discovery'\|\|view==='uxPreview'\)/);
  assert.match(script,/destination==='role-workspace'\|\|keepingWorkspace/);
  assert.match(script,/setView\(openWorkspace\?\(baWorkspace\?'discovery':'work'\):'myWork'\)/);
- assert.match(script,/if\(view==='myWork'\|\|view==='work'\|\|view==='discovery'\)window\.ATGVMyWorkAI\?\.update/);
+ assert.match(script,/if\(view==='myWork'\)window\.ATGVMyWorkAI\?\.update/);
  assert.match(script,/if\(destination==='discovery'\)/);
  assert.match(script,/baBreadcrumbAtRequirements=true/);
  assert.match(script,/const openWorkspace=destination==='role-workspace'\|\|keepingWorkspace/);
