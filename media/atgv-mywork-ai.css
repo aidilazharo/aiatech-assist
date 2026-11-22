@@ -159,7 +159,8 @@ body.atgv-mywork-chat-mode:not(.gate-mode) #appHeader .header-end{
 /* v0.0.21 — a global notification replaces the header row. The same live
    canvas is reparented into the notification so it stays on top of the real
    red bottom divider rather than disappearing with #appHeader.hidden. */
-body.atgv-mywork-chat-mode:not(.gate-mode) #topNotification.top-notification{
+body.atgv-mywork-chat-mode:not(.gate-mode) #topNotification.top-notification,
+body.atgv-ba-ai-active:not(.gate-mode) #topNotification.top-notification{
   position:relative;overflow:visible!important;z-index:20;
   border-bottom:3px solid #D31145!important;
 }
@@ -167,7 +168,8 @@ body.atgv-mywork-chat-mode:not(.gate-mode) #topNotification.top-notification{
   display:none;position:absolute;left:0;right:0;bottom:-3px;height:0;
   z-index:21;overflow:visible;pointer-events:none;
 }
-body.atgv-mywork-chat-mode:not(.gate-mode) #topNotification #myWorkHeaderWave.mywork-header-wave{
+body.atgv-mywork-chat-mode:not(.gate-mode) #topNotification #myWorkHeaderWave.mywork-header-wave,
+body.atgv-ba-ai-active:not(.gate-mode) #topNotification #myWorkHeaderWave.mywork-header-wave{
   display:block;
 }
 #topNotification #myWorkHeaderWave .mywork-header-wave-visual{
