@@ -26,7 +26,8 @@ body.atgv-mywork-chat-mode:not(.gate-mode) #contentPane.content-pane{
    No second red divider is drawn inside the chat content. The app header has
    overflow:hidden in the base theme; override it only while My Work is active. */
 body.atgv-mywork-chat-mode:not(.gate-mode) #appHeader.app-header,
-body.atgv-ba-ai-active:not(.gate-mode) #appHeader.app-header{
+body.atgv-ba-ai-active:not(.gate-mode) #appHeader.app-header,
+body.atgv-global-ai-active:not(.gate-mode) #appHeader.app-header{
   position:relative;z-index:40;overflow:visible!important;
 }
 #appHeader #myWorkHeaderWave.mywork-header-wave{
@@ -34,7 +35,8 @@ body.atgv-ba-ai-active:not(.gate-mode) #appHeader.app-header{
   z-index:21;overflow:visible;pointer-events:none;
 }
 body.atgv-mywork-chat-mode:not(.gate-mode) #appHeader #myWorkHeaderWave.mywork-header-wave,
-body.atgv-ba-ai-active:not(.gate-mode) #appHeader #myWorkHeaderWave.mywork-header-wave{
+body.atgv-ba-ai-active:not(.gate-mode) #appHeader #myWorkHeaderWave.mywork-header-wave,
+body.atgv-global-ai-active:not(.gate-mode) #appHeader #myWorkHeaderWave.mywork-header-wave{
   display:block;
 }
 /* Wave centerline: 76 * .52 - 38 = 1.52px above the header's bottom edge.
@@ -51,7 +53,9 @@ body.atgv-ba-ai-active:not(.gate-mode) #appHeader #myWorkHeaderWave.mywork-heade
   background:transparent;border:0;pointer-events:none;
 }
 body.atgv-mywork-chat-mode:not(.gate-mode) #appHeader .brand-area,
-body.atgv-mywork-chat-mode:not(.gate-mode) #appHeader .header-end{
+body.atgv-mywork-chat-mode:not(.gate-mode) #appHeader .header-end,
+body.atgv-global-ai-active:not(.gate-mode) #appHeader .brand-area,
+body.atgv-global-ai-active:not(.gate-mode) #appHeader .header-end{
   position:relative;z-index:30;
 }
 #atgvMyWorkAi .atgv-mywork-ai-results{
@@ -161,7 +165,8 @@ body.atgv-mywork-chat-mode:not(.gate-mode) #appHeader .header-end{
    canvas is reparented into the notification so it stays on top of the real
    red bottom divider rather than disappearing with #appHeader.hidden. */
 body.atgv-mywork-chat-mode:not(.gate-mode) #topNotification.top-notification,
-body.atgv-ba-ai-active:not(.gate-mode) #topNotification.top-notification{
+body.atgv-ba-ai-active:not(.gate-mode) #topNotification.top-notification,
+body.atgv-global-ai-active:not(.gate-mode) #topNotification.top-notification{
   position:relative;overflow:visible!important;z-index:20;
   border-bottom:3px solid #D31145!important;
 }
@@ -170,7 +175,8 @@ body.atgv-ba-ai-active:not(.gate-mode) #topNotification.top-notification{
   z-index:21;overflow:visible;pointer-events:none;
 }
 body.atgv-mywork-chat-mode:not(.gate-mode) #topNotification #myWorkHeaderWave.mywork-header-wave,
-body.atgv-ba-ai-active:not(.gate-mode) #topNotification #myWorkHeaderWave.mywork-header-wave{
+body.atgv-ba-ai-active:not(.gate-mode) #topNotification #myWorkHeaderWave.mywork-header-wave,
+body.atgv-global-ai-active:not(.gate-mode) #topNotification #myWorkHeaderWave.mywork-header-wave{
   display:block;
 }
 #topNotification #myWorkHeaderWave .mywork-header-wave-visual{
