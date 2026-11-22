@@ -72,9 +72,9 @@ test('Role Workspace can still be reached from AI task action without a sidebar 
  assert.match(snippet,/navigate\(target\)/);
  assert.match(ui,/const openWorkspace=destination==='role-workspace'\|\|keepingWorkspace/);
 });
-test('chat has no artificial header gap and animated divider is clipped inside header',()=>{
+test('chat has sidebar-matched clearance outside the scroll viewport and waveform stays clipped in header',()=>{
  const root=css.match(/#myWorkView > #atgvMyWorkAi,[\s\S]*?#myWorkView > #atgvMyWorkAi\.atgv-mywork-ai\{([^}]+)\}/)?.[1]||'';
- assert.match(root,/padding:0;margin:0/);
+ assert.match(root,/padding:23px 0 0;margin:0/);
  assert.doesNotMatch(css,/padding:(42px|34px|24px) 0 0/);
  const wave=css.match(/#appHeader #myWorkHeaderWave \.mywork-header-wave-visual\{([^}]+)\}/)?.[1]||'';
  assert.match(wave,/clip-path:inset\(0 0 50% 0\)/);
