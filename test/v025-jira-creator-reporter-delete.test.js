@@ -147,7 +147,7 @@ test('user interface offers deletion review and runtime requires typed confirmat
  const ui=source(path.join(root,'media/start.js'),'utf8');
  const host=source(path.join(root,'src/lib/runtime/extension-runtime.js'),'utf8');
  const section=ui.slice(ui.indexOf('function renderBAJiraBackedEpics(){'),ui.indexOf('function renderBACompletedRecords(){'));
- assert.match(section,/Delete Jira BR/);assert.match(section,/send\('deleteJiraOnlyBROwned'/);
+ assert.match(section,/ba-jira-only-delete','🗑'/);assert.match(section,/send\('deleteJiraOnlyBROwned'/);
  assert.match(host,/case 'deleteJiraOnlyBROwned':/);
  assert.match(host,/DELETE BR '\+plan\.brId\+' '\+plan\.epicKey/);
  assert.match(host,/creator-reporter-jira-only-deleted/);

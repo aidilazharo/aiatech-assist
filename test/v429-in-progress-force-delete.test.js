@@ -99,7 +99,7 @@ test('the empty-cycle Delete Everywhere path works without a live Jira identity'
  assert.match(notices[0],/deleted/i);assert.equal(updates[0].value.length,0);
 }));
 test('the Start card sends all in-progress work to the unified deletion path',()=>{
- const begin=ui.indexOf("$('baDeleteIncomplete').addEventListener('click'"),end=ui.indexOf("$('baRestartIncomplete').addEventListener",begin);
+ const begin=ui.indexOf("$('baDeleteIncomplete').addEventListener('click'"),end=ui.indexOf('// v0.1.21:',begin);
  let click;const sent=[];const button={disabled:false,addEventListener(_event,fn){click=fn;}};
  const context={$:()=>button,brState:{revision:'R1',sourceDocuments:[],brs:[],restartPending:true},activeId:'demo',requestBRDeletion:value=>sent.push(value)};
  vm.runInNewContext(ui.slice(begin,end),context);click();
