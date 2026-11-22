@@ -570,7 +570,7 @@ function html(webview,{resumeLibrary=false}={}){
     </section>
     </section>
     <div id="baRequirementModal" class="modal-overlay hidden" aria-hidden="true"><div class="modal-card ba-requirement-modal-card" role="dialog" aria-modal="true" aria-labelledby="baRequirementModalTitle">
-      <div class="ba-requirement-modal-heading"><h2 id="baRequirementModalTitle">Business Requirement details</h2><div class="ba-requirement-modal-tools"><button type="button" id="baTransferOpen" class="secondary" hidden>Transfer BR</button><button type="button" id="baRequirementModalClose" class="secondary">Close</button></div></div>
+      <div class="ba-requirement-modal-heading"><h2 id="baRequirementModalTitle">Business Requirement details</h2><div class="ba-requirement-modal-tools"><button type="button" id="baTransferOpen" class="secondary ba-br-icon-action" aria-label="Transfer BR to another Business Analyst" title="Transfer BR to another Business Analyst" data-tooltip="Transfer BR" hidden>⇄</button><button type="button" id="baRequirementModalClose" class="secondary ba-br-icon-action" aria-label="Close Business Requirement details" title="Close BR details" data-tooltip="Close">✕</button></div></div>
       <section id="baTransferPanel" class="ba-transfer-panel hidden" aria-label="Transfer Business Requirement ownership">
         <div class="ba-transfer-head"><strong id="baTransferTitle">Transfer BR</strong><button type="button" id="baTransferCancel" class="secondary">Cancel</button></div>
         <p id="baTransferExplanation" class="muted">Transfer the Jira Epic Reporter to a verified Business Analyst. The original Jira Creator and child issue assignees are preserved.</p>
