@@ -56,7 +56,8 @@ test('BR operation progress avoids duplicate banners, tracks completion, and blo
 });
 test('Jira approval uses current validated preview while publish still verifies remote state',()=>{
  const host=read('test/generated/extension-source.txt');
- assert.match(host,/jiraPreviewValidation=conflicts\.length\?null:/);
+ assert.match(host,/const verifiedAt=blockers\.length\?0:Date\.now\(\)/);
+ assert.match(host,/jiraPreviewValidation=verifiedAt\?\{[^}]+\}:null/);
  assert.match(host,/Date\.now\(\)-jiraPreviewValidation\.verifiedAt<300000/);
  const approve=host.slice(host.indexOf("case 'brJiraApprove':"),host.indexOf("case 'brApproveRetirements':"));
  assert.doesNotMatch(approve,/jiraPreflight\(/);

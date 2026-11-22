@@ -21,7 +21,7 @@ test('Jira preview has eight correctly sized columns and row actions remain cont
 test('Jira repair candidates use structured issue keys and are prioritized in both preview tables',()=>{
  const ui=source('media/start.js'),host=source('src/lib/runtime/extension-runtime.js');
  assert.match(host,/linkCandidates\.push\(\{path:item\.path,key:issue\.key\}\)/);
- assert.match(host,/conflicts,linkCandidates,protection:/);
+ assert.match(host,/const payload=\{changes,issueTypes,jiraProject,fieldPlans:jiraPreviewFieldPlans,conflicts:blockers,linkCandidates,protection,/);
  assert.match(ui,/jiraLinkCandidates=Array\.isArray\(m\.linkCandidates\)/);
  assert.match(ui,/pinFirst:row=>!!jiraLinkCandidate\(row\.entry\)/);
  assert.match(ui,/jiraDetailsActions\(row\.entry,true\)/);
@@ -38,9 +38,9 @@ test('Failed Jira link repair is retryable; historical content forces separately
  assert.match(workflow,/contentMatchesApproved===false\?digest\(\{recoveredRemoteDigest:remoteDigest\}\):hash/);
 });
 
-test('No Jira Preview is rendered before all mandatory checks pass',()=>{
+test('Legacy Jira approval stays unavailable until all mandatory checks pass',()=>{
  const ui=source('media/start.js'),host=source('src/lib/runtime/extension-runtime.js');
- assert.match(host,/preflightBlocked\?'brJiraPreflight':'brJiraPlan'/);
+ assert.match(host,/type:blockers\.length\?'brJiraPreflight':'brJiraPlan'/);
  assert.match(ui,/if\(m\.type==='brJiraPreflight'\)/);
  assert.match(ui,/Jira Preview has NOT been created/);
  assert.match(ui,/\$\('brJiraApprove'\)\.disabled=true;\$\('brJiraSync'\)\.disabled=true/);

@@ -2954,51 +2954,70 @@ body:not(.gate-mode) #sdlcWorkspaceShell.atgv-sdlc-workspace-shell{
  border:0!important;background:transparent!important;padding:0 3px!important;
  color:var(--vscode-testing-iconPassed,#80d89f)!important
 }
+#discoveryView #baAutoOriginalFiles{
+ flex:1 1 320px;min-width:0;margin:0
+}
 #discoveryView #baAutoOriginalFiles .source-document-row{
- display:grid;grid-template-columns:26px minmax(0,1fr);gap:12px;
- align-items:center;min-width:0;padding:11px 13px;margin:0 0 12px;
- border:1px solid var(--vscode-panel-border,#394451);border-radius:8px;
- background:var(--vscode-editor-background,#14181e)
+ display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:9px;
+ min-width:0;margin:0;padding:0;border:0;background:transparent
 }
-#discoveryView #baAutoOriginalFiles .source-document-info{grid-column:2;min-width:0;width:100%}
-#discoveryView #baAutoOriginalFiles .source-document-info strong{
- display:block;max-width:100%;font-size:12px;line-height:1.55;
- overflow:hidden;text-overflow:ellipsis;white-space:nowrap
-}
+#discoveryView #baAutoOriginalFiles .source-document-info{grid-column:2;min-width:0}
+#discoveryView #baAutoOriginalFiles .source-document-info strong,
 #discoveryView #baAutoOriginalFiles .source-document-info small{
- display:block;max-width:100%;margin-top:3px;
- overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
- color:var(--vscode-descriptionForeground,#a9b0bd)
+ display:block;white-space:normal;overflow:visible;overflow-wrap:anywhere;line-height:1.5
+}
+#discoveryView #baAutoOriginalFiles .source-document-info strong{font-size:12px}
+#discoveryView #baAutoOriginalFiles .source-document-info small{
+ margin-top:2px;color:var(--vscode-descriptionForeground,#a9b0bd)
 }
 #discoveryView #baAutoOriginalFiles .source-select-radio{align-self:center;margin:0}
 #discoveryView #baAutoDocumentToolbar{
- display:flex;align-items:center;justify-content:space-between;flex-wrap:nowrap;
- gap:12px;overflow:visible!important;padding:0 0 12px;margin:0 0 12px;
- min-width:0;position:relative
+ display:flex;align-items:center;flex-wrap:wrap;gap:10px;min-width:0;
+ position:relative;overflow:visible!important;padding:0 0 10px;margin:0 0 12px
 }
-#discoveryView #baAutoDocumentTabs{
- flex:1 1 auto;min-width:0;max-width:100%;
- display:flex;align-items:center;flex-wrap:nowrap;gap:4px;
- overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;
- margin:0;padding:2px 0
+#discoveryView .ba-auto-title-tools{
+ display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;min-width:0;
+ gap:7px;margin-inline-start:auto
 }
-#discoveryView #baAutoDocumentTabs button{
- flex:0 0 auto;white-space:nowrap;min-height:34px;
- padding:6px 10px;font-size:12px;border:1px solid transparent;
- border-radius:5px;background:transparent;color:var(--vscode-descriptionForeground,#c0c5cf)
+#discoveryView .ba-auto-title-tools[hidden]{display:none!important}
+#discoveryView .ba-auto-title-tools .ba-auto-tabs{
+ display:flex;align-items:center;flex-wrap:wrap;gap:3px;
+ margin:0;padding:0;min-width:0;max-width:100%;overflow:visible
 }
-#discoveryView #baAutoDocumentTabs button[aria-selected="true"]{
+#discoveryView #baAutoDocumentToolbar .ba-auto-document-actions{
+ display:flex;align-items:center;gap:4px;padding-inline-start:7px;
+ border-inline-start:1px solid var(--vscode-panel-border,#414957)
+}
+#discoveryView #baAutoJira > .ba-auto-jira-heading{flex-wrap:wrap}
+#discoveryView #baAutoJiraBadge[data-state="blocked"]{
+ color:var(--vscode-errorForeground,#ffaaa6)
+}
+#discoveryView #baAutoJiraTabs{
+ padding-inline-start:7px;border-inline-start:1px solid var(--vscode-panel-border,#414957)
+}
+#discoveryView #baAutoDocumentToolbar .ba-auto-title-icon,
+#discoveryView #baAutoJira .ba-auto-title-icon{
+ position:relative;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;
+ flex:0 0 auto;width:34px;min-width:34px;max-width:none;height:34px;min-height:34px;
+ margin:0;padding:0;border-radius:5px
+}
+#discoveryView .ba-auto-title-tools .ba-auto-title-icon > svg{
+ width:17px;height:17px;pointer-events:none
+}
+#discoveryView #baAutoPrimaryAction [data-ba-primary-icon][hidden]{display:none!important}
+#discoveryView .ba-auto-title-tools .ba-auto-title-icon[aria-pressed="true"]{
  color:var(--vscode-foreground,#fff);
  background:var(--vscode-list-activeSelectionBackground,#274b73);
  border-color:var(--vscode-focusBorder,#4b97e4)
 }
-#discoveryView #baAutoDocumentToolbar .ba-auto-document-actions{
- flex:0 0 auto;min-width:0;display:flex;align-items:center;gap:7px
+#discoveryView .ba-auto-title-tools .ba-auto-title-icon:focus-visible{
+ outline:2px solid var(--vscode-focusBorder,#4b97e4);outline-offset:2px
 }
-#discoveryView #baAutoPrimaryAction{
- width:auto;max-width:200px;min-height:36px;
- white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
- padding:7px 12px
+#discoveryView .ba-auto-title-tools .ba-auto-title-icon:focus-visible::after{
+ content:attr(title);position:absolute;z-index:81;inset-inline-end:0;top:calc(100% + 6px);
+ width:max-content;max-width:min(230px,70vw);padding:5px 8px;white-space:normal;
+ pointer-events:none;border-radius:5px;background:var(--vscode-menu-background,#303843);
+ color:var(--vscode-menu-foreground,#fff);font-size:11px;line-height:1.4
 }
 #discoveryView #baAutoOverflowMenu{position:relative;flex:0 0 auto;min-width:0}
 #discoveryView #baAutoOverflowMenu>summary{
@@ -3092,8 +3111,6 @@ body:not(.gate-mode) #sdlcWorkspaceShell.atgv-sdlc-workspace-shell{
 #discoveryView #baAutoDocumentPanel>.ba-auto-inline{margin-top:8px;padding:4px 0;border:0}
 @media(max-width:690px){
  #discoveryView #baAutoDocumentToolbar{gap:7px}
- #discoveryView #baAutoDocumentTabs button{padding:7px 8px}
- #discoveryView #baAutoPrimaryAction{max-width:135px;padding:7px 9px;font-size:11px}
  #discoveryView #baAutoFormattedDocument{padding:14px}
 }
 

@@ -62,11 +62,13 @@
   return get('baAutoFileActions').querySelector('.source-document-actions .ba-process-btn');
  }
  function syncDocumentActions(){
-  const labels={iso:'Download ISO BRD',source:'Save changes',original:'Replace & Reprocess',preflight:'Download analysis'};
+  const label={iso:'Download ISO 29148 BRD as PDF',source:'Save source changes',original:'Replace & Reprocess',preflight:'Download pre-flight analysis'}[kind];
+  const icon={iso:'download',source:'save',original:'replace',preflight:'download'}[kind];
   const action=primaryTarget();
-  primary.textContent=labels[kind];
-  primary.title=kind==='iso'?'Download the structured ISO 29148 BRD as PDF':kind==='source'?
-   'Save edited source (enabled after changes)':kind==='original'?'Replace the verified uploaded source':'Download the pre-flight analysis as text';
+  primary.title=label;
+  primary.setAttribute('aria-label',label);
+  for(const mark of primary.querySelectorAll('[data-ba-primary-icon]'))
+   mark.toggleAttribute('hidden',mark.dataset.baPrimaryIcon!==icon);
   primary.disabled=!action||action.disabled||action.classList.contains('hidden')||busy()&&kind!=='source';
   get('baAutoOverflowActions').dataset.kind=kind;
  }
@@ -99,6 +101,7 @@
    viewer.replaceChildren();
    get('baAutoArtifactStatus').textContent='';
   }
+  get('baAutoDocumentTools').hidden=!sourceDigest;
   get('baAutoSourceEditor').hidden=!sourceDigest;
   // Every tab has exactly one visible panel; preflight no longer overlaps the BRD text editor.
   const preflight=kind==='preflight';
@@ -249,9 +252,10 @@
    {key:'status',label:'Change',sortable:!hierarchy},
    {key:'action',label:'Action',sortable:false,render:row=>{
     const canPreview=row.entry&&row.entry.action!=='retire';
-    const action=button(canPreview?'Edit Jira item':row.category==='br'?'Open BR':row.key?'Open Jira item':'View',()=>{
+    const canEdit=canPreview&&!!state?.preview?.fieldPlans?.[row.path]?.schema&&!state?.preview?.projectionIssues?.length;
+    const action=button(canEdit?'Edit Jira item':row.category==='br'?'Open BR':canPreview?'View Jira draft':row.key?'Open Jira item':'View',()=>{
      if(row.category==='br')openBREditor(row.br,{artifact:true});
-     else if(canPreview)renderJiraIssueDetails(row.entry,false,{automatic:true});
+     else if(canPreview)renderJiraIssueDetails(row.entry,!canEdit,{automatic:true});
      else if(row.key)openJiraIssueModal(row.key);
     });
     action.disabled=busy()||!(canPreview||row.key||row.category==='br');return action;
@@ -302,6 +306,11 @@
   badge('baAutoDiscoveryBadge',!!brState.discoveryRevision&&!discoveryDirty&&(current>1||ready));
   badge('baAutoRequirementsBadge',!!requirements().length&&!brState.baDraftQuality?.excluded?.length&&!brEditorDirty&&phase!=='running'&&(current>1||ready));
   badge('baAutoJiraBadge',ready&&!unsaved);
+  if(!busy()&&state?.preview?.conflicts?.length){
+   const jiraBadge=get('baAutoJiraBadge');
+   jiraBadge.dataset.state='blocked';
+   jiraBadge.textContent='Needs attention';
+  }
   const refresh=get('baAutoRefresh'),stop=get('baAutoStop'),publish=get('baAutoPublish');
   refresh.disabled=!source()||busy()||unsaved||!!baBusyTask||discoveryImportBusy;
   stop.classList.toggle('hidden',phase!=='running');
@@ -360,6 +369,8 @@
  get('baAutoJiraTabs').addEventListener('click',event=>{
   const tab=event.target.closest('[data-ba-jira-tab]');
   if(!tab)return;
+  event.preventDefault();
+  get('baAutoJira').open=true;
   jiraTab=tab.dataset.baJiraTab;
   for(const option of get('baAutoJiraTabs').querySelectorAll('button'))option.setAttribute('aria-pressed',String(option===tab));
   renderJira();
@@ -367,6 +378,8 @@
  get('baAutoJiraView').addEventListener('click',event=>{
   const tab=event.target.closest('[data-ba-jira-view]');
   if(!tab)return;
+  event.preventDefault();
+  get('baAutoJira').open=true;
   jiraView=tab.dataset.baJiraView;
   for(const option of get('baAutoJiraView').querySelectorAll('button'))option.setAttribute('aria-pressed',String(option===tab));
   renderJira();

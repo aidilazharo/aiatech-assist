@@ -218,3 +218,72 @@ test('build renders four steps and puts collapsible artifacts and skill on the B
  assert.match(ui,/ATGVDataTables\.mount/);
  assert.match(ui,/setBusinessRequirementsActivity/);
 });
+
+test('Jira preview projects eligible requirements while reporting other BRs that need attention',async t=>{
+ const {registry,register}=await registerFixture(t);
+ const draft=await workflow.generated(registry,'demo',register.revision,{discoveryRevision:'discovery',requirements:[edited],actor:'BA',automatic:true});
+ const blocked={...draft.brs[0],id:'BR-002',title:'Review visitor access',draftSavedAt:null};
+ const mixed={...draft,brs:[draft.brs[0],blocked]};
+ const blockers=[];
+ const candidate=workflow.projectPreparedJira(mixed,{blockers});
+ assert.deepEqual(workflow.plan(candidate).map(row=>row.path),['BR-001']);
+ assert.match(blockers[0],/BR-002: Save the BR draft/);
+ assert.equal(mixed.brs[0].status,'draft');
+ assert.equal(candidate.brs[1].status,'draft');
+ assert.throws(()=>workflow.projectPreparedJira(mixed),/Save the BR draft/);
+});
+
+test('Jira Work Items retain draft rows when Jira inventory fails, and a retry verifies the same draft',async t=>{
+ const {registry,register}=await registerFixture(t);
+ const draft=await workflow.generated(registry,'demo',register.revision,{discoveryRevision:'discovery',requirements:[edited],actor:'BA',automatic:true});
+ const host=await fs.readFile(hostFile,'utf8');
+ const diagnostics=[];
+ let inventoryFailure=true;
+ const target={config:{get:key=>key==='jira.projectKey'?'TC':''},token:'test-token'};
+ const prepare=hostFunction(host,'async function prepareBRJiraPreview(','async function syncApprovedBRs(',{
+  requireOpened:()=>{},activeProject:{id:'demo'},registry,brWorkflow:workflow,baAutomatic:automatic,sha,path,
+  dashboard:{webview:{postMessage:async()=>{}}},jiraPreviewFieldPlans:{},jiraPreviewFieldMetadata:new Map(),approvedJiraPreviewRevision:null,jiraPreviewValidation:null,
+  ensureJiraPreviewTarget:async()=>target,validProjectKey:key=>key,baseAtlassian:()=> 'https://example.atlassian.net',
+  jiraDuplicates:{fetchProjectIssues:async()=>{if(inventoryFailure)throw Error('HTTP 429');return [];}},
+  baJiraDraftIds:{plan:()=>[]},jiraIssueTypes:async()=>[{id:'10017',name:'Epic'}],
+  prePublishIdentityGuard:async(_r,_c,_t,_changes,inventory)=>{assert.deepEqual(inventory,[]);return {safe:true};},
+  formatIdentityConflicts:()=>[],jiraPreflight:async(_r,_c,_t,_items,_progress,{inventory})=>{assert.deepEqual(inventory,[]);return [];},
+  jiraPreviewDetails:require('../src/jira-preview-details'),jiraTemplateKnowledge:{load:async()=>null},
+  jiraIssueFieldMetadata:async()=>[{id:'summary',name:'Summary',required:true,schema:{type:'string'},operations:['set']}],
+  jiraFieldPreflight:checks,atgvJobSafeError:error=>error.message,recordBAProcess:async event=>diagnostics.push(event)
+ });
+ const blocked=await prepare({automatic:true});
+ assert.equal(blocked.rows.length,1);
+ assert.equal(blocked.rows[0].path,draft.brs[0].id);
+ assert.equal(blocked.changes[0].action,'create');
+ assert.equal(blocked.verifiedAt,0);
+ assert.equal(blocked.checkedCount,0);
+ assert.match(blocked.conflicts[0],/Read Jira issue inventory: HTTP 429/);
+ assert.equal(diagnostics[0].action,'verify-work-items');
+ const unreviewed=await prepare({automatic:true,qualityBlocker:'Draft quality review: model timed out'});
+ assert.equal(unreviewed.rows.length,1);
+ assert.equal(unreviewed.verifiedAt,0);
+ assert.match(unreviewed.conflicts[0],/model timed out/);
+ inventoryFailure=false;
+ const ready=await prepare({automatic:true});
+ assert.equal(ready.conflicts.length,0);
+ assert.ok(ready.verifiedAt>0);
+ assert.ok(ready.fieldPlans[draft.brs[0].id].schema);
+ assert.equal(ready.checkedCount,1);
+ assert.equal((await workflow.load(registry,'demo')).brs[0].status,'draft');
+});
+
+test('automatic identity verification checks all markers from the completed inventory',async()=>{
+ const host=await fs.readFile(hostFile,'utf8');
+ const marker='atgv-'+'a'.repeat(24);
+ const verify=hostFunction(host,'async function jiraPreflight(','async function prePublishIdentityGuard(',{
+  jiraScopedMarker:()=>marker,jiraFindIssueByMarker:async()=>assert.fail('complete Jira inventory replaces per-item lookups')
+ });
+ const work=[{action:'create',path:'BR-001'}],config={};
+ const matched={key:'TC-1',fields:{labels:[marker]}};
+ const one=await verify({},config,'test-token',work,undefined,{automatic:true,inventory:[matched]});
+ assert.equal(one.linkCandidates[0].key,'TC-1');
+ const duplicates=await verify({},config,'test-token',work,undefined,{automatic:true,inventory:[matched,{...matched,key:'TC-2'}]});
+ assert.match(duplicates[0],/same identity marker \(TC-1, TC-2\)/);
+ assert.equal(duplicates.linkCandidates.length,0);
+});
