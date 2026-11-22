@@ -5597,6 +5597,7 @@ function renderSourcePreflight(){
   const available=hasDedicatedPreflightRecovery();skip.classList.toggle('hidden',!available);
   skip.disabled=!available||!!baBusyTask||!brState||!sourceSelectedDigests.size||selectedRole!=='business-analyst'||!activeId;
  }
+ window.ATGVBusinessRequirements?.syncDocumentActions?.();
  if(!info)return;
  const phase=info.phase||'checking',running=['preflight','repair','checking'].includes(phase);
  panel.dataset.phase=running?'running':phase;
@@ -5656,7 +5657,11 @@ function renderSourceDocuments(){
   selector.addEventListener('change',()=>{if(selector.checked)sourceSelectedDigests.add(doc.digest);else sourceSelectedDigests.delete(doc.digest);send('baSourceSelection',{digests:[...sourceSelectedDigests]});renderSourceSelection();});
   const name=document.createElement('strong');name.textContent=doc.name;
   const exactFileVerified=/^[a-f0-9]{64}$/.test(String(doc.byteDigest||''));
-  const detail=document.createElement('small');detail.textContent=['Uploaded by '+(doc.uploadedBy||'Legacy source · uploader unavailable'),doc.uploadedAt?formatDateTime(doc.uploadedAt):doc.addedAt?formatDateTime(doc.addedAt):'',Number(doc.characters||0).toLocaleString()+' characters',doc.version?'Version '+doc.version:'Version 1',!doc.storedName?'Re-upload required to process':exactFileVerified?'Original file fingerprint recorded':'Legacy source: re-upload required to verify original bytes'].filter(Boolean).join(' · ');
+  const fullMeta=['Uploaded by '+(doc.uploadedBy||'Legacy source · uploader unavailable'),doc.uploadedAt?formatDateTime(doc.uploadedAt):doc.addedAt?formatDateTime(doc.addedAt):'',Number(doc.characters||0).toLocaleString()+' characters',doc.version?'Version '+doc.version:'Version 1',!doc.storedName?'Re-upload required to process':exactFileVerified?'Original file fingerprint recorded':'Legacy source: re-upload required to verify original bytes'].filter(Boolean).join(' · ');
+  const detail=document.createElement('small');
+  detail.textContent=[doc.version?'Version '+doc.version:'Version 1',doc.uploadedAt?formatDateTime(doc.uploadedAt):doc.addedAt?formatDateTime(doc.addedAt):'',Number(doc.characters||0).toLocaleString()+' characters'].filter(Boolean).join(' · ');
+  detail.title=fullMeta;
+  info.title=doc.name+' · '+fullMeta;
   info.append(name,detail);
   const actions=document.createElement('div');actions.className='source-document-actions';
   const replace=document.createElement('button');replace.type='button';replace.className='secondary ba-process-btn';
@@ -5681,6 +5686,7 @@ function renderSourceDocuments(){
  }
  renderArchivedSources();
  renderSourceSelection();
+ window.ATGVBusinessRequirements?.syncDocumentActions?.();
 }
 function renderSourceSelection(){
  const count=sourceSelectedDigests.size;
