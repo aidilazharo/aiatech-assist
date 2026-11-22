@@ -6372,7 +6372,10 @@ async function handleDashboardMessage(msg){
             (!msg.relative?inspected.targets.find(row=>row.runnable):null);
           if(!target)throw Error('No runnable application target is detected in this repository.');
           const action='Install & Run Custom Stack';
-          const approved=await uiWarning(
+          const workflow=require('../../architect-custom-workflow');
+          workflow.beginConsent(root);
+          let approved,consentCancelled=false;
+          try{approved=await uiWarning(
             'Execute the six-stage local Custom Stack workflow for '+target.framework+' ('+(target.relative||'repository root')+')?'+
             '\\n\\n1. Scan manifests and application dependencies.'+
             '\\n2–3. Create or reuse a LOCAL fix branch and commit isolated mock service/database fixtures.'+
@@ -6381,12 +6384,12 @@ async function handleDashboardMessage(msg){
             '\\n\\nExisting local changes are never overwritten, main is never changed and nothing is pushed to GitHub.'+
             '\\nThe preview DOES NOT start or validate the real PostgreSQL, identity provider, or external systems. It does not constitute production readiness. Continue?',
             {modal:true},action);
-          if(approved!==action){
+          }finally{consentCancelled=workflow.endConsent(root);}
+          if(consentCancelled||approved!==action){
             await dashboard?.webview.postMessage({type:'architectCustomError',projectId,
               message:'Install & Run cancelled before changing files.'});break;
           }
           architectErrorLogs.begin(projectId,'custom-stack');
-          const workflow=require('../../architect-custom-workflow');
           const result=await workflow.installAndRun(root,{
             expectedSha:msg.expectedSha||inspected.sha,
             relative:typeof msg.relative==='string'?msg.relative:undefined,
