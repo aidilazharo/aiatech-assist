@@ -9,7 +9,7 @@ const css=fs.readFileSync(path.join(__dirname,'../media/start.css'),'utf8');
 const host=fs.readFileSync(path.join(__dirname,'../test/generated/extension-source.txt'),'utf8');
 
 test('All Jira Project Items stays on the separate BA overview',()=>{
- assert.match(host,/<section id="baRequirementsOverview"[^>]+>\s*<section id="baJiraInventorySection"/);
+ assert.match(host,/<section id="baRequirementsOverview"[^>]+>\s*<section id="baUncompletedPanel"/);
  assert.match(source,/setView\(destination==='discovery'\?'discovery':'baOverview'\)/);
  assert.match(source,/view!=='baOverview'\|\|selectedRole!=='business-analyst'/);
  assert.equal((host.match(/id="baJiraInventorySection"/g)||[]).length,1);
