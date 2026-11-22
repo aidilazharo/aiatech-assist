@@ -1876,6 +1876,11 @@ $('baTransferCommit').addEventListener('click',()=>{
 });
 window.addEventListener('message',event=>{
  const m=event.data||{};
+ if(m.type==='baJiraTransferCompleted'&&m.projectId===activeId){
+  jiraInventoryLastChecked=0;
+  if(view==='baOverview'&&selectedRole==='business-analyst')searchJiraInventory();
+  status('Transfer completed. Jira BR ownership has been verified and project items are refreshing.');
+ }
  if(m.projectId!==activeId||m.requestId!==baTransferRequest||!baRequirementModalTarget||
     m.jiraKey!==baRequirementModalTarget.rootKey||$('baTransferPanel').classList.contains('hidden'))return;
  if(m.type==='baJiraTransferCandidatesResult'){
@@ -1896,8 +1901,7 @@ window.addEventListener('message',event=>{
   baTransferBusy=false;setBATransferProgress(100,'Transfer completed');
   $('baTransferCancel').disabled=false;$('baTransferCancel').textContent='Close';
   $('baTransferCommit').disabled=true;
-  // Reload Jira from the server: do not spoof the updated owner locally.
-  searchJiraInventory();
+  // The project-level completion handler refreshes Jira even if the modal was closed.
  }else if(m.type==='baJiraTransferError'){
   baTransferBusy=false;$('baTransferCancel').disabled=false;
   $('baTransferCancel').textContent='Cancel';
