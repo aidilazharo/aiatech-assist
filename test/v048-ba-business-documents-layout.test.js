@@ -38,7 +38,7 @@ test('Business Documents file cards separate selection, long filenames and indep
 });
 test('ISO BRD downloads have equal height and never share the analysis scrollport',()=>{
  assert.match(rule('#discoveryView #baAutoIsoPreflightActions'),/display:grid;grid-template-columns:repeat\(2,minmax\(0,245px\)\)/);
- const buttons=rule('#discoveryView #baAutoIsoPreflightActions button,');
+ const buttons=layout.slice(layout.indexOf('#discoveryView #baAutoIsoPreflightActions button,'),layout.indexOf('}',layout.indexOf('#discoveryView #baAutoIsoPreflightActions button,'))+1);
  assert.match(buttons,/min-height:38px/);
  assert.match(buttons,/justify-content:center;align-items:center/);
  assert.match(rule('#discoveryView #baAutoIsoPreflight[hidden]'),/display:none!important/);
