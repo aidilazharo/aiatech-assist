@@ -99,8 +99,8 @@ async function removeLegacyForSource(registry,id,sourceDigest){
   await fs.unlink(file);
  }
 }
-async function prepare(registry,id,source){
- if(!source||!DIGEST.test(String(source.digest||''))||sha(source.text)!==source.digest)
+async function prepare(registry,id,source,{editedTextDigest=source?.digest}={}){
+ if(!source||!DIGEST.test(String(source.digest||''))||sha(source.text)!==editedTextDigest)
   throw Error('Verified original source text is required to prepare BR Markdown.');
  const units=split(source.text),dir=await directory(registry,id,{create:true});
  const result=[];

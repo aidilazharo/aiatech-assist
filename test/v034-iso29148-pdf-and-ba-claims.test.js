@@ -90,7 +90,7 @@ test('BA auto-claims are verified, only unassigned drafts, and never overwrite a
 });
 test('generated draft confirmation uses rendered paragraphs rather than literal escaped \\n text',()=>{
  const host=read('src/lib/runtime/extension-runtime.js');
- for(const begin of ["const confirmed=await uiWarning('AI generated ","const approval=await uiWarning('AI prepared "]){
+ for(const begin of ["await uiWarning('AI generated ","const approval=await uiWarning('AI prepared "]){
   const first=host.indexOf(begin),last=host.indexOf('{modal:true',first);
   assert.ok(first>=0&&last>first);
   const prompt=host.slice(first,last);

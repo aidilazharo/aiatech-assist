@@ -2507,3 +2507,73 @@ body:not(.gate-mode) #sdlcWorkspaceShell.atgv-sdlc-workspace-shell{
 #workView #architectCustomActions.hidden,#workView #architectCustomScan.hidden,
 #workView #architectCustomPull.hidden,#workView #architectCustomMockRun.hidden,
 #workView #architectCustomStop.hidden{display:none!important}
+
+/* The BA workspace groups the existing source, Jira and register controls under four stages. */
+#discoveryView.ba-automatic-view > .discovery-overview,
+#discoveryView.ba-automatic-view > #baUncompletedPanel,
+#discoveryView.ba-automatic-view > #discoveryImportPanel,
+#discoveryView.ba-automatic-view > #discoveryQuestionsPanel,
+#discoveryView.ba-automatic-view > #discoveryReviewPanel,
+#discoveryView.ba-automatic-view > .br-workflow-panel,
+#discoveryView.ba-automatic-view > .jira-publish-panel,
+#discoveryView.ba-automatic-view > #baStepNavigation,
+#discoveryView.ba-automatic-view > .ba-step-reopen{display:none!important}
+.ba-auto-heading,.ba-auto-heading-actions,.ba-auto-progress-head,.ba-auto-ai,.ba-auto-actions,.ba-auto-inline,.ba-auto-artifact > summary{display:flex;align-items:center;gap:10px}
+.ba-auto-heading,.ba-auto-progress-head,.ba-auto-actions,.ba-auto-inline,.ba-auto-artifact > summary{justify-content:space-between}
+.ba-auto-heading{margin-bottom:14px;flex-wrap:wrap}
+.ba-auto-heading h2{margin:0;min-width:0;overflow-wrap:anywhere}
+.ba-auto-heading h2 span{font-weight:400;color:var(--vscode-descriptionForeground);font-size:.86em}
+.ba-auto-heading h2 span:not(:empty)::before{content:' · ';margin-right:3px}
+.ba-auto-heading-actions{margin-left:auto;flex-wrap:wrap}
+#baAutoSkillSlot:not(:empty){display:flex;align-items:center}
+#baAutoSkillSlot #workSkill{display:inline-flex;position:static;margin:0}
+.ba-auto-progress,.ba-auto-artifact{border:1px solid var(--vscode-panel-border,#4b5460);border-radius:8px;background:var(--vscode-sideBar-background,#181c23)}
+.ba-auto-progress{padding:12px 15px;margin-bottom:14px}
+.ba-auto-progress-head{margin-bottom:9px}
+.ba-auto-ai,.ba-auto-steps small,.ba-auto-artifact summary small,.ba-auto-inline span{color:var(--vscode-descriptionForeground);font-size:.9em}
+.ba-auto-wave{height:8px;display:inline-flex;align-items:center;gap:2px;color:var(--vscode-charts-red,#d31145)}
+.ba-auto-wave i{width:2px;height:2px;border-radius:2px;background:currentColor}
+.ba-auto-ai.is-active .ba-auto-wave i{height:8px;animation:ba-auto-wave .8s ease-in-out alternate infinite}
+.ba-auto-wave i:nth-child(2n){animation-delay:-.27s!important}
+.ba-auto-wave i:nth-child(3n){animation-delay:-.53s!important}
+@keyframes ba-auto-wave{from{transform:scaleY(.22)}to{transform:scaleY(1)}}
+.ba-auto-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:0;padding:0;list-style:none;gap:10px}
+.ba-auto-steps li{min-width:0;position:relative;display:grid;gap:5px}
+.ba-auto-steps li > span{display:grid;place-items:center;width:27px;height:27px;border:1px solid var(--vscode-panel-border,#68758a);border-radius:50%;font-weight:650}
+.ba-auto-steps li:not(:last-child)::after{content:'';position:absolute;height:1px;background:var(--vscode-panel-border,#68758a);left:35px;right:0;top:13px}
+.ba-auto-steps li[data-state="ready"] > span{color:var(--vscode-charts-green,#72d7ac);border-color:currentColor}
+.ba-auto-steps li[data-state="running"] > span,.ba-auto-steps li[data-state="manual"] > span{color:var(--vscode-textLink-foreground,#82bdfa);border-color:currentColor}
+.ba-auto-steps small{display:block;margin-top:2px}
+.ba-auto-artifacts{display:grid;gap:7px}
+.ba-auto-artifact > summary{padding:10px 12px;min-height:43px;cursor:pointer;list-style:none}
+.ba-auto-artifact > summary::-webkit-details-marker{display:none}
+.ba-auto-artifact > summary strong::before{content:'›';display:inline-block;margin-right:9px;color:var(--vscode-descriptionForeground)}
+.ba-auto-artifact[open] > summary strong::before{transform:rotate(90deg)}
+.ba-auto-artifact summary small{margin-left:6px;font-weight:400}
+.ba-auto-badge{margin-left:auto;text-align:center;min-width:53px;border:1px solid currentColor;border-radius:5px;padding:2px 6px;color:var(--vscode-charts-orange,#ffd093);font-size:.85em}
+.ba-auto-badge[data-state="ready"]{color:var(--vscode-charts-green,#72d7ac)}
+.ba-auto-body{padding:10px 12px 12px;border-top:1px solid var(--vscode-panel-border,#4b5460)}
+.ba-auto-body textarea{width:100%;box-sizing:border-box;resize:vertical}
+.ba-auto-tabs{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px}
+.ba-auto-tabs button{background:transparent;color:var(--vscode-descriptionForeground);border:1px solid transparent;padding:3px 7px}
+.ba-auto-tabs button[aria-pressed="true"]{color:var(--vscode-textLink-foreground,#82bdfa);border-color:currentColor}
+#baAutoOriginalFiles .source-documents-panel{border:0;margin:0 0 8px;padding:0;background:none}
+#baAutoOriginalFiles .source-documents-head,#baAutoOriginalFiles #sourceSelectionActions,#baAutoOriginalFiles #discoveryImportStatus{display:none}
+.ba-auto-inline{flex-wrap:wrap;margin-top:6px}
+.ba-auto-requirement{border-bottom:1px solid var(--vscode-panel-border,#4b5460);padding:6px 0}
+.ba-auto-requirement summary{cursor:pointer}
+.ba-auto-requirement p{white-space:pre-wrap;overflow-wrap:anywhere}
+.ba-auto-jira-title{display:flex;align-items:flex-start;gap:5px}
+.ba-auto-jira-title button{padding:0 4px;min-height:20px}
+.ba-auto-actions{flex-wrap:wrap;padding:10px 0}
+.ba-auto-actions p{margin:0}
+#baAutoHistory{margin-top:6px}
+#baAutoJiraBlockers{padding-inline-start:21px;color:var(--vscode-errorForeground,#ffb4b4)}
+#brEditModal[data-ba-artifact="true"] :is(#brEditApprove,#brEditRevision,#brEditEndorse,#brApprovalGuidance){display:none!important}
+@media (max-width:620px){
+ .ba-auto-heading-actions{margin-left:0}
+ .ba-auto-steps{gap:6px}
+ .ba-auto-steps strong{font-size:.9em}
+ .ba-auto-steps small{display:none}
+}
+@media (prefers-reduced-motion:reduce){.ba-auto-ai.is-active .ba-auto-wave i{animation:none;height:4px}}

@@ -14,6 +14,8 @@ function snapshot(register){
   })).sort((a,b)=>a.digest.localeCompare(b.digest));
  const state={sources,epoch:Number(register?.importEpoch||0),
   processedSources:Array.isArray(register?.processedSources)?[...register.processedSources]:[]};
+ const overrides=sources.map(source=>register.baArtifactEdits?.[source.digest]?.source?.digest||'');
+ if(overrides.some(Boolean))state.overrides=overrides;
  const identity=crypto.createHash('sha256').update(JSON.stringify(state)).digest('hex');
  return {schema:1,identity,...state};
 }

@@ -1,13 +1,12 @@
-# ATGV AIATECH Assist v0.0.37
+# ATGV AIATECH Assist v0.0.38
 
 ## Changes
 
-- Edit planned Jira summaries, descriptions, acceptance criteria, completion checks, and supported Jira fields directly from Business Requirements preview and preflight.
-- Edit supported live Jira fields in the issue modal with Jira option validation and verification of saved values.
-- Prepare every planned issue against Jira’s current create or edit schema. Use dedicated acceptance criteria and Definition of Done fields where configured and carry full checks in Description where needed.
-- Use generalized guidance from TRM_Application_Req.xlsx in Business Analyst BR generation, with issue-specific checks and separate project evidence.
+- Business Requirements now prepares the source, develops requirements, and builds a Jira preview automatically. Publishing and republishing still require an explicit click and confirmation.
+- The four-stage page aligns the BA skill dropdown with the generated title and keeps the AI wave active only during preparation. Source documents, the ISO/IEC/IEEE 29148 working BRD, 12 Discovery answers, generated requirements, and proposed Jira placement are grouped in collapsible editors with Draft and Ready states.
+- A DataTables hierarchy shows Jira items by type and opens their field editors. Preflight checks the Jira project’s field schema, allowed values, Acceptance Criteria, and Definition of Done. The BA role uses guidance derived from `TRM_Application_Req` when generating requirements.
+- Republish previews the linked In Progress and Done items affected by a BR revision, then moves them to To Do using verified Jira transitions after confirmation. The publication journal supports resuming interrupted updates.
 
 ## Validation
 
-- Node regression suite passed with 2,457 passing tests and three skips.
-- The VSIX activation check passed. Jira write behavior was verified with test fixtures.
+- Regression fixtures cover automatic preparation, editable artifacts, field mapping, publish approval, and scoped Jira transitions. The release workflow verifies Linux packaging, Windows stack reset, and activation of the packaged extension.

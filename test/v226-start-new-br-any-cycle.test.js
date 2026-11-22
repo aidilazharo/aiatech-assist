@@ -31,7 +31,7 @@ test('Starting from Start confirms an active cycle and prevents unsafe interrupt
  assert.match(host,/uiWarning\(`Start a new independent Business Requirements cycle\?/);
  assert.match(host,/answer!==action\)break/);
  assert.match(host,/brWorkflow\.startOrRestart\(registry,activeProject\.id,current\.revision/);
- assert.match(ui,/if\(baBusyTask\|\|discoveryImportBusy\|\|brEditorSaving\|\|discoveryDirty\|\|brEditorDirty\|\|Object\.keys\(brState\.pending\|\|\{\}\)\.length\)/);
+ assert.match(ui,/if\(baBusyTask\|\|discoveryImportBusy\|\|brEditorSaving\|\|discoveryDirty\|\|brEditorDirty\|\|window\.ATGVBusinessRequirements\?\.dirty\(\)\|\|Object\.keys\(brState\.pending\|\|\{\}\)\.length\)/);
  assert.match(ui,/Finish the current operation, save unsaved changes/);
  assert.match(host,/if\(msg\.openUploadImmediately\)\{/);
  assert.match(host,/await importDiscoveryDocument\('business-analyst'\)/);

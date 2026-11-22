@@ -2,8 +2,8 @@
   "name": "atgv-aiatech-assist",
   "displayName": "ATGV AIATECH Assist",
   "description": "",
-  "version": "0.0.37",
-  "atgvDisplayVersion": "0.0.37",
+  "version": "0.0.38",
+  "atgvDisplayVersion": "0.0.38",
   "publisher": "aia-my",
   "private": true,
   "license": "UNLICENSED",
@@ -196,7 +196,7 @@
     "terser": "5.31.6"
   },
   "scripts": {
-    "test": "node scripts/generate-source-test-index.js && node --test test/*.test.js",
+    "test": "node scripts/generate-source-test-index.js && node --require ./test/local-network-only.js --test test/*.test.js",
     "ui:generate": "node scripts/generate-ui-theme.js",
     "ui:check": "node scripts/generate-ui-theme.js --check",
     "platform:check": "node scripts/check-platform.js",

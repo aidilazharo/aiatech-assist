@@ -73,12 +73,12 @@ test('preflight evidence atomically follows source mapping with original source 
   assert.equal(state.sourceDocuments[0].digest,SHA);
  }finally{await fsAsync.rm(home,{recursive:true,force:true});}
 });
-test('upload starts automatic preflight, bounded repair and mapping; UI continues to Map & Save 12',()=>{
+test('upload starts four-stage preparation and preserves verified mapping',()=>{
  const host=code('test/generated/extension-source.txt'),ui=code('media/start.js');
  const importFn=host.slice(host.indexOf('async function importDiscoveryDocument'),host.indexOf('const successfulSourceMappings'));
  const mappingFn=host.slice(host.indexOf('async function processSelectedDiscoverySources'),host.indexOf('async function removeDiscoverySource'));
  assert.match(importFn,/autoMap=updatedDocuments\.length>0/);
- assert.match(importFn,/await processSelectedDiscoverySources\(/);
+ assert.match(importFn,/await runBRPreparation\('source'\)/);
  assert.match(mappingFn,/baDocumentPreflight\.prompt/);
  assert.match(mappingFn,/if\(!result\?\.ready\)/);
  assert.match(mappingFn,/commitSourceMapping\(registry,run\.projectId,original\.revision,\{digests:selected,proposals:mappedProposals,preflights,sourceSnapshot\}\)/);

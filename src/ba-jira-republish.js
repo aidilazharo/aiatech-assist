@@ -1,0 +1,50 @@
+'use strict';
+
+const root=path=>String(path||'').split('/')[0];
+const normal=name=>String(name||'').toLowerCase().trim().replace(/[\s_-]+/g,'');
+const isToDo=name=>normal(name)==='todo';
+
+function shouldReopen(status){
+ const category=String(status?.statusCategory?.key||'').toLowerCase();
+ if(!status?.name||isToDo(status.name))return false;
+ return category==='indeterminate'||category==='done'||['inprogress','done'].includes(normal(status.name));
+}
+
+/** Plan a status reset only for verified links of BRs that actually changed. */
+async function preview(register,roots,{read,transitions,verify,retiring=[]}){
+ const included=new Set(roots),exclude=new Set(retiring),rows=[],blocked=[];
+ for(const [path,link] of Object.entries(register.synced||{})){
+  if(!included.has(root(path))||exclude.has(path)||!link?.key)continue;
+  try{
+   const issue=await read(link.key);
+   verify(path,issue);
+   const status=issue.fields?.status;
+   if(!shouldReopen(status)){
+    if(!status?.name)blocked.push(link.key+' returned no Jira status.');
+    continue;
+   }
+   const options=(await transitions(link.key)).filter(item=>isToDo(item.to));
+   const transition=options.find(item=>String(item.id)===register.baPendingReopen?.rows?.find(row=>row.path===path)?.transitionId)||options[0];
+   if(!transition){blocked.push(link.key+' has no available transition to To Do from '+status.name+'.');continue;}
+   rows.push({path,key:link.key,from:status.name,statusId:String(status.id||''),to:transition.to,transitionId:String(transition.id)});
+  }catch(error){blocked.push(link.key+' could not be verified for republish. '+String(error.message||error).slice(0,200));}
+ }
+ return {rows,blocked};
+}
+
+async function apply(row,{read,transitions,verify,move}){
+ const live=await read(row.key);
+ verify(row.path,live);
+ const status=live.fields?.status;
+ if(isToDo(status?.name))return;
+ if(!shouldReopen(status)||String(status.id||'')!==row.statusId||status.name!==row.from)
+  throw Error(row.key+' changed status after preview. Refresh the Jira preview.');
+ const transition=(await transitions(row.key)).find(value=>String(value.id)===row.transitionId&&isToDo(value.to));
+ if(!transition)throw Error(row.key+' can no longer transition to To Do.');
+ await move(row.key,transition.id,live.fields.updated);
+ const confirmed=await read(row.key);
+ verify(row.path,confirmed);
+ if(!isToDo(confirmed.fields?.status?.name))throw Error('Jira did not confirm To Do for '+row.key+'.');
+}
+
+module.exports={shouldReopen,preview,apply};
