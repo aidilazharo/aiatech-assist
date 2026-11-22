@@ -12,7 +12,7 @@ test('My Work chat title matches the left sidebar WORKSPACE title top offset',()
  assert.match(sidebar,/padding:17px 10px 10px/);
  assert.match(title,/padding-top:6px/);
  const shell=rule(css,'#myWorkView > #atgvMyWorkAi.atgv-mywork-ai');
- assert.match(shell,/padding:23px 0 0;margin:0/);
+ assert.match(shell,/padding:0;margin:0;background:#000!important/);
  assert.match(shell,/box-sizing:border-box/);
  assert.match(rule(css,'#atgvMyWorkAi .atgv-mywork-ai-title'),/margin:0 0 7px/);
  assert.match(html,/<div class="nav-label">WORKSPACE<\/div>/);
@@ -24,7 +24,7 @@ test('the chat and results have the same z-index and remain above their backgrou
  assert.match(composer,/position:relative;z-index:1;isolation:isolate/);
  assert.match(css,/#atgvMyWorkAi \.atgv-mywork-ai-results > \.atgv-mywork-ai-conversation\{[\s\S]*?position:relative;z-index:1/);
  assert.match(results,/overflow-y:auto/);
- assert.match(results,/padding:0 clamp\(12px,2vw,24px\) 26px/);
+ assert.match(results,/padding:23px clamp\(12px,2vw,24px\) 26px/);
  assert.match(results,/scroll-padding-top:0/);
 });
 test('all roles share one borderless My Work shell and waveform still stays in header',()=>{
