@@ -1,57 +1,82 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
-const source=fs.readFileSync(path.join(__dirname,'../media/start.js'),'utf8');
-function fixture({permissionsOk=true,stackReady=true,checking=false,connectionChecking=false}={}){
- let now=0,nextId=0;const timers=new Map(),sent=[],opened=[],nodes=new Map();
- const element=id=>{
-  if(!nodes.has(id)){
-   const classes=new Set(id==='extensionUpgradeModal'||id==='libraryUpdateModal'?['hidden']:[]);
-   nodes.set(id,{textContent:'',classList:{contains:x=>classes.has(x),add:x=>classes.add(x),remove:x=>classes.delete(x),toggle:(x,on)=>on?classes.add(x):classes.delete(x)}});
-  }return nodes.get(id);
- };
- const schedule=(fn,delay)=>{const id=++nextId;timers.set(id,{at:now+delay,fn});return id;};
- const cancel=id=>timers.delete(id);
- function advance(ms){
-  const target=now+ms;let guard=0;
-  while(true){const next=[...timers.entries()].sort((a,b)=>a[1].at-b[1].at)[0];if(!next||next[1].at>target)break;
-   if(++guard>5000)throw Error('Timer loop');now=next[1].at;timers.delete(next[0]);next[1].fn();
-  }now=target;
- }
- const start=source.indexOf('function stopStartupAuto('),end=source.indexOf('function renderStartupPage()',start);
- assert.ok(start>=0&&end>start);
- const init=`let startupAutoTimer=null,startupAutoEnabled=true,startupAutoStage='',startupAutoNotice='',startupAutoDeadline=0,startupPage=0,startupSetupRequired=true;
- let startupAutoProject={id:'p1',name:'Project One',techStackId:'react',techStackCompanionId:''};
- let startupPermissions={ok:${permissionsOk}},startupScanComplete=true,startupConnectionVerified=true,startupOpenStackId='',startupCopilotModalOpen=false,startupConnectionCheckPending=${connectionChecking};
- let startupStackData={catalog:{available:true},stacks:[{id:'react',ready:${stackReady}}]},latestSoftwareUpdateState={busy:${checking}};
- const STARTUP_SCREEN_MS=5000;
- function renderStartupPage(){};function startupPayload(){return {email:'saved'};};`;
- const create=new Function('$','setTimeout','clearTimeout','Date','send','launchFromGate',init+source.slice(start,end)+`\nreturn {beginStartupAuto,stopStartupAuto,getPage:()=>startupPage,getEnabled:()=>startupAutoEnabled,getStage:()=>startupAutoStage,projectStep:()=>{startupSetupRequired=false;beginStartupAuto('project');},setChecking:value=>latestSoftwareUpdateState.busy=value,setConnectionChecking:value=>startupConnectionCheckPending=value};`);
- const api=create(element,schedule,cancel,{now:()=>now},(command,payload)=>sent.push({command,...payload}),data=>opened.push(data));
- return {api,advance,sent,opened,element};
+const read=file=>fs.readFileSync(path.join(__dirname,'..',file),'utf8');
+const ui=read('media/start.js'),host=read('src/lib/runtime/extension-runtime.js');
+function segment(source,first,last){
+ const start=source.indexOf(first),end=source.indexOf(last,start);
+ assert.ok(start>=0&&end>start,first);
+ return source.slice(start,end);
 }
-test('completed setup displays each startup screen for five seconds before resuming the selected project',()=>{
- const x=fixture();x.api.beginStartupAuto('stack');x.advance(4999);assert.equal(x.api.getPage(),0);
- x.advance(1);assert.equal(x.api.getPage(),1);assert.equal(x.sent.length,0);
- x.advance(4999);assert.equal(x.sent.length,0);x.advance(1);
- assert.deepEqual(x.sent,[{command:'startupProceed',settings:{email:'saved'},autoResume:true,projectId:'p1'}]);
- x.api.projectStep();x.advance(4999);assert.equal(x.opened.length,0);x.advance(1);
+function fixture(){
+ const sent=[],opened=[],screens=[],nodes=new Map();
+ const element=id=>{
+  if(!nodes.has(id))nodes.set(id,{value:'',focus(){this.focused=true;}});
+  return nodes.get(id);
+ };
+ const create=new Function('$','send','launchFromGate','showStartupStep',[
+  "let startupProceedMode='',startupPrereqRequested=false,startupFormInitialized=false,startupPage=0,startupScanComplete=true,startupVerifying=false,startupInstallingModule='',startupConnectionVerified=false,startupConnectionEditSnapshot=null,startupConnectionHealthError=false,startupConnectionCheckPending=false,startupReturnToConnections=false;",
+  "let gateBusy=false,gateError='',workspaceOpened=false,opening={phase:'search'}; const extensionSettings={};",
+  "const startupFieldMap={githubUrl:'startupGithubUrl'};const startupPayload=()=>({email:'saved'});",
+  "function renderStartupPage(){}function resetStartupConnectionChecks(){}function updateStartupRepositoryPreview(){}function updateHeaderUserName(){}function startupScanPercent(){}function renderStartupScanPlaceholders(){}",
+  segment(ui,'function requestStartupReadiness(){','function renderStartupStackReadiness('),
+  "function receive(message){",
+  segment(ui," if(message.type==='startupProceedResult'","\n});"),
+  "}",
+  "return {renderStartupConfig,receive};"
+ ].join('\n'));
+ const api=create(element,(command,data)=>sent.push({command,...data}),data=>opened.push(data),show=>screens.push(show));
+ return {api,sent,opened,screens,element};
+}
+const verified={required:true,verified:true,prerequisitesVerified:true};
+test('verified startup skips both setup screens and resumes the only remembered project immediately',()=>{
+ const x=fixture();x.api.renderStartupConfig(verified);x.api.renderStartupConfig(verified);
+ assert.deepEqual(x.sent,[{command:'startupProceed',settings:{email:'saved'},autoResume:true}]);
+ assert.deepEqual(x.screens,[]);
+ x.api.receive({type:'startupProceedResult',success:true,projectId:'p1'});
+ assert.deepEqual(x.screens,[false]);
  assert.deepEqual(x.opened,[{projectId:'p1',autoResume:true}]);
 });
-test('failed permissions or a missing selected stack stop automatic opening',()=>{
- for(const options of [{permissionsOk:false},{stackReady:false}]){
-  const x=fixture(options);x.api.beginStartupAuto('stack');x.advance(6000);
-  assert.equal(x.api.getEnabled(),false);assert.equal(x.sent.length,0);assert.equal(x.opened.length,0);
-  assert.match(x.element('startupProceedInfo').textContent,/paused/i);
- }
+test('verified startup without a unique remembered project shows selection',()=>{
+ const x=fixture();x.api.renderStartupConfig(verified);
+ x.api.receive({type:'startupProceedResult',success:true,projectId:''});
+ assert.deepEqual(x.opened,[]);
+ assert.deepEqual(x.screens,[false]);
+ assert.equal(x.element('gateQuery').focused,true);
 });
-test('an update check keeps the setup screen visible until its result is ready',()=>{
- const x=fixture({checking:true});x.api.beginStartupAuto('stack');x.advance(9000);assert.equal(x.api.getPage(),0);
- x.api.setChecking(false);x.advance(4999);assert.equal(x.api.getPage(),0);x.advance(251);assert.equal(x.api.getPage(),1);
+test('missing prerequisite or credential verification reopens only the applicable setup step',()=>{
+ const x=fixture();x.api.renderStartupConfig({...verified,prerequisitesVerified:false});
+ assert.deepEqual(x.sent,[{command:'startupReadiness'}]);
+ assert.deepEqual(x.screens,[true]);
+ const y=fixture();y.api.renderStartupConfig({...verified,verified:false});
+ assert.deepEqual(y.sent,[]);
+ assert.deepEqual(y.screens,[true]);
+ const z=fixture();z.api.renderStartupConfig(verified);
+ z.api.receive({type:'startupProceedResult',success:false,verified:false,message:'Saved credentials changed.'});
+ assert.deepEqual(z.opened,[]);
+ assert.deepEqual(z.screens,[true]);
+ assert.equal(z.element('startupProceedInfo').textContent,'Saved credentials changed.');
 });
-test('automatic project opening waits for the connection checks to finish',()=>{
- const x=fixture({connectionChecking:true});x.api.beginStartupAuto('stack');x.advance(15000);
- assert.equal(x.api.getPage(),1);assert.equal(x.sent.length,0);
- assert.match(x.element('startupProceedInfo').textContent,/Checking Jira/);
- x.api.setConnectionChecking(false);x.advance(1250);
- assert.equal(x.sent.length,1);assert.equal(x.sent[0].command,'startupProceed');
+test('only one registered, previously opened project can resume automatically',()=>{
+ const saved={'atgvAssist.activeProject':'p1','atgvAssist.recentProjects':['p1','obsolete']};
+ const state={get:(key,fallback)=>saved[key]??fallback};
+ const create=new Function('context','getWorkspace','vscode','startupIsComplete',segment(host,
+  'const STARTUP_PREREQUISITES_KEY=','// Keep the verification proof')+
+  '\nreturn {startupPrerequisitesVerified,previouslyOpenedStartupProject};');
+ const vscode={workspace:{isTrusted:true}};
+ const {startupPrerequisitesVerified,previouslyOpenedStartupProject}=create(
+  {workspaceState:state},()=>({uri:{toString:()=> 'file:///test'}}),vscode,()=>true);
+ assert.equal(startupPrerequisitesVerified(),true,'legacy completed setup can resume');
+ const p1={id:'p1'},p2={id:'p2'};
+ assert.equal(previouslyOpenedStartupProject([p1]),p1,'a previously opened project needs no selected stack');
+ assert.equal(previouslyOpenedStartupProject([p1,p2]),null);
+ assert.equal(previouslyOpenedStartupProject([p2]),null);
+ assert.equal(previouslyOpenedStartupProject([]),null);
+ saved['atgvAssist.startupPrerequisites']={workspace:'file:///other',verified:true};
+ assert.equal(startupPrerequisitesVerified(),false);
+ saved['atgvAssist.startupPrerequisites']={workspace:'file:///test',verified:false};
+ assert.equal(startupPrerequisitesVerified(),false);
+ saved['atgvAssist.startupPrerequisites'].verified=true;
+ assert.equal(startupPrerequisitesVerified(),true);
+ vscode.workspace.isTrusted=false;
+ assert.equal(startupPrerequisitesVerified(),false);
 });

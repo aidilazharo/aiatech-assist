@@ -53,10 +53,13 @@ test('Start connection setup presents read-only timeline and download button wit
  assert.match(ui,/detail\.textContent=String\(event\.detail/);
  assert.doesNotMatch(ui,/card\.innerHTML=/);
 });
-test('connection diagnostics are hidden on the Start screen while internal log export remains available',()=>{
+test('connection logs and saved-credential tests remain available after successful setup',()=>{
  const css=require('node:fs').readFileSync(path.join(__dirname,'../media/start.css'),'utf8');
- assert.match(html,/<details id="startupConnectionLogPanel"[^>]*\bhidden\b[^>]*>/);
- assert.match(css,/#startupConnectionForm #startupConnectionLogPanel\{display:none!important\}/);
+ assert.match(html,/<details id="startupConnectionLogPanel" class="atgv-connection-log-panel">/);
+ assert.match(html,/<summary>Connection Logs/);
+ assert.doesNotMatch(css,/#startupConnectionForm #startupConnectionLogPanel\{display:none/);
+ assert.match(html,/id="startupTestSavedConnections"/);
+ assert.match(ui,/\$\('startupTestSavedConnections'\)\.addEventListener\('click',checkSavedStartupConnections\)/);
  assert.match(html,/id="startupUnifiedLog"/);
  assert.match(source,/case 'startupDownloadConnectionLogs':/);
  assert.match(source,/case 'startupGetConnectionLogs':/);

@@ -32,7 +32,7 @@ function harness(){
   "const rootNode=$('baJiraBackedEpics');",
   "const projectConnectionsSnapshot={jira:{key:'TC'}};",
   "const activeId='active-project',jiraInventoryProject='active-project',jiraInventoryKey='TC';",
-  "const jiraInventoryItems=arguments[5],jiraInventoryRunning=false;",
+  "const jiraInventoryItems=items,jiraInventoryRunning=false;",
   segment,
   "return renderBAJiraBackedEpics;"
  ].join('\n');

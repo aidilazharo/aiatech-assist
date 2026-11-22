@@ -61,13 +61,10 @@ function decodePng(bytes){
  return {width,height,data:zlib.deflateSync(rgb,{level:9})};
 }
 function loadPackagedLogo(){
- for(const file of ['../media/atgv-mark.png','../assets/icon.png']){
-  try{
-   const buffer=fs.readFileSync(path.resolve(__dirname,file));
-   if(buffer.length>4*1024*1024)continue;
-   return decodePng(buffer);
-  }catch{ /* Fall back to the next packaged ATGV icon. */ }
- }
- return null;
+ // The red extension icon is visible on the PDF's white logo tile.
+ try{
+  const buffer=fs.readFileSync(path.resolve(__dirname,'../assets/icon.png'));
+  return buffer.length<=4*1024*1024?decodePng(buffer):null;
+ }catch{return null;}
 }
 module.exports={decodePng,loadPackagedLogo};

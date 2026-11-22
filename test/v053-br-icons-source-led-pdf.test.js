@@ -17,6 +17,7 @@ test('PDF title is derived from actual GATE source filename with correct domain 
   'BR-005 Approval Package Versioning and Sequential Approvals');
  assert.equal(pdf.titleCase('capex and opex for EXCO, with EA, and TBP'), 'CAPEX and OPEX for EXCO, with EA, and TBP');
  assert.equal(pdf.documentTitle('GATE project approval v1.1.docx'),'GATE: Project Approval');
+ assert.equal(pdf.titleCase('CRUD API for jira and github: a release for iOS'), 'CRUD API for Jira and GitHub: A Release for iOS');
 });
 
 test('default BRS excludes explanatory filler and the full repeated source appendix',()=>{
@@ -45,8 +46,8 @@ test('default BRS excludes explanatory filler and the full repeated source appen
  assert.doesNotMatch(raw,/DRAFT -- this export is not evidence/);
  assert.doesNotMatch(raw,/The source contains a validated business decision/);
  assert.doesNotMatch(raw,/Appendix A - Validated Working Source/);
- // Packaged image mark or vector AI glyph must be visible in every generated PDF.
- assert.ok(raw.includes('/Logo Do')||raw.includes('(AI)'));
+ assert.match(raw,/\/Subtype \/Image/);
+ assert.match(raw,/\/Logo Do/);
 });
 
 test('source appendix remains available only by explicit opt-in',()=>{
@@ -74,7 +75,10 @@ test('packaged ATGV AI mark uses a safe embedded PNG XObject or a vector fallbac
  assert.equal(decoded.width,1);assert.equal(decoded.height,1);
  assert.deepEqual([...zlib.inflateSync(decoded.data)],[255,127,127]);
  const candidate=logo.loadPackagedLogo();
- assert.ok(candidate===null||candidate.data.length>0);
+ assert.ok(candidate?.data.length,'packaged red extension logo must decode');
+ const rgb=zlib.inflateSync(candidate.data);
+ assert.ok(rgb.some((red,i)=>i%3===0&&red>150&&rgb[i+1]<100&&rgb[i+2]<150),'logo remains visible on white');
+
 });
 
 test('BR details use compact icon actions with native and accessible tooltips',()=>{
@@ -96,4 +100,23 @@ test('BR details use compact icon actions with native and accessible tooltips',(
  assert.match(ui,/send\('deleteJiraOnlyBROwned'/);
  assert.match(ui,/send\('recoverJiraOnlyBR'/);
  assert.match(css,/\.ba-br-icon-action:focus-visible/);
+});
+
+test('PDF justifies wrapped body lines and leaves the final line at natural spacing',()=>{
+ const objective='Each project owner must submit a verified business case with costs, approvals, acceptance criteria, and delivery dependencies. A finance lead confirms all budget numbers before the project moves to the next approval stage. End of objective.';
+ const raw=pdf.document({source:{name:'Gate approval.pdf'},requirements:[{id:'BR-004',title:'Project approval',objective}]}).toString('latin1');
+ const stretched=raw.match(/ (\d+\.\d{3}) Tw \(Each project owner[^)]+\) Tj 0 Tw/);
+ assert.ok(stretched&&Number(stretched[1])>0,'the first body line must use positive PDF word spacing');
+ assert.match(raw,/ Tm \([^()]*End of objective\.\) Tj ET/);
+});
+test('PDF retains verified source details when exported before BR records exist',()=>{
+ const passage='Team leads submit the approved project budget and assign an owner before delivery starts.';
+ const workingText=['# Working BR','Read the explanation before proceeding.','~~~~text',
+  '## DELIVERY AND APPROVALS','',passage,'~~~','Another verified source paragraph.','~~~~','Provisional guidance.'].join('\n');
+ const raw=pdf.document({source:{name:'Delivery Requirements.docx'},workingText}).toString('latin1');
+ assert.match(raw,/1 Source Requirements/);
+ assert.match(raw,/Delivery and Approvals/);
+ assert.ok(raw.includes(passage));
+ assert.match(raw,/Another verified source paragraph/);
+ assert.doesNotMatch(raw,/Read the explanation|Provisional guidance|Appendix A/);
 });

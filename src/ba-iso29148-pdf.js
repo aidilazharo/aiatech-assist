@@ -15,57 +15,88 @@ function pdfText(value){
 }
 function esc(v){return pdfText(v).replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)');}
 function rgb(v){return v.map(x=>x.toFixed(3)).join(' ');}
-function wrap(value,limit=99){
+// Standard PDF Helvetica advance widths in thousandths of a point at 1 pt.
+const HELVETICA_ASCII=[
+ 278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,
+ 556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,
+ 1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,
+ 667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,
+ 333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,
+ 556,556,333,500,278,556,500,722,500,500,500,334,260,334,584
+];
+const HELVETICA_LATIN1=[
+ 278,333,556,556,556,556,260,556,333,737,370,556,584,333,737,333,
+ 400,584,333,333,333,556,537,278,333,333,365,556,834,834,834,611,
+ 667,667,667,667,667,667,1000,722,667,667,667,667,278,278,278,278,
+ 722,722,778,778,778,778,778,584,778,722,722,722,722,667,667,611,
+ 556,556,556,556,556,556,889,500,556,556,556,556,278,278,278,278,
+ 556,556,556,556,556,556,556,584,611,556,556,556,556,500,556,500
+];
+function helveticaWidth(value,size){
+ let units=0;
+ for(const char of value){
+  const code=char.charCodeAt(0);
+  units+=HELVETICA_ASCII[code-32]??HELVETICA_LATIN1[code-160]??556;
+ }
+ return units*size/1000;
+}
+function wrap(value,limit=99,measure=text=>text.length){
  const lines=[];
- for(const para of pdfText(value).replace(/\r/g,'').split('\n')){
-  if(!para.trim()){lines.push('');continue;}
-  const words=para.replace(/\s+/g,' ').trim().split(' ');
-  let line='';
-  for(const original of words){
-   let token=original;
-   while(token.length>limit){
-    if(line){lines.push(line);line='';}
-    lines.push(token.slice(0,limit));token=token.slice(limit);
+ for(const row of pdfText(value).replace(/\r\n?/g,'\n').split('\n')){
+  if(!row.trim()){lines.push('');continue;}
+  const words=row.trim().split(/\s+/);
+  let current='';
+  for(const word of words){
+   if(current&&measure(current+' '+word)>limit){lines.push(current);current='';}
+   if(measure(word)<=limit){current+=(current?' ':'')+word;continue;}
+   for(const character of word){
+    if(current&&measure(current+character)>limit){lines.push(current);current='';}
+    current+=character;
    }
-   if(!token)continue;
-   if(line&&line.length+token.length+1>limit){lines.push(line);line=token;}
-   else line+=(line?' ':'')+token;
   }
-  if(line)lines.push(line);
+  if(current)lines.push(current);
  }
  return lines;
 }
 function sourceSection(working){
  const lines=String(working||'').split(/\r?\n/);
- const at=lines.findIndex(x=>/^~{3,}text\s*$/.test(x.trim()));
- if(at>=0){
-  const end=lines.findIndex((v,i)=>i>at&&/^~{3,}\s*$/.test(v.trim()));
-  if(end>at)return lines.slice(at+1,end).join('\n');
- }
- return ''; // Only include actual validated source, never infer from guidance.
+ const at=lines.findIndex(line=>/^~{3,}text$/.test(line.trim()));
+ if(at<0)return '';
+ const fence=lines[at].trim().slice(0,-4);
+ const closing=lines.findIndex((line,i)=>i>at&&line.trim()===fence);
+ return closing<0?'':lines.slice(at+1,closing).join('\n');
 }
-const acronymTokens=new Set(['GATE','AIA','AI','ATGV','IT','API','BR','BRD','BRS','ISO','IEEE','IEC','TBP','EA','EXCO','TRM','CAPEX','OPEX','MYR','USD','RMB','PMO','PIC','RBAC','SST','KPI','ID','UAT','UI','UX','MVP1A','PDF','JIRA','SAP']);
+const acronymTokens=new Set([
+ 'AI','AIA','API','ATGV','BA','BR','BRD','BRS','CAPEX','CD','CI','CRUD','CSV','DB','EA','EXCO','GATE','HTTP','HTTPS',
+ 'ID','IEC','IEEE','ISO','IT','JSON','KPI','MVP','MYR','NET','OIDC','OPEX','PDF','PIC','PMO','QA','RAG','RBAC',
+ 'REST','RMB','SAP','SDK','SDLC','SLA','SQL','SSO','SST','TBP','TRM','UAT','UI','URL','USD','UX','VS'
+]);
+const titleSpellings=new Map([
+ ['devops','DevOps'],['github','GitHub'],['ios','iOS'],['jira','Jira'],['macos','macOS'],['mvp1a','MVP1a'],
+ ['node.js','Node.js'],['oauth','OAuth'],['openapi','OpenAPI']
+]);
+const titleSmallWords=new Set(['a','an','the','and','or','but','as','of','for','to','in','on','at','by','with','from','per']);
 function titleCase(value){
- // Keep literal markup-like source tokens unchanged; they remain safely PDF-escaped.
- if(/[<>]/.test(String(value||'')))return String(value||'').trim();
- const small=new Set(['a','an','the','and','or','of','for','to','in','on','at','by','with']);
- let wordIndex=0;
- return String(value||'').trim().replace(/\s+/g,' ').replace(/\b[A-Za-z][A-Za-z0-9]*\b/g,word=>{
-  const first=wordIndex++===0,upper=word.toUpperCase(),lower=word.toLowerCase();
-  if(acronymTokens.has(upper))return upper==='MVP1A'?'MVP1a':upper==='JIRA'?'Jira':upper;
-  if(/^v\d+$/i.test(word))return 'v'+word.slice(1);
-  if(!first&&small.has(lower))return lower;
-  return lower.charAt(0).toUpperCase()+lower.slice(1);
+ const title=String(value??'').trim().replace(/\s+/g,' ');
+ if(/[<>]/.test(title))return title;
+ return title.replace(/\bnode\.js\b|\p{L}[\p{L}\p{M}\p{N}]*(?:['’][\p{L}\p{M}\p{N}]+)*/giu,(word,offset)=>{
+  const lower=word.toLowerCase(),upper=word.toUpperCase();
+  if(titleSpellings.has(lower))return titleSpellings.get(lower);
+  if(acronymTokens.has(upper))return upper;
+  if(/^v\d+$/i.test(word))return lower;
+  if(word!==lower&&word!==upper&&word!==lower[0].toUpperCase()+lower.slice(1))return word;
+  const start=offset===0||/[:—–]\s*$/.test(title.slice(0,offset));
+  return !start&&titleSmallWords.has(lower)?lower:lower[0].toUpperCase()+lower.slice(1);
  });
 }
 function documentTitle(name){
- let base=String(name||'').replace(/^.*[\\/]/,'').replace(/\.(?:docx?|pdf|md|txt)$/i,'');
+ let base=String(name||'').replace(/^.*[\\/]/,'').replace(/\.(?:docx?|pdf|md|txt|xlsx)$/i,'');
  base=base.replace(/\s+(?:BRD|BRS)(?:\s+Requirements)?(?:\s+Revised)?(?:\s+(?:Version|v)\s*\d+(?:\.\d+)*)?$/i,'');
  base=base.replace(/\s+(?:Requirements\s+)?Revised\s+(?:Version\s*)?v?\d+(?:\.\d+)*$/i,'');
  base=base.replace(/\s+v\d+(?:\.\d+)*$/i,'');
- base=titleCase(base.replace(/[_]+/g,' ').trim());
- if(/^GATE\s+/i.test(base))base=base.replace(/^GATE\s+/,'GATE: ');
- return base||'Business Requirements';
+ base=base.replace(/[_]+/g,' ').trim();
+ if(/^GATE\s+(?=[\p{L}\p{N}])/iu.test(base))base=base.replace(/^GATE\s+/i,'GATE: ');
+ return titleCase(base)||'Business Requirements';
 }
 function document(spec={}){
  const source=spec.source||{},brs=Array.isArray(spec.requirements)?spec.requirements.filter(x=>x&&!x.archivedFromRestart&&x.status!=='retired'):[];
@@ -75,8 +106,9 @@ function document(spec={}){
  const pages=[];let page=null,y=H-M;
  const line=(x1,y1,x2,y2,color=BLUE,width=1)=>page.push(rgb(color)+' RG '+width+' w '+x1.toFixed(2)+' '+y1.toFixed(2)+' m '+x2.toFixed(2)+' '+y2.toFixed(2)+' l S');
  const box=(x,b,w,h,color)=>page.push(rgb(color)+' rg '+[x,b,w,h].map(v=>v.toFixed(2)).join(' ')+' re f');
- const text=(value,x,baseline,size=10,{bold=false,color=DARK}={})=>{
-  page.push(rgb(color)+' rg BT /'+(bold?'F2':'F1')+' '+size.toFixed(1)+' Tf 1 0 0 1 '+x.toFixed(2)+' '+baseline.toFixed(2)+' Tm ('+esc(value)+') Tj ET');
+ const text=(value,x,baseline,size=10,{bold=false,color=DARK,wordSpacing=0}={})=>{
+  const spacing=wordSpacing>0?wordSpacing.toFixed(3)+' Tw ':'';
+  page.push(rgb(color)+' rg BT /'+(bold?'F2':'F1')+' '+size.toFixed(1)+' Tf 1 0 0 1 '+x.toFixed(2)+' '+baseline.toFixed(2)+' Tm '+spacing+'('+esc(value)+') Tj'+(spacing?' 0 Tw':'')+' ET');
  };
  function brandLogo(x,b,size=58){
   box(x,b,size,size,[1,1,1]);
@@ -109,23 +141,61 @@ function document(spec={}){
   if(level===1){y-=4;line(M,y,RIGHT,y,[0.83,0.87,0.91],.65);y-=12;}
   else y-=9;
  }
- function paragraph(value,{indent=0,muted=false,small=false}={}){
-  const size=small?8.6:10,step=small?12.2:14.6,max=Math.floor((RIGHT-M-indent)/(size*.53));
-  for(const part of wrap(value,Math.max(35,max))){
-   check(step+3);if(part)text(part,M+indent,y,size,{color:muted?MUTED:DARK});y-=step;
+ function paragraph(value,{indent=0,muted=false,small=false,justify=true}={}){
+  const size=small?8.6:10,step=small?12.2:14.6,maxWidth=RIGHT-M-indent;
+  const measure=line=>helveticaWidth(line,size);
+  for(const row of String(value??'').replace(/\r\n?/g,'\n').split('\n')){
+   const lines=wrap(row,maxWidth,measure);
+   for(const [index,part] of lines.entries()){
+    check(step+3);
+    if(part){
+     const gaps=part.split(' ').length-1;
+     const wordSpacing=justify&&index<lines.length-1&&gaps>0?(maxWidth-measure(part))/gaps:0;
+     text(part,M+indent,y,size,{color:muted?MUTED:DARK,wordSpacing});
+    }
+    y-=step;
+   }
   }
   y-=5;
  }
  function field(label,value){
-  check(29);text(label.toUpperCase(),M,y,8,{bold:true,color:MUTED});
-  text(pdfText(value||'Not specified').slice(0,90),M+168,y,9,{color:DARK});y-=24;
+  const left=M+168,size=9,step=12;
+  const lines=wrap(value||'Not specified',RIGHT-left,part=>helveticaWidth(part,size));
+  check(17+lines.length*step);
+  text(label.toUpperCase(),M,y,8,{bold:true,color:MUTED});
+  for(const part of lines){text(part,left,y,size,{color:DARK});y-=step;}
+  y-=12;
+ }
+ function validatedSource(value){
+  const keepHardBreaks=/\.(?:docx?|xlsx)$/i.test(source.name||'');
+  let body='';
+  const flush=()=>{if(body)paragraph(body);body='';};
+  for(const rawLine of value.split(/[\n\f]/)){
+   const line=rawLine.trim();
+   const markdownHeading=/^#{1,6}\s+(.+)$/.exec(line);
+   const uppercaseHeading=line.length<=90&&/^(?:\d+(?:\.\d+)*\.?\s+)?[\p{Lu}][\p{Lu}\p{N} &/(),.-]*$/u.test(line)&&/\s/.test(line)&&!/[.!?]$/.test(line);
+   if(markdownHeading||uppercaseHeading){
+    flush();
+    heading(titleCase(markdownHeading?.[1]||line),2);
+   }else if(!line){
+    flush();
+   }else if(keepHardBreaks||/^(?:[-*•]|\d+[.)])\s/.test(line)){
+    flush();
+    paragraph(line);
+   }else{
+    body+=(body?' ':'')+line;
+   }
+  }
+  flush();
  }
  function metadataStatus(br){return br.status==='approved'?'APPROVED REVISION '+(br.approvedRevision||1):'DRAFT - PENDING BA APPROVAL';}
- function empty(textValue){paragraph(textValue||'Not documented in the verified requirements evidence. Requires Business Analyst confirmation.',{muted:true});}
  const displayTitle=documentTitle(source.name||spec.projectId);
  const allApproved=brs.length>0&&brs.every(br=>br.status==='approved');
  const state=allApproved?'REQUIREMENT RECORDS APPROVED':'DRAFT - PENDING BA APPROVAL';
  const validated=sourceSection(spec.workingText);
+ const appendix=spec.includeSourceAppendix===true&&!!validated.trim();
+ const sourceOnly=!brs.length&&!appendix&&!!validated.trim();
+ const traceabilityHeading=(brs.length?3:sourceOnly?2:1)+' Traceability and Approval';
  newPage();
  box(M,y-135,RIGHT-M,129,NAVY);
  brandLogo(RIGHT-79,y-94,62);
@@ -138,24 +208,23 @@ function document(spec={}){
  y-=154;
  paragraph('ISO/IEC/IEEE 29148:2018 | Business Requirements Specification',{small:true,muted:true});
  field('Project ID',spec.projectId||'Not recorded');
- field('Source document',fileName.slice(0,70));
+ field('Source document',fileName);
  field('Issued (UTC)',created);
  field('Requirement records',String(brs.length));
  field('Review status',state);
  heading('Contents');
- for(const section of ['1 Business Requirements Overview','2 Detailed Business Requirements','3 Traceability and Approval']){
-  paragraph(section,{small:true});
+ const sections=brs.length?['1 Business Requirements Overview','2 Detailed Business Requirements']:sourceOnly?['1 Source Requirements']:[];
+ for(const section of [...sections,traceabilityHeading])paragraph(section,{small:true,justify:false});
+ if(appendix)paragraph('Appendix A - Validated Working Source',{small:true,justify:false});
+ if(sourceOnly){
+  heading(sections[0]);
+  validatedSource(validated);
  }
- if(spec.includeSourceAppendix===true)paragraph('Appendix A - Validated Working Source',{small:true});
- heading('1 Business Requirements Overview');
- if(!brs.length)paragraph('No requirement records have been generated from the verified source.',{muted:true});
- for(const br of brs){
-  paragraph((br.id||'BR')+' - '+titleCase(br.title||'Untitled Requirement'),{small:true});
+ if(brs.length){
+  heading(sections[0]);
+  for(const br of brs)paragraph((br.id||'BR')+' - '+titleCase(br.title||'Untitled Requirement'),{small:true,justify:false});
+  heading(sections[1]);
  }
- // Trace the source directly. Never substitute generated policy or analysis
- // text for absent decisions in the actual source document.
- heading('2 Detailed Business Requirements');
- if(!brs.length)paragraph('No requirements available.',{muted:true});
  for(const br of brs){
   heading((br.id||'BR')+' - '+titleCase(br.title||'Untitled Requirement'));
   field('Status',metadataStatus(br));
@@ -190,8 +259,7 @@ function document(spec={}){
    }
   }
  }
- heading('3 Traceability and Approval');
- field('Source name',fileName.slice(0,65));
+ heading(traceabilityHeading);
  field('Record status',state);
  if(valid.test(String(source.digest||''))){
   paragraph('Source SHA-256: '+source.digest,{small:true});
@@ -201,9 +269,9 @@ function document(spec={}){
  }
  const pending=brs.filter(br=>br.status!=='approved');
  if(pending.length)paragraph('Pending BA Approval: '+pending.map(br=>br.id).join(', '),{small:true});
- if(spec.includeSourceAppendix===true){
+ if(appendix){
   heading('Appendix A - Validated Working Source');
-  if(validated)paragraph(validated,{small:true});
+  paragraph(validated,{small:true});
  }
  // Add numbered footers after all pages are known.
  for(const [i,ops] of pages.entries()){

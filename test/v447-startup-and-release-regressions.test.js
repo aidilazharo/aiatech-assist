@@ -19,10 +19,11 @@ test('release discovery queries public mirror repositories only',()=>{
  assert.equal(extension.PINNED_RELEASE_URL,'https://github.com/aidilazharo/aiatech-assist/releases/latest');
  assert.equal(library.LATEST_URL,'https://github.com/aidilazharo/tech-stacks-skills/releases/latest');
 });
-test('startup boots prerequisites on webview readiness and hides optional Copilot SDK',()=>{
+test('startup runs prerequisites when setup needs them and hides optional Copilot SDK',()=>{
  assert.match(host,/type:'startupSavedFields'/);
  assert.match(ui,/message\.type==='startupSavedFields'/);
  assert.match(ui,/startupPrereqRequested=true;/);
+ assert.match(ui,/if\(required&&startupPage===0\)requestStartupReadiness\(\)/);
  assert.match(ui,/send\('startupReadiness'\);/);
  assert.match(page,/id="startupCopilotCard"[^>]*class="[^"]*startup-copilot-card" hidden/);
  assert.match(styles,/#startupCopilotCard\{display:none!important\}/);

@@ -2225,8 +2225,6 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 .atgv-startup-prerequisites>.atgv-tool-scan-status:hover{background:transparent!important}
 .atgv-startup-prerequisites>.atgv-tool-scan-status{background:transparent}
 #gateFinder .gate-search-footer{border-top:0!important;padding-top:0!important;min-height:0}
-#gateFinder .gate-search-footer #gateSearchPrevious,
-#gateFinder .gate-search-footer #gateAutoMessage{display:none!important}
 #gateFinder .gate-result button:disabled{
  background:var(--vscode-button-secondaryBackground,#3b3b3b)!important;
  border-color:var(--vscode-panel-border,#4b4b4b)!important;
@@ -2352,10 +2350,6 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
    Successful checks are tracked internally but never occupy visible space. */
 #startupConnectionForm #startupConnectionProgress:empty,
 #startupConnectionChecks:empty{display:none!important;margin:0!important;padding:0!important}
-/* Connection diagnostics remain available in the sanitized internal log and
-   the existing unified error-log export, not as a visible Start screen panel. */
-#startupConnectionForm #startupConnectionLogPanel{display:none!important}
-
 /* Jira-only BR deletion is destructive: keep the request distinct from recovery. */
 .ba-jira-only-delete{color:var(--vscode-errorForeground,#f17a7a)!important;border-color:var(--vscode-inputValidation-errorBorder,#8b3636)!important}
 .ba-jira-only-delete:focus-visible{outline:2px solid var(--vscode-focusBorder,#007fd4);outline-offset:2px}
@@ -3150,10 +3144,10 @@ body:not(.gate-mode) #sdlcWorkspaceShell.atgv-sdlc-workspace-shell{
 #workView .ba-completed-br-heading .ba-br-icon-action:focus-visible{
  outline:2px solid var(--vscode-focusBorder,#66a5f5);outline-offset:2px
 }
-#workView #baRequirementModal .ba-br-icon-action:not([disabled]):is(:hover,:focus-visible)::after,
-#workView .ba-completed-br-heading .ba-br-icon-action:not([disabled]):is(:hover,:focus-visible)::after{
+#workView #baRequirementModal .ba-br-icon-action[data-tooltip]:is(:hover,:focus-visible)::after,
+#workView .ba-completed-br-heading .ba-br-icon-action[data-tooltip]:is(:hover,:focus-visible)::after{
  content:attr(data-tooltip);position:absolute;z-index:150;right:0;bottom:calc(100% + 8px);
- min-width:max-content;max-width:min(300px,70vw);padding:6px 9px;
+ width:max-content;max-width:min(260px,70vw);padding:6px 9px;white-space:normal;
  border-radius:5px;border:1px solid var(--vscode-panel-border,#586171);
  color:var(--vscode-menu-foreground,#f5f7fa);
  background:var(--vscode-menu-background,#242932);

@@ -14,16 +14,11 @@ test('startup and project-search screens no longer show Pause automatic opening'
  assert.match(html,/id="startupPrevious"/);
  assert.match(html,/id="startupProceed"/);
  assert.match(html,/id="gateSearchPrevious"/);
- assert.match(html,/id="gateAutoMessage"/);
+ assert.doesNotMatch(html,/<button id="gateSearchPrevious"[^>]+(?:\bhidden\b|tabindex="-1")/);
 });
-test('automatic opening remains safe, with cancellation on manual navigation and failed checks',()=>{
- assert.match(ui,/function stopStartupAuto\(message='Automatic opening paused\.'\)/);
- assert.match(ui,/if\(startupAutoTimer\)clearTimeout\(startupAutoTimer\)/);
- assert.match(ui,/function beginStartupAuto\(stage\)/);
- assert.match(ui,/if\(stage==='project'\)/);
+test('automatic opening uses the stored setup checks and launches without a countdown',()=>{
+ assert.doesNotMatch(ui,/STARTUP_SCREEN_MS|startupAutoTimer|Automatic opening paused/);
+ assert.match(ui,/if\(required&&startupConnectionVerified\)\{requestStartupProceed\(true\);return;\}/);
  assert.match(ui,/launchFromGate\(\{projectId,autoResume:true\}\)/);
- assert.match(ui,/if\(!selection\.autoResume&&startupAutoEnabled\)stopStartupAuto/);
- assert.match(ui,/startupPermissions\.ok/);
- assert.match(ui,/startupConnectionVerified/);
- assert.match(ui,/startupPrerequisiteDetails'\)\.addEventListener\('toggle'/);
+ assert.match(ui,/\$\('gateSearchPrevious'\)\.disabled=gateBusy;/);
 });
