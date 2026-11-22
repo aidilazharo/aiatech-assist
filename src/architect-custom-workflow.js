@@ -49,7 +49,7 @@ async function verifyMock(url,driver,root,relative,state){
  throw Error('The mock service did not pass localhost health verification.');
 }
 async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgress=async()=>{},
- driver=developer,stack=custom,repairs=repair,dependencies=dependency}={}){
+ driver=developer,stack=custom,repairs=repair,dependencies=dependency,onAiReview=null}={}){
  const key=path.resolve(root);
  if(running.has(key))throw Error('Custom Stack Install & Run is already in progress.');
  const state={controller:new AbortController(),started:false};
@@ -70,6 +70,12 @@ async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgr
   if(!chosen.mockable&&new URL(url).pathname!=='/api/v1/health')
    throw Error('NestJS synthetic API preview must use /api/v1/health.');
   const analysis=await repairs.analyse(key,inspection);
+  if(typeof onAiReview==='function'){
+   await report(17,1,'1/6 AI reviewing application architecture and blockers (advisory only)…',true);
+   try{analysis.modelReview=await onAiReview(inspection,analysis);}
+   catch{await report(19,1,'AI advisory unavailable; verified manifest analysis remains authoritative.',false);}
+   await report(21,1,'1/6 Repository analysis finished. Continuing with verified local actions…');
+  }
   cancelled(state);
   await report(24,2,'2/6 Creating isolated local fix branch; main remains untouched…');
   let branch=inspection.branch;
@@ -112,6 +118,7 @@ async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgr
   cancelled(state);
   const updated=await stack.scan(key,{driver});
   updated.analysis=await repairs.analyse(key,updated);
+  if(analysis.modelReview)updated.analysis.modelReview=analysis.modelReview;
   updated.branches=await repairs.branches(key,{driver});
   await report(100,6,'Mock preview verified. All six steps complete; use Stop to terminate it.');
   return {...result,running:true,url,branch,inspection:updated,
