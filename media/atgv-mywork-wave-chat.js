@@ -18,7 +18,7 @@
  const blendedRGBA=(target,mix,alpha)=>'rgba('+redRGB.map((v,i)=>
   Math.round(v+(target[i]-v)*mix)).join(',')+','+alpha+')';
  let project='',role='',pendingId=0,sequence=0,pending=false;
- let brActivity=false,brVisible=false;
+ let brActivity=false,brVisible=false,globalAiActive=false;
  let greetingNode=null,briefingNode=null,lastBriefRequest=0,submittedText='',handoffDraft='';
  const dayLocal=(date=new Date())=>[date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');
  let sessionDay=dayLocal(),dayTimer=null;
@@ -218,6 +218,18 @@
   renderTasks(b);
   activity();
  }
+ // Host activity is independent of the selected role and the currently open page.
+ // The shared canvas remains in the app/notification header, never in a task pane.
+ window.addEventListener('message',event=>{
+  const msg=event.data||{};
+  if(msg.type!=='atgvAiActivity')return;
+  const next=msg.active===true;
+  if(globalAiActive===next)return;
+  globalAiActive=next;
+  document.body.classList.toggle('atgv-global-ai-active',next);
+  window.ATGVSyncMyWorkHeaderWaveHost?.();
+  if(next){pulse(.45);requestAnimationFrame(resize);}
+ });
  window.addEventListener('message',event=>{
   if(expireConversationAtMidnight())return;
   const msg=event.data||{};
@@ -269,7 +281,7 @@
    }
   }
   const idle=(now-lastActivity)/1000;
-  const engaged=pending||thinking||!!writer||queue.length>0||idle<.8;
+  const engaged=pending||thinking||!!writer||queue.length>0||idle<.8||globalAiActive;
   let targetHeight=0,targetOpacity=0,targetSpeed=0,stage='SLEEPING';
   if(reduceMotion){
    targetOpacity=engaged?1:0;stage=engaged?'ACTIVE':'SLEEPING';
@@ -287,6 +299,11 @@
   }else{
    // Quiet idle heartbeat: keep a faint red waveform fading in/out.
    targetOpacity=.34;targetHeight=.1;targetSpeed=.22;stage='SLEEPING';
+  }
+  if(globalAiActive){
+   // A calm, low-amplitude red-to-CMYK waveform while any AI model is active.
+   targetHeight=reduceMotion?0:Math.min(.17,10/Math.max(h,1));
+   targetOpacity=.88;targetSpeed=reduceMotion?0:.92;stage='THINKING';
   }
   if(brActivity){
    targetHeight=reduceMotion?0:Math.min(.15,8/Math.max(h,1));
