@@ -1513,7 +1513,7 @@ function openBARequirementModal(ref,openAnswers=false){
  baRequirementPriorFocus=document.activeElement;
  baRequirementModalTarget={kind:ref.kind,brId:ref.id||'',scopeId:ref.scopeId,rootKey:ref.rootKey,projectId:activeId,openAnswers};
  if(typeof resetBATransferPanel==='function')resetBATransferPanel();
- const transferButton=$('baTransferOpen');if(transferButton)transferButton.hidden=!ref.rootKey;
+ const transferButton=$('baTransferOpen');if(transferButton){transferButton.hidden=!ref.rootKey;transferButton.title='Transfer BR to another Business Analyst';transferButton.dataset.tooltip=transferButton.title;}
  baBreadcrumbAtRequirements=true;
  $('baRequirementModalTitle').textContent=ref.title||ref.label||'Business Requirement details';
  if(ref.kind==='local')renderBACompletedRecords();else renderBAJiraBackedEpics();
@@ -5865,23 +5865,23 @@ function renderBAJiraBackedEpics(){
   heading.append(brElement('span','ba-completed-br-meta',(item.status||'Status unknown')+' · Unlinked to local BR'));
   // Mirror the completed BR's action alignment, but never present missing
   // discovery answers as accessible or reconstructed from Jira.
-  const answers=brElement('button','secondary ba-view-br-answers ba-jira-answers-unavailable','View 12 Answers');
+  const answers=baIconAction(brElement('button','secondary ba-view-br-answers ba-jira-answers-unavailable'),'▤','Discovery answers unavailable in this project');
   answers.type='button';answers.disabled=true;answers.title='Discovery answers unavailable in this ATGV project';
   answers.setAttribute('aria-label','View 12 Answers unavailable: discovery evidence is not stored in this ATGV project');
   heading.append(answers);
-  const open=brElement('button','secondary ba-view-jira','View Jira · '+item.linkedIssueCount+' linked');
+  const open=baIconAction(brElement('button','secondary ba-view-jira'),'↗','View Jira · '+item.linkedIssueCount+' linked issues');
   open.type='button';open.title='Open Jira Epic '+item.key;
   open.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();openJiraIssueModal(item.key);});
   open.addEventListener('keydown',event=>event.stopPropagation());
   heading.append(open);
   if(item.brId){
-   const recover=brElement('button','secondary ba-recover-confluence','Recover from Confluence');
+   const recover=baIconAction(brElement('button','secondary ba-recover-confluence'),'↺','Recover BR from verified Confluence source');
    recover.type='button';recover.title='Restore only from the verified Confluence Source Vault. No Jira issue is deleted.';
    recover.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();
     send('recoverJiraOnlyBR',{projectId:activeId,brId:item.brId,jiraKey:item.key});
    });
    heading.append(recover);
-   const remove=brElement('button','secondary ba-jira-only-delete','🗑');
+   const remove=baIconAction(brElement('button','secondary ba-jira-only-delete','🗑'),'🗑','Review and delete this Jira BR and linked issues');
    remove.type='button';
    remove.title='Eligible only when your Jira account ID matches this Epic Creator or Reporter AND Jira grants Delete Issues permission. Review all descendants first.';
    remove.setAttribute('aria-label','Review deletion eligibility and complete Jira hierarchy for '+item.brId);
@@ -6051,7 +6051,7 @@ function renderBACompletedRecords(){
   heading.append(brElement('span','ba-completed-br-meta',`${group.snapshots.length>1?group.snapshots.length+' published revisions · ':''}Approved R${latest?.approvedRevision||1}${updatedBR?' · Updated · Review required':' · Completed'}`));
   const latestTree=latest?ATGVCompletedBRHistory.jiraTree(latest):{count:0};
   if(group.snapshots.some(snapshot=>Object.keys(snapshot.cycle?.discoveryAnswers||{}).length>0)){
-   const viewAnswers=brElement('button','secondary ba-view-br-answers','View 12 Answers');
+   const viewAnswers=baIconAction(brElement('button','secondary ba-view-br-answers'),'▤','View saved discovery answers');
    viewAnswers.type='button';viewAnswers.title='Expand the completed BR and view saved discovery answers';
    viewAnswers.addEventListener('click',event=>{
     event.preventDefault();event.stopPropagation();details.open=true;
@@ -6063,7 +6063,7 @@ function renderBACompletedRecords(){
    heading.append(viewAnswers);
   }
   if(latestTree.count){
-   const viewJira=brElement('button','secondary ba-view-jira','View Jira · '+latestTree.count+' linked');
+   const viewJira=baIconAction(brElement('button','secondary ba-view-jira'),'↗','View Jira · '+latestTree.count+' linked issues');
    viewJira.type='button';viewJira.title=`View Jira · ${latestTree.count} linked`;
    viewJira.addEventListener('click',event=>{event.stopPropagation();openBRJiraInventory(group.id);});
    viewJira.addEventListener('keydown',event=>event.stopPropagation());
@@ -6594,6 +6594,14 @@ function renderDiscovery(){
 }
 
 function brElement(tag,cls,text){const el=document.createElement(tag);if(cls)el.className=cls;if(text!==undefined)el.textContent=String(text);return el;}
+function baIconAction(node,icon,tooltip){
+ node.classList.add('ba-br-icon-action');
+ node.textContent=icon;
+ node.title=tooltip;
+ node.dataset.tooltip=tooltip;
+ node.setAttribute('aria-label',tooltip);
+ return node;
+}
 let brActiveFilter='all',brFilterProjectId=null;
 function activeBusinessRequirements(){return (brState?.brs||[]).filter(br=>br.status!=='retired'&&!br.archivedFromRestart);}
 function brImpactType(br){return brState?.impact?.find(x=>x.id===br.id)?.change||(br.needsRefresh?'modified':br.status==='approved'?'unchanged':'new');}
