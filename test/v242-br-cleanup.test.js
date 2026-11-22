@@ -10,7 +10,7 @@ function register(){return {brs:[{id:'BR-005',status:'approved',approvedContent:
 test('in-progress button reads Delete and retains the verified Delete Everywhere workflow',()=>{
  assert.ok(src.includes('id="baDeleteIncomplete" class="danger" type="button" data-br-delete-action>Delete</button>'));
  assert.ok(!src.includes('id="baDeleteIncomplete" class="danger" type="button" data-br-delete-action>Force Delete Everywhere</button>'));
- const start=ui.indexOf("$('baDeleteIncomplete').addEventListener('click'");const end=ui.indexOf("$('baRestartIncomplete').addEventListener('click'",start),part=ui.slice(start,end);
+ const start=ui.indexOf("$('baDeleteIncomplete').addEventListener('click'");const end=ui.indexOf('// v0.1.21:',start),part=ui.slice(start,end);
  assert.match(part,/requestBRDeletion\(\{target:'in-progress',revision:brState\.revision\}\)/);
  assert.match(src,/case 'deleteEmptyIncompleteCycle'/);
 });

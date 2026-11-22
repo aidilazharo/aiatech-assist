@@ -28,7 +28,7 @@ test('new BR action starts cycle then opens native upload; resume pending cycle 
  assert.match(ui,/if\(brState\.restartPending&&[!]\(brState\.sourceDocuments\|\|\[\]\)\.length\)/);
  assert.match(ui,/send\('startOrRestartBusinessRequirements',\{revision:brState\.revision,openUploadImmediately:true\}\)/);
  assert.match(ui,/\$\('baNewRequirement'\)\.addEventListener\('click',beginNewBusinessRequirement\)/);
- assert.match(ui,/\$\('baOverviewNew'\)\.addEventListener\('click',beginNewBusinessRequirement\)/);
+ assert.doesNotMatch(ui,/\$\('baOverviewNew'\)\.addEventListener/);
  const action=host.slice(host.indexOf("case 'startOrRestartBusinessRequirements':"),host.indexOf("case 'restartDiscoverySources':"));
  assert.match(action,/if\(msg\.openUploadImmediately\)\{/);
  assert.match(action,/await importDiscoveryDocument\('business-analyst'\)/);

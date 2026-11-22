@@ -2923,3 +2923,33 @@ body:not(.gate-mode) #sdlcWorkspaceShell.atgv-sdlc-workspace-shell{
 }
 
 #discoveryView #baAutoDocumentToolbar #baAutoArtifactSave[hidden]{display:none!important}
+
+
+/* v0.0.51 – BA-only BR ownership transfer and compact Jira deletion. */
+#workView #baRequirementModal .ba-requirement-modal-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#workView #baRequirementModal .ba-requirement-modal-tools button[hidden]{display:none!important}
+#workView #baRequirementModal .ba-transfer-panel{
+ flex:0 0 auto;box-sizing:border-box;max-width:100%;min-width:0;margin:0 0 12px;padding:12px 14px;
+ border:1px solid var(--vscode-focusBorder,#346b9d);border-radius:8px;
+ background:var(--vscode-sideBar-background,#252930)
+}
+#workView #baRequirementModal .ba-transfer-panel.hidden{display:none!important}
+#workView #baRequirementModal .ba-transfer-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+#workView #baRequirementModal .ba-transfer-panel p{margin:8px 0;line-height:1.5;overflow-wrap:anywhere}
+#workView #baRequirementModal .ba-transfer-controls{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+#workView #baRequirementModal .ba-transfer-controls label{display:flex;flex:1 1 250px;min-width:0;flex-direction:column;gap:6px}
+#workView #baRequirementModal #baTransferUsers{min-height:36px;width:100%;min-width:0}
+#workView #baRequirementModal #baTransferCommit{min-height:36px;min-width:110px}
+#workView #baRequirementModal .ba-transfer-track{
+ width:100%;height:9px;overflow:hidden;border:1px solid var(--vscode-panel-border,#56606a);
+ border-radius:8px;background:var(--vscode-editor-background,#151a20);margin:12px 0 8px
+}
+#workView #baRequirementModal .ba-transfer-track[hidden]{display:none!important}
+#workView #baRequirementModal #baTransferFill{height:100%;width:0;transition:width .2s ease;background:var(--vscode-progressBar-background,#0e639c)}
+#workView #baRequirementModal #baTransferStatus{margin:6px 0 0;min-height:20px}
+#workView #baRequirementModal .ba-jira-only-delete{
+ display:inline-flex;align-items:center;justify-content:center;
+ min-width:36px;width:36px;min-height:36px;padding:0;
+ color:var(--vscode-errorForeground,#f77878);font-size:17px;line-height:1
+}
+@media(max-width:600px){#workView #baRequirementModal .ba-transfer-panel{padding:10px}}

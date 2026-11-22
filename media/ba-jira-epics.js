@@ -21,6 +21,7 @@
    if(!keyPattern.test(key)||!key.startsWith(keyPrefix+'-')||seen.has(key))continue;
    seen.add(key);
    issues.push({key,type:String(raw.type||''),summary:String(raw.summary||'').slice(0,250),status:String(raw.status||'').slice(0,80),
+    reporter:String(raw.reporter||''),reporterId:String(raw.reporterId||''),
     parentKey:String(raw.parentKey||'').toUpperCase(),sourceStoryKey:String(raw.sourceStoryKey||'').toUpperCase()});
   }
   const children=new Map();
@@ -38,7 +39,8 @@
    return visited.size-1;
   }
   return issues.filter(issue=>issue.type.trim().toLowerCase()==='epic'&&!linked.has(issue.key)).map(issue=>({
-   key:issue.key,summary:issue.summary,status:issue.status,brId:brFromSummary(issue.summary),linkedIssueCount:descendants(issue.key)
+   key:issue.key,summary:issue.summary,status:issue.status,brId:brFromSummary(issue.summary),
+   reporter:issue.reporter,reporterId:issue.reporterId,linkedIssueCount:descendants(issue.key)
   })).sort((a,b)=>a.key.localeCompare(b.key,undefined,{numeric:true}));
  }
  // Merge the local BR register with Jira's actual project inventory for display.

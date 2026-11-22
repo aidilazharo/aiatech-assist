@@ -34,7 +34,7 @@ test('BA overview puts the in-progress requirement ahead of Jira and removes the
  assert.match(overviewStyle,/background:transparent!important/);
  assert.match(css,/#workView\.ba-project-overview #baUncompletedPanel\{[\s\S]{0,190}order:0/);
  assert.match(css,/#workView\.ba-project-overview #baJiraInventorySection\{[\s\S]{0,190}order:1/);
- assert.match(html,/id="baOverviewNew"/);
+ assert.doesNotMatch(html,/id="baOverviewNew"|id="baRestartIncomplete"/);
  assert.match(html,/id="baResumeIncomplete"/);
  assert.match(html,/id="baJiraInventoryTable"/);
 });

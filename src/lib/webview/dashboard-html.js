@@ -542,14 +542,12 @@ function html(webview,{resumeLibrary=false}={}){
         <p id="baIncompleteSource" class="muted"></p>
       </div>
       <div class="ba-incomplete-actions" role="group" aria-label="Uncompleted requirement actions">
-        <button id="baOverviewNew" type="button">New Business Requirement</button>
         <button id="baResumeIncomplete" type="button">Resume</button>
-        <button id="baRestartIncomplete" class="secondary" type="button">Restart</button>
         <button id="baDeleteIncomplete" class="danger" type="button" data-br-delete-action>Delete</button>
       </div>
     </section>
     <section id="baJiraInventorySection" class="ba-jira-inventory-panel" aria-labelledby="baJiraInventoryTitle">
-      <div class="ba-jira-inventory-heading"><div><h2 id="baJiraInventoryTitle">All Jira Project Items</h2><p class="muted">All visible Jira issues for this project, with the original creator and latest status.</p></div><div class="stack"><button id="baReviewDeletedJira" class="secondary hidden" type="button" title="Review ATGV-owned Jira issues left by previously local-only deleted Business Requirements">Review Deleted Jira</button><button id="baJiraInventoryRefresh" class="secondary" type="button">Refresh Jira Items</button></div></div>
+      <div class="ba-jira-inventory-heading"><div><h2 id="baJiraInventoryTitle">All Jira Project Items</h2><p class="muted">Current BR owner (Jira Reporter), original creator and latest Jira status.</p></div><div class="stack"><button id="baReviewDeletedJira" class="secondary hidden" type="button" title="Review ATGV-owned Jira issues left by previously local-only deleted Business Requirements">Review Deleted Jira</button><button id="baJiraInventoryRefresh" class="secondary" type="button">Refresh Jira Items</button></div></div>
       <div class="ba-jira-inventory-filters">
         <label for="baJiraBrFilter">Business Requirement <select id="baJiraBrFilter"><option value="">All BRs / project</option></select></label>
         <label for="baJiraTypeFilter">Issue type <select id="baJiraTypeFilter"><option value="">All types</option></select></label>
@@ -562,7 +560,14 @@ function html(webview,{resumeLibrary=false}={}){
     </section>
     </section>
     <div id="baRequirementModal" class="modal-overlay hidden" aria-hidden="true"><div class="modal-card ba-requirement-modal-card" role="dialog" aria-modal="true" aria-labelledby="baRequirementModalTitle">
-      <div class="ba-requirement-modal-heading"><h2 id="baRequirementModalTitle">Business Requirement details</h2><button type="button" id="baRequirementModalClose" class="secondary">Close</button></div>
+      <div class="ba-requirement-modal-heading"><h2 id="baRequirementModalTitle">Business Requirement details</h2><div class="ba-requirement-modal-tools"><button type="button" id="baTransferOpen" class="secondary" hidden>Transfer BR</button><button type="button" id="baRequirementModalClose" class="secondary">Close</button></div></div>
+      <section id="baTransferPanel" class="ba-transfer-panel hidden" aria-label="Transfer Business Requirement ownership">
+        <div class="ba-transfer-head"><strong id="baTransferTitle">Transfer BR</strong><button type="button" id="baTransferCancel" class="secondary">Cancel</button></div>
+        <p id="baTransferExplanation" class="muted">Transfer the Jira Epic Reporter to a verified Business Analyst. The original Jira Creator and child issue assignees are preserved.</p>
+        <div class="ba-transfer-controls"><label for="baTransferUsers">Business Analyst <select id="baTransferUsers" disabled><option value="">Loading Business Analysts…</option></select></label><button type="button" id="baTransferCommit" disabled>Transfer</button></div>
+        <div id="baTransferProgress" class="ba-transfer-track" role="progressbar" aria-label="Business Requirement transfer progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><div id="baTransferFill"></div></div>
+        <p id="baTransferStatus" role="status" aria-live="polite" class="muted"></p>
+      </section>
       <div id="baRequirementModalContent" aria-live="polite"></div>
     </div></div>
     <section id="pmDailyCockpit" class="pm-daily-cockpit hidden" aria-label="Project Manager daily delivery cockpit">

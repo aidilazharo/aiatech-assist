@@ -9,10 +9,11 @@ const ui=fs.readFileSync(path.join(root,'media/start.js'),'utf8');
 const css=fs.readFileSync(path.join(root,'media/start.css'),'utf8');
 const progress=require('../media/ba-progress');
 
-test('incomplete cycle gets exactly one Resume/Restart section while approved history is preserved',()=>{
- for(const id of ['baUncompletedPanel','baIncompleteTitle','baIncompleteMeta','baIncompleteSource','baResumeIncomplete','baRestartIncomplete']){
+test('incomplete cycle shows only Resume and Delete while approved history is preserved',()=>{
+ for(const id of ['baUncompletedPanel','baIncompleteTitle','baIncompleteMeta','baIncompleteSource','baResumeIncomplete','baDeleteIncomplete']){
   assert.equal((host.match(new RegExp('id="'+id+'"','g'))||[]).length,1,id);
  }
+ assert.doesNotMatch(host,/id="baRestartIncomplete"|id="baOverviewNew"/);
  assert.match(host,/<section id="baUncompletedPanel" class="ba-incomplete-panel"/);
  assert.match(host,/id="baCompletedSection" class="ba-completed-flat"/);
  assert.match(host,/id="baCompletedJiraHistory"/);
@@ -35,11 +36,8 @@ test('resume navigates to saved active step without restarting or submitting wor
  assert.match(resume,/navigate\('discovery'\)/);
  assert.doesNotMatch(resume,/send\(|startOrRestartBusinessRequirements|importDiscovery/);
 });
-test('restart uses host confirmation, preserves protected records and guards unsafe states',()=>{
- const start=ui.indexOf("$('baRestartIncomplete').addEventListener('click'");
- const end=ui.indexOf('// v0.1.21:',start);
- assert.match(ui.slice(start,end),/send\('restartUncompletedBusinessRequirement',\{revision:brState\.revision,openUploadImmediately:true\}\)/);
- assert.match(ui,/const canRestart=sources\.length>0&&!Object\.keys\(brState\?\.pending\|\|\{\}\)\.length&&!discoveryDirty&&!brEditorDirty&&!busy/);
+test('restart remains a protected host operation but has no in-progress overview button',()=>{
+ assert.doesNotMatch(ui,/baRestartIncomplete/);
  const hostStart=host.indexOf("case 'restartUncompletedBusinessRequirement':");
  const hostEnd=host.indexOf("case 'restartDiscoverySources':",hostStart);
  const restart=host.slice(hostStart,hostEnd);
