@@ -46,18 +46,15 @@ function sourceSection(working){
 }
 const acronymTokens=new Set(['GATE','AIA','AI','ATGV','IT','API','BR','BRD','BRS','ISO','IEEE','IEC','TBP','EA','EXCO','TRM','CAPEX','OPEX','MYR','USD','RMB','PMO','PIC','RBAC','SST','KPI','ID','UAT','UI','UX','MVP1A','PDF','JIRA','SAP']);
 function titleCase(value){
- const words=String(value||'').trim().replace(/\s+/g,' ').split(/(\s+|(?<=\w)-(?=\w))/);
- let seen=0;
- return words.map(token=>{
-  if(!token.trim()||token==='-')return token;
-  const upper=token.toUpperCase();
+ const small=new Set(['a','an','the','and','or','of','for','to','in','on','at','by','with']);
+ let wordIndex=0;
+ return String(value||'').trim().replace(/\s+/g,' ').replace(/\b[A-Za-z][A-Za-z0-9]*\b/g,word=>{
+  const first=wordIndex++===0,upper=word.toUpperCase(),lower=word.toLowerCase();
   if(acronymTokens.has(upper))return upper==='MVP1A'?'MVP1a':upper==='JIRA'?'Jira':upper;
-  if(/^v\d+(?:\.\d+)*$/i.test(token))return 'v'+token.slice(1);
-  if(/^\d+[A-Z]?$/i.test(token)||/^(BR|FR|NFR|AC)-\d+/i.test(token))return token.toUpperCase();
-  const lower=token.toLowerCase();
-  if(seen++>0&&new Set(['a','an','the','and','or','of','for','to','in','on','at','by','with']).has(lower))return lower;
+  if(/^v\d+$/i.test(word))return 'v'+word.slice(1);
+  if(!first&&small.has(lower))return lower;
   return lower.charAt(0).toUpperCase()+lower.slice(1);
- }).join('');
+ });
 }
 function documentTitle(name){
  let base=String(name||'').replace(/^.*[\\/]/,'').replace(/\.(?:docx?|pdf|md|txt)$/i,'');
