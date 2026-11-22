@@ -433,7 +433,7 @@ async function runMockServices(root,{relative='',previewUrl=''}={}){
     const info=await inspectScripts(root);
     const target=info.targets.find(t=>t.relative===relative);
     if(!target||target.kind!=='npm')throw Error('Select a detected Node application for synthetic API preview.');
-    if(!/^fix\\/atgv-custom-stack-[a-f0-9]{10}$/.test(info.repo.branch||''))
+    if(!/^fix\/atgv-custom-stack-[a-f0-9]{10}$/.test(info.repo.branch||''))
         throw Error('Synthetic API runner is allowed only on an isolated ATGV local fix branch.');
     const url=require('./architect-custom-stack').loopbackPreview(previewUrl);
     const parsed=new URL(url);
