@@ -3135,3 +3135,41 @@ body:not(.gate-mode) #sdlcWorkspaceShell.atgv-sdlc-workspace-shell{
 #workView .ba-jira-project-table .atgv-datatable-pager{
  box-sizing:border-box;max-width:100%;min-width:0;flex-wrap:wrap;gap:8px
 }
+
+/* v0.0.53: compact, accessible icon-only BR modal actions. */
+#workView #baRequirementModal .ba-br-icon-action,
+#workView .ba-completed-br-heading .ba-br-icon-action{
+ position:relative;box-sizing:border-box;display:inline-flex;align-items:center;
+ justify-content:center;flex:0 0 36px;width:36px;min-width:36px;max-width:36px;
+ height:36px;min-height:36px;margin:0;padding:0;border-radius:6px;
+ font-size:17px;line-height:1.05;white-space:nowrap;
+}
+#workView #baRequirementModal .ba-br-icon-action[hidden]{display:none!important}
+#workView .ba-completed-br-heading .ba-br-icon-action[disabled]{opacity:.48;cursor:not-allowed}
+#workView #baRequirementModal .ba-br-icon-action:focus-visible,
+#workView .ba-completed-br-heading .ba-br-icon-action:focus-visible{
+ outline:2px solid var(--vscode-focusBorder,#66a5f5);outline-offset:2px
+}
+#workView #baRequirementModal .ba-br-icon-action:not([disabled]):is(:hover,:focus-visible)::after,
+#workView .ba-completed-br-heading .ba-br-icon-action:not([disabled]):is(:hover,:focus-visible)::after{
+ content:attr(data-tooltip);position:absolute;z-index:150;right:0;bottom:calc(100% + 8px);
+ min-width:max-content;max-width:min(300px,70vw);padding:6px 9px;
+ border-radius:5px;border:1px solid var(--vscode-panel-border,#586171);
+ color:var(--vscode-menu-foreground,#f5f7fa);
+ background:var(--vscode-menu-background,#242932);
+ box-shadow:0 5px 16px rgba(0,0,0,.4);
+ font-size:11px;line-height:1.35;font-weight:400;pointer-events:none
+}
+#workView #baRequirementModal .ba-requirement-modal-tools{gap:7px;align-items:center;flex-wrap:nowrap}
+#workView .ba-completed-br-heading .ba-br-icon-action.ba-jira-only-delete{
+ font-size:15px;color:var(--vscode-errorForeground,#ff8e8e)
+}
+#workView .ba-completed-br-heading .ba-br-icon-action.ba-jira-answers-unavailable{
+ color:var(--vscode-disabledForeground,#999)
+}
+@media(max-width:620px){
+ #workView #baRequirementModal .ba-br-icon-action,
+ #workView .ba-completed-br-heading .ba-br-icon-action{
+  flex-basis:34px;width:34px;min-width:34px;height:34px;min-height:34px
+ }
+}
