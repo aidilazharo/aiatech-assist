@@ -811,7 +811,32 @@ async function activeAiTarget(){
  return resolveAiTarget({vscodeApi:vscode,config:{provider,model:conf.get('rag.model',''),endpoint:conf.get('rag.endpoint',''),codexTransport:conf.get('ai.codexTransport','https'),preferredVendor:conf.get('ai.preferredVendor',''),selectedModel:conf.get('ai.selectedModel','')},secret:await context.secrets.get(aiSecretKey(provider)),runtimeRoot:aiRuntimeRoot(),projectDirectory:getWorkspace()?.uri.fsPath||context.globalStorageUri.fsPath});
 }
 
-const aiAnswer=(target,prompt,maxChars,options={})=>sendAiText({vscodeApi:vscode,target,prompt,maxChars,...options});
+// One host-owned, reference-counted AI activity signal for every application page.
+// Starting a long-running Git install/server is NOT AI activity; only actual model
+// requests and the configured AI service may activate the shared header waveform.
+let aiChatActivityEnd=null;
+let activeAiRequests=0;
+function publishAiActivity(){
+ if(!dashboard?.webview)return;
+ Promise.resolve(dashboard.webview.postMessage({type:'atgvAiActivity',active:activeAiRequests>0,count:activeAiRequests}))
+  .catch(error=>report('Header AI activity notification: '+String(error.message||error).slice(0,140)));
+}
+function beginAiActivity(){
+ activeAiRequests++;
+ publishAiActivity();
+ let finished=false;
+ return ()=>{
+  if(finished)return;
+  finished=true;
+  activeAiRequests=Math.max(0,activeAiRequests-1);
+  publishAiActivity();
+ };
+}
+const aiAnswer=async(target,prompt,maxChars,options={})=>{
+ const finished=beginAiActivity();
+ try{return await sendAiText({vscodeApi:vscode,target,prompt,maxChars,...options});}
+ finally{finished();}
+};
 let modelStatusCache={at:0,status:inactive('LLM'),pending:null},modelStatusPoll=null;
 async function currentModelStatus(){
  const now=Date.now();if(now-modelStatusCache.at<45000)return modelStatusCache.status;
@@ -1042,7 +1067,7 @@ function aiRoot(){if(!activeProject||!registry)throw Error('Open an ATGV project
 async function aiStatus(){if(!activeProject)return null;const epoch=activationEpoch,root=aiRoot();const config=await aiServiceConfig.read(root);if(epoch!==activationEpoch||!activeProject)return null;try{const data=await aiOrchestrator.readStatus(root);return {...data,config,worker:aiOrchestrator.workerId(),sync:data.file?(()=>{try{const m=new aiMemory.ProjectMemory(root);try{return m.get('shared-sync','Never');}finally{m.close();}}catch{return 'Unavailable';}})():'Never',nextRun:data.runs[0]?.started?new Date(new Date(data.runs[0].started).getTime()+config.interval*60000).toISOString():null};}catch(e){return {config,error:e.message,worker:aiOrchestrator.workerId(),runs:[],jobs:[],proposals:[]};}}
 async function aiSharedClient(){const {project,config}=current();const token=await getAtlassianToken(project);if(!token)throw Error('Atlassian token missing. Shared generation is disabled.');return new SharedMemory({config,token,projectId:project.id});}
 async function aiPull(){if(!activeProject)return;const epoch=activationEpoch,projectId=activeProject.id;try{const shared=await aiSharedClient(),remote=await shared.read();if(epoch!==activationEpoch||activeProject?.id!==projectId)return;const memory=new aiMemory.ProjectMemory(aiRoot());try{memory.importShared(remote.value.manifest,projectId);}finally{memory.close();}report('Confluence AI memory loaded for '+activeProject.id);}catch(e){report('Confluence AI memory deferred: '+e.message);}}
-async function aiRunOnce(){if(aiServiceBusy||!activeProject)return {status:'busy'};aiServiceBusy=true;try{const root=aiRoot(),shared=await aiSharedClient(),provider=cfg().get('rag.provider','auto');if(!['ollama','openai-compatible'].includes(provider))throw Error('Unattended generation needs an approved Ollama or OpenAI-compatible endpoint, not interactive Copilot Auto. Configure RAG Provider.');const model=await activeAiTarget();const result=await aiOrchestrator.run({root,shared,model,onProgress:(message,percent)=>{dashboard?.webview.postMessage({type:'aiServiceProgress',message,percent});}});const memory=new aiMemory.ProjectMemory(root);try{const merged=await shared.mergeManifest(memory.manifest(activeProject.id),memory.get('shared-manifest',{}));memory.set('shared-manifest',merged);memory.set('shared-sync',new Date().toISOString());}catch(e){memory.queueOperation('manifest',memory.manifest(activeProject.id));report('AI memory sync queued: '+e.message);}finally{memory.close();}await dashboard?.webview.postMessage({type:'aiServiceProgress',message:'Completed: '+result.status,percent:100});return result;}finally{aiServiceBusy=false;await refreshDashboard().catch(()=>{});}}
+async function aiRunOnce(){if(aiServiceBusy||!activeProject)return {status:'busy'};aiServiceBusy=true;try{const root=aiRoot(),shared=await aiSharedClient(),provider=cfg().get('rag.provider','auto');if(!['ollama','openai-compatible'].includes(provider))throw Error('Unattended generation needs an approved Ollama or OpenAI-compatible endpoint, not interactive Copilot Auto. Configure RAG Provider.');const model=await activeAiTarget();const endAi=beginAiActivity();let result;try{result=await aiOrchestrator.run({root,shared,model,onProgress:(message,percent)=>{dashboard?.webview.postMessage({type:'aiServiceProgress',message,percent});}});}finally{endAi();}const memory=new aiMemory.ProjectMemory(root);try{const merged=await shared.mergeManifest(memory.manifest(activeProject.id),memory.get('shared-manifest',{}));memory.set('shared-manifest',merged);memory.set('shared-sync',new Date().toISOString());}catch(e){memory.queueOperation('manifest',memory.manifest(activeProject.id));report('AI memory sync queued: '+e.message);}finally{memory.close();}await dashboard?.webview.postMessage({type:'aiServiceProgress',message:'Completed: '+result.status,percent:100});return result;}finally{aiServiceBusy=false;await refreshDashboard().catch(()=>{});}}
 async function aiSchedule(){if(aiServiceTimer){clearInterval(aiServiceTimer);aiServiceTimer=null;}if(!activeProject)return;const settings=await aiServiceConfig.read(aiRoot());if(settings.enabled&&settings.mode==='vscode'){aiServiceTimer=setInterval(()=>{if(!aiServiceBusy)aiRunOnce().catch(e=>report('AI hourly service: '+e.message));},settings.interval*60000);aiServiceTimer.unref?.();}}
 const confluenceSourceConflictNotices=new Map();
 
@@ -5848,6 +5873,7 @@ async function handleDashboardMessage(msg){
            await recordStartupDiagnostic({stage:'webview-assets',status:'failed',detail});
          }
          await finishManualProjectDiscovery(startupSequence);
+         publishAiActivity(); // Restore the signal after webview reload while an AI request is still active.
          if(startupUpdateSessionChecked!==startupSessionId){
           startupUpdateSessionChecked=startupSessionId;
           void checkSoftwareUpdates({prompt:true,force:true,startup:true}).catch(e=>report('Startup update check: '+e.message));
@@ -8076,7 +8102,7 @@ async function handleDashboardMessage(msg){
         }
         break;
       }
-      case 'openAtgvAi':{await atgvAiChat.open(vscode,{runtimeRoot:aiRuntimeRoot(),onLog:report});break;}
+      case 'openAtgvAi':{await atgvAiChat.open(vscode,{runtimeRoot:aiRuntimeRoot(),onLog:report,onActivity:active=>{if(active){aiChatActivityEnd?.();aiChatActivityEnd=beginAiActivity();}else{aiChatActivityEnd?.();aiChatActivityEnd=null;}}});break;}
        case 'deleteJiraOnlyBROwned':{
          const projectId=activeProject?.id||'';
          if(remoteBRDeletionBusy)throw Error('A remote Jira deletion or recovery is in progress.');
@@ -11302,7 +11328,7 @@ function activate(ctx){
    }
   });
   const reportIssue=()=>openIssueReport();
-  const ai=()=>atgvAiChat.open(vscode,{runtimeRoot:aiRuntimeRoot(),onLog:report});
+  const ai=()=>atgvAiChat.open(vscode,{runtimeRoot:aiRuntimeRoot(),onLog:report,onActivity:active=>{if(active){aiChatActivityEnd?.();aiChatActivityEnd=beginAiActivity();}else{aiChatActivityEnd?.();aiChatActivityEnd=null;}}});
   const actions={start,workspace,ai,restart,reset,refreshUnifiedArtifacts,reportIssue};
   for(const [name,fn] of Object.entries(actions))ctx.subscriptions.push(vscode.commands.registerCommand('atgvAssist.'+name,async(...args)=>{await ready;return guarded(()=>fn(...args));}));
   ctx.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(()=>{++startupSequence;ready=initialize().then(()=>{startIdleMaintenance();return dashboard?start({skipReload:true}):undefined;}).catch(e=>report('Workspace change: '+e.message));}));
