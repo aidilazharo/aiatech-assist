@@ -1,14 +1,14 @@
-# ATGV AIATECH Assist v0.0.41
+# ATGV AIATECH Assist v0.0.42
 
 ## Changes
 
-- Record a durable, redacted, bounded Technology Stack diagnostic journal from Save Stack through checkout, repository scanning, approval waiting, all six Install & Run stages, dependency installation, mock preview verification, cancellation and failures.
-- Reuse the existing Technology Stack download icon to export chronological activity and in-session errors even when no failure has occurred.
-- Keep project-specific log history across ATGV restarts in VS Code extension global storage, outside the Git checkout.
-- Fix the previously unsupported `custom-stack` error-log category which could prevent an approved Install & Run from starting.
-- Distinguish 2–3% repository preflight from 4% waiting for explicit user confirmation. Emit reminders at the same percentage every 30 seconds until approval, cancellation or dialog timeout.
+- Align the top of every role's My Work AI chat with the left-sidebar WORKSPACE title using the matching 23px top offset (17px sidebar top padding plus 6px first-label padding).
+- Put the clearance on the non-scrolling My Work AI shell, rather than the scrollable results viewport, to prevent messages passing underneath the native header animation.
+- Bring the scrollable chat text, conversation, and bottom composer to one consistent z-index 1 foreground layer while keeping the native header waveform untouched above the red border.
+- Remove the chat title's extra 2px top margin to match the sidebar heading baseline.
+- Keep the existing full-width borderless chat, fixed bottom composer, task cards, responsive layout, and reduced-motion behavior unchanged.
 
 ## Validation
 
-- Regression tests cover redaction, persistent chronology, per-project isolation, bounded log retention, no-follow symlinks, valid custom-stack diagnostics, and reuse of the existing download icon.
-- CI verifies the Node suite, UI themes, Windows stack reset, and VSIX packaging/activation.
+- Regression tests check the exact sidebar-aligned offset, shared foreground stacking, scroll clipping, waveform preservation, and role-independent AI layout.
+- CI validates the complete Node regression suite, Windows reset checks, UI themes, and VSIX packaging/activation.
