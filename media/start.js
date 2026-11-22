@@ -5532,6 +5532,7 @@ $('baWorkingBrDownload').addEventListener('click',()=>{
 });
 function renderSourceDocuments(){
  const root=$('sourceDocuments');root.replaceChildren();
+ const fileToolbar=$('baAutoFileActions');if(fileToolbar)fileToolbar.replaceChildren();
  renderSourcePreflight();
  const files=brState?.sourceDocuments||[];
  // Older interrupted mappings could persist a source selection without a
@@ -5570,7 +5571,12 @@ function renderSourceDocuments(){
   remove.dataset.brDeleteAction='true';
   remove.disabled=!!baBusyTask||!!sourceRemoving||brDeletionBusy||!baCanEdit('ba-discovery');
   remove.addEventListener('click',()=>{if(remove.disabled)return;requestBRDeletion({target:'active-source',digest:doc.digest,revision:brState.revision});});
-  actions.append(replace,remove);item.append(selector,info,actions);root.append(item);
+  actions.append(replace,remove);
+  // Keep document tools in a single toolbar; preserve their original click handlers.
+  if(fileToolbar&&$('discoveryView')?.classList.contains('ba-automatic-view')){
+   fileToolbar.append(actions);item.append(selector,info);
+  }else item.append(selector,info,actions);
+  root.append(item);
  }
  renderArchivedSources();
  renderSourceSelection();
