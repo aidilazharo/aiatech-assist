@@ -6,7 +6,7 @@
 - Reuse the existing Technology Stack download icon to export chronological activity and in-session errors even when no failure has occurred.
 - Keep project-specific log history across ATGV restarts in VS Code extension global storage, outside the Git checkout.
 - Fix the previously unsupported `custom-stack` error-log category which could prevent an approved Install & Run from starting.
-- Explain that 4% means user confirmation is pending, not a stalled installation. Emit a reminder at the same percentage every 30 seconds until approval, cancellation or dialog timeout.
+- Distinguish 2–3% repository preflight from 4% waiting for explicit user confirmation. Emit reminders at the same percentage every 30 seconds until approval, cancellation or dialog timeout.
 
 ## Validation
 
