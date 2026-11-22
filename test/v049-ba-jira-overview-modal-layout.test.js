@@ -26,8 +26,9 @@ test('BA overview puts the in-progress requirement ahead of Jira and removes the
  const end=html.indexOf('<section id="pmDailyCockpit"',main);
  assert.ok(main>=0&&first>main&&second>first&&end>second,'in-progress must be the first overview section');
  assert.match(css,/#workView\.ba-project-overview > #baRequirementsOverview\{/);
- const overviewStyle=css.slice(css.lastIndexOf('#workView.ba-project-overview > #baRequirementsOverview{'),
-  css.indexOf('}',css.lastIndexOf('#workView.ba-project-overview > #baRequirementsOverview{')));
+ const layoutStart=css.indexOf('/* v0.0.49 — BA Jira overview');
+ const ruleStart=css.indexOf('#workView.ba-project-overview > #baRequirementsOverview{',layoutStart);
+ const overviewStyle=css.slice(ruleStart,css.indexOf('}',ruleStart));
  assert.match(overviewStyle,/padding:0!important/);
  assert.match(overviewStyle,/border:0!important/);
  assert.match(overviewStyle,/background:transparent!important/);
