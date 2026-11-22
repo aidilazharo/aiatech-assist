@@ -25,10 +25,16 @@ test('every workspace view including SDLC Readiness has valid id and hidden init
 });
 
 test('every sidebar menu routes to a dedicated workspace page',()=>{
-  const routes={overview:'landing', 'sdlc-roles':'myWork','role-workspace':'work',flow:'flow',documents:'documents',planning:'planning',knowledge:'knowledge',library:'library',operations:'operations',settings:'settings'};
+  const routes={overview:'landing', 'sdlc-roles':'myWork',flow:'flow',library:'library',settings:'settings'};
   for(const [route,page] of Object.entries(routes)){
     assert.match(html,new RegExp('data-nav="'+route+'"'),'sidebar has route '+route);
     assert.match(html,new RegExp('<main id="'+viewId(page)+'"'),'route '+route+' points to actual page');
+  }
+  assert.doesNotMatch(html,/data-nav="role-workspace"|data-nav="documents"|data-nav="planning"|data-nav="knowledge"|data-nav="operations"/);
+  assert.match(html,/data-nav="flow"[^>]*>[\s\S]{0,100}SDLC Workspace<\/button>/);
+  for(const view of ['documents','planning','knowledge','operations']){
+    assert.match(html,new RegExp('data-sdlc-tab="'+view+'"'));
+    assert.match(html,new RegExp('<main id="'+view+'View"'));
   }
   assert.match(start,/if\(destination==='flow'\)\{setView\('flow'\)/);
   assert.match(start,/if\(destination==='planning'\)\{setView\('planning'\)/);
