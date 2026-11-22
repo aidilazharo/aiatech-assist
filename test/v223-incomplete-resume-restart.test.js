@@ -30,6 +30,13 @@ test('the overview renders the saved milestone and source for an unfinished cycl
  assert.equal(progress.derive({started:true,hasSources:true,mappingDone:true,savedDiscovery:true}).find(item=>item.current).key,'review');
 });
 test('resume navigates to saved active step without restarting or submitting work',()=>{
+ const start=ui.indexOf("$('baResumeIncomplete').addEventListener('click'");
+ const end=ui.indexOf("$('baDeleteIncomplete').addEventListener('click'",start);
+ const resume=ui.slice(start,end);
+ assert.match(resume,/navigate\('discovery'\)/);
+ assert.doesNotMatch(resume,/send\(|startOrRestartBusinessRequirements|importDiscovery/);
+});
+test('restart remains a protected host operation but has no in-progress overview button',()=>{
  assert.doesNotMatch(ui,/baRestartIncomplete/);
  const hostStart=host.indexOf("case 'restartUncompletedBusinessRequirement':");
  const hostEnd=host.indexOf("case 'restartDiscoverySources':",hostStart);
