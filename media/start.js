@@ -2320,7 +2320,11 @@ function refreshArchitectStageClasses(project){
  const saved=!!(stackId&&prepared?.stackId===stackId&&project?.techStackId===stackId);
  const tested=saved&&project?.techStackValidation?.status==='tested'&&project.techStackValidation.stackId===stackId;
  const approved=tested&&project?.techStackApproval?.status==='approved'&&project.techStackApproval.stackId===stackId;
- const serverReady=architectServerRequirementReady(project,stackId);
+ const customStack=stackId==='custom';
+ const preview=project?.techStackCustomPreview;
+ const mockReady=!!(customStack&&saved&&preview?.status==='verified'&&preview.mockOnly===true&&
+  preview.sha===prepared.sha&&preview.branch===prepared.branch);
+ const serverReady=customStack?mockReady:architectServerRequirementReady(project,stackId);
  for(const [id,done,current] of [
   ['architectSaveStage',saved,!saved],['architectDependenciesStage',tested,saved&&!tested],
   ['architectTestStage',tested,tested&&!serverReady],['architectApproveStage',approved,serverReady&&!approved]
@@ -2328,7 +2332,7 @@ function refreshArchitectStageClasses(project){
   const step=$(id);step.classList.toggle('complete',!!done);step.classList.toggle('current',!!current);
   step.setAttribute('aria-label',step.textContent.trim()+': '+(done?'Completed':current?'Current step':'Pending'));
  }
- $('architectApprovalStatus').textContent=stackId==='custom'?'Custom Stack · a local synthetic mock preview is not verified Developer handoff evidence. Separate test/build and reviewed branch publication are required; merging to main is not required.':approved?'Approved for Developers · '+new Date(project.techStackApproval.approvedAt||Date.now()).toLocaleString():serverReady?(architectLiveServerReady(project,stackId)?'Server running and verified · ready for architect approval.':'Application server was verified for this commit and is now stopped. Ready for Architect approval.'):tested?'Run Server successfully to enable approval.':saved?'Complete Test & Run, then Run Server.':'';
+ $('architectApprovalStatus').textContent=customStack?(approved?'Developer MOCK handoff approved · '+String(project.techStackApproval.remoteBranch||'')+' · real integrations remain unverified.':mockReady?'Mock preview verified. Approve for Developers will validate real test/build checks and publish a separate reviewed handoff branch; no main merge.':'Complete Install & Run before approving a Custom Stack development handoff.'):approved?'Approved for Developers · '+new Date(project.techStackApproval.approvedAt||Date.now()).toLocaleString():serverReady?(architectLiveServerReady(project,stackId)?'Server running and verified · ready for architect approval.':'Application server was verified for this commit and is now stopped. Ready for Architect approval.'):tested?'Run Server successfully to enable approval.':saved?'Complete Test & Run, then Run Server.':'';
 }
 function syncArchitectStackButtons(project){
  const stackId=$('architectStackSelect').value;
@@ -2354,11 +2358,23 @@ function syncArchitectStackButtons(project){
   save.title=locked?'Custom Stack saved. Change the stack selection to save again.':'Save Custom Stack: clone the configured project GitHub repository into its missing or empty repository folder. Never overwrite existing files.';
   $('architectResetStack').disabled=true;
   $('architectTestStack').disabled=true;
-  $('architectApproveStack').disabled=true;
-  $('architectTestStack').title='Custom Stack uses isolated Install & Run. This is a mock preview, not a real test/build certification.';
-  $('architectApproveStack').title='Mock preview verified locally, but Developer approval requires separate tested and reviewed handoff evidence. Do not merge into main merely to approve.';
+  // A verified mock preview unlocks REQUESTING handoff validation, not
+  // approval itself. Host execution checks every target and confirms a push.
+  const preview=project?.techStackCustomPreview;
+  const mockReady=!!(saved&&preview?.status==='verified'&&preview.mockOnly===true&&
+    preview.root===prepared.root&&preview.sha===prepared.sha&&preview.branch===prepared.branch);
+  const handedOff=!!(mockReady&&approved&&project?.techStackApproval?.scope==='development-mock'&&
+    project.techStackApproval.remoteVerified===true&&project.techStackApproval.remoteSha===prepared.sha);
+  const handoff=$('architectApproveStack');
+  handoff.disabled=architectActionBusy||!mockReady||handedOff;
+  handoff.textContent=handedOff?'Development Handoff Approved':'Approve for Developers';
+  $('architectTestStack').title='Real test/build checks run with explicit consent during Custom Stack handoff.';
+  handoff.title=handedOff?'Development-only handoff pinned to a verified remote SHA; real integrations remain unverified.':
+    mockReady?'Run test/build for every runnable application and request explicit approval to push the mock-only handoff branch, without merging main.':
+    'Complete Install & Run to verify a committed, local synthetic preview first.';
   return;
  }
+ $('architectApproveStack').textContent='Approve for Developers';
  // A different prepared stack can be replaced only through a confirmed,
  // clean-checkout Git reset. Keep the action available and explain that path.
  save.title=locked?'Technology stack saved. Change the selection to save again.':switching?'Review Git safety checks and confirm switching from '+prepared.stackId+' to '+stackId+'. Previous branches remain intact.':'';
@@ -8110,7 +8126,7 @@ function architectBegin(action,message){
  if(action==='architectResetStack')live.active='git';
  else if(action==='architectSaveStack'){live.completed.clear();live.active='git';}
  else if(action==='architectTestStack')live.active='tests';
- else if(action==='architectApproveStack')live.active='approval';
+ else if(action==='architectApproveStack'||action==='architectApproveCustomStack')live.active='approval';
  renderArchitectRequirements(projects.find(p=>p.id===activeId));
  $('architectBootstrapStatus').textContent=message;
  for(const id of ['architectSaveStack','architectResetStack','architectTestStack','architectApproveStack'])$(id).disabled=true;
@@ -8433,6 +8449,11 @@ window.addEventListener('message',event=>{
    renderArchitectCustomPanel();
   }
  }
+ if(m.type==='architectCustomHandoffProgress'&&m.projectId===activeId){
+  architectLastMessage='Custom Stack handoff · '+String(m.message||'Validating application tests and build').slice(-250);
+  $('architectApprovalStatus').textContent=architectLastMessage;
+  $('architectBootstrapStatus').textContent=architectLastMessage;
+ }
  if(m.type==='architectCustomRunResult'){
   architectCustomBusy=false;architectCustomOperation='';architectCustomLastError='';architectCustomAiActive=false;
   architectCustomStage=m.value?.running?7:architectCustomStage;
@@ -8483,7 +8504,12 @@ $('architectSaveStack').addEventListener('click',()=>{
 $('architectStopInstall').addEventListener('click',()=>{if(architectActionBusy&&architectPendingAction==='architectSaveStack'){$('architectStopInstall').disabled=true;send('architectStopInstall');}});
 $('architectDownloadDependencyHistory').addEventListener('click',()=>send('architectDownloadDependencyHistory'));
 $('architectTestStack').addEventListener('click',()=>architectBegin('architectTestStack','Testing, building and checking the selected stack…'));
-$('architectApproveStack').addEventListener('click',()=>architectBegin('architectApproveStack','Approving the tested stack for Developers…'));
+$('architectApproveStack').addEventListener('click',()=>{
+ const custom=$('architectStackSelect').value==='custom';
+ architectBegin(custom?'architectApproveCustomStack':'architectApproveStack',custom?
+  'Validating Custom Stack test/build and preparing a development-only mock handoff…':
+  'Approving the tested stack for Developers…');
+});
 
 window.addEventListener('message',event=>{
  const msg=event.data||{};
@@ -8617,7 +8643,7 @@ window.addEventListener('message',event=>{
      const current=techStacks.find(item=>item.id===$('architectStackSelect').value);
      for(let i=0;i<(current?.dependencyPackages?.length||0);i++)live.completed.add('package:'+i);
    }
-   if(architectPendingAction==='architectApproveStack')live.completed.add('approval');
+   if(['architectApproveStack','architectApproveCustomStack'].includes(architectPendingAction))live.completed.add('approval');
    if(architectPendingAction==='architectResetStack'){
      live.completed.clear();
      architectStackDraft={projectId:activeId,stackId:''};
