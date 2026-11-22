@@ -50,7 +50,7 @@ test('React stack becomes incompatible when an old Node.js version is detected',
 test('start page and branded extension-update modal are separate surfaces',()=>{
  const html=read('src/lib/webview/dashboard-html.js');
  const ui=read('media/start.js');const css=read('media/start.css');
- assert.match(html,/id="startupSetup" class="atgv-startup-setup"/);
+ assert.match(html,/id="startupSetup" class="atgv-startup-setup hidden"/);
  assert.match(html,/id="startupProceed" disabled/);
  assert.match(html,/id="startupStackGrid"/);
  assert.match(html,/id="extensionUpgradeModal" class="modal-overlay hidden"/);
@@ -60,14 +60,15 @@ test('start page and branded extension-update modal are separate surfaces',()=>{
  assert.match(css,/\.atgv-upgrade-modal/);
  assert.equal((html.match(/id="extensionUpgradeModal"/g)||[]).length,1);
 });
-test('host requires live Jira, Confluence, GitHub and library checks before saving and proceeding',()=>{
+test('host checks Jira, Confluence, GitHub and Library before saving and verifies the saved proof before proceeding',()=>{
  const host=read('src/lib/runtime/extension-runtime.js');
  assert.match(host,/await testJiraConnection\(config,atlassian\)/);
  assert.match(host,/confluenceApi\+'\?limit=1'/);
  assert.match(host,/await sdlcCatalog\.remoteInfo\(libraryConf,github\)/);
  assert.match(host,/atgvAssist\.startupSetup\.completed/);
  assert.match(host,/storedStartupVerification\(\)/);
- assert.match(host,/verified\.signature!==sha/);
+ assert.match(host,/verifiedFields=!!verified&&verified\.signature===sha/);
+ assert.match(host,/if\(!verifiedFields\)throw Error/);
  assert.match(host,/offerBrandedExtensionUpgrade\(release\)/);
  assert.doesNotMatch(host,/showInformationMessage\(`ATGV v\$\{release\.version\} is available \(installed:/);
 });

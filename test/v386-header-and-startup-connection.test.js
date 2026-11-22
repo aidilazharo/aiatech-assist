@@ -19,7 +19,7 @@ function createPageHarness(){
  const start=ui.indexOf('function renderStartupPage(){');
  const end=ui.indexOf('function showStartupStep(required)',start);
  const invalidateStart=ui.indexOf('function invalidateStartupConnection(){');
- const invalidateEnd=ui.indexOf('for(const id of Object.values(startupFieldMap))',invalidateStart);
+ const invalidateEnd=ui.indexOf('function toggleStartupConnectionEdit(){',invalidateStart);
  assert.ok(start>0&&end>start&&invalidateStart>0&&invalidateEnd>invalidateStart);
  const nodes=new Map();
  const node=id=>{
@@ -35,7 +35,7 @@ function createPageHarness(){
  const create=new Function('$',[
   "const startupFieldMap={jiraUrl:'startupJiraUrl',email:'startupEmail',githubUrl:'startupGithubUrl',projectRepository:'startupProjectRepository'};",
   "let startupSetupRequired=true,startupPage=1,startupVerifying=false,startupInstallingModule='',startupScanComplete=true,startupConnectionVerified=true,startupConnectionEditSnapshot=null,startupOpenStackId='',startupCopilotModalOpen=false;",
-  "let startupAutoNotice='',startupAutoEnabled=false,startupConnectionCheckPending=false,startupConnectionHealthError=false;",
+  "let startupProceedMode='',startupConnectionCheckPending=false,startupConnectionHealthError=false;",
   ui.slice(start,end),
   ui.slice(invalidateStart,invalidateEnd),
   'return {renderStartupPage,invalidateStartupConnection,setVerifying:v=>startupVerifying=v,setVerified:v=>startupConnectionVerified=v};'
@@ -50,6 +50,9 @@ test('successful Test & Save hides and disables action, changes restore it, and 
  assert.equal(node('startupTestConnections').disabled,true);
  assert.equal(node('startupTestConnections').hiddenClasses.has('hidden'),true);
  assert.equal(node('startupProceed').disabled,false);
+ assert.equal(node('startupPrevious').disabled,false);
+ assert.equal(node('startupTestSavedConnections').disabled,false);
+ assert.equal(node('startupTestSavedConnections').hiddenClasses.has('hidden'),false);
  assert.match(node('startupProceedInfo').textContent,/Connections verified/);
 
  page.invalidateStartupConnection();

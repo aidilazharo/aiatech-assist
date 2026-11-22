@@ -29,19 +29,18 @@ function pageFixture(){
  const source=[
   "const startupFieldMap={jiraUrl:'startupJiraUrl',email:'startupEmail',githubUrl:'startupGithubUrl',projectRepository:'startupProjectRepository'};",
   "let startupSetupRequired=true,startupPage=1,startupVerifying=false,startupInstallingModule='',startupConnectionVerified=false,startupConnectionEditSnapshot=null,startupScanComplete=true,startupFormInitialized=false,startupReturnToConnections=false,startupPrereqRequested=true,startupOpenStackId='',startupCopilotModalOpen=false;",
-  "let startupConnectionCheckSequence=0,startupConnectionCheckPending=false,startupConnectionHealthStarted=false,startupConnectionHealthError=false;const startupConnectionCheckResults=new Map();",
+  "let startupConnectionCheckSequence=0,startupConnectionCheckPending=false,startupConnectionHealthError=false;const startupConnectionCheckResults=new Map();",
   "const STARTUP_CONNECTION_CHECK_LABELS=[['jira','Jira API'],['confluence','Confluence API'],['github','GitHub account'],['organization','GitHub organization'],['extension','Extension · read/write/releases'],['library','Library · read/write/releases'],['extension-releases','Extension releases · optional'],['library-releases','Library releases · optional']];function updateStartupIssueSummary(){}",
-  "let startupAutoNotice='',startupAutoEnabled=false,startupAutoProject=null,startupAutoStage='';let gateBusy=false,gateError='',workspaceOpened=false,opening={phase:'search'};",
-  "function stopStartupAuto(){startupAutoEnabled=false;} function beginStartupAuto(){}",
+  "let startupProceedMode='',startupStackData=null,gateBusy=false,gateError='',workspaceOpened=false,opening={phase:'search'};",
   segment('function startupRing(', 'function updateStartupStackProgress('),
   segment('function startupPayload(){','function renderStartupPermissionRows('),
   segment('function renderStartupPage(){','function renderStartupStackReadiness('),
   segment('function invalidateStartupConnection(){',"for(const id of Object.values(startupFieldMap))"),
   segment("$('startupConnectionForm').addEventListener('submit'", "$('startupProceed').addEventListener('click'"),
   'function receive(message){',
-  segment(" if(message.type==='startupConnectionCheck'", " if(message.type==='startupProceedResult')"),
+  segment(" if(message.type==='startupConnectionCheck'", " if(message.type==='startupProceedResult'"),
   '}',
-  'return {renderStartupConfig,renderStartupPage,toggleStartupConnectionEdit,receive,setAuto:v=>startupAutoEnabled=v,isAuto:()=>startupAutoEnabled,isVerified:()=>startupConnectionVerified};'
+  'return {renderStartupConfig,renderStartupPage,toggleStartupConnectionEdit,checkSavedStartupConnections,receive,isVerified:()=>startupConnectionVerified};'
  ].join('\n');
  const document={createElement:tag=>({tag,dataset:{},style:{},children:[],textContent:'',attributes:{},open:false,
   setAttribute(name,value){this.attributes[name]=value;},append(...children){this.children.push(...children);}})};
@@ -49,25 +48,29 @@ function pageFixture(){
  return {node,sent,page:create(node,document,id=>node(id).value,(type,extra)=>sent.push({type,...extra}),()=>{},{jira:{}},()=>{},()=>{})};
 }
 const config={required:true,verified:true,saved:{jiraUrl:'https://example.atlassian.net',email:'person@example.com',githubUrl:'https://github.com/aiamalaysia',projectRepository:'my-fow-technology-app-techassists'},defaults:setup.DEFAULTS};
-test('Edit is below the GitHub token field and verified startup checks run automatically',()=>{
+test('Verified connection settings expose a manual read-only test',()=>{
  const token=html.indexOf('id="startupGithubToken"'),button=html.indexOf('id="startupEditConnections"');
  assert.ok(token>0&&button>token&&button<html.indexOf('</div>',token));
  const {node,sent,page}=pageFixture();
  page.renderStartupConfig(config);
- assert.equal(sent.at(-1).type,'startupCheckConnections');
- assert.deepEqual(Object.keys(sent.at(-1).settings).sort(),['email','githubUrl','jiraUrl','projectRepository']);
+ assert.equal(sent.length,0,'saved checks are only run on request');
  assert.equal(node('startupConnectionChecks').children.length,0,'idle checks must not appear in the interface');
  assert.equal(node('startupConnectionProgress').children.length,0,'progress is hidden until a check starts');
+ assert.equal(node('startupTestSavedConnections').classList.contains('hidden'),false);
+ page.checkSavedStartupConnections();
+ assert.equal(sent.at(-1).type,'startupCheckConnections');
+ assert.deepEqual(Object.keys(sent.at(-1).settings).sort(),['email','githubUrl','jiraUrl','projectRepository']);
  assert.equal(node('startupEditConnections').textContent,'Edit');
  assert.equal(node('startupEditConnections').classList.contains('hidden'),false);
  assert.equal(node('startupJiraUrl').disabled,true);
 });
-test('Editing stops automatic opening, keeps edits through stale state, and cancel restores values and clears tokens',()=>{
+test('Editing invalidates an in-flight test, keeps edits through stale state and restores saved fields on cancel',()=>{
  const {node,sent,page}=pageFixture();
  page.renderStartupConfig(config);
+ page.checkSavedStartupConnections();
  const staleRequest=sent.at(-1).requestId;
- page.setAuto(true);page.toggleStartupConnectionEdit();
- assert.equal(page.isAuto(),false);assert.equal(page.isVerified(),false);
+ page.toggleStartupConnectionEdit();
+ assert.equal(page.isVerified(),false);
  assert.equal(node('startupProceed').disabled,true);
  assert.equal(node('startupTestConnections').disabled,false);
  for(const id of ['startupJiraUrl','startupEmail','startupAtlassianToken','startupGithubUrl','startupProjectRepository','startupGithubToken'])assert.equal(node(id).disabled,false,id);
@@ -87,7 +90,7 @@ test('Editing stops automatic opening, keeps edits through stale state, and canc
  assert.equal(node('startupJiraUrl').value,config.saved.jiraUrl);
  assert.equal(node('startupAtlassianToken').value,'');assert.equal(node('startupGithubToken').value,'');
  assert.equal(page.isVerified(),true);assert.equal(node('startupProceed').disabled,false);
- assert.equal(sent.at(-1).type,'startupCheckConnections');
+ assert.equal(sent.length,2,'cancel does not repeat a network test');
 });
 test('Successful re-verification clears tokens and locks all edited fields',()=>{
  const {node,sent,page}=pageFixture();page.renderStartupConfig(config);page.toggleStartupConnectionEdit();
@@ -99,8 +102,8 @@ test('Successful re-verification clears tokens and locks all edited fields',()=>
  assert.equal(node('startupEmail').disabled,true);assert.equal(node('startupEditConnections').textContent,'Edit');
  assert.equal(node('startupProceed').disabled,false);
 });
-test('A failed background health check remains visible across state refreshes',()=>{
- const {node,sent,page}=pageFixture();page.renderStartupConfig(config);
+test('A failed connection test remains visible across state refreshes',()=>{
+ const {node,sent,page}=pageFixture();page.renderStartupConfig(config);page.checkSavedStartupConnections();
  const request=sent.at(-1);page.receive({type:'startupConnectionHealthResult',requestId:request.requestId,success:false,checks:[{id:'confluence',label:'Confluence API',state:'error',message:'Server responded (HTTP 404).',url:'https://example.atlassian.net/wiki/api/v2/spaces'}]});
  page.renderStartupConfig(config);
  assert.match(node('startupConnectionMessage').textContent,/connections need attention/i);
@@ -108,7 +111,7 @@ test('A failed background health check remains visible across state refreshes',(
  assert.equal(node('startupConnectionChecks').children[0].children[0]._atgvProgress.number.textContent,'!');
 });
 test('checks display sequentially and each successful check disappears immediately',()=>{
- const {node,sent,page}=pageFixture();page.renderStartupConfig(config);
+ const {node,sent,page}=pageFixture();page.renderStartupConfig(config);page.checkSavedStartupConnections();
  const request=sent.at(-1),receive=(check)=>page.receive({type:'startupConnectionCheck',requestId:request.requestId,check});
  const jira={id:'jira',label:'Jira API',state:'pending',message:'Checking…'};
  receive(jira);
@@ -180,7 +183,7 @@ test('All service checks complete after multiple failures, with meaningful safe 
  assert.equal(result.checks.find(x=>x.id==='organization').state,'ok');
  assert.deepEqual(h.writes,[]);assert.doesNotMatch(JSON.stringify(result),/test-atl|test-git/);
 });
-test('Automatic connection health check uses saved credentials without changing settings or tokens',async()=>{
+test('Read-only connection test uses saved credentials without storing settings or tokens',async()=>{
  const h=hostFixture();
  const result=await h.context.testAndSaveStartupConnections({settings:setup.DEFAULTS},{save:false,onProgress:item=>h.progress.push(item)});
  assert.equal(result.success,true);assert.equal(result.checks.length,8);

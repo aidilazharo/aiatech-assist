@@ -663,7 +663,6 @@ function gateOpeningPercent(percent,message){
 }
 function launchFromGate(selection={}){
   if(gateBusy)return;
-  if(!selection.autoResume&&startupAutoEnabled)stopStartupAuto('Automatic opening paused for your project selection.');
   gateError='';gateOfflineAvailable=false;gateBusy=true;
   $('gateProgress').classList.remove('hidden');
   gateOpeningPercent(5,'Selecting project…');
@@ -678,6 +677,7 @@ function renderGate(){
   $('gateOpeningError').classList.toggle('hidden',!gateError);
   $('gateRecovery').classList.toggle('hidden',!gateOfflineAvailable);
   $('gateOffline').disabled=gateBusy;
+  $('gateSearchPrevious').disabled=gateBusy;
   renderGateResults();
 }
 function gateProjectRow(root,project,{recent=false}={}){
@@ -735,7 +735,6 @@ $('gateOpenFolder').addEventListener('click',()=>send('openWorkspaceFolder'));
 for(const [id,provider] of [['guideJiraTokenLink','jira'],['guideConfluenceTokenLink','confluence'],['guideGithubTokenLink','github']])$(id).addEventListener('click',()=>send('guideTokenLink',{provider}));
 $('gateSearch').addEventListener('click',()=>{
   if(gateBusy)return;
-  if(startupAutoEnabled)stopStartupAuto();
   const q=read('gateQuery');renderGateResults();
   if(q.length<2){status('Enter at least 2 characters to search Confluence spaces.',true);return;}
   const requestId=++spaceSearchSequence;gateSearchId=requestId;gateSearched=true;spaces=[];$('gateSearchMessage').textContent='';renderGateResults();
@@ -744,14 +743,12 @@ $('gateSearch').addEventListener('click',()=>{
 });
 $('gateQuery').addEventListener('input',()=>{gateSearchId=null;spaces=[];gateSearched=false;$('gateSearchMessage').textContent='';renderGateResults();});
 $('gateQuery').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('gateSearch').click();}});
-$('gateManual').addEventListener('click',()=>{if(startupAutoEnabled)stopStartupAuto();openProject();});
+$('gateManual').addEventListener('click',()=>openProject());
 $('gateSearchPrevious').addEventListener('click',()=>{
  if(gateBusy)return;
- if(startupAutoEnabled)stopStartupAuto();
  startupReturnToConnections=true;startupPage=1;
- if(!startupPrereqRequested){startupPrereqRequested=true;send('startupReadiness');}
- $('startupConnectionMessage').textContent=startupConnectionVerified?'Connections already verified and saved.':'Test & Save Connections to continue to Search Project.';
- showStartupStep(true);$('startupJiraUrl').focus();
+ showStartupStep(true);
+ $(startupConnectionVerified?'startupTestSavedConnections':'startupJiraUrl').focus();
 });
 $('gateOffline').addEventListener('click',()=>{
   if(gateBusy||!gateOfflineAvailable)return;
@@ -1513,7 +1510,7 @@ function openBARequirementModal(ref,openAnswers=false){
  baRequirementPriorFocus=document.activeElement;
  baRequirementModalTarget={kind:ref.kind,brId:ref.id||'',scopeId:ref.scopeId,rootKey:ref.rootKey,projectId:activeId,openAnswers};
  if(typeof resetBATransferPanel==='function')resetBATransferPanel();
- const transferButton=$('baTransferOpen');if(transferButton)transferButton.hidden=!ref.rootKey;
+ const transferButton=$('baTransferOpen');if(transferButton){transferButton.hidden=!ref.rootKey;transferButton.title='Transfer BR to another Business Analyst';transferButton.dataset.tooltip=transferButton.title;}
  baBreadcrumbAtRequirements=true;
  $('baRequirementModalTitle').textContent=ref.title||ref.label||'Business Requirement details';
  if(ref.kind==='local')renderBACompletedRecords();else renderBAJiraBackedEpics();
@@ -5865,23 +5862,23 @@ function renderBAJiraBackedEpics(){
   heading.append(brElement('span','ba-completed-br-meta',(item.status||'Status unknown')+' · Unlinked to local BR'));
   // Mirror the completed BR's action alignment, but never present missing
   // discovery answers as accessible or reconstructed from Jira.
-  const answers=brElement('button','secondary ba-view-br-answers ba-jira-answers-unavailable','View 12 Answers');
+  const answers=baIconAction(brElement('button','secondary ba-view-br-answers ba-jira-answers-unavailable'),'▤','Discovery answers unavailable in this project');
   answers.type='button';answers.disabled=true;answers.title='Discovery answers unavailable in this ATGV project';
   answers.setAttribute('aria-label','View 12 Answers unavailable: discovery evidence is not stored in this ATGV project');
   heading.append(answers);
-  const open=brElement('button','secondary ba-view-jira','View Jira · '+item.linkedIssueCount+' linked');
+  const open=baIconAction(brElement('button','secondary ba-view-jira'),'↗','View Jira · '+item.linkedIssueCount+' linked issues');
   open.type='button';open.title='Open Jira Epic '+item.key;
   open.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();openJiraIssueModal(item.key);});
   open.addEventListener('keydown',event=>event.stopPropagation());
   heading.append(open);
   if(item.brId){
-   const recover=brElement('button','secondary ba-recover-confluence','Recover from Confluence');
+   const recover=baIconAction(brElement('button','secondary ba-recover-confluence'),'↺','Recover BR from verified Confluence source');
    recover.type='button';recover.title='Restore only from the verified Confluence Source Vault. No Jira issue is deleted.';
    recover.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();
     send('recoverJiraOnlyBR',{projectId:activeId,brId:item.brId,jiraKey:item.key});
    });
    heading.append(recover);
-   const remove=brElement('button','secondary ba-jira-only-delete','🗑');
+   const remove=baIconAction(brElement('button','secondary ba-jira-only-delete','🗑'),'🗑','Review and delete this Jira BR and linked issues');
    remove.type='button';
    remove.title='Eligible only when your Jira account ID matches this Epic Creator or Reporter AND Jira grants Delete Issues permission. Review all descendants first.';
    remove.setAttribute('aria-label','Review deletion eligibility and complete Jira hierarchy for '+item.brId);
@@ -6051,7 +6048,7 @@ function renderBACompletedRecords(){
   heading.append(brElement('span','ba-completed-br-meta',`${group.snapshots.length>1?group.snapshots.length+' published revisions · ':''}Approved R${latest?.approvedRevision||1}${updatedBR?' · Updated · Review required':' · Completed'}`));
   const latestTree=latest?ATGVCompletedBRHistory.jiraTree(latest):{count:0};
   if(group.snapshots.some(snapshot=>Object.keys(snapshot.cycle?.discoveryAnswers||{}).length>0)){
-   const viewAnswers=brElement('button','secondary ba-view-br-answers','View 12 Answers');
+   const viewAnswers=baIconAction(brElement('button','secondary ba-view-br-answers'),'▤','View saved discovery answers');
    viewAnswers.type='button';viewAnswers.title='Expand the completed BR and view saved discovery answers';
    viewAnswers.addEventListener('click',event=>{
     event.preventDefault();event.stopPropagation();details.open=true;
@@ -6063,7 +6060,7 @@ function renderBACompletedRecords(){
    heading.append(viewAnswers);
   }
   if(latestTree.count){
-   const viewJira=brElement('button','secondary ba-view-jira','View Jira · '+latestTree.count+' linked');
+   const viewJira=baIconAction(brElement('button','secondary ba-view-jira'),'↗','View Jira · '+latestTree.count+' linked issues');
    viewJira.type='button';viewJira.title=`View Jira · ${latestTree.count} linked`;
    viewJira.addEventListener('click',event=>{event.stopPropagation();openBRJiraInventory(group.id);});
    viewJira.addEventListener('keydown',event=>event.stopPropagation());
@@ -6594,6 +6591,14 @@ function renderDiscovery(){
 }
 
 function brElement(tag,cls,text){const el=document.createElement(tag);if(cls)el.className=cls;if(text!==undefined)el.textContent=String(text);return el;}
+function baIconAction(node,icon,tooltip){
+ node.classList.add('ba-br-icon-action');
+ node.textContent=icon;
+ node.title=tooltip;
+ node.dataset.tooltip=tooltip;
+ node.setAttribute('aria-label',tooltip);
+ return node;
+}
 let brActiveFilter='all',brFilterProjectId=null;
 function activeBusinessRequirements(){return (brState?.brs||[]).filter(br=>br.status!=='retired'&&!br.archivedFromRestart);}
 function brImpactType(br){return brState?.impact?.find(x=>x.id===br.id)?.change||(br.needsRefresh?'modified':br.status==='approved'?'unchanged':'new');}
@@ -8800,7 +8805,7 @@ const startupFieldMap={jiraUrl:'startupJiraUrl',email:'startupEmail',githubUrl:'
  projectRepository:'startupProjectRepository'};
 let startupFormInitialized=false,startupPrereqRequested=false,startupConnectionVerified=false,startupSetupRequired=true,startupReturnToConnections=false;
 let startupConnectionEditSnapshot=null;
-let startupConnectionCheckSequence=0,startupConnectionCheckPending=false,startupConnectionHealthStarted=false,startupConnectionHealthError=false;
+let startupConnectionCheckSequence=0,startupConnectionCheckPending=false,startupConnectionHealthError=false;
 const startupConnectionCheckResults=new Map();
 const STARTUP_CONNECTION_CHECK_LABELS=[
  ['jira','Jira API'],['confluence','Confluence API'],['github','GitHub account'],['organization','GitHub organization'],
@@ -8811,12 +8816,11 @@ let startupVerifying=false,startupScanComplete=false,startupPage=0,startupInstal
 let startupLastInstalledTool='';
 let startupStackData=null,startupOpenStackId='',startupStackPriorFocus=null;
 let startupCopilotBusy=false,startupCopilotModalOpen=false,startupCopilotPriorFocus=null;
-let startupPermissions=null,startupAutoProject=null,startupAutoEnabled=false,startupAutoTimer=null,startupAutoStage='',startupAutoDeadline=0,startupAutoNotice='';
+let startupPermissions=null,startupProceedMode='';
 const startupStackProgress=new Map();
 const startupPermissionProgress=new Map();
 const STARTUP_STACKS=[['react','ReactJS'],['angular','Angular'],['nestjs','NestJS'],['dotnet','.NET'],['spring-boot','Spring Boot']];
 const STARTUP_STACK_NAMES=STARTUP_STACKS.map(([,name])=>name);
-const STARTUP_SCREEN_MS=5000;
 function setStartupCopilotStatus(state,message){
  startupCopilotBusy=state==='working';
  const button=$('startupCopilotSetup');button.disabled=startupCopilotBusy||state==='ready'||state==='unsupported';
@@ -8993,7 +8997,7 @@ function beginStartupConnectionChecks(){
  renderStartupConnectionChecks();return ++startupConnectionCheckSequence;
 }
 function checkSavedStartupConnections(){
- startupConnectionHealthStarted=true;
+ if(!startupConnectionVerified||startupVerifying||startupConnectionCheckPending||startupProceedMode)return;
  startupConnectionHealthError=false;
  $('startupConnectionMessage').textContent='Checking saved Jira, Confluence and GitHub connections…';
  $('startupConnectionMessage').className='test-status';
@@ -9018,68 +9022,36 @@ function renderStartupPermissionRows(checks){
 }
 function renderStartupPermissions(result){
  startupPermissions=result;renderStartupPermissionRows(result?.checks||[]);
- if(!result?.ok&&startupAutoEnabled)stopStartupAuto('Automatic opening paused: review the permission checks.');
-}
-function stopStartupAuto(message='Automatic opening paused.'){
- if(startupAutoTimer)clearTimeout(startupAutoTimer);startupAutoTimer=null;startupAutoEnabled=false;startupAutoStage='';startupAutoNotice=message;
- if(startupSetupRequired)$('startupProceedInfo').textContent=message;else $('gateAutoMessage').textContent=message;
-}
-function beginStartupAuto(stage){
- if(!startupAutoEnabled||!startupAutoProject)return;
- if(startupAutoTimer)clearTimeout(startupAutoTimer);
- startupAutoStage=stage;startupAutoDeadline=Date.now()+STARTUP_SCREEN_MS;
- const tick=()=>{
-  if(!startupAutoEnabled||startupAutoStage!==stage)return;
-  const dialogOpen=!$('extensionUpgradeModal').classList.contains('hidden')||!$('libraryUpdateModal').classList.contains('hidden')||startupOpenStackId||startupCopilotModalOpen;
-  if(dialogOpen||latestSoftwareUpdateState?.busy){startupAutoDeadline=Date.now()+STARTUP_SCREEN_MS;startupAutoTimer=setTimeout(tick,250);return;}
-  const seconds=Math.max(0,Math.ceil((startupAutoDeadline-Date.now())/1000));
-  const target=stage==='project'?$('gateAutoMessage'):$('startupProceedInfo');
-  target.textContent=stage==='project'?'Opening '+startupAutoProject.name+' in '+seconds+'s…':'Continuing automatically in '+seconds+'s…';
-  if(seconds>0){startupAutoTimer=setTimeout(tick,250);return;}
-  if(stage==='stack'){
-   if(!startupScanComplete||!startupPermissions){target.textContent='Waiting for prerequisite and permission checks…';startupAutoTimer=setTimeout(tick,250);return;}
-   const ids=[startupAutoProject.techStackId,startupAutoProject.techStackCompanionId].filter(Boolean);
-   if(!startupPermissions.ok||!startupStackData?.catalog?.available||ids.some(id=>!startupStackData.stacks.some(stack=>stack.id===id&&stack.ready))){stopStartupAuto('Automatic opening paused: review the selected stack and permissions.');return;}
-   startupPage=1;renderStartupPage();beginStartupAuto('connections');return;
-  }
-  if(stage==='connections'){
-   if(startupConnectionCheckPending){target.textContent='Checking Jira, Confluence and GitHub connections…';startupAutoDeadline=Date.now()+1000;startupAutoTimer=setTimeout(tick,250);return;}
-   if(!startupConnectionVerified){stopStartupAuto('Automatic opening paused: verify the saved connections.');return;}
-   startupAutoStage='proceeding';$('startupProceed').disabled=true;
-   send('startupProceed',{settings:startupPayload(),autoResume:true,projectId:startupAutoProject.id});return;
-  }
-  if(stage==='project'){
-   const projectId=startupAutoProject.id;startupAutoEnabled=false;startupAutoTimer=null;startupAutoStage='';
-   launchFromGate({projectId,autoResume:true});
-  }
- };
- startupAutoTimer=setTimeout(tick,0);
 }
 function renderStartupPage(){
  if(!startupSetupRequired)return;
  if(startupPage!==0&&startupOpenStackId)closeStartupStackModal();
  if(startupPage!==0&&startupCopilotModalOpen)closeStartupCopilotModal();
  // Saved connections remain read-only until the user chooses Edit.
- $('startupTestConnections').disabled=startupVerifying||startupConnectionVerified;
+ const busy=startupVerifying||!!startupProceedMode;
+ $('startupTestConnections').disabled=busy||startupConnectionVerified;
  $('startupTestConnections').classList.toggle('hidden',startupConnectionVerified);
+ $('startupTestSavedConnections').disabled=busy||startupConnectionCheckPending||!startupConnectionVerified;
+ $('startupTestSavedConnections').classList.toggle('hidden',!startupConnectionVerified);
  for(const id of [...Object.values(startupFieldMap),'startupAtlassianToken','startupGithubToken'])
-  $(id).disabled=startupVerifying||startupConnectionVerified;
+  $(id).disabled=busy||startupConnectionVerified;
  const editButton=$('startupEditConnections');
  editButton.classList.toggle('hidden',!startupConnectionVerified&&!startupConnectionEditSnapshot);
- editButton.disabled=startupVerifying;
+ editButton.disabled=busy;
  editButton.textContent=startupConnectionEditSnapshot?'Cancel':'Edit';
  editButton.setAttribute('aria-label',startupConnectionEditSnapshot?'Cancel editing connections':'Edit Atlassian and GitHub connections');
  $('startupComputerCard').classList.toggle('hidden',startupPage!==0);
  $('startupConnectionForm').classList.toggle('hidden',startupPage!==1);
  $('startupPrevious').classList.toggle('hidden',startupPage===0);
  $('startupUnifiedLog').classList.toggle('hidden',startupPage!==0);
- $('startupPrevious').disabled=startupPage===0||startupVerifying||!!startupInstallingModule;
- $('startupProceed').disabled=startupVerifying||!!startupInstallingModule||(startupPage===0?!startupScanComplete:!startupConnectionVerified);
- $('startupProceed').textContent=startupPage===0?'Next →':'Next: Search Project →';
- $('startupProceedInfo').textContent=startupPage===0?(startupScanComplete?'Review available modules, then select Next.':'Checking computer prerequisites…'):
-  startupConnectionCheckPending?'Checking Jira, Confluence and GitHub connections…':startupConnectionHealthError?'Some connection checks need attention. Review them before continuing.':
+ $('startupPrevious').disabled=startupPage===0||busy||!!startupInstallingModule;
+ $('startupProceed').disabled=busy||!!startupInstallingModule||(startupPage===0?!startupScanComplete:!startupConnectionVerified);
+ $('startupProceed').textContent=startupPage===0&&!startupConnectionVerified?'Next →':'Next: Search Project →';
+ $('startupProceedInfo').textContent=startupProceedMode?'Opening project search…':
+  startupPage===0?(startupScanComplete?'Review available modules, then select Next.':'Checking computer prerequisites…'):
+  startupConnectionCheckPending?'Testing saved connections…':
+  startupConnectionHealthError&&startupConnectionVerified?'Open Connection Logs to review the latest test.':
   startupConnectionVerified?'Connections verified. Select Next to search projects.':'Test & Save Connections to enable Next.';
- if(startupAutoNotice&&!startupAutoEnabled)$('startupProceedInfo').textContent=startupAutoNotice;
 }
 function showStartupStep(required){
  if(!required&&startupOpenStackId)closeStartupStackModal();
@@ -9089,10 +9061,22 @@ function showStartupStep(required){
  $('gateFinder').classList.toggle('hidden',required);
  if(required)renderStartupPage();
 }
+function requestStartupReadiness(){
+ if(startupPrereqRequested)return;
+ startupPrereqRequested=true;
+ startupScanPercent(0,'Starting prerequisite scan…');
+ renderStartupScanPlaceholders();
+ send('startupReadiness');
+}
+function requestStartupProceed(autoResume=false){
+ if(startupProceedMode)return;
+ startupProceedMode=autoResume?'resume':'manual';
+ if(!autoResume)renderStartupPage();
+ send('startupProceed',{settings:startupPayload(),autoResume});
+}
 function renderStartupConfig(config){
- if(!config)return;
- // A stale startup-state response must never cover an in-flight or opened
- // project with the Jira/GitHub credential form. Explicit Previous still works.
+ if(!config||startupProceedMode==='resume')return;
+ // Keep an in-flight or opened project visible across state refreshes.
  const openingInProgress=gateBusy||!!gateError||workspaceOpened||(opening?.phase&&opening.phase!=='search');
  const required=config.required===true&&!openingInProgress;
  if(!startupFormInitialized){
@@ -9101,15 +9085,14 @@ function renderStartupConfig(config){
   for(const [key,id] of Object.entries(startupFieldMap))$(id).value=saved[key]||defaults[key]||'';
   $('startupGithubUrl').value=$('startupGithubUrl').value.replace(/^https?:\/\//i,'');
   updateStartupRepositoryPreview();
-  // Restore verified state before rendering the wizard so "Next: Search Project"
-  // is enabled immediately after restarting the extension or VS Code.
   startupConnectionVerified=config.verified===true;
   resetStartupConnectionChecks();
-  startupAutoProject=startupConnectionVerified&&config.selectedProject?.id?config.selectedProject:null;
-  startupAutoEnabled=required&&!!startupAutoProject;
-  if(startupConnectionVerified&&!startupAutoEnabled)startupPage=1;
   startupFormInitialized=true;
- }else if(config.verified===true&&!startupConnectionEditSnapshot){
+  if(config.prerequisitesVerified){
+   startupPage=1;
+   if(required&&startupConnectionVerified){requestStartupProceed(true);return;}
+  }
+ }else if(config.verified===true&&!startupConnectionEditSnapshot&&!startupVerifying){
   startupConnectionVerified=true;
  }
  if(startupConnectionVerified&&!startupConnectionHealthError&&!startupConnectionCheckPending){
@@ -9117,9 +9100,7 @@ function renderStartupConfig(config){
   $('startupConnectionMessage').className='test-status success';
  }
  showStartupStep(required||startupReturnToConnections);
- if(required&&startupConnectionVerified&&!startupConnectionHealthStarted&&!startupConnectionEditSnapshot)checkSavedStartupConnections();
- if(required&&!startupPrereqRequested){startupPrereqRequested=true;startupScanPercent(0,'Starting prerequisite scan…');renderStartupScanPlaceholders();send('startupReadiness');}
- if(required&&startupAutoEnabled&&!startupAutoStage)beginStartupAuto('stack');
+ if(required&&startupPage===0)requestStartupReadiness();
 }
 function renderStartupStackReadiness(result){
  const grid=$('startupStackGrid');grid.replaceChildren();
@@ -9141,7 +9122,7 @@ function renderStartupStackReadiness(result){
   card.setAttribute('aria-label',stack.name+': '+badge.textContent+'. View host tools and project modules');
   card.append(title);startupRing(card);card.append(badge);
   paintStartupStack(card,startupStackProgress.get(stack.id)||{name:stack.name,status:stack.ready?'complete':'error',percent:stack.ready?100:0,message:badge.textContent});
-  card.addEventListener('click',()=>{if(startupAutoEnabled)stopStartupAuto('Automatic opening paused while reviewing the stack.');openStartupStackModal(stack.id,card);});grid.append(card);
+  card.addEventListener('click',()=>openStartupStackModal(stack.id,card));grid.append(card);
  }
  if(typeof updateStartupIssueSummary==='function')updateStartupIssueSummary();
  if(startupOpenStackId){
@@ -9237,7 +9218,7 @@ function invalidateStartupConnection(){
  renderStartupPage();
 }
 function toggleStartupConnectionEdit(){
- if(startupVerifying)return;
+ if(startupVerifying||startupProceedMode)return;
  if(startupConnectionEditSnapshot){
   for(const [key,id] of Object.entries(startupFieldMap))$(id).value=startupConnectionEditSnapshot[key];
   $('startupAtlassianToken').value='';$('startupGithubToken').value='';
@@ -9245,10 +9226,7 @@ function toggleStartupConnectionEdit(){
   updateHeaderUserName(read('startupEmail'));
   $('startupConnectionMessage').textContent='Changes discarded. Saved connections remain available.';
   $('startupConnectionMessage').className='test-status success';
-  checkSavedStartupConnections();
  }else if(startupConnectionVerified){
-  if(startupAutoEnabled)stopStartupAuto('Automatic opening paused while editing connections.');
-  startupAutoNotice='';
   startupConnectionHealthError=false;
   startupConnectionCheckSequence++;startupConnectionCheckPending=false;resetStartupConnectionChecks();
   startupConnectionEditSnapshot=Object.fromEntries(Object.entries(startupFieldMap).map(([key,id])=>[key,$(id).value]));
@@ -9260,6 +9238,7 @@ function toggleStartupConnectionEdit(){
  if(startupConnectionEditSnapshot)$('startupJiraUrl').focus();
 }
 $('startupEditConnections').addEventListener('click',toggleStartupConnectionEdit);
+$('startupTestSavedConnections').addEventListener('click',checkSavedStartupConnections);
 for(const id of Object.values(startupFieldMap))$(id).addEventListener('input',()=>{
  updateStartupRepositoryPreview();invalidateStartupConnection();
 });
@@ -9294,12 +9273,9 @@ $('startupCopilotSetup').addEventListener('click',()=>{
  setStartupCopilotStatus('working','Preparing Copilot SDK setup…');send('startupSetupCopilot');
 });
 for(const id of ['startupUnifiedLog','gateUnifiedLog'])$(id).addEventListener('click',()=>send('startupExportUnifiedLog'));
-$('startupPrerequisiteDetails').addEventListener('toggle',()=>{
- if($('startupPrerequisiteDetails').open&&startupAutoEnabled)stopStartupAuto('Automatic opening paused while reviewing prerequisites.');
-});
 $('startupRefresh').addEventListener('click',()=>{
  if(startupInstallingModule)return;
- if(startupAutoEnabled)stopStartupAuto('Automatic opening paused while checks are refreshed.');
+ startupPrereqRequested=true;
  startupPermissions=null;startupPermissionProgress.clear();renderStartupScanPlaceholders();
  startupScanComplete=false;updateStartupIssueSummary();
  startupScanPercent(0,'Refreshing local computer prerequisites…');
@@ -9321,25 +9297,27 @@ $('startupConnectionLogDownload').addEventListener('click',()=>{
  send('startupDownloadConnectionLogs');
 });
 $('startupPrevious').addEventListener('click',()=>{
- if(startupAutoEnabled)stopStartupAuto();
- if(startupPage===1&&!startupVerifying&&!startupInstallingModule){startupPage=0;$('startupPrerequisiteDetails').open=false;renderStartupPage();}
+ if(startupPage!==1||startupVerifying||startupInstallingModule||startupProceedMode)return;
+ startupPage=0;$('startupPrerequisiteDetails').open=false;
+ requestStartupReadiness();
+ renderStartupPage();
+ $('startupRefresh').focus();
 });
 $('startupEmail').addEventListener('input',()=>updateHeaderUserName(read('startupEmail')));
 $('startupConnectionForm').addEventListener('submit',event=>{
- event.preventDefault();if(startupVerifying||startupConnectionVerified)return;
- if(startupAutoEnabled)stopStartupAuto();
+ event.preventDefault();if(startupVerifying||startupConnectionVerified||startupProceedMode)return;
  startupConnectionVerified=false;startupVerifying=true;
  renderStartupPage();
  $('startupConnectionMessage').textContent='Testing Jira, Confluence and GitHub account…';
  send('startupTestConnections',{settings:startupPayload(),atlassianToken:read('startupAtlassianToken'),githubToken:read('startupGithubToken'),requestId:beginStartupConnectionChecks()});
 });
 $('startupProceed').addEventListener('click',()=>{
- if(startupVerifying||startupInstallingModule)return;
- if(startupAutoEnabled)stopStartupAuto();
- if(startupPage===0){if(!startupScanComplete)return;startupPage=1;renderStartupPage();$('startupJiraUrl').focus();return;}
- if(!startupConnectionVerified)return;
- $('startupProceed').disabled=true;$('startupProceedInfo').textContent='Opening project search…';
- send('startupProceed',{settings:startupPayload()});
+ if(startupVerifying||startupInstallingModule||startupProceedMode)return;
+ if(startupPage===0){
+  if(!startupScanComplete)return;
+  if(!startupConnectionVerified){startupPage=1;renderStartupPage();$('startupJiraUrl').focus();return;}
+ }
+ if(startupConnectionVerified)requestStartupProceed();
 });
 window.addEventListener('message',event=>{
  const message=event.data||{};
@@ -9348,14 +9326,6 @@ window.addEventListener('message',event=>{
    const saved=message.saved||{};
    for(const [key,id] of Object.entries(startupFieldMap))if(!$(id).value)$(id).value=saved[key]||'';
    updateHeaderUserName(saved.email);
-  }
-  // Start scanning as soon as the host confirms the webview is ready,
-  // without waiting for the larger project and credential state payload.
-  if(!startupPrereqRequested){
-   startupPrereqRequested=true;
-   renderStartupScanPlaceholders();
-   startupScanPercent(0,'Starting prerequisite scan…');
-   send('startupReadiness');
   }
  }
  if(message.type==='state'&&message.startupSetup)renderStartupConfig(message.startupSetup);
@@ -9367,7 +9337,7 @@ window.addEventListener('message',event=>{
  if(message.type==='startupPermissionsResult')renderStartupPermissions(message.value);
  if(message.type==='startupReadinessResult'){
   $('startupRefresh').disabled=false;
-  if(message.error){startupScanPercent(0,'Prerequisite scan failed.');startupScanComplete=false;$('startupToolMessage').textContent=message.error;renderStartupCopilotReadiness({unknown:true});setStartupInstallFeedback('Prerequisite scan failed. Download Unified Error Log for details.','error');if(startupAutoEnabled)stopStartupAuto('Automatic opening paused: prerequisite scan failed.');renderStartupPage();}
+  if(message.error){startupScanPercent(0,'Prerequisite scan failed.');startupScanComplete=false;$('startupToolMessage').textContent=message.error;renderStartupCopilotReadiness({unknown:true});setStartupInstallFeedback('Prerequisite scan failed. Download Unified Error Log for details.','error');renderStartupPage();}
   else renderStartupStackReadiness(message.value);
  }
  if(message.type==='startupCopilotSetup')setStartupCopilotStatus(message.status,message.message||'Copilot SDK setup finished.');
@@ -9413,15 +9383,14 @@ window.addEventListener('message',event=>{
   else resetStartupConnectionChecks();
   startupConnectionHealthError=!message.success||!!message.checks?.some(check=>check.state==='offline');
   if(startupConnectionHealthError){
-   $('startupConnectionMessage').textContent=message.success?'Some services are available offline. Review Technology stack prerequisites.':'Some connections need attention. Review Technology stack prerequisites or select Edit.';
+   $('startupConnectionMessage').textContent='Some connections need attention. Open Connection Logs for details.';
    $('startupConnectionMessage').className='test-status error';
-   if(startupAutoEnabled)stopStartupAuto('Automatic opening paused: review the connection checks.');
   }else{$('startupConnectionMessage').textContent=message.message||'Connections verified.';$('startupConnectionMessage').className='test-status success';}
   renderStartupPage();
  }
  if(message.type==='startupConnectionsResult'){
   if(message.requestId!==startupConnectionCheckSequence)return;
-  startupConnectionCheckPending=false;startupConnectionHealthStarted=true;startupConnectionHealthError=!message.success;
+  startupConnectionCheckPending=false;startupConnectionHealthError=!message.success;
   if(Array.isArray(message.checks)){for(const check of message.checks)if(startupConnectionCheckResults.has(check.id))startupConnectionCheckResults.set(check.id,check);renderStartupConnectionChecks();}
   else resetStartupConnectionChecks();
   startupVerifying=false;
@@ -9429,15 +9398,31 @@ window.addEventListener('message',event=>{
   $('startupConnectionMessage').textContent=message.message||'Connection test did not complete.';
   if(!startupConnectionVerified&&Array.isArray(message.checks)){
    const failed=message.checks.filter(check=>check.state==='error').map(check=>check.label);
-   if(failed.length)$('startupConnectionMessage').textContent='Check '+failed.join(', ')+'. No changes were saved. Details are under Technology stack prerequisites.';
+   if(failed.length)$('startupConnectionMessage').textContent='Check '+failed.join(', ')+'. Open Connection Logs for details.';
   }
   $('startupConnectionMessage').className=startupConnectionVerified?'test-status success':'test-status error';
-  if(startupConnectionVerified){startupConnectionEditSnapshot=null;$('startupAtlassianToken').value='';$('startupGithubToken').value='';send('startupReadiness');}
+  if(startupConnectionVerified){
+   startupConnectionEditSnapshot=null;
+   $('startupAtlassianToken').value='';$('startupGithubToken').value='';
+   if(startupStackData&&!startupStackData.catalog?.available)send('startupReadiness');
+  }
   renderStartupPage();
  }
- if(message.type==='startupProceedResult'){
-  if(message.success){startupReturnToConnections=false;showStartupStep(false);$('gateQuery').focus();if(startupAutoEnabled&&startupAutoStage==='proceeding')beginStartupAuto('project');}
-  else{if(startupAutoEnabled)stopStartupAuto(message.message||'Automatic opening paused.');startupVerifying=false;renderStartupPage();$('startupProceedInfo').textContent=message.message||'Unable to continue.';}
+ if(message.type==='startupProceedResult'&&startupProceedMode){
+  const resuming=startupProceedMode==='resume';
+  startupProceedMode='';
+  if(message.success){
+   startupReturnToConnections=false;showStartupStep(false);
+   if(resuming&&message.projectId){
+    const projectId=message.projectId;
+    launchFromGate({projectId,autoResume:true});
+   }else $('gateQuery').focus();
+  }else{
+   if(message.verified===false){startupConnectionVerified=false;startupPage=1;}
+   else if(resuming){startupPage=0;requestStartupReadiness();}
+   showStartupStep(true);
+   $('startupProceedInfo').textContent=message.message||'Unable to continue.';
+  }
  }
 });
 

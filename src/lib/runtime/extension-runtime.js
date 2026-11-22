@@ -161,7 +161,7 @@ let startupModuleInstalling=false,startupCopilotSetupRunning=false;
 let startupSessionVerified=false;
 let startupSessionProceedApproved=false;
 let startupVerifiedSignature='';
-let startupPermissionsState=null,startupReadinessState=null,startupReadinessSequence=0;
+let startupReadinessSequence=0;
 function isBAProcessCommand(command){
  return /^(?:br[A-Z]|ba[A-Z]|discovery[A-Z]|importDiscovery|saveDiscovery|processDiscoverySources|updateSourceDocuments|downloadWorkingBR|downloadDocumentPreflight|deleteBREverywhere|stopDiscoverySourceMapping|restartUncompletedBusinessRequirement|startOrRestartBusinessRequirements)/.test(String(command||''))&&
   command!=='baDownloadProcessLog';
@@ -1539,6 +1539,21 @@ async function aiDrafts(){
 }
 function startupIsComplete(){return context.globalState.get('atgvAssist.startupSetup.completed',false)===true;}
 const STARTUP_VERIFIED_SECRET='atgvAssist.startupConnections.verified';
+const STARTUP_PREREQUISITES_KEY='atgvAssist.startupPrerequisites';
+function startupPrerequisitesVerified(){
+ const workspace=getWorkspace();
+ if(!workspace||!vscode.workspace.isTrusted)return false;
+ const result=context.workspaceState.get(STARTUP_PREREQUISITES_KEY);
+ // Older versions persisted wizard completion without a separate scan result.
+ return result?result.workspace===workspace.uri.toString()&&result.verified===true:startupIsComplete();
+}
+function previouslyOpenedStartupProject(projects){
+ if(projects.length!==1)return null;
+ const project=projects[0];
+ const selected=context.workspaceState.get('atgvAssist.activeProject','');
+ const recent=context.workspaceState.get('atgvAssist.recentProjects',[]);
+ return project.id===selected||(Array.isArray(recent)&&recent.includes(project.id))?project:null;
+}
 // Keep the verification proof inside VS Code SecretStorage, never in the webview
 // or plain extension settings. It binds the precise saved endpoints to both PATs.
 function startupSavedConnectionFields(){
@@ -1564,7 +1579,7 @@ async function storedStartupVerification(){
   return {signature};
  }catch{return null;}
 }
-async function startupStatus(projects=[]){
+async function startupStatus(){
  // Cache already-verified OS keychain credentials during an opened session.
  const alreadyOpened=openingLocked||openingFlow.phase!=='search'||!!activeProject;
  const verified=alreadyOpened&&startupSessionVerified&&startupVerifiedSignature?
@@ -1574,25 +1589,20 @@ async function startupStatus(projects=[]){
  const workspace=getWorkspace()?.uri.fsPath;
  let offline=null;
  try{if(workspace){const installed=await sdlcCatalog.activeRoot(workspace);offline=installed.offline?installed:null;}}catch(e){if(!/not activated/.test(e.message))report('Offline Library startup status: '+e.message);}
- const selectedId=context.workspaceState?.get('atgvAssist.activeProject','')||'';
- const selected=Array.isArray(projects)?projects.find(project=>project.id===selectedId&&project.techStackId):null;
  // An in-flight or already-open project must not be replaced by the startup
  // credential wizard during an unrelated dashboard refresh. The setup gate is
  // only for the unselected Start screen; credential errors stay in the project
  // opening error panel so the user can retry or explicitly go back.
  const openingActive=openingLocked||openingFlow.phase!=='search'||!!activeProject;
  return {required:!startupSessionProceedApproved&&!openingActive,defaults:startupSetup.DEFAULTS,
-  selectedProject:selected?{id:selected.id,name:selected.name,techStackId:selected.techStackId,techStackCompanionId:selected.techStackCompanionId||''}:null,
+  prerequisitesVerified:startupPrerequisitesVerified(),
   verified:!!verified,offlineLibrary:offline?{version:offline.version,filename:offline.filename,repository:offline.repository}:null,
   saved:typeof startupSavedConnectionFields==='function'?startupSavedConnectionFields():{}};
 }
 async function requireAutomaticStartup(projectId){
- if(!registry||!getWorkspace()||!projectId||context.workspaceState.get('atgvAssist.activeProject','')!==projectId)throw Error('Previously selected project is unavailable. Select a project manually.');
- if(!startupPermissionsState?.ok)throw Error('Workspace or install permissions need attention. Review the Start page before continuing.');
- const project=await registry.read(projectId);
- const ids=[project.techStackId,project.techStackCompanionId].filter(Boolean);
- if(!startupReadinessState?.catalog?.available||!ids.length||ids.some(id=>!startupReadinessState?.stacks?.some(stack=>stack.id===id&&stack.ready)))throw Error('The selected project technology stack or SDLC Library is not ready. Review its prerequisites.');
- return project;
+ if(!registry||!startupPrerequisitesVerified())throw Error('Review Technology stack prerequisites before resuming the project.');
+ const project=previouslyOpenedStartupProject(await registry.list());
+ if(!project||project.id!==projectId)throw Error('The saved project selection changed. Select a project from the list.');
 }
 function startupConnectionFailure(error){
  const text=String(error?.message||error||''),status=/\bHTTP\s+(\d{3})\b/i.exec(text)?.[1];
@@ -1826,7 +1836,7 @@ async function dashboardState(){
   }
   const roleSteps=activeProject&&openingFlow.phase==='open'?await roleStepEngine.overview(registry,activeProject.id,currentWork.roles):{scopeId:'project',roles:[]};
   const consolidatedSdlc=activeProject&&openingFlow.phase==='open'?await roleStepEngine.consolidated(registry,activeProject.id,currentWork.roles):{roles:[],scopes:0,verifiedEvidence:0,outputs:0};
-  return {architectErrorLogCount:activeProject?.id?architectErrorLogs.count(activeProject.id):0,projectConnections,emptyWorkspace:emptyWorkspace&&!unmanagedFolders.length,guideAutoShown,baMappingResumeAvailable,baSelectedSources,delivery,unifiedRepository,usedRoles,designState,approvedDesignHash,blueprintRegister,blueprintAssessment,health,aiService,unmanagedFolders,brState,exportRecoveryFailures:exportRecovery?.failures||[],jiraBrowseBaseUrl,roleSettings,timeline,modelStatus,recentProjects,projectReadiness,openingOffline,startupScan,startupSetup:await startupStatus(projects),serviceConfigured,serviceUrl,coordinationProvider:coordinationProvider(),remoteLinks:links,liveRemote:activeProject?.id===liveRemoteState.projectId?liveRemoteState:null,autoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.autoSync.'+activeProject.id,false)),jiraAutoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.jiraAutoSync.'+activeProject.id,false)),discovery:discoveryState,flow:flowState,type:'state',projects,techStacks,activeId:openingFlow.phase==='open'?activeProject?.id||null:null,opening:openingFlow.snapshot(),summary:openingFlow.phase==='open'?store?.summary()||{documents:0,chunks:0}:{documents:0,chunks:0},workspace:getWorkspace()?.uri.fsPath||null,extensionSettings,jiraTokenSaved,githubTokenSaved,catalog:await catalogUiState(),updates:updateStatus(),work:currentWork,roleSteps,consolidatedSdlc};
+  return {architectErrorLogCount:activeProject?.id?architectErrorLogs.count(activeProject.id):0,projectConnections,emptyWorkspace:emptyWorkspace&&!unmanagedFolders.length,guideAutoShown,baMappingResumeAvailable,baSelectedSources,delivery,unifiedRepository,usedRoles,designState,approvedDesignHash,blueprintRegister,blueprintAssessment,health,aiService,unmanagedFolders,brState,exportRecoveryFailures:exportRecovery?.failures||[],jiraBrowseBaseUrl,roleSettings,timeline,modelStatus,recentProjects,projectReadiness,openingOffline,startupScan,startupSetup:await startupStatus(),serviceConfigured,serviceUrl,coordinationProvider:coordinationProvider(),remoteLinks:links,liveRemote:activeProject?.id===liveRemoteState.projectId?liveRemoteState:null,autoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.autoSync.'+activeProject.id,false)),jiraAutoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.jiraAutoSync.'+activeProject.id,false)),discovery:discoveryState,flow:flowState,type:'state',projects,techStacks,activeId:openingFlow.phase==='open'?activeProject?.id||null:null,opening:openingFlow.snapshot(),summary:openingFlow.phase==='open'?store?.summary()||{documents:0,chunks:0}:{documents:0,chunks:0},workspace:getWorkspace()?.uri.fsPath||null,extensionSettings,jiraTokenSaved,githubTokenSaved,catalog:await catalogUiState(),updates:updateStatus(),work:currentWork,roleSteps,consolidatedSdlc};
 }
 async function publishBlueprintState(){
   if(!dashboard||!activeProject)return;
@@ -1878,7 +1888,7 @@ async function restart(){
 async function start(options={}){
   await ready;
   startupSessionVerified=false;startupVerifiedSignature='';startupSessionProceedApproved=false;
-  startupPermissionsState=null;startupReadinessState=null;++startupReadinessSequence;
+  ++startupReadinessSequence;
   if(!options.skipReload){
     const pendingKey='atgvAssist.startAfterWindowReload';
     await vscode.commands.executeCommand('workbench.action.closeAllEditors');
@@ -5551,7 +5561,6 @@ async function handleDashboardMessage(msg){
       }
       case 'startupReadiness':{
         const scan=++startupReadinessSequence;
-        startupPermissionsState=null;startupReadinessState=null;
         try{
           await dashboard?.webview.postMessage({type:'startupReadinessProgress',percent:0,completed:0,total:Object.keys(startupReadiness.TOOLS).length+1,message:'Checking technology stack prerequisites and project modules…'});
           const workspace=getWorkspace(),workspacePath=workspace?.uri.fsPath||'';
@@ -5562,13 +5571,16 @@ async function handleDashboardMessage(msg){
           try{const states=workspaceFolders.map(folder=>vscode.workspace.fs.isWritableFileSystem?.(folder.uri.scheme));workspaceWritable=states.includes(false)?false:states.includes(true)?true:undefined;}catch{}
           const permissions=startupPermissions.check({workspacePath,additionalWorkspacePaths,projectPath,extensionPath:context.extensionUri.fsPath,storagePath:context.globalStorageUri.fsPath,
            trusted:vscode.workspace.isTrusted,workspaceWritable,onProgress:check=>scan===startupReadinessSequence?dashboard?.webview.postMessage({type:'startupPermissionProgress',check}):undefined})
-           .then(async result=>{if(scan===startupReadinessSequence){startupPermissionsState=result;await dashboard?.webview.postMessage({type:'startupPermissionsResult',value:result});}return result;})
-           .catch(async error=>{const result={ok:false,checks:[{id:'permissions',label:'Permission checks',ok:false,detail:String(error.message||error)}]};if(scan===startupReadinessSequence){startupPermissionsState=result;await dashboard?.webview.postMessage({type:'startupPermissionsResult',value:result});}return result;});
+           .then(async result=>{if(scan===startupReadinessSequence){await dashboard?.webview.postMessage({type:'startupPermissionsResult',value:result});}return result;})
+           .catch(async error=>{const result={ok:false,checks:[{id:'permissions',label:'Permission checks',ok:false,detail:String(error.message||error)}]};if(scan===startupReadinessSequence){await dashboard?.webview.postMessage({type:'startupPermissionsResult',value:result});}return result;});
           const result=await startupReadiness.check({onProgress:progress=>scan===startupReadinessSequence?dashboard?.webview.postMessage({type:'startupReadinessProgress',...progress}):undefined,
            onStackProgress:progress=>scan===startupReadinessSequence?dashboard?.webview.postMessage({type:'startupStackProgress',...progress}):undefined,loadCatalog:startupStackCatalog});
-          await permissions;
+          const permissionResult=await permissions;
           if(scan!==startupReadinessSequence)break;
-          startupReadinessState=result;
+          if(workspace){
+            const verified=permissionResult.ok&&result.catalog?.available===true&&result.stacks.some(stack=>stack.ready);
+            await context.workspaceState.update(STARTUP_PREREQUISITES_KEY,{workspace:workspace.uri.toString(),verified});
+          }
           result.copilotSdk={installed:await copilotRepairSdk.installed(context.globalStorageUri.fsPath),compatible:copilotRepairSdk.compatibleNode(),version:copilotRepairSdk.VERSION};
           const tools=Object.entries(result.tools||{}).map(([name,item])=>name+': '+(item.installed?'detected '+item.version+' via '+(item.source||'PATH'):'not detected'+(item.error?' ('+item.error+')':''))).join(' | ');
           await recordStartupDiagnostic({stage:'readiness-scan',status:'complete',detail:tools+' | SDLC Library: '+(result.catalog?.available?(result.catalog.source+' '+result.catalog.version):'unavailable')});
@@ -5745,16 +5757,24 @@ async function handleDashboardMessage(msg){
         break;
       }
       case 'startupProceed':{
+        let verifiedFields=false;
         try{
          const verified=await storedStartupVerification();
-         if(!verified||verified.signature!==sha(JSON.stringify(startupSetup.validate(msg.settings))))throw Error('Test Jira, Confluence and GitHub connections with the current fields before proceeding.');
-         if(msg.autoResume)await requireAutomaticStartup(String(msg.projectId||''));
+         verifiedFields=!!verified&&verified.signature===sha(JSON.stringify(startupSetup.validate(msg.settings)));
+         if(!verifiedFields)throw Error('Test Jira, Confluence and GitHub connections with the current fields before proceeding.');
+         let projectId='';
+         if(msg.autoResume===true){
+          if(!registry||!startupPrerequisitesVerified())throw Error('Review Technology stack prerequisites before continuing.');
+          projectId=previouslyOpenedStartupProject(await registry.list())?.id||'';
+         }
          await context.globalState.update('atgvAssist.startupSetup.completed',true);
          startupSessionProceedApproved=true;
          startupSessionVerified=true;startupVerifiedSignature=verified.signature;
-         await dashboard?.webview.postMessage({type:'startupProceedResult',success:true});
+         await dashboard?.webview.postMessage({type:'startupProceedResult',success:true,projectId});
          await refreshDashboard();
-        }catch(error){await dashboard?.webview.postMessage({type:'startupProceedResult',success:false,message:String(error.message||error)});}
+        }catch(error){
+         await dashboard?.webview.postMessage({type:'startupProceedResult',success:false,verified:verifiedFields,message:String(error.message||error)});
+        }
         break;
       }
       case 'extensionUpgradeDecision':{

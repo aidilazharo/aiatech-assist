@@ -9,7 +9,7 @@ const working=['# Business Requirements','## Draft','~~~text','Validated spellin
  'Business case from verified source.','Approval rules must be reviewed.','~~~',
  '## Provisional Standards Guidance','Provisional advice is NOT business policy.'].join('\n');
 test('ISO 29148 BRS PDF has a valid self-contained cross-reference structure and populated source evidence',()=>{
- const result=pdf.document({projectId:'TC',source,workingText:working,generatedAt:'2026-11-22T06:00:00Z',
+ const result=pdf.document({projectId:'TC',source,workingText:working,includeSourceAppendix:true,generatedAt:'2026-11-22T06:00:00Z',
   requirements:[{id:'BR-001',status:'draft',title:'Project approval',objective:'Reduce manual approvals',scope:'Review project submissions',acceptanceCriteria:'A reviewer can approve a valid request',
     features:[{title:'Approval',description:'Capture decision',stories:[{title:'Approve request',acceptanceCriteria:'Reason recorded'}]}]}]});
  assert.ok(Buffer.isBuffer(result));
@@ -20,7 +20,7 @@ test('ISO 29148 BRS PDF has a valid self-contained cross-reference structure and
  assert.match(content,/\/Type \/Font \/Subtype \/Type1 \/BaseFont \/Helvetica/);
  assert.match(content,/BUSINESS REQUIREMENTS/);
  assert.match(content,/ISO\/IEC\/IEEE 29148:2018/);
- assert.match(content,/Project approval/);
+ assert.match(content,/Project Approval/);
  assert.match(content,/Reduce manual approvals/);
  assert.match(content,/Validated spelling correction/);
  assert.match(content,/Business case from verified source/);
@@ -37,7 +37,7 @@ test('long source is preserved across multiple A4 PDF pages without truncation',
  const repeated=Array.from({length:650},(_,i)=>'Section '+i+': verify the source business condition for the change.').join('\n');
  const sourceText=['# Working BR','## Draft','~~~text',repeated,'~~~'].join('\n');
  assert.equal(pdf.sourceSection(sourceText),repeated);
- const bytes=pdf.document({projectId:'TC',source,workingText:sourceText,requirements:[]});
+ const bytes=pdf.document({projectId:'TC',source,workingText:sourceText,requirements:[],includeSourceAppendix:true});
  const content=bytes.toString('latin1');
  const number=Number(/\/Type \/Pages \/Kids \[[^\]]+\] \/Count (\d+)/.exec(content)?.[1]||0);
  assert.ok(number>=10,'long source should be paginated, not cut off');

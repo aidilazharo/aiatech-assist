@@ -79,7 +79,7 @@ test('Changed endpoint, revoked token, missing catalog PAT or altered proof cann
  assert.equal(x.sandbox.startupSessionVerified,false);
 });
 
-function webviewFixture(){
+function webviewFixture(startPage=0){
  const nodes=new Map(),sent=[];
  const find=id=>{
   if(!nodes.has(id)){
@@ -97,8 +97,8 @@ function webviewFixture(){
  assert.ok(a>0&&z>a);
  const source=[
   "const startupFieldMap={jiraUrl:'startupJiraUrl',email:'startupEmail',githubUrl:'startupGithubUrl',projectRepository:'startupProjectRepository'};",
-  "let startupSetupRequired=true,startupPage=0,startupVerifying=false,startupInstallingModule='',startupConnectionVerified=false,startupConnectionEditSnapshot=null,startupScanComplete=true,startupFormInitialized=false,startupReturnToConnections=false,startupPrereqRequested=false,startupOpenStackId='',startupCopilotModalOpen=false; let gateBusy=false,gateError='',workspaceOpened=false,opening={phase:'search'};",
-  "let startupAutoNotice='',startupAutoEnabled=false,startupAutoProject=null,startupAutoStage='',startupConnectionHealthStarted=false,startupConnectionHealthError=false,startupConnectionCheckPending=false; function beginStartupAuto(){} function resetStartupConnectionChecks(){} function checkSavedStartupConnections(){startupConnectionHealthStarted=true;}",
+  "let startupSetupRequired=true,startupPage="+startPage+",startupVerifying=false,startupInstallingModule='',startupConnectionVerified=false,startupConnectionEditSnapshot=null,startupScanComplete=true,startupFormInitialized=false,startupReturnToConnections=false,startupPrereqRequested=false,startupOpenStackId='',startupCopilotModalOpen=false; let gateBusy=false,gateError='',workspaceOpened=false,opening={phase:'search'};",
+  "let startupProceedMode='',startupConnectionHealthError=false,startupConnectionCheckPending=false; function resetStartupConnectionChecks(){}",
   'function updateStartupRepositoryPreview(){}',
   ui.slice(a,z),
   "return {renderStartupConfig,renderStartupPage,getPage:()=>startupPage,isVerified:()=>startupConnectionVerified,setOpening:p=>opening={phase:p},setGateBusy:v=>gateBusy=v,setGateError:v=>gateError=v};"
@@ -106,13 +106,16 @@ function webviewFixture(){
  const create=new Function('$','updateHeaderUserName','extensionSettings','startupScanPercent','renderStartupScanPlaceholders','send',source);
  return {find,sent,client:create(find,()=>{}, {jira:{}},()=>{},()=>{},(command,extra)=>sent.push({command,...extra}))};
 }
-test('Verified settings restore locked fields, hidden Test & Save and enabled Next: Search Project',()=>{
- const {find,client}=webviewFixture();
+test('Verified settings restore the connection page with locked fields, Test Connections and navigation',()=>{
+ const {find,client}=webviewFixture(1);
  client.renderStartupConfig({required:true,verified:true,saved:setup.DEFAULTS,defaults:setup.DEFAULTS});
  assert.equal(client.isVerified(),true);
  assert.equal(client.getPage(),1);
  assert.equal(find('startupProceed').textContent,'Next: Search Project →');
  assert.equal(find('startupProceed').disabled,false);
+ assert.equal(find('startupPrevious').disabled,false);
+ assert.equal(find('startupTestSavedConnections').disabled,false);
+ assert.equal(find('startupTestSavedConnections').classList.contains('hidden'),false);
  assert.equal(find('startupTestConnections').disabled,true);
  assert.equal(find('startupTestConnections').classList.contains('hidden'),true);
  for(const id of ['startupJiraUrl','startupEmail','startupAtlassianToken','startupGithubUrl','startupProjectRepository','startupGithubToken'])
