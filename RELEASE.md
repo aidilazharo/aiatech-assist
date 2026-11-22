@@ -1,16 +1,24 @@
-# ATGV AIATECH Assist v0.0.51
+# ATGV AIATECH Assist v0.0.52
 
-## Business Requirements ownership and UI
+## Business Documents — cleaner document-first interface
 
-- Replace the Jira-only BR Delete Jira BR text button with a compact accessible delete icon; existing irreversible-deletion confirmation remains intact.
-- Add Transfer BR to the BR details modal. Show verified project-roster Business Analyst users and require Jira Browse Projects / Modify Reporter permissions.
-- Validate original Jira Epic, active project, registered roles, current Creator/Reporter identity, and issue revision before updating the Epic Reporter field.
-- Display true transfer progress and show **Transfer completed** only after a fresh Jira read confirms the selected owner.
-- Refresh All Jira Project Items after success and show a **BR owner** column from Jira Reporter. **Created by** remains Jira's immutable original Creator.
-- Do not change child issue assignees or pretend Jira Creator is editable.
-- Remove New Business Requirement and Restart from the Business Requirement in Progress card; retain Resume and Delete.
-- Add regression tests for permissions, reporter verification, UI wiring and rollback.
+- Compact source header with complete original upload metadata preserved in a tooltip.
+- Four exclusive tabs: Structured BRD, Editable source, Original and Pre-flight.
+- One tab-aware primary action; download, edit, replace, analysis and irreversible Delete stay available under a compact overflow menu.
+- ISO 29148 source renders as a safe formatted read-only document instead of raw Markdown.
+- Markdown headings, paragraphs, lists, requirement accordions, code blocks and tables render using DOM text nodes. No unsafe innerHTML.
+- Editable source remains a text editor; saving remains disabled until actual changes exist. Original source stays read-only.
+- Unsaved source edits guard tab switches and destructive source actions.
+- Preserve existing verified upload, preflight, download, replacement and BR deletion workflows.
+
+## DataTables correction
+
+- Restore correct eight-column widths after adding BR owner: Business Requirement, Jira key, Type, Summary, Status, BR owner, Created by and Created.
+- Contain horizontal scrolling inside the Jira table, preserve readability and avoid overlapping cells.
+- Populate BR owner as a sortable value using the live Jira Epic Reporter without changing immutable Creator.
+- Preserve existing DataTables search, sorting, pagination and clickable Jira/BR rows.
 
 ## Validation
 
-- Automated GitHub workflow runs tests and packages the VSIX after merge to main. Build status must be checked before treating the release as downloadable.
+- Pull request CI must pass regression, Windows reset, UI checks and VSIX packaging.
+- GitHub release is published from the verified main-branch workflow.
