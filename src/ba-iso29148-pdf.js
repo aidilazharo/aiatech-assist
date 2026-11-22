@@ -3,6 +3,7 @@
 // Section design is aligned to the BRS information-item guidance in
 // ISO/IEC/IEEE 29148:2018 (8.2, 9.2, 9.3). No conformity claim is made.
 const crypto=require('node:crypto');
+const {loadPackagedLogo}=require('./ba-pdf-logo');
 const W=595.28,H=841.89,M=48,RIGHT=W-M;
 const NAVY=[0.07,0.12,0.20],BLUE=[0.12,0.36,0.69],DARK=[0.16,0.20,0.27],MUTED=[0.39,0.44,0.51];
 const valid=/^[a-f0-9]{64}$/;
@@ -43,16 +44,56 @@ function sourceSection(working){
  }
  return ''; // Only include actual validated source, never infer from guidance.
 }
+const acronymTokens=new Set(['GATE','AIA','AI','ATGV','IT','API','BR','BRD','BRS','ISO','IEEE','IEC','TBP','EA','EXCO','TRM','CAPEX','OPEX','MYR','USD','RMB','PMO','PIC','RBAC','SST','KPI','ID','UAT','UI','UX','MVP1A','PDF','JIRA','SAP']);
+function titleCase(value){
+ const words=String(value||'').trim().replace(/\s+/g,' ').split(/(\s+|(?<=\w)-(?=\w))/);
+ let seen=0;
+ return words.map(token=>{
+  if(!token.trim()||token==='-')return token;
+  const upper=token.toUpperCase();
+  if(acronymTokens.has(upper))return upper==='MVP1A'?'MVP1a':upper==='JIRA'?'Jira':upper;
+  if(/^v\d+(?:\.\d+)*$/i.test(token))return 'v'+token.slice(1);
+  if(/^\d+[A-Z]?$/i.test(token)||/^(BR|FR|NFR|AC)-\d+/i.test(token))return token.toUpperCase();
+  const lower=token.toLowerCase();
+  if(seen++>0&&new Set(['a','an','the','and','or','of','for','to','in','on','at','by','with']).has(lower))return lower;
+  return lower.charAt(0).toUpperCase()+lower.slice(1);
+ }).join('');
+}
+function documentTitle(name){
+ let base=String(name||'').replace(/^.*[\\/]/,'').replace(/\.(?:docx?|pdf|md|txt)$/i,'');
+ base=base.replace(/\s+(?:BRD|BRS)(?:\s+Requirements)?(?:\s+Revised)?(?:\s+(?:Version|v)\s*\d+(?:\.\d+)*)?$/i,'');
+ base=base.replace(/\s+(?:Requirements\s+)?Revised\s+(?:Version\s*)?v?\d+(?:\.\d+)*$/i,'');
+ base=base.replace(/\s+v\d+(?:\.\d+)*$/i,'');
+ base=titleCase(base.replace(/[_]+/g,' ').trim());
+ if(/^GATE\s+/i.test(base))base=base.replace(/^GATE\s+/,'GATE: ');
+ return base||'Business Requirements';
+}
 function document(spec={}){
  const source=spec.source||{},brs=Array.isArray(spec.requirements)?spec.requirements.filter(x=>x&&!x.archivedFromRestart&&x.status!=='retired'):[];
  const preparedAt=spec.generatedAt&&Number.isFinite(Date.parse(spec.generatedAt))?new Date(spec.generatedAt):new Date();
  const created=preparedAt.toISOString().slice(0,10),fileName=pdfText(source.name||'Source document not recorded');
+ const logoImage=loadPackagedLogo();
  const pages=[];let page=null,y=H-M;
  const line=(x1,y1,x2,y2,color=BLUE,width=1)=>page.push(rgb(color)+' RG '+width+' w '+x1.toFixed(2)+' '+y1.toFixed(2)+' m '+x2.toFixed(2)+' '+y2.toFixed(2)+' l S');
  const box=(x,b,w,h,color)=>page.push(rgb(color)+' rg '+[x,b,w,h].map(v=>v.toFixed(2)).join(' ')+' re f');
  const text=(value,x,baseline,size=10,{bold=false,color=DARK}={})=>{
   page.push(rgb(color)+' rg BT /'+(bold?'F2':'F1')+' '+size.toFixed(1)+' Tf 1 0 0 1 '+x.toFixed(2)+' '+baseline.toFixed(2)+' Tm ('+esc(value)+') Tj ET');
  };
+ function brandLogo(x,b,size=58){
+  box(x,b,size,size,[1,1,1]);
+  if(logoImage){
+   const scale=Math.min((size-8)/logoImage.width,(size-8)/logoImage.height);
+   const w=logoImage.width*scale,h=logoImage.height*scale;
+   page.push('q '+w.toFixed(2)+' 0 0 '+h.toFixed(2)+' '+
+    (x+(size-w)/2).toFixed(2)+' '+(b+(size-h)/2).toFixed(2)+' cm /Logo Do Q');
+  }else{
+   box(x+3,b+3,size-6,size-6,NAVY);
+   text('AI',x+size*.22,b+size*.41,size*.37,{bold:true,color:[1,1,1]});
+   // Branded AI monogram fallback; no downloaded graphics.
+   for(const [i,c] of [[0,[.01,.73,.85]],[1,[.84,.11,.51]],[2,[.94,.77,.08]],[3,[.09,.64,.68]]])
+    box(x+8+i*(size-16)/4,b+7,(size-20)/4,3.5,c);
+  }
+ }
  function newPage(){
   page=[];pages.push(page);y=H-79;
   box(0,H-12,W,12,NAVY);box(0,H-16,W,4,BLUE);
@@ -82,90 +123,110 @@ function document(spec={}){
  }
  function metadataStatus(br){return br.status==='approved'?'APPROVED REVISION '+(br.approvedRevision||1):'DRAFT - PENDING BA APPROVAL';}
  function empty(textValue){paragraph(textValue||'Not documented in the verified requirements evidence. Requires Business Analyst confirmation.',{muted:true});}
- newPage();box(M,y-100,RIGHT-M,94,NAVY);
- text('BUSINESS REQUIREMENTS',M+18,y-36,22,{bold:true,color:[1,1,1]});
- text('SPECIFICATION (BRS)',M+18,y-64,18,{bold:true,color:[1,1,1]});
- y-=125;
- paragraph('Structured with reference to ISO/IEC/IEEE 29148:2018. DRAFT — this export is not evidence of ISO certification, stakeholder sign-off or approved implementation.',{muted:true,small:true});
- field('Project ID',spec.projectId||'Not specified');
+ const displayTitle=documentTitle(source.name||spec.projectId);
+ const allApproved=brs.length>0&&brs.every(br=>br.status==='approved');
+ const state=allApproved?'REQUIREMENT RECORDS APPROVED':'DRAFT - PENDING BA APPROVAL';
+ const validated=sourceSection(spec.workingText);
+ newPage();
+ box(M,y-135,RIGHT-M,129,NAVY);
+ brandLogo(RIGHT-79,y-94,62);
+ let titleY=y-30;
+ for(const titleLine of wrap(displayTitle,38).filter(Boolean).slice(0,3)){
+  text(titleLine,M+16,titleY,17.7,{bold:true,color:[1,1,1]});
+  titleY-=22;
+ }
+ text('BUSINESS REQUIREMENTS SPECIFICATION',M+16,y-113,11,{bold:true,color:[.88,.93,1]});
+ y-=154;
+ paragraph('ISO/IEC/IEEE 29148:2018 | Business Requirements Specification',{small:true,muted:true});
+ field('Project ID',spec.projectId||'Not recorded');
  field('Source document',fileName.slice(0,70));
- field('Export date (UTC)',created);
- field('BR records',String(brs.length));
- field('Document state','WORKING / HUMAN REVIEW REQUIRED');
- field('Original file SHA-256',valid.test(String(source.byteDigest||''))?source.byteDigest.slice(0,28)+'...':'Not recorded');
- heading('Document control');
- paragraph('Generated from the project repository and validated working-BR evidence. The original uploaded file is not modified. No missing business decision is inferred from an AI recommendation.');
- paragraph('Baseline: '+(source.digest||'Unrecorded')+'. Approval authority, revision baseline and signature are not asserted by this draft.',{small:true,muted:true});
+ field('Issued (UTC)',created);
+ field('Requirement records',String(brs.length));
+ field('Review status',state);
  heading('Contents');
- for(const x of ['1 Business purpose and scope','2 Business overview and stakeholders','3 Business management requirements','4 Business operational requirements','5 Business requirements register and acceptance','6 Traceability, verification and approval','Appendix A - Validated working source text'])paragraph(x,{small:true});
- heading('1 Business purpose and scope');
- heading('1.1 Business purpose',2);
- if(brs.length){for(const br of brs){paragraph(br.id+' - '+(br.title||'Untitled'),{small:true,muted:true});paragraph(br.objective||'Objective not specified.');}}
- else empty('Business requirements have not yet been generated. Refer to the verified working source in Appendix A; Business Analyst must validate the business purpose.');
- heading('1.2 Business scope',2);
- if(brs.length){for(const br of brs){paragraph(br.id+' - '+(br.title||'Untitled'),{small:true,muted:true});paragraph(br.scope||'Scope not specified.');}}
- else empty();
- heading('2 Business overview and stakeholders');
- heading('2.1 Business overview',2);
- paragraph('Source: '+fileName+'. Total current BR records: '+brs.length+'. This section does not replace an approved business architecture or stakeholder analysis.');
- heading('2.2 Major stakeholders',2);empty();
- heading('2.3 Terms, definitions and references',2);
- paragraph('Primary reference: '+fileName+'. Requirements engineering guidance: ISO/IEC/IEEE 29148:2018 (Business Requirements Specification).');
- heading('3 Business management requirements');
- for(const sub of ['3.1 Business environment','3.2 Mission, goals and objectives','3.3 Business model','3.4 Information environment']){
-  heading(sub,2);empty('Business Analyst to classify and validate this information from the source and stakeholder decisions. Do not treat technical design defaults as business policy.');
+ for(const section of ['1 Business Requirements Overview','2 Detailed Business Requirements','3 Traceability and Approval']){
+  paragraph(section,{small:true});
  }
- heading('4 Business operational requirements');
- for(const sub of ['4.1 Business processes','4.2 Business operational policies and rules','4.3 Business operational constraints','4.4 Business operational modes','4.5 Business operational quality','4.6 Business structure']){
-  heading(sub,2);empty('See the source-backed requirement records below. Detailed policy or operational mode is pending explicit evidence or stakeholder confirmation.');
- }
- heading('5 Preliminary operational concept of proposed system');
- empty('No proposed operational concept has been approved from the verified source. The Solution Architect and Business Analyst must validate expected actors, workflows, interfaces and operating assumptions.');
- heading('6 Business requirements register and acceptance');
- if(!brs.length)empty('No generated BR records have been saved. This source-backed draft requires mapping, AI review and Business Analyst approval.');
+ if(spec.includeSourceAppendix===true)paragraph('Appendix A - Validated Working Source',{small:true});
+ heading('1 Business Requirements Overview');
+ if(!brs.length)paragraph('No requirement records have been generated from the verified source.',{muted:true});
  for(const br of brs){
-  heading((br.id||'BR')+' - '+(br.title||'Untitled requirement'));
-  field('Status',metadataStatus(br));field('Revision',String(br.revisionNumber||br.approvedRevision||0));
-  heading('Business objective',2);paragraph(br.objective||'Not specified.');
-  heading('Scope',2);paragraph(br.scope||'Not specified.');
-  heading('Acceptance criteria',2);paragraph(br.acceptanceCriteria||'Not specified; validation required.');
-  if(br.evidence?.length){
-   heading('Source evidence',2);
-   for(const ev of br.evidence.slice(0,25))paragraph((ev.sourceName||ev.name||ev.digest||'Recorded evidence')+' '+(ev.excerpt||ev.text||'').slice(0,1200),{small:true});
+  paragraph((br.id||'BR')+' - '+titleCase(br.title||'Untitled Requirement'),{small:true});
+ }
+ // Trace the source directly. Never substitute generated policy or analysis
+ // text for absent decisions in the actual source document.
+ heading('2 Detailed Business Requirements');
+ if(!brs.length)paragraph('No requirements available.',{muted:true});
+ for(const br of brs){
+  heading((br.id||'BR')+' - '+titleCase(br.title||'Untitled Requirement'));
+  field('Status',metadataStatus(br));
+  field('Revision',String(br.revisionNumber||br.approvedRevision||0));
+  if(br.objective){heading('Business Objective',2);paragraph(br.objective);}
+  if(br.scope){heading('Scope',2);paragraph(br.scope);}
+  if(br.acceptanceCriteria){heading('Acceptance Criteria',2);paragraph(br.acceptanceCriteria);}
+  // A source may be cited in several features. List it once per BR.
+  const seenEvidence=new Set();
+  const evidence=[];
+  for(const ev of Array.isArray(br.evidence)?br.evidence:[]){
+   const name=String(ev.sourceName||ev.name||ev.digest||'');
+   const excerpt=String(ev.excerpt||ev.text||'').trim();
+   const key=name+'|'+excerpt;
+   if(!key.trim()||seenEvidence.has(key))continue;
+   seenEvidence.add(key);
+   evidence.push({name,excerpt});
+  }
+  if(evidence.length){
+   heading('Source References',2);
+   for(const ev of evidence.slice(0,25)){
+    paragraph((ev.name||fileName)+(ev.excerpt?' - '+ev.excerpt.slice(0,500):''),{small:true});
+   }
   }
   for(const [i,feature] of (br.features||[]).entries()){
-   heading('Feature '+(i+1)+': '+(feature.title||feature.name||'Unnamed'),2);
+   heading('Feature '+(i+1)+': '+titleCase(feature.title||feature.name||'Unnamed Feature'),2);
    if(feature.description)paragraph(feature.description);
    for(const [j,story] of (feature.stories||[]).entries()){
-    paragraph('Story '+(j+1)+': '+(story.title||story.name||story.description||'Not specified'),{small:true});
-    if(story.acceptanceCriteria)paragraph('Acceptance: '+story.acceptanceCriteria,{small:true});
+    paragraph('Story '+(j+1)+': '+titleCase(story.title||story.name||'Untitled Story'),{small:true});
+    if(story.description)paragraph(story.description,{small:true});
+    if(story.acceptanceCriteria)paragraph('Acceptance Criteria: '+story.acceptanceCriteria,{small:true});
    }
   }
  }
- heading('7 Traceability, verification and approval');
+ heading('3 Traceability and Approval');
  field('Source name',fileName.slice(0,65));
- field('Source digest',valid.test(String(source.digest||''))?source.digest.slice(0,28)+'...':'Not recorded');
- field('Testing','NOT RUN');
- field('BA approval','Required unless verified independently');
- paragraph('Traceability references and acceptance criteria above are records from the active Business Requirements register. This export does not change any Jira status, ownership, approved baseline or approval decision.',{small:true});
- heading('Appendix A - Validated working source text');
- const extracted=sourceSection(spec.workingText);
- if(extracted){paragraph('The following text is drawn from the integrity-checked working BR. Validated spelling corrections may have been applied. The original upload remains unchanged.',{muted:true,small:true});paragraph(extracted,{small:true});}
- else empty('Validated working source text was not available in the requested export. Re-run document preflight and verify the working BR.');
+ field('Record status',state);
+ if(valid.test(String(source.digest||''))){
+  paragraph('Source SHA-256: '+source.digest,{small:true});
+ }
+ if(valid.test(String(source.byteDigest||''))){
+  paragraph('Original File SHA-256: '+source.byteDigest,{small:true});
+ }
+ const pending=brs.filter(br=>br.status!=='approved');
+ if(pending.length)paragraph('Pending BA Approval: '+pending.map(br=>br.id).join(', '),{small:true});
+ if(spec.includeSourceAppendix===true){
+  heading('Appendix A - Validated Working Source');
+  if(validated)paragraph(validated,{small:true});
+ }
  // Add numbered footers after all pages are known.
  for(const [i,ops] of pages.entries()){
   ops.push(rgb([0.81,0.85,0.89])+' RG .6 w '+M+' 48 m '+RIGHT+' 48 l S');
-  const footer='ATGV AIATECH ASSIST  |  BRS WORKING DRAFT  |  '+created+'  |  Page '+(i+1)+' of '+pages.length;
+  const footer='ATGV AIATECH ASSIST  |  ISO 29148 BRS  |  '+created+'  |  Page '+(i+1)+' of '+pages.length;
   ops.push(rgb(MUTED)+' rg BT /F1 8 Tf 1 0 0 1 '+M+' 33 Tm ('+esc(footer)+') Tj ET');
  }
  // Serialize a standards-compatible, self-contained PDF with no external files.
  const objects=[null,'<< /Type /Pages /Kids [] /Count 0 >>','<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>','<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>'];
  const pageRefs=[];
+ let logoRef=0;
+ if(logoImage){
+  logoRef=objects.length+1;
+  objects.push('<< /Type /XObject /Subtype /Image /Width '+logoImage.width+' /Height '+logoImage.height+
+   ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length '+logoImage.data.length+
+   ' >>\nstream\n'+logoImage.data.toString('latin1')+'\nendstream');
+ }
  for(const ops of pages){
   const content=ops.join('\n')+'\n',streamNum=objects.length+1;
   objects.push('<< /Length '+Buffer.byteLength(content,'latin1')+' >>\nstream\n'+content+'endstream');
   const pageNum=objects.length+1;
-  objects.push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+W+' '+H+'] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents '+streamNum+' 0 R >>');
+  objects.push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+W+' '+H+'] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> '+(logoRef?'/XObject << /Logo '+logoRef+' 0 R >> ':'')+'>> /Contents '+streamNum+' 0 R >>');
   pageRefs.push(pageNum+' 0 R');
  }
  objects[0]='<< /Type /Catalog /Pages 2 0 R >>';
@@ -179,4 +240,4 @@ function document(spec={}){
  if(!bytes.subarray(0,8).toString('latin1').startsWith('%PDF-1.4'))throw Error('Unable to build a valid PDF header.');
  return bytes;
 }
-module.exports={document,sourceSection,pdfText,wrap};
+module.exports={document,sourceSection,pdfText,wrap,titleCase,documentTitle};
