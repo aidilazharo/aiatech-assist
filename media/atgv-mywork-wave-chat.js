@@ -18,7 +18,7 @@
  const blendedRGBA=(target,mix,alpha)=>'rgba('+redRGB.map((v,i)=>
   Math.round(v+(target[i]-v)*mix)).join(',')+','+alpha+')';
  let project='',role='',pendingId=0,sequence=0,pending=false;
- let brActivity=false;
+ let brActivity=false,brVisible=false;
  let greetingNode=null,briefingNode=null,lastBriefRequest=0,submittedText='',handoffDraft='';
  const dayLocal=(date=new Date())=>[date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');
  let sessionDay=dayLocal(),dayTimer=null;
@@ -121,7 +121,15 @@
    if(brActivity===running)return;
    brActivity=running;
    ripples=[];
-   if(brActivity)resize();
+   if(brActivity)requestAnimationFrame(resize);
+  },
+  setBusinessRequirementsVisible(active){
+   const next=active===true;
+   if(brVisible===next)return;
+   brVisible=next;
+   // The canvas is often width 0 while My Work is hidden; remeasure after
+   // the Business Requirements header becomes visible, even for idle red waves.
+   if(brVisible)requestAnimationFrame(resize);
   }};
  input.addEventListener('input',()=>{
   pulse(.22+Math.min(1,input.value.length/380));
@@ -282,7 +290,12 @@
   }
   if(brActivity){
    targetHeight=reduceMotion?0:Math.min(.15,8/Math.max(h,1));
-   targetOpacity=.75;targetSpeed=reduceMotion?0:.85;stage='THINKING';
+   targetOpacity=.85;targetSpeed=reduceMotion?0:.85;stage='THINKING';
+  }else if(brVisible){
+   // Keep a quiet red heartbeat on the BA page, including draft/ready states.
+   // Only real AI activity switches to the CMYK processing animation.
+   targetHeight=reduceMotion?0:Math.min(.13,7/Math.max(h,1));
+   targetOpacity=.62;targetSpeed=reduceMotion?0:.32;stage='READY';
   }
   const smooth=(a,b,k)=>a+(b-a)*(1-Math.exp(-k*dt));
   height=smooth(height,targetHeight,engaged?6:3);
