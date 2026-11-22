@@ -31,14 +31,17 @@ test('only known steps are persisted, and progress is normalized',()=>{
 test('practice interaction is limited to navigation, not Git Jira or approval buttons',()=>{
  for(const id of ids)for(const step of get(id).steps){
   if(!step.interactive)continue;
-  assert.ok(step.selector.includes('data-nav')||step.selector==='#sidebarRoleTrigger',`${id}/${step.id} permits unsafe interaction`);
+  assert.ok(step.selector.includes('data-nav')||step.selector.includes('data-sdlc-tab')||step.selector==='#sidebarRoleTrigger',`${id}/${step.id} permits unsafe interaction`);
  }
 });
 test('all tour targets exist in real extension webview markup',()=>{
  const source=read('test/generated/extension-source.txt');
  for(const id of ids)for(const step of get(id).steps){
   if(step.selector[0]==='#')assert.ok(source.includes(`id="${step.selector.slice(1)}"`),`${id}/${step.id} target missing: ${step.selector}`);
-  else if(step.selector.startsWith('[data-nav='))assert.ok(source.includes(`data-nav="${step.selector.match(/"([^"]+)"/)[1]}"`),`${id}/${step.id} navigation missing`);
+  else if(step.selector.startsWith('[data-nav=')||step.selector.startsWith('[data-sdlc-tab=')){
+   const attr=step.selector.startsWith('[data-nav=')?'data-nav':'data-sdlc-tab';
+   assert.ok(source.includes(attr+'="'+step.selector.match(/"([^"]+)"/)[1]+'"'),`${id}/${step.id} navigation missing`);
+  }
  }
 });
 test('webview includes local scripts, accessible guide overlay, keyboard navigation and host persistence',()=>{
