@@ -8407,10 +8407,10 @@ window.addEventListener('message',event=>{
   if(Number.isInteger(m.step)&&m.step>=1&&m.step<=6)architectCustomStage=m.step;
   architectCustomAiActive=m.ai===true;
   const message=String(m.message||'Working with custom application…');
-  if(/Verifying localhost|health at /i.test(message))architectCustomOperation='VERIFYING LOCALHOST HEALTH';
+  if(/waiting for|confirmation|approval/i.test(message))architectCustomOperation='WAITING FOR VS CODE CONFIRMATION';
+  else if(/Verifying localhost|health at /i.test(message))architectCustomOperation='VERIFYING LOCALHOST HEALTH';
   else if(/Starting /i.test(message))architectCustomOperation='STARTING APPLICATION';
   else if(/installing|dependencies|npm /i.test(message))architectCustomOperation='INSTALLING DEPENDENCIES';
-  else if(/waiting for|confirmation|approval/i.test(message))architectCustomOperation='WAITING FOR VS CODE CONFIRMATION';
   else if(architectCustomBusy&&architectCustomOperation!=='WAITING FOR VS CODE CONFIRMATION')architectCustomOperation='PROCESSING CUSTOM STACK';
   architectCustomNotify(message);
   architectCustomSetProgress(m.percent??Math.min(90,architectCustomProgressPercent+5),message);
