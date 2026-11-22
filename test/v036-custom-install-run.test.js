@@ -37,7 +37,7 @@ test('Install & Run performs ordered scan, local commit, dependency check and ve
    branch='fix/atgv-custom-stack-'+sha.slice(0,10);sha='b'.repeat(40);
    await fs.mkdir(path.join(root,'atgv-preview'));
    await fs.writeFile(path.join(root,'atgv-preview','README.md'),'SYNTHETIC DATA');
-   await fs.writeFile(path.join(root,'atgv-preview','mock-services.mjs'),'// mocked');
+   await fs.writeFile(path.join(root,'atgv-preview','mock-services.mjs'),require('../src/architect-custom-repair').PREVIEW_SERVICE);
    await fs.writeFile(path.join(root,'atgv-preview','mock-database.json'),'{"synthetic":true}');
    return {branch};
   }
