@@ -1,6 +1,7 @@
 'use strict';
 const { requestJson, baseAtlassian, githubRepoInfo } = require('./clients');
 const { validateUrl, textFromAdf, sha } = require('./utils');
+const fieldValues = require('./jira-field-values');
 function validProjectKey(raw) { const key = String(raw || '').trim().toUpperCase(); if (!/^[A-Z][A-Z0-9_]{1,20}$/.test(key))
     throw new Error('Invalid Jira project key. Select a valid Jira project in Settings or when generating the Jira preview.'); return key; }
 function jiraAuth(config, token) {
@@ -8,7 +9,7 @@ function jiraAuth(config, token) {
         throw new Error('Jira token required for writes.');
     return { token, basicEmail: String(config.get('jira.email') || '').trim() };
 }
-function adf(text) { return { type: 'doc', version: 1, content: String(text || '').split(/\n/).map(line => ({ type: 'paragraph', content: line ? [{ type: 'text', text: line.slice(0, 10000) }] : [] })) }; }
+function adf(text) { return fieldValues.toRichText(text || ''); }
 function validIssueKey(key) { if (!/^[A-Z][A-Z0-9_]{1,20}-\d{1,12}$/.test(key))
     throw new Error('Invalid Jira issue key.'); return key; }
 function validBranch(name) {
@@ -60,13 +61,20 @@ async function jiraIssueTypes(config, token) {
     }
 }
 
+function jiraFieldMetadata(id,info){
+ return {id,name:String(info?.name||id),required:info?.required===true,hasDefaultValue:info?.hasDefaultValue===true,
+  schema:info?.schema||{},operations:Array.isArray(info?.operations)?info.operations:[],
+  allowedValues:Array.isArray(info?.allowedValues)?info.allowedValues:[],
+  defaultValue:info?.defaultValue,writable:info?.writable!==false};
+}
+
 async function jiraIssueFieldMetadata(config,token,{issueTypeId,key}={}){
  const site=baseAtlassian(config),auth=jiraAuth(config,token);
  if(key){
   validIssueKey(key);
   const response=await requestJson(site+'/rest/api/3/issue/'+encodeURIComponent(key)+'/editmeta',auth);
-  if(!response||typeof response.fields!=='object'||Array.isArray(response.fields))throw Error('Jira edit field metadata is unavailable.');
-  return Object.entries(response.fields).map(([id,info])=>({id,name:String(info?.name||id),required:info?.required===true,hasDefaultValue:info?.hasDefaultValue===true,schema:info?.schema||{},operations:info?.operations||[]}));
+  if(!response||!response.fields||typeof response.fields!=='object'||Array.isArray(response.fields))throw Error('Jira edit field metadata is unavailable.');
+  return Object.entries(response.fields).map(([id,info])=>jiraFieldMetadata(id,info));
  }
  if(!/^[0-9]+$/.test(String(issueTypeId||'')))throw Error('Select a valid Jira issue type before checking fields.');
  const project=validProjectKey(config.get('jira.projectKey'));
@@ -75,7 +83,7 @@ async function jiraIssueFieldMetadata(config,token,{issueTypeId,key}={}){
   const data=await requestJson(site+'/rest/api/3/issue/createmeta/'+encodeURIComponent(project)+'/issuetypes/'+encodeURIComponent(String(issueTypeId))+'?startAt='+startAt+'&maxResults=100',auth);
   const rows=Array.isArray(data.fields)?data.fields:Object.entries(data.fields||{}).map(([id,value])=>({fieldId:id,...value}));
   if(!rows.length)break;
-  for(const info of rows){const id=String(info.fieldId||info.key||info.id||'');if(!id||seen.has(id))continue;seen.add(id);list.push({id,name:String(info.name||id),required:info.required===true,hasDefaultValue:info.hasDefaultValue===true,schema:info.schema||{},operations:info.operations||[]});}
+  for(const info of rows){const id=String(info.fieldId||info.key||info.id||'');if(!id||seen.has(id))continue;seen.add(id);list.push(jiraFieldMetadata(id,info));}
   startAt+=rows.length;
   if(data.isLast===true||(Number.isFinite(Number(data.total))&&Number(data.total)>0&&startAt>=Number(data.total))||rows.length<100)break;
  }
@@ -86,14 +94,22 @@ async function jiraReadIssueAllFields(config,token,key){
  validIssueKey(key);
  return requestJson(baseAtlassian(config)+'/rest/api/3/issue/'+encodeURIComponent(key)+'?fields=*all',jiraAuth(config,token));
 }
-function safeExtraFields(extraFields){
+function safeExtraFields(extraFields,metadata){
  if(!extraFields||typeof extraFields!=='object'||Array.isArray(extraFields))throw Error('Invalid custom Jira field values.');
  const result={};
  const keys=Object.keys(extraFields);
  if(keys.length>100)throw Error('Too many custom Jira fields.');
+ const byId=metadata?new Map(metadata.map(field=>[field.id,field])):null;
  for(const key of keys){
-  if(!/^customfield_\d+$/.test(key)&&key!=='environment')throw Error('Unsafe Jira field ID: '+key);
   const value=extraFields[key];
+  if(byId){
+   const field=byId.get(key);
+   if(!field||!fieldValues.isEditable(field))throw Error('Unsafe Jira field ID: '+key);
+   if(JSON.stringify(value??null).length>100000)throw Error('Jira field content exceeds safe limit.');
+   result[key]=fieldValues.encode(field,fieldValues.editorValue(field,value));
+   continue;
+  }
+  if(!/^customfield_\d+$/.test(key)&&key!=='environment')throw Error('Unsafe Jira field ID: '+key);
   if(typeof value!=='string'&&!(value&&typeof value==='object'&&!Array.isArray(value)&&value.type==='doc'&&value.version===1&&Array.isArray(value.content)))throw Error('Unsupported Jira field value for '+key);
   if(JSON.stringify(value).length>100000)throw Error('Jira field content exceeds safe limit.');
   result[key]=value;
@@ -112,7 +128,7 @@ function resolveJiraIssueType(types, requested) {
         throw new Error(`Issue type ${requested} is unavailable or has an unsupported hierarchy level.`);
     return found;
 }
-async function jiraCreateIssue(config, token, { summary, description = '', issueType = 'Task', parentKey, marker, issueTypes, extraLabels = [], extraFields = {} } = {}) {
+async function jiraCreateIssue(config, token, { summary, description = '', issueType = 'Task', parentKey, marker, issueTypes, extraLabels = [], extraFields = {}, fieldMetadata } = {}) {
     const projectKey = validProjectKey(config.get('jira.projectKey'));
     const types = Array.isArray(issueTypes) && issueTypes.length ? issueTypes : await jiraIssueTypes(config, token);
     const type = resolveJiraIssueType(types, issueType);
@@ -135,7 +151,7 @@ async function jiraCreateIssue(config, token, { summary, description = '', issue
             throw Error('Invalid SDLC role label.');
         fields.labels = [...new Set([...(fields.labels||[]),...extraLabels])];
     }
-    Object.assign(fields,safeExtraFields(extraFields));
+    Object.assign(fields,safeExtraFields(extraFields,fieldMetadata));
     const data = await requestJson(`${baseAtlassian(config)}/rest/api/3/issue`, { ...jiraAuth(config, token), method: 'POST', data: { fields } });
     if (!data.key)
         return Promise.reject(new Error('Jira did not return issue key. Check remote for a created issue before retrying.'));
@@ -184,7 +200,7 @@ async function jiraReadIssueChangelog(config, token, key) {
     return { entries, complete: false };
 }
 function remoteFingerprint(issue) { return sha(JSON.stringify({ summary: String(issue.fields?.summary || ''), description: textFromAdf(issue.fields?.description) })); }
-async function jiraUpdateIssue(config, token, { key, summary, description, extraFields = {} } = {}) {
+async function jiraUpdateIssue(config, token, { key, summary, description, extraFields = {}, fieldMetadata } = {}) {
     validIssueKey(key);
     const fields = {};
     if (summary !== undefined) {
@@ -194,7 +210,7 @@ async function jiraUpdateIssue(config, token, { key, summary, description, extra
     }
     if (description !== undefined)
         fields.description = adf(description);
-    Object.assign(fields,safeExtraFields(extraFields));
+    Object.assign(fields,safeExtraFields(extraFields,fieldMetadata));
     if (!Object.keys(fields).length)
         throw new Error('No Jira fields changed.');
     return requestJson(`${baseAtlassian(config)}/rest/api/3/issue/${encodeURIComponent(key)}`, { ...jiraAuth(config, token), method: 'PUT', data: { fields } });
