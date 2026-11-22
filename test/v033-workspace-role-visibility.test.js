@@ -24,9 +24,10 @@ test('non-Developer direct and automatic navigation to Library Studio are blocke
  assert.match(js,/if\(canUseLibraryStudio\(\)\)navigate\('library'\)/);
  assert.match(js,/if\(view==='library'&&destination!=='library'&&window\.atgvLibraryStudio\?\.isDirty\(\)\)/);
 });
-test('chat content aligns with sidebar Workspace label, keeping waveform clipped to header',()=>{
+test('scrollable chat top clearance aligns with Workspace label, keeping waveform clipped to header',()=>{
  const css=read('media/atgv-mywork-ai.css');
- assert.match(css,/padding:23px 0 0;margin:0/);
+ assert.match(css,/padding:0;margin:0;background:#000!important/);
+ assert.match(css,/padding:23px clamp\(12px,2vw,24px\) 26px/);
  assert.doesNotMatch(css,/padding:42px 0 0/);
  assert.doesNotMatch(css,/padding-top:34px/);
  assert.doesNotMatch(css,/padding-top:24px/);
