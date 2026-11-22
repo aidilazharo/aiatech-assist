@@ -178,7 +178,8 @@ function normalizeProjectInput(input = {}, existing) {
             branch: typeof requestedPreparation.branch === 'string' && (
                 /^bootstrap\/[a-z0-9-]{1,80}$/.test(requestedPreparation.branch) ||
                 (/^migration\/[a-z0-9-]{1,120}$/.test(requestedPreparation.branch) &&
-                 requestedPreparation.branch.startsWith('migration/'+techStackId+'-catalog-'))
+                 requestedPreparation.branch.startsWith('migration/'+techStackId+'-catalog-')) ||
+                (techStackId==='custom' && /^fix\/atgv-custom-stack-[a-f0-9]{10}$/.test(requestedPreparation.branch))
             ) ? requestedPreparation.branch : '',
             baseBranch: validGithubBranch(requestedPreparation.baseBranch || '') || 'main',
             sha: typeof requestedPreparation.sha === 'string' && /^[a-f0-9]{40}$/.test(requestedPreparation.sha) ? requestedPreparation.sha : '',
@@ -187,6 +188,23 @@ function normalizeProjectInput(input = {}, existing) {
             at: String(requestedPreparation.at || '').slice(0, 60)
         };
     }
+    // Persist mock-preview evidence separately from real server verification.
+    // Never reinterpret a synthetic database as a verified PostgreSQL instance.
+    const requestedMock = stackChanged ? null : (input.techStackCustomPreview === undefined ? existing?.techStackCustomPreview || null : input.techStackCustomPreview);
+    const techStackCustomPreview = techStackId==='custom' && techStackPrepared &&
+      requestedMock?.status==='verified' && requestedMock.mockOnly===true &&
+      requestedMock.stackId==='custom' && requestedMock.root===techStackPrepared.root &&
+      requestedMock.branch===techStackPrepared.branch && requestedMock.sha===techStackPrepared.sha &&
+      typeof requestedMock.relative==='string' &&
+      (requestedMock.relative==='' || (requestedMock.relative.length<=250 && requestedMock.relative.split('/').every(part=>/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,79}$/.test(part)) && requestedMock.relative.split('/').length<=3)) &&
+      typeof requestedMock.url==='string' && requestedMock.url===techStackPrepared.previewUrl &&
+      /^http:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d{1,5})?\//.test(requestedMock.url) &&
+      typeof requestedMock.at==='string' ? {
+        status:'verified',stackId:'custom',root:techStackPrepared.root,
+        branch:techStackPrepared.branch,sha:techStackPrepared.sha,
+        relative:requestedMock.relative,url:requestedMock.url,
+        mockOnly:true,at:requestedMock.at.slice(0,60)
+      } : null;
     const techStackValidation = stackChanged ? null : (input.techStackValidation === undefined ? existing?.techStackValidation || null : input.techStackValidation);
     const techStackApproval = stackChanged ? null : (input.techStackApproval === undefined ? existing?.techStackApproval || null : input.techStackApproval);
     const requestedServerVerification = stackChanged ? null : (input.techStackServerVerification === undefined ? existing?.techStackServerVerification || null : input.techStackServerVerification);
@@ -202,7 +220,7 @@ function normalizeProjectInput(input = {}, existing) {
           root: techStackPrepared.root, sha: techStackPrepared.sha,
           branch: techStackPrepared.branch, at: requestedServerVerification.at.slice(0,60)
         } : null;
-    return { schema: 4, id, name, techStackId, techStackCompanionId, techStackGeneration, techStackPrepared, techStackValidation, techStackServerVerification, techStackApproval, createdAt: existing?.createdAt || now, updatedAt: now, schedule: normalizeProjectSchedule(input.schedule, existing?.schedule), settings: normalizeSettings(input.settings === undefined ? (existing?.settings || {}) : input.settings) };
+    return { schema: 4, id, name, techStackId, techStackCompanionId, techStackGeneration, techStackPrepared, techStackCustomPreview, techStackValidation, techStackServerVerification, techStackApproval, createdAt: existing?.createdAt || now, updatedAt: now, schedule: normalizeProjectSchedule(input.schedule, existing?.schedule), settings: normalizeSettings(input.settings === undefined ? (existing?.settings || {}) : input.settings) };
 }
 function projectConfig(project, extensionSettings = {}, globalConfig = { get: (_, fallback) => fallback }) {
     const projectSettings = project?.settings || {};
