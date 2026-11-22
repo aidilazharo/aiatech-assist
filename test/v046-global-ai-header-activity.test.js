@@ -45,7 +45,7 @@ test('shared red/CMYK top waveform appears across all app pages only for real AI
  assert.match(wave,/msg\.type!=='atgvAiActivity'/);
  assert.match(wave,/classList\.toggle\('atgv-global-ai-active',next\)/);
  assert.match(wave,/window\.ATGVSyncMyWorkHeaderWaveHost\?\.\(\)/);
- assert.match(wave,/globalAiActive\|\|/);
+ assert.match(wave,/\|\|globalAiActive/);
  assert.match(wave,/if\(globalAiActive\)\{[\s\S]*?targetHeight=reduceMotion\?0:Math\.min\(\.17,10\/Math\.max\(h,1\)\)/);
  assert.match(host,/const endAi=beginAiActivity\(\);let result;try\{result=await aiOrchestrator\.run/);
  assert.match(host,/finally\{endAi\(\);\}/);
