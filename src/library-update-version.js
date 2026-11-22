@@ -21,7 +21,10 @@ function compareInstalledRelease(installed,remote){
  if(base.reason!=='same'||!remote?.tag)return base;
  const next=releaseBuild(remote.tag,base.remote),current=releaseBuild(installed?.releaseTag,base.installed);
  if(next===null)return {...base,available:false,reason:'remote-unverified'};
- if(current===null)return {...base,available:true,reason:'build-unverified'};
+ // An unrecorded local release tag does not prove that the remote build is newer.
+ // In particular, a Git checkout has no releaseTag; treating it as older
+ // would repeatedly prompt for the same VERSION on every startup.
+ if(current===null)return {...base,available:false,reason:'build-unverified'};
  return {...base,available:next>current,reason:next>current?'newer-build':next===current?'same':'older'};
 }
 function displayLibraryUpdate(installedVersion,remoteVersion){

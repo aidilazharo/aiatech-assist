@@ -775,7 +775,7 @@ async function checkSoftwareUpdates({prompt=false,interactive=false,force=false,
   ]);
   if(prompt){
    if(extensionRelease)await promptExtensionRelease(extensionRelease,{force:startup});
-   if(libraryRelease)await promptLibraryRelease(libraryRelease,{force:startup});
+   if(libraryRelease)await promptLibraryRelease(libraryRelease);
   }
   if(errors.length&&interactive)throw Error(errors.join(' | '));
  }finally{softwareCheckBusy=false;await publishUpdateStatus();if(pendingStartupUpdateCheck){pendingStartupUpdateCheck=false;void checkSoftwareUpdates({prompt:true,force:true,startup:true}).catch(e=>report('Startup update check: '+e.message));}}
@@ -8695,13 +8695,20 @@ async function handleDashboardMessage(msg){
           if(remote){
             catalogRemote={repository:remote.repository,version:remote.version,sha:remote.sha};
             const newer=!installed||libraryUpdateVersion.compareInstalledRemote(installed.version,remote.version).available;
-            if(!newer){
+            // A verified ZIP may contain a newer source-build under the same VERSION.
+            // Only use the aidilazharo release mirror for its own configured Library.
+            const newerReleaseBuild=!!installed&&
+              config.repositoryUrl===startupSetup.SOURCE_REPOS.aidilazharo.library&&
+              !!libraryRelease&&
+              libraryUpdateVersion.compareInstalledRelease(installed,libraryRelease).reason==='newer-build';
+            if(!newer&&!newerReleaseBuild){
               const message='Active Library v'+installed.version+' is equal to or newer than the selected '+config.repositoryUrl+' main v'+remote.version+'. No downgrade was performed. The public release mirror is checked separately.';
               await dashboard?.webview.postMessage({type:'catalogAction',action:'pull',success:true,message});
               await progress('completed',100,'SDLC Library already newer',message);
               activeLibraryUpdatePullRequestId=null;
               return;
             }
+            if(newer){
             await progress('running',55,'Pulling verified Library main','Cloning or fast-forwarding the owner-selected source repository after verifying its commit and manifest.');
             const pulled=await sdlcCatalog.syncGitWorkspace(config,token,workspace,context.globalStorageUri.fsPath,{expectedSha:remote.sha});
             const active=await sdlcCatalog.activeRoot(workspace);
@@ -8719,12 +8726,14 @@ async function handleDashboardMessage(msg){
             await progress('completed',100,'SDLC Library update complete',message);
             activeLibraryUpdatePullRequestId=null;
             return;
+            }
           }
           // The public mirror distributes the aidilazharo source only.
           // Never activate it as the aiamalaysia catalogue if its source is inaccessible.
           if(config.repositoryUrl!==startupSetup.SOURCE_REPOS.aidilazharo.library)
             throw Error('Cannot verify selected Library source '+config.repositoryUrl+': '+String(sourceError?.message||'GitHub authentication unavailable')+'. Public mirror belongs to aidilazharo and cannot replace this source.');
-          await progress('running',35,'Checking fallback GitHub release','Selected source is unavailable. Checking the checksum-verified public release without downgrading existing work.');
+          await progress('running',35,remote?'Checking newer verified Library build':'Checking fallback GitHub release',
+            remote?'Selected source VERSION is unchanged. Checking for a newer checksum-verified release build.':'Selected source is unavailable. Checking the checksum-verified public release without downgrading existing work.');
           const checked=await libraryReleaseUpdater.latestAcrossRepositories();
           const release=checked.release;libraryLatest=checked.latest;libraryReleaseWarnings=checked.errors;
           if(!release)throw Error(checked.latest?'The latest public Library release is missing its verified ZIP or checksum.':'No public SDLC Library release is available.');
