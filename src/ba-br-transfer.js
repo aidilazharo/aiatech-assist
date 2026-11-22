@@ -43,7 +43,7 @@ function assertActor(scope,actorId){
 async function transfer({readIssue,writeReporter,projectKey,epicKey,brId='',register={},actorId,targetId,expectedUpdated,expectedOwnerId,onProgress=()=>{}}){
  if(typeof readIssue!=='function'||typeof writeReporter!=='function')throw Error('Jira read/write operations unavailable.');
  if(!ACCOUNT.test(String(targetId||'')))throw Error('Select a verified Business Analyst.');
- onProgress('checking',20,'Verifying the current Jira BR owner…');
+ await onProgress('checking',20,'Verifying the current Jira BR owner…');
  const issue=await readIssue(epicKey);
  const scope=assertIssue(issue,projectKey,epicKey,brId,register);
  assertActor(scope,actorId);
@@ -51,14 +51,16 @@ async function transfer({readIssue,writeReporter,projectKey,epicKey,brId='',regi
   throw Error('Jira BR ownership changed. Refresh the BR and reopen Transfer BR.');
  if(scope.ownerId===targetId)throw Error('This user already owns the Business Requirement.');
  // The second read prevents a stale form being applied after another Jira edit.
- onProgress('checking',40,'Checking for concurrent Jira changes…');
+ await onProgress('checking',40,'Checking for concurrent Jira changes…');
  const latest=assertIssue(await readIssue(epicKey),projectKey,epicKey,brId,register);
  if(latest.updated!==scope.updated||latest.ownerId!==scope.ownerId)
   throw Error('Jira BR changed during transfer. No change was made.');
- onProgress('writing',65,'Updating the Jira Epic reporter…');
- await writeReporter(epicKey,targetId);
+ await onProgress('writing',65,'Updating the Jira Epic reporter…');
  try{
-  onProgress('verifying',85,'Verifying the new BR owner in Jira…');
+  // The PUT itself can fail after Jira has applied the change (e.g. a lost response).
+  // Always re-read the reporter before deciding whether compensation is necessary.
+  await writeReporter(epicKey,targetId);
+  await onProgress('verifying',85,'Verifying the new BR owner in Jira…');
   const verified=assertIssue(await readIssue(epicKey),projectKey,epicKey,brId,register);
   if(verified.ownerId!==targetId)throw Error('Jira did not confirm the new BR owner.');
   return {epicKey,brId,ownerId:targetId,previousOwnerId:scope.ownerId,creatorId:scope.creatorId};
