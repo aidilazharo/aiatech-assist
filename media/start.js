@@ -631,6 +631,7 @@ function setView(next){
   // Keep its logical 'discovery' mode so existing save/approval and error guards work.
   $('discoveryView').classList.toggle('hidden',next!=='discovery');
   view=next;
+  if(typeof syncSdlcWorkspaceShell==='function')syncSdlcWorkspaceShell(next);
   if(typeof renderWorkspaceBreadcrumbs==='function')renderWorkspaceBreadcrumbs();
   // Only My Work owns a three-zone, full-height chat layout; all role work pages retain normal scrolling.
   document.body?.classList?.toggle?.('atgv-mywork-chat-mode',next==='myWork');
@@ -1044,6 +1045,28 @@ function requestNavigationRefresh(destination){
    requestId:++navigationRefreshRequestId});
  });
 }
+// A single SDLC Workspace sidebar destination owns the four existing pages.
+// Preserve their original view IDs and handlers; no document/approval state
+// is moved or reconstructed when switching tabs.
+const SDLC_WORKSPACE_VIEWS=new Set(['flow','documents','planning','knowledge','operations']);
+function syncSdlcWorkspaceShell(next){
+ const shell=$('sdlcWorkspaceShell');
+ if(!shell)return;
+ const active=SDLC_WORKSPACE_VIEWS.has(next);
+ shell.classList.toggle('hidden',!active);
+ shell.setAttribute('aria-hidden',String(!active));
+ const overview=$('sdlcWorkspaceOverview');
+ if(overview){
+  overview.classList.toggle('current',next==='flow');
+  overview.setAttribute('aria-pressed',String(next==='flow'));
+ }
+ for(const tab of shell.querySelectorAll('[data-sdlc-tab]')){
+  const chosen=active&&tab.dataset.sdlcTab===next;
+  tab.classList.toggle('current',chosen);
+  tab.setAttribute('aria-selected',String(chosen));
+  tab.tabIndex=chosen||active&&next==='flow'&&tab.dataset.sdlcTab==='documents'?0:-1;
+ }
+}
 function navigate(destination){
   if(roleSettingsDirty&&view==='project'&&destination!=='project-settings'&&destination!=='tech'){status('Save project role settings before leaving Project Settings.',true);return;}
   if(view==='discovery'&&discoveryDirty){status('Save your discovery answers before leaving this screen.',true);return;}
@@ -1067,8 +1090,9 @@ function navigate(destination){
   const isRole=visibleRoles().some(role=>role.id===destination);
   const keepingWorkspace=isRole&&(view==='work'||view==='discovery'||view==='uxPreview');
   if(isRole&&activeId){usedRoleIds.add(destination);send('markRoleUsed',{roleId:destination});}
-  selectedNav=destination==='role-workspace'||destination==='discovery'||keepingWorkspace?'role-workspace':
+  selectedNav=destination==='role-workspace'||destination==='discovery'||keepingWorkspace||
     isRole||destination==='sdlc-roles'?'sdlc-roles':
+    SDLC_WORKSPACE_VIEWS.has(destination)?'flow':
     destination==='project-settings'||destination==='tech'?'settings':destination;
   for(const button of document.querySelectorAll('.sidebar [data-nav]')){
     const active=button.dataset.nav===selectedNav;
@@ -1113,6 +1137,19 @@ function navigate(destination){
   }
 }
 for(const nav of document.querySelectorAll('.sidebar [data-nav]'))nav.addEventListener('click',()=>navigate(nav.dataset.nav));
+// Internal tab navigation keeps the original five workflow views and guards.
+$('sdlcWorkspaceOverview').addEventListener('click',()=>navigate('flow'));
+for(const tab of $('sdlcWorkspaceTabs').querySelectorAll('[data-sdlc-tab]')){
+ tab.addEventListener('click',()=>navigate(tab.dataset.sdlcTab));
+ tab.addEventListener('keydown',event=>{
+  if(!['ArrowRight','ArrowLeft','Home','End'].includes(event.key))return;
+  const tabs=[...$('sdlcWorkspaceTabs').querySelectorAll('[data-sdlc-tab]')];
+  const index=tabs.indexOf(tab);
+  const next=event.key==='Home'?0:event.key==='End'?tabs.length-1:
+   (index+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;
+  event.preventDefault();tabs[next]?.focus();navigate(tabs[next].dataset.sdlcTab);
+ });
+}
 function closeRoleMenu(){
  $('sidebarRoleMenu').classList.add('hidden');$('sidebarRoleTrigger').setAttribute('aria-expanded','false');
 }
