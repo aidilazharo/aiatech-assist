@@ -630,6 +630,10 @@ function setView(next){
   }else if(next==='discovery'&&view!=='discovery'&&baResumeCardReady&&!baProcessRunning){
     baViewedStep='start';
   }
+  // The BR details dialog is now a visible workView overlay, not a child of
+  // the hidden workflow panel. Close it whenever the user leaves the BA overview.
+  if(view==='baOverview'&&next!=='baOverview'&&typeof baRequirementModalTarget!=='undefined'&&baRequirementModalTarget)
+    closeBARequirementModal(false);
   for(const page of pages)page.classList.toggle('hidden',page!==target);
   if(next==='myWork')target.querySelector?.('.atgv-page-feedback')?.remove();
   // The BA workflow and project inventory are separate views in the role workspace.
