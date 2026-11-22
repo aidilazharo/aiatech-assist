@@ -2463,3 +2463,47 @@ body:not(.gate-mode) #sdlcWorkspaceShell.atgv-sdlc-workspace-shell{
  #sdlcWorkspaceShell .atgv-sdlc-workspace-tabs{gap:6px}
  #sdlcWorkspaceShell .atgv-sdlc-workspace-tabs button[role="tab"]{padding:5px 10px}
 }
+
+/* Custom Stack: one action, one existing shared progress bar, six compact stages. */
+#workView #architectCustomSteps.atgv-custom-steps{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));
+  gap:7px;list-style:none;counter-reset:custom-stage;padding:0;margin:10px 0;
+}
+#workView #architectCustomSteps li{
+  counter-increment:custom-stage;display:flex;align-items:center;gap:7px;
+  border:1px solid var(--vscode-panel-border,#303842);border-radius:6px;
+  padding:7px 9px;color:var(--vscode-descriptionForeground,#aeb6bf);font-size:11px;
+}
+#workView #architectCustomSteps li:before{
+  content:counter(custom-stage);display:inline-flex;align-items:center;justify-content:center;
+  flex:0 0 18px;width:18px;height:18px;border-radius:100%;
+  border:1px solid currentColor;font-size:10px;
+}
+#workView #architectCustomSteps li[data-state="active"]{
+  border-color:var(--vscode-focusBorder,#4e94cb);color:var(--vscode-foreground,#fff);
+}
+#workView #architectCustomSteps li[data-state="done"]:before{
+  content:"✓";color:var(--vscode-terminal-ansiGreen,#74ca9e);border-color:currentColor;
+}
+#workView #architectCustomRun.atgv-custom-stop-mode{
+  background:var(--vscode-inputValidation-errorBackground,#61252b);
+  border-color:var(--vscode-inputValidation-errorBorder,#a85d63);
+}
+#workView #architectCustomAiWave.atgv-custom-ai-low-wave{
+  width:66px;height:16px;display:flex;gap:4px;align-items:center;
+  justify-content:center;margin:5px 0;opacity:.62;
+}
+#workView #architectCustomAiWave.atgv-custom-ai-low-wave.hidden{display:none!important}
+#workView #architectCustomAiWave span{
+  display:block;width:3px;height:5px;border-radius:4px;background:#56b6ab;
+  animation:atgv-custom-low-wave 1.45s ease-in-out infinite alternate;
+}
+#workView #architectCustomAiWave span:nth-child(2){animation-delay:.22s;background:#63b9d5}
+#workView #architectCustomAiWave span:nth-child(3){animation-delay:.44s;background:#c884a0}
+#workView #architectCustomAiWave span:nth-child(4){animation-delay:.66s;background:#69c8a1}
+#workView #architectCustomAiWave span:nth-child(5){animation-delay:.88s;background:#78aacd}
+@keyframes atgv-custom-low-wave{from{height:4px;opacity:.4}to{height:10px;opacity:.86}}
+@media(prefers-reduced-motion:reduce){#workView #architectCustomAiWave span{animation:none!important;height:6px}}
+#workView #architectCustomActions.hidden,#workView #architectCustomScan.hidden,
+#workView #architectCustomPull.hidden,#workView #architectCustomMockRun.hidden,
+#workView #architectCustomStop.hidden{display:none!important}
