@@ -14,11 +14,11 @@ test('extension and library versions are beneath AIATECH ASSIST in both headers'
  const brand=markup.slice(markup.indexOf('<div class="brand-area">'),markup.indexOf('<div class="header-context">'));
  assert.ok(brand.indexOf('brand-name')<brand.indexOf('brand-versions'));
 });
-test('start removes settings, model picker lives under Handoffs in left sidebar',()=>{
+test('start removes settings, model picker follows the consolidated SDLC sidebar item',()=>{
  assert.doesNotMatch(markup,/id="gateSettings"/);
  const sidebar=markup.slice(markup.indexOf('<aside class="sidebar"'),markup.indexOf('</aside>'));
- assert.ok(sidebar.indexOf('data-nav="operations"')>0);
- assert.ok(sidebar.indexOf('id="headerModel"')>sidebar.indexOf('data-nav="operations"'));
+ assert.ok(sidebar.indexOf('data-nav="flow"')>0);
+ assert.ok(sidebar.indexOf('id="headerModel"')>sidebar.indexOf('data-nav="flow"'));
  assert.equal((markup.match(/id="headerModel"/g)||[]).length,1);
  assert.match(ui,/\$\('headerModel'\)\.addEventListener\('click',openModelPicker\)/);
 });

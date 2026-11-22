@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.34';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.35';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -125,18 +125,25 @@ function html(webview,{resumeLibrary=false}={}){
       <div class="nav-label">WORKSPACE</div>
       <button type="button" class="nav-item current" data-nav="overview"><span class="nav-icon">▦</span>Overview</button>
       <button type="button" class="nav-item" data-nav="sdlc-roles"><span class="nav-icon">◉</span>My Work</button>
-      <button type="button" class="nav-item" data-nav="role-workspace"><span class="nav-icon">▣</span>Role Workspace</button>
-      <button type="button" class="nav-item" data-nav="flow"><span class="nav-icon">↻</span>SDLC</button>
-      <button type="button" class="nav-item" data-nav="documents"><span class="nav-icon">▤</span>Documents</button>
-      <button type="button" class="nav-item" data-nav="planning"><span class="nav-icon">▥</span>Solution Designs</button>
+      <button type="button" class="nav-item" data-nav="flow"><span class="nav-icon">↻</span>SDLC Workspace</button>
       <button type="button" class="nav-item" data-nav="library" id="navLibraryStudio" hidden aria-hidden="true" tabindex="-1"><span class="nav-icon">▤</span>Library Studio</button>
-      <button type="button" class="nav-item" data-nav="knowledge"><span class="nav-icon">◎</span>Knowledge & RAG</button>
-      <button type="button" class="nav-item" data-nav="operations"><span class="nav-icon">⚑</span>Approvals & Handoffs</button>
       <button id="headerModel" type="button" class="header-model-status sidebar-model-status inactive" aria-haspopup="dialog" aria-controls="modelPicker" title="Choose AI model"><span class="model-dot" aria-hidden="true"></span><span id="headerModelName">LLM</span><span id="headerModelState">Not active</span><span aria-hidden="true">⌄</span></button>
     </div>
     <div class="sidebar-footer"><div class="sidebar-role-picker"><div class="role-select-wrap"><button type="button" id="sidebarRoleTrigger" class="role-picker-trigger" aria-haspopup="listbox" aria-expanded="false"><span id="sidebarRoleCurrent">Choose role</span><span aria-hidden="true">▾</span></button><div id="sidebarRoleMenu" class="role-picker-menu hidden" role="listbox" aria-label="Active SDLC role"></div><select id="sidebarRole" class="role-native-hidden" aria-label="Active SDLC role"></select></div><button type="button" id="sidebarSwitchProject" class="sidebar-project-switch" title="Switch project">Choose project ▾</button></div><button type="button" class="nav-item settings-shortcut" data-nav="settings" id="navSettings"><span class="nav-icon">⚙</span>Settings</button></div>
    </aside>
    <div id="contentPane" class="content-pane" role="main">
+   <section id="sdlcWorkspaceShell" class="atgv-sdlc-workspace-shell hidden" aria-labelledby="sdlcWorkspaceHeading">
+     <div class="atgv-sdlc-workspace-heading">
+       <h2 id="sdlcWorkspaceHeading">SDLC Workspace</h2>
+       <button type="button" id="sdlcWorkspaceOverview" class="secondary atgv-sdlc-workspace-overview" aria-label="Open SDLC readiness overview">SDLC Readiness</button>
+     </div>
+     <div id="sdlcWorkspaceTabs" class="atgv-sdlc-workspace-tabs" role="tablist" aria-label="SDLC Workspace sections">
+       <button type="button" role="tab" data-sdlc-tab="documents" id="sdlcTabDocuments" aria-controls="documentsView" aria-selected="false" tabindex="-1">Documents</button>
+       <button type="button" role="tab" data-sdlc-tab="planning" id="sdlcTabPlanning" aria-controls="planningView" aria-selected="false" tabindex="-1">Solution Designs</button>
+       <button type="button" role="tab" data-sdlc-tab="knowledge" id="sdlcTabKnowledge" aria-controls="knowledgeView" aria-selected="false" tabindex="-1">Knowledge &amp; RAG</button>
+       <button type="button" role="tab" data-sdlc-tab="operations" id="sdlcTabOperations" aria-controls="operationsView" aria-selected="false" tabindex="-1">Approvals</button>
+     </div>
+   </section>
    <main id="gateView" class="gate-container">
     <div class="gate-top"><div class="gate-identity gate-lead-identity"><span class="gate-logo-stack"><img src="${brand}" alt="ATGV" class="gate-logo"/></span><span class="gate-product-title"><h1>AIATECH ASSIST</h1><small class="gate-brand-versions">Extension v${extensionVersion}<span id="gateLibraryVersion"> · Library —</span></small></span></div><div class="gate-header-actions"><button id="gateReportIssue" type="button" class="guide-icon-button" aria-label="Report an issue" title="Report an Issue"><svg class="guide-help-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.5 0-3-.4-4.3-1.2L3 20l1.3-4A8.5 8.5 0 1 1 21 11.5Z"/><path d="M12 7.5v4.5M12 15.5h.01"/></svg></button><button id="gateGuideHelp" type="button" class="guide-icon-button" aria-label="Open interactive user guide" title="Interactive User Guide" aria-haspopup="dialog" aria-controls="guideMenu"><svg class="guide-help-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.65 9a2.5 2.5 0 0 1 4.7 1.2c0 1.8-2.35 2-2.35 3.7"/><path d="M12 17.3h.01"/></svg></button></div></div>
     <div id="gateFolderAlert" class="gate-folder-alert hidden" role="alert"><div><strong>Open a VS Code folder to continue</strong><p>ATGV needs an open folder to find or create project files. Select a folder before searching or creating a project.</p></div><button id="gateOpenFolder" type="button">Open Folder</button></div>

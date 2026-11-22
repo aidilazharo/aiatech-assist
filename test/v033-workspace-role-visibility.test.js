@@ -24,11 +24,13 @@ test('non-Developer direct and automatic navigation to Library Studio are blocke
  assert.match(js,/if\(canUseLibraryStudio\(\)\)navigate\('library'\)/);
  assert.match(js,/if\(view==='library'&&destination!=='library'&&window\.atgvLibraryStudio\?\.isDirty\(\)\)/);
 });
-test('chat waveform overhang has compact safe clearance rather than a 94px black band',()=>{
+test('chat starts immediately below header, waveform clipped without an empty black band',()=>{
  const css=read('media/atgv-mywork-ai.css');
- assert.match(css,/padding:42px 0 0/);
- assert.match(css,/padding-top:34px/);
- assert.match(css,/padding-top:24px/);
+ assert.match(css,/padding:0;margin:0/);
+ assert.doesNotMatch(css,/padding:42px 0 0/);
+ assert.doesNotMatch(css,/padding-top:34px/);
+ assert.doesNotMatch(css,/padding-top:24px/);
+ assert.match(css,/clip-path:inset\(0 0 50% 0\)/);
  assert.doesNotMatch(css,/padding:94px 0 0/);
  assert.match(css,/#atgvMyWorkAi \.atgv-mywork-ai-results\{/);
  assert.match(css,/overflow-y:auto/);

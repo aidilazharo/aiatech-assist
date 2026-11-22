@@ -11,7 +11,7 @@
    s('overview','Project overview','Review SDLC progress and the active project here.','#overviewActive','overview'),
    s('role','Choose your role','Choose the SDLC role you will work in. Each role has its own workflow and guide.','#sidebarRoleTrigger','overview',true),
    s('my-work','Open My Work','Open role-specific tasks, ownership, deliverables, and progress.','[data-nav="sdlc-roles"]','overview',true),
-   s('designs','Review designs','Find architecture diagrams and AI design drafts here.','[data-nav="planning"]','overview',true),
+   s('designs','Review designs','Find architecture diagrams and AI design drafts here.','[data-sdlc-tab="planning"]','flow',true),
    s('settings','Open project settings','Open Settings, then select the Project Settings tab to configure the project.','[data-nav="settings"]','overview',true)
   ]},
   'start-settings':{label:'Start & Settings',description:'Use the start screen and settings to connect tools and configure roles.',steps:[
@@ -44,10 +44,10 @@
    s('overview','Overview','Check project progress, work items, and milestones.','[data-nav="overview"]','overview',true),
    s('my-work','My Work','Open the workbench for the currently selected role.','[data-nav="sdlc-roles"]','overview',true),
    s('sdlc','SDLC','Review the process stages and dependencies.','[data-nav="flow"]','overview',true),
-   s('documents','Documents','Browse generated and manually maintained SDLC documents.','[data-nav="documents"]','overview',true),
-   s('designs','Designs & Diagrams','Review architecture and generated design diagrams.','[data-nav="planning"]','overview',true),
-   s('knowledge','Knowledge & RAG','Search indexed project documents and approved knowledge sources.','[data-nav="knowledge"]','overview',true),
-   s('approvals','Approvals & Handoffs','View document ownership, reviews, and sign-offs.','[data-nav="operations"]','overview',true),
+   s('documents','Documents','Browse generated and manually maintained SDLC documents.','[data-sdlc-tab="documents"]','flow',true),
+   s('designs','Designs & Diagrams','Review architecture and generated design diagrams.','[data-sdlc-tab="planning"]','flow',true),
+   s('knowledge','Knowledge & RAG','Search indexed project documents and approved knowledge sources.','[data-sdlc-tab="knowledge"]','flow',true),
+   s('approvals','Approvals & Handoffs','View document ownership, reviews, and sign-offs.','[data-sdlc-tab="operations"]','flow',true),
    s('settings','Settings','Manage extension connections and project-specific configuration using tabs.','[data-nav="settings"]','overview',true)
   ]},
   'jira-publishing':{label:'Publish Business Requirements to Jira',description:'Preview approved BR changes and publish Jira with explicit approval.',steps:[
@@ -86,7 +86,7 @@
    s('role','Technical Lead workspace','This optional role can be enabled in project role settings. Start from assigned deliverables.','#roleChecklist','technical-lead'),
    s('handoff','Review dependencies and handoffs','Review readiness, blocked tasks, and work ownership before technical sign-off.','#handoffList','technical-lead'),
    s('tasks','Plan technical work','Use approved architecture and the same Jira stories as Developers. Do not duplicate feature branches.','#roleChecklistHeading','technical-lead'),
-   s('approvals','Review and hand off','Review implementation and test evidence through the linked PR and role handoffs.','[data-nav="operations"]','technical-lead',true)
+   s('approvals','Review and hand off','Review implementation and test evidence through the linked PR and role handoffs.','[data-sdlc-tab="operations"]','flow',true)
   ]},
   'software-developer':{label:'Developer',description:'Claim and work on approved Jira assignments.',steps:[
    s('issues','Review Jira assignments','Open Developer My Work and review live Jira issue tables.','#roleJiraWork','software-developer'),
@@ -97,7 +97,7 @@
    s('role','QA role workspace','Review assigned test responsibilities and readiness for QA execution.','#roleChecklist','qa-engineer'),
    s('handoffs','Check development readiness','Validate implementation evidence and dependencies before executing acceptance tests.','#handoffList','qa-engineer'),
    s('evidence','Record test evidence','Use role deliverables to record actual test cases, outcomes, defects and supporting evidence.','#roleChecklistHeading','qa-engineer'),
-   s('documents','Review linked documentation','Trace test cases and defects back to the approved BR and Jira story.','[data-nav="documents"]','qa-engineer',true)
+   s('documents','Review linked documentation','Trace test cases and defects back to the approved BR and Jira story.','[data-sdlc-tab="documents"]','flow',true)
   ]}
  };
  const categories={

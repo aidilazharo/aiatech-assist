@@ -17,7 +17,7 @@ test('standard SDLC catalogue has predefined roles, without a create-role UI',()
  assert.ok(ROLES.length>=14);
  for(const id of ['security-engineer','product-owner','data-engineer','ux-designer','uat-tester'])assert.ok(ROLES.some(x=>x.id===id));
  assert.doesNotMatch(html,/id="showRoleCreator"|id="roleCreator"|id="newRoleName"/);
- assert.doesNotMatch(html,/SDLC Workspace|Locally stored timeline and diagram documents\. Remote synchronization is separate\./);
+ assert.doesNotMatch(html,/Locally stored timeline and diagram documents\. Remote synchronization is separate\./);
  assert.doesNotMatch(script,/Select a project to continue\./);
  assert.match(html,/id="roleSettingsForm"/);assert.match(html,/id="roleTimelineForm"/);
 });
