@@ -121,6 +121,7 @@ const projectSkeleton=require('../../project-skeleton');
 const developerGit=require('../../developer-git');
 const architectRepository=require('../../architect-repository');
 const architectErrorLogs=require('../../architect-error-logs');
+const architectStackActivity=require('../../architect-stack-activity');
 const developerCopilot=require('../../developer-copilot');
 const developerBR=require('../../developer-br-pipeline');
 const developerTdd=require('../../developer-tdd');
@@ -291,6 +292,14 @@ async function askHostDialog(type,message,opts={}){
   pendingHostDialogs.set(requestId,{resolve,timer,details:opts.details||'',projectId:activeProject?.id||null});
   Promise.resolve(dashboard.webview.postMessage({type:'hostDialogRequest',requestId,dialogType:type,message:String(message||'').slice(0,10000),confirm:opts.confirm||'Confirm',value:opts.value||'',password:!!opts.password,placeholder:opts.placeholder||'',items:opts.items||[],hasDetails:!!opts.details,detailsLabel:opts.detailsLabel||'View Full Deletion Preview'})).then(ok=>{if(!ok){clearTimeout(timer);pendingHostDialogs.delete(requestId);resolve(undefined);}}).catch(()=>{clearTimeout(timer);pendingHostDialogs.delete(requestId);resolve(undefined);});
  });
+}
+async function recordStackActivity(projectId,stage,message){
+ if(!projectId||!context?.globalStorageUri?.fsPath)return;
+ try{
+  const record=await architectStackActivity.append(context.globalStorageUri.fsPath,projectId,stage,message);
+  if(activeProject?.id===projectId)await dashboard?.webview.postMessage({
+   type:'architectLogState',projectId,available:true,events:record.events});
+ }catch(error){report('Technology Stack diagnostic journal: '+error.message);}
 }
 async function uiWarning(message,...args){
  const options=args.find(item=>item&&typeof item==='object'&&!Array.isArray(item))||{};
@@ -6533,22 +6542,47 @@ async function handleDashboardMessage(msg){
         await dashboard?.webview.postMessage({type:'architectureBootstrapResult',value:{message:'Using configured local Git repository: '+info.repo.root+' · '+info.targets.length+' runnable target(s). Save Stack installs dependencies automatically before tests and startup.'}});
         break;
       }
+      case 'architectActivityStatus':{
+        requireOpened();
+        if(msg.projectId!==activeProject.id)break;
+        const current=await architectStackActivity.read(context.globalStorageUri.fsPath,activeProject.id);
+        await dashboard?.webview.postMessage({type:'architectLogState',projectId:activeProject.id,
+          available:!!current||!!architectErrorLogs.get(activeProject.id,'all'),
+          events:current?.events||0,errorCount:architectErrorLogs.count(activeProject.id)});
+        break;
+      }
       case 'architectDownloadErrorLog':{
         requireOpened();
         const kind='all';
-        const item=architectErrorLogs.get(activeProject.id,kind);
-        if(!item)throw Error('No technology stack errors have been recorded for this project during this ATGV session.');
+        const activity=await architectStackActivity.read(context.globalStorageUri.fsPath,activeProject.id);
+        const errors=architectErrorLogs.get(activeProject.id,kind);
+        if(!activity&&!errors)throw Error('No Technology Stack activity recorded. Select Save Stack to start a diagnostic session.');
+        const content=[
+          'ATGV AIATECH Assist — Unified Technology Stack Diagnostic Log',
+          'Exported: '+new Date().toISOString(),
+          'Project: '+activeProject.id,
+          'Extension: '+require('../../../package.json').version,
+          'Scope: Save Stack, Git checkout, approval, six-stage Install & Run, dependencies, preview, errors',
+          'Diagnostic history is redacted, bounded and stored outside the Git checkout.',
+          '',
+          '--- CHRONOLOGICAL ACTIVITY ---',
+          activity?.content||'No durable activity recorded.',
+          '',
+          '--- RECORDED ERRORS ---',
+          errors?.content||'No stack errors have been recorded.'
+        ].join('\n');
+        const item={content:architectErrorLogs.redact(content),count:errors?.count||0};
         const name=architectErrorLogs.filename(activeProject.id,kind);
         const target=await vscode.window.showSaveDialog({
-          title:'Save ATGV Unified Technology Stack Error Report',
+          title:'Save ATGV Unified Technology Stack Diagnostic Log',
           defaultUri:vscode.Uri.file(path.join(require('node:os').homedir(),name)),
-          filters:{'Text logs':['log','txt']},saveLabel:'Save Error Log'
+          filters:{'Text logs':['log','txt']},saveLabel:'Save Diagnostic Log'
         });
         if(target){
           // The report is already sanitized and is never automatically written
           // inside the Git checkout. The user picks its destination explicitly.
           await vscode.workspace.fs.writeFile(target,Buffer.from(item.content,'utf8'));
-          await dashboard?.webview.postMessage({type:'architectErrorLogSaved',projectId:activeProject.id,kind,count:item.count,message:'Unified error log saved: '+target.fsPath});
+          await dashboard?.webview.postMessage({type:'architectErrorLogSaved',projectId:activeProject.id,kind,count:item.count,message:'Unified Technology Stack diagnostic log saved: '+target.fsPath});
         }
         break;
       }
@@ -6679,8 +6713,11 @@ async function handleDashboardMessage(msg){
       case 'architectCustomScan':{
         const projectId=activeProject?.id||'';
         const scanId=Number.isSafeInteger(msg.scanId)&&msg.scanId>0?msg.scanId:null;
-        const progress=async(percent,message)=>activeProject?.id===projectId?
-          dashboard?.webview.postMessage({type:'architectCustomProgress',projectId,scanId,percent,message}):undefined;
+        const progress=async(percent,message)=>{
+          await recordStackActivity(projectId,'Scan Repository '+percent+'%',message);
+          return activeProject?.id===projectId?
+            dashboard?.webview.postMessage({type:'architectCustomProgress',projectId,scanId,percent,message}):undefined;
+        };
         try{
           requireOpened();
           if(msg.projectId!==projectId)throw Error('The project changed. Select Custom Stack again.');
@@ -6836,6 +6873,7 @@ async function handleDashboardMessage(msg){
         const projectId=activeProject?.id||'';
         try{
           requireOpened();
+          await recordStackActivity(projectId,'Install & Run / requested','Six-stage workflow requested. Verifying the repository before asking for approval.');
           if(msg.projectId!==projectId)throw Error('Project changed. Reopen the Custom Stack workflow.');
           const conf=effectiveConfig(activeProject);
           const root=await architectRepository.resolve(context.workspaceState,projectId,developerGit,{
@@ -6851,7 +6889,19 @@ async function handleDashboardMessage(msg){
           const action='Install & Run Custom Stack';
           const workflow=require('../../architect-custom-workflow');
           workflow.beginConsent(root);
+          await recordStackActivity(projectId,'Install & Run / approval','Awaiting ATGV confirmation in VS Code. No application scripts have started.');
+          await dashboard?.webview.postMessage({type:'architectCustomProgress',projectId,percent:4,
+            message:'Waiting for approval in the ATGV dialog (inside VS Code). No code or dependencies have run.'});
           let approved,consentCancelled=false;
+          const approvalStarted=Date.now();
+          const reminder=setInterval(()=>{
+            const elapsed=Math.floor((Date.now()-approvalStarted)/1000);
+            void recordStackActivity(projectId,'Install & Run / approval','Still awaiting confirmation after '+elapsed+' seconds.').then(()=>
+              dashboard?.webview.postMessage({type:'architectCustomProgress',projectId,percent:4,
+                message:'Still waiting for ATGV confirmation ('+elapsed+'s). Choose Confirm or Cancel; no scan or installation is running.'})
+            ).catch(()=>{});
+          },30000);
+          reminder.unref?.();
           try{approved=await uiWarning(
             'Execute the six-stage local Custom Stack workflow for '+target.framework+' ('+(target.relative||'repository root')+')?'+
             '\\n\\n1. Scan manifests and application dependencies.'+
@@ -6861,7 +6911,9 @@ async function handleDashboardMessage(msg){
             '\\n\\nExisting local changes are never overwritten, main is never changed and nothing is pushed to GitHub.'+
             '\\nThe preview DOES NOT start or validate the real PostgreSQL, identity provider, or external systems. It does not constitute production readiness. Continue?',
             {modal:true},action);
-          }finally{consentCancelled=workflow.endConsent(root);}
+          }finally{clearInterval(reminder);consentCancelled=workflow.endConsent(root);}
+          await recordStackActivity(projectId,'Install & Run / approval',
+            consentCancelled?'Stop requested before approval.':approved===action?'Approved local workflow execution.':'Confirmation cancelled or timed out without running scripts.');
           if(consentCancelled||approved!==action){
             await dashboard?.webview.postMessage({type:'architectCustomError',projectId,
               message:'Install & Run cancelled before changing files.'});break;
@@ -6890,6 +6942,7 @@ async function handleDashboardMessage(msg){
             },
             onProgress:async entry=>{
               architectErrorLogs.append(projectId,'custom-stack',entry.message);
+              await recordStackActivity(projectId,'Install & Run '+entry.step+'/6 · '+entry.percent+'%',entry.message);
               if(activeProject?.id===projectId)await dashboard?.webview.postMessage({
                 type:'architectCustomProgress',projectId,percent:entry.percent,
                 step:entry.step,ai:entry.ai===true,message:entry.message});
@@ -6899,8 +6952,10 @@ async function handleDashboardMessage(msg){
             await vscode.env.openExternal(vscode.Uri.parse(result.url)).catch(error=>report('Custom Stack mock browser: '+error.message));
             await dashboard?.webview.postMessage({type:'architectCustomRunResult',projectId,value:result});
           }
+          await recordStackActivity(projectId,'Install & Run / complete','Verified mock preview: '+result.url+'; local branch '+result.branch+'.');
           architectErrorLogs.clear(projectId,'custom-stack');
         }catch(error){
+          await recordStackActivity(projectId,'Install & Run / failed',error.diagnosticLogs||String(error.stack||error.message||error));
           if(projectId)architectErrorLogs.append(projectId,'custom-stack',error.diagnosticLogs||String(error.stack||error.message||error));
           report('Custom Stack install/run: '+error.message);
           if(activeProject?.id===projectId)await dashboard?.webview.postMessage({
@@ -6959,6 +7014,7 @@ async function handleDashboardMessage(msg){
           const root=await architectRepository.resolve(context.workspaceState,projectId,developerGit,{
             projectRoot:aiRoot(),githubOwner:conf.get('github.owner'),githubRepo:conf.get('github.repo')});
           const workflow=require('../../architect-custom-workflow');
+          await recordStackActivity(projectId,'Install & Run / stop','User requested cancellation or managed preview stop.');
           if(workflow.cancel(root)){
             await dashboard?.webview.postMessage({type:'architectCustomProgress',projectId,
               percent:0,message:'Stop requested. Cancelling the current stage safely…'});
@@ -6976,6 +7032,7 @@ async function handleDashboardMessage(msg){
         architectServerOperationSerial++;
         requireOpened();architectErrorLogs.begin(activeProject.id,'save');
         const id=String(msg.stackId||''),stackGate=require('../../architect-stack-approval');
+        await recordStackActivity(activeProject.id,'Save Stack','Selected '+id+'. Checking settings and configured Git repository.');
         stackGate.selection(id,'');
         if(id==='custom'){
           // Save only the Custom Stack selection and recover a missing/empty
@@ -6986,17 +7043,20 @@ async function handleDashboardMessage(msg){
           if(current.techStackPrepared?.stackId&&current.techStackPrepared.stackId!=='custom')
             throw Error('A different technology stack has prepared Git work. Reset Tech Stack with its safety review before saving Custom Stack.');
           const config=effectiveConfig(activeProject);
+          await recordStackActivity(projectId,'Save Stack / repository','Checking checkout; clone or pull only if folder is missing or empty.');
           const checkout=await architectRepository.ensureCustom(context.workspaceState,projectId,developerGit,{
             projectRoot:aiRoot(),githubOwner:config.get('github.owner'),
             githubRepo:config.get('github.repo'),githubBranch:config.get('github.branch'),
             catalogRepositoryUrl:catalogConfig().repositoryUrl
           });
+          await recordStackActivity(projectId,'Save Stack / repository','Checkout mode: '+checkout.mode+'; directory: '+checkout.root);
           const updated=await registry.update(projectId,{...current,
             techStackId:'custom',techStackCompanionId:'',
             techStackPrepared:null,techStackValidation:null,
             techStackServerVerification:null,techStackApproval:null});
           activeProject=updated;
           const detected=await require('../../architect-custom-stack').scan(checkout.root);
+          await recordStackActivity(projectId,'Save Stack / complete','Custom Stack saved. Git SHA '+detected.sha+'; detected '+detected.targets.length+' target(s). No application scripts executed.');
           const process=developerGit.localLogs();
           detected.running=!!(process.running&&detected.targets.some(item=>
             path.resolve(checkout.root,item.relative)===path.resolve(process.cwd||'')));
@@ -10683,6 +10743,7 @@ async function handleDashboardMessage(msg){
     if(['designDelete','designOpenMockupBrowser'].includes(msg.command))await dashboard?.webview.postMessage({type:'designActionError',message:e.message});
     if(msg.command.startsWith('delivery'))await dashboard?.webview.postMessage({type:'deliveryOperationError',message:e.message});
     if(String(msg.command||'').startsWith('uxDesign')||String(msg.command||'').startsWith('uxPipeline')||String(msg.command||'').startsWith('uxFramework')||msg.command==='uxPrototypeOpenBrowser'||msg.command==='uxPublishFrontend')await dashboard?.webview.postMessage({type:'uxDesignError',projectId:activeProject?.id,message:e.message});
+    if(activeProject?.id&&/^architect(?:SaveStack|Custom|TestStack|RunServer|StopServer|ApproveStack)/.test(msg.command||''))await recordStackActivity(activeProject.id,'Technology Stack / error',String(e.stack||e.message||e));
     const architectLogKinds={architectSaveStack:'save',architectResetStack:'reset',architectTestStack:'test',architectRunServer:'server',architectStopServer:'server',architectServerStatus:'server',architectApproveStack:'approval',architectCheckStackUpdates:'catalog',architectPullStackUpdates:'catalog'};
     if(architectLogKinds[msg.command]&&activeProject?.id){
       const kind=architectLogKinds[msg.command];
