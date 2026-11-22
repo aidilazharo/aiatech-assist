@@ -395,11 +395,15 @@ function syncMyWorkHeaderWaveHost(){
  if(typeof document==='undefined'||!document.body)return;
  const wave=$('myWorkHeaderWave'),header=$('appHeader'),notice=$('topNotification');
  if(!wave||!header||!notice)return;
- const inMyWork=document.body.classList.contains('atgv-mywork-chat-mode');
- const host=topNoticeCurrent&&inMyWork?notice:header;
+ const aiVisible=document.body.classList.contains('atgv-mywork-chat-mode')||
+  document.body.classList.contains('atgv-ba-ai-active');
+ const host=topNoticeCurrent&&aiVisible?notice:header;
  if(wave.parentElement!==host)host.appendChild(wave);
 }
-if(typeof window!=='undefined')window.addEventListener('atgv:viewchange',syncMyWorkHeaderWaveHost);
+if(typeof window!=='undefined'){
+ window.ATGVSyncMyWorkHeaderWaveHost=syncMyWorkHeaderWaveHost;
+ window.addEventListener('atgv:viewchange',syncMyWorkHeaderWaveHost);
+}
 function showTopNotification(item){
  topNoticeCurrent=item;
  syncMyWorkHeaderWaveHost();

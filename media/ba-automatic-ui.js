@@ -69,6 +69,8 @@
    get('baAutoArtifactStatus').textContent='';
   }
   get('baAutoSourceEditor').hidden=!sourceDigest;
+  // Preflight is part of the Structured ISO BRD, not Uploaded Documents or raw source.
+  get('baAutoIsoPreflight').hidden=kind!=='iso';
   if(currentSource&&get('baAutoSource').open&&changed)requestArtifact();
   if(artifactContext){
    input.readOnly=kind==='original'||busy()||!baCanEdit('ba-discovery');
@@ -212,9 +214,15 @@
 
  function render(){
   placeSkill();
-  const wave=selectedRole==='business-analyst'&&['baOverview','discovery'].includes(view)&&state?.projectId===activeId&&state?.phase==='running';
-  document.body.classList.toggle('atgv-ba-ai-active',wave);
-  window.ATGVMyWorkChat?.setBusinessRequirementsActivity?.(wave);
+  const showingBusinessRequirements=selectedRole==='business-analyst'&&['baOverview','discovery'].includes(view);
+  const aiWorking=showingBusinessRequirements&&(
+   state?.projectId===activeId&&['running','publishing'].includes(state?.phase)||discoveryImportBusy);
+  // Show the header waveform throughout the BA workflow; run stronger CMYK
+  // waves only during real AI activity, never solely because the page is open.
+  document.body.classList.toggle('atgv-ba-ai-active',showingBusinessRequirements);
+  window.ATGVMyWorkChat?.setBusinessRequirementsActivity?.(aiWorking);
+  window.ATGVMyWorkChat?.setBusinessRequirementsVisible?.(showingBusinessRequirements);
+  window.ATGVSyncMyWorkHeaderWaveHost?.();
   if(!active()||!activeId||!brState)return;
   if(!source()&&sourceDigest)state=null;
   if(requestedProject!==activeId){
@@ -273,6 +281,7 @@
   if(artifactDirty()){get('baAutoArtifactStatus').textContent='Save your edits before switching documents.';return;}
   kind=selected.dataset.baDocument;
   for(const option of get('baAutoDocumentTabs').querySelectorAll('button'))option.setAttribute('aria-pressed',String(option===selected));
+  renderArtifacts();
   requestArtifact();
  });
  get('baAutoJiraTabs').addEventListener('click',event=>{
