@@ -64,7 +64,7 @@
    if(view!=='work'||selectedRole!==step.route)navigate(step.route);
    return view==='work'&&selectedRole===step.route;
   }
-  if(step.route==='planning'||step.route==='documents'||step.route==='discovery'){
+  if(['flow','planning','documents','knowledge','operations','discovery'].includes(step.route)){
    if(view!==step.route)navigate(step.route);
    return view===step.route;
   }
