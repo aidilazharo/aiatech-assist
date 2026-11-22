@@ -8023,6 +8023,7 @@ function architectBegin(action,message){
 let architectCustomInfo=null,architectCustomBusy=false,architectCustomRunning=false;
 let architectCustomProgressPercent=0,architectCustomProgressLabel='Ready to scan';
 let architectCustomOperation='',architectCustomStatusPending=false,architectCustomLastError='';
+let architectCustomStage=0,architectCustomAiActive=false;
 // Distinguish a scan request sent from acknowledgement by the extension host.
 let architectCustomScanPending=false,architectCustomScanStartedAt=0,architectCustomHostResponseAt=0,architectCustomScanSequence=0;
 let architectCustomRuntime={projectId:'',checked:false,running:false,pid:null,previewUrl:'',relative:'',mockPreview:false,exitCode:null,reachable:null};
@@ -8056,7 +8057,7 @@ function architectCustomDrawRuntime(){
   state='stopped';title='APPLICATION NOT RUNNING';
   description=Number.isInteger(runtime.exitCode)?'ATGV process exited with code '+runtime.exitCode+'. Check logs before restarting.':
    (architectCustomInfo?.projectId===activeId?
-    'Scan complete, but NO server was started. Select Install & Run or Run Mock Preview.':
+    'Scan complete, but no server was started. Select Install & Run to prepare the mock preview.':
     'Scan Repository identifies applications; it does not install or start them.');
  }else if(runtime?.message){
   state='unknown';description=runtime.message;
@@ -8099,7 +8100,20 @@ function renderArchitectCustomPanel(){
  $('architectCustomScan').textContent='Scan Repository';
  $('architectCustomScan').title='Re-analyze the current verified repository, dependencies, environment and service blockers';
  $('architectCustomPull').disabled=architectCustomBusy||architectActionBusy||!current?.sha||!current?.clean||architectCustomRunning;
- $('architectCustomRun').disabled=architectCustomBusy||!current?.ready||architectCustomRunning;
+ const singleRun=$('architectCustomRun');
+ const stopMode=architectCustomBusy||architectCustomRunning;
+ singleRun.textContent=stopMode?'Stop':'Install & Run';
+ singleRun.classList.toggle('atgv-custom-stop-mode',stopMode);
+ singleRun.setAttribute('aria-pressed',String(stopMode));
+ singleRun.disabled=!activeId||architectActionBusy||
+  projects.find(p=>p.id===activeId)?.techStackId!=='custom'; 
+ const stages=$('architectCustomSteps');
+ if(stages)for(const item of stages.querySelectorAll('[data-step]')){
+  const number=Number(item.dataset.step);
+  item.dataset.state=number<architectCustomStage?'done':number===architectCustomStage?'active':'pending';
+ }
+ const waves=$('architectCustomAiWave');
+ if(waves)waves.classList.toggle('hidden',!architectCustomAiActive);
  $('architectCustomMockRun').disabled=architectCustomBusy||!current?.ready||architectCustomRunning||!selected?.mockable;
  $('architectCustomStop').disabled=architectCustomBusy||!architectCustomRunning;
  const branchSelect=$('architectCustomBranch'),priorBranch=branchSelect.value;
@@ -8228,12 +8242,22 @@ $('architectCustomActions').addEventListener('click',event=>{
  architectCustomNotify(message);renderArchitectCustomPanel();
 });
 $('architectCustomRun').addEventListener('click',()=>{
- if(!activeId||architectCustomBusy||!architectCustomInfo?.ready)return;
- architectCustomBusy=true;architectCustomOperation='WAITING FOR VS CODE CONFIRMATION';architectCustomLastError='';
- architectCustomSetProgress(5,'Awaiting approval to install dependencies and run the app');
- architectCustomNotify('Confirm the run action in the VS Code dialog. The application has NOT started yet.');
+ if(!activeId||architectActionBusy)return;
+ if(architectCustomBusy||architectCustomRunning){
+  architectCustomOperation='STOPPING OR CANCELLING';
+  architectCustomNotify('Stop requested; cancelling the active stage or stopping the managed mock service…');
+  send('architectCustomStop',{projectId:activeId,relative:$('architectCustomTarget').value});
+  renderArchitectCustomPanel();return;
+ }
+ const current=architectCustomInfo?.projectId===activeId?architectCustomInfo:null;
+ const selected=current?.targets?.find(row=>row.relative===$('architectCustomTarget').value);
+ architectCustomBusy=true;architectCustomScanPending=false;architectCustomStage=1;architectCustomAiActive=false;
+ architectCustomOperation='WAITING FOR VS CODE CONFIRMATION';architectCustomLastError='';
+ architectCustomSetProgress(4,'Awaiting approval for six-stage Install & Run');
+ architectCustomNotify('Confirm the single Install & Run workflow in VS Code. No files have changed yet.');
  renderArchitectCustomPanel();
- send('architectCustomRun',{projectId:activeId,sha:architectCustomInfo.sha,relative:$('architectCustomTarget').value,previewUrl:$('architectCustomPreviewUrl').value.trim()});
+ send('architectCustomInstallRun',{projectId:activeId,expectedSha:current?.sha||'',
+  relative:selected?.relative,previewUrl:selected?$('architectCustomPreviewUrl').value.trim():''});
 });
 $('architectCustomMockRun').addEventListener('click',()=>{
  if(!activeId||architectCustomBusy||!architectCustomInfo?.ready)return;
@@ -8265,7 +8289,7 @@ window.addEventListener('message',event=>{
  }
  if(m.type==='architectCustomScanResult'||m.type==='architectCustomPullResult'||
     m.type==='architectCustomBranchResult'||m.type==='architectCustomInstallResult'){
-  architectCustomBusy=false;architectCustomScanPending=false;architectCustomOperation='';architectCustomLastError='';
+  architectCustomBusy=false;architectCustomScanPending=false;architectCustomOperation='';architectCustomLastError='';architectCustomAiActive=false;
   architectCustomRunning=!!m.value?.running;
   architectCustomInfo={...m.value,projectId:activeId,previewCustomized:false};
   const text=m.value?.pullMessage||m.value?.branchMessage||
@@ -8276,7 +8300,8 @@ window.addEventListener('message',event=>{
   renderArchitectCustomPanel();architectCustomRequestStatus();
  }
  if(m.type==='architectCustomError'){
-  architectCustomBusy=false;architectCustomScanPending=false;architectCustomOperation='';
+  architectCustomBusy=false;architectCustomScanPending=false;architectCustomOperation='';architectCustomAiActive=false;
+  architectCustomInfo=null;
   architectCustomLastError=String(m.message||'Custom Stack operation failed.').slice(0,250);
   if(m.logAvailable)architectRecordErrorLog(m);
   architectCustomNotify(m.message||'Custom Stack operation failed.','error');
@@ -8285,6 +8310,8 @@ window.addEventListener('message',event=>{
  }
  if(m.type==='architectCustomProgress'){
   if(m.scanId)architectCustomHostResponseAt=Date.now();
+  if(Number.isInteger(m.step)&&m.step>=1&&m.step<=6)architectCustomStage=m.step;
+  architectCustomAiActive=m.ai===true;
   const message=String(m.message||'Working with custom application…');
   if(/Verifying localhost|health at /i.test(message))architectCustomOperation='VERIFYING LOCALHOST HEALTH';
   else if(/Starting /i.test(message))architectCustomOperation='STARTING APPLICATION';
@@ -8295,6 +8322,7 @@ window.addEventListener('message',event=>{
   architectCustomDrawRuntime();
  }
  if(m.type==='architectCustomAiReviewResult'){
+  architectCustomAiActive=false;
   const current=architectCustomInfo?.projectId===activeId?architectCustomInfo:null;
   if(current?.sha===m.sha&&current.analysis){
    current.analysis.modelReview=m.review;
@@ -8303,7 +8331,9 @@ window.addEventListener('message',event=>{
   }
  }
  if(m.type==='architectCustomRunResult'){
-  architectCustomBusy=false;architectCustomOperation='';architectCustomLastError='';
+  architectCustomBusy=false;architectCustomOperation='';architectCustomLastError='';architectCustomAiActive=false;
+  architectCustomStage=m.value?.steps?.length||6;
+  if(m.value?.inspection)architectCustomInfo={...m.value.inspection,projectId:activeId,previewCustomized:false};
   architectCustomRunning=!!m.value?.running;
   if(m.value?.running)architectCustomRuntime={...architectCustomRuntime,projectId:activeId,checked:true,running:true,
     previewUrl:String(m.value.url||''),mockPreview:!!m.value.mockPreview,reachable:true};
@@ -8312,7 +8342,8 @@ window.addEventListener('message',event=>{
   renderArchitectCustomPanel();architectCustomRequestStatus();
  }
  if(m.type==='architectCustomStopResult'){
-  architectCustomBusy=false;architectCustomRunning=false;architectCustomOperation='';architectCustomLastError='';
+  architectCustomBusy=false;architectCustomRunning=false;architectCustomOperation='';architectCustomLastError='';architectCustomAiActive=false;
+  architectCustomStage=0;
   architectCustomRuntime={...architectCustomRuntime,projectId:activeId,checked:true,running:false,reachable:null,previewUrl:''};
   architectCustomNotify(m.value?.message||'Custom Stack stopped.','complete');
   architectCustomSetProgress(100,'Custom application stopped');renderArchitectCustomPanel();architectCustomRequestStatus();
@@ -8328,7 +8359,7 @@ $('architectStackSelect').addEventListener('change',event=>{
  renderArchitectRequirements(project);
  renderArchitectCustomPanel();
  if(event.target.value==='custom'&&activeId){
-  architectCustomBusy=false;architectCustomScanPending=false;architectCustomInfo=null;architectCustomRunning=false;
+  architectCustomBusy=false;architectCustomScanPending=false;architectCustomInfo=null;architectCustomRunning=false;architectCustomStage=0;architectCustomAiActive=false;
   architectCustomSetProgress(0,'Ready to scan');
   architectCustomNotify('Choose Save Stack to verify or clone the configured GitHub checkout. Scan Repository for AI-assisted readiness guidance.');
   renderArchitectCustomPanel();
