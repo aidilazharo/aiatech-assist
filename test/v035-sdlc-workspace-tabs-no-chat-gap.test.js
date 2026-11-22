@@ -72,14 +72,15 @@ test('Role Workspace can still be reached from AI task action without a sidebar 
  assert.match(snippet,/navigate\(target\)/);
  assert.match(ui,/const openWorkspace=destination==='role-workspace'\|\|keepingWorkspace/);
 });
-test('chat has sidebar-matched clearance outside the scroll viewport and waveform stays clipped in header',()=>{
+test('chat has sidebar-matched clearance inside the scroll viewport and waveform stays clipped in header',()=>{
  const root=css.match(/#myWorkView > #atgvMyWorkAi,[\s\S]*?#myWorkView > #atgvMyWorkAi\.atgv-mywork-ai\{([^}]+)\}/)?.[1]||'';
- assert.match(root,/padding:23px 0 0;margin:0/);
+ assert.match(root,/padding:0;margin:0;background:#000!important/);
  assert.doesNotMatch(css,/padding:(42px|34px|24px) 0 0/);
  const wave=css.match(/#appHeader #myWorkHeaderWave \.mywork-header-wave-visual\{([^}]+)\}/)?.[1]||'';
  assert.match(wave,/clip-path:inset\(0 0 50% 0\)/);
  assert.match(css,/#topNotification #myWorkHeaderWave \.mywork-header-wave-visual\{[^}]+clip-path:inset\(0 0 50% 0\)/);
  const results=css.match(/#atgvMyWorkAi \.atgv-mywork-ai-results\{([^}]+)\}/)?.[1]||'';
  assert.match(results,/overflow-y:auto/);
+ assert.match(results,/padding:23px clamp\(12px,2vw,24px\) 26px/);
  assert.match(results,/scroll-padding-top:0/);
 });
