@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.49';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.50';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -175,7 +175,7 @@ function html(webview,{resumeLibrary=false}={}){
         <div id="startupConnectionLogList" class="atgv-connection-log-list" role="log" aria-label="Connection check history" aria-live="polite"><p class="muted">Open to load saved connection events.</p></div>
         <p id="startupConnectionLogMessage" class="muted" role="status" aria-live="polite"></p>
       </details></form>
-      <div class="atgv-startup-footer"><button type="button" id="startupUnifiedLog" class="secondary atgv-icon-only" aria-label="Download unified error log" title="Download unified error log (startup, prerequisite and project errors)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m-4-4 4 4 4-4M5 17v4h14v-4"/></svg></button><button type="button" id="startupPrevious" class="secondary hidden" disabled>← Previous</button><button type="button" id="startupAutoPause" class="secondary hidden">Pause automatic opening</button><p id="startupProceedInfo" role="status">Checking computer prerequisites…</p><button type="button" id="startupProceed" disabled>Next →</button></div>
+      <div class="atgv-startup-footer"><button type="button" id="startupUnifiedLog" class="secondary atgv-icon-only" aria-label="Download unified error log" title="Download unified error log (startup, prerequisite and project errors)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m-4-4 4 4 4-4M5 17v4h14v-4"/></svg></button><button type="button" id="startupPrevious" class="secondary hidden" disabled>← Previous</button><p id="startupProceedInfo" role="status">Checking computer prerequisites…</p><button type="button" id="startupProceed" disabled>Next →</button></div>
     </section>
     <section id="gateFinder" class="gate-finder hidden">
       <div class="gate-search-bar"><input id="gateQuery" type="search" aria-label="Search projects" placeholder="Search Confluence spaces or local projects…"><button type="button" id="gateSearch">Search</button><button id="gateManual" class="secondary" type="button">+ New Project</button></div>
@@ -187,7 +187,7 @@ function html(webview,{resumeLibrary=false}={}){
       <div id="gateRemoteSection" class="hidden"><div class="gate-local-header"><h2>Confluence Spaces</h2><span id="gateResultsCount" class="muted"></span></div><div id="gateRemote" class="gate-list"></div></div>
       <div id="gateWorkspaceSection"><div class="gate-local-header"><h2>Workspace Projects</h2></div><div id="gateLocal" class="gate-list"></div></div>
       <section id="gateUnmanagedSection" class="hidden" aria-label="Unregistered project folders"><h3>Existing folders to import</h3><p class="muted">These folders already exist under projects/ but are not registered. Import preserves their files and normalizes project IDs to lowercase.</p><div id="gateUnmanaged" class="gate-list"></div></section>
-      <div class="atgv-startup-footer gate-search-footer"><button id="gateUnifiedLog" type="button" class="secondary atgv-icon-only" aria-label="Download unified error log" title="Download unified error log (prerequisites and project opening)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m-4-4 4 4 4-4M5 17v4h14v-4"/></svg></button><button id="gateSearchPrevious" type="button" class="secondary hidden" tabindex="-1" aria-hidden="true">← Previous</button><button id="gateAutoPause" type="button" class="secondary hidden">Pause automatic opening</button><p id="gateAutoMessage" role="status" class="muted hidden"></p></div>
+      <div class="atgv-startup-footer gate-search-footer"><button id="gateUnifiedLog" type="button" class="secondary atgv-icon-only" aria-label="Download unified error log" title="Download unified error log (prerequisites and project opening)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m-4-4 4 4 4-4M5 17v4h14v-4"/></svg></button><button id="gateSearchPrevious" type="button" class="secondary hidden" tabindex="-1" aria-hidden="true">← Previous</button><p id="gateAutoMessage" role="status" class="muted hidden"></p></div>
     </section>
     </section>
    </main>
