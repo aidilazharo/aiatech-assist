@@ -8332,7 +8332,7 @@ window.addEventListener('message',event=>{
  }
  if(m.type==='architectCustomRunResult'){
   architectCustomBusy=false;architectCustomOperation='';architectCustomLastError='';architectCustomAiActive=false;
-  architectCustomStage=m.value?.steps?.length||6;
+  architectCustomStage=m.value?.running?7:architectCustomStage;
   if(m.value?.inspection)architectCustomInfo={...m.value.inspection,projectId:activeId,previewCustomized:false};
   architectCustomRunning=!!m.value?.running;
   if(m.value?.running)architectCustomRuntime={...architectCustomRuntime,projectId:activeId,checked:true,running:true,
