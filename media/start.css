@@ -2921,3 +2921,5 @@ body:not(.gate-mode) #sdlcWorkspaceShell.atgv-sdlc-workspace-shell{
  #discoveryView #baAutoDocumentToolbar{gap:6px;padding-bottom:10px}
  #discoveryView #baAutoDocumentToolbar :is(button,[role="tab"]){min-height:40px;padding:8px 10px}
 }
+
+#discoveryView #baAutoDocumentToolbar #baAutoArtifactSave[hidden]{display:none!important}
