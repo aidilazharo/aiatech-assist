@@ -6985,6 +6985,10 @@ function openBREditor(id,{artifact=false}={}){
  brEditing=id;baBreadcrumbAtRequirements=true;
  brReadOnly=(!artifact&&br.status!=='draft')||!baCanEdit('ba-br-'+id);
  $('brEditModal').dataset.baArtifact=String(artifact);
+ $('brEditPlacementField').classList.toggle('hidden',!artifact);
+ const placement=$('brSuggestedPlacement');
+ placement.value=br.jiraPlacement||'';
+ placement.readOnly=brReadOnly;
  brEditorDirty=false;brEditorSaving=false;
  const editorMilestone=artifact?'':baViewedStep||window.baLastGuideProgress?.find(step=>step.current)?.key||'';
  $('brEditTitle').textContent=(editorMilestone==='approve'?'Review for Approval ':brReadOnly?'Preview ':'Preview / Edit ')+id;
@@ -7004,6 +7008,7 @@ $('brUnsavedCancel').addEventListener('click',()=>{$('brUnsavedModal').classList
 $('brUnsavedDiscard').addEventListener('click',()=>closeBREditor(true));
 $('brUnsavedSave').addEventListener('click',()=>{brCloseAfterSave=true;$('brUnsavedModal').classList.add('hidden');$('brUnsavedModal').setAttribute('aria-hidden','true');$('brEditSave').click();});
 $('brEditClose').addEventListener('click',()=>closeBREditor());
+$('brSuggestedPlacement').addEventListener('input',()=>{brEditorDirty=true;updateBREditorActions();});
 // Approval prerequisites are shown inside the BR editor, but Discovery and
 // AI Review are rendered under separate milestones. Navigate to the milestone
 // BEFORE expanding, scrolling, or focusing its panel.
@@ -7051,7 +7056,9 @@ $('brApprovalReviewAI').addEventListener('click',openAIReviewFromApproval);
 $('brEditModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeBREditor();});
 $('brEditSave').addEventListener('click',()=>{
  if(!brEditing||!brState||brReadOnly||brEditorSaving||window.ATGVBusinessRequirements?.busy())return;
- try{const content=parseBRQuill();brEditorSaving=true;baBusy('saveBR','Saving Business Requirements draft…');$('brEditError').textContent='Saving Business Requirements draft…';updateBREditorActions();if($('brEditModal').dataset.baArtifact==='true')send('baEditRequirementArtifact',{projectId:activeId,roleId:selectedRole,brId:brEditing,revision:brState.revision,content});
+ try{const content=parseBRQuill();const artifact=$('brEditModal').dataset.baArtifact==='true';
+  if(artifact)content.jiraPlacement=$('brSuggestedPlacement').value.trim();
+  brEditorSaving=true;baBusy('saveBR','Saving Business Requirements draft…');$('brEditError').textContent='Saving Business Requirements draft…';updateBREditorActions();if(artifact)send('baEditRequirementArtifact',{projectId:activeId,roleId:selectedRole,brId:brEditing,revision:brState.revision,content});
   else send('brEdit',{brId:brEditing,revision:brState.revision,content});}
  catch(e){brEditorSaving=false;baBusy('',null);$('brEditError').textContent=e.message;}
 });

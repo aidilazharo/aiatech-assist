@@ -85,7 +85,8 @@
    const summary=document.createElement('summary');
    summary.textContent=br.id+' · '+br.title;
    item.append(summary);
-   for(const [label,value] of [['Business purpose',br.objective],['Scope',br.scope],['Acceptance criteria',br.acceptanceCriteria]]){
+   for(const [label,value] of [['Business purpose',br.objective],['Scope',br.scope],['Acceptance criteria',br.acceptanceCriteria],
+    ['Suggested Jira placement',br.jiraPlacement||(brState.synced?.[br.id]?.key?'Keep the existing Epic '+brState.synced[br.id].key+'.':'Create an Epic for '+br.title+'.')]]){
     const title=document.createElement('strong'),text=document.createElement('p');
     title.textContent=label;text.textContent=value||'Unspecified';item.append(title,text);
    }

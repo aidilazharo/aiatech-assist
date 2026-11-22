@@ -70,6 +70,7 @@ test('a source-supported draft is previewable without recording approval until t
  const draft=await workflow.generated(registry,'demo',register.revision,{discoveryRevision:'discovery',requirements:[edited],actor:'BA',automatic:true});
  assert.equal(draft.brs[0].status,'draft');
  assert.ok(draft.brs[0].draftSavedAt);
+ assert.match(draft.brs[0].jiraPlacement,/Create an Epic for Visitor check-in/);
  assert.equal(draft.brs[0].approvedContent,null);
  assert.equal(workflow.plan(draft).length,0);
  const candidate=workflow.projectPreparedJira(draft);
@@ -88,19 +89,22 @@ test('a source-supported draft is previewable without recording approval until t
  assert.deepEqual(workflow.plan(saved),plan);
 });
 
-test('a manual BR edit preserves the last published revision and its Jira key',async t=>{
+test('a manual BR edit preserves the published Jira key and updates the proposed placement',async t=>{
  const {registry,register}=await registerFixture(t);
  let state=await workflow.write(registry,'demo',register.revision,next=>{
   next.brs=[{id:'BR-001',...edited,approvedContent:edited,status:'approved',approvedRevision:1,needsRefresh:false}];
   next.synced={'BR-001':{key:'TC-42',hash:'previous'}};
  });
- state=await workflow.edit(registry,'demo',state.revision,{brId:'BR-001',content:{...edited,title:'Visitor arrival registration'},automatic:true});
+ const jiraPlacement='Group with the Reception Operations workstream.';
+ state=await workflow.edit(registry,'demo',state.revision,{brId:'BR-001',content:{...edited,title:'Visitor arrival registration',jiraPlacement},automatic:true});
  assert.equal(state.brs[0].status,'draft');
  assert.equal(state.brs[0].approvedContent.title,edited.title);
  assert.equal(state.brs[0].baManualFields.title,'Visitor arrival registration');
  const candidate=workflow.projectPreparedJira(state);
  const items=workflow.plan(candidate);
  assert.equal(items[0].key,'TC-42');
+ assert.equal(state.brs[0].baManualFields.jiraPlacement,jiraPlacement);
+ assert.ok(items[0].description.includes(jiraPlacement));
  assert.deepEqual(workflow.changedPublishedBRs(state,candidate,items),['BR-001']);
 });
 

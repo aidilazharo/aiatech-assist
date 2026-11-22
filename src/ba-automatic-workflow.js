@@ -52,7 +52,8 @@ function isoDocument(sourceName,register,corrected){
   '## Business operational requirements',show('currentProcess'),show('targetProcess'),show('businessRules'),
   '## Constraints and dependencies',show('constraints'),show('dependencies'),show('data'),
   '## Business requirements and acceptance criteria',
-  ...requirements.flatMap(br=>['### '+br.id+' · '+br.title,br.objective,br.scope,br.acceptanceCriteria]),
+  ...requirements.flatMap(br=>['### '+br.id+' · '+br.title,br.objective,br.scope,br.acceptanceCriteria,
+   ...(br.jiraPlacement?['Suggested Jira placement · '+br.jiraPlacement]:[])]),
   '## Measures and open decisions',show('measures'),show('questions'),
   '## Source and AI preflight evidence',corrected||'Source checks are pending.'
  ].join('\n\n');
