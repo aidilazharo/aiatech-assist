@@ -73,9 +73,11 @@ test('update offer displays each library version once and explains a same-versio
  const x=fixture();
  x.emit({type:'libraryUpdateOffer',requestId:'version',installedVersion:'1.1.15',remoteVersion:'1.1.17',remoteTag:'v1.1.17-source-build.11'});
  assert.equal(x.node('libraryUpdateCurrent').textContent,'v1.1.15');
- assert.equal(x.node('libraryUpdateNext').textContent,'v1.1.17');
- x.emit({type:'libraryUpdateOffer',requestId:'build',installedVersion:'1.1.17',remoteVersion:'1.1.17',remoteTag:'v1.1.17-source-build.12',installedVersionWarning:'Check local changes.'});
- assert.equal(x.node('libraryUpdateNext').textContent,'v1.1.17');
+ assert.equal(x.node('libraryUpdateNext').textContent,'v1.1.17 · build 11');
+ x.emit({type:'libraryUpdateOffer',requestId:'build',installedVersion:'1.1.17',remoteVersion:'1.1.17',
+  installedTag:'v1.1.17-source-build.11',remoteTag:'v1.1.17-source-build.12',installedVersionWarning:'Check local changes.'});
+ assert.equal(x.node('libraryUpdateCurrent').textContent,'v1.1.17 · build 11');
+ assert.equal(x.node('libraryUpdateNext').textContent,'v1.1.17 · build 12');
  assert.match(x.node('libraryUpdateDescription').textContent,/build is available/);
  assert.match(x.node('libraryUpdateDescription').textContent,/Check local changes/);
 });
