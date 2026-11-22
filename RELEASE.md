@@ -1,15 +1,23 @@
-# ATGV AIATECH Assist v0.0.35
+# ATGV AIATECH Assist v0.0.36
 
-## My Work AI and SDLC navigation
+## Unified Custom Stack Install & Run
 
-- Remove the black gap above My Work chat. The conversation now begins immediately under the header; clip the lower half of the red/CMYK waveform at the real header border rather than reserving an empty 42px (mobile 34px / short screens 24px) spacer.
-- Remove **Role Workspace** from the sidebar. Keep the same role-specific work pages, unsaved-change guards, AI chat **Go to task** routing, Jira ticket selection and role permissions.
-- Combine sidebar navigation **SDLC**, **Documents**, **Solution Designs**, **Knowledge & RAG**, and **Approvals & Handoffs** into **SDLC Workspace**.
-- SDLC Workspace opens **SDLC Readiness** by default and exposes four internal tabs: Documents, Solution Designs, Knowledge & RAG and Approvals. The Readiness control reopens the original SDLC status page.
-- Preserve all existing page IDs, handlers, document editor routes, approvals, Confluence, Jira and project permission checks; tab switching uses the existing `navigate`/view system.
-- Add keyboard-operable tab navigation, selection state and focus indicators. Library Studio remains visible only in the active Developer role.
+- Consolidate repository scanning, local fix-branch creation, mock fixture commits, dependency installation, synthetic service startup, and localhost health verification behind one **Install & Run** action.
+- Toggle the same control to **Stop** during a run; Stop requests cancel pending workflow stages or terminate ATGV-owned local processes. Consent-dialog cancellation never starts installation.
+- Preserve the branch selector and the existing single Technology Stack progress bar. Display six compact step statuses instead of another progress bar.
+- Hide the standalone Scan Repository, Pull Repository, Run Mock Preview, Stop, dependency, and fix-branch action buttons from the primary Custom Stack panel. Keep underlying handlers for compatibility.
+- Run limited, read-only Solution Architect AI assessment of verified manifest evidence when an AI provider is available. Show a small, low-amplitude five-bar animation only while the AI assessment is active.
+- Create or reuse `fix/atgv-custom-stack-<source SHA>` locally; never alter `main`, overwrite dirty checkouts, or push project changes automatically.
+- Provide NestJS synthetic API health preview at `/api/v1/health` with an ATGV-managed Node process and simulated JSON database. For supported Vite frontends, use the existing local mock API and synthetic fixtures.
+- Clearly distinguish synthetic previews from production database, authentication, integration, security, or readiness testing. Unimplemented mock endpoints return HTTP 501.
 
 ## Verification
 
-- Test no duplicate visible sidebar entries, preserved AI action navigation, tab selection, mobile/small viewport chat, waveform clipping, and old workspace page guards.
-- Require full Node regression suite, Windows validation and VSIX packaging before merge.
+- Added `test/v036-custom-install-run.test.js` for workflow order, safe failure on dirty checkout, and the consolidated UI.
+- JavaScript parse checks performed on the changed extension/runtime files.
+- Full repository test suite and VSIX packaging must pass in GitHub CI before merge or release publication.
+
+## Limitations
+
+- This implementation creates and commits isolated mock-preview source, not arbitrary AI-generated production source repairs.
+- Automatic synthetic service mode currently covers detected Vite and NestJS targets. Real backend/database integrations remain unverified.
