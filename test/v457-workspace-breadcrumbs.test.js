@@ -65,7 +65,7 @@ test('right pane removes breadcrumbs without damaging page headings or active wo
 });
 test('legacy route model remains available for internal workflow navigation without rendering breadcrumbs',()=>{
  const ui=read('media/start.js');
- assert.match(ui,/view=next;\s*if\(typeof renderWorkspaceBreadcrumbs==='function'\)renderWorkspaceBreadcrumbs\(\)/);
+  assert.match(ui,/view=next;\s*if\(typeof syncSdlcWorkspaceShell==='function'\)syncSdlcWorkspaceShell\(next\);\s*if\(typeof renderWorkspaceBreadcrumbs==='function'\)renderWorkspaceBreadcrumbs\(\)/);
  assert.match(ui,/baBreadcrumbAtRequirements=action==='br-home'/);
  assert.match(ui,/if\(brEditing&&!closeBREditor\(\)\)return/);
  assert.match(ui,/baBreadcrumbAtRequirements=true;/);
