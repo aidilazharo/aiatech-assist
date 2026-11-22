@@ -96,7 +96,9 @@ test('the project overview and four-stage workflow use separate views and share 
  assert.match(controller,/discoveryView'\)\.classList\.toggle\('hidden',next!=='discovery'/);
  assert.match(controller,/baRequirementsOverview'\)\?\.classList\.toggle\('hidden',next!=='baOverview'/);
  assert.match(ui,/label:'Role',sortable:!hierarchy/);
- assert.match(ui,/classList\.toggle\('atgv-ba-ai-active',wave\)/);
+ assert.match(ui,/classList\.toggle\('atgv-ba-ai-active',showingBusinessRequirements\)/);
+ assert.match(ui,/setBusinessRequirementsActivity\?\.\(aiWorking\)/);
+ assert.match(ui,/setBusinessRequirementsVisible\?\.\(showingBusinessRequirements\)/);
  assert.match(html,/data-ba-jira-view="list"[\s\S]*data-ba-jira-view="hierarchy"/);
  assert.match(css,/data-state="running"[^\n]*animation:ba-stage-spin/);
 });
