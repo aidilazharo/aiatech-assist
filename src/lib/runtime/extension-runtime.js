@@ -6980,6 +6980,24 @@ async function handleDashboardMessage(msg){
             }
           });
           if(activeProject?.id===projectId){
+            // Persist mock-only readiness at the exact local fix-branch SHA.
+            // This is not a real database/server verification or test/build proof.
+            const handoff=require('../../architect-custom-handoff');
+            const preview=handoff.previewEvidence(root,result);
+            const current=await registry.read(projectId);
+            if(current.techStackId!=='custom')throw Error('Custom Stack selection changed during Install & Run.');
+            const keep=current.techStackApproval?.scope==='development-mock' &&
+              current.techStackApproval?.sha===preview.sha && current.techStackApproval?.remoteVerified===true &&
+              current.techStackValidation?.sha===preview.sha;
+            const saved=await registry.update(projectId,{...current,
+              techStackPrepared:{stackId:'custom',root:preview.root,branch:preview.branch,
+                sha:preview.sha,remotePushed:keep,previewUrl:preview.url,at:preview.at},
+              techStackCustomPreview:preview,
+              techStackValidation:keep?current.techStackValidation:null,
+              techStackApproval:keep?current.techStackApproval:null,
+              techStackServerVerification:null});
+            activeProject=saved;
+            await refreshDashboard();
             await vscode.env.openExternal(vscode.Uri.parse(result.url)).catch(error=>report('Custom Stack mock browser: '+error.message));
             await dashboard?.webview.postMessage({type:'architectCustomRunResult',projectId,value:result});
           }
@@ -7372,6 +7390,74 @@ async function handleDashboardMessage(msg){
         architectErrorLogs.clear(activeProject.id,'server');
         await refreshDashboard();
         await dashboard?.webview.postMessage({type:'architectServerState',projectId:activeProject.id,value:result});break;
+      }
+      case 'architectApproveCustomStack':{
+        requireOpened();
+        const projectId=activeProject.id;
+        const project=await registry.read(projectId);
+        const handoff=require('../../architect-custom-handoff');
+        if(project.techStackId!=='custom'||!handoff.matches(project))
+          throw Error('Save Custom Stack, then complete Install & Run to verify the current synthetic preview.');
+        const root=await architectRepository.resolve(context.workspaceState,projectId,developerGit,{
+          projectRoot:aiRoot(),githubOwner:effectiveConfig(activeProject).get('github.owner'),
+          githubRepo:effectiveConfig(activeProject).get('github.repo')});
+        if(root!==project.techStackPrepared.root)throw Error('The configured project repository differs from the verified mock preview.');
+        architectErrorLogs.begin(projectId,'approval');
+        const confirm='Validate Custom Stack Handoff';
+        const ready=await uiWarning(
+          'Validate Custom Stack at Git revision '+project.techStackPrepared.sha.slice(0,12)+'?\n\n'+
+          'ATGV will run the declared test and build scripts for EVERY runnable application, installing missing dependencies if needed. '+
+          'These scripts can execute repository code. Keep the repository clean and review the scripts before confirming.\n\n'+
+          'The local ATGV-owned synthetic preview must remain running. Tests/build must all pass. '+
+          'This check does NOT verify live PostgreSQL, real SAML/identity services, external APIs or production deployment.\n\n'+
+          'After successful checks, a separate Architect confirmation will be required before publishing a SHA-pinned GitHub handoff branch. main will not be modified.',
+          {modal:true},confirm);
+        if(confirm!==ready){
+          await dashboard?.webview.postMessage({type:'architectStackCancelled',projectId,message:'Custom Stack handoff validation cancelled; no approval or GitHub push.'});
+          break;
+        }
+        const validation=await handoff.validate(root,{project,onProgress:async message=>{
+          const text=String(message||'').slice(-1300);
+          architectErrorLogs.append(projectId,'approval',text);
+          await recordStackActivity(projectId,'Custom Stack development handoff',text);
+          if(activeProject?.id===projectId)
+            await dashboard?.webview.postMessage({type:'architectCustomHandoffProgress',projectId,message:text.slice(-280)});
+        }});
+        if(activeProject?.id!==projectId)throw Error('The active project changed during handoff checks. No approval was published.');
+        const actor=await changeContributorActor();
+        const approve='Approve Development Handoff';
+        const decision=await uiWarning(
+          'Approve Custom Stack for DEVELOPER MOCK DEVELOPMENT only?\n\n'+
+          'Verified '+validation.targets.length+' runnable application(s), '+validation.results.length+' successful test/build checks, '+validation.sha.slice(0,12)+
+          ' on branch '+validation.branch+'.\n\n'+
+          'The local synthetic preview is healthy. Real PostgreSQL, external authentication and integrations remain UNVERIFIED; this is NOT production approval.\n\n'+
+          'ATGV will publish the exact verified SHA to a dedicated GitHub tech-stack/custom-vN handoff branch (or a safe SHA-pinned alias). '+
+          'No force-push or merge to main will occur.',
+          {modal:true},approve);
+        if(decision!==approve){
+          await dashboard?.webview.postMessage({type:'architectStackCancelled',projectId,message:'Custom Stack handoff approval cancelled after test/build checks. No branch published.'});
+          break;
+        }
+        const published=await require('../../git-handoff-coordinator').publishApprovedStack({
+          root,stackId:'custom',generation:Number(project.techStackGeneration||1),sha:validation.sha});
+        const signoff=handoff.approval(project,validation,actor,published);
+        if(activeProject?.id!==projectId)throw Error('The active project changed. Remote revision was published but local approval not recorded; reconcile before retrying.');
+        const latest=await registry.read(projectId);
+        if(!handoff.matches(latest)||latest.techStackPrepared.sha!==validation.sha)
+          throw Error('Project revision changed before approval save. Remote branch is preserved for reconciliation.');
+        const updated=await registry.update(projectId,{...latest,
+          techStackPrepared:{...latest.techStackPrepared,remotePushed:true},
+          techStackValidation:validation,techStackApproval:signoff});
+        activeProject=updated;
+        architectErrorLogs.clear(projectId,'approval');
+        await recordStackActivity(projectId,'Custom Stack approved for Developer mock work',
+          'Validated '+validation.results.length+' test/build checks at '+validation.sha.slice(0,12)+
+          '. Remote handoff '+published.branch+'. Production/database/identity integrations remain unverified.');
+        await refreshDashboard();
+        await dashboard?.webview.postMessage({type:'architectStackState',
+          value:{message:'Custom Stack approved for DEVELOPER MOCK DEVELOPMENT · '+published.branch+
+            ' @ '+validation.sha.slice(0,12)+'. Real PostgreSQL/identity/external integrations remain unverified.'}});
+        break;
       }
       case 'architectApproveStack':{
         requireOpened();architectErrorLogs.begin(activeProject.id,'approval');const gate=require('../../architect-stack-approval');const project=await registry.read(activeProject.id);
@@ -10775,7 +10861,7 @@ async function handleDashboardMessage(msg){
     if(msg.command.startsWith('delivery'))await dashboard?.webview.postMessage({type:'deliveryOperationError',message:e.message});
     if(String(msg.command||'').startsWith('uxDesign')||String(msg.command||'').startsWith('uxPipeline')||String(msg.command||'').startsWith('uxFramework')||msg.command==='uxPrototypeOpenBrowser'||msg.command==='uxPublishFrontend')await dashboard?.webview.postMessage({type:'uxDesignError',projectId:activeProject?.id,message:e.message});
     if(activeProject?.id&&/^architect(?:SaveStack|Custom|TestStack|RunServer|StopServer|ApproveStack)/.test(msg.command||''))await recordStackActivity(activeProject.id,'Technology Stack / error',String(e.stack||e.message||e));
-    const architectLogKinds={architectSaveStack:'save',architectResetStack:'reset',architectTestStack:'test',architectRunServer:'server',architectStopServer:'server',architectServerStatus:'server',architectApproveStack:'approval',architectCheckStackUpdates:'catalog',architectPullStackUpdates:'catalog'};
+    const architectLogKinds={architectSaveStack:'save',architectResetStack:'reset',architectTestStack:'test',architectRunServer:'server',architectStopServer:'server',architectServerStatus:'server',architectApproveStack:'approval',architectApproveCustomStack:'approval',architectCheckStackUpdates:'catalog',architectPullStackUpdates:'catalog'};
     if(architectLogKinds[msg.command]&&activeProject?.id){
       const kind=architectLogKinds[msg.command];
       const last=developerGit.localLogs();
@@ -10786,7 +10872,7 @@ async function handleDashboardMessage(msg){
         details:e.diagnosticLogs||ownOutput||e.stack||e.message,
         version:require('../../../package.json').atgvDisplayVersion});
     }
-    if(['architectSaveStack','architectResetStack','architectTestStack','architectApproveStack'].includes(msg.command))await dashboard?.webview.postMessage({type:'architectStackError',projectId:activeProject?.id,command:msg.command,logAvailable:true,logKind:architectLogKinds[msg.command],logCount:architectErrorLogs.count(activeProject?.id),failedStep:/local preview port is occupied/i.test(String(e.message||''))?'server':undefined,message:architectErrorLogs.redact(e.message)});
+    if(['architectSaveStack','architectResetStack','architectTestStack','architectApproveStack','architectApproveCustomStack'].includes(msg.command))await dashboard?.webview.postMessage({type:'architectStackError',projectId:activeProject?.id,command:msg.command,logAvailable:true,logKind:architectLogKinds[msg.command],logCount:architectErrorLogs.count(activeProject?.id),failedStep:/local preview port is occupied/i.test(String(e.message||''))?'server':undefined,message:architectErrorLogs.redact(e.message)});
     if(['architectCheckStackUpdates','architectPullStackUpdates'].includes(msg.command))await dashboard?.webview.postMessage({type:'architectCatalogAction',projectId:activeProject?.id,success:false,logAvailable:true,logKind:'catalog',logCount:architectErrorLogs.count(activeProject?.id),message:architectErrorLogs.redact(e.message)});
     if(['architectRunServer','architectStopServer','architectServerStatus'].includes(msg.command))await dashboard?.webview.postMessage({type:'architectServerError',projectId:activeProject?.id,command:msg.command,logAvailable:true,logCount:architectErrorLogs.count(activeProject?.id),message:architectErrorLogs.redact(e.message)});
     if(msg.command==='deleteBREverywhere')await dashboard?.webview.postMessage({type:'brDeletionProgress',projectId:activeProject?.id,phase:'failed',message:'Deletion stopped: '+String(e.message||e).slice(0,450),deleted:0,total:0});

@@ -40,6 +40,7 @@ function approval(project,repo,actor,at=new Date().toISOString()) {
   return {status:'approved',stackId,companionId,root:repo.root,sha:repo.sha,approvedAt:at,approvedBy:String(actor).trim()};
 }
 function developerAllowed(project) {
+  if(project?.techStackId==='custom')return require('./architect-custom-handoff').developerAllowed(project);
   const a=project?.techStackApproval;
   return !!(a?.status==='approved'&&a.stackId&&a.stackId===project?.techStackId&&(a.companionId||'')===(project?.techStackCompanionId||'')&&a.sha&&a.approvedBy);
 }
