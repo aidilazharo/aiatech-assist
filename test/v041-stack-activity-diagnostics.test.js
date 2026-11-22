@@ -59,6 +59,10 @@ test('existing unified log download exports successes and failures from Save Sta
  assert.match(source,/architectStackActivity\.read\(context\.globalStorageUri\.fsPath,activeProject\.id\)/);
  assert.match(source,/const activity=await architectStackActivity\.read/);
  assert.match(source,/Still waiting for ATGV confirmation/);
+ assert.match(source,/percent:2,phase:'preflight'/);
+ assert.match(source,/percent:3,phase:'preflight'/);
+ assert.match(source,/percent:4,phase:'approval'/);
+ assert.match(ui,/architectCustomOperation='VERIFYING REPOSITORY BEFORE APPROVAL'/);
  assert.match(source,/clearInterval\(reminder\)/);
  assert.match(source,/approved!==action/);
  assert.match(ui,/send\('architectActivityStatus',\{projectId:activeId\}\)/);
