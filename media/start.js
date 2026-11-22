@@ -1346,6 +1346,7 @@ let baJiraView='list';
 let jiraLinkReconcileAfterRefreshRequest=0;
 let baJiraTableInstance=null;
 let baRequirementModalTarget=null,baRequirementPriorFocus=null;
+let baTransferState=null,baTransferRequest=0,baTransferBusy=false;
 let brDeletionBusy=false;
 let brDeletionDismissTimer=null;
 function hideBRDeletionProgress(){
@@ -1510,7 +1511,9 @@ function syncBARequirementModal(){
 function openBARequirementModal(ref,openAnswers=false){
  if(!ref||!activeId)return;
  baRequirementPriorFocus=document.activeElement;
- baRequirementModalTarget={kind:ref.kind,scopeId:ref.scopeId,rootKey:ref.rootKey,projectId:activeId,openAnswers};
+ baRequirementModalTarget={kind:ref.kind,brId:ref.id||'',scopeId:ref.scopeId,rootKey:ref.rootKey,projectId:activeId,openAnswers};
+ resetBATransferPanel();
+ $('baTransferOpen').hidden=!ref.rootKey;
  baBreadcrumbAtRequirements=true;
  $('baRequirementModalTitle').textContent=ref.title||ref.label||'Business Requirement details';
  if(ref.kind==='local')renderBACompletedRecords();else renderBAJiraBackedEpics();
@@ -1520,6 +1523,7 @@ function openBARequirementModal(ref,openAnswers=false){
 }
 function closeBARequirementModal(restore=true){
  const target=baRequirementModalTarget;if(!target)return;baRequirementModalTarget=null;
+ resetBATransferPanel();
  const content=$('baRequirementModalContent'),card=content.firstElementChild;
  if(card&&target.projectId===activeId)$(target.kind==='local'?'baCompletedList':'baJiraBackedEpics').append(card);
  content.replaceChildren();$('baRequirementModal').classList.add('hidden');$('baRequirementModal').setAttribute('aria-hidden','true');
@@ -1585,6 +1589,16 @@ function renderBAJiraInventory(){
       if(active.length){const detail=document.createElement('small');detail.style.display='block';detail.className='muted';detail.textContent=active.length+' child issue(s) in progress (Epic status unchanged)';el.append(detail);}
     }
     return el;
+   }},
+  {key:'brOwner',label:'BR owner',render:item=>{
+    const own=String(item.reporter||'');
+    const roots=(item._brRefs||[]).map(ref=>ref.rootKey).filter(Boolean);
+    const epic=String(item.type||'').toLowerCase()==='epic'&&roots.includes(item.key)?item:
+      jiraInventoryItems.find(issue=>roots.includes(issue.key));
+    const owner=epic?.reporter||own;
+    const node=document.createElement('span');node.textContent=roots.length?(owner||'Unassigned'):'—';
+    if(epic?.reporterId)node.title='Current Jira Reporter account ID: '+epic.reporterId;
+    return node;
    }},
   {key:'creator',label:'Created by',render:item=>{const name=document.createElement('span');name.textContent=item.creator||'Unavailable';if(item.creatorId)name.title='Atlassian account ID: '+item.creatorId;return name;}},{key:'created',label:'Created',render:item=>{const stamp=document.createElement('time');const raw=String(item.created||'');const parsed=new Date(raw.replace(/([+-]\d{2})(\d{2})$/,'$1:$2'));stamp.title=raw;stamp.dateTime=Number.isNaN(parsed.getTime())?'':parsed.toISOString();stamp.textContent=Number.isNaN(parsed.getTime())?raw:(new Intl.DateTimeFormat(undefined,{day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'})).format(parsed);return stamp;}}
  ],{label:'All Jira items and Business Requirements for '+(key||'project'),pageSize:5,sortKey:'',onRowClick:item=>{if(item._isJiraIssue===false)openBARequirementModal(item._brRoots[0]);else openJiraIssueModal(item.key);}});
@@ -1817,6 +1831,89 @@ $('baJiraInventoryRefresh').addEventListener('click',()=>{
  searchJiraInventory();
  if(jiraInventoryRunning)jiraLinkReconcileAfterRefreshRequest=jiraInventoryRequest;
 });
+
+function resetBATransferPanel(){
+ baTransferRequest++;
+ baTransferState=null;baTransferBusy=false;
+ $('baTransferPanel').classList.add('hidden');
+ $('baTransferUsers').disabled=true;$('baTransferUsers').replaceChildren();
+ $('baTransferCommit').disabled=true;
+ $('baTransferCancel').disabled=false;
+ $('baTransferProgress').hidden=true;$('baTransferFill').style.width='0%';
+ $('baTransferProgress').setAttribute('aria-valuenow','0');
+ $('baTransferStatus').textContent='';
+}
+function setBATransferProgress(percent,message){
+ const value=Math.max(0,Math.min(100,Number(percent)||0));
+ $('baTransferProgress').hidden=false;
+ $('baTransferFill').style.width=value+'%';
+ $('baTransferProgress').setAttribute('aria-valuenow',String(value));
+ $('baTransferStatus').textContent=message||'Verifying transfer…';
+}
+$('baTransferOpen').addEventListener('click',()=>{
+ const selected=baRequirementModalTarget;
+ if(!selected?.rootKey||baTransferBusy)return;
+ resetBATransferPanel();
+ $('baTransferPanel').classList.remove('hidden');
+ $('baTransferTitle').textContent='Transfer '+(selected.brId||selected.rootKey);
+ $('baTransferStatus').textContent='Loading verified Business Analysts from the project roster…';
+ const option=document.createElement('option');option.value='';option.textContent='Loading Business Analysts…';
+ $('baTransferUsers').append(option);
+ send('baJiraTransferCandidates',{roleId:selectedRole,projectId:activeId,jiraKey:selected.rootKey,brId:selected.brId,requestId:baTransferRequest});
+});
+$('baTransferUsers').addEventListener('change',()=>{
+ $('baTransferCommit').disabled=!baTransferState||baTransferBusy||!$('baTransferUsers').value;
+});
+$('baTransferCancel').addEventListener('click',()=>{if(!baTransferBusy)resetBATransferPanel();});
+$('baTransferCommit').addEventListener('click',()=>{
+ const context=baTransferState,target=$('baTransferUsers').value;
+ if(baTransferBusy||!context||!target||!context.users.some(user=>user.accountId===target))return;
+ baTransferBusy=true;$('baTransferCommit').disabled=true;$('baTransferUsers').disabled=true;
+ $('baTransferCancel').disabled=true;
+ setBATransferProgress(10,'Requesting Jira BR ownership transfer…');
+ send('baJiraTransferOwner',{roleId:selectedRole,projectId:activeId,jiraKey:context.jiraKey,brId:context.brId,
+   accountId:target,expectedUpdated:context.updated,expectedOwnerId:context.ownerId,requestId:baTransferRequest});
+});
+window.addEventListener('message',event=>{
+ const m=event.data||{};
+ if(m.projectId!==activeId||m.requestId!==baTransferRequest||!baRequirementModalTarget||
+    m.jiraKey!==baRequirementModalTarget.rootKey||$('baTransferPanel').classList.contains('hidden'))return;
+ if(m.type==='baJiraTransferCandidatesResult'){
+  baTransferState={...m,users:Array.isArray(m.users)?m.users:[]};
+  const list=$('baTransferUsers');list.replaceChildren();
+  const choose=document.createElement('option');choose.value='';choose.textContent='Select Business Analyst';list.append(choose);
+  for(const user of baTransferState.users){
+   const option=document.createElement('option');option.value=user.accountId;option.textContent=user.name;list.append(option);
+  }
+  list.disabled=!baTransferState.users.length;
+  $('baTransferStatus').textContent=baTransferState.users.length?
+    'Current BR owner: '+(m.ownerName||'Unassigned')+'. Choose another registered Business Analyst.':
+    'No eligible Business Analysts were found. Ask them to enter My Work with the Business Analyst role.';
+  $('baTransferCommit').disabled=true;
+ }else if(m.type==='baJiraTransferProgress'&&baTransferBusy){
+  setBATransferProgress(m.percent,m.message);
+ }else if(m.type==='baJiraTransferCompleted'){
+  baTransferBusy=false;setBATransferProgress(100,'Transfer completed');
+  $('baTransferCancel').disabled=false;$('baTransferCancel').textContent='Close';
+  $('baTransferCommit').disabled=true;
+  // Reload Jira from the server: do not spoof the updated owner locally.
+  searchJiraInventory();
+ }else if(m.type==='baJiraTransferError'){
+  baTransferBusy=false;$('baTransferCancel').disabled=false;
+  $('baTransferCancel').textContent='Cancel';
+  $('baTransferUsers').disabled=!baTransferState?.users?.length;
+  $('baTransferCommit').disabled=!$('baTransferUsers').value;
+  $('baTransferStatus').textContent='Transfer failed: '+String(m.message||'Refresh and try again.');
+  $('baTransferProgress').hidden=true;
+ }else if(m.type==='baJiraTransferCancelled'){
+  baTransferBusy=false;$('baTransferCancel').disabled=false;
+  $('baTransferUsers').disabled=!baTransferState?.users?.length;
+  $('baTransferCommit').disabled=!$('baTransferUsers').value;
+  $('baTransferProgress').hidden=true;
+  $('baTransferStatus').textContent='Transfer cancelled. No Jira issue was changed.';
+ }
+});
+
 $('baRequirementModalClose').addEventListener('click',()=>closeBARequirementModal());
 $('baRequirementModal').addEventListener('click',event=>{if(event.target===$('baRequirementModal'))closeBARequirementModal();});
 $('baRequirementModal').addEventListener('keydown',event=>{
@@ -5621,7 +5718,6 @@ function beginNewBusinessRequirement(event){
  send('startOrRestartBusinessRequirements',{revision:brState.revision,openUploadImmediately:true});
 }
 $('baNewRequirement').addEventListener('click',beginNewBusinessRequirement);
-$('baOverviewNew').addEventListener('click',beginNewBusinessRequirement);
 $('baStartMyWork').addEventListener('click',()=>{navigate('sdlc-roles');send('deliveryRefresh');send('roleHandoffOwners');});
 $('baStartSolutionDesigns').addEventListener('click',()=>navigate('planning'));
 $('baStartSDLCReadiness').addEventListener('click',()=>navigate('flow'));
@@ -5767,7 +5863,7 @@ function renderBAJiraBackedEpics(){
     send('recoverJiraOnlyBR',{projectId:activeId,brId:item.brId,jiraKey:item.key});
    });
    heading.append(recover);
-   const remove=brElement('button','secondary ba-jira-only-delete','Delete Jira BR');
+   const remove=brElement('button','secondary ba-jira-only-delete','🗑');
    remove.type='button';
    remove.title='Eligible only when your Jira account ID matches this Epic Creator or Reporter AND Jira grants Delete Issues permission. Review all descendants first.';
    remove.setAttribute('aria-label','Review deletion eligibility and complete Jira hierarchy for '+item.brId);
@@ -6162,12 +6258,7 @@ function renderBAUncompleted(){
  $('baResumeIncomplete').classList.toggle('hidden',!unfinished);
  $('baResumeIncomplete').textContent='Resume';
  $('baResumeIncomplete').disabled=!activeId||!brState;
- $('baOverviewNew').disabled=!activeId||!brState||busy;
- $('baRestartIncomplete').classList.toggle('hidden',!unfinished);
  $('baDeleteIncomplete').classList.toggle('hidden',!unfinished);
- const canRestart=sources.length>0&&!Object.keys(brState?.pending||{}).length&&!discoveryDirty&&!brEditorDirty&&!busy&&selectedRole==='business-analyst'&&!!activeId;
- $('baRestartIncomplete').disabled=!canRestart;
- $('baRestartIncomplete').title=canRestart?'Archive the unfinished cycle and start a new upload.':'Finish the active operation before restarting.';
  const deleting=busy||discoveryAutosaving||brDeletionBusy||selectedRole!=='business-analyst';
  $('baDeleteIncomplete').disabled=deleting||(!sources.length&&!active.length&&!brState?.restartPending);
  $('baDeleteIncomplete').title=deleting?'Finish or discard active editing before deletion.':'Delete the current in-progress BR and its scoped artifacts everywhere after verification.';
@@ -6179,10 +6270,6 @@ $('baResumeIncomplete').addEventListener('click',()=>{
 $('baDeleteIncomplete').addEventListener('click',()=>{
  if($('baDeleteIncomplete').disabled||!brState||!activeId)return;
  requestBRDeletion({target:'in-progress',revision:brState.revision});
-});
-$('baRestartIncomplete').addEventListener('click',()=>{
- if($('baRestartIncomplete').disabled||!brState||!activeId)return;
- send('restartUncompletedBusinessRequirement',{revision:brState.revision,openUploadImmediately:true});
 });
 // v0.1.21: The nine milestones are the sole Business Requirements navigation.
 function baGuideRender(progress,displayed,details){
