@@ -8319,7 +8319,7 @@ window.addEventListener('message',event=>{
   else if(architectCustomBusy&&architectCustomOperation!=='WAITING FOR VS CODE CONFIRMATION')architectCustomOperation='PROCESSING CUSTOM STACK';
   architectCustomNotify(message);
   architectCustomSetProgress(m.percent??Math.min(90,architectCustomProgressPercent+5),message);
-  architectCustomDrawRuntime();
+  renderArchitectCustomPanel();
  }
  if(m.type==='architectCustomAiReviewResult'){
   architectCustomAiActive=false;
