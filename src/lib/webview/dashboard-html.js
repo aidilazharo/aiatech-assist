@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.50';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.51';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -547,7 +547,7 @@ function html(webview,{resumeLibrary=false}={}){
       </div>
     </section>
     <section id="baJiraInventorySection" class="ba-jira-inventory-panel" aria-labelledby="baJiraInventoryTitle">
-      <div class="ba-jira-inventory-heading"><div><h2 id="baJiraInventoryTitle">All Jira Project Items</h2><p class="muted">Current BR owner (Jira Reporter), original creator and latest Jira status.</p></div><div class="stack"><button id="baReviewDeletedJira" class="secondary hidden" type="button" title="Review ATGV-owned Jira issues left by previously local-only deleted Business Requirements">Review Deleted Jira</button><button id="baJiraInventoryRefresh" class="secondary" type="button">Refresh Jira Items</button></div></div>
+      <div class="ba-jira-inventory-heading"><div><h2 id="baJiraInventoryTitle">All Jira Project Items</h2><p class="muted">Current BR owner (Jira Reporter), original creator and latest status.</p></div><div class="stack"><button id="baReviewDeletedJira" class="secondary hidden" type="button" title="Review ATGV-owned Jira issues left by previously local-only deleted Business Requirements">Review Deleted Jira</button><button id="baJiraInventoryRefresh" class="secondary" type="button">Refresh Jira Items</button></div></div>
       <div class="ba-jira-inventory-filters">
         <label for="baJiraBrFilter">Business Requirement <select id="baJiraBrFilter"><option value="">All BRs / project</option></select></label>
         <label for="baJiraTypeFilter">Issue type <select id="baJiraTypeFilter"><option value="">All types</option></select></label>
