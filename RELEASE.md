@@ -1,13 +1,14 @@
-# ATGV AIATECH Assist v0.0.40
+# ATGV AIATECH Assist v0.0.41
 
 ## Changes
 
-- Stop repeated SDLC Library update prompts when the installed Library version matches a public release but the local release-build tag is absent or unverified.
-- Respect the previously shown update notification across ATGV restarts instead of forcing the same prompt again.
-- Permit a verified, newer same-version source-build ZIP to install when the configured aidilazharo GitHub main branch is on the same semantic version; preserve owner-specific source restrictions and checksum verification.
-- Show source build numbers alongside Library versions in update prompts, so same-version build upgrades are understandable.
+- Record a durable, redacted, bounded Technology Stack diagnostic journal from Save Stack through checkout, repository scanning, approval waiting, all six Install & Run stages, dependency installation, mock preview verification, cancellation and failures.
+- Reuse the existing Technology Stack download icon to export chronological activity and in-session errors even when no failure has occurred.
+- Keep project-specific log history across ATGV restarts in VS Code extension global storage, outside the Git checkout.
+- Fix the previously unsupported `custom-stack` error-log category which could prevent an approved Install & Run from starting.
+- Distinguish 2–3% repository preflight from 4% waiting for explicit user confirmation. Emit reminders at the same percentage every 30 seconds until approval, cancellation or dialog timeout.
 
 ## Validation
 
-- Automated regressions cover missing build metadata, equal/newer/older releases, persisted startup prompts, same-version ZIP installation routing, and build numbers in the popup.
-- The GitHub release workflow runs the full Node regression suite, theme checks, Windows reset tests, and VSIX activation/package verification.
+- Regression tests cover redaction, persistent chronology, per-project isolation, bounded log retention, no-follow symlinks, valid custom-stack diagnostics, and reuse of the existing download icon.
+- CI verifies the Node suite, UI themes, Windows stack reset, and VSIX packaging/activation.

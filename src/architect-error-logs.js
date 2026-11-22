@@ -8,7 +8,7 @@ const history=new Map();
 const HISTORY_LIMIT=24;
 const COMBINED_LIMIT=1024*1024;
 const LOG_LIMIT=512*1024;
-const kinds={save:'Save Stack',install:'Install Dependencies',reset:'Reset Tech Stack',test:'Test & Run',server:'Run Server',approval:'Approve Stack',catalog:'Catalog Update'};
+const kinds={save:'Save Stack',install:'Install Dependencies',reset:'Reset Tech Stack',test:'Test & Run',server:'Run Server',approval:'Approve Stack',catalog:'Catalog Update','custom-stack':'Custom Stack Install & Run'};
 function redact(input){
  return String(input??'')
   .replace(/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g,'[REDACTED PRIVATE KEY]')
