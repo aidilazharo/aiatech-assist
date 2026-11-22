@@ -8911,14 +8911,12 @@ function renderStartupPermissions(result){
 }
 function stopStartupAuto(message='Automatic opening paused.'){
  if(startupAutoTimer)clearTimeout(startupAutoTimer);startupAutoTimer=null;startupAutoEnabled=false;startupAutoStage='';startupAutoNotice=message;
- $('startupAutoPause').classList.add('hidden');$('gateAutoPause').classList.add('hidden');
  if(startupSetupRequired)$('startupProceedInfo').textContent=message;else $('gateAutoMessage').textContent=message;
 }
 function beginStartupAuto(stage){
  if(!startupAutoEnabled||!startupAutoProject)return;
  if(startupAutoTimer)clearTimeout(startupAutoTimer);
  startupAutoStage=stage;startupAutoDeadline=Date.now()+STARTUP_SCREEN_MS;
- $('startupAutoPause').classList.toggle('hidden',stage==='project');$('gateAutoPause').classList.toggle('hidden',stage!=='project');
  const tick=()=>{
   if(!startupAutoEnabled||startupAutoStage!==stage)return;
   const dialogOpen=!$('extensionUpgradeModal').classList.contains('hidden')||!$('libraryUpdateModal').classList.contains('hidden')||startupOpenStackId||startupCopilotModalOpen;
@@ -8940,7 +8938,7 @@ function beginStartupAuto(stage){
    send('startupProceed',{settings:startupPayload(),autoResume:true,projectId:startupAutoProject.id});return;
   }
   if(stage==='project'){
-   const projectId=startupAutoProject.id;startupAutoEnabled=false;startupAutoTimer=null;startupAutoStage='';$('gateAutoPause').classList.add('hidden');
+   const projectId=startupAutoProject.id;startupAutoEnabled=false;startupAutoTimer=null;startupAutoStage='';
    launchFromGate({projectId,autoResume:true});
   }
  };
@@ -9185,8 +9183,6 @@ $('startupCopilotSetup').addEventListener('click',()=>{
  setStartupCopilotStatus('working','Preparing Copilot SDK setup…');send('startupSetupCopilot');
 });
 for(const id of ['startupUnifiedLog','gateUnifiedLog'])$(id).addEventListener('click',()=>send('startupExportUnifiedLog'));
-$('startupAutoPause').addEventListener('click',()=>stopStartupAuto());
-$('gateAutoPause').addEventListener('click',()=>stopStartupAuto());
 $('startupPrerequisiteDetails').addEventListener('toggle',()=>{
  if($('startupPrerequisiteDetails').open&&startupAutoEnabled)stopStartupAuto('Automatic opening paused while reviewing prerequisites.');
 });
