@@ -86,6 +86,7 @@ const baJiraRepublish=require('../../ba-jira-republish');
 const baJiraDraftIds=require('../../ba-jira-draft-ids');
 const jiraProjectInventory=require('../../jira-project-inventory');
 const pmJiraAssignment=require('../../pm-jira-assignment');
+const baBRTransfer=require('../../ba-br-transfer');
 const jiraItemEditor=require('../../jira-item-editor');
 const sourceStore=require('../../source-store');
 const {evaluate:continuityEvaluate}=require('../../continuity');
@@ -8189,7 +8190,79 @@ async function handleDashboardMessage(msg){
         break;
       }
       case 'openAtgvAi':{await atgvAiChat.open(vscode,{runtimeRoot:aiRuntimeRoot(),onLog:report,onActivity:active=>{if(active){aiChatActivityEnd?.();aiChatActivityEnd=beginAiActivity();}else{aiChatActivityEnd?.();aiChatActivityEnd=null;}}});break;}
-       case 'deleteJiraOnlyBROwned':{
+       case 'baJiraTransferCandidates':
+      case 'baJiraTransferOwner':{
+        const writing=msg.command==='baJiraTransferOwner';
+        const projectId=activeProject?.id||'',jiraKey=String(msg.jiraKey||'').trim().toUpperCase();
+        const requestId=msg.requestId,brId=String(msg.brId||'').trim().toUpperCase();
+        const post=payload=>dashboard?.webview.postMessage({projectId,jiraKey,brId,requestId,...payload});
+        try{
+          requireOpened();requireOnline();
+          if(!projectId||msg.projectId!==projectId)throw Error('Project changed. Reopen this BR.');
+          if(msg.roleId!=='business-analyst')throw Error('Switch to the Business Analyst role before transferring BR ownership.');
+          const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
+          if(!token)throw Error('Connect Jira credentials before transferring a Business Requirement.');
+          const projectKey=validProjectKey(config.get('jira.projectKey')),base=baseAtlassian(config);
+          const auth={token,basicEmail:String(config.get('jira.email')||'').trim()};
+          const [issue,permissions,me,found,register]=await Promise.all([
+            jiraReadIssueAllFields(config,token,jiraKey),
+            requestJson(base+'/rest/api/3/mypermissions?projectKey='+encodeURIComponent(projectKey)+
+              '&permissions=BROWSE_PROJECTS%2CMODIFY_REPORTER',auth),
+            requestJson(base+'/rest/api/3/myself',auth),
+            myWorkPresence.locate(config,token,projectKey),
+            brWorkflow.load(registry,projectId)
+          ]);
+          if(!baBRTransfer.canModifyReporter(permissions))
+            throw Error('Jira Browse Projects and Modify Reporter permissions are required to transfer a BR.');
+          const rows=myWorkPresence.extractRows(found.page?.body?.storage?.value||'');
+          const actorId=String(me?.accountId||'');
+          const actor=rows.find(row=>row.id===actorId);
+          if(!actor?.roles?.some(role=>String(role||'').trim().toLowerCase()==='business analyst'))
+            throw Error('Your verified Jira account is not registered as Business Analyst. Open Business Analyst My Work and retry.');
+          const root=baBRTransfer.assertIssue(issue,projectKey,jiraKey,brId,register);
+          baBRTransfer.assertActor(root,actorId);
+          const users=baBRTransfer.candidates(rows,root.ownerId);
+          const ownerName=rows.find(row=>row.id===root.ownerId)?.name||
+            String(issue.fields?.reporter?.displayName||'Unassigned').slice(0,140);
+          if(!writing){
+            await post({type:'baJiraTransferCandidatesResult',users,ownerId:root.ownerId,ownerName,updated:root.updated});
+            break;
+          }
+          const accountId=String(msg.accountId||'');
+          const recipient=users.find(user=>user.accountId===accountId);
+          if(!recipient)throw Error('Select a different verified Business Analyst from the project roster.');
+          if(String(msg.expectedUpdated||'')!==root.updated||
+            String(msg.expectedOwnerId||'')!==root.ownerId)
+            throw Error('Jira ownership changed since the BA list loaded. Reopen Transfer BR.');
+          const approved=await uiWarning('Transfer '+(root.brId||jiraKey)+' ('+jiraKey+') from '+
+            ownerName+' to '+recipient.name+'?\n\nOnly the Jira Epic Reporter will change. '+
+            'The original Creator and child issue assignees will remain unchanged.',
+            {modal:true},'Transfer BR');
+          if(approved!=='Transfer BR'){
+            await post({type:'baJiraTransferCancelled'});break;
+          }
+          if(activeProject?.id!==projectId)throw Error('Project changed before transfer.');
+          const onProgress=(phase,percent,message)=>post({type:'baJiraTransferProgress',phase,percent,message});
+          const result=await baBRTransfer.transfer({
+            projectKey,epicKey:jiraKey,brId,register,actorId,targetId:recipient.accountId,
+            expectedUpdated:root.updated,expectedOwnerId:root.ownerId,
+            readIssue:key=>jiraReadIssueAllFields(config,token,key),
+            writeReporter:(key,accountId)=>requestJson(base+'/rest/api/3/issue/'+encodeURIComponent(key),
+              {...auth,method:'PUT',data:{fields:{reporter:accountId?{accountId}:null}}}),
+            onProgress
+          });
+          await recordStartupDiagnostic({stage:'ba-br-transfer',projectId,status:'complete',tool:'Jira',
+            detail:'Transferred '+jiraKey+' BR reporter from '+(result.previousOwnerId||'Unassigned')+
+              ' to '+result.ownerId+'; original creator preserved.'});
+          await post({type:'baJiraTransferCompleted',ownerId:result.ownerId,
+            creatorId:result.creatorId,message:'Transfer completed'});
+        }catch(error){
+          report('Business Requirement transfer failed: '+String(error.message||error).slice(0,350));
+          await post({type:'baJiraTransferError',message:String(error.message||error).slice(0,500)});
+        }
+        break;
+      }
+      case 'deleteJiraOnlyBROwned':{
          const projectId=activeProject?.id||'';
          if(remoteBRDeletionBusy)throw Error('A remote Jira deletion or recovery is in progress.');
          remoteBRDeletionBusy=true;
