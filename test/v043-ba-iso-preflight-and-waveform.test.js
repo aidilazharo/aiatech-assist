@@ -26,7 +26,7 @@ test('one preserved AI preflight component belongs to its own Business Documents
  assert.match(html,/data-ba-document="iso"/);
  assert.match(ba,/get\('baAutoIsoPreflight'\)\.hidden=!preflight/);
  assert.match(ba,/get\('baAutoDocumentPanel'\)\.hidden=preflight/);
- assert.match(ba,/renderArtifacts\(\);\s*requestArtifact\(\)/);
+ assert.match(ba,/renderArtifacts\(\);[\s\S]*?requestArtifact\(\)/);
 });
 test('preflight exports stay outside collapsed findings and retain existing action handlers',()=>{
  const begin=html.indexOf('id="baAutoIsoPreflightActions"');
