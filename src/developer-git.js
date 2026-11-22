@@ -444,6 +444,9 @@ async function runMockServices(root,{relative='',previewUrl=''}={}){
     const stat=await fs.lstat(file).catch(()=>null);
     if(!stat?.isFile()||stat.isSymbolicLink())
         throw Error('ATGV mock service source is missing or unsafe.');
+    const trusted=require('./architect-custom-repair').PREVIEW_SERVICE;
+    if(await fs.readFile(file,'utf8')!==trusted)
+        throw Error('The local synthetic mock service differs from the verified ATGV template.');
     const cwd=path.join(info.repo.root,relative);
     const child=spawn(process.execPath,[file],{
         cwd,env:{ATGV_MOCK_PORT:String(port),PATH:process.env.PATH||'',SystemRoot:process.env.SystemRoot||'',
