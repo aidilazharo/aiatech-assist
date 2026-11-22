@@ -406,6 +406,7 @@ function html(webview,{resumeLibrary=false}={}){
                 <button id="baAutoTabPreflight" type="button" role="tab" data-ba-document="preflight" aria-controls="baAutoIsoPreflight" aria-selected="false" aria-pressed="false" tabindex="-1">Pre-flight Analyst</button>
               </div>
               <div id="baAutoIsoPreflightActions" class="ba-auto-iso-preflight-actions"><button id="baPreflightDownload" type="button" class="secondary hidden" title="Download the Business Analyst preflight findings (.txt)" aria-label="Download Pre-flight Analyst text report" disabled>Download Pre-flight Analyst</button><button id="baWorkingBrDownload" type="button" class="secondary hidden" title="Download an ISO/IEC/IEEE 29148-aligned Business Requirements Specification PDF based on verified evidence" disabled>Download ISO 29148 Business Requirements</button><button id="baPreflightRetry" type="button" class="secondary hidden" title="Retry document AI preflight and 12-question mapping">Retry Mapping</button><button id="baPreflightSkip" type="button" class="secondary hidden" title="Proceed with original source evidence; AI checks remain unverified." disabled>Skip AI Preflight · Source-Only</button></div>
+              <button type="button" id="baAutoArtifactSave" disabled>Save Document</button>
               <div id="baAutoFileActions" class="ba-auto-file-actions" aria-label="Uploaded source actions"></div>
             </div>
             <div id="baAutoIsoPreflight" class="ba-auto-iso-preflight" role="tabpanel" aria-labelledby="baAutoTabPreflight" hidden>
@@ -415,7 +416,7 @@ function html(webview,{resumeLibrary=false}={}){
             <div id="baAutoDocumentPanel" role="tabpanel" aria-labelledby="baAutoTabIso">
               <label for="baAutoArtifactText" id="baAutoArtifactLabel">Structured ISO BRD</label>
               <textarea id="baAutoArtifactText" rows="11" maxlength="1000000" spellcheck="false" readonly></textarea>
-              <div class="ba-auto-inline"><span id="baAutoArtifactStatus" role="status"></span><button type="button" id="baAutoArtifactSave" disabled>Save Document</button></div>
+              <div class="ba-auto-inline"><span id="baAutoArtifactStatus" role="status"></span></div>
             </div>
           </div>
         </div>
