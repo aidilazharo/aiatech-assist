@@ -7,7 +7,7 @@
  const header=get('workSkill').parentElement;
  const stages=['source','requirements','jira','publish'];
  const stageNames=['Prepare Source','Develop Requirements','Prepare Jira Preview','Publish to Jira'];
- const kindNames={iso:'Structured ISO BRD',source:'Editable source',original:'Original source text'};
+ const kindNames={iso:'Structured ISO BRD',source:'Editable source',original:'Original source text',preflight:'Pre-flight Analyst'};
  const sourcePanel=root.querySelector('.source-documents-panel');
  const skill=get('workSkill');
  get('baAutoOriginalFiles').append(sourcePanel);
@@ -27,7 +27,7 @@
   const stage=phase==='ready'?'publish':current?.stage||(!brState?.mappingCompleted?'source':!requirements().length?'requirements':'jira');
   return {label:stageNames[stages.indexOf(stage)],running:phase==='running'||phase==='publishing'};
  }
- const artifactDirty=()=>!!artifactContext&&kind!=='original'&&input.value!==artifactContext.text;
+ const artifactDirty=()=>!!artifactContext&&['iso','source'].includes(kind)&&input.value!==artifactContext.text;
  const dirty=()=>artifactDirty()||discoveryDirty||brEditorDirty;
  const invoke=(command,fields={})=>send(command,{projectId:activeId,roleId:selectedRole,...fields});
  const requirements=()=>brState?.brs?.filter(br=>!br.archivedFromRestart&&!['retired','retire-proposed'].includes(br.status))||[];
@@ -54,7 +54,7 @@
  }
 
  function requestArtifact(){
-  if(!active()||!sourceDigest||artifactDirty())return;
+  if(!active()||!sourceDigest||kind==='preflight'||artifactDirty())return;
   get('baAutoArtifactLabel').textContent=kindNames[kind];
   get('baAutoArtifactStatus').textContent='Loading document…';
   artifactContext=null;input.readOnly=true;
@@ -69,9 +69,20 @@
    get('baAutoArtifactStatus').textContent='';
   }
   get('baAutoSourceEditor').hidden=!sourceDigest;
-  // Preflight is part of the Structured ISO BRD, not Uploaded Documents or raw source.
-  get('baAutoIsoPreflight').hidden=kind!=='iso';
-  if(currentSource&&get('baAutoSource').open&&changed)requestArtifact();
+  // Every tab has exactly one visible panel; preflight no longer overlaps the BRD text editor.
+  const preflight=kind==='preflight';
+  get('baAutoIsoPreflight').hidden=!preflight;
+  get('baAutoDocumentPanel').hidden=preflight;
+  get('baAutoPreflightPlaceholder').hidden=!get('baSourcePreflight').classList.contains('hidden');
+  const documentPanel=get('baAutoDocumentPanel');
+  for(const tab of get('baAutoDocumentTabs').querySelectorAll('[data-ba-document]')){
+   const selected=tab.dataset.baDocument===kind;
+   tab.setAttribute('aria-selected',String(selected));
+   tab.setAttribute('aria-pressed',String(selected));
+   tab.tabIndex=selected?0:-1;
+   if(selected&&!preflight)documentPanel.setAttribute('aria-labelledby',tab.id);
+  }
+  if(currentSource&&get('baAutoSource').open&&changed&&!preflight)requestArtifact();
   if(artifactContext){
    input.readOnly=kind==='original'||busy()||!baCanEdit('ba-discovery');
    get('baAutoArtifactSave').disabled=input.readOnly||!artifactDirty()||!input.value.trim();
@@ -280,9 +291,19 @@
   if(!selected||selected.dataset.baDocument===kind)return;
   if(artifactDirty()){get('baAutoArtifactStatus').textContent='Save your edits before switching documents.';return;}
   kind=selected.dataset.baDocument;
-  for(const option of get('baAutoDocumentTabs').querySelectorAll('button'))option.setAttribute('aria-pressed',String(option===selected));
   renderArtifacts();
+  if(kind==='preflight'&&!get('baSourcePreflight').classList.contains('hidden'))get('baSourcePreflight').open=true;
   requestArtifact();
+ });
+ get('baAutoDocumentTabs').addEventListener('keydown',event=>{
+  if(!['ArrowRight','ArrowLeft','Home','End'].includes(event.key))return;
+  const tabs=[...get('baAutoDocumentTabs').querySelectorAll('[data-ba-document]')];
+  const current=tabs.indexOf(document.activeElement);
+  if(current<0)return;
+  event.preventDefault();
+  const next=event.key==='Home'?0:event.key==='End'?tabs.length-1:(current+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;
+  tabs[next].click();
+  if(tabs[next].getAttribute('aria-selected')==='true')tabs[next].focus();
  });
  get('baAutoJiraTabs').addEventListener('click',event=>{
   const tab=event.target.closest('[data-ba-jira-tab]');
