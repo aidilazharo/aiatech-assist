@@ -46,12 +46,12 @@ test('My Work has isolated chat and suggestions with shared top-header AI animat
 test('shared role selection opens AI and Role Workspace without changing existing role models',()=>{
  assert.equal(roles.length,18);
  assert.equal(new Set(roles.map(role=>role.id)).size,18);
- assert.match(script,/const keepingWorkspace=isRole&&\(view==='work'\|\|view==='discovery'\|\|view==='uxPreview'\)/);
+ assert.match(script,/const keepingWorkspace=isRole&&\['work','baOverview','discovery','uxPreview'\]\.includes\(view\)/);
  assert.match(script,/destination==='role-workspace'\|\|keepingWorkspace/);
- assert.match(script,/setView\(openWorkspace\?\(baWorkspace\?'discovery':'work'\):'myWork'\)/);
+ assert.match(script,/setView\(openWorkspace\?\(baWorkspace\?'baOverview':'work'\):'myWork'\)/);
  assert.match(script,/if\(view==='myWork'\)window\.ATGVMyWorkAI\?\.update/);
- assert.match(script,/if\(destination==='discovery'\)/);
- assert.match(script,/baBreadcrumbAtRequirements=true/);
+ assert.match(script,/if\(destination==='ba-overview'\|\|destination==='discovery'\)/);
+ assert.match(script,/baBreadcrumbAtRequirements=destination==='discovery'/);
  assert.match(script,/const openWorkspace=destination==='role-workspace'\|\|keepingWorkspace/);
  assert.match(actions,/atgv:mywork-open-task/);
  assert.match(actions,/workspace&&!workspace\.classList\.contains\('hidden'\)/);

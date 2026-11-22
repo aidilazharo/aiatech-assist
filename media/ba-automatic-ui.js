@@ -6,6 +6,7 @@
  if(!root?.classList.contains('ba-automatic-view'))return;
  const header=get('workSkill').parentElement;
  const stages=['source','requirements','jira','publish'];
+ const stageNames=['Prepare Source','Develop Requirements','Prepare Jira Preview','Publish to Jira'];
  const kindNames={iso:'Structured ISO BRD',source:'Editable source',original:'Original source text'};
  const sourcePanel=root.querySelector('.source-documents-panel');
  const skill=get('workSkill');
@@ -14,12 +15,18 @@
  get('baAutoHistoryContent').append(get('baStartPanel'));
  get('baAutoFeedback').append(get('baInlineStatus'),get('brDeletionProgress'),get('baMilestoneError'));
 
- let state=null,requestedProject='',artifactProject='',jiraTab='hierarchy',tableKey='',brKey='',kind='iso',sourceDigest='',artifactContext=null,request=0;
+ let state=null,requestedProject='',artifactProject='',jiraView='list',jiraTab='all',tableKey='',brKey='',kind='iso',sourceDigest='',artifactContext=null,request=0;
  const collapsed=new Set();
  const input=get('baAutoArtifactText');
 
  const active=()=>view==='discovery'&&selectedRole==='business-analyst';
  const busy=()=>state?.phase==='running'||state?.phase==='publishing';
+ function stageSummary(){
+  const current=state?.projectId===activeId?state:null;
+  const phase=current?.phase||'idle';
+  const stage=phase==='ready'?'publish':current?.stage||(!brState?.mappingCompleted?'source':!requirements().length?'requirements':'jira');
+  return {label:stageNames[stages.indexOf(stage)],running:phase==='running'||phase==='publishing'};
+ }
  const artifactDirty=()=>!!artifactContext&&kind!=='original'&&input.value!==artifactContext.text;
  const dirty=()=>artifactDirty()||discoveryDirty||brEditorDirty;
  const invoke=(command,fields={})=>send(command,{projectId:activeId,roleId:selectedRole,...fields});
@@ -73,6 +80,7 @@
   const brs=requirements();
   const body=get('baAutoBRList');
   get('baAutoBRCount').textContent=brs.length?brs.length+' individual BR'+(brs.length===1?'':'s'):'';
+  const excluded=new Set((brState?.baDraftQuality?.excluded||[]).map(row=>row.id));
   const key=String(brState?.revision||'')+'|'+busy()+'|'+brs.map(br=>baCanEdit('ba-br-'+br.id)).join('');
   if(brKey===key)return;
   brKey=key;
@@ -84,6 +92,7 @@
    item.dataset.br=br.id;item.className='ba-auto-requirement';item.open=expanded.has(br.id);
    const summary=document.createElement('summary');
    summary.textContent=br.id+' · '+br.title;
+   if(excluded.has(br.id))summary.append(document.createTextNode(' · Excluded from Jira preview'));
    item.append(summary);
    for(const [label,value] of [['Business purpose',br.objective],['Scope',br.scope],['Acceptance criteria',br.acceptanceCriteria],
     ['Suggested Jira placement',br.jiraPlacement||(brState.synced?.[br.id]?.key?'Keep the existing Epic '+brState.synced[br.id].key+'.':'Create an Epic for '+br.title+'.')]]){
@@ -98,12 +107,25 @@
 
  function publishedRows(brIds){
   return Object.entries(brState?.synced||{}).filter(([path,link])=>brIds.has(path.split('/')[0])&&link?.key)
-   .map(([path,link])=>({path,title:link.title||link.key,key:link.key,kind:link.kind,jiraType:link.issueType}));
+   .map(([path,link])=>({path,title:link.title||link.key,key:link.key,kind:link.kind,jiraType:link.issueType,roleId:link.roleId}));
+ }
+
+ function jiraRole(node){
+  const aliases={developer:'software-developer',uiux:'ux-designer',qa:'qa-engineer',uat:'uat-tester'};
+  const names={'business-analyst':'Business Analyst','project-manager':'Project Manager','software-developer':'Developer',
+   'ux-designer':'UI/UX Designer','qa-engineer':'QA Engineer','uat-tester':'UAT Tester'};
+  const linked=node.key&&jiraInventoryProject===activeId?jiraInventoryItems.find(item=>item.key===node.key):null;
+  const labelled=linked?.labels?.filter(label=>label.startsWith('atgv-role-')).map(label=>label.slice(10))||[];
+  if(labelled.length>1)return 'Multiple roles';
+  const raw=String(node.roleId||node.roleLabel?.replace(/^atgv-role-/,'')||labelled[0]||node.path.match(/\/ROLE-([^/]+)$/i)?.[1]||'').toLowerCase();
+  const id=aliases[raw]||raw;
+  return (Object.hasOwn(names,id)?names[id]:roleData.roles.find(role=>role.id===id)?.label)||(node.kind==='Epic'?'Business Analyst':'Unspecified');
  }
 
  function rowsForTable(){
   const preview=state?.preview;
-  const brs=requirements();
+  const evaluated=preview?new Set(preview.rows?.map(row=>row.path.split('/')[0])):null;
+  const brs=requirements().filter(br=>evaluated?evaluated.has(br.id):!!brState?.synced?.[br.id]?.key);
   const byRoot=new Set(brs.map(br=>br.id));
   const work=new Map((preview?.rows||publishedRows(byRoot)).map(row=>[row.path,row]));
   const changes=new Map((preview?.changes||[]).map(row=>[row.path,row]));
@@ -111,14 +133,14 @@
   const resets=new Map((preview?.reopenRows||[]).map(row=>[row.key,row]));
   const rows=[];
   for(const br of brs){
-   rows.push({id:br.id+'::br',path:br.id,title:br.title,type:'BR',category:'br',depth:0,br:br.id});
+   rows.push({id:br.id+'::br',path:br.id,title:br.title,type:'BR',role:'Business Analyst',category:'br',depth:0,br:br.id});
    for(const [path,node] of work){
     if(path.split('/')[0]!==br.id)continue;
     const edited=changes.get(path);
     const type=node.jiraType||node.kind||'Task';
     const category=String(type).toLowerCase().replace(/[\s_-]+/g,'');
     const parent=path.includes('/')?path.slice(0,path.lastIndexOf('/')):null;
-    rows.push({id:path,path,title:edited?.title||node.title||path,type,category,
+    rows.push({id:path,path,title:edited?.title||node.title||path,type,category,role:jiraRole({...node,...edited}),
      kind:String(node.kind||'').toLowerCase(),
      depth:path===br.id?1:Math.min(path.split('/').length,5),br:br.id,parent:parent||br.id+'::br',
      key:node.key||edited?.key||'',entry:edited,status:resets.has(node.key)?resets.get(node.key).from+' → To Do':edited?.action||'Linked'});
@@ -134,13 +156,22 @@
   get('baAutoJiraBlockers').hidden=!issues.length;
   const warnings=get('baAutoJiraBlockers');
   warnings.replaceChildren(...issues.map(message=>{const row=document.createElement('li');row.textContent=message;return row;}));
-  const key=JSON.stringify([state?.preview?.revision,brState?.revision,state?.phase,jiraTab,[...collapsed]]);
+  const notes=state?.preview?.sourceNotes||state?.sourceNotes||[];
+  get('baAutoSourceNotes').hidden=!notes.length;
+  get('baAutoSourceNotesList').replaceChildren(...notes.map(message=>{const row=document.createElement('li');row.textContent=message;return row;}));
+  const key=JSON.stringify([state?.preview?.revision,brState?.revision,state?.phase,jiraView,jiraTab,[...collapsed],rows.map(row=>row.role)]);
   if(tableKey===key)return;
   tableKey=key;
-  const hierarchy=jiraTab==='hierarchy',byId=new Map(rows.map(row=>[row.id,row]));
-  const hasChildren=new Set(rows.map(row=>row.parent).filter(Boolean));
-  const shown=rows.filter(row=>{
-   if(!hierarchy)return row.category===jiraTab||row.kind===jiraTab;
+  const hierarchy=jiraView==='hierarchy',byId=new Map(rows.map(row=>[row.id,row]));
+  const matching=rows.filter(row=>jiraTab==='all'||row.category===jiraTab||row.kind===jiraTab);
+  const visible=new Set(matching.map(row=>row.id));
+  if(hierarchy)for(const row of matching){
+   for(let parent=row.parent;parent&&!visible.has(parent);parent=byId.get(parent)?.parent)visible.add(parent);
+  }
+  const included=hierarchy?rows.filter(row=>visible.has(row.id)):matching;
+  const hasChildren=new Set(included.map(row=>row.parent).filter(Boolean));
+  const shown=included.filter(row=>{
+   if(!hierarchy)return true;
    let parent=row.parent;
    // The maximum BR hierarchy depth is bounded even for old imports.
    for(let depth=0;parent&&depth<8;depth++,parent=byId.get(parent)?.parent)if(collapsed.has(parent))return false;
@@ -164,6 +195,7 @@
     wrap.append(document.createTextNode(row.title));return wrap;
    }},
    {key:'type',label:'Type',sortable:!hierarchy},
+   {key:'role',label:'Role',sortable:!hierarchy},
    {key:'key',label:'Jira key',sortable:!hierarchy,render:row=>jiraKeyNode(row.key||'—')},
    {key:'status',label:'Change',sortable:!hierarchy},
    {key:'action',label:'Action',sortable:false,render:row=>{
@@ -175,11 +207,14 @@
     });
     action.disabled=busy()||!(canPreview||row.key||row.category==='br');return action;
    }}
-  ],{label:'Business Requirements Jira work items',pageSize:5});
+  ],{label:'Business Requirements Jira work items',pageSize:5,preserveOrder:hierarchy});
  }
 
  function render(){
   placeSkill();
+  const wave=selectedRole==='business-analyst'&&['baOverview','discovery'].includes(view)&&state?.projectId===activeId&&state?.phase==='running';
+  document.body.classList.toggle('atgv-ba-ai-active',wave);
+  window.ATGVMyWorkChat?.setBusinessRequirementsActivity?.(wave);
   if(!active()||!activeId||!brState)return;
   if(!source()&&sourceDigest)state=null;
   if(requestedProject!==activeId){
@@ -199,9 +234,7 @@
   const ready=phase==='ready'||phase==='published'||phase==='publishing';
   const unsaved=dirty();
   get('baAutoTitle').textContent=state?.title||source()?.name?.replace(/\.[a-z0-9]{2,5}$/i,'').replace(/[_-]+/g,' ')||'';
-  get('baAutoAI').classList.toggle('is-active',phase==='running');
-  get('baAutoAIStatus').textContent=phase==='running'?'ATGV AI working':'ATGV AI idle';
-  window.ATGVMyWorkChat?.setBusinessRequirementsActivity?.(phase==='running');
+  get('baAutoSteps').setAttribute('aria-busy',String(busy()));
   for(const step of root.querySelectorAll('[data-ba-auto-stage]')){
    const index=stages.indexOf(step.dataset.baAutoStage);
    const complete=phase==='published'||index<current||ready&&index<3;
@@ -212,7 +245,7 @@
   }
   badge('baAutoSourceBadge',!!brState.mappingCompleted&&!artifactDirty()&&phase!=='running'&&(current>0||ready));
   badge('baAutoDiscoveryBadge',!!brState.discoveryRevision&&!discoveryDirty&&(current>1||ready));
-  badge('baAutoRequirementsBadge',!!requirements().length&&!brEditorDirty&&phase!=='running'&&(current>1||ready));
+  badge('baAutoRequirementsBadge',!!requirements().length&&!brState.baDraftQuality?.excluded?.length&&!brEditorDirty&&phase!=='running'&&(current>1||ready));
   badge('baAutoJiraBadge',ready&&!unsaved);
   const refresh=get('baAutoRefresh'),stop=get('baAutoStop'),publish=get('baAutoPublish');
   refresh.disabled=!source()||busy()||unsaved||!!baBusyTask||discoveryImportBusy;
@@ -249,6 +282,13 @@
   for(const option of get('baAutoJiraTabs').querySelectorAll('button'))option.setAttribute('aria-pressed',String(option===tab));
   renderJira();
  });
+ get('baAutoJiraView').addEventListener('click',event=>{
+  const tab=event.target.closest('[data-ba-jira-view]');
+  if(!tab)return;
+  jiraView=tab.dataset.baJiraView;
+  for(const option of get('baAutoJiraView').querySelectorAll('button'))option.setAttribute('aria-pressed',String(option===tab));
+  renderJira();
+ });
  get('baAutoSource').addEventListener('toggle',()=>{if(get('baAutoSource').open&&!artifactContext)requestArtifact();});
  input.addEventListener('input',render);
  get('baAutoArtifactSave').addEventListener('click',()=>{
@@ -282,7 +322,7 @@
     jiraPreviewFieldsByPath=state.preview.fieldPlans;
    }
    render();
-   window.ATGVMyWorkChat?.setBusinessRequirementsActivity?.(state.phase==='running');
+   if(view==='baOverview')renderBAUncompleted();
    if(previous==='running'&&state.phase!=='running'&&active()&&get('baAutoSource').open&&!artifactDirty())requestArtifact();
   }else if(m.projectId===activeId&&m.requestId===request){
    if(m.type==='baArtifactRead'&&m.digest===sourceDigest&&m.kind===kind){
@@ -308,6 +348,6 @@
   if(!target)return false;
   target.open=true;target.scrollIntoView({block:'nearest'});return true;
  }
- window.ATGVBusinessRequirements={render,active,busy,placeSkill,dirty,openStage};
+ window.ATGVBusinessRequirements={render,active,busy,placeSkill,dirty,openStage,stageSummary};
  render();
 })();

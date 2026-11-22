@@ -134,7 +134,9 @@ test('retains user Discovery edits and identifies unresolved material facts',()=
  const corrected=automatic.applyGroundedReview(answers,{suggestions:[{key:'scope',suggestedAnswer:'Reception and security with a 100% SLA.'}]});
  assert.equal(corrected.scope,'Reception and security');
  const blocked=automatic.mappedAnswers({...paragraphs,questions:'Who can approve high-risk visits?'});
- assert.match(automatic.publicationIssues({discoveryAnswers:blocked,discoveryRevision:'x',reviewRevision:'x'}).join(' '),/question 12/);
+ const open={discoveryAnswers:blocked,discoveryRevision:'x',reviewRevision:'x'};
+ assert.deepEqual(automatic.publicationIssues(open),[]);
+ assert.match(automatic.sourceNotes(open).join(' '),/question 12/);
 });
 
 test('republish previews and moves only linked started or completed work of changed BRs',async()=>{
@@ -188,7 +190,7 @@ test('the preparation bridge clears the busy state for both ready and failed pre
  const run=hostFunction(host,'async function runBRPreparation(','function requireBAWorkspace(',{
   AbortController,baAutomatic:automatic,activeProject:{id:'demo'},baPreparationRun:null,jiraSyncBusy:false,baPublishIntent:false,
   registry:{},brWorkflow:{load:async()=>({sourceDocuments:[{}],revision:'expected',synced:{}})},
-  requireOpened:()=>{},requireBAOwner:async()=>{},brPreparationStage:()=> 'jira',brPreparationTitle:()=> 'Visitor check-in',
+  requireOpened:()=>{},requireBAOwner:async()=>{},brPreparationStage:()=> 'jira',brPreparationTitle:()=> 'Visitor check-in',assessAutomaticDrafts:async()=>{},
   prepareBRJiraPreview:async()=>{if(fail)throw Error('Jira preview could not be built');return {revision:'expected',changes:[{}],reopenRows:[],conflicts:[]};},
   baPreparationSessions:statuses,postBAPreparation:async(id,state)=>{statuses.set(id,state);},
   dashboard:{webview:{postMessage:async message=>messages.push(message)}}

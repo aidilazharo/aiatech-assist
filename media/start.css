@@ -417,16 +417,16 @@ button:focus-visible{outline:2px solid var(--vscode-focusBorder,#649ed2);outline
 @media(max-width:680px){#discoveryView .ba-review-details .ba-review-footer .ba-review-options{justify-content:stretch}#discoveryView .ba-review-details .ba-review-footer .ba-review-options button{flex:1 1 170px;white-space:normal}}
 
 /* v0.2.23 · Uncompleted Business Requirement continuation card */
-#discoveryView .ba-incomplete-panel{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;background:#292b30;border:1px solid #45474d;border-radius:8px;padding:16px 18px;margin:14px 0}
-#discoveryView .ba-incomplete-copy{flex:1;min-width:230px}
-#discoveryView .ba-incomplete-kicker{font-size:10px;letter-spacing:.1em;font-weight:750;color:#e2ac3c}
-#discoveryView .ba-incomplete-copy h2{font-size:14px;line-height:1.45;margin:4px 0}
-#discoveryView .ba-incomplete-copy p{font-size:11px;line-height:1.5;margin:2px 0;overflow-wrap:anywhere}
-#discoveryView .ba-incomplete-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
-#discoveryView .ba-incomplete-actions button{font-size:12px;padding:8px 13px;min-height:36px}
-#discoveryView .ba-incomplete-actions #baDeleteIncomplete{background:transparent;color:var(--vscode-errorForeground,#ff8187);border:1px solid var(--vscode-errorForeground,#e85e68)}
-#discoveryView .ba-incomplete-actions #baDeleteIncomplete:hover:not(:disabled){background:rgba(220,69,80,.15)}
-@media(max-width:640px){#discoveryView .ba-incomplete-actions{width:100%;justify-content:stretch}#discoveryView .ba-incomplete-actions button{flex:1}}
+#baRequirementsOverview .ba-incomplete-panel{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;background:#292b30;border:1px solid #45474d;border-radius:8px;padding:16px 18px;margin:14px 0}
+#baRequirementsOverview .ba-incomplete-copy{flex:1;min-width:230px}
+#baRequirementsOverview .ba-incomplete-kicker{font-size:10px;letter-spacing:.1em;font-weight:750;color:#e2ac3c}
+#baRequirementsOverview .ba-incomplete-copy h2{font-size:14px;line-height:1.45;margin:4px 0}
+#baRequirementsOverview .ba-incomplete-copy p{font-size:11px;line-height:1.5;margin:2px 0;overflow-wrap:anywhere}
+#baRequirementsOverview .ba-incomplete-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+#baRequirementsOverview .ba-incomplete-actions button{font-size:12px;padding:8px 13px;min-height:36px}
+#baRequirementsOverview .ba-incomplete-actions #baDeleteIncomplete{background:transparent;color:var(--vscode-errorForeground,#ff8187);border:1px solid var(--vscode-errorForeground,#e85e68)}
+#baRequirementsOverview .ba-incomplete-actions #baDeleteIncomplete:hover:not(:disabled){background:rgba(220,69,80,.15)}
+@media(max-width:640px){#baRequirementsOverview .ba-incomplete-actions{width:100%;justify-content:stretch}#baRequirementsOverview .ba-incomplete-actions button{flex:1}}
 
 /* v0.2.24: Step-specific actions are inside their respective sections, not in a shared footer. */
 #discoveryView .ba-review-details .ba-review-footer #discoveryCopilot.ba-review-next-action{background:var(--vscode-button-background,#0e639c);color:var(--vscode-button-foreground,#fff);border-color:transparent}
@@ -2510,7 +2510,6 @@ body:not(.gate-mode) #sdlcWorkspaceShell.atgv-sdlc-workspace-shell{
 
 /* The BA workspace groups the existing source, Jira and register controls under four stages. */
 #discoveryView.ba-automatic-view > .discovery-overview,
-#discoveryView.ba-automatic-view > #baUncompletedPanel,
 #discoveryView.ba-automatic-view > #discoveryImportPanel,
 #discoveryView.ba-automatic-view > #discoveryQuestionsPanel,
 #discoveryView.ba-automatic-view > #discoveryReviewPanel,
@@ -2518,7 +2517,7 @@ body:not(.gate-mode) #sdlcWorkspaceShell.atgv-sdlc-workspace-shell{
 #discoveryView.ba-automatic-view > .jira-publish-panel,
 #discoveryView.ba-automatic-view > #baStepNavigation,
 #discoveryView.ba-automatic-view > .ba-step-reopen{display:none!important}
-.ba-auto-heading,.ba-auto-heading-actions,.ba-auto-progress-head,.ba-auto-ai,.ba-auto-actions,.ba-auto-inline,.ba-auto-artifact > summary{display:flex;align-items:center;gap:10px}
+.ba-auto-heading,.ba-auto-heading-actions,.ba-auto-progress-head,.ba-auto-actions,.ba-auto-inline,.ba-auto-artifact > summary{display:flex;align-items:center;gap:10px}
 .ba-auto-heading,.ba-auto-progress-head,.ba-auto-actions,.ba-auto-inline,.ba-auto-artifact > summary{justify-content:space-between}
 .ba-auto-heading{margin-bottom:14px;flex-wrap:wrap}
 .ba-auto-heading h2{margin:0;min-width:0;overflow-wrap:anywhere}
@@ -2530,19 +2529,15 @@ body:not(.gate-mode) #sdlcWorkspaceShell.atgv-sdlc-workspace-shell{
 .ba-auto-progress,.ba-auto-artifact{border:1px solid var(--vscode-panel-border,#4b5460);border-radius:8px;background:var(--vscode-sideBar-background,#181c23)}
 .ba-auto-progress{padding:12px 15px;margin-bottom:14px}
 .ba-auto-progress-head{margin-bottom:9px}
-.ba-auto-ai,.ba-auto-steps small,.ba-auto-artifact summary small,.ba-auto-inline span{color:var(--vscode-descriptionForeground);font-size:.9em}
-.ba-auto-wave{height:8px;display:inline-flex;align-items:center;gap:2px;color:var(--vscode-charts-red,#d31145)}
-.ba-auto-wave i{width:2px;height:2px;border-radius:2px;background:currentColor}
-.ba-auto-ai.is-active .ba-auto-wave i{height:8px;animation:ba-auto-wave .8s ease-in-out alternate infinite}
-.ba-auto-wave i:nth-child(2n){animation-delay:-.27s!important}
-.ba-auto-wave i:nth-child(3n){animation-delay:-.53s!important}
-@keyframes ba-auto-wave{from{transform:scaleY(.22)}to{transform:scaleY(1)}}
+.ba-auto-steps small,.ba-auto-artifact summary small,.ba-auto-inline span{color:var(--vscode-descriptionForeground);font-size:.9em}
 .ba-auto-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:0;padding:0;list-style:none;gap:10px}
 .ba-auto-steps li{min-width:0;position:relative;display:grid;gap:5px}
-.ba-auto-steps li > span{display:grid;place-items:center;width:27px;height:27px;border:1px solid var(--vscode-panel-border,#68758a);border-radius:50%;font-weight:650}
+.ba-auto-steps li > span{position:relative;display:grid;place-items:center;width:27px;height:27px;border:1px solid var(--vscode-panel-border,#68758a);border-radius:50%;font-weight:650}
 .ba-auto-steps li:not(:last-child)::after{content:'';position:absolute;height:1px;background:var(--vscode-panel-border,#68758a);left:35px;right:0;top:13px}
 .ba-auto-steps li[data-state="ready"] > span{color:var(--vscode-charts-green,#72d7ac);border-color:currentColor}
 .ba-auto-steps li[data-state="running"] > span,.ba-auto-steps li[data-state="manual"] > span{color:var(--vscode-textLink-foreground,#82bdfa);border-color:currentColor}
+.ba-auto-steps li[data-state="running"] > span::before{content:'';position:absolute;inset:-3px;border:2px solid transparent;border-top-color:currentColor;border-right-color:currentColor;border-radius:50%;animation:ba-stage-spin .9s linear infinite}
+@keyframes ba-stage-spin{to{transform:rotate(360deg)}}
 .ba-auto-steps small{display:block;margin-top:2px}
 .ba-auto-artifacts{display:grid;gap:7px}
 .ba-auto-artifact > summary{padding:10px 12px;min-height:43px;cursor:pointer;list-style:none}
@@ -2569,6 +2564,11 @@ body:not(.gate-mode) #sdlcWorkspaceShell.atgv-sdlc-workspace-shell{
 .ba-auto-actions p{margin:0}
 #baAutoHistory{margin-top:6px}
 #baAutoJiraBlockers{padding-inline-start:21px;color:var(--vscode-errorForeground,#ffb4b4)}
+#baAutoSourceNotes{margin-top:12px;color:var(--vscode-descriptionForeground)}
+#baAutoSourceNotes summary{cursor:pointer}
+#baRequirementsOverview #baUncompletedPanel{margin-top:12px}
+#baRequirementsOverview [hidden]{display:none!important}
+#workView.ba-project-overview > .work-head{display:none!important}
 #brEditModal[data-ba-artifact="true"] :is(#brEditApprove,#brEditRevision,#brEditEndorse,#brApprovalGuidance){display:none!important}
 @media (max-width:620px){
  .ba-auto-heading-actions{margin-left:0}
@@ -2576,4 +2576,4 @@ body:not(.gate-mode) #sdlcWorkspaceShell.atgv-sdlc-workspace-shell{
  .ba-auto-steps strong{font-size:.9em}
  .ba-auto-steps small{display:none}
 }
-@media (prefers-reduced-motion:reduce){.ba-auto-ai.is-active .ba-auto-wave i{animation:none;height:4px}}
+@media (prefers-reduced-motion:reduce){.ba-auto-steps li[data-state="running"] > span::before{animation:none}}

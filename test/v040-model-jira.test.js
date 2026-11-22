@@ -58,6 +58,6 @@ test('Jira preview verifies target project before preflight and offers an explic
  assert.match(code,/uiQuickPick\(picks,\{title:'Select Jira project for BR preview'/);
  assert.match(code,/registry\.update\(activeProject\.id/);
  assert.match(code,/Object\.keys\(register\.synced\|\|\{\}\)\.length/);
- assert.match(code,/const target=await ensureJiraPreviewTarget\(register,\{automatic\}\)/);
+ assert.match(code,/const target=verifiedTarget\|\|await ensureJiraPreviewTarget\(register,\{automatic\}\)/);
  assert.match(source('media/start.js'),/baBusyTask==='jiraPreview'/);
 });

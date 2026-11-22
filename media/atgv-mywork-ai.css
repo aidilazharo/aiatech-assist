@@ -23,14 +23,16 @@ body.atgv-mywork-chat-mode:not(.gate-mode) #contentPane.content-pane{
 /* My Work waveform is painted on the ACTUAL main header bottom border (#D31145).
    No second red divider is drawn inside the chat content. The app header has
    overflow:hidden in the base theme; override it only while My Work is active. */
-body.atgv-mywork-chat-mode:not(.gate-mode) #appHeader.app-header{
+body.atgv-mywork-chat-mode:not(.gate-mode) #appHeader.app-header,
+body.atgv-ba-ai-active:not(.gate-mode) #appHeader.app-header{
   position:relative;z-index:40;overflow:visible!important;
 }
 #appHeader #myWorkHeaderWave.mywork-header-wave{
   display:none;position:absolute;left:0;right:0;bottom:-3px;height:0;
   z-index:21;overflow:visible;pointer-events:none;
 }
-body.atgv-mywork-chat-mode:not(.gate-mode) #appHeader #myWorkHeaderWave.mywork-header-wave{
+body.atgv-mywork-chat-mode:not(.gate-mode) #appHeader #myWorkHeaderWave.mywork-header-wave,
+body.atgv-ba-ai-active:not(.gate-mode) #appHeader #myWorkHeaderWave.mywork-header-wave{
   display:block;
 }
 /* Wave centerline: 76 * .52 - 38 = 1.52px above the header's bottom edge.

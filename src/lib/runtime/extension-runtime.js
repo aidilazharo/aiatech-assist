@@ -83,6 +83,7 @@ const jiraFieldPreflight=require('../../jira-field-preflight');
 const jiraFieldValues=require('../../jira-field-values');
 const baAutomatic=require('../../ba-automatic-workflow');
 const baJiraRepublish=require('../../ba-jira-republish');
+const baJiraDraftIds=require('../../ba-jira-draft-ids');
 const jiraProjectInventory=require('../../jira-project-inventory');
 const pmJiraAssignment=require('../../pm-jira-assignment');
 const jiraItemEditor=require('../../jira-item-editor');
@@ -3679,7 +3680,7 @@ async function jiraPreflight(reg,config,token,items,onProgress,{automatic=false}
   if(item.action==='create'){
    const marker=jiraScopedMarker(reg,config,item.path),issue=await jiraFindIssueByMarker(config,token,marker);
    if(issue&&reg.pending?.[item.path]?.action!=='create'){
-    conflicts.push(`${item.path}: issue ${issue.key} exists without a recorded operation`);
+    conflicts.push(automatic?`${item.path} needs its existing Jira link to ${issue.key} verified.`:`${item.path}: issue ${issue.key} exists without a recorded operation`);
     // Structured recovery action: never depend on parsing user-visible text.
     linkCandidates.push({path:item.path,key:issue.key});
    }
@@ -3700,9 +3701,9 @@ async function jiraPreflight(reg,config,token,items,onProgress,{automatic=false}
  }
  conflicts.assessment=assessment;conflicts.linkCandidates=linkCandidates;return conflicts;
 }
-async function prePublishIdentityGuard(reg,config,token,items){
+async function prePublishIdentityGuard(reg,config,token,items,inventory){
  // Read-only check happens on every preview/publish, never invokes DELETE.
- const rows=await jiraDuplicates.fetchProjectIssues(config,token);
+ const rows=inventory||await jiraDuplicates.fetchProjectIssues(config,token);
  return jiraDuplicates.assessPublishPlan(rows,items,reg.synced||{});
 }
 function formatIdentityConflicts(gate){
@@ -3805,6 +3806,49 @@ function brPreparationTitle(register){
   register.brs.filter(br=>!br.archivedFromRestart&&br.status!=='retired'));
 }
 
+async function assessAutomaticDrafts(projectId,signal){
+ const register=await brWorkflow.load(registry,projectId);
+ const drafts=register.brs.filter(br=>br.status==='draft'&&!br.archivedFromRestart);
+ const checked=Object.fromEntries(drafts.map(br=>[br.id,baAutomatic.qualityFingerprint(register,br)]));
+ if(JSON.stringify(checked)===JSON.stringify(register.baDraftQuality?.checked||{}))return;
+ const preserved=(register.baDraftQuality?.excluded||[]).filter(row=>checked[row.id]===row.fingerprint);
+ const excluded=[...preserved];
+ const concerns=baAutomatic.sourceConcerns(register);
+ const questions=register.discoveryAnswers?.questions||'';
+ let target,skill;
+ for(const draft of drafts){
+  if(register.baDraftQuality?.checked?.[draft.id]===checked[draft.id])continue;
+  signal.throwIfAborted();
+  const local=baAutomatic.invalidDraft(draft);
+  const crossSource=(register.sourceConflicts||[]).some(item=>item.brId===draft.id&&register.sourceConflictDecisions?.[item.id]!==true);
+  let reason=local||(crossSource?'This draft has conflicting rules in its verified sources.':'');
+  if(!reason){
+   target||=await activeAiTarget();skill||=await roleSkillPrompt('business-analyst');
+   const review=baAutomatic.draftForReview(draft),parts=[[]];
+   for(const work of review.work){
+    if(parts.at(-1).length>=12)parts.push([]);
+    parts.at(-1).push(work);
+   }
+   for(const part of parts){
+    const input=[{...review,work:part}];
+    const prompt=baAutomatic.qualityPrompt(input,concerns,questions);
+    for(let attempt=0;attempt<2;attempt++){
+     const answer=await aiAnswer(target,prompt+(attempt?'\nReturn the required JSON and an exact quote from the draft.':'')+skill,55000,{json:true,signal});
+     signal.throwIfAborted();
+     try{reason=baAutomatic.parseQuality(answer,input,concerns)[0]?.reason||'';break;}
+     catch(error){if(attempt)throw Error(draft.id+' quality review failed validation. Refresh affected artifacts to retry.');}
+    }
+    if(reason)break;
+   }
+  }
+  if(reason)excluded.push({id:draft.id,reason,fingerprint:checked[draft.id]});
+ }
+ signal.throwIfAborted();
+ if(activeProject?.id!==projectId)throw Error('Project changed during BR quality review.');
+ const updated=await brWorkflow.write(registry,projectId,register.revision,next=>{next.baDraftQuality={checked,excluded};});
+ await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
+}
+
 async function runBRPreparation(from){
  requireOpened();
  const projectId=activeProject.id;
@@ -3824,7 +3868,7 @@ async function runBRPreparation(from){
   if(!initial.sourceDocuments?.length)throw Error('Upload a source document to prepare Business Requirements.');
   const required=brPreparationStage(initial);
   const first=baAutomatic.stages.includes(from)&&baAutomatic.stages.indexOf(from)<baAutomatic.stages.indexOf(required)?from:required;
-  await postBAPreparation(projectId,{phase:'running',stage:first,preview:null,error:'',title:brPreparationTitle(initial)});
+  await postBAPreparation(projectId,{phase:'running',stage:first,preview:null,sourceNotes:[],error:'',title:brPreparationTitle(initial)});
   await baAutomatic.run(first,{
    signal,
    progress:async stage=>{
@@ -3856,6 +3900,8 @@ async function runBRPreparation(from){
    },
    prepareJira:async()=>{
     await current();
+    await assessAutomaticDrafts(projectId,signal);
+    await current();
     prepared=await prepareBRJiraPreview({automatic:true});
     if((await current()).revision!==prepared.revision)throw Error('Business Requirements changed while Jira was being checked. Refresh affected artifacts.');
    }
@@ -3863,7 +3909,7 @@ async function runBRPreparation(from){
   const currentState=await current();
   const complete=prepared.changes.length===0&&prepared.reopenRows.length===0&&!prepared.conflicts.length&&!currentState.baPendingReopen&&
    Object.keys(currentState.synced||{}).length>0;
-  await postBAPreparation(projectId,{phase:prepared.conflicts.length?'draft':complete?'published':'ready',stage:'jira',preview:prepared,
+  await postBAPreparation(projectId,{phase:prepared.conflicts.length?'draft':complete?'published':'ready',stage:'jira',preview:prepared,sourceNotes:prepared.sourceNotes,
    error:prepared.conflicts[0]||'',title:brPreparationTitle(currentState)});
  }catch(error){
   if(typeof recordBAProcess==='function'&&activeProject?.id===projectId&&error.name!=='AbortError')
@@ -3972,18 +4018,47 @@ async function prepareBRJiraPreview({automatic=false}={}){
  requireOpened();
  const projectId=activeProject.id;
  const progressTask=automatic?'preparation':'jiraPreview';
- const original=await brWorkflow.load(registry,projectId);
+ let original=await brWorkflow.load(registry,projectId);
  let register=automatic?brWorkflow.projectPreparedJira(original):original;
+ let changes=brWorkflow.plan(register),verifiedTarget,inventory;
+ if(automatic&&changes.some(item=>item.action==='create')){
+  verifiedTarget=await ensureJiraPreviewTarget(register,{automatic});
+  inventory=await jiraDuplicates.fetchProjectIssues(verifiedTarget.config,verifiedTarget.token);
+  if(activeProject?.id!==projectId)throw Error('Project changed while checking Jira identifiers.');
+  const proposed=baJiraDraftIds.plan(original,changes,inventory,path=>jiraScopedMarker(register,verifiedTarget.config,path));
+  if(proposed.length){
+   const owners=await listOwnership();
+   const records=new Map((owners.documents||[]).map(row=>[row.documentId,row]));
+   const assignments=proposed.filter(({id,replacement})=>{
+    const prior=records.get('ba-br-'+id),next=records.get('ba-br-'+replacement);
+    return owners.me&&!owners.cached&&owners.scope!=='local'&&!prior?.pending&&!next?.pending&&
+     (!prior?.ownerId||prior.ownerId===owners.me)&&!next?.ownerId;
+   });
+   if(activeProject?.id!==projectId)throw Error('Project changed while checking draft ownership.');
+   if(assignments.length){
+    await brWorkflow.renumberDrafts(registry,projectId,original.revision,assignments);
+    original=(await brWorkflow.repairPendingExports(registry,projectId)).register;
+    register=brWorkflow.projectPreparedJira(original);
+    changes=brWorkflow.plan(register);
+    await dashboard?.webview.postMessage({type:'brUpdated',register:original});
+    try{
+     const ids=assignments.map(row=>row.replacement);
+     for(let offset=0;offset<ids.length;offset+=100)await autoClaimBARequirements(projectId,ids.slice(offset,offset+100));
+     await postBAOwners();
+    }catch(error){report('BR draft identifier ownership: '+String(error.message||error));}
+   }
+  }
+ }
  approvedJiraPreviewRevision=null;jiraPreviewValidation=null;
-        const currentRequirements=register.brs.filter(item=>!item.archivedFromRestart&&item.status!=='retired'&&item.status!=='retire-proposed');
+        const currentRequirements=register.brs.filter(item=>!item.archivedFromRestart&&item.status!=='retired'&&item.status!=='retire-proposed'&&
+         !(automatic&&baAutomatic.excludedDraft(original,item)));
         const activeRetirements=register.brs.some(item=>!item.archivedFromRestart&&item.status==='retire-proposed'&&item.approvedContent);
-        if((!currentRequirements.length&&!activeRetirements)||currentRequirements.some(item=>item.status!=='approved'||item.needsRefresh||item.externalReviewRequired||item.roleReviewRequired||item.dependencyReviewRequired))throw Error('Save and approve all current-cycle Business Requirements and complete outstanding reviews before creating a Jira preview. Archived approved requirements remain historical.');
-        const changes=brWorkflow.plan(register);
+        if((!automatic&&!currentRequirements.length&&!activeRetirements)||currentRequirements.some(item=>item.status!=='approved'||item.needsRefresh||item.externalReviewRequired||item.roleReviewRequired||item.dependencyReviewRequired))throw Error('Save and approve all current-cycle Business Requirements and complete outstanding reviews before creating a Jira preview. Archived approved requirements remain historical.');
         await dashboard?.webview.postMessage({type:'baProgress',task:progressTask,message:'Checking JIRA project and changes…',percent:30});
         let conflicts=[],previewTypes=[],linkCandidates=[];
         const reopenRoots=automatic?brWorkflow.changedPublishedBRs(original,register,changes):[];
         let reopen={rows:[],blocked:[]};
-        if(changes.length||reopenRoots.length){const target=await ensureJiraPreviewTarget(register,{automatic});
+        if(changes.length||reopenRoots.length){const target=verifiedTarget||await ensureJiraPreviewTarget(register,{automatic});
           if(automatic)reopen=await baJiraRepublish.preview(original,reopenRoots,{...reopenServices(original,target.config,target.token),retiring:changes.filter(item=>item.action==='retire').map(item=>item.path)});
           if(changes.some(item=>item.action==='create')){
             const targetKey=validProjectKey(target.config.get('jira.projectKey'));
@@ -4000,7 +4075,7 @@ async function prepareBRJiraPreview({automatic=false}={}){
             }
           }
           await dashboard?.webview.postMessage({type:'baProgress',task:progressTask,message:'Verifying Jira issue identity and existing mappings…',percent:15});
-          const duplicateGate=await prePublishIdentityGuard(register,target.config,target.token,changes);
+          const duplicateGate=await prePublishIdentityGuard(register,target.config,target.token,changes,inventory);
           conflicts=await jiraPreflight(register,target.config,target.token,changes,async(checked,total)=>dashboard?.webview.postMessage({type:'baProgress',task:progressTask,message:`Checking Jira issues ${checked}/${total}…`,percent:Math.min(95,Math.floor(25+checked/total*70))}),{automatic});
           linkCandidates=conflicts.linkCandidates||[];
           conflicts.push(...formatIdentityConflicts(duplicateGate));
@@ -4047,8 +4122,10 @@ async function prepareBRJiraPreview({automatic=false}={}){
         const payload={changes,issueTypes,jiraProject,fieldPlans:jiraPreviewFieldPlans,conflicts,linkCandidates,protection:conflicts.assessment?.protection||[],revision:register.revision,checkedCount:changes.length};
         if(automatic){
          const reviewIssues=baAutomatic.publicationIssues(original);
+         if(!currentRequirements.length&&!activeRetirements)reviewIssues.push('No draft passed the quality review. Update a draft in Generated Requirements, then refresh the preview.');
          const projected=brWorkflow.flattenApproved(register.brs.filter(br=>!br.archivedFromRestart));
          return {...payload,conflicts:[...conflicts,...reviewIssues],reviewIssues,reopenRoots,reopenRows:reopen.rows,
+          sourceNotes:baAutomatic.sourceNotes(original),
           projectId,planHash:sha(JSON.stringify(changes)),fieldPlansHash:sha(JSON.stringify(jiraPreviewFieldPlans)),
           verifiedAt:Date.now(),site:baseAtlassian(effectiveConfig(activeProject)),
           rows:projected.map(item=>({...item,key:register.synced?.[item.path]?.key||'',
@@ -9030,7 +9107,7 @@ async function handleDashboardMessage(msg){
          await postBAPreparation(projectId);break;
         }
         if(!register.sourceDocuments?.length){
-         await postBAPreparation(projectId,{phase:'idle',stage:'source',title:'',preview:null,error:''});break;
+         await postBAPreparation(projectId,{phase:'idle',stage:'source',title:'',preview:null,sourceNotes:[],error:''});break;
         }
         if(session?.preview?.revision===register.revision&&Date.now()-session.preview.verifiedAt<=300000||session?.phase==='draft'){
          await postBAPreparation(projectId);break;

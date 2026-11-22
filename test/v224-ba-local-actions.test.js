@@ -8,11 +8,10 @@ const html=fs.readFileSync(path.join(root,'test/generated/extension-source.txt')
 const js=fs.readFileSync(path.join(root,'media/start.js'),'utf8');
 const css=fs.readFileSync(path.join(root,'media/start.css'),'utf8');
 
-test('unfinished requirement card is Start-only and Resume still targets saved workflow step',()=>{
- assert.match(js,/panel\.classList\.toggle\('hidden',!unfinished\|\|displayed!=='start'\)/);
- assert.match(js,/if\(!unfinished\|\|displayed!=='start'\)return/);
- assert.match(js,/renderBAUncompleted\(progress,activeStep,activeBrs,hasSources,displayed\)/);
- assert.match(js,/\$\('baResumeIncomplete'\)\.dataset\.resumeStep=activeStep/);
+test('unfinished requirement actions are shown in the overview and Resume opens the workflow',()=>{
+ assert.match(js,/if\(!panel\|\|view!=='baOverview'\)return/);
+ assert.match(js,/baResumeIncomplete'\)\.classList\.toggle\('hidden',!unfinished\)/);
+ assert.match(js,/baResumeIncomplete'\)\.addEventListener\('click',\(\)=>\{[^}]+navigate\('discovery'\)/);
  assert.match(js,/send\('restartUncompletedBusinessRequirement'/);
 });
 

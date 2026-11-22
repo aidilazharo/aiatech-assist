@@ -607,7 +607,7 @@ function setView(next){
   // Hide every workspace page, not just a fixed list. A newly added page must
   // never remain visible behind another menu or expose the wrong workflow.
   const pages=[...document.querySelectorAll('#contentPane > main')];
-  const targetId=next==='landing'?'landingView':next==='discovery'?'workView':next+'View';
+  const targetId=next==='landing'?'landingView':['baOverview','discovery'].includes(next)?'workView':next+'View';
   const target=document.getElementById(targetId);
   if(!target||!pages.includes(target)){
     console.error('ATGV: Workspace page not found:',next);
@@ -627,9 +627,10 @@ function setView(next){
   }
   for(const page of pages)page.classList.toggle('hidden',page!==target);
   if(next==='myWork')target.querySelector?.('.atgv-page-feedback')?.remove();
-  // The BR workspace is embedded above the Jira inventory in BA My Work.
-  // Keep its logical 'discovery' mode so existing save/approval and error guards work.
+  // The BA workflow and project inventory are separate views in the role workspace.
   $('discoveryView').classList.toggle('hidden',next!=='discovery');
+  $('baRequirementsOverview')?.classList.toggle('hidden',next!=='baOverview');
+  $('workView')?.classList.toggle('ba-project-overview',next==='baOverview');
   view=next;
   if(typeof syncSdlcWorkspaceShell==='function')syncSdlcWorkspaceShell(next);
   if(typeof renderWorkspaceBreadcrumbs==='function')renderWorkspaceBreadcrumbs();
@@ -1089,9 +1090,9 @@ function navigate(destination){
   }
   // Navigate locally without an automatic dashboard/webview refresh.
   const isRole=visibleRoles().some(role=>role.id===destination);
-  const keepingWorkspace=isRole&&(view==='work'||view==='discovery'||view==='uxPreview');
+  const keepingWorkspace=isRole&&['work','baOverview','discovery','uxPreview'].includes(view);
   if(isRole&&activeId){usedRoleIds.add(destination);send('markRoleUsed',{roleId:destination});}
-  selectedNav=destination==='role-workspace'||destination==='discovery'||keepingWorkspace||
+  selectedNav=destination==='role-workspace'||destination==='ba-overview'||destination==='discovery'||keepingWorkspace||
     isRole||destination==='sdlc-roles'?'sdlc-roles':
     SDLC_WORKSPACE_VIEWS.has(destination)?'flow':
     destination==='project-settings'||destination==='tech'?'settings':destination;
@@ -1106,9 +1107,9 @@ function navigate(destination){
     const baWorkspace=selectedRole==='business-analyst';
     const openWorkspace=destination==='role-workspace'||keepingWorkspace;
     if(baWorkspace&&openWorkspace)baBreadcrumbAtRequirements=false;
-    setView(openWorkspace?(baWorkspace?'discovery':'work'):'myWork');
+    setView(openWorkspace?(baWorkspace?'baOverview':'work'):'myWork');
     renderSidebarRole();renderRoleWork();
-    if(baWorkspace&&openWorkspace){renderDiscovery();refreshAIChangeResolution();}
+    if(baWorkspace&&openWorkspace){renderBAUncompleted();send('baOwnersRefresh');}
     renderRoleTimeline();ensurePMJiraInventory(true);ensureBAJiraInventory(true);send('roleHandoffOwners');return;
   }
   if(destination==='overview'){setView('landing');$('overviewGanttDetails').open=false;send('loadPlanning');send('myWorkRosterRefresh',{projectId:activeId,roleId:selectedRole});return;}
@@ -1117,11 +1118,13 @@ function navigate(destination){
   if(destination==='documents'){setView('documents');renderDocumentGroups();return;}
   if(destination==='knowledge'){setView('knowledge');send('refreshConnectedSources');return;}
   if(destination==='planning'){setView('planning');send('loadPlanning');renderDesignCards();return;}
-  if(destination==='discovery'){
-    baBreadcrumbAtRequirements=true;
+  if(destination==='ba-overview'||destination==='discovery'){
+    baBreadcrumbAtRequirements=destination==='discovery';
     selectedRole='business-analyst';renderSidebarRole();
-    setView('discovery');renderRoleWork();ensureBAJiraInventory(true);
-    send('baOwnersRefresh');renderDiscovery();refreshAIChangeResolution();return;
+    setView(destination==='discovery'?'discovery':'baOverview');renderRoleWork();send('baOwnersRefresh');
+    if(view==='baOverview'){renderBAUncompleted();ensureBAJiraInventory(true);}
+    else{renderDiscovery();refreshAIChangeResolution();}
+    return;
   }
   if(destination==='flow'){setView('flow');renderFlow();return;}
   if(destination==='operations'){setView('operations');opsOwnerLoaded=false;renderOperationDocuments();send('refreshOwners');return;}
@@ -1334,7 +1337,6 @@ let baJiraView='list';
 let jiraLinkReconcileAfterRefreshRequest=0;
 let baJiraTableInstance=null;
 let baRequirementModalTarget=null,baRequirementPriorFocus=null;
-let baInventoryVisibleStep='start';
 let brDeletionBusy=false;
 let brDeletionDismissTimer=null;
 function hideBRDeletionProgress(){
@@ -1476,6 +1478,8 @@ function renderBAJiraHierarchy(rows){
 }
 function openBRJiraInventory(brId){
  if(baRequirementModalTarget)closeBARequirementModal();
+ if(view!=='baOverview')navigate('ba-overview');
+ if(view!=='baOverview')return;
  const filter=$('baJiraBrFilter');filter.value=brId;
  baJiraView='list';renderBAJiraInventory();
  $('baJiraInventorySection').scrollIntoView({behavior:'smooth',block:'start'});
@@ -1774,7 +1778,7 @@ function searchJiraInventory(){
  send('searchProjectJiraInventory',{projectId:activeId,requestId:jiraInventoryRequest});
 }
 function ensureBAJiraInventory(force=false){
- if(!['work','discovery'].includes(view)||selectedRole!=='business-analyst')return;
+ if(view!=='baOverview'||selectedRole!=='business-analyst')return;
  renderBAJiraInventory();
  const key=projectConnectionsSnapshot.jira?.key||'';
  if(!activeId||!key)return;
@@ -1816,7 +1820,7 @@ $('baRequirementModal').addEventListener('keydown',event=>{
   else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
  }
 });
-window.addEventListener('atgv:viewchange',()=>{if(view!=='discovery'&&baRequirementModalTarget)closeBARequirementModal(false);});
+window.addEventListener('atgv:viewchange',()=>{if(!['baOverview','discovery'].includes(view)&&baRequirementModalTarget)closeBARequirementModal(false);});
 $('baReviewDeletedJira').addEventListener('click',()=>send('reviewPreviouslyDeletedJira'));
 $('baJiraBrFilter').addEventListener('change',renderBAJiraInventory);
 $('baJiraListView').addEventListener('click',()=>{baJiraView='list';renderBAJiraInventory();});
@@ -3843,15 +3847,8 @@ function renderBAWorkDashboard(){
   item.append(number,caption);metrics.append(item);
  }
 }
-$('baMyWorkOpen').addEventListener('click',()=>{
- navigate('discovery');
- // My Work is an entry point to the project history. Always show Start, even
- // when a new upload cycle is already in progress; do not change its state.
- if(view==='discovery'){
-  baViewedStep='start';
-  renderDiscoverySummary();
- }
-});
+$('baMyWorkOpen').addEventListener('click',()=>navigate('ba-overview'));
+$('baAutoBack').addEventListener('click',()=>navigate('ba-overview'));
 function applyFocusedRoleLayout(roleId){
  const work=$('workView');
  const focused=roleId!=='business-analyst'&&roleId!=='software-developer';
@@ -3872,7 +3869,6 @@ function applyFocusedRoleLayout(roleId){
  work.classList.toggle('role-ba-simplified',roleId==='business-analyst');
  // The actual BR workflow replaces the old My Work dashboard; its metrics remain available internally.
  $('baMyWorkDashboard').classList.add('hidden');
- $('baJiraInventorySection').classList.toggle('hidden',roleId!=='business-analyst'||baInventoryVisibleStep!=='start');
  $('pmDailyCockpit').classList.toggle('hidden',roleId!=='project-manager');
  work.classList.toggle('role-pm-dashboard',roleId==='project-manager');
 }
@@ -5576,8 +5572,8 @@ function updateSourceSubmitButton(){
 // The persistent header action starts a new BR cycle and opens the native upload
 // picker. If a fresh cycle already exists (e.g. a cancelled picker), resume it
 // without archiving history or creating another empty cycle.
-function beginNewBusinessRequirement(){
- if($('baNewRequirement').disabled||!brState||!activeId)return;
+function beginNewBusinessRequirement(event){
+ if(event?.currentTarget?.disabled||!brState||!activeId)return;
  // The action is always clickable in Start, including during an unfinished
  // requirement. Block unsafe interruption explicitly instead of disabling it.
  if(baBusyTask||discoveryImportBusy||brEditorSaving||discoveryDirty||brEditorDirty||window.ATGVBusinessRequirements?.dirty()||Object.keys(brState.pending||{}).length){
@@ -5585,12 +5581,14 @@ function beginNewBusinessRequirement(){
   return;
  }
  if(brState.restartPending&&!(brState.sourceDocuments||[]).length){
+  if(view!=='discovery')navigate('discovery');
   baViewedStep='upload';renderDiscoverySummary();triggerDiscoveryImport();return;
  }
  // The host confirms archival of an unfinished cycle before any changes.
  send('startOrRestartBusinessRequirements',{revision:brState.revision,openUploadImmediately:true});
 }
 $('baNewRequirement').addEventListener('click',beginNewBusinessRequirement);
+$('baOverviewNew').addEventListener('click',beginNewBusinessRequirement);
 $('baStartMyWork').addEventListener('click',()=>{navigate('sdlc-roles');send('deliveryRefresh');send('roleHandoffOwners');});
 $('baStartSolutionDesigns').addEventListener('click',()=>navigate('planning'));
 $('baStartSDLCReadiness').addEventListener('click',()=>navigate('flow'));
@@ -5982,7 +5980,7 @@ function renderBACompletedRecords(){
   details.append(body);root.append(details);
  }
  if(baRequirementModalTarget?.kind==='local')syncBARequirementModal();
- if(baJiraTableInstance&&selectedRole==='business-analyst'&&baInventoryVisibleStep==='start')renderBAJiraInventory();
+ if(baJiraTableInstance&&view==='baOverview'&&selectedRole==='business-analyst')renderBAJiraInventory();
 }
 // Change-only publication keeps the original nine approval milestones plus Start; never add a duplicate Publish action.
 function atgvSetBAActionLabel(id,label){
@@ -6113,37 +6111,37 @@ function baMappingComplete(){
 }
 // Resume an unfinished cycle from persisted project data. Never create another
 // BR, re-run AI, or change an approved revision merely to reopen a milestone.
-function renderBAUncompleted(progress,activeStep,activeBrs,hasSources,displayed){
+function renderBAUncompleted(){
  const panel=$('baUncompletedPanel');
- const started=hasSources||!!brState?.restartPending||activeBrs.length>0;
- const unfinished=baResumeCardReady&&started&&baHasRecoverableBR(brState)&&!progress.every(step=>step.complete);
- panel.classList.toggle('hidden',!unfinished||displayed!=='start');
- if(!unfinished||displayed!=='start')return;
- const current=progress.find(step=>step.key===activeStep)||progress.find(step=>step.current)||progress[0];
- const active=activeBrs.filter(br=>br.status!=='retired');
+ if(!panel||view!=='baOverview')return;
+ const progress=window.ATGVBusinessRequirements?.stageSummary();
+ const unfinished=baHasRecoverableBR(brState)&&(!baPublishedCurrent()||!!brState?.baPendingReopen||progress?.running);
+ const active=activeBusinessRequirements().filter(br=>br.status!=='retired');
  const first=active[0];
- const title=active.length>1?`${active.length} Business Requirements in progress`:first?`${first.id} · ${first.title||first.approvedContent?.title||'Uncompleted Business Requirement'}`:brState?.restartPending&&!hasSources?'New Business Requirement · Awaiting upload':'Business Requirement in progress';
  const sources=(brState?.sourceDocuments||[]).map(item=>item.name).filter(Boolean);
- $('baIncompleteTitle').textContent=title;
- $('baIncompleteMeta').textContent=`Resume at: Step ${current.index+1} of ${progress.length} · ${current.label}`;
- $('baIncompleteSource').textContent=sources.length?`Source: ${sources.join(', ')}`:'No source document uploaded yet.';
- $('baResumeIncomplete').textContent=`Resume · ${current.label}`;
- $('baResumeIncomplete').dataset.resumeStep=activeStep;
- $('baResumeIncomplete').disabled=!!baBusyTask||discoveryImportBusy||brEditorSaving;
- const canRestart=hasSources&&!Object.keys(brState?.pending||{}).length&&!discoveryDirty&&!brEditorDirty&&!baBusyTask&&!discoveryImportBusy&&!brEditorSaving&&selectedRole==='business-analyst'&&!!activeId;
+ const busy=!!baBusyTask||discoveryImportBusy||brEditorSaving||progress?.running;
+ $('baIncompleteTitle').textContent=!unfinished?'Business Requirements':active.length>1?`${active.length} Business Requirements in progress`:first?`${first.id} · ${first.title}`:'Business Requirement in progress';
+ $('baIncompleteMeta').textContent=unfinished?(progress?.label||'Prepare Source'):'';
+ $('baIncompleteMeta').hidden=!unfinished;
+ $('baIncompleteSource').textContent=sources.join(', ');
+ $('baIncompleteSource').hidden=!unfinished||!sources.length;
+ panel.querySelector('.ba-incomplete-kicker').hidden=!unfinished;
+ $('baResumeIncomplete').classList.toggle('hidden',!unfinished);
+ $('baResumeIncomplete').textContent='Resume';
+ $('baResumeIncomplete').disabled=!activeId||!brState;
+ $('baOverviewNew').disabled=!activeId||!brState||busy;
+ $('baRestartIncomplete').classList.toggle('hidden',!unfinished);
+ $('baDeleteIncomplete').classList.toggle('hidden',!unfinished);
+ const canRestart=sources.length>0&&!Object.keys(brState?.pending||{}).length&&!discoveryDirty&&!brEditorDirty&&!busy&&selectedRole==='business-analyst'&&!!activeId;
  $('baRestartIncomplete').disabled=!canRestart;
- $('baRestartIncomplete').title=!hasSources?'Already awaiting a source upload. Resume to continue.':discoveryDirty||brEditorDirty?'Save or discard unsaved changes before restarting.':Object.keys(brState?.pending||{}).length?'Resolve pending Jira operations before restarting.':canRestart?'Archive the unfinished cycle and start again from Upload.':'Restart is temporarily unavailable.';
- const deleting=!!baBusyTask||discoveryImportBusy||brEditorSaving||discoveryAutosaving||brDeletionBusy||selectedRole!=='business-analyst';
+ $('baRestartIncomplete').title=canRestart?'Archive the unfinished cycle and start a new upload.':'Finish the active operation before restarting.';
+ const deleting=busy||discoveryAutosaving||brDeletionBusy||selectedRole!=='business-analyst';
  $('baDeleteIncomplete').disabled=deleting||(!sources.length&&!active.length&&!brState?.restartPending);
  $('baDeleteIncomplete').title=deleting?'Finish or discard active editing before deletion.':'Delete the current in-progress BR and its scoped artifacts everywhere after verification.';
 }
 $('baResumeIncomplete').addEventListener('click',()=>{
  if($('baResumeIncomplete').disabled)return;
- const key=$('baResumeIncomplete').dataset.resumeStep;
- if(!ATGVBAProgress.definitions.some(([name])=>name===key))return;
- baViewedStep=key;
- renderDiscoverySummary();
- requestAnimationFrame(()=>$('baProgressSelected')?.scrollIntoView?.({block:'nearest'}));
+ navigate('discovery');
 });
 $('baDeleteIncomplete').addEventListener('click',()=>{
  if($('baDeleteIncomplete').disabled||!brState||!activeId)return;
@@ -6205,8 +6203,6 @@ function renderDiscoverySummary(){
   if(baViewedStep&&!progress.some(step=>step.key===baViewedStep&&step.selectable))baViewedStep=null;
   baPreviousStage=status.stage;baLastActiveStep=activeStep;
   const displayed=baViewedStep||activeStep;
-  baInventoryVisibleStep=displayed;
-  $('baJiraInventorySection').classList.toggle('hidden',selectedRole!=='business-analyst'||displayed!=='start');
   window.baLastGuideProgress=progress;
   const stageError=$('baMilestoneError');
   stageError.classList.toggle('hidden',!baFailedProcess||!baFailedMessage);
@@ -6281,7 +6277,7 @@ function renderDiscoverySummary(){
   $('baNewRequirement').classList.toggle('hidden',displayed!=='start');
   $('baNewRequirement').disabled=displayed!=='start'||!activeId||!brState;
   $('baNewRequirement').title=restartOpen?'Open document upload for the newly started Business Requirement':'Start a new independent Business Requirement; unfinished work will be archived only after confirmation.';
-  renderBAUncompleted(progress,activeStep,activeBrs,hasSources,displayed);
+  renderBAUncompleted();
   if(displayed!=='start'&&baRequirementModalTarget)closeBARequirementModal(false);
   renderBACompletedRecords();
   // Always show the BR register at Start, even if the local completed-cycle
@@ -7395,7 +7391,6 @@ window.addEventListener('message',event=>{
     if(!baHasRecoverableBR(brState)){
       baResumeCardReady=false;
       if(previousSources>0)baViewedStep='start';
-      $('baUncompletedPanel').classList.add('hidden');
     }
     brPlanRevision=null;brJiraPreviewApproved=false;brJiraPlanChanges=0;brJiraPlanConflicts=0;jiraPlanForCR=[];jiraLinkCandidates=[];jiraPreflightBlocked=false;jiraProtectionForCR=[];
     closeJiraIssuePreview();for(const id of ['brJiraDetailsPanel','brJiraApprovalDetails']){$(id).classList.add('hidden');$(id).replaceChildren();}

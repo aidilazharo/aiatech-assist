@@ -34,7 +34,7 @@
   const number=doc.createElement('span');number.className='muted';number.setAttribute('aria-live','polite');
   prev.addEventListener('click',()=>{state.page--;render();});next.addEventListener('click',()=>{state.page++;render();});pager.append(prev,number,next);
   container.append(bar,overflow,pager);
-  function render(){const result=select(state.rows,state);state.page=result.page;tbody.replaceChildren();
+  function render(){const result=select(state.rows,options.preserveOrder?{...state,sortKey:''}:state);state.page=result.page;tbody.replaceChildren();
    for(const item of result.rows){const row=doc.createElement('tr');
     if(typeof options.onRowClick==='function'){
       row.classList.add('atgv-datatable-clickable-row');row.tabIndex=0;row.setAttribute('role','button');row.setAttribute('aria-label','View '+String(item.key||item.summary||'record')+' details');
@@ -43,7 +43,7 @@
     }
     for(const col of columns){const cell=doc.createElement('td');const rendered=typeof col.render==='function'?col.render(item,doc):text(item[col.key]);if(rendered&&typeof rendered==='object'&&typeof rendered.nodeType==='number')cell.append(rendered);else cell.textContent=text(rendered);row.append(cell);}tbody.append(row);}
    if(!result.rows.length){const row=doc.createElement('tr'),cell=doc.createElement('td');cell.colSpan=columns.length;cell.className='muted';cell.textContent='No matching records.';row.append(cell);tbody.append(row);}
-   for(const [idx,col] of columns.entries())thead.children[0].children[idx].setAttribute('aria-sort',state.sortKey===col.key?(state.descending?'descending':'ascending'):'none');
+   for(const [idx,col] of columns.entries())thead.children[0].children[idx].setAttribute('aria-sort',!options.preserveOrder&&state.sortKey===col.key?(state.descending?'descending':'ascending'):'none');
    count.textContent=result.filtered+' of '+result.total+' records';number.textContent='Page '+result.page+' of '+result.pages;prev.disabled=result.page<=1;next.disabled=result.page>=result.pages;
   }
   search.addEventListener('input',()=>{state.term=search.value;state.page=1;render();});render();return {refresh:render,setRows(nextRows){if(!Array.isArray(nextRows))throw Error('DataTable rows must be an array.');state.rows=nextRows;render();}};
