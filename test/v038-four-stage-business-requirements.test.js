@@ -257,6 +257,7 @@ test('Jira Work Items retain draft rows when Jira inventory fails, and a retry v
  assert.equal(blocked.rows[0].path,draft.brs[0].id);
  assert.equal(blocked.changes[0].action,'create');
  assert.equal(blocked.verifiedAt,0);
+ assert.equal(blocked.checkedCount,0);
  assert.match(blocked.conflicts[0],/Read Jira issue inventory: HTTP 429/);
  assert.equal(diagnostics[0].action,'verify-work-items');
  const unreviewed=await prepare({automatic:true,qualityBlocker:'Draft quality review: model timed out'});
@@ -268,6 +269,7 @@ test('Jira Work Items retain draft rows when Jira inventory fails, and a retry v
  assert.equal(ready.conflicts.length,0);
  assert.ok(ready.verifiedAt>0);
  assert.ok(ready.fieldPlans[draft.brs[0].id].schema);
+ assert.equal(ready.checkedCount,1);
  assert.equal((await workflow.load(registry,'demo')).brs[0].status,'draft');
 });
 

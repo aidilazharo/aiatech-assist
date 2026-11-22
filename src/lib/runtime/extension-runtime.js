@@ -4100,7 +4100,7 @@ async function prepareBRJiraPreview({automatic=false,signal,qualityBlocker=''}={
  let changes=brWorkflow.plan(register);
  const conflicts=qualityBlocker?[qualityBlocker]:[];
  let previewTypes=[],linkCandidates=[],protection=[],reopenRoots=automatic?brWorkflow.changedPublishedBRs(original,register,changes):[];
- let reopen={rows:[],blocked:[]},issueTypes={},jiraProject='',site='',check='Verify Jira project';
+ let reopen={rows:[],blocked:[]},issueTypes={},jiraProject='',site='',checkedCount=0,check='Verify Jira project';
  const activeRetirements=register.brs.some(item=>!item.archivedFromRestart&&item.status==='retire-proposed'&&item.approvedContent);
  if(!automatic){
   const currentRequirements=register.brs.filter(item=>!item.archivedFromRestart&&!['retired','retire-proposed'].includes(item.status));
@@ -4113,7 +4113,8 @@ async function prepareBRJiraPreview({automatic=false,signal,qualityBlocker=''}={
    await progress('Verifying Jira project and checking planned changes…',10);
    const target=await ensureJiraPreviewTarget(register,{automatic});
    assertCurrent();
-   jiraProject=validProjectKey(target.config.get('jira.projectKey'));
+   const targetKey=validProjectKey(target.config.get('jira.projectKey'));
+   jiraProject=targetKey;
    site=baseAtlassian(target.config);
    check='Read Jira issue inventory';
    const inventory=automatic?await jiraDuplicates.fetchProjectIssues(target.config,target.token):undefined;
@@ -4160,13 +4161,13 @@ async function prepareBRJiraPreview({automatic=false,signal,qualityBlocker=''}={
    if(changes.some(item=>item.action==='create')){
     check='Load creatable Jira issue types';
     const source=activeProject?.settings?.jira?.projectKey?'Project Settings':'Extension Settings default';
-    await progress('Checking Jira '+jiraProject+' ('+source+') Create Issues permission and issue types…',20);
+    await progress(`Checking Jira ${targetKey} (${source}) Create Issues permission and issue types…`,20);
     try { previewTypes=await jiraIssueTypes(target.config,target.token); }
     catch(error){
      if(/permission|HTTP (401|403|404)|authorization/i.test(String(error.message||error))){
       const extensionDefault=String(extensionSettings?.jira?.projectKey||'').toUpperCase();
-      const difference=extensionDefault&&extensionDefault!==jiraProject?' Extension Settings default is '+extensionDefault+'. Check this project’s saved mapping.':'';
-      throw new Error('Jira preview target '+jiraProject+' ('+source+'). '+error.message+difference,{cause:error});
+      const difference=extensionDefault&&extensionDefault!==targetKey?` Extension Settings default is ${extensionDefault}; changing the default does not update this project's mapping.`:'';
+      throw new Error(`Jira preview target ${targetKey} (${source}). ${error.message}${difference} Confirm the intended Jira Project Key in Project Settings before retrying.`,{cause:error});
      }
      throw error;
     }
@@ -4178,6 +4179,7 @@ async function prepareBRJiraPreview({automatic=false,signal,qualityBlocker=''}={
    conflicts.push(...formatIdentityConflicts(duplicateGate));
    const checked=await jiraPreflight(register,target.config,target.token,changes,
     (count,total)=>progress('Checking Jira issues '+count+'/'+total+'…',30+Math.floor(count/total*30)),{automatic,inventory,signal});
+   checkedCount=changes.length;
    linkCandidates=checked.linkCandidates||[];
    protection=checked.assessment?.protection||[];
    conflicts.push(...checked);
@@ -4199,8 +4201,8 @@ async function prepareBRJiraPreview({automatic=false,signal,qualityBlocker=''}={
       const identifier=item.action==='create'?{issueTypeId:type?.id}:{key:item.key};
       if(item.action==='create'&&!type?.id)throw Error('No verified creatable Jira issue type for '+item.kind);
       const cacheKey=item.action==='create'?'create:'+type.id:'edit:'+item.key;
-      let metadata=metaCache.get(cacheKey);
-      if(!metadata){metadata=await jiraIssueFieldMetadata(target.config,target.token,identifier);metaCache.set(cacheKey,metadata);}
+      if(!metaCache.has(cacheKey))metaCache.set(cacheKey,jiraIssueFieldMetadata(target.config,target.token,identifier));
+      const metadata=await metaCache.get(cacheKey);
       const existing=item.action==='update'?await jiraReadIssueAllFields(target.config,target.token,item.key):null;
       const approvedBR=register.brs.find(br=>br.id===item.path.split('/')[0])?.approvedContent||{};
       const fieldPlan=jiraFieldPreflight.planFields(item,metadata,{approvedBR,discoveryAnswers:register.discoveryAnswers||{},existing,template});
@@ -4236,7 +4238,7 @@ async function prepareBRJiraPreview({automatic=false,signal,qualityBlocker=''}={
  const planHash=sha(JSON.stringify(changes));
  jiraPreviewValidation=verifiedAt?{projectId,revision:register.revision,planHash,fieldPlansHash,verifiedAt,site,jiraProject}:null;
  await progress(blockers.length?'Jira Work Items need attention. Found '+blockers.length+' blocker(s).':'Jira Preview ready for '+changes.length+' planned change(s).',100);
- const payload={changes,issueTypes,jiraProject,fieldPlans:jiraPreviewFieldPlans,conflicts:blockers,linkCandidates,protection,revision:register.revision,checkedCount:changes.length};
+ const payload={changes,issueTypes,jiraProject,fieldPlans:jiraPreviewFieldPlans,conflicts:blockers,linkCandidates,protection,revision:register.revision,checkedCount};
  if(automatic){
   return {...payload,reviewIssues,projectionIssues,reopenRoots,reopenRows:reopen.rows,
    sourceNotes:baAutomatic.sourceNotes(original),projectId,planHash,fieldPlansHash,verifiedAt,site,
