@@ -14,17 +14,26 @@ function loopbackPreview(input){
   throw Error('Custom Stack preview must use an HTTP localhost URL without credentials, query or fragment.');
  return url.toString();
 }
-function framework(target,pkg){
- if(target.kind==='dotnet')return {name:'ASP.NET Core / .NET',preview:'http://127.0.0.1:5111/api/health'};
- if(target.kind==='maven')return {name:'Java / Maven / Spring Boot',preview:'http://127.0.0.1:8080/api/health'};
+// Detect executable applications, not development tools installed for testing.
+// A NestJS package with vitest/vite must never be mistaken for a web frontend.
+function framework(target,pkg,{viteConfig=false}={}){
+ if(target.kind==='dotnet')return {name:'ASP.NET Core / .NET',preview:'http://127.0.0.1:5111/api/health',role:'backend',mockType:'none'};
+ if(target.kind==='maven')return {name:'Java / Maven / Spring Boot',preview:'http://127.0.0.1:8080/api/health',role:'backend',mockType:'none'};
  const dep={...pkg?.dependencies,...pkg?.devDependencies};
- if(dep['@angular/core'])return {name:'Angular',preview:'http://127.0.0.1:4200/'};
- if(dep['@nestjs/core'])return {name:'NestJS',preview:'http://127.0.0.1:3000/api/v1/health'};
- if(dep.next)return {name:'Next.js',preview:'http://127.0.0.1:3000/'};
- if(dep.vite)return {name:dep.react?'React / Vite':'Vite',preview:'http://127.0.0.1:5173/'};
- if(dep.react)return {name:'React',preview:'http://127.0.0.1:3000/'};
- if(dep.express)return {name:'Node / Express',preview:'http://127.0.0.1:3000/'};
- return {name:'Node.js (custom scripts)',preview:'http://127.0.0.1:3000/'};
+ const commands=['dev','start:dev','start'].map(name=>String(pkg?.scripts?.[name]||''));
+ const runsVite=commands.some(script=>/(?:^|[\s;&|])(?:npx\s+|npm\s+exec\s+(?:--\s+)?)?vite(?:\s|$)/.test(script));
+ const isVite=Boolean(dep.vite&&viteConfig&&runsVite);
+ const frontend=(name,preview,mockType='none')=>({name,preview,role:'frontend',mockType});
+ const backend=(name)=>({name,preview:'http://127.0.0.1:3000/api/v1/health',role:'backend',mockType:'api'});
+ if(dep['@nestjs/core'])return backend('NestJS');
+ if(dep.next)return frontend('Next.js','http://127.0.0.1:3000/');
+ if(dep['@angular/core'])return frontend('Angular','http://127.0.0.1:4200/');
+ if(isVite)return frontend(dep.react?'React / Vite':dep.vue?'Vue / Vite':dep.svelte?'Svelte / Vite':'Vite','http://127.0.0.1:5173/','vite');
+ if(dep.fastify)return backend('Node / Fastify');
+ if(dep.express)return backend('Node / Express');
+ if(dep.react||dep.vue||dep.svelte)return frontend('Web application','http://127.0.0.1:3000/');
+ if(pkg?.workspaces)return {name:'npm workspace root',preview:'http://127.0.0.1:3000/',role:'workspace',mockType:'none'};
+ return {name:'Node.js (custom scripts)',preview:'http://127.0.0.1:3000/',role:'service',mockType:'none'};
 }
 async function scan(root,{driver=developer,fsApi=fs}={}){
  if(typeof root!=='string'||!path.isAbsolute(root))throw Error('Select an absolute project repository checkout before scanning.');
@@ -35,19 +44,27 @@ async function scan(root,{driver=developer,fsApi=fs}={}){
   const rel=String(target.relative||'');
   if(rel.startsWith('/')||rel.includes('\\')||rel.includes('//')||rel.split('/').length>3||rel.split('/').some(x=>x==='.'||x==='..'||x.startsWith('.')))throw Error('Unsupported application location in custom scan.');
   const cwd=path.join(found.repo.root,rel);
-  let pkg=null;
+  let pkg=null,viteConfig=false;
   if(target.kind==='npm'){
    try{pkg=JSON.parse(await fsApi.readFile(path.join(cwd,'package.json'),'utf8'));}
    catch(error){throw Error('Invalid package.json in '+(rel||'repository root')+': '+error.message);}
+   for(const name of ['vite.config.ts','vite.config.mts','vite.config.js','vite.config.mjs']){
+    const st=await fsApi.lstat(path.join(cwd,name)).catch(error=>error.code==='ENOENT'?null:Promise.reject(error));
+    if(st?.isFile()&&!st.isSymbolicLink()){viteConfig=true;break;}
+   }
   }
-  const info=framework(target,pkg);
+  const info=framework(target,pkg,{viteConfig});
   const scripts=Array.isArray(target.scripts)?target.scripts:[];
-  entries.push({relative:rel||'',kind:target.kind,framework:info.name,previewUrl:loopbackPreview(info.preview),
+  const runnable=target.kind==='npm'?['dev','start:dev','start'].some(x=>scripts.includes(x)):['dotnet','maven'].includes(target.kind);
+  entries.push({relative:rel,kind:target.kind,framework:info.name,role:info.role,mockType:info.mockType,previewUrl:loopbackPreview(info.preview),
    installed:!!target.installed,scripts,runScript:target.kind==='npm'?(scripts.includes('dev')?'dev':scripts.includes('start:dev')?'start:dev':scripts.includes('start')?'start':''):'run',
-   runnable:target.kind==='npm'?(scripts.includes('dev')||scripts.includes('start:dev')||scripts.includes('start')):['dotnet','maven'].includes(target.kind),
-   mockable:target.kind==='npm'&&!!({...pkg?.dependencies,...pkg?.devDependencies}).vite,
+   runnable,mockable:runnable&&info.mockType==='vite',mockApi:runnable&&info.mockType==='api',
    packageName:String(pkg?.name||'').slice(0,100)});
  }
+ // Industry-standard monorepos can have an orchestration package.json at root.
+ // Prefer a real frontend instead of a root workspace or backend test harness.
+ const priority=x=>!x.runnable?5:x.mockable?0:x.role==='frontend'?1:x.mockApi?2:x.role==='backend'?3:4;
+ entries.sort((a,b)=>priority(a)-priority(b)||a.relative.localeCompare(b.relative));
  return {root:found.repo.root,sha:String(found.repo.sha||''),branch:String(found.repo.branch||''),clean:found.repo.clean===true,
   targets:entries,recognized:entries.length,ready:entries.some(entry=>entry.runnable)};
 }
