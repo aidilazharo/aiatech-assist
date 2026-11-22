@@ -196,7 +196,7 @@
     "terser": "5.31.6"
   },
   "scripts": {
-    "test": "node scripts/generate-source-test-index.js && node --require ./test/local-network-only.js --test test/*.test.js",
+    "test": "node scripts/generate-source-test-index.js && node -e \"const fs=require('node:fs'),cp=require('node:child_process'),rl=require('node:readline'); const tests=fs.readdirSync('test').filter(name=>name.endsWith('.test.js')).map(name=>'test/'+name); const child=cp.spawn(process.execPath,['--require','./test/local-network-only.js','--test',...tests],{stdio:['ignore','pipe','inherit']}); rl.createInterface({input:child.stdout}).on('line',line=>{  if(/^(?:not ok|# (?:tests|pass|fail|skipped)|\\s+(?:location|failureType|error|code|name|expected|operator|actual):|\\s+The input did not match|\\s+Invalid |\\s+Cannot )/.test(line))   process.stdout.write(line.slice(0,380)+'\\n'); }); child.on('error',error=>{console.error(error.message);process.exitCode=1;}); child.on('exit',code=>{process.exitCode=code??1;});\"",
     "ui:generate": "node scripts/generate-ui-theme.js",
     "ui:check": "node scripts/generate-ui-theme.js --check",
     "platform:check": "node scripts/check-platform.js",
