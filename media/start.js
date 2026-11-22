@@ -1560,6 +1560,16 @@ function renderBAJiraInventory(){
  const scoped=brPicker.value?combined.rows.filter(item=>item._brRefs.some(ref=>ref.scopeId===brPicker.value)):combined.rows;
  const rows=prioritizeJiraCreators(scoped.filter(item=>(!type||item.type===type)&&(!issueStatus||item.status===issueStatus)),jiraInventoryViewerId)
   .sort((a,b)=>Number(b._brRoots.length>0)-Number(a._brRoots.length>0));
+ // BR owner is the Epic's live Jira Reporter, not the immutable Creator.
+ // Populate a real sort value so the new DataTable column sorts correctly.
+ const epicOwners=new Map(jiraInventoryItems.filter(item=>String(item.type||'').toLowerCase()==='epic')
+  .map(item=>[item.key,String(item.reporter||'')]));
+ for(const item of rows){
+  const rootKey=(item._brRefs||[]).map(ref=>ref.rootKey).find(key=>epicOwners.has(key))||
+   (String(item.type||'').toLowerCase()==='epic'?item.key:'');
+  item.brOwner=rootKey?epicOwners.get(rootKey)||'':'';
+ }
+
  const treeView=baJiraView==='tree';
  $('baJiraListView').setAttribute('aria-pressed',String(!treeView));$('baJiraTreeView').setAttribute('aria-pressed',String(treeView));
  root.classList.toggle('hidden',treeView);$('baJiraHierarchy').classList.toggle('hidden',!treeView);
@@ -1591,12 +1601,10 @@ function renderBAJiraInventory(){
     return el;
    }},
   {key:'brOwner',label:'BR owner',render:item=>{
-    const own=String(item.reporter||'');
     const roots=(item._brRefs||[]).map(ref=>ref.rootKey).filter(Boolean);
     const epic=String(item.type||'').toLowerCase()==='epic'&&roots.includes(item.key)?item:
       jiraInventoryItems.find(issue=>roots.includes(issue.key));
-    const owner=epic?.reporter||own;
-    const node=document.createElement('span');node.textContent=roots.length?(owner||'Unassigned'):'—';
+    const node=document.createElement('span');node.textContent=roots.length?(item.brOwner||'Unassigned'):'—';
     if(epic?.reporterId)node.title='Current Jira Reporter account ID: '+epic.reporterId;
     return node;
    }},
@@ -5597,6 +5605,7 @@ function renderSourcePreflight(){
   const available=hasDedicatedPreflightRecovery();skip.classList.toggle('hidden',!available);
   skip.disabled=!available||!!baBusyTask||!brState||!sourceSelectedDigests.size||selectedRole!=='business-analyst'||!activeId;
  }
+ window.ATGVBusinessRequirements?.syncDocumentActions?.();
  if(!info)return;
  const phase=info.phase||'checking',running=['preflight','repair','checking'].includes(phase);
  panel.dataset.phase=running?'running':phase;
@@ -5656,7 +5665,11 @@ function renderSourceDocuments(){
   selector.addEventListener('change',()=>{if(selector.checked)sourceSelectedDigests.add(doc.digest);else sourceSelectedDigests.delete(doc.digest);send('baSourceSelection',{digests:[...sourceSelectedDigests]});renderSourceSelection();});
   const name=document.createElement('strong');name.textContent=doc.name;
   const exactFileVerified=/^[a-f0-9]{64}$/.test(String(doc.byteDigest||''));
-  const detail=document.createElement('small');detail.textContent=['Uploaded by '+(doc.uploadedBy||'Legacy source · uploader unavailable'),doc.uploadedAt?formatDateTime(doc.uploadedAt):doc.addedAt?formatDateTime(doc.addedAt):'',Number(doc.characters||0).toLocaleString()+' characters',doc.version?'Version '+doc.version:'Version 1',!doc.storedName?'Re-upload required to process':exactFileVerified?'Original file fingerprint recorded':'Legacy source: re-upload required to verify original bytes'].filter(Boolean).join(' · ');
+  const fullMeta=['Uploaded by '+(doc.uploadedBy||'Legacy source · uploader unavailable'),doc.uploadedAt?formatDateTime(doc.uploadedAt):doc.addedAt?formatDateTime(doc.addedAt):'',Number(doc.characters||0).toLocaleString()+' characters',doc.version?'Version '+doc.version:'Version 1',!doc.storedName?'Re-upload required to process':exactFileVerified?'Original file fingerprint recorded':'Legacy source: re-upload required to verify original bytes'].filter(Boolean).join(' · ');
+  const detail=document.createElement('small');
+  detail.textContent=[doc.version?'Version '+doc.version:'Version 1',doc.uploadedAt?formatDateTime(doc.uploadedAt):doc.addedAt?formatDateTime(doc.addedAt):'',Number(doc.characters||0).toLocaleString()+' characters'].filter(Boolean).join(' · ');
+  detail.title=fullMeta;
+  info.title=doc.name+' · '+fullMeta;
   info.append(name,detail);
   const actions=document.createElement('div');actions.className='source-document-actions';
   const replace=document.createElement('button');replace.type='button';replace.className='secondary ba-process-btn';
@@ -5681,6 +5694,7 @@ function renderSourceDocuments(){
  }
  renderArchivedSources();
  renderSourceSelection();
+ window.ATGVBusinessRequirements?.syncDocumentActions?.();
 }
 function renderSourceSelection(){
  const count=sourceSelectedDigests.size;

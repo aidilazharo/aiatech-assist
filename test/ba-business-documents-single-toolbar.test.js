@@ -37,7 +37,10 @@ test('four tabs select one visible content panel without losing unsaved edits',(
  assert.match(ba,/if\(artifactDirty\(\)\)\{get\('baAutoArtifactStatus'\)/);
  assert.match(ba,/\['ArrowRight','ArrowLeft','Home','End'\]/);
  assert.match(ba,/kind==='preflight'/);
- assert.match(ba,/get\('baAutoArtifactSave'\)\.hidden=preflight\|\|kind==='original'/);
+ assert.match(ba,/get\('baAutoArtifactSave'\)\.hidden=kind!=='source'/);
+ assert.match(ba,/get\('baAutoFormattedDocument'\)/);
+ assert.match(html,/id="baAutoPrimaryAction"/);
+ assert.match(html,/id="baAutoOverflowMenu"/);
  assert.match(css,/#discoveryView #baAutoDocumentPanel\[hidden\]/);
 });
 

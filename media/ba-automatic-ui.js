@@ -8,6 +8,8 @@
  const stages=['source','requirements','jira','publish'];
  const stageNames=['Prepare Source','Develop Requirements','Prepare Jira Preview','Publish to Jira'];
  const kindNames={iso:'Structured ISO BRD',source:'Editable source',original:'Original source text',preflight:'Pre-flight Analyst'};
+ const viewer=get('baAutoFormattedDocument');
+ const primary=get('baAutoPrimaryAction'),overflow=get('baAutoOverflowMenu');
  const sourcePanel=root.querySelector('.source-documents-panel');
  const skill=get('workSkill');
  get('baAutoOriginalFiles').append(sourcePanel);
@@ -27,7 +29,7 @@
   const stage=phase==='ready'?'publish':current?.stage||(!brState?.mappingCompleted?'source':!requirements().length?'requirements':'jira');
   return {label:stageNames[stages.indexOf(stage)],running:phase==='running'||phase==='publishing'};
  }
- const artifactDirty=()=>!!artifactContext&&['iso','source'].includes(kind)&&input.value!==artifactContext.text;
+ const artifactDirty=()=>!!artifactContext&&kind==='source'&&input.value!==artifactContext.text;
  const dirty=()=>artifactDirty()||discoveryDirty||brEditorDirty;
  const invoke=(command,fields={})=>send(command,{projectId:activeId,roleId:selectedRole,...fields});
  const requirements=()=>brState?.brs?.filter(br=>!br.archivedFromRestart&&!['retired','retire-proposed'].includes(br.status))||[];
@@ -53,10 +55,38 @@
   return node;
  }
 
+ function primaryTarget(){
+  if(kind==='iso')return get('baWorkingBrDownload');
+  if(kind==='source')return get('baAutoArtifactSave');
+  if(kind==='preflight')return get('baPreflightDownload');
+  return get('baAutoFileActions').querySelector('.source-document-actions .ba-process-btn');
+ }
+ function syncDocumentActions(){
+  const labels={iso:'Download ISO BRD',source:'Save changes',original:'Replace & Reprocess',preflight:'Download analysis'};
+  const action=primaryTarget();
+  primary.textContent=labels[kind];
+  primary.title=kind==='iso'?'Download the structured ISO 29148 BRD as PDF':kind==='source'?
+   'Save edited source (enabled after changes)':kind==='original'?'Replace the verified uploaded source':'Download the pre-flight analysis as text';
+  primary.disabled=!action||action.disabled||action.classList.contains('hidden')||busy()&&kind!=='source';
+  get('baAutoOverflowActions').dataset.kind=kind;
+ }
+ function renderFormattedDocument(text){
+  if(!window.ATGVDocumentViewer?.render){
+   viewer.textContent=String(text||'');
+   get('baAutoArtifactStatus').textContent='Formatted view unavailable; showing plain text.';
+   return;
+  }
+  try{window.ATGVDocumentViewer.render(viewer,text);}
+  catch(error){
+   viewer.textContent=String(text||'');
+   get('baAutoArtifactStatus').textContent='Formatted view unavailable; displaying document text.';
+  }
+ }
  function requestArtifact(){
   if(!active()||!sourceDigest||kind==='preflight'||artifactDirty())return;
   get('baAutoArtifactLabel').textContent=kindNames[kind];
   get('baAutoArtifactStatus').textContent='Loading document…';
+  if(kind==='iso')viewer.textContent='Loading structured Business Requirements…';
   artifactContext=null;input.readOnly=true;
   invoke('baReadArtifact',{kind,digest:sourceDigest,requestId:++request});
  }
@@ -66,6 +96,7 @@
   const changed=currentSource!==sourceDigest||artifactProject!==activeId;
   if(changed){
    sourceDigest=currentSource;artifactProject=activeId;artifactContext=null;input.value='';
+   viewer.replaceChildren();
    get('baAutoArtifactStatus').textContent='';
   }
   get('baAutoSourceEditor').hidden=!sourceDigest;
@@ -73,7 +104,10 @@
   const preflight=kind==='preflight';
   get('baAutoIsoPreflight').hidden=!preflight;
   get('baAutoDocumentPanel').hidden=preflight;
-  get('baAutoArtifactSave').hidden=preflight||kind==='original';
+  get('baAutoArtifactSave').hidden=kind!=='source';
+  viewer.hidden=kind!=='iso';
+  input.hidden=kind==='iso'||preflight;
+  get('baAutoArtifactLabel').hidden=kind==='iso'||preflight;
   get('baAutoPreflightPlaceholder').hidden=!get('baSourcePreflight').classList.contains('hidden');
   const documentPanel=get('baAutoDocumentPanel');
   for(const tab of get('baAutoDocumentTabs').querySelectorAll('[data-ba-document]')){
@@ -85,9 +119,10 @@
   }
   if(currentSource&&get('baAutoSource').open&&changed&&!preflight)requestArtifact();
   if(artifactContext){
-   input.readOnly=kind==='original'||busy()||!baCanEdit('ba-discovery');
+   input.readOnly=kind!=='source'||busy()||!baCanEdit('ba-discovery');
    get('baAutoArtifactSave').disabled=input.readOnly||!artifactDirty()||!input.value.trim();
   }else get('baAutoArtifactSave').disabled=true;
+  syncDocumentActions();
  }
 
  function renderRequirements(){
@@ -294,6 +329,7 @@
   kind=selected.dataset.baDocument;
   renderArtifacts();
   if(kind==='preflight'&&!get('baSourcePreflight').classList.contains('hidden'))get('baSourcePreflight').open=true;
+  overflow.open=false;
   requestArtifact();
  });
  get('baAutoDocumentTabs').addEventListener('keydown',event=>{
@@ -306,6 +342,21 @@
   tabs[next].click();
   if(tabs[next].getAttribute('aria-selected')==='true')tabs[next].focus();
  });
+ primary.addEventListener('click',()=>{
+  const target=primaryTarget();
+  if(!primary.disabled&&target&&!target.disabled)target.click();
+ });
+ overflow.addEventListener('keydown',event=>{
+  if(event.key==='Escape'){overflow.open=false;overflow.querySelector('summary')?.focus();event.stopPropagation();}
+ });
+ document.addEventListener('click',event=>{if(overflow.open&&!overflow.contains(event.target))overflow.open=false;});
+ get('baAutoDocumentToolbar').addEventListener('click',event=>{
+  if(!artifactDirty())return;
+  const destructive=event.target.closest('.source-document-actions button');
+  if(!destructive)return;
+  event.preventDefault();event.stopImmediatePropagation();
+  get('baAutoArtifactStatus').textContent='Save your source edits before replacing or deleting the document.';
+ },true);
  get('baAutoJiraTabs').addEventListener('click',event=>{
   const tab=event.target.closest('[data-ba-jira-tab]');
   if(!tab)return;
@@ -360,10 +411,12 @@
     artifactContext={revision:m.revision,text:m.text};
     input.value=m.text;
     get('baAutoArtifactStatus').textContent='';
+    if(kind==='iso')renderFormattedDocument(m.text);
     render();
    }else if(m.type==='baArtifactSaved'){
     artifactContext=null;
     get('baAutoArtifactStatus').textContent='Document saved.';
+    requestArtifact();
    }else if(m.type==='baArtifactError'){
     get('baAutoArtifactStatus').textContent=m.message;
     render();
@@ -379,6 +432,6 @@
   if(!target)return false;
   target.open=true;target.scrollIntoView({block:'nearest'});return true;
  }
- window.ATGVBusinessRequirements={render,active,busy,placeSkill,dirty,openStage,stageSummary};
+ window.ATGVBusinessRequirements={render,active,busy,placeSkill,dirty,openStage,stageSummary,syncDocumentActions};
  render();
 })();

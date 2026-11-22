@@ -2953,3 +2953,185 @@ body:not(.gate-mode) #sdlcWorkspaceShell.atgv-sdlc-workspace-shell{
  color:var(--vscode-errorForeground,#f77878);font-size:17px;line-height:1
 }
 @media(max-width:600px){#workView #baRequirementModal .ba-transfer-panel{padding:10px}}
+
+
+/* v0.0.52 — calm, document-first Business Documents workspace. */
+#discoveryView #baAutoSourceBadge[data-state="ready"]{
+ border:0!important;background:transparent!important;padding:0 3px!important;
+ color:var(--vscode-testing-iconPassed,#80d89f)!important
+}
+#discoveryView #baAutoOriginalFiles .source-document-row{
+ display:grid;grid-template-columns:26px minmax(0,1fr);gap:12px;
+ align-items:center;min-width:0;padding:11px 13px;margin:0 0 12px;
+ border:1px solid var(--vscode-panel-border,#394451);border-radius:8px;
+ background:var(--vscode-editor-background,#14181e)
+}
+#discoveryView #baAutoOriginalFiles .source-document-info{grid-column:2;min-width:0;width:100%}
+#discoveryView #baAutoOriginalFiles .source-document-info strong{
+ display:block;max-width:100%;font-size:12px;line-height:1.55;
+ overflow:hidden;text-overflow:ellipsis;white-space:nowrap
+}
+#discoveryView #baAutoOriginalFiles .source-document-info small{
+ display:block;max-width:100%;margin-top:3px;
+ overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+ color:var(--vscode-descriptionForeground,#a9b0bd)
+}
+#discoveryView #baAutoOriginalFiles .source-select-radio{align-self:center;margin:0}
+#discoveryView #baAutoDocumentToolbar{
+ display:flex;align-items:center;justify-content:space-between;flex-wrap:nowrap;
+ gap:12px;overflow:visible!important;padding:0 0 12px;margin:0 0 12px;
+ min-width:0;position:relative
+}
+#discoveryView #baAutoDocumentTabs{
+ flex:1 1 auto;min-width:0;max-width:100%;
+ display:flex;align-items:center;flex-wrap:nowrap;gap:4px;
+ overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;
+ margin:0;padding:2px 0
+}
+#discoveryView #baAutoDocumentTabs button{
+ flex:0 0 auto;white-space:nowrap;min-height:34px;
+ padding:6px 10px;font-size:12px;border:1px solid transparent;
+ border-radius:5px;background:transparent;color:var(--vscode-descriptionForeground,#c0c5cf)
+}
+#discoveryView #baAutoDocumentTabs button[aria-selected="true"]{
+ color:var(--vscode-foreground,#fff);
+ background:var(--vscode-list-activeSelectionBackground,#274b73);
+ border-color:var(--vscode-focusBorder,#4b97e4)
+}
+#discoveryView #baAutoDocumentToolbar .ba-auto-document-actions{
+ flex:0 0 auto;min-width:0;display:flex;align-items:center;gap:7px
+}
+#discoveryView #baAutoPrimaryAction{
+ width:auto;max-width:200px;min-height:36px;
+ white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+ padding:7px 12px
+}
+#discoveryView #baAutoOverflowMenu{position:relative;flex:0 0 auto;min-width:0}
+#discoveryView #baAutoOverflowMenu>summary{
+ cursor:pointer;box-sizing:border-box;display:flex;align-items:center;
+ justify-content:center;list-style:none;width:36px;height:36px;
+ padding:0;border:1px solid var(--vscode-panel-border,#555d67);
+ border-radius:5px;background:var(--vscode-button-secondaryBackground,#333b47);
+ color:var(--vscode-button-secondaryForeground,#eee);font-size:21px;line-height:1
+}
+#discoveryView #baAutoOverflowMenu>summary::-webkit-details-marker{display:none}
+#discoveryView #baAutoOverflowMenu>summary:focus-visible{
+ outline:2px solid var(--vscode-focusBorder,#4b97e4);outline-offset:2px
+}
+#discoveryView #baAutoOverflowMenu:not([open]) .ba-auto-overflow-actions{display:none!important}
+#discoveryView #baAutoOverflowActions{
+ box-sizing:border-box;position:absolute;z-index:80;top:calc(100% + 7px);right:0;
+ display:flex;flex-direction:column;gap:4px;width:min(310px,80vw);
+ max-width:calc(100vw - 40px);max-height:300px;
+ overflow:auto;padding:8px;
+ border:1px solid var(--vscode-panel-border,#53606b);border-radius:8px;
+ background:var(--vscode-menu-background,var(--vscode-editorWidget-background,#282d35));
+ box-shadow:0 8px 24px rgba(0,0,0,.36)
+}
+#discoveryView #baAutoDocumentToolbar #baAutoOverflowActions #baAutoIsoPreflightActions,
+#discoveryView #baAutoDocumentToolbar #baAutoOverflowActions #baAutoFileActions,
+#discoveryView #baAutoDocumentToolbar #baAutoOverflowActions #baAutoFileActions .source-document-actions{
+ display:flex!important;flex-direction:column;gap:4px;width:100%;min-width:0
+}
+#discoveryView #baAutoDocumentToolbar #baAutoOverflowActions button{
+ box-sizing:border-box;display:block;width:100%;max-width:100%;
+ min-height:34px;margin:0;padding:8px 10px;
+ line-height:1.4;font-size:12px;text-align:left;
+ white-space:normal;overflow-wrap:anywhere
+}
+#discoveryView #baAutoDocumentToolbar #baAutoOverflowActions button.hidden,
+#discoveryView #baAutoDocumentToolbar #baAutoOverflowActions button[hidden]{display:none!important}
+#discoveryView #baAutoOverflowActions[data-kind="iso"] #baWorkingBrDownload,
+#discoveryView #baAutoOverflowActions[data-kind="preflight"] #baPreflightDownload,
+#discoveryView #baAutoOverflowActions[data-kind="source"] #baAutoArtifactSave,
+#discoveryView #baAutoOverflowActions[data-kind="original"] #baAutoFileActions .source-document-actions button:first-child{display:none!important}
+#discoveryView #baAutoOverflowActions #baAutoFileActions .br-danger{
+ color:var(--vscode-errorForeground,#ff8c8c)!important;
+ border-color:var(--vscode-errorForeground,#c45d5d)!important
+}
+#discoveryView #baAutoDocumentPanel #baAutoArtifactLabel[hidden],
+#discoveryView #baAutoDocumentPanel #baAutoArtifactText[hidden],
+#discoveryView #baAutoDocumentPanel #baAutoFormattedDocument[hidden] {display:none!important}
+#discoveryView #baAutoDocumentPanel #baAutoArtifactLabel{
+ margin:8px 0 8px;font-size:12px
+}
+#discoveryView #baAutoFormattedDocument{
+ box-sizing:border-box;width:100%;max-width:100%;min-height:260px;
+ max-height:clamp(350px,55vh,690px);overflow:auto;
+ padding:20px clamp(16px,3vw,32px);
+ border:1px solid var(--vscode-panel-border,#485260);border-radius:7px;
+ background:var(--vscode-editor-background,#141920);
+ color:var(--vscode-editor-foreground,#e7eaf0);
+ font-family:var(--vscode-font-family,system-ui,sans-serif);font-size:13px;line-height:1.75
+}
+#discoveryView .ba-document-viewer h1,
+#discoveryView .ba-document-viewer h2,
+#discoveryView .ba-document-viewer h3,
+#discoveryView .ba-document-viewer h4{line-height:1.35;letter-spacing:-.01em}
+#discoveryView .ba-document-viewer h1{font-size:20px;margin:0 0 10px}
+#discoveryView .ba-document-viewer h2{font-size:16px;margin:26px 0 10px;padding-bottom:7px;border-bottom:1px solid var(--vscode-panel-border,#485260)}
+#discoveryView .ba-document-viewer h3{font-size:14px;margin:20px 0 8px}
+#discoveryView .ba-document-viewer h4{font-size:13px;margin:16px 0 6px}
+#discoveryView .ba-document-viewer p{margin:8px 0 14px;max-width:100%;overflow-wrap:anywhere}
+#discoveryView .ba-document-viewer :is(ul,ol){margin:8px 0 16px;padding-inline-start:23px}
+#discoveryView .ba-document-viewer li{margin:5px 0;overflow-wrap:anywhere}
+#discoveryView .ba-document-viewer code{font-family:var(--vscode-editor-font-family,monospace);font-size:.92em}
+#discoveryView .ba-document-viewer pre{
+ padding:12px 14px;white-space:pre-wrap;overflow-wrap:anywhere;
+ background:var(--vscode-textCodeBlock-background,#20252d);border-radius:6px
+}
+#discoveryView .ba-document-viewer blockquote{padding:4px 12px;margin:10px 0;border-left:3px solid var(--vscode-focusBorder,#559cee)}
+#discoveryView .ba-document-viewer-table{max-width:100%;overflow-x:auto;margin:15px 0}
+#discoveryView .ba-document-viewer table{width:100%;border-collapse:collapse;min-width:360px}
+#discoveryView .ba-document-viewer th,
+#discoveryView .ba-document-viewer td{
+ text-align:left;vertical-align:top;padding:9px 12px;
+ border:1px solid var(--vscode-panel-border,#424e5a);overflow-wrap:anywhere
+}
+#discoveryView .ba-document-viewer th{background:var(--vscode-editorWidget-background,#2b3038)}
+#discoveryView .ba-document-viewer-requirement{
+ border:1px solid var(--vscode-panel-border,#485260);border-radius:5px;
+ margin:10px 0;padding:9px 12px
+}
+#discoveryView .ba-document-viewer-requirement>summary{cursor:pointer;font-weight:600}
+#discoveryView .ba-document-viewer-requirement[open]>summary{padding-bottom:9px}
+#discoveryView #baAutoDocumentPanel>.ba-auto-inline{margin-top:8px;padding:4px 0;border:0}
+@media(max-width:690px){
+ #discoveryView #baAutoDocumentToolbar{gap:7px}
+ #discoveryView #baAutoDocumentTabs button{padding:7px 8px}
+ #discoveryView #baAutoPrimaryAction{max-width:135px;padding:7px 9px;font-size:11px}
+ #discoveryView #baAutoFormattedDocument{padding:14px}
+}
+
+/* v0.0.52 — 8-column Jira project DataTable, preventing old 6-column widths from
+   allocating 100% before BR owner and Created columns are laid out. */
+#workView .ba-jira-project-table{box-sizing:border-box;min-width:0;max-width:100%}
+#workView .ba-jira-project-table .atgv-datatable-scroll{
+ box-sizing:border-box;width:100%;max-width:100%;min-width:0;
+ overflow-x:auto;overflow-y:hidden;overscroll-behavior-inline:contain
+}
+#workView .ba-jira-project-table .atgv-datatable-table{
+ width:100%;min-width:1350px;table-layout:fixed
+}
+#workView .ba-jira-project-table .atgv-datatable-table th:nth-child(1){width:14%}
+#workView .ba-jira-project-table .atgv-datatable-table th:nth-child(2){width:8%}
+#workView .ba-jira-project-table .atgv-datatable-table th:nth-child(3){width:8%}
+#workView .ba-jira-project-table .atgv-datatable-table th:nth-child(4){width:25%}
+#workView .ba-jira-project-table .atgv-datatable-table th:nth-child(5){width:11%}
+#workView .ba-jira-project-table .atgv-datatable-table th:nth-child(6){width:12%}
+#workView .ba-jira-project-table .atgv-datatable-table th:nth-child(7){width:12%}
+#workView .ba-jira-project-table .atgv-datatable-table th:nth-child(8){width:10%}
+#workView .ba-jira-project-table .atgv-datatable-table td{
+ white-space:normal;word-break:normal;overflow-wrap:anywhere;
+ vertical-align:top;line-height:1.5
+}
+#workView .ba-jira-project-table .atgv-datatable-table td:nth-child(1),
+#workView .ba-jira-project-table .atgv-datatable-table td:nth-child(4){
+ white-space:normal;overflow-wrap:anywhere
+}
+#workView .ba-jira-project-table .atgv-datatable-table td:nth-child(2),
+#workView .ba-jira-project-table .atgv-datatable-table td:nth-child(8){white-space:nowrap}
+#workView .ba-jira-project-table .atgv-datatable-controls,
+#workView .ba-jira-project-table .atgv-datatable-pager{
+ box-sizing:border-box;max-width:100%;min-width:0;flex-wrap:wrap;gap:8px
+}
