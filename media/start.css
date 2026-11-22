@@ -3125,6 +3125,10 @@ body:not(.gate-mode) #sdlcWorkspaceShell.atgv-sdlc-workspace-shell{
  white-space:normal;word-break:normal;overflow-wrap:anywhere;
  vertical-align:top;line-height:1.5
 }
+#workView .ba-jira-project-table .atgv-datatable-table td:nth-child(1),
+#workView .ba-jira-project-table .atgv-datatable-table td:nth-child(4){
+ white-space:normal;overflow-wrap:anywhere
+}
 #workView .ba-jira-project-table .atgv-datatable-table td:nth-child(2),
 #workView .ba-jira-project-table .atgv-datatable-table td:nth-child(8){white-space:nowrap}
 #workView .ba-jira-project-table .atgv-datatable-controls,
