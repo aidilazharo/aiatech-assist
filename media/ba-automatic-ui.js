@@ -86,6 +86,7 @@
   if(!active()||!sourceDigest||kind==='preflight'||artifactDirty())return;
   get('baAutoArtifactLabel').textContent=kindNames[kind];
   get('baAutoArtifactStatus').textContent='Loading document…';
+  if(kind==='iso')viewer.textContent='Loading structured Business Requirements…';
   artifactContext=null;input.readOnly=true;
   invoke('baReadArtifact',{kind,digest:sourceDigest,requestId:++request});
  }
@@ -95,6 +96,7 @@
   const changed=currentSource!==sourceDigest||artifactProject!==activeId;
   if(changed){
    sourceDigest=currentSource;artifactProject=activeId;artifactContext=null;input.value='';
+   viewer.replaceChildren();
    get('baAutoArtifactStatus').textContent='';
   }
   get('baAutoSourceEditor').hidden=!sourceDigest;
