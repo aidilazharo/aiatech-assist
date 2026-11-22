@@ -396,7 +396,8 @@ function syncMyWorkHeaderWaveHost(){
  const wave=$('myWorkHeaderWave'),header=$('appHeader'),notice=$('topNotification');
  if(!wave||!header||!notice)return;
  const aiVisible=document.body.classList.contains('atgv-mywork-chat-mode')||
-  document.body.classList.contains('atgv-ba-ai-active');
+  document.body.classList.contains('atgv-ba-ai-active')||
+  document.body.classList.contains('atgv-global-ai-active');
  const host=topNoticeCurrent&&aiVisible?notice:header;
  if(wave.parentElement!==host)host.appendChild(wave);
 }
