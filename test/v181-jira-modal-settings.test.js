@@ -25,13 +25,14 @@ test('Jira ID, summary and data row open a modal, preserving Assign to Me',()=>{
 test('Jira detail requests are project-scoped, read-only, and do not leak credentials',()=>{
  const host=read('test/generated/extension-source.txt');
  const start=host.indexOf("case 'roleJiraIssueDetails':{");
- const end=host.indexOf("case 'roleJiraIssues':{",start);
+ const end=host.indexOf("case 'roleJiraIssueSave':{",start);
  assert.ok(start>=0&&end>start);
  const section=host.slice(start,end);
  assert.match(section,/requireOpened\(\);requireOnline\(\)/);
  assert.match(section,/developerGit\.jiraKey\(msg\.key\)/);
  assert.match(section,/issue\.fields\?\.project\?\.key!==validProjectKey/);
- assert.match(section,/rest\/api\/3\/issue\//);
+ assert.match(section,/jiraReadIssueAllFields\(config,token,key\)/);
+ assert.match(section,/jiraIssueFieldMetadata\(config,token,\{key\}\)/);
  assert.doesNotMatch(section,/method:\s*'PUT'|method:\s*'POST'|method:\s*'DELETE'/);
  assert.match(section,/requestId:msg\.requestId/);
  assert.doesNotMatch(section,/token:token|value:token|jiraToken:token/);

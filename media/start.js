@@ -2364,8 +2364,35 @@ let roleJiraProject='',roleJiraLoading=false,roleJiraLoaded=false,roleJiraItems=
 let jiraModalKey='',jiraModalRequest=0,jiraModalPreviousFocus=null,jiraModalUrl='';
 let jiraModalDetail=null,jiraModalEditing=false,jiraModalSaving=false,jiraModalSaveRequest=0,roleJiraRefreshAfterSave=false;
 let jiraModalAssigneeRequest=0,jiraModalAssigneeBusy=false,jiraModalAssigneeData=null;
+let jiraModalFieldInputs=[];
+function jiraFieldInput(field){
+ const select=field.kind==='select'||field.kind==='boolean';
+ const control=document.createElement(select?'select':field.kind==='textarea'?'textarea':'input');
+ if(select){
+  control.multiple=field.multiple;
+  if(field.multiple)control.size=Math.min(6,Math.max(2,field.options.length));
+  const options=field.kind==='boolean'?[{value:'true',label:'True'},{value:'false',label:'False'}]:[...field.options];
+  const current=new Set((Array.isArray(field.value)?field.value:[field.value]).filter(value=>value!==''));
+  if(!field.multiple)options.unshift({value:'',label:field.required?'Select a Jira value':'None'});
+  for(const value of current)if(!options.some(option=>option.value===value))options.push({value,label:'Current value · '+value});
+  for(const {value,label} of options){
+   const option=document.createElement('option');option.value=value;option.textContent=label;option.selected=current.has(value);control.append(option);
+  }
+ }else{
+  if(field.kind==='date')control.type='date';
+  if(field.kind==='textarea')control.rows=3;
+  control.value=Array.isArray(field.value)?field.value.join('\n'):field.value;
+  if(field.multiple)control.placeholder='One Jira value per line';
+ }
+ const read=()=>select&&field.multiple?Array.from(control.selectedOptions,option=>option.value):control.value;
+ return {id:field.id,control,read,original:JSON.stringify(read())};
+}
+function changedJiraFieldInputs(inputs){
+ return Object.fromEntries(inputs.filter(input=>JSON.stringify(input.read())!==input.original).map(input=>[input.id,input.read()]));
+}
 function resetJiraIssueEditor(){
- jiraModalEditing=false;jiraModalSaving=false;jiraModalDetail=null;
+ jiraModalEditing=false;jiraModalSaving=false;jiraModalDetail=null;jiraModalFieldInputs=[];
+ $('jiraIssueEditFields')?.replaceChildren();
  jiraModalAssigneeRequest++;jiraModalAssigneeBusy=false;jiraModalAssigneeData=null;
  $('jiraIssueEditPanel').classList.add('hidden');$('jiraIssueModalBody').classList.remove('hidden');
  $('jiraIssueModalEdit').classList.add('hidden');$('jiraIssueModalSave').classList.add('hidden');$('jiraIssueModalCancelEdit').classList.add('hidden');
@@ -2376,6 +2403,16 @@ function beginJiraIssueEdit(){
  jiraModalEditing=true;
  $('jiraIssueEditSummary').value=jiraModalDetail.summary||'';
  $('jiraIssueEditDescription').value=jiraModalDetail.description||'';
+ $('jiraIssueEditSummary').readOnly=jiraModalDetail.coreEditable?.summary===false;
+ $('jiraIssueEditDescription').readOnly=jiraModalDetail.coreEditable?.description===false;
+ const extra=$('jiraIssueEditFields');extra.replaceChildren();
+ jiraModalFieldInputs=(jiraModalDetail.editors||[]).map(field=>{
+  const input=jiraFieldInput(field);
+  const label=document.createElement('label');
+  label.textContent=field.name+(field.required?' · Required':'');
+  label.append(input.control);extra.append(label);
+  return input;
+ });
  const select=$('jiraIssueEditStatusSelect');select.replaceChildren();
  const unchanged=document.createElement('option');unchanged.value='';unchanged.textContent='Keep current status ('+jiraModalDetail.status+')';select.append(unchanged);
  for(const transition of jiraModalDetail.transitions||[]){
@@ -2392,7 +2429,7 @@ function saveJiraIssueEdit(){
  if(!summary||summary.length>254){$('jiraIssueEditStatus').textContent='Summary must contain 1–254 characters.';return;}
  jiraModalSaving=true;$('jiraIssueModalSave').disabled=true;$('jiraIssueModalCancelEdit').disabled=true;
  $('jiraIssueEditStatus').textContent='Saving and verifying Jira issue…';
- send('roleJiraIssueSave',{key:jiraModalKey,summary,description,transitionId,expectedUpdated:jiraModalDetail.updated,requestId:++jiraModalSaveRequest});
+ send('roleJiraIssueSave',{key:jiraModalKey,summary,description,transitionId,fieldValues:changedJiraFieldInputs(jiraModalFieldInputs),expectedUpdated:jiraModalDetail.updated,requestId:++jiraModalSaveRequest});
 }
 function closeJiraIssueModal(){const panel=$('jiraIssueModal');panel.classList.add('hidden');panel.setAttribute('aria-hidden','true');jiraModalKey='';jiraModalUrl='';jiraModalRequest++;jiraModalSaveRequest++;resetJiraIssueEditor();if(jiraModalPreviousFocus?.isConnected)jiraModalPreviousFocus.focus();}
 function openJiraIssueModal(key){resetJiraIssueEditor();if(!/^[A-Z][A-Z0-9_]{1,20}-\d{1,12}$/.test(String(key||'')))return;jiraModalPreviousFocus=document.activeElement;jiraModalKey=key;jiraModalUrl='';$('jiraIssueModalTitle').textContent='Jira '+key;$('jiraIssueModalSubtitle').textContent='Loading live issue details…';$('jiraIssueModalBody').textContent='Retrieving Jira details…';$('jiraIssueModalOpen').disabled=true;$('jiraIssueModal').classList.remove('hidden');$('jiraIssueModal').setAttribute('aria-hidden','false');$('jiraIssueModalClose').focus();refreshJiraIssueModal();}
@@ -2437,7 +2474,7 @@ function applyJiraAssigneeUsers(msg){
  const scope=msg.scope?' · '+msg.scope.count+' development items; '+msg.scope.excludedCount+' specialist-role items excluded':'';
  note.textContent='Required role: '+msg.role+scope+'. '+(msg.message||'Select an eligible user, then click Assign.');
 }
-function renderJiraIssueModal(value){if(!value||value.key!==jiraModalKey)return;resetJiraIssueEditor();jiraModalDetail=value;$('jiraIssueModalEdit').classList.remove('hidden');const root=$('jiraIssueModalBody');root.replaceChildren();jiraModalUrl=value.url||'';$('jiraIssueModalOpen').disabled=!jiraModalUrl;$('jiraIssueModalReload').disabled=false;$('jiraIssueModalTitle').textContent=value.key+' · '+value.summary;$('jiraIssueModalSubtitle').textContent=value.type+' · '+value.status;
+function renderJiraIssueModal(value){if(!value||value.key!==jiraModalKey)return;resetJiraIssueEditor();jiraModalDetail=value;$('jiraIssueModalEdit').classList.toggle('hidden',!(value.coreEditable?.summary||value.coreEditable?.description||value.editors?.length||value.transitions?.length));const root=$('jiraIssueModalBody');root.replaceChildren();jiraModalUrl=value.url||'';$('jiraIssueModalOpen').disabled=!jiraModalUrl;$('jiraIssueModalReload').disabled=false;$('jiraIssueModalTitle').textContent=value.key+' · '+value.summary;$('jiraIssueModalSubtitle').textContent=value.type+' · '+value.status;
  const fields=[['Status',value.status],['Priority',value.priority],['Type',value.type],['Reporter',value.reporter],['Created',value.created],['Updated',value.updated],['Due date',value.dueDate],['Assignee',value.assignee]];const grid=document.createElement('dl');grid.className='jira-issue-detail-grid';for(const [label,val] of fields){if(!val)continue;const wrapper=document.createElement('div');const dt=document.createElement('dt');dt.textContent=label;const dd=document.createElement('dd');if(label==='Assignee'&&selectedRole==='project-manager'&&view==='work')dd.append(jiraIssueAssigneeEditor(value));else dd.textContent=val;wrapper.append(dt,dd);grid.append(wrapper);}root.append(grid);
  const section=(label,text)=>{const box=document.createElement('section');box.className='jira-issue-detail-block';const heading=document.createElement('h3');heading.textContent=label;const content=document.createElement('p');content.textContent=text||'Not provided';box.append(heading,content);root.append(box);return box;};
  section('Description',value.description||'No description provided.');
@@ -5234,8 +5271,8 @@ $('brJiraIssueModalClose')?.addEventListener('click',closeJiraIssuePreview);
 $('brJiraIssueModal')?.addEventListener('click',event=>{if(event.target===$('brJiraIssueModal'))closeJiraIssuePreview();});
 document.addEventListener?.('keydown',event=>{if(event.key==='Escape'&&!$('brJiraIssueModal')?.classList.contains('hidden'))closeJiraIssuePreview();});
 function jiraDetailsButton(entry,readOnly=false){
- const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='View details';
- button.setAttribute('aria-label','View Jira details for '+String(entry.title||entry.path));
+ const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent=readOnly||entry.action==='retire'?'View details':'Edit Jira item';
+ button.setAttribute('aria-label',button.textContent+' '+String(entry.title||entry.path));
  button.addEventListener('click',()=>renderJiraIssueDetails(entry,readOnly));return button;
 }
 function renderJiraIssueDetails(entry,readOnly=false){
@@ -5247,6 +5284,8 @@ function renderJiraIssueDetails(entry,readOnly=false){
   const caption=$('brJiraIssueModalTitle');if(caption)caption.textContent='Jira Issue Preview · '+String(entry.key||entry.title||entry.path);
   $('brJiraIssueModalClose')?.focus?.();
  }
+ const fieldPlan=typeof jiraPreviewFieldsByPath==='undefined'?null:jiraPreviewFieldsByPath?.[entry.path];
+ const fieldInputs=[];
  const heading=document.createElement('h3');heading.textContent='Jira issue details';root.append(heading);
  const addValue=(label,value)=>{const group=document.createElement('div');group.className='jira-preview-detail';const title=document.createElement('strong');title.textContent=label;const text=document.createElement('div');text.className='jira-preview-detail-value';text.textContent=String(value||'Not specified');group.append(title,text);root.append(group);};
  addValue('Summary',entry.title);addValue('Action',String(entry.action||'').toUpperCase());addValue('Jira project',jiraPreviewProject||'Not verified');
@@ -5255,14 +5294,26 @@ function renderJiraIssueDetails(entry,readOnly=false){
  const parentKey=entry.parent?brState?.synced?.[entry.parent]?.key:'';
  addValue('Parent',entry.parent?(entry.parent+(parentKey?' · '+parentKey:' · key assigned during publication')):'None');addValue('Existing Jira key',entry.key||'Not created yet');
  if(entry.action!=='retire'){
-  addValue('Jira description to publish',entry.description||'Not specified');
+  addValue('Jira description to publish',fieldPlan?.description||entry.description||'Not specified');
   const approved=brState?.brs?.find(br=>br.id===String(entry.path||'').split('/')[0])?.approvedContent;
   addValue('Approved BR acceptance criteria (reference)',approved?.acceptanceCriteria||'Not specified');
-  const hint=document.createElement('p');hint.className='muted';hint.textContent=entry.staleJiraDetails?'The approved BR changed. Review these saved details and save them again before approving the Jira preview.':'Issue-specific acceptance criteria and definition of done are added to the Jira description. They do not change the approved Business Requirement.';root.append(hint);
+  const hint=document.createElement('p');hint.className='muted';hint.textContent=entry.staleJiraDetails?'The approved BR changed. Review these saved details and save them again before approving the Jira preview.':'Criteria and completion checks use the configured Jira fields. The preview includes their description fallback when required.';root.append(hint);
   const form=document.createElement('div');form.className='jira-preview-detail-form';
   const inputs={};
+  const originalText={};
+  if(fieldPlan&&!readOnly){
+   const saved=entry.staleJiraDetails||entry.jiraDetails||{};
+   for(const [field,label,max] of [['summary','Summary',254],['description','Description',32000]]){
+    const wrap=document.createElement('label');wrap.textContent=label;
+    const input=document.createElement(field==='summary'?'input':'textarea');
+    input.maxLength=max;
+    if(field==='description')input.rows=5;
+    input.value=field==='summary'?saved.summary??entry.title:saved.description??fieldPlan.baseDescription??entry.description;
+    originalText[field]=input.value;inputs[field]=input;wrap.append(input);form.append(wrap);
+   }
+  }
   for(const [field,label] of [['acceptanceCriteria','Issue-specific acceptance criteria'],['definitionOfDone','Definition of done']]){
-   const wrap=document.createElement('label');wrap.textContent=label;const input=document.createElement('textarea');input.rows=4;input.maxLength=5000;input.value=entry.jiraDetails?.[field]||entry.staleJiraDetails?.[field]||'';input.placeholder='Not specified';input.readOnly=readOnly;wrap.append(input);form.append(wrap);inputs[field]=input;
+   const wrap=document.createElement('label');wrap.textContent=label;const input=document.createElement('textarea');input.rows=4;input.maxLength=5000;input.value=entry.staleJiraDetails?.[field]||entry.jiraDetails?.[field]||fieldPlan?.details?.[field]||'';input.placeholder='Not specified';input.readOnly=readOnly;wrap.append(input);form.append(wrap);inputs[field]=input;
   }
   root.append(form);
   if(!readOnly){
@@ -5275,14 +5326,18 @@ function renderJiraIssueDetails(entry,readOnly=false){
  if(!readOnly){const save=document.createElement('button');save.type='button';save.textContent='Save Jira details & refresh preview';save.addEventListener('click',()=>{
    if(!brPlanRevision||baBusyTask)return;
    baBusy('jiraDetails','Saving Jira details and refreshing the preview…');
-   send('brJiraSaveDetails',{revision:brPlanRevision,path:entry.path,hash:entry.hash,acceptanceCriteria:inputs.acceptanceCriteria.value,definitionOfDone:inputs.definitionOfDone.value});
+   const draft={revision:brPlanRevision,path:entry.path,hash:entry.hash,acceptanceCriteria:inputs.acceptanceCriteria.value,definitionOfDone:inputs.definitionOfDone.value};
+   if(fieldPlan){
+    for(const field of ['summary','description'])if(inputs[field]?.value!==originalText[field])draft[field]=inputs[field].value;
+    draft.fieldValues=changedJiraFieldInputs(fieldInputs);
+   }
+   send('brJiraSaveDetails',draft);
   });root.append(save);}
  }else addValue('Retirement','The existing issue will be marked obsolete; no description is replaced.');
- const fieldPlan=typeof jiraPreviewFieldsByPath==='undefined'?null:jiraPreviewFieldsByPath?.[entry.path];
  if(fieldPlan){
   const section=document.createElement('section');section.className='jira-preview-field-list';
   const title=document.createElement('h3');title.textContent='All available Jira fields ('+(fieldPlan.fields||[]).length+')';section.append(title);
-  const explanation=document.createElement('p');explanation.className='muted';explanation.textContent='ATGV automatically fills all supported writable text fields from the approved BR, and inserts a clear missing-information placeholder where text evidence is unavailable. Non-text fields (users, dates, numbers and selections) display a preview-only placeholder when no valid value exists; Jira will not accept arbitrary text in these fields. Existing unsupported values are preserved.';section.append(explanation);
+  const explanation=document.createElement('p');explanation.className='muted';explanation.textContent='Values come from the approved BR, Jira defaults, or an existing issue. Choose valid Jira values for fields that need input.';section.append(explanation);
   const totals=fieldPlan.autofillSummary;
   if(totals){const summary=document.createElement('p');summary.className='muted';summary.textContent='Auto-filled: '+totals.mapped+' · Text placeholders: '+totals.textPlaceholders+' · Existing Jira values: '+totals.preserved+' · Jira defaults: '+totals.jiraDefaults+' · Preview-only / needs valid Jira value: '+totals.previewOnly;section.append(summary);}
   for(const field of fieldPlan.fields||[]){
@@ -5290,7 +5345,13 @@ function renderJiraIssueDetails(entry,readOnly=false){
    const caption=document.createElement('strong');caption.textContent=field.name+(field.required?' · Required':'');
    const value=document.createElement('div');value.className='jira-preview-detail-value';value.textContent=field.display||'Information not available in the approved Business Requirements document.';
    const status=document.createElement('small');status.textContent='Field ID: '+field.id+' · Type: '+field.type+' · '+field.status+' · Source: '+field.source;
-   row.append(caption,value,status);section.append(row);
+   row.append(caption,value,status);
+   if(!readOnly&&entry.action!=='retire'&&field.editor&&!field.detailText){
+    const input=jiraFieldInput(field.editor);
+    input.control.setAttribute('aria-label',field.name);
+    fieldInputs.push(input);row.append(input.control);
+   }
+   section.append(row);
   }
   for(const message of fieldPlan.blocking||[]){
    const warning=document.createElement('p');warning.setAttribute('role','alert');warning.textContent='Jira field requires attention: '+message;section.append(warning);
@@ -7357,6 +7418,7 @@ window.addEventListener('message',event=>{
     baBusy('',null);
     jiraPreflightBlocked=true;
     brPlanRevision=m.revision;jiraPlanForCR=[];
+    jiraPreviewIssueTypes=m.issueTypes||{};jiraPreviewProject=m.jiraProject||'';jiraPreviewFieldsByPath=m.fieldPlans||{};
     jiraLinkCandidates=Array.isArray(m.linkCandidates)?m.linkCandidates.filter(row=>row&&typeof row.path==='string'&&/^[A-Z][A-Z0-9_]{1,20}-\d{1,12}$/.test(String(row.key||''))):[];
     jiraProtectionForCR=m.protection||[];
     brJiraPreviewApproved=false;brJiraPlanChanges=(m.changes||[]).length;brJiraPlanConflicts=(m.conflicts||[]).length;
@@ -7373,6 +7435,13 @@ window.addEventListener('message',event=>{
       const row=brElement('div','jira-link-repair-row jira-preflight-recovery');
       row.append(brElement('span','',candidate.path+' · '+candidate.key+(entry?.title?' · '+entry.title:'')));
       row.append(jiraFixLinkButton(candidate.path,candidate.key));
+      box.append(row);
+    }
+    for(const entry of m.changes||[]){
+      const plan=jiraPreviewFieldsByPath[entry.path];
+      if(!plan?.fields?.length||(!plan.blocking?.length&&!entry.staleJiraDetails))continue;
+      const row=brElement('div','jira-link-repair-row');
+      row.append(brElement('span','',entry.title+' · '+entry.path),jiraDetailsButton(entry));
       box.append(row);
     }
     const conflicts=$('brJiraConflicts');

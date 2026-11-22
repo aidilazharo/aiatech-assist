@@ -80,6 +80,7 @@ const copilotRepairSdk=require('../../copilot-repair-sdk');
 const jiraControl=require('../../jira-change-control');
 const jiraDuplicates=require('../../jira-duplicate-cleanup');
 const jiraFieldPreflight=require('../../jira-field-preflight');
+const jiraFieldValues=require('../../jira-field-values');
 const jiraProjectInventory=require('../../jira-project-inventory');
 const pmJiraAssignment=require('../../pm-jira-assignment');
 const jiraItemEditor=require('../../jira-item-editor');
@@ -3650,13 +3651,14 @@ async function prePublishIdentityGuard(reg,config,token,items){
 function formatIdentityConflicts(gate){
  return (gate.matches||[]).map(item=>`${item.path}: existing Jira ${item.existingKey} may already represent this requirement (${item.reason}). Reconcile the authoritative Epic and trusted BR-to-Jira mapping; no automatic deletion is allowed.`);
 }
-function verifyRecoveredJiraIssue(remote,item,{marker,projectKey,issueType,parentKey}){
+function verifyRecoveredJiraIssue(remote,item,{marker,projectKey,issueType,parentKey,publishedDescription}){
  const fields=remote.fields||{};
  if(!Array.isArray(fields.labels)||!fields.labels.includes(marker))throw Error('Recovered Jira issue marker is invalid.');
  if(fields.project?.key!==projectKey)throw Error('Recovered Jira issue is in the wrong project.');
  if(String(fields.issuetype?.name||'').toLowerCase()!==String(issueType||'').toLowerCase())throw Error('Recovered Jira issue has the wrong issue type.');
  if((fields.parent?.key||null)!==(parentKey||null))throw Error('Recovered Jira issue has an unexpected parent.');
- if(String(fields.summary||'')!==item.title||remoteFingerprint(remote)!==sha(JSON.stringify({summary:item.title,description:item.description})))throw Error('Recovered Jira issue content differs from the approved revision.');
+ const description=jiraFieldValues.richTextValue(fields.description);
+ if(String(fields.summary||'')!==item.title||![item.description,publishedDescription].includes(description))throw Error('Recovered Jira issue content differs from the approved revision.');
 }
 async function roleRepairPreviewFor(brId,register,config,token){
  const planned=jiraRoleRepair.plan(register,brId),project=validProjectKey(config.get('jira.projectKey'));
@@ -3693,6 +3695,7 @@ async function roleRepairPreviewFor(brId,register,config,token){
   existing:rows.filter(r=>r.status==='existing').length,conflicts:rows.filter(r=>r.status==='conflict').length};
 }
 let jiraPreviewFieldPlans={};
+let jiraPreviewFieldMetadata=new Map();
 let jiraLinkRepairBusy=false;
 async function syncApprovedBRs(expectedRevision){
  requireOnline();if(jiraSyncBusy)throw Error('Jira synchronization is already running.');
@@ -3722,14 +3725,14 @@ async function syncApprovedBRs(expectedRevision){
   const conflicts=await jiraPreflight(state,config,token,items);
   if(conflicts.length)throw Error('Jira synchronization blocked: '+conflicts.join('; '));
   if(items.some(item=>item.action!=='retire'&&!jiraPreviewFieldPlans[item.path]))throw Error('Jira issue field metadata was not verified. Generate Jira Preview again.');
-  const types=await jiraIssueTypes(config,token);
+  const types=items.some(item=>item.action==='create')?await jiraIssueTypes(config,token):[];
   const hasType=name=>types.some(t=>t.name?.toLowerCase()===name.toLowerCase()&&!t.subtask);
   if(items.some(x=>x.action==='create'&&x.kind==='Epic')&&!hasType('Epic'))throw Error('Jira project requires an Epic issue type.');
   const featureType=hasType('Feature')?'Feature':hasType('Story')?'Story':null;
   if(items.some(x=>x.action==='create'&&x.kind==='Feature')&&!featureType)throw Error('Jira project requires Feature or Story issue type.');
   if(items.some(x=>x.action==='create'&&x.kind==='Story'&&x.issueLevel==='standard')&&!hasType('Story'))throw Error('New Story hierarchy needs a standard Jira Story issue type.');
   const subtasks=types.find(t=>t.subtask&&/^(sub-task|subtask)$/i.test(String(t.name||'')));
-  const plannedIssueType=item=>item.kind==='Epic'?'Epic':item.kind==='Story'&&item.issueLevel==='standard'?'Story':['Story','Task','Role'].includes(item.kind)?subtasks.name:featureType;
+  const plannedIssueType=item=>item.kind==='Epic'?'Epic':item.kind==='Story'&&item.issueLevel==='standard'?'Story':['Story','Task','Role'].includes(item.kind)?subtasks?.name:featureType;
   if(items.some(x=>x.action==='create'&&(['Story','Task','Role'].includes(x.kind))&&x.issueLevel!=='standard')&&!subtasks)throw Error('Jira project requires Sub-task to represent BR stories and tasks.');
   const summary=items.map(x=>`${x.action.toUpperCase()} ${x.kind} ${x.path}${x.key?' ('+x.key+')':''}`).join('\n');
   const response=await uiWarning(`Publish ${items.length} Jira changes?\n${summary.slice(0,1500)}\nRetired issues are labeled atgv-obsolete.`,{modal:true},'Publish Jira');
@@ -3740,11 +3743,10 @@ async function syncApprovedBRs(expectedRevision){
    await publishProgress('publishing',`Processing ${confirmed+1} of ${total}: ${item.kind} · ${item.title}`,{currentPath:item.path,currentAction:item.action});
    const previous=state.synced[item.path];
    const fieldPlan=jiraPreviewFieldPlans[item.path];
+   let actualMeta;
    if(item.action!=='retire'){
-    const actualMeta=await jiraIssueFieldMetadata(config,token,item.action==='create'?{issueTypeId:types.find(x=>x.name===plannedIssueType(item))?.id}:{key:item.key});
-    const actualIds=actualMeta.map(field=>field.id+':'+String(field.schema?.type||'unknown')+':'+field.required).sort();
-    const plannedIds=fieldPlan.fields.map(field=>field.id+':'+field.type+':'+field.required).sort();
-    if(JSON.stringify(actualIds)!==JSON.stringify(plannedIds))throw Error('Jira field configuration changed since the approved preview for '+item.path+'. Refresh Jira Preview.');
+    actualMeta=await jiraIssueFieldMetadata(config,token,item.action==='create'?{issueTypeId:types.find(x=>x.name===plannedIssueType(item))?.id}:{key:item.key});
+    if(jiraFieldValues.schemaFingerprint(actualMeta)!==fieldPlan.schema)throw Error('Jira field configuration changed since the approved preview for '+item.path+'. Refresh Jira Preview.');
     if(item.action==='update'){
      const latestFull=await jiraReadIssueAllFields(config,token,item.key);
      const selected=Object.keys(fieldPlan.extraFields||{});
@@ -3764,7 +3766,7 @@ async function syncApprovedBRs(expectedRevision){
     if(remote){
      if(!state.pending[item.path]?.previousAttempt)throw Error('Unexpected existing Jira issue '+remote.key);
      const parentKey=item.parent?state.synced[item.parent]?.key:null;
-     verifyRecoveredJiraIssue(remote,item,{marker,projectKey:config.get('jira.projectKey'),issueType:plannedIssueType(item),parentKey});
+     verifyRecoveredJiraIssue(remote,item,{marker,projectKey:config.get('jira.projectKey'),issueType:plannedIssueType(item),parentKey,publishedDescription:fieldPlan.description});
      key=remote.key;
     }else{
      const started=state.pending[item.path];
@@ -3772,20 +3774,26 @@ async function syncApprovedBRs(expectedRevision){
      state=await brWorkflow.markAttempt(registry,activeProject.id,state.revision,{path:item.path});
      const parentKey=item.parent?state.synced[item.parent]?.key:undefined;
      if(item.parent&&!parentKey)throw Error('Missing Jira parent for '+item.path);
-     const created=await jiraCreateIssue(config,token,{summary:item.title,description:item.description,issueType:plannedIssueType(item),parentKey,marker,issueTypes:types,extraLabels:item.roleLabel?[item.roleLabel]:[],extraFields:fieldPlan.extraFields});
+     const created=await jiraCreateIssue(config,token,{summary:item.title,description:fieldPlan.description,issueType:plannedIssueType(item),parentKey,marker,issueTypes:types,extraLabels:item.roleLabel?[item.roleLabel]:[],extraFields:fieldPlan.extraFields,fieldMetadata:actualMeta});
      key=created.key;
     }
    }else if(item.action==='update'){
     const current=await jiraReadIssue(config,token,key);
     if(!previous?.remoteDigest||remoteFingerprint(current)!==previous.remoteDigest)throw Error('Jira content conflict: '+key);
-    await jiraUpdateIssue(config,token,{key,summary:item.title,description:item.description,extraFields:fieldPlan.extraFields});
+    if(Object.keys(fieldPlan.updateCore).length||Object.keys(fieldPlan.extraFields).length)
+     await jiraUpdateIssue(config,token,{key,...fieldPlan.updateCore,extraFields:fieldPlan.extraFields,fieldMetadata:actualMeta});
    }else if(item.action==='retire'){
     const current=await jiraReadIssue(config,token,key);
     if(!previous?.remoteDigest||remoteFingerprint(current)!==previous.remoteDigest)throw Error('Jira retirement blocked: missing trusted baseline or external changes on '+key);
     await jiraRetireIssue(config,token,{key});
    }
-   const remote=item.action==='retire'?null:await jiraReadIssue(config,token,key);
-   state=await brWorkflow.recorded(registry,activeProject.id,state.revision,{path:item.path,action:item.action,key,hash:item.hash,kind:item.kind,issueType:remote?.fields?.issuetype?.name||plannedIssueType(item),title:item.title,remoteDigest:remote?remoteFingerprint(remote):null,marker:jiraScopedMarker(state,config,item.path)});
+   const fieldsToVerify=Object.keys(fieldPlan?.extraFields||{});
+   const remote=item.action==='retire'?null:fieldsToVerify.length?await jiraReadIssueAllFields(config,token,key):await jiraReadIssue(config,token,key);
+   for(const id of fieldsToVerify){
+    const field=actualMeta.find(entry=>entry.id===id);
+    if(!jiraFieldValues.sameValue(field,fieldPlan.extraFields[id],remote?.fields?.[id]))throw Error('Jira did not confirm '+field.name+' for '+key+'. Refresh Jira before retrying.');
+   }
+   state=await brWorkflow.recorded(registry,activeProject.id,state.revision,{path:item.path,action:item.action,key,hash:item.hash,kind:item.kind,issueType:remote?.fields?.issuetype?.name||previous?.issueType||plannedIssueType(item),title:item.title,remoteDigest:remote?remoteFingerprint(remote):null,marker:jiraScopedMarker(state,config,item.path)});
    // Only report a completed operation AFTER its confirmed Jira state is persisted locally.
    confirmed++;
    await publishProgress('publishing',`Confirmed ${confirmed} of ${total}: ${item.kind} · ${key}`,{currentPath:item.path,currentKey:key,currentAction:item.action});
@@ -5919,16 +5927,21 @@ async function handleDashboardMessage(msg){
         const key=developerGit.jiraKey(msg.key),config=effectiveConfig(activeProject);
         const token=await getAtlassianToken(activeProject);
         if(!token)throw Error('Connect Jira in Settings before viewing ticket details.');
-        const url=baseAtlassian(config)+'/rest/api/3/issue/'+encodeURIComponent(key)+'?fields=summary,description,status,priority,issuetype,assignee,reporter,parent,subtasks,labels,created,updated,duedate,project,components,fixVersions';
         try{
-          const issue=await requestJson(url,{token,basicEmail:String(config.get('jira.email')||'').trim()});
+          const [issue,editMeta]=await Promise.all([
+           jiraReadIssueAllFields(config,token,key),
+           jiraIssueFieldMetadata(config,token,{key}).then(fields=>({fields})).catch(error=>({message:String(error.message||error).slice(0,350)}))
+          ]);
           if(issue.fields?.project?.key!==validProjectKey(config.get('jira.projectKey')))throw Error('This ticket belongs to a different Jira project.');
           const fields=issue.fields||{};
+          const schema=editMeta.fields||[];
+          const editors=schema.map(field=>jiraFieldValues.editorField(field,fields[field.id])).filter(Boolean);
+          const coreEditable=Object.fromEntries(['summary','description'].map(id=>[id,schema.some(field=>field.id===id&&jiraFieldValues.canSet(field))]));
           const transitions=await jiraAvailableTransitions(config,token,key).catch(()=>[]);
           const registered=await brWorkflow.load(registry,activeProject.id);
           const matched=Object.entries(registered.synced||{}).find(([,row])=>row?.key===key);
           const linkedBrId=matched?matched[0].split('/')[0]:'';
-          const value={key,linkedBrId,transitions,summary:String(fields.summary||''),description:textFromAdf(fields.description).slice(0,20000),type:String(fields.issuetype?.name||''),status:String(fields.status?.name||''),priority:String(fields.priority?.name||'Unspecified'),assignee:String(fields.assignee?.displayName||'Unassigned'),assigneeId:String(fields.assignee?.accountId||''),reporter:String(fields.reporter?.displayName||'Unknown'),parent:fields.parent?{key:String(fields.parent.key||''),summary:String(fields.parent.fields?.summary||'')}:null,subtasks:(fields.subtasks||[]).slice(0,150).map(sub=>({key:String(sub.key||''),summary:String(sub.fields?.summary||''),status:String(sub.fields?.status?.name||'')})),labels:(fields.labels||[]).slice(0,35).filter(x=>typeof x==='string'),created:fields.created||'',updated:fields.updated||'',dueDate:fields.duedate||'',components:(fields.components||[]).map(x=>x.name).filter(Boolean).slice(0,30),fixVersions:(fields.fixVersions||[]).map(x=>x.name).filter(Boolean).slice(0,30),url:baseAtlassian(config)+'/browse/'+encodeURIComponent(key)};
+          const value={key,linkedBrId,transitions,editors,coreEditable,editError:editMeta.message||'',summary:String(fields.summary||''),description:jiraFieldValues.richTextValue(fields.description),type:String(fields.issuetype?.name||''),status:String(fields.status?.name||''),priority:String(fields.priority?.name||'Unspecified'),assignee:String(fields.assignee?.displayName||'Unassigned'),assigneeId:String(fields.assignee?.accountId||''),reporter:String(fields.reporter?.displayName||'Unknown'),parent:fields.parent?{key:String(fields.parent.key||''),summary:String(fields.parent.fields?.summary||'')}:null,subtasks:(fields.subtasks||[]).slice(0,150).map(sub=>({key:String(sub.key||''),summary:String(sub.fields?.summary||''),status:String(sub.fields?.status?.name||'')})),labels:(fields.labels||[]).slice(0,35).filter(x=>typeof x==='string'),created:fields.created||'',updated:fields.updated||'',dueDate:fields.duedate||'',components:(fields.components||[]).map(x=>x.name).filter(Boolean).slice(0,30),fixVersions:(fields.fixVersions||[]).map(x=>x.name).filter(Boolean).slice(0,30),url:baseAtlassian(config)+'/browse/'+encodeURIComponent(key)};
           await dashboard?.webview.postMessage({type:'roleJiraIssueDetails',key,requestId:msg.requestId,value});
         }catch(error){await dashboard?.webview.postMessage({type:'roleJiraIssueDetailsError',key,requestId:msg.requestId,message:String(error.message||error).slice(0,500)});}
         break;
@@ -5943,14 +5956,15 @@ async function handleDashboardMessage(msg){
           const managed=Object.entries(register.synced||{}).find(([,item])=>item?.key===key);
           const before=await jiraReadIssue(config,token,key);
           if(managed)verifyLinkedJiraIdentity(register,config,managed[0],before);
-          const result=await jiraItemEditor.save({config,token,key,expectedUpdated:msg.expectedUpdated,draft:{summary:msg.summary,description:msg.description,transitionId:msg.transitionId}});
+          const result=await jiraItemEditor.save({config,token,key,expectedUpdated:msg.expectedUpdated,draft:{summary:msg.summary,description:msg.description,transitionId:msg.transitionId,fieldValues:msg.fieldValues??{}}});
           let updated=register,brWarning='';
           if(result.changed&&managed){
             try{
-              if(result.contentChanged){
+              if(result.summaryOrDescriptionChanged){
                 updated=await brWorkflow.recordInboundJira(registry,projectId,register.revision,[{path:managed[0],key,remoteDigest:result.remoteDigest,summary:result.summary,description:result.description}],validProjectKey(config.get('jira.projectKey')));
-              }else if(result.statusChanged){
-                updated=await brWorkflow.recordLinkedJiraStatus(registry,projectId,register.revision,{path:managed[0],key,previousStatus:result.previousStatus,status:result.status});
+              }
+              if(result.statusChanged){
+                updated=await brWorkflow.recordLinkedJiraStatus(registry,projectId,updated.revision,{path:managed[0],key,previousStatus:result.previousStatus,status:result.status});
               }
             }catch(error){brWarning='Jira saved, but BR review state could not be recorded: '+String(error.message||error).slice(0,240)+'. Refresh the project and reconcile the change.';}
           }
@@ -9082,7 +9096,24 @@ async function handleDashboardMessage(msg){
         const item=changes.find(row=>row.path===msg.path&&row.action!=='retire');
         if(!item||item.hash!==msg.hash)throw Error('Jira issue changed. Generate the preview again.');
         const owner=await requireBAOwner('ba-br-'+item.path.split('/')[0]);
-        const updated=await brWorkflow.saveJiraIssueDetails(registry,activeProject.id,register.revision,{path:item.path,hash:item.hash,acceptanceCriteria:msg.acceptanceCriteria,definitionOfDone:msg.definitionOfDone,actor:owner.actor});
+        const fieldPlan=jiraPreviewFieldPlans[item.path];
+        const saved=item.staleJiraDetails||item.jiraDetails||{};
+        const reference=fieldPlan?.details||saved;
+        const changesToFields=msg.fieldValues??{};
+        const allowed=new Set((fieldPlan?.fields||[]).filter(field=>field.editor&&!field.detailText).map(field=>field.id));
+        const fieldValues=Object.fromEntries(Object.entries(saved.fieldValues||{}).filter(([id])=>allowed.has(id)));
+        const metadata=jiraPreviewFieldMetadata.get(item.path)||[];
+        jiraFieldValues.editedValues(metadata,changesToFields);
+        for(const [id,value] of Object.entries(changesToFields)){
+          if(!allowed.has(id))throw Error('Jira field '+id+' is unavailable. Refresh Jira fields before editing.');
+          fieldValues[id]=value;
+        }
+        const updated=await brWorkflow.saveJiraIssueDetails(registry,activeProject.id,register.revision,{
+          path:item.path,hash:item.hash,
+          acceptanceCriteria:msg.acceptanceCriteria===reference.acceptanceCriteria?saved.acceptanceCriteria:msg.acceptanceCriteria,
+          definitionOfDone:msg.definitionOfDone===reference.definitionOfDone?saved.definitionOfDone:msg.definitionOfDone,
+          summary:msg.summary??saved.summary,description:msg.description??saved.description,fieldValues,actor:owner.actor
+        });
         approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;jiraPreviewValidation=null;
         await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
         await handleDashboardMessage({command:'brJiraPreview'});
@@ -9133,7 +9164,7 @@ async function handleDashboardMessage(msg){
             if(String(remote.fields?.issuetype?.name||'').toLowerCase()!==type.toLowerCase())
              throw Error('The Jira issue type no longer matches the approved plan.');
           }else{
-            verifyRecoveredJiraIssue(remote,item,{marker,projectKey,issueType:type,parentKey});
+            verifyRecoveredJiraIssue(remote,item,{marker,projectKey,issueType:type,parentKey,publishedDescription:jiraPreviewFieldPlans[item.path]?.description});
             if(item.roleLabel&&!remote.fields?.labels?.includes(item.roleLabel))
              throw Error('The Jira role label does not match the approved Developer task.');
           }
@@ -9154,7 +9185,7 @@ async function handleDashboardMessage(msg){
         break;
       }
       case 'brJiraPreview':{
-        jiraPreviewFieldPlans={};
+        jiraPreviewFieldPlans={};jiraPreviewFieldMetadata=new Map();
         requireOpened();let register=await brWorkflow.load(registry,activeProject.id);approvedJiraPreviewRevision=null;jiraPreviewValidation=null;
         const currentRequirements=register.brs.filter(item=>!item.archivedFromRestart&&item.status!=='retired'&&item.status!=='retire-proposed');
         const activeRetirements=register.brs.some(item=>!item.archivedFromRestart&&item.status==='retire-proposed'&&item.approvedContent);
@@ -9192,6 +9223,7 @@ async function handleDashboardMessage(msg){
         if(changes.length){
          const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
          const metaCache=new Map();
+         const template=await jiraTemplateKnowledge.load(path.dirname(registry.fileFor(activeProject.id)));
          for(const item of changes.filter(entry=>entry.action!=='retire')){
           try{
            const type=previewTypes.find(value=>value.name===issueTypes[item.path]);
@@ -9202,10 +9234,11 @@ async function handleDashboardMessage(msg){
            if(!metadata){metadata=await jiraIssueFieldMetadata(config,token,identifier);metaCache.set(cacheKey,metadata);}
            const existing=item.action==='update'?await jiraReadIssueAllFields(config,token,item.key):null;
            const approvedBR=register.brs.find(br=>br.id===item.path.split('/')[0])?.approvedContent||{};
-           const fieldPlan=jiraFieldPreflight.planFields(item,metadata,{approvedBR,discoveryAnswers:register.discoveryAnswers||{},existing});
+           const fieldPlan=jiraFieldPreflight.planFields(item,metadata,{approvedBR,discoveryAnswers:register.discoveryAnswers||{},existing,template});
            const selected=Object.keys(fieldPlan.extraFields);
            fieldPlan.existingDigest=item.action==='update'?sha(JSON.stringify(Object.fromEntries(selected.map(key=>[key,existing?.fields?.[key]??null])))):null;
            jiraPreviewFieldPlans[item.path]=fieldPlan;
+           jiraPreviewFieldMetadata.set(item.path,metadata);
            conflicts.push(...fieldPlan.blocking.map(message=>item.path+': '+message));
           }catch(error){
            const message=item.path+': unable to inspect all Jira fields: '+String(error.message||error);
