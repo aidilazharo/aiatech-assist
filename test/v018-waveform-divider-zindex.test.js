@@ -11,7 +11,7 @@ test('My Work canvas overlays the actual #D31145 header border on all screen siz
  const html=read('src/lib/webview/dashboard-html.js');
  const header=html.slice(html.indexOf('<header class="app-header"'),html.indexOf('</header>')+9);
  const main=html.slice(html.indexOf('<main id="myWorkView"'),html.indexOf('<main id="workView"'));
- const headerRule=css.match(/body\.atgv-mywork-chat-mode:not\(\.gate-mode\) #appHeader\.app-header,\s*body\.atgv-ba-ai-active:not\(\.gate-mode\) #appHeader\.app-header\{([^}]+)\}/)?.[1]||'';
+ const headerRule=css.match(/body\.atgv-mywork-chat-mode:not\(\.gate-mode\) #appHeader\.app-header,\s*body\.atgv-ba-ai-active:not\(\.gate-mode\) #appHeader\.app-header,\s*body\.atgv-global-ai-active:not\(\.gate-mode\) #appHeader\.app-header\{([^}]+)\}/)?.[1]||'';
  const carrier=css.match(/#appHeader #myWorkHeaderWave\.mywork-header-wave\{([^}]+)\}/)?.[1]||'';
  const visual=css.match(/#appHeader #myWorkHeaderWave \.mywork-header-wave-visual\{([^}]+)\}/)?.[1]||'';
  const canvas=css.match(/#appHeader #myWorkHeaderWave canvas#atgvMyWorkAiOrb\{([^}]+)\}/)?.[1]||'';

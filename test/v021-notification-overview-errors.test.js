@@ -26,7 +26,7 @@ test('notification keeps the existing live My Work canvas above its own red bord
  assert.match(ui,/\$\('appHeader'\)\.classList\.remove\('hidden'\);\s*syncMyWorkHeaderWaveHost\(\);/);
  assert.match(css,/#topNotification #myWorkHeaderWave\.mywork-header-wave\{/);
  assert.match(css,/#topNotification #myWorkHeaderWave canvas#atgvMyWorkAiOrb\{/);
- assert.match(css,/body\.atgv-mywork-chat-mode:not\(\.gate-mode\) #topNotification\.top-notification,\s*body\.atgv-ba-ai-active:not\(\.gate-mode\) #topNotification\.top-notification\{/);
+ assert.match(css,/body\.atgv-mywork-chat-mode:not\(\.gate-mode\) #topNotification\.top-notification,\s*body\.atgv-ba-ai-active:not\(\.gate-mode\) #topNotification\.top-notification,\s*body\.atgv-global-ai-active:not\(\.gate-mode\) #topNotification\.top-notification\{/);
  assert.match(css,/#topNotification #myWorkHeaderWave \.mywork-header-wave-visual\{height:42px;bottom:-20px\}/);
 });
 
