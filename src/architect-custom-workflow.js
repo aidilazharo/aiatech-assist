@@ -8,6 +8,7 @@ const repair=require('./architect-custom-repair');
 const developer=require('./developer-git');
 const dependency=require('./stack-dependency-helper');
 const running=new Map();
+const awaitingConsent=new Map();
 const steps=Object.freeze([
  'Scan repository',
  'Create local branch',
@@ -131,11 +132,21 @@ async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgr
   if(running.get(key)===state)running.delete(key);
  }
 }
+function beginConsent(root){
+ const key=path.resolve(root);
+ if(awaitingConsent.has(key)||running.has(key))throw Error('Custom Stack workflow already pending.');
+ awaitingConsent.set(key,false);
+}
+function endConsent(root){
+ const key=path.resolve(root),cancelled=awaitingConsent.get(key)===true;
+ awaitingConsent.delete(key);
+ return cancelled;
+}
 function cancel(root){
- const state=running.get(path.resolve(root));
- if(!state)return false;
- state.controller.abort();
- return true;
+ const key=path.resolve(root),state=running.get(key);
+ if(state){state.controller.abort();return true;}
+ if(awaitingConsent.has(key)){awaitingConsent.set(key,true);return true;}
+ return false;
 }
 function isPending(root){return running.has(path.resolve(root));}
-module.exports={installAndRun,cancel,isPending,steps};
+module.exports={installAndRun,beginConsent,endConsent,cancel,isPending,steps};
