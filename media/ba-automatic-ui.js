@@ -221,6 +221,7 @@
   // waves only during real AI activity, never solely because the page is open.
   document.body.classList.toggle('atgv-ba-ai-active',showingBusinessRequirements);
   window.ATGVMyWorkChat?.setBusinessRequirementsActivity?.(aiWorking);
+  window.ATGVMyWorkChat?.setBusinessRequirementsVisible?.(showingBusinessRequirements);
   window.ATGVSyncMyWorkHeaderWaveHost?.();
   if(!active()||!activeId||!brState)return;
   if(!source()&&sourceDigest)state=null;
