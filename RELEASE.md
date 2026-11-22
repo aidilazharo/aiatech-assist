@@ -1,16 +1,15 @@
-# ATGV AIATECH Assist v0.0.34
+# ATGV AIATECH Assist v0.0.35
 
-## Business Analyst requirements and source workflow
+## My Work AI and SDLC navigation
 
-- Fix BR generation confirmation dialogs showing literal backslash-n sequences. Display real paragraph breaks in both AI and source-only generation decisions.
-- Automatically claim newly created, unassigned BR drafts for the live verified Business Analyst. When the BA workspace is opened, claim remaining unassigned draft BRs once per verified batch. Never transfer existing ownership, override pending transfer requests, or queue unverified offline claims.
-- Remove the redundant **Remove Source** action from Uploaded Documents. Rename the destructive **Delete Everywhere** button to **Delete**, retaining the existing complete deletion preflight and explicit confirmation.
-- Display **AI document preflight** as a collapsed summary by default, with findings and report exports in an expandable details section.
-- Rename the TXT export to **Download Pre-flight Analyst** with `ATGV-Preflight-Analyst-...` filenames; preserve the original preflight audit evidence and text format.
-- Replace the Working BR Markdown download with **Download ISO 29148 Business Requirements**. Generate an offline, pagination-aware A4 PDF with structured BRS sections (business purpose and scope, management, operations, requirement records, acceptance criteria, traceability, verification and original-source appendix).
-- Use only integrity-verified working BR text and current saved requirements. Missing facts remain explicitly pending human review. No assertion of ISO certification, final approval, executed tests or unchanged-source modifications.
+- Remove the black gap above My Work chat. The conversation now begins immediately under the header; clip the lower half of the red/CMYK waveform at the real header border rather than reserving an empty 42px (mobile 34px / short screens 24px) spacer.
+- Remove **Role Workspace** from the sidebar. Keep the same role-specific work pages, unsaved-change guards, AI chat **Go to task** routing, Jira ticket selection and role permissions.
+- Combine sidebar navigation **SDLC**, **Documents**, **Solution Designs**, **Knowledge & RAG**, and **Approvals & Handoffs** into **SDLC Workspace**.
+- SDLC Workspace opens **SDLC Readiness** by default and exposes four internal tabs: Documents, Solution Designs, Knowledge & RAG and Approvals. The Readiness control reopens the original SDLC status page.
+- Preserve all existing page IDs, handlers, document editor routes, approvals, Confluence, Jira and project permission checks; tab switching uses the existing `navigate`/view system.
+- Add keyboard-operable tab navigation, selection state and focus indicators. Library Studio remains visible only in the active Developer role.
 
 ## Verification
 
-- Add unit regressions for PDF structure and pagination, no invented approvals, duplicate ownership safety, visible labels and real line breaks.
-- Run Node regression suite, Windows checks and VSIX artifact integrity before merging.
+- Test no duplicate visible sidebar entries, preserved AI action navigation, tab selection, mobile/small viewport chat, waveform clipping, and old workspace page guards.
+- Require full Node regression suite, Windows validation and VSIX packaging before merge.
