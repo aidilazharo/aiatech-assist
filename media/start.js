@@ -8045,12 +8045,12 @@ window.addEventListener('message',event=>{
 });
 let architectServerBusy=false,architectServerSnapshot={running:false,message:'App server stopped'},architectServerSnapshotProjectId='';
 let architectServerStatusRequest=0,architectServerStatusAccepted=0;
-let architectErrorLogProjectId='',architectErrorLogCount=0;
+let architectErrorLogProjectId='',architectErrorLogCount=0,architectLogCheckedProjectId='';
 function updateArchitectFailureLogButtons(){
  const button=$('architectDownloadUnifiedLog');
  const available=!!(activeId&&architectErrorLogProjectId===activeId&&architectErrorLogCount>0);
  button.disabled=!available;
- button.title=available?'Download '+architectErrorLogCount+' recorded Technology Stack error(s) in one report.':'No Technology Stack errors recorded for this project during this session.';
+ button.title=available?'Download chronological Technology Stack activity and errors from Save Stack onward.':'Select Save Stack to start a downloadable Technology Stack diagnostic log.';
 }
 function architectRecordErrorLog(message){
  if(!message?.logAvailable||message.projectId!==activeId)return;
@@ -8060,6 +8060,13 @@ function architectRecordErrorLog(message){
 }
 $('architectDownloadUnifiedLog').addEventListener('click',()=>{
  if(activeId&&architectErrorLogProjectId===activeId&&architectErrorLogCount>0)send('architectDownloadErrorLog',{kind:'all'});
+});
+window.addEventListener('message',event=>{
+ const msg=event.data||{};
+ if(msg.type!=='architectLogState'||msg.projectId!==activeId)return;
+ architectErrorLogProjectId=activeId;
+ architectErrorLogCount=Math.max(Number(msg.events)||0,Number(msg.errorCount)||0);
+ updateArchitectFailureLogButtons();
 });
 function updateArchitectServerControls(saved){
  const toggle=$('architectServerToggle');
@@ -8161,6 +8168,10 @@ function renderArchitectCustomPanel(){
  const isCustom=$('architectStackSelect').value==='custom';
  panel.classList.toggle('hidden',!isCustom);
  if(!isCustom)return;
+ if(activeId&&architectLogCheckedProjectId!==activeId){
+  architectLogCheckedProjectId=activeId;
+  send('architectActivityStatus',{projectId:activeId});
+ }
  const current=architectCustomInfo?.projectId===activeId?architectCustomInfo:null;
  if(architectCustomRuntime.projectId!==activeId){
   architectCustomRuntime={projectId:activeId,checked:false,running:false,pid:null,previewUrl:'',relative:'',mockPreview:false,exitCode:null,reachable:null};
@@ -8337,7 +8348,7 @@ $('architectCustomRun').addEventListener('click',()=>{
  architectCustomBusy=true;architectCustomScanPending=false;architectCustomStage=1;architectCustomAiActive=false;
  architectCustomOperation='WAITING FOR VS CODE CONFIRMATION';architectCustomLastError='';
  architectCustomSetProgress(4,'Awaiting approval for six-stage Install & Run');
- architectCustomNotify('Confirm the single Install & Run workflow in VS Code. No files have changed yet.');
+ architectCustomNotify('Check the ATGV confirmation dialog inside VS Code. No scripts have run; download the diagnostic log to troubleshoot.');
  renderArchitectCustomPanel();
  send('architectCustomInstallRun',{projectId:activeId,expectedSha:current?.sha||'',
   relative:selected?.relative,previewUrl:selected?$('architectCustomPreviewUrl').value.trim():''});
@@ -8399,6 +8410,7 @@ window.addEventListener('message',event=>{
   if(/Verifying localhost|health at /i.test(message))architectCustomOperation='VERIFYING LOCALHOST HEALTH';
   else if(/Starting /i.test(message))architectCustomOperation='STARTING APPLICATION';
   else if(/installing|dependencies|npm /i.test(message))architectCustomOperation='INSTALLING DEPENDENCIES';
+  else if(/waiting for|confirmation|approval/i.test(message))architectCustomOperation='WAITING FOR VS CODE CONFIRMATION';
   else if(architectCustomBusy&&architectCustomOperation!=='WAITING FOR VS CODE CONFIRMATION')architectCustomOperation='PROCESSING CUSTOM STACK';
   architectCustomNotify(message);
   architectCustomSetProgress(m.percent??Math.min(90,architectCustomProgressPercent+5),message);
