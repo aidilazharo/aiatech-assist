@@ -36,9 +36,11 @@ function harness(){
   segment,
   "return renderBAJiraBackedEpics;"
  ].join('\n');
- const run=new Function('$','brElement','ATGVCompletedBRHistory','completedBARecords','ATGVBAJiraEpics','items','document','openJiraIssueModal',source);
+ const run=new Function('$','brElement','baIconAction','ATGVCompletedBRHistory','completedBARecords','ATGVBAJiraEpics','items','document','openJiraIssueModal',source);
  const render=run(
   id=>id==='baJiraBackedEpics'?root:null,element,
+  (node,icon,tooltip)=>{node.className+=' ba-br-icon-action';node.textContent=icon;node.title=tooltip;
+   node.dataset.tooltip=tooltip;node.setAttribute('aria-label',tooltip);return node;},
   {group:()=>[]},()=>[],jiraEpics,jiraItems,
   {createElement:tag=>element(tag)},
   key=>opened.push(key)
@@ -59,10 +61,12 @@ test('Jira-only Epic uses identical completed BR accordion structure, without du
  assert.equal(heading.children[0].textContent,'BR-001 · Person Name CRUD Interface');
  assert.match(heading.children[1].textContent,/To Do · Unlinked to local BR/);
  const answers=heading.children[2],jira=heading.children[3];
- assert.equal(answers.textContent,'View 12 Answers');
+ assert.equal(answers.textContent,'▤');
+ assert.match(answers.title,/unavailable/);
  assert.equal(answers.disabled,true);
  assert.match(answers.attributes['aria-label'],/unavailable/);
- assert.equal(jira.textContent,'View Jira · 1 linked');
+ assert.equal(jira.textContent,'↗');
+ assert.match(jira.title,/1 linked/);
  assert.equal(body.className,'ba-completed-br-body');
  assert.match(body.children[0].children[1].textContent,/Jira alone cannot reconstruct it/);
  let prevented=false,stopped=false;
