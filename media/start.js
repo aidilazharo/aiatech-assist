@@ -2328,7 +2328,7 @@ function refreshArchitectStageClasses(project){
   const step=$(id);step.classList.toggle('complete',!!done);step.classList.toggle('current',!!current);
   step.setAttribute('aria-label',step.textContent.trim()+': '+(done?'Completed':current?'Current step':'Pending'));
  }
- $('architectApprovalStatus').textContent=approved?'Approved for Developers · '+new Date(project.techStackApproval.approvedAt||Date.now()).toLocaleString():serverReady?(architectLiveServerReady(project,stackId)?'Server running and verified · ready for architect approval.':'Application server was verified for this commit and is now stopped. Ready for Architect approval.'):tested?'Run Server successfully to enable approval.':saved?'Complete Test & Run, then Run Server.':'';
+ $('architectApprovalStatus').textContent=stackId==='custom'?'Custom Stack · a local synthetic mock preview is not verified Developer handoff evidence. Separate test/build and reviewed branch publication are required; merging to main is not required.':approved?'Approved for Developers · '+new Date(project.techStackApproval.approvedAt||Date.now()).toLocaleString():serverReady?(architectLiveServerReady(project,stackId)?'Server running and verified · ready for architect approval.':'Application server was verified for this commit and is now stopped. Ready for Architect approval.'):tested?'Run Server successfully to enable approval.':saved?'Complete Test & Run, then Run Server.':'';
 }
 function syncArchitectStackButtons(project){
  const stackId=$('architectStackSelect').value;
@@ -2355,6 +2355,8 @@ function syncArchitectStackButtons(project){
   $('architectResetStack').disabled=true;
   $('architectTestStack').disabled=true;
   $('architectApproveStack').disabled=true;
+  $('architectTestStack').title='Custom Stack uses isolated Install & Run. This is a mock preview, not a real test/build certification.';
+  $('architectApproveStack').title='Mock preview verified locally, but Developer approval requires separate tested and reviewed handoff evidence. Do not merge into main merely to approve.';
   return;
  }
  // A different prepared stack can be replaced only through a confirmed,
