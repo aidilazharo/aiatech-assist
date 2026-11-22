@@ -1560,6 +1560,16 @@ function renderBAJiraInventory(){
  const scoped=brPicker.value?combined.rows.filter(item=>item._brRefs.some(ref=>ref.scopeId===brPicker.value)):combined.rows;
  const rows=prioritizeJiraCreators(scoped.filter(item=>(!type||item.type===type)&&(!issueStatus||item.status===issueStatus)),jiraInventoryViewerId)
   .sort((a,b)=>Number(b._brRoots.length>0)-Number(a._brRoots.length>0));
+ // BR owner is the Epic's live Jira Reporter, not the immutable Creator.
+ // Populate a real sort value so the new DataTable column sorts correctly.
+ const epicOwners=new Map(jiraInventoryItems.filter(item=>String(item.type||'').toLowerCase()==='epic')
+  .map(item=>[item.key,String(item.reporter||'')]));
+ for(const item of rows){
+  const rootKey=(item._brRefs||[]).map(ref=>ref.rootKey).find(key=>epicOwners.has(key))||
+   (String(item.type||'').toLowerCase()==='epic'?item.key:'');
+  item.brOwner=rootKey?epicOwners.get(rootKey)||'':'';
+ }
+
  const treeView=baJiraView==='tree';
  $('baJiraListView').setAttribute('aria-pressed',String(!treeView));$('baJiraTreeView').setAttribute('aria-pressed',String(treeView));
  root.classList.toggle('hidden',treeView);$('baJiraHierarchy').classList.toggle('hidden',!treeView);
@@ -1591,12 +1601,10 @@ function renderBAJiraInventory(){
     return el;
    }},
   {key:'brOwner',label:'BR owner',render:item=>{
-    const own=String(item.reporter||'');
     const roots=(item._brRefs||[]).map(ref=>ref.rootKey).filter(Boolean);
     const epic=String(item.type||'').toLowerCase()==='epic'&&roots.includes(item.key)?item:
       jiraInventoryItems.find(issue=>roots.includes(issue.key));
-    const owner=epic?.reporter||own;
-    const node=document.createElement('span');node.textContent=roots.length?(owner||'Unassigned'):'—';
+    const node=document.createElement('span');node.textContent=roots.length?(item.brOwner||'Unassigned'):'—';
     if(epic?.reporterId)node.title='Current Jira Reporter account ID: '+epic.reporterId;
     return node;
    }},
