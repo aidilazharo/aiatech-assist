@@ -46,6 +46,8 @@ function sourceSection(working){
 }
 const acronymTokens=new Set(['GATE','AIA','AI','ATGV','IT','API','BR','BRD','BRS','ISO','IEEE','IEC','TBP','EA','EXCO','TRM','CAPEX','OPEX','MYR','USD','RMB','PMO','PIC','RBAC','SST','KPI','ID','UAT','UI','UX','MVP1A','PDF','JIRA','SAP']);
 function titleCase(value){
+ // Keep literal markup-like source tokens unchanged; they remain safely PDF-escaped.
+ if(/[<>]/.test(String(value||'')))return String(value||'').trim();
  const small=new Set(['a','an','the','and','or','of','for','to','in','on','at','by','with']);
  let wordIndex=0;
  return String(value||'').trim().replace(/\s+/g,' ').replace(/\b[A-Za-z][A-Za-z0-9]*\b/g,word=>{
