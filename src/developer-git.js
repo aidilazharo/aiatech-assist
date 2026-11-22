@@ -215,14 +215,15 @@ async function inspectScripts(root) {
     // Discover real npm/.NET/Maven application folders, including common
     // multi-app repositories such as ReactTS_Frontend + NestJS_Backend.
     // Never recurse through dependency trees, symlinks, Git internals or docs.
-    const locations = new Set(['', 'apps/web', 'services/api']);
+    const locations = new Set(['']);
     const excluded = new Set(['node_modules','dist','build','coverage','docs','test','tests','e2e','src','scripts','public','assets','vendor','fixtures','.git','.atgv']);
+    const workspaceContainers = new Set(['apps','services','packages','modules','projects','applications','frontend','backend','client','server']);
     const acceptable = name => /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,79}$/.test(name) && !excluded.has(name.toLowerCase());
     const children = async folder => (await fs.readdir(folder,{withFileTypes:true}).catch(error=>error.code==='ENOENT'?[]:Promise.reject(error)))
         .filter(entry=>entry.isDirectory() && !entry.isSymbolicLink() && acceptable(entry.name)).slice(0,80);
     for (const entry of await children(repo.root)) {
         locations.add(entry.name);
-        if (['apps','services','packages'].includes(entry.name.toLowerCase()))
+        if (workspaceContainers.has(entry.name.toLowerCase()))
             for (const child of await children(path.join(repo.root,entry.name)))
                 locations.add(entry.name+'/'+child.name);
     }
@@ -266,7 +267,7 @@ function approvedCommand(target, operation) {
         return npmCommand(['run', script]);
     }
     if (target.kind === 'dotnet')
-        return { bin: 'dotnet', args: operation === 'test' ? ['test', 'tests/Atgv.Tests/Atgv.Tests.csproj'] : [operation === 'run' ? 'run' : 'build'] };
+        return { bin: 'dotnet', args: operation === 'test' ? ['test'] : [operation === 'run' ? 'run' : 'build'] };
     if (target.kind === 'maven')
         return mavenCommand(operation === 'test' ? ['test'] : operation === 'build' ? ['package'] : ['spring-boot:run']);
     throw Error('Unsupported project runtime.');

@@ -65,13 +65,13 @@ async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgr
   if(expectedSha&&inspection.sha!==expectedSha)throw Error('Git revision changed since the previous scan. Nothing was modified; retry after refreshing the repository.');
   if(!inspection.clean)throw Error('Local checkout has uncommitted changes. Preserve or commit them before Install & Run.');
   if(driver.localLogs().running)throw Error('Stop the currently managed application before Install & Run.');
-  const chosen=inspection.targets.find(x=>x.relative===relative&&x.runnable)||(!relative?inspection.targets.find(x=>x.runnable):null);
+  const chosen=inspection.targets.find(x=>x.relative===relative&&x.runnable)||(!relative?inspection.targets.find(x=>x.runnable&&x.mockable)||inspection.targets.find(x=>x.runnable&&x.mockApi)||inspection.targets.find(x=>x.runnable):null);
   if(!chosen)throw Error('No runnable application was detected for the selected Custom Stack target.');
-  if(!chosen.mockable&&!/NestJS/i.test(chosen.framework))
-   throw Error('Automated synthetic service preview currently supports detected Vite and NestJS applications. No incomplete mock runner was started.');
+  if(!chosen.mockable&&!chosen.mockApi)
+   throw Error('Synthetic preview requires a runnable Vite frontend with local configuration or a supported Node API (NestJS, Express, Fastify). Other standard frameworks are detected but need an explicitly configured runtime; no unsafe fallback was started.');
   const url=stack.loopbackPreview(relative===chosen.relative&&previewUrl?previewUrl:chosen.previewUrl);
-  if(!chosen.mockable&&new URL(url).pathname!=='/api/v1/health')
-   throw Error('NestJS synthetic API preview must use /api/v1/health.');
+  if(chosen.mockApi&&new URL(url).pathname!=='/api/v1/health')
+   throw Error('Node API synthetic preview must use /api/v1/health.');
   const analysis=await repairs.analyse(key,inspection);
   if(typeof onAiReview==='function'){
    await report(17,1,'1/6 AI reviewing application architecture and blockers (advisory only)…',true);

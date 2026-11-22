@@ -26,7 +26,9 @@ async function analyse(root,inspection,{fsApi=fs}={}){
   const scripts=Object.keys(pkg.scripts||{}).filter(x=>/^[a-zA-Z0-9:_-]+$/.test(x)).slice(0,30);
   const isDb=dependencyNames.some(x=>/^(pg|postgres|mysql2|mysql|sqlite3|better-sqlite3|@mikro-orm\/postgresql|prisma|@prisma\/client|typeorm|sequelize|mongoose)$/.test(x));
   const usesAuth=dependencyNames.some(x=>/okta|passport|saml|openid|auth0/i.test(x));
-  const vite=Boolean(deps.vite);
+  // Vite in devDependencies can be a Vitest tool in backend applications.
+  // Only runnable, configured Vite frontends count as preview services.
+  const vite=target.mockable===true;
   hasVite||=vite;hasDb||=isDb;
   hasBackend||=Boolean(deps['@nestjs/core']||deps.express||deps.fastify);
   const exampleNames=[];
