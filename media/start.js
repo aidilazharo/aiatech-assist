@@ -1512,8 +1512,8 @@ function openBARequirementModal(ref,openAnswers=false){
  if(!ref||!activeId)return;
  baRequirementPriorFocus=document.activeElement;
  baRequirementModalTarget={kind:ref.kind,brId:ref.id||'',scopeId:ref.scopeId,rootKey:ref.rootKey,projectId:activeId,openAnswers};
- resetBATransferPanel();
- $('baTransferOpen').hidden=!ref.rootKey;
+ if(typeof resetBATransferPanel==='function')resetBATransferPanel();
+ const transferButton=$('baTransferOpen');if(transferButton)transferButton.hidden=!ref.rootKey;
  baBreadcrumbAtRequirements=true;
  $('baRequirementModalTitle').textContent=ref.title||ref.label||'Business Requirement details';
  if(ref.kind==='local')renderBACompletedRecords();else renderBAJiraBackedEpics();
@@ -1523,7 +1523,7 @@ function openBARequirementModal(ref,openAnswers=false){
 }
 function closeBARequirementModal(restore=true){
  const target=baRequirementModalTarget;if(!target)return;baRequirementModalTarget=null;
- resetBATransferPanel();
+ if(typeof resetBATransferPanel==='function')resetBATransferPanel();
  const content=$('baRequirementModalContent'),card=content.firstElementChild;
  if(card&&target.projectId===activeId)$(target.kind==='local'?'baCompletedList':'baJiraBackedEpics').append(card);
  content.replaceChildren();$('baRequirementModal').classList.add('hidden');$('baRequirementModal').setAttribute('aria-hidden','true');
