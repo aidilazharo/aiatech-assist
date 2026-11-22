@@ -91,7 +91,7 @@ test('the project overview and four-stage workflow use separate views and share 
  const root=path.join(__dirname,'..');
  const [html,ui,controller,css]=await Promise.all(['src/lib/webview/dashboard-html.js','media/ba-automatic-ui.js','media/start.js','media/start.css']
   .map(file=>fs.readFile(path.join(root,file),'utf8')));
- assert.match(html,/<section id="baRequirementsOverview"[\s\S]*id="baJiraInventorySection"[\s\S]*id="baUncompletedPanel"/);
+ assert.match(html,/<section id="baRequirementsOverview"[\s\S]*id="baUncompletedPanel"[\s\S]*id="baJiraInventorySection"/);
  assert.doesNotMatch(html,/id="baAutoAI(?:Status)?"/);
  assert.match(controller,/discoveryView'\)\.classList\.toggle\('hidden',next!=='discovery'/);
  assert.match(controller,/baRequirementsOverview'\)\?\.classList\.toggle\('hidden',next!=='baOverview'/);

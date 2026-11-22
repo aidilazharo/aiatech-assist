@@ -2753,3 +2753,121 @@ body:not(.gate-mode) #sdlcWorkspaceShell.atgv-sdlc-workspace-shell{
  #discoveryView textarea#baAutoArtifactText{height:320px;padding:12px}
  #discoveryView #baAutoArtifactSave{width:100%;margin:0}
 }
+
+/* v0.0.49 — BA Jira overview without a redundant outer panel.
+   Keep the Jira DataTable as the only inventory card, with the active
+   Business Requirement continuation card above it. */
+#workView.ba-project-overview{
+ background:transparent!important;border:0!important;box-shadow:none!important;
+ border-radius:0!important;min-width:0
+}
+#workView.ba-project-overview > #baRequirementsOverview{
+ box-sizing:border-box;display:flex;flex-direction:column;gap:16px;
+ width:100%;min-width:0;max-width:100%;margin:0;padding:0!important;
+ background:transparent!important;border:0!important;border-radius:0!important;
+ box-shadow:none!important;outline:0
+}
+#workView.ba-project-overview #baUncompletedPanel{
+ order:0;margin:0!important;max-width:100%;min-width:0
+}
+#workView.ba-project-overview #baJiraInventorySection{
+ order:1;box-sizing:border-box;width:100%;min-width:0;max-width:100%;
+ margin:0 0 18px;padding:20px clamp(14px,2.2vw,24px);
+ overflow:hidden
+}
+#workView.ba-project-overview .ba-jira-inventory-heading h2{overflow-wrap:anywhere}
+#workView.ba-project-overview .ba-jira-inventory-filters{min-width:0}
+#workView.ba-project-overview .atgv-datatable-scroll{overflow-x:auto;max-width:100%}
+
+/* The BR details modal must be in the visible workView rather than inside
+   the hidden discoveryView/baStartPanel. Retain its completed-BR styling. */
+#workView #baRequirementModal.modal-overlay{
+ z-index:80;box-sizing:border-box;padding:clamp(10px,2vw,24px);
+ align-items:center;justify-content:center;overflow:auto
+}
+#workView #baRequirementModal.modal-overlay.hidden{display:none!important}
+#workView #baRequirementModal .ba-requirement-modal-card{
+ box-sizing:border-box;width:min(1000px,100%);max-width:100%;max-height:90vh;
+ min-width:0;display:flex;flex-direction:column;overflow:hidden;
+ background:var(--vscode-editor-background);padding:18px
+}
+#workView #baRequirementModal .ba-requirement-modal-heading{
+ display:flex;align-items:center;justify-content:space-between;
+ gap:16px;margin-bottom:12px;flex:0 0 auto
+}
+#workView #baRequirementModal .ba-requirement-modal-heading h2{
+ margin:0;font-size:18px;line-height:1.45;min-width:0;overflow-wrap:anywhere
+}
+#workView #baRequirementModal .ba-requirement-modal-heading button{
+ flex:0 0 auto;min-height:36px
+}
+#workView #baRequirementModalContent{
+ flex:1 1 auto;min-height:0;min-width:0;overflow-y:auto;
+ overflow-x:hidden;overscroll-behavior:contain;padding:2px 4px 12px;
+ scrollbar-gutter:stable
+}
+#workView #baRequirementModalContent .ba-completed-br-section{
+ border:1px solid var(--atgv-line);border-radius:9px;margin:0;
+ background:var(--vscode-editor-background);min-width:0;overflow:hidden
+}
+#workView #baRequirementModalContent .ba-completed-br-heading{
+ cursor:pointer;display:flex;align-items:center;gap:10px;
+ flex-wrap:wrap;padding:13px 16px;min-height:52px;list-style:none
+}
+#workView #baRequirementModalContent .ba-completed-br-heading::-webkit-details-marker{display:none}
+#workView #baRequirementModalContent .ba-completed-br-title{
+ flex:1 1 220px;min-width:0;font-size:13px;line-height:1.45;
+ overflow-wrap:anywhere
+}
+#workView #baRequirementModalContent .ba-completed-br-meta{
+ color:var(--vscode-descriptionForeground);font-size:11px;
+ line-height:1.5;overflow-wrap:anywhere
+}
+#workView #baRequirementModalContent .ba-completed-br-body{
+ min-width:0;padding:14px 16px;border-top:1px solid var(--atgv-line)
+}
+#workView #baRequirementModalContent .ba-completed-br,
+#workView #baRequirementModalContent .ba-completed-cycle{
+ min-width:0;max-width:100%;overflow-wrap:anywhere
+}
+#workView #baRequirementModalContent .ba-completed-cycle{
+ border:1px solid var(--atgv-line);border-radius:8px;margin:10px 0;
+ background:var(--vscode-editor-background)
+}
+#workView #baRequirementModalContent .ba-completed-cycle-heading{
+ padding:10px 12px;cursor:pointer;font-size:12px;font-weight:650
+}
+#workView #baRequirementModalContent .ba-completed-tabs{
+ display:flex;gap:4px;flex-wrap:wrap;min-width:0;
+ border-bottom:1px solid var(--atgv-line);margin-top:10px
+}
+#workView #baRequirementModalContent .ba-completed-tab{
+ min-height:36px;padding:9px 12px;background:transparent;
+ font-size:12px;border:0;border-bottom:2px solid transparent
+}
+#workView #baRequirementModalContent .ba-completed-tab[aria-selected="true"]{
+ color:var(--vscode-textLink-foreground,#82bdfa);
+ border-bottom-color:currentColor
+}
+#workView #baRequirementModalContent .ba-completed-tabpanel,
+#workView #baRequirementModalContent .ba-completed-evidence-tabs{
+ box-sizing:border-box;min-width:0;max-width:100%;
+ overflow-wrap:anywhere
+}
+#workView #baRequirementModalContent .ba-jira-only-br-section button{
+ white-space:normal;line-height:1.4;min-height:30px
+}
+#workView #baRequirementModalContent :is(p,li,small,pre,code){
+ overflow-wrap:anywhere;max-width:100%
+}
+#workView #baRequirementModalContent pre{
+ white-space:pre-wrap;overflow-x:auto
+}
+@media(max-width:640px){
+ #workView.ba-project-overview #baJiraInventorySection{padding:14px}
+ #workView.ba-project-overview > #baRequirementsOverview{gap:12px}
+ #workView #baRequirementModal .ba-requirement-modal-card{padding:12px;max-height:94vh}
+ #workView #baRequirementModal .ba-requirement-modal-heading{gap:8px}
+ #workView #baRequirementModal .ba-requirement-modal-heading h2{font-size:15px}
+ #workView #baRequirementModalContent .ba-completed-br-heading{padding:11px 12px}
+}
