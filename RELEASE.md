@@ -1,24 +1,22 @@
-# ATGV AIATECH Assist v0.0.52
+# ATGV AIATECH Assist v0.0.53
 
-## Business Documents — cleaner document-first interface
+## Business Requirement dialog
 
-- Compact source header with complete original upload metadata preserved in a tooltip.
-- Four exclusive tabs: Structured BRD, Editable source, Original and Pre-flight.
-- One tab-aware primary action; download, edit, replace, analysis and irreversible Delete stay available under a compact overflow menu.
-- ISO 29148 source renders as a safe formatted read-only document instead of raw Markdown.
-- Markdown headings, paragraphs, lists, requirement accordions, code blocks and tables render using DOM text nodes. No unsafe innerHTML.
-- Editable source remains a text editor; saving remains disabled until actual changes exist. Original source stays read-only.
-- Unsaved source edits guard tab switches and destructive source actions.
-- Preserve existing verified upload, preflight, download, replacement and BR deletion workflows.
+- Use icon-only buttons for Transfer BR, Close, saved discovery answers, linked Jira issues, Confluence recovery and Jira BR deletion.
+- Keep all existing Jira/Confluence actions and safeguards, now with keyboard-focus styling, readable tooltip labels and accessible button names.
+- Keep disabled discovery answers visibly unavailable when no local evidence exists.
 
-## DataTables correction
+## ISO 29148 PDF export
 
-- Restore correct eight-column widths after adding BR owner: Business Requirement, Jira key, Type, Summary, Status, BR owner, Created by and Created.
-- Contain horizontal scrolling inside the Jira table, preserve readability and avoid overlapping cells.
-- Populate BR owner as a sortable value using the live Jira Epic Reporter without changing immutable Creator.
-- Preserve existing DataTables search, sorting, pagination and clickable Jira/BR rows.
+- Derive the document title from the actual uploaded source filename, removing revision suffixes and correctly capitalizing descriptive words while preserving domain acronyms.
+- Add the packaged ATGV AI logo to the cover; gracefully fall back to a vector AI mark if the image cannot be decoded.
+- Remove boilerplate BRS guidance, repeated empty sections, duplicated source-file citations and the default full-source appendix.
+- Organize the saved business requirements into Business Requirements Overview, Detailed Business Requirements, and Traceability and Approval.
+- Preserve all BR objectives, scopes, acceptance criteria, features, stories, revisions, source digests and real approval statuses.
+- Keep the full validated source available through an explicit `includeSourceAppendix` export option; the original uploaded file and stored evidence are untouched.
+- Use a self-contained PDF XObject for the packaged logo with no external API dependencies.
 
-## Validation
+## Verification
 
-- Pull request CI must pass regression, Windows reset, UI checks and VSIX packaging.
-- GitHub release is published from the verified main-branch workflow.
+- Run the full GitHub regression suite and Windows checks.
+- Build the VSIX and publish only after the main-branch workflow succeeds.
