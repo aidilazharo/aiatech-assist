@@ -2871,3 +2871,55 @@ body:not(.gate-mode) #sdlcWorkspaceShell.atgv-sdlc-workspace-shell{
  #workView #baRequirementModal .ba-requirement-modal-heading h2{font-size:15px}
  #workView #baRequirementModalContent .ba-completed-br-heading{padding:11px 12px}
 }
+
+
+/* Business Documents: single action row and mutually exclusive content tabs. */
+#discoveryView #baAutoDocumentToolbar{
+ box-sizing:border-box;display:flex;align-items:center;flex-wrap:nowrap;gap:8px;
+ width:100%;max-width:100%;min-width:0;overflow-x:auto;overflow-y:hidden;
+ padding:4px 0 12px;margin:0 0 12px;
+ border-bottom:1px solid var(--vscode-panel-border,#404958);
+ scrollbar-width:thin;overscroll-behavior-inline:contain
+}
+#discoveryView #baAutoDocumentTabs{
+ display:flex;align-items:center;flex:0 0 auto;flex-wrap:nowrap;gap:4px;
+ margin:0;padding:0;border:0
+}
+#discoveryView #baAutoDocumentToolbar :is(button,[role="tab"]){
+ box-sizing:border-box;flex:0 0 auto;width:auto;max-width:none;min-width:0;
+ min-height:36px;margin:0;padding:7px 10px;line-height:1.35;
+ white-space:nowrap;font-size:12px
+}
+#discoveryView #baAutoDocumentToolbar #baAutoDocumentTabs [aria-selected="true"]{
+ background:var(--vscode-list-activeSelectionBackground,#15395a);
+ color:var(--vscode-list-activeSelectionForeground,#fff);
+ border-color:var(--vscode-focusBorder,#4da3ff)
+}
+#discoveryView #baAutoDocumentToolbar #baAutoIsoPreflightActions,
+#discoveryView #baAutoDocumentToolbar #baAutoFileActions,
+#discoveryView #baAutoDocumentToolbar #baAutoFileActions .source-document-actions{
+ display:contents!important
+}
+#discoveryView #baAutoDocumentToolbar #baAutoIsoPreflightActions button{width:auto;max-width:none}
+#discoveryView #baAutoDocumentToolbar .br-danger{margin-left:0}
+#discoveryView #baAutoDocumentPanel[hidden],
+#discoveryView #baAutoIsoPreflight[hidden]{display:none!important}
+#discoveryView #baAutoIsoPreflight{margin:0;min-height:160px}
+#discoveryView #baAutoIsoPreflight .ba-source-preflight{width:100%}
+#discoveryView #baAutoDocumentPanel #baAutoArtifactLabel{margin-top:8px}
+#discoveryView #baAutoDocumentPanel > .ba-auto-inline{
+ box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;
+ flex-wrap:wrap;gap:10px;min-width:0;margin-top:14px;padding-top:12px;
+ border-top:1px solid var(--vscode-panel-border,#404958)
+}
+#discoveryView #baAutoOriginalFiles .source-document-row{
+ grid-template-columns:22px minmax(0,1fr);align-items:center
+}
+#discoveryView #baAutoOriginalFiles .source-document-info{grid-column:2}
+#discoveryView #baAutoOriginalFiles .source-document-row .source-document-actions{display:none}
+@media(max-width:600px){
+ #discoveryView #baAutoDocumentToolbar{gap:6px;padding-bottom:10px}
+ #discoveryView #baAutoDocumentToolbar :is(button,[role="tab"]){min-height:40px;padding:8px 10px}
+}
+
+#discoveryView #baAutoDocumentToolbar #baAutoArtifactSave[hidden]{display:none!important}

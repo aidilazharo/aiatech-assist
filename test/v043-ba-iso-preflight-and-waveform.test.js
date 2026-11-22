@@ -14,7 +14,7 @@ function rule(selector){
  assert.ok(i>=0,'CSS rule missing: '+selector);
  return css.slice(i+selector.length+1,css.indexOf('}',i));
 }
-test('one preserved AI preflight component belongs to Structured ISO BRD, not Uploaded Documents',()=>{
+test('one preserved AI preflight component belongs to its own Business Documents tab, not Uploaded Documents',()=>{
  assert.equal((html.match(/id="baSourcePreflight"/g)||[]).length,1);
  assert.equal((html.match(/id="baAutoIsoPreflight"/g)||[]).length,1);
  const iso=html.indexOf('id="baAutoIsoPreflight"'),details=html.indexOf('id="baSourcePreflight"');
@@ -24,8 +24,9 @@ test('one preserved AI preflight component belongs to Structured ISO BRD, not Up
  assert.ok(!sourcePanel.includes('id="baSourcePreflight"'),'preflight must not be repeated beneath uploaded files');
  assert.match(html,/id="baAutoDocumentTabs"/);
  assert.match(html,/data-ba-document="iso"/);
- assert.match(ba,/get\('baAutoIsoPreflight'\)\.hidden=kind!=='iso'/);
- assert.match(ba,/renderArtifacts\(\);\s*requestArtifact\(\)/);
+ assert.match(ba,/get\('baAutoIsoPreflight'\)\.hidden=!preflight/);
+ assert.match(ba,/get\('baAutoDocumentPanel'\)\.hidden=preflight/);
+ assert.match(ba,/renderArtifacts\(\);[\s\S]*?requestArtifact\(\)/);
 });
 test('preflight exports stay outside collapsed findings and retain existing action handlers',()=>{
  const begin=html.indexOf('id="baAutoIsoPreflightActions"');

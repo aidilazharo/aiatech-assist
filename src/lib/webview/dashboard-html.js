@@ -398,18 +398,26 @@ function html(webview,{resumeLibrary=false}={}){
         <div class="ba-auto-body">
           <div id="baAutoOriginalFiles"></div>
           <div id="baAutoSourceEditor" hidden>
-            <div id="baAutoDocumentTabs" class="ba-auto-tabs" role="group" aria-label="Business document view">
-              <button type="button" data-ba-document="iso" aria-pressed="true">Structured ISO BRD</button>
-              <button type="button" data-ba-document="source" aria-pressed="false">Editable source</button>
-              <button type="button" data-ba-document="original" aria-pressed="false">Original upload</button>
-            </div>
-            <div id="baAutoIsoPreflight" class="ba-auto-iso-preflight" aria-label="AI document preflight and ISO BRD downloads">
+            <div id="baAutoDocumentToolbar" class="ba-auto-document-toolbar" role="toolbar" aria-label="Business document controls">
+              <div id="baAutoDocumentTabs" class="ba-auto-tabs" role="tablist" aria-label="Business document view">
+                <button id="baAutoTabIso" type="button" role="tab" data-ba-document="iso" aria-controls="baAutoDocumentPanel" aria-selected="true" aria-pressed="true" tabindex="0">Structured ISO BRD</button>
+                <button id="baAutoTabSource" type="button" role="tab" data-ba-document="source" aria-controls="baAutoDocumentPanel" aria-selected="false" aria-pressed="false" tabindex="-1">Editable source</button>
+                <button id="baAutoTabOriginal" type="button" role="tab" data-ba-document="original" aria-controls="baAutoDocumentPanel" aria-selected="false" aria-pressed="false" tabindex="-1">Original upload</button>
+                <button id="baAutoTabPreflight" type="button" role="tab" data-ba-document="preflight" aria-controls="baAutoIsoPreflight" aria-selected="false" aria-pressed="false" tabindex="-1">Pre-flight Analyst</button>
+              </div>
               <div id="baAutoIsoPreflightActions" class="ba-auto-iso-preflight-actions"><button id="baPreflightDownload" type="button" class="secondary hidden" title="Download the Business Analyst preflight findings (.txt)" aria-label="Download Pre-flight Analyst text report" disabled>Download Pre-flight Analyst</button><button id="baWorkingBrDownload" type="button" class="secondary hidden" title="Download an ISO/IEC/IEEE 29148-aligned Business Requirements Specification PDF based on verified evidence" disabled>Download ISO 29148 Business Requirements</button><button id="baPreflightRetry" type="button" class="secondary hidden" title="Retry document AI preflight and 12-question mapping">Retry Mapping</button><button id="baPreflightSkip" type="button" class="secondary hidden" title="Proceed with original source evidence; AI checks remain unverified." disabled>Skip AI Preflight · Source-Only</button></div>
-              <details id="baSourcePreflight" class="ba-source-preflight hidden" aria-label="AI source document preflight"><summary class="ba-source-preflight-toggle"><span class="ba-source-preflight-spinner" aria-hidden="true"></span><strong id="baSourcePreflightTitle">AI document preflight</strong><span class="ba-source-preflight-chevron" aria-hidden="true">▾</span></summary><div class="ba-source-preflight-body"><p id="baSourcePreflightMessage" class="muted"></p><small id="baSourcePreflightCounts"></small><ul id="baSourcePreflightFindings"></ul></div></details>
+              <button type="button" id="baAutoArtifactSave" disabled>Save Document</button>
+              <div id="baAutoFileActions" class="ba-auto-file-actions" aria-label="Uploaded source actions"></div>
             </div>
-            <label for="baAutoArtifactText" id="baAutoArtifactLabel">Structured ISO BRD</label>
-            <textarea id="baAutoArtifactText" rows="11" maxlength="1000000" spellcheck="false" readonly></textarea>
-            <div class="ba-auto-inline"><span id="baAutoArtifactStatus" role="status"></span><button type="button" id="baAutoArtifactSave" disabled>Save Document</button></div>
+            <div id="baAutoIsoPreflight" class="ba-auto-iso-preflight" role="tabpanel" aria-labelledby="baAutoTabPreflight" hidden>
+              <details id="baSourcePreflight" class="ba-source-preflight hidden" aria-label="AI source document preflight"><summary class="ba-source-preflight-toggle"><span class="ba-source-preflight-spinner" aria-hidden="true"></span><strong id="baSourcePreflightTitle">AI document preflight</strong><span class="ba-source-preflight-chevron" aria-hidden="true">▾</span></summary><div class="ba-source-preflight-body"><p id="baSourcePreflightMessage" class="muted"></p><small id="baSourcePreflightCounts"></small><ul id="baSourcePreflightFindings"></ul></div></details>
+              <p id="baAutoPreflightPlaceholder" class="muted" hidden>Pre-flight findings will appear after document analysis.</p>
+            </div>
+            <div id="baAutoDocumentPanel" role="tabpanel" aria-labelledby="baAutoTabIso">
+              <label for="baAutoArtifactText" id="baAutoArtifactLabel">Structured ISO BRD</label>
+              <textarea id="baAutoArtifactText" rows="11" maxlength="1000000" spellcheck="false" readonly></textarea>
+              <div class="ba-auto-inline"><span id="baAutoArtifactStatus" role="status"></span></div>
+            </div>
           </div>
         </div>
       </details>
