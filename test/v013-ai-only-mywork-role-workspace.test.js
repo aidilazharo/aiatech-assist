@@ -37,7 +37,9 @@ test('My Work has isolated chat and suggestions with shared top-header AI animat
  assert.match(workspace,/id="roleJiraWork"/);
  assert.match(workspace,/id="roleStepFlow"/);
  assert.equal(html.match(/id="atgvMyWorkAiInput"/g)?.length,1);
- assert.equal(html.match(/data-nav="role-workspace"/g)?.length,1);
+ assert.doesNotMatch(html,/data-nav="role-workspace"/);
+ assert.match(script,/atgv:mywork-open-task/);
+ assert.match(script,/navigate\(target\)/);
  assert.equal(html.match(/data-nav="sdlc-roles"/g)?.length,1);
 });
 
