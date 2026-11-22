@@ -74,10 +74,11 @@ window.addEventListener('message',event=>{
 vscode.postMessage({command:'status'});
 </script></body></html>`;
 }
-async function open(vscode,{runtimeRoot,onLog=()=>{}}){
+async function open(vscode,{runtimeRoot,onLog=()=>{},onActivity=()=>{}}){
  if(panel){panel.reveal(vscode.ViewColumn.One);return panel;}
  panel=vscode.window.createWebviewPanel('atgvAssist.ai','ATGV: AI',vscode.ViewColumn.One,{enableScripts:true,retainContextWhenHidden:true,localResourceRoots:[]});
- history=[];let pending=false;
+ history=[];let pending=false,activityReported=false;
+ const signalActivity=active=>{if(activityReported===!!active)return;activityReported=!!active;try{onActivity(activityReported);}catch(error){onLog('ATGV AI activity callback: '+String(error.message||error).slice(0,150));}};
  const send=message=>panel?.webview.postMessage(message);
  panel.webview.onDidReceiveMessage(async message=>{
   try{
@@ -105,6 +106,7 @@ async function open(vscode,{runtimeRoot,onLog=()=>{}}){
    if(prompt.length>12000||!prompt&&!images.length||images.length>3)throw Error('Invalid chat message or attachment count.');
    pending=true;controller=new AbortController();
    const temp=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-ai-chat-'));const paths=[];
+   signalActivity(true);
    try{
     for(let i=0;i<images.length;i++){
      const item=images[i];const types={'image/png':{ext:'png',sig:'89504e470d0a1a0a'},'image/jpeg':{ext:'jpg',sig:'ffd8ff'},'image/webp':{ext:'webp',sig:'52494646'}};
@@ -125,10 +127,10 @@ async function open(vscode,{runtimeRoot,onLog=()=>{}}){
     history.push({role:'User',text:prompt+(paths.length?' [image]':'')},{role:'Assistant',text:reply});
     send({type:'reply',success:true,text:reply});
    }catch(error){onLog('ATGV AI: '+String(error.message||error).slice(0,250));send({type:'reply',success:false,text:codexError(error).message});}
-   finally{pending=false;controller=null;await fs.rm(temp,{force:true,recursive:true}).catch(()=>{});}
+   finally{pending=false;controller=null;signalActivity(false);await fs.rm(temp,{force:true,recursive:true}).catch(()=>{});}
   }catch(error){onLog('ATGV AI: '+String(error.message||error).slice(0,200));send({type:message.command==='send'?'reply':'status',success:false,text:String(error.message||error).slice(0,300),message:String(error.message||error).slice(0,300)});}
  });
- panel.onDidDispose(()=>{controller?.abort();controller=null;panel=null;history=[];});
+ panel.onDidDispose(()=>{controller?.abort();signalActivity(false);controller=null;panel=null;history=[];});
  panel.webview.html=html(panel.webview);
  return panel;
 }
