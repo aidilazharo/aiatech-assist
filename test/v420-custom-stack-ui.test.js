@@ -14,6 +14,7 @@ test('Custom Stack scans an existing React Vite project without copying or runni
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-custom-scan-'));
  try{
   await fs.writeFile(path.join(root,'package.json'),JSON.stringify({name:'original-app',scripts:{dev:'vite',build:'vite build'},dependencies:{react:'^19'},devDependencies:{vite:'^8'}}));
+  await fs.writeFile(path.join(root,'vite.config.ts'),'export default {};\n');
   const sha='a'.repeat(40);
   let executed=0;
   const driver={inspectScripts:async()=>({repo:{root,sha,branch:'main',clean:true},targets:[{kind:'npm',relative:'',installed:false,scripts:['dev','build']}]}),runLocal:async()=>{executed++},localLogs:()=>({running:false})};
