@@ -13,7 +13,7 @@ test('unfinished requirement actions are shown in the overview and Resume opens 
  assert.match(js,/baResumeIncomplete'\)\.classList\.toggle\('hidden',!unfinished\)/);
  assert.match(js,/baResumeIncomplete'\)\.addEventListener\('click',\(\)=>\{[^}]+navigate\('discovery'\)/);
  assert.doesNotMatch(js,/baRestartIncomplete/);
- assert.doesNotMatch(host,/id="baRestartIncomplete"|id="baOverviewNew"/);
+ assert.doesNotMatch(html,/id="baRestartIncomplete"|id="baOverviewNew"/);
 });
 
 test('finished AI Review uses Next Step Generate Requirements rather than Re-run, and navigates safely',()=>{
