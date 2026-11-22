@@ -73,6 +73,7 @@
   const preflight=kind==='preflight';
   get('baAutoIsoPreflight').hidden=!preflight;
   get('baAutoDocumentPanel').hidden=preflight;
+  get('baAutoArtifactSave').hidden=preflight||kind==='original';
   get('baAutoPreflightPlaceholder').hidden=!get('baSourcePreflight').classList.contains('hidden');
   const documentPanel=get('baAutoDocumentPanel');
   for(const tab of get('baAutoDocumentTabs').querySelectorAll('[data-ba-document]')){
