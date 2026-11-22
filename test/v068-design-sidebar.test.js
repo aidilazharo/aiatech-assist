@@ -36,7 +36,7 @@ test('role selector shows role-use dots without readiness counters, sidebar adop
  assert.match(js,/role-used-marker/);assert.match(js,/markRoleUsed/);assert.doesNotMatch(js,/option\.textContent=role\.label\+\(ready/);
  assert.match(css,/\.sidebar\{background:color-mix\(in srgb,var\(--role-pane-bg/);
  assert.match(css,/\.role-used-marker\.is-used\{background:#3987f5/);
- assert.match(html,/>SDLC<\/button>/);assert.match(html,/>SDLC Readiness<\/h1>/);
+ assert.match(html,/>SDLC Workspace<\/button>/);assert.match(html,/>SDLC Readiness<\/h1>/);
  assert.match(html,/>Solution Designs<\/h1>/);
  assert.doesNotMatch(html,/Deterministic prerequisite checks from saved BA discovery/);
 });
