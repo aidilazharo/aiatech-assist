@@ -16,9 +16,8 @@ body.atgv-mywork-chat-mode:not(.gate-mode) #contentPane.content-pane{
   display:flex!important;flex-direction:column;align-items:stretch;justify-content:flex-start;
   flex:1 1 auto;height:100%;min-height:0;width:100%;min-width:0;
   box-sizing:border-box;align-self:stretch;overflow:hidden;
-  /* Only reserve the ~38px waveform overhang plus a small safety margin; the
-     old 94px clearance created an apparent black overlay above chat. */
-  padding:42px 0 0;margin:0;background:#000!important;color:#fff!important;
+  /* No artificial top gutter. Waveform is clipped at the header border. */
+  padding:0;margin:0;background:#000!important;color:#fff!important;
   border:0!important;box-shadow:none!important;border-radius:0;max-width:none;text-align:left;
 }
 /* My Work waveform is painted on the ACTUAL main header bottom border (#D31145).
@@ -40,6 +39,7 @@ body.atgv-mywork-chat-mode:not(.gate-mode) #appHeader #myWorkHeaderWave.mywork-h
   display:block;position:absolute;
   left:clamp(220px,20vw,330px);right:clamp(12px,2vw,24px);
   bottom:-38px;height:76px;min-width:0;z-index:3;overflow:visible;
+  clip-path:inset(0 0 50% 0);
   pointer-events:none;
 }
 #appHeader #myWorkHeaderWave canvas#atgvMyWorkAiOrb{
@@ -137,14 +137,12 @@ body.atgv-mywork-chat-mode:not(.gate-mode) #appHeader .header-end{
 }
 @media(max-width:620px){
   #appHeader #myWorkHeaderWave .mywork-header-wave-visual{left:10px;right:10px;height:58px;bottom:-29px}
-  #myWorkView > #atgvMyWorkAi.atgv-mywork-ai{padding-top:34px}
   #atgvMyWorkAi .atgv-mywork-ai-results{padding:0 12px 20px;scroll-padding-top:0}
   #atgvMyWorkAi .atgv-mywork-ai-chat{padding:10px 10px 14px}
   #atgvMyWorkAi .atgv-mywork-ai-message{max-width:none;width:100%}
 }
 @media(max-height:400px){
   #appHeader #myWorkHeaderWave .mywork-header-wave-visual{height:42px;bottom:-20px}
-  #myWorkView > #atgvMyWorkAi.atgv-mywork-ai{padding-top:24px}
   #atgvMyWorkAi .atgv-mywork-ai-results{padding-top:0;scroll-padding-top:0}
   #atgvMyWorkAi .atgv-mywork-ai-chat{padding-block:6px}
 }
@@ -170,7 +168,7 @@ body.atgv-mywork-chat-mode:not(.gate-mode) #topNotification #myWorkHeaderWave.my
 #topNotification #myWorkHeaderWave .mywork-header-wave-visual{
   display:block;position:absolute;left:clamp(220px,20vw,330px);
   right:clamp(12px,2vw,24px);bottom:-38px;height:76px;
-  min-width:0;z-index:3;overflow:visible;pointer-events:none;
+  min-width:0;z-index:3;overflow:visible;clip-path:inset(0 0 50% 0);pointer-events:none;
 }
 #topNotification #myWorkHeaderWave canvas#atgvMyWorkAiOrb{
   display:block;position:relative;z-index:4;width:100%;height:100%;
