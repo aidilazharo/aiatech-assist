@@ -8057,7 +8057,7 @@ function architectCustomDrawRuntime(){
   state='stopped';title='APPLICATION NOT RUNNING';
   description=Number.isInteger(runtime.exitCode)?'ATGV process exited with code '+runtime.exitCode+'. Check logs before restarting.':
    (architectCustomInfo?.projectId===activeId?
-    'Scan complete, but no server was started. Select Install & Run to prepare the mock preview.':
+    'Scan complete, but NO server was started. Select Install & Run to prepare the mock preview.':
     'Scan Repository identifies applications; it does not install or start them.');
  }else if(runtime?.message){
   state='unknown';description=runtime.message;
