@@ -1,26 +1,15 @@
-# ATGV AIATECH Assist v0.0.44
+# ATGV AIATECH Assist v0.0.45
 
 ## Changes
 
-- Detect standard multi-application and npm workspace repository layouts without ATGV-only root-level adapters.
-- Classify runnable Vite frontends using both a local Vite configuration and an actual Vite start script, not a test-only dependency.
-- Preserve NestJS/Express/Fastify API identification even when their test tools include Vite.
-- Prefer runnable frontend applications for Custom Stack installation and local browser previews.
-- Route supported Node API targets to isolated synthetic API health previews instead of a Vite mock overlay.
-- Recognize standard `apps/`, `services/`, `packages/`, `modules/`, and related workspace containers.
-- Use a standard `dotnet test` command rather than a hardcoded test project.
-- Add regression tests for React/Vite frontend, NestJS with test-only Vite, npm workspace root, and Express classification.
-
-## Safety
-
-- Preserve existing application sources, local Git fix branch isolation, and explicit execution approval.
-- Mock data is synthetic and must not be presented as a real database or production readiness.
-- Unsupported runtimes are detected and reported rather than silently modified or executed.
-- No Tech Cockpit-specific framework assumptions were added.
+- Move the 23px My Work AI top black margin from the fixed outer panel into the scrollable chat/results viewport.
+- Keep the initial conversation aligned with the sidebar WORKSPACE heading, while the margin scrolls away naturally with chat messages.
+- Preserve the anchored bottom message composer, native header waveform, text foreground, and responsive layouts.
+- Use 16px scrolling top clearance on narrow screens and 12px on very short viewports.
+- Update CSS layout regression tests so future releases cannot reintroduce the fixed top gap.
 
 ## Validation
 
-- Source-level classification checks: passed for NestJS, React/Vite, Next.js, and workspace root.
-- Regression test added: `test/v044-industry-standard-custom-stack.test.js`.
-- Full Node regression suite, Windows verification, and VSIX packaging: pending CI/execution.
-- This release record describes the branch candidate; it is not a claim that a distributable VSIX has been built.
+- Static layout assertions cover the shell, scrollable viewport, header waveform, and mobile/short-height clearance.
+- Full regression suite, Windows checks and VSIX packaging: pending CI validation.
+- No application source or Jira data is changed by this UI-only patch.
