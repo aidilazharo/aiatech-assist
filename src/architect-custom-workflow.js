@@ -26,6 +26,8 @@ async function assertPreviewScaffold(root){
   const stat=await fs.lstat(file).catch(()=>null);
   if(!stat?.isFile()||stat.isSymbolicLink())throw Error('Existing fix branch has missing or unsafe ATGV preview fixture '+name+'. Repair manually; no files were overwritten.');
  }
+ const source=await fs.readFile(path.join(root,'atgv-preview','mock-services.mjs'),'utf8');
+ if(source!==repair.PREVIEW_SERVICE)throw Error('ATGV preview runner differs from the trusted mock template. Refusing to execute modified code.');
  const fixture=JSON.parse(await fs.readFile(path.join(root,'atgv-preview','mock-database.json'),'utf8'));
  if(fixture.synthetic!==true)throw Error('Preview fixture is not marked synthetic. Refusing to run it.');
 }
