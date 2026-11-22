@@ -9,17 +9,20 @@ const ba=read('media/ba-automatic-ui.js');
 const ui=read('media/start.js');
 const css=read('media/start.css');
 
-test('one horizontal toolbar owns all Business Documents actions',()=>{
+test('source details and document controls share one responsive title bar',()=>{
  const begin=html.indexOf('id="baAutoDocumentToolbar"');
  const end=html.indexOf('id="baAutoIsoPreflight"',begin);
  assert.ok(begin>=0&&end>begin);
  const toolbar=html.slice(begin,end);
- for(const id of ['baAutoDocumentTabs','baPreflightDownload','baWorkingBrDownload',
+ for(const id of ['baAutoOriginalFiles','baAutoDocumentTools','baAutoDocumentTabs','baPreflightDownload','baWorkingBrDownload',
   'baPreflightRetry','baPreflightSkip','baAutoArtifactSave','baAutoFileActions']){
   assert.equal((toolbar.match(new RegExp('id="'+id+'"','g'))||[]).length,1,id);
  }
- assert.match(css,/#discoveryView #baAutoDocumentToolbar\{[\s\S]*?flex-wrap:nowrap/);
- assert.match(css,/#discoveryView #baAutoDocumentToolbar\{[\s\S]*?overflow-x:auto/);
+ assert.ok(toolbar.indexOf('id="baAutoOriginalFiles"')<toolbar.indexOf('id="baAutoDocumentTabs"'));
+ assert.match(css,/#discoveryView #baAutoDocumentToolbar\{[^}]*flex-wrap:wrap/);
+ assert.match(css,/#discoveryView \.ba-auto-title-tools\{[^}]*margin-inline-start:auto/);
+ assert.match(ui,/info\.append\(name,detail\)/);
+ assert.match(ui,/detail\.textContent=\[doc\.version/);
  assert.match(css,/#discoveryView #baAutoDocumentToolbar #baAutoFileActions/);
  assert.match(ui,/fileToolbar\.append\(actions\);item\.append\(selector,info\)/);
  assert.match(ui,/fileToolbar\.replaceChildren\(\)/);
@@ -50,4 +53,23 @@ test('existing download, document save and source-delete handlers remain connect
  assert.match(ui,/requestBRDeletion\(\{target:'active-source',digest:doc\.digest,revision:brState\.revision\}\)/);
  assert.match(ba,/invoke\('baSaveArtifact',\{kind,digest:sourceDigest/);
  assert.equal((html.match(/id="baAutoArtifactSave"/g)||[]).length,1);
+});
+
+test('document and Jira views use icon buttons with accessible tooltip labels',()=>{
+ const controls=[...html.matchAll(/<(?:button|summary)[^>]+class="ba-auto-title-icon"[^>]*>([^<]*)<\/(?:button|summary)>/g)];
+ assert.equal(controls.length,15);
+ for(const [tag,icon] of controls){
+  assert.match(tag,/aria-label="[^"]+"/);
+  assert.match(tag,/title="[^"]+"/);
+  assert.match(icon,/\$\{baHeaderIcon\(/);
+ }
+ assert.match(ba,/primary\.setAttribute\('aria-label',label\)/);
+ assert.match(ba,/mark\.toggleAttribute\('hidden',mark\.dataset\.baPrimaryIcon!==icon\)/);
+ assert.match(css,/\.ba-auto-title-icon:focus-visible::after\{[^}]*content:attr\(title\)/);
+ const start=html.indexOf('<summary class="ba-auto-jira-heading">');
+ const end=html.indexOf('</summary>',start);
+ const jira=html.slice(start,end);
+ assert.match(jira,/id="baAutoJiraView"/);
+ assert.match(jira,/id="baAutoJiraTabs"/);
+ assert.match(ba,/event\.preventDefault\(\);\s+get\('baAutoJira'\)\.open=true/);
 });

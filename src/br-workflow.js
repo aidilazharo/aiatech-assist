@@ -1287,17 +1287,31 @@ async function approve(registry,id,revision,{brId,actor='Local confirmation',req
  return (await repairPendingExports(registry,id)).register;
 
 }
-function projectPreparedJira(register,{actor='Business Analyst'}={}){
+function projectPreparedJira(register,{actor='Business Analyst',blockers}={}){
  const next=structuredClone(register);
  const active=next.brs.filter(row=>!row.archivedFromRestart&&row.status!=='retired');
- if(!active.length)throw Error('Prepare Business Requirements before generating Jira Preview.');
+ if(!active.length){
+  const message='Prepare Business Requirements before generating Jira Preview.';
+  if(!blockers)throw Error(message);
+  blockers.push(message);
+  return next;
+ }
  for(const br of active){
   if(automaticWorkflow.excludedDraft(next,br))continue;
-  if(br.status==='draft')approveRecord(next,br.id,{actor,automatic:true});
-  if(br.status!=='approved'||br.needsRefresh||br.externalReviewRequired||br.roleReviewRequired||br.dependencyReviewRequired)
-   throw Error(br.id+' has outstanding changes that require reconciliation.');
-  for(const [nodePath,details] of Object.entries(next.jiraIssueDetails||{})){
-   if((nodePath===br.id||nodePath.startsWith(br.id+'/'))&&details?.approvedHash)details.approvedHash=digest(br.approvedContent);
+  try{
+   if(br.status==='draft')approveRecord(next,br.id,{actor,automatic:true});
+   if(br.status!=='approved'||br.needsRefresh||br.externalReviewRequired||br.roleReviewRequired||br.dependencyReviewRequired)
+    throw Error(br.id+' has outstanding changes that require reconciliation.');
+   for(const [nodePath,details] of Object.entries(next.jiraIssueDetails||{})){
+    if((nodePath===br.id||nodePath.startsWith(br.id+'/'))&&details?.approvedHash)details.approvedHash=digest(br.approvedContent);
+   }
+  }catch(error){
+   if(!blockers)throw error;
+   const message=String(error.message||error);
+   blockers.push(message.startsWith(br.id)?message:br.id+': '+message);
+   // Keep a blocked requirement out of the preview projection while preserving its stored revision.
+   const index=next.brs.indexOf(br);
+   next.brs[index]=structuredClone(register.brs[index]);
   }
  }
  return next;

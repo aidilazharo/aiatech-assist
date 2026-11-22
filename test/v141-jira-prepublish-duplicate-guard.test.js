@@ -49,3 +49,26 @@ test('identity collision error includes the conflicting Jira key and a reconcili
  assert.match(src,/no automatic deletion is allowed/);
  assert.match(src,/Jira publication blocked by possible duplicates/);
 });
+
+test('Jira inventory follows short pages and rejects an incomplete or repeated cursor',async()=>{
+ const source=fs.readFileSync(path.join(__dirname,'../src/jira-duplicate-cleanup.js'),'utf8');
+ const start=source.indexOf('async function fetchProjectIssues('),end=source.indexOf('function snapshot(',start);
+ const reader=new Function('requestJson','auth','validProjectKey','baseAtlassian',source.slice(start,end)+'\nreturn fetchProjectIssues;');
+ const config={get:()=> 'TC'},readPages=(responses,received=[])=>reader(async (_url,options)=>{
+  received.push(options.data.nextPageToken);
+  return responses.shift();
+ },()=>({}),key=>key,()=> 'https://example.atlassian.net');
+ const tokens=[];
+ const fetch=readPages([
+  {issues:[{key:'TC-1'}],nextPageToken:'second',isLast:false},
+  {issues:[{key:'TC-2'}],nextPageToken:'third',isLast:false},
+  {issues:[{key:'TC-3'}],isLast:true}
+ ],tokens);
+ const rows=await fetch(config,'test-token',{max:10});
+ assert.deepEqual(rows.map(row=>row.key),['TC-1','TC-2','TC-3']);
+ assert.deepEqual(tokens,[undefined,'second','third']);
+ const repeat=readPages([{issues:[],isLast:false,nextPageToken:'repeat'},{issues:[],isLast:false,nextPageToken:'repeat'}]);
+ await assert.rejects(repeat(config,'test-token'),/repeated pagination token/);
+ const missing=readPages([{issues:[],isLast:false}]);
+ await assert.rejects(missing(config,'test-token'),/missing or repeated pagination token/);
+});

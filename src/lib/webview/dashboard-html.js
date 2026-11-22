@@ -6,7 +6,27 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.53';
+  const baHeaderIcons={
+    document:"<path d=\"M6 3h8l4 4v14H6zM14 3v5h5M9 12h6M9 16h6\"/>",
+    edit:"<path d=\"m5 16 11-11 3 3L8 19H5zM14 7l3 3M5 21h14\"/>",
+    original:"<path d=\"M8 3h8l4 4v12H8zM16 3v5h4M4 7v14h12\"/>",
+    preflight:"<path d=\"M12 2 4 5v6c0 5 4 9 8 11 4-2 8-6 8-11V5zM8 12l3 3 5-6\"/>",
+    download:"<path d=\"M12 4v11m-4-4 4 4 4-4M5 16v4h14v-4\"/>",
+    save:"<path d=\"M4 4h13l3 3v13H4zM8 4v6h8V4M8 20v-6h8v6\"/>",
+    replace:"<path d=\"M8 5h10l-3-3m3 3-3 3M16 19H6l3 3m-3-3 3-3M5 8v5m14-2v5\"/>",
+    more:"<circle cx=\"5\" cy=\"12\" r=\"1\"/><circle cx=\"12\" cy=\"12\" r=\"1\"/><circle cx=\"19\" cy=\"12\" r=\"1\"/>",
+    list:"<path d=\"M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01\"/>",
+    tree:"<path d=\"M7 3v15h5M7 9h5M12 7h6v4h-6zM12 16h6v4h-6z\"/>",
+    all:"<path d=\"M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z\"/>",
+    br:"<path d=\"M5 4h14v16H5zM8 8h8M8 12h8M8 16h5\"/>",
+    epic:"<path d=\"M13 2 5 14h6l-1 8 9-12h-6z\"/>",
+    feature:"<path d=\"m12 3 9 9-9 9-9-9zM12 9v6m-3-3h6\"/>",
+    story:"<path d=\"M4 5h6l2 2 2-2h6v14h-6l-2 2-2-2H4zM12 7v14\"/>",
+    task:"<path d=\"M5 5h14v14H5zM8 12l3 3 5-6\"/>",
+    subtask:"<path d=\"M5 5v7h4m-3-3 3 3-3 3M12 8h7v8h-7zM14 12l1 1 2-2\"/>"
+  };
+  const baHeaderIcon=(name,variant='')=>`<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${variant}>${baHeaderIcons[name]}</svg>`;
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.54';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -397,19 +417,19 @@ function html(webview,{resumeLibrary=false}={}){
       <details id="baAutoSource" class="ba-auto-artifact" open>
         <summary><strong>Business Documents</strong><span id="baAutoSourceBadge" class="ba-auto-badge">Draft</span></summary>
         <div class="ba-auto-body">
-          <div id="baAutoOriginalFiles"></div>
-          <div id="baAutoSourceEditor" hidden>
-            <div id="baAutoDocumentToolbar" class="ba-auto-document-toolbar" role="toolbar" aria-label="Business document controls">
+          <div id="baAutoDocumentToolbar" class="ba-auto-document-toolbar" role="group" aria-label="Business document controls">
+            <div id="baAutoOriginalFiles"></div>
+            <div id="baAutoDocumentTools" class="ba-auto-title-tools" hidden>
               <div id="baAutoDocumentTabs" class="ba-auto-tabs" role="tablist" aria-label="Business document view">
-                <button id="baAutoTabIso" type="button" role="tab" data-ba-document="iso" aria-controls="baAutoDocumentPanel" aria-selected="true" aria-pressed="true" tabindex="0">Structured BRD</button>
-                <button id="baAutoTabSource" type="button" role="tab" data-ba-document="source" aria-controls="baAutoDocumentPanel" aria-selected="false" aria-pressed="false" tabindex="-1">Editable source</button>
-                <button id="baAutoTabOriginal" type="button" role="tab" data-ba-document="original" aria-controls="baAutoDocumentPanel" aria-selected="false" aria-pressed="false" tabindex="-1">Original</button>
-                <button id="baAutoTabPreflight" type="button" role="tab" data-ba-document="preflight" aria-controls="baAutoIsoPreflight" aria-selected="false" aria-pressed="false" tabindex="-1">Pre-flight</button>
+                <button id="baAutoTabIso" class="ba-auto-title-icon" type="button" role="tab" data-ba-document="iso" aria-controls="baAutoDocumentPanel" aria-selected="true" aria-pressed="true" tabindex="0" aria-label="Structured BRD" title="Structured BRD">${baHeaderIcon('document')}</button>
+                <button id="baAutoTabSource" class="ba-auto-title-icon" type="button" role="tab" data-ba-document="source" aria-controls="baAutoDocumentPanel" aria-selected="false" aria-pressed="false" tabindex="-1" aria-label="Editable source" title="Editable source">${baHeaderIcon('edit')}</button>
+                <button id="baAutoTabOriginal" class="ba-auto-title-icon" type="button" role="tab" data-ba-document="original" aria-controls="baAutoDocumentPanel" aria-selected="false" aria-pressed="false" tabindex="-1" aria-label="Original uploaded document" title="Original uploaded document">${baHeaderIcon('original')}</button>
+                <button id="baAutoTabPreflight" class="ba-auto-title-icon" type="button" role="tab" data-ba-document="preflight" aria-controls="baAutoIsoPreflight" aria-selected="false" aria-pressed="false" tabindex="-1" aria-label="Pre-flight" title="Pre-flight">${baHeaderIcon('preflight')}</button>
               </div>
               <div class="ba-auto-document-actions">
-                <button id="baAutoPrimaryAction" type="button" title="Action for the selected document tab" disabled>Download ISO BRD</button>
+                <button id="baAutoPrimaryAction" class="ba-auto-title-icon" type="button" aria-label="Download ISO BRD" title="Download ISO BRD" disabled>${baHeaderIcon('download',' data-ba-primary-icon="download"')}${baHeaderIcon('save',' data-ba-primary-icon="save" hidden')}${baHeaderIcon('replace',' data-ba-primary-icon="replace" hidden')}</button>
                 <details id="baAutoOverflowMenu" class="ba-auto-overflow-menu">
-                  <summary aria-label="More document actions" title="More actions">⋯</summary>
+                  <summary class="ba-auto-title-icon" aria-label="More document actions" title="More document actions">${baHeaderIcon('more')}</summary>
                   <div id="baAutoOverflowActions" class="ba-auto-overflow-actions" data-kind="iso" role="group" aria-label="Additional document actions">
                     <div id="baAutoIsoPreflightActions" class="ba-auto-iso-preflight-actions"><button id="baPreflightDownload" type="button" class="secondary hidden" title="Download the Business Analyst preflight findings (.txt)" aria-label="Download Pre-flight Analyst text report" disabled>Download Pre-flight Analyst</button><button id="baWorkingBrDownload" type="button" class="secondary hidden" title="Download an ISO/IEC/IEEE 29148-aligned Business Requirements Specification PDF based on verified evidence" disabled>Download ISO 29148 Business Requirements</button><button id="baPreflightRetry" type="button" class="secondary hidden" title="Retry document AI preflight and 12-question mapping">Retry Mapping</button><button id="baPreflightSkip" type="button" class="secondary hidden" title="Proceed with original source evidence; AI checks remain unverified." disabled>Skip AI Preflight · Source-Only</button></div>
                     <button type="button" id="baAutoArtifactSave" disabled>Save Document</button>
@@ -418,6 +438,8 @@ function html(webview,{resumeLibrary=false}={}){
                 </details>
               </div>
             </div>
+          </div>
+          <div id="baAutoSourceEditor" hidden>
             <div id="baAutoIsoPreflight" class="ba-auto-iso-preflight" role="tabpanel" aria-labelledby="baAutoTabPreflight" hidden>
               <details id="baSourcePreflight" class="ba-source-preflight hidden" aria-label="AI source document preflight"><summary class="ba-source-preflight-toggle"><span class="ba-source-preflight-spinner" aria-hidden="true"></span><strong id="baSourcePreflightTitle">AI document preflight</strong><span class="ba-source-preflight-chevron" aria-hidden="true">▾</span></summary><div class="ba-source-preflight-body"><p id="baSourcePreflightMessage" class="muted"></p><small id="baSourcePreflightCounts"></small><ul id="baSourcePreflightFindings"></ul></div></details>
               <p id="baAutoPreflightPlaceholder" class="muted" hidden>Pre-flight findings will appear after document analysis.</p>
@@ -442,23 +464,28 @@ function html(webview,{resumeLibrary=false}={}){
         <div class="ba-auto-body" id="baAutoBRList"></div>
       </details>
       <details id="baAutoJira" class="ba-auto-artifact" open>
-        <summary><strong>Jira Work Items <small id="baAutoJiraCount"></small></strong><span id="baAutoJiraBadge" class="ba-auto-badge">Draft</span></summary>
+        <summary class="ba-auto-jira-heading">
+          <strong>Jira Work Items <small id="baAutoJiraCount"></small></strong>
+          <span class="ba-auto-title-tools">
+            <span id="baAutoJiraBadge" class="ba-auto-badge">Draft</span>
+            <span id="baAutoJiraView" class="ba-auto-tabs" role="group" aria-label="Jira work item view">
+              <button class="ba-auto-title-icon" type="button" data-ba-jira-view="list" aria-pressed="true" aria-label="List view" title="List view">${baHeaderIcon('list')}</button>
+              <button class="ba-auto-title-icon" type="button" data-ba-jira-view="hierarchy" aria-pressed="false" aria-label="Hierarchy view" title="Hierarchy view">${baHeaderIcon('tree')}</button>
+            </span>
+            <span id="baAutoJiraTabs" class="ba-auto-tabs" role="group" aria-label="Jira issue category">
+              <button class="ba-auto-title-icon" type="button" data-ba-jira-tab="all" aria-pressed="true" aria-label="All Jira issue types" title="All Jira issue types">${baHeaderIcon('all')}</button>
+              <button class="ba-auto-title-icon" type="button" data-ba-jira-tab="br" aria-pressed="false" aria-label="Business Requirements" title="Business Requirements">${baHeaderIcon('br')}</button>
+              <button class="ba-auto-title-icon" type="button" data-ba-jira-tab="epic" aria-pressed="false" aria-label="Epics" title="Epics">${baHeaderIcon('epic')}</button>
+              <button class="ba-auto-title-icon" type="button" data-ba-jira-tab="feature" aria-pressed="false" aria-label="Features" title="Features">${baHeaderIcon('feature')}</button>
+              <button class="ba-auto-title-icon" type="button" data-ba-jira-tab="story" aria-pressed="false" aria-label="Stories" title="Stories">${baHeaderIcon('story')}</button>
+              <button class="ba-auto-title-icon" type="button" data-ba-jira-tab="task" aria-pressed="false" aria-label="Tasks" title="Tasks">${baHeaderIcon('task')}</button>
+              <button class="ba-auto-title-icon" type="button" data-ba-jira-tab="subtask" aria-pressed="false" aria-label="Subtasks" title="Subtasks">${baHeaderIcon('subtask')}</button>
+            </span>
+          </span>
+        </summary>
         <div class="ba-auto-body">
-          <div id="baAutoJiraView" class="ba-auto-tabs" role="group" aria-label="Jira work item view">
-            <button type="button" data-ba-jira-view="list" aria-pressed="true">List</button>
-            <button type="button" data-ba-jira-view="hierarchy" aria-pressed="false">Hierarchy</button>
-          </div>
-          <div id="baAutoJiraTabs" class="ba-auto-tabs" role="group" aria-label="Jira issue category">
-            <button type="button" data-ba-jira-tab="all" aria-pressed="true">All types</button>
-            <button type="button" data-ba-jira-tab="br">BRs</button>
-            <button type="button" data-ba-jira-tab="epic">Epics</button>
-            <button type="button" data-ba-jira-tab="feature">Features</button>
-            <button type="button" data-ba-jira-tab="story">Stories</button>
-            <button type="button" data-ba-jira-tab="task">Tasks</button>
-            <button type="button" data-ba-jira-tab="subtask">Subtasks</button>
-          </div>
+          <ul id="baAutoJiraBlockers" aria-label="Jira preview blockers" hidden></ul>
           <div id="baAutoJiraItems"></div>
-          <ul id="baAutoJiraBlockers" hidden></ul>
         </div>
       </details>
     </div>
