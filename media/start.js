@@ -546,7 +546,7 @@ function trackProcessEvent(m){
  if(m.type==='architectStackProgress')processActivityUpsert('stack', 'Technology Stack',m.message,'running',m.percent??null);
  else if(m.type==='architectStackState')processActivityUpsert('stack','Technology Stack',m.value?.message||'Stack process completed',/failed|error/i.test(m.value?.message||'')?'failed':'done',/failed|error/i.test(m.value?.message||'')?null:100);
  else if(m.type==='architectServerState')processActivityUpsert('server','Application Server',m.value?.message||'Server operation finished',/failed|error|unavailable/i.test(m.value?.message||'')?'failed':'done',/failed|error|unavailable/i.test(m.value?.message||'')?null:100);
- else if(m.type==='baProgress')processActivityUpsert('ba-'+(m.task||'workflow'),'Business Requirements · '+(m.task||'Workflow'),m.message||'Processing…',m.done?'done':'running',m.done?100:m.percent??null);
+ else if(m.type==='baProgress')processActivityUpsert('ba-'+(m.task||'workflow'),'Business Requirements · '+(m.task||'Workflow'),m.message||'Processing…',m.failed?'failed':m.done?'done':'running',m.done&&!m.failed?100:m.percent??null);
  else if(m.type==='deliveryProgress')processActivityUpsert('delivery','Document Delivery',m.message||'Processing…','running',m.percent??null);
  else if(m.type==='deliveryOperationCompleted')processActivityUpsert('delivery','Document Delivery',m.message||'Completed','done',100);
  else if(m.type==='deliveryOperationError')processActivityUpsert('delivery','Document Delivery',m.message||'Failed','failed');
@@ -1070,6 +1070,7 @@ function syncSdlcWorkspaceShell(next){
 function navigate(destination){
   if(roleSettingsDirty&&view==='project'&&destination!=='project-settings'&&destination!=='tech'){status('Save project role settings before leaving Project Settings.',true);return;}
   if(view==='discovery'&&discoveryDirty){status('Save your discovery answers before leaving this screen.',true);return;}
+  if(view==='discovery'&&destination!=='discovery'&&window.ATGVBusinessRequirements?.dirty()){status('Save your Business Requirements edits before leaving this screen.',true);return;}
   if(roleTimelineDirty&&destination!==selectedRole&&destination!=='sdlc-roles'){if($('sidebarRole'))$('sidebarRole').value=selectedRole;status('Save this role timeline before leaving.',true);return;}
   if(view==='documentEditor'&&docDirty){$('docEditorStatus').textContent='Save your document before leaving this screen.';status('Save your document before switching screens.',true);return;}
   if(view==='planning'&&designDirty&&destination!=='planning'){status('Save your design draft before leaving this screen.',true);return;}
@@ -3897,6 +3898,7 @@ function renderRoleSkillHeader(roleId=selectedRole){
   for(const item of choices){const opt=document.createElement('option');opt.value=item.id;opt.textContent=String(item.label||item.id).slice(0,90);opt.title=item.source;select.append(opt);}
   select.value=selected.id;select.disabled=false;host.dataset.available='true';
  }
+ if(typeof window!=='undefined')window.ATGVBusinessRequirements?.placeSkill();
  host.title=choices.length?`${acronym}: ${selected?.source||''}\n${choices.length} catalog variant(s) · ${catalogState?.installed?.version||'unknown'} · ${String(catalogState?.installed?.sha||'').slice(0,12)}`:'No role variants installed. Pull Catalog in Settings.';
 }
 $('workSkillSelect').addEventListener('change',()=>{
@@ -5275,7 +5277,7 @@ function jiraDetailsButton(entry,readOnly=false){
  button.setAttribute('aria-label',button.textContent+' '+String(entry.title||entry.path));
  button.addEventListener('click',()=>renderJiraIssueDetails(entry,readOnly));return button;
 }
-function renderJiraIssueDetails(entry,readOnly=false){
+function renderJiraIssueDetails(entry,readOnly=false,{automatic=false}={}){
  const dialog=$('brJiraIssueModal');
  const root=dialog?$('brJiraIssueModalContent'):$(readOnly?'brJiraApprovalDetails':'brJiraDetailsPanel');if(!root)return;
  root.replaceChildren();root.classList.remove('hidden');
@@ -5319,7 +5321,7 @@ function renderJiraIssueDetails(entry,readOnly=false){
   if(!readOnly){
    const propose=document.createElement('button');propose.type='button';propose.className='secondary';propose.textContent='Suggest AC & DoD (TRM reference)';
    const note=document.createElement('p');note.className='muted';note.classList.add('jira-template-suggestion-status');
-   propose.addEventListener('click',()=>send('jiraTemplateSuggest',{path:entry.path,hash:entry.hash,revision:brPlanRevision}));
+   propose.addEventListener('click',()=>send('jiraTemplateSuggest',{path:entry.path,hash:entry.hash,revision:brPlanRevision,automatic,projectId:activeId,roleId:selectedRole}));
    root.append(propose,note);
    if(typeof window!=='undefined')window.atgvPendingJiraDetails={path:entry.path,acceptance:inputs.acceptanceCriteria,done:inputs.definitionOfDone};
  }
@@ -5331,6 +5333,7 @@ function renderJiraIssueDetails(entry,readOnly=false){
     for(const field of ['summary','description'])if(inputs[field]?.value!==originalText[field])draft[field]=inputs[field].value;
     draft.fieldValues=changedJiraFieldInputs(fieldInputs);
    }
+   if(automatic)Object.assign(draft,{automatic,projectId:activeId,roleId:selectedRole});
    send('brJiraSaveDetails',draft);
   });root.append(save);}
  }else addValue('Retirement','The existing issue will be marked obsolete; no description is replaced.');
@@ -5577,7 +5580,7 @@ function beginNewBusinessRequirement(){
  if($('baNewRequirement').disabled||!brState||!activeId)return;
  // The action is always clickable in Start, including during an unfinished
  // requirement. Block unsafe interruption explicitly instead of disabling it.
- if(baBusyTask||discoveryImportBusy||brEditorSaving||discoveryDirty||brEditorDirty||Object.keys(brState.pending||{}).length){
+ if(baBusyTask||discoveryImportBusy||brEditorSaving||discoveryDirty||brEditorDirty||window.ATGVBusinessRequirements?.dirty()||Object.keys(brState.pending||{}).length){
   status('Finish the current operation, save unsaved changes and resolve pending Jira operations before starting a new Business Requirement.',true);
   return;
  }
@@ -6159,8 +6162,6 @@ function renderDiscoverySummary(){
   const readiness=currentDiscoveryReadiness();
   const total=readiness.total||12,filled=readiness.filled||0,missing=readiness.missing||[];
   const percent=Math.max(0,Math.min(100,Math.round((filled/Math.max(total,1))*100)));
-  $('discoveryProjectName').textContent=activeProjectRecord()?.name||'Current project';
-  $('discoveryUpdatedAt').textContent=formatDateTime(discoveryData?.updatedAt);
   $('discoveryReadiness').textContent=`${filled} / ${total} answered`;
   const missingPreview=missing.slice(0,3).map(item=>item.label).join(' · ');
   $('discoveryMissing').textContent=missing.length?`${missing.length} question${missing.length===1?'':'s'} remaining${missingPreview?': '+missingPreview:''}${missing.length>3?' …':''}`:readiness.needsDecision?'12 answers complete · Question 12 records open decisions (draft review allowed).':'All 12 questions completed.';
@@ -6250,10 +6251,10 @@ function renderDiscoverySummary(){
   // v0.1.49: an already-approved current BR cannot be held at the approval step by archived BR records.
   const stageLabels={start:'Start or review completed Business Requirements',upload:'Upload source documents',mapping:'Review mapping and save discovery answers',questions:'Save 12 Discovery Questions',review:'AI Review & Suggestions',documents:'Generate, preview and approve Business Requirements',jira:'Preview, approve and publish Jira',complete:'Published · workflow completed'};
   const currentMilestone=progress.find(step=>step.current)||progress.at(-1);
-  $('discoveryReadiness').textContent=progress.every(step=>step.complete)?'Published · 10 of 10 complete':`${(currentMilestone?.index??0)+1} of 10 · ${currentMilestone?.label||'Start'}`;
+  $('discoveryReadiness').textContent=progress.every(step=>step.complete)?'Published':currentMilestone?.label||'Start';
   // Give the BA an actionable question number and label instead of only '1 answer remaining'.
   const missingQuestionDetails=missing.slice(0,2).map(item=>{const index=BA_QUESTIONS.findIndex(([key])=>key===item.key);return `Q${index+1}: ${item.label}`;}).join(' · ');
-  $('discoveryMissing').textContent=missing.length&&mappingDone?`${missing.length} unanswered — ${missingQuestionDetails}${missing.length>2?' …':''}. AI Review can identify gaps; complete all answers before generation.`:status.stage==='questions'&&readiness.needsDecision?'Open decisions recorded; approval requires resolution.':progress.every(step=>step.complete)?'Jira publishing completed.':currentMilestone?.label==='AI Review'?'Inspect saved AI Review evidence and suggestions.':`Current action: ${currentMilestone?.label||'Upload'}`;
+  $('discoveryMissing').textContent=missing.length&&mappingDone?`${missing.length} unanswered — ${missingQuestionDetails}${missing.length>2?' …':''}. AI Review can identify gaps; complete all answers before generation.`:status.stage==='questions'&&readiness.needsDecision?'Open decisions recorded; approval requires resolution.':progress.every(step=>step.complete)?'Jira publishing completed.':currentMilestone?.label==='AI Review'?'Inspect saved AI Review evidence and suggestions.':currentMilestone?.label||'Upload';
   $('baDiscoveryProgress').classList.toggle('hidden',!showQuestions);
   // Never offer a save when all 12 answers match the persisted revision.
   // The same inline action advances to AI Review after the persisted 12 answers are ready.
@@ -6378,11 +6379,13 @@ function renderDiscoverySummary(){
   const stepHints={upload:'Select source documents and submit for AI mapping.',mapping:'Select uploaded documents for mapping, then review and save the 12 answers.',review:'Inspect saved AI findings, sources and individual answers before confirming the review.',generate:'Generate Business Requirements drafts.',save:'Preview and save every draft.',approve:'Check and approve Business Requirements.',jiraPreview:'Inspect the generated Jira plan.',jiraApprove:'Approve the current Jira preview.',publish:'Publish the approved Jira plan.'};
   $('discoveryProgressHint').textContent=stepHints[displayed]||hints[status.stage]||'';
   renderBAButtons();
+  window.ATGVBusinessRequirements?.render();
   if(typeof renderWorkspaceBreadcrumbs==='function')renderWorkspaceBreadcrumbs();
 }
 function openBAWorkflowStep(key){
   navigate('discovery');
   if(view!=='discovery')return false; // Respect unsaved changes and workspace guards.
+  if(window.ATGVBusinessRequirements?.active())return window.ATGVBusinessRequirements.openStage(key);
   const definition=ATGVBAProgress.definitions.find(([name])=>name===key);
   const node=definition&&$(definition[1]);
   if(!node||node.disabled){
@@ -6904,7 +6907,8 @@ function brApprovalPrerequisites(br){
 function updateBREditorActions(){
  const br=brState?.brs?.find(x=>x.id===brEditing);
  const draft=br?.status==='draft',approved=br?.status==='approved';
- const canEdit=!!br&&draft&&!brReadOnly&&!baBusyTask&&!brEditorSaving;
+ const editingArtifact=$('brEditModal').dataset.baArtifact==='true';
+ const canEdit=!!br&&(draft||editingArtifact&&approved)&&!brReadOnly&&!baBusyTask&&!brEditorSaving;
  const independent=!!roleSettings?.enabled?.includes('business-owner');
  const isBusinessOwner=$('sidebarRole')?.value==='business-owner';
  const editorMilestone=baViewedStep||window.baLastGuideProgress?.find(step=>step.current)?.key||'';
@@ -6912,8 +6916,8 @@ function updateBREditorActions(){
  $('brEditEndorse').disabled=!independent||!draft||!br?.draftSavedAt||brEditorDirty||!!baBusyTask||!isBusinessOwner;
  const blockers=brApprovalPrerequisites(br);
  const canApprove=!!br&&!blockers.length;
- $('brEditSave').classList.toggle('hidden',brReadOnly||editorMilestone==='approve');
- $('brEditSave').disabled=!canEdit||!!br?.draftSavedAt&&!brEditorDirty;
+ $('brEditSave').classList.toggle('hidden',brReadOnly||!editingArtifact&&editorMilestone==='approve');
+ $('brEditSave').disabled=!canEdit||(editingArtifact?!brEditorDirty:!!br?.draftSavedAt&&!brEditorDirty);
  $('brEditApprove').classList.toggle('hidden',(!draft&&!approved)||editorMilestone==='save');
  $('brEditApprove').textContent=approved?'✓ Approved':independent?'Final Approve Business Requirements':'Approve Business Requirements';
  $('brEditApprove').disabled=!canApprove;
@@ -6973,14 +6977,23 @@ function updateBREditorActions(){
  $('brApprovalReviewAI').classList.add('hidden');
  const approvalNotice=blockers.length?'Approval blocked: '+blockers.map(x=>x.message).join(' '):null;
  $('brEditStatus').textContent=approved?'Approved · Read-only':brEditorSaving?'Saving draft…':brReadOnly?'Draft · Read-only':approvalNotice||(brEditorDirty?'Unsaved changes · Approve will save automatically':br?.draftSavedAt?'Draft saved · Ready for approval':'AI-generated draft · Review content; Approve will save automatically');
+ if(editingArtifact)$('brEditStatus').textContent=brEditorSaving?'Saving draft…':brReadOnly?'View requirement':brEditorDirty?'Unsaved changes':'Save changes to refresh the Jira preview.';
+ window.ATGVBusinessRequirements?.render();
 }
-function openBREditor(id){
+function openBREditor(id,{artifact=false}={}){
  const br=brState?.brs?.find(item=>item.id===id);if(!br||br.status==='retired'||br.status==='retire-proposed')return;
- brEditing=id;baBreadcrumbAtRequirements=true;brReadOnly=br.status!=='draft'||!baCanEdit('ba-br-'+id);brEditorDirty=false;brEditorSaving=false;
- const editorMilestone=baViewedStep||window.baLastGuideProgress?.find(step=>step.current)?.key||'';
+ brEditing=id;baBreadcrumbAtRequirements=true;
+ brReadOnly=(!artifact&&br.status!=='draft')||!baCanEdit('ba-br-'+id);
+ $('brEditModal').dataset.baArtifact=String(artifact);
+ $('brEditPlacementField').classList.toggle('hidden',!artifact);
+ const placement=$('brSuggestedPlacement');
+ placement.value=br.jiraPlacement||'';
+ placement.readOnly=brReadOnly;
+ brEditorDirty=false;brEditorSaving=false;
+ const editorMilestone=artifact?'':baViewedStep||window.baLastGuideProgress?.find(step=>step.current)?.key||'';
  $('brEditTitle').textContent=(editorMilestone==='approve'?'Review for Approval ':brReadOnly?'Preview ':'Preview / Edit ')+id;
  $('brEditError').textContent='';
- $('brEditModal').classList.remove('hidden');$('brEditModal').setAttribute('aria-hidden','false');rebuildBRQuill(br,brReadOnly||editorMilestone==='approve');updateBREditorActions();
+ $('brEditModal').classList.remove('hidden');$('brEditModal').setAttribute('aria-hidden','false');rebuildBRQuill(br,brReadOnly||!artifact&&editorMilestone==='approve');updateBREditorActions();
  if(typeof renderWorkspaceBreadcrumbs==='function')renderWorkspaceBreadcrumbs();
 }
 let brCloseAfterSave=false;
@@ -6995,6 +7008,7 @@ $('brUnsavedCancel').addEventListener('click',()=>{$('brUnsavedModal').classList
 $('brUnsavedDiscard').addEventListener('click',()=>closeBREditor(true));
 $('brUnsavedSave').addEventListener('click',()=>{brCloseAfterSave=true;$('brUnsavedModal').classList.add('hidden');$('brUnsavedModal').setAttribute('aria-hidden','true');$('brEditSave').click();});
 $('brEditClose').addEventListener('click',()=>closeBREditor());
+$('brSuggestedPlacement').addEventListener('input',()=>{brEditorDirty=true;updateBREditorActions();});
 // Approval prerequisites are shown inside the BR editor, but Discovery and
 // AI Review are rendered under separate milestones. Navigate to the milestone
 // BEFORE expanding, scrolling, or focusing its panel.
@@ -7041,8 +7055,11 @@ $('brApprovalEditDiscovery').addEventListener('click',openDiscoveryQuestionsFrom
 $('brApprovalReviewAI').addEventListener('click',openAIReviewFromApproval);
 $('brEditModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeBREditor();});
 $('brEditSave').addEventListener('click',()=>{
- if(!brEditing||!brState||brReadOnly||brEditorSaving)return;
- try{const content=parseBRQuill();brEditorSaving=true;baBusy('saveBR','Saving Business Requirements draft…');$('brEditError').textContent='Saving Business Requirements draft…';updateBREditorActions();send('brEdit',{brId:brEditing,revision:brState.revision,content});}
+ if(!brEditing||!brState||brReadOnly||brEditorSaving||window.ATGVBusinessRequirements?.busy())return;
+ try{const content=parseBRQuill();const artifact=$('brEditModal').dataset.baArtifact==='true';
+  if(artifact)content.jiraPlacement=$('brSuggestedPlacement').value.trim();
+  brEditorSaving=true;baBusy('saveBR','Saving Business Requirements draft…');$('brEditError').textContent='Saving Business Requirements draft…';updateBREditorActions();if(artifact)send('baEditRequirementArtifact',{projectId:activeId,roleId:selectedRole,brId:brEditing,revision:brState.revision,content});
+  else send('brEdit',{brId:brEditing,revision:brState.revision,content});}
  catch(e){brEditorSaving=false;baBusy('',null);$('brEditError').textContent=e.message;}
 });
 $('brEditRevision').addEventListener('click',()=>{
@@ -7301,7 +7318,9 @@ $('discoveryForm').addEventListener('submit',e=>{
   if(discoveryAutosaving||baBusyTask)return; // Reject duplicate manual clicks while a save is running.
   const answers=Object.fromEntries(BA_QUESTIONS.map(([key])=>[key,$('ba-'+key).value]));
   discoveryAutosaving=true;discoveryAutosaveSnapshot=answers;
-  baBusy('saveDiscovery','Saving 12 discovery answers…');send('saveDiscovery',{answers,revision:discoveryData.revision,preserveReview:preserveReviewOnSave});
+  baBusy('saveDiscovery','Saving 12 discovery answers…');
+  if(window.ATGVBusinessRequirements?.active())send('baSaveDiscoveryArtifact',{projectId:activeId,roleId:selectedRole,answers,revision:discoveryData.revision});
+  else send('saveDiscovery',{answers,revision:discoveryData.revision,preserveReview:preserveReviewOnSave});
 });
 function requestDiscoveryReview(){
  if($('discoveryCopilot').disabled)return;

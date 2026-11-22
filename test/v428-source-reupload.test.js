@@ -30,12 +30,12 @@ async function withProject(fn){
 function uploadFixture(registry,file){
  const messages=[],notices=[],mapped=[],savedSelections=[];
  const context={
-  requireOpened(){},ensureBAUploadRole:async()=> 'BA',registry,activeProject:{id:'demo'},
+  baPreparationRun:null,jiraSyncBusy:false,requireOpened(){},ensureBAUploadRole:async()=> 'BA',registry,activeProject:{id:'demo'},
   vscode:{window:{showOpenDialog:async()=>[{fsPath:file}]}},path,fs,discoveryImport,sha,sourceStore,brWorkflow,baBrTextPipeline,
   dashboard:{webview:{postMessage:async message=>messages.push(message)}},
   context:{workspaceState:{update:async(key,value)=>savedSelections.push({key,value})}},
   documentPreflightSessions:new Map(),approvedJiraPreviewRevision:null,approvedJiraPreviewBinding:null,jiraPreviewValidation:null,
-  processSelectedDiscoverySources:async message=>mapped.push(message),
+  runBRPreparation:async stage=>mapped.push(stage),
   uiWarning:async()=>{throw Error('Unexpected revision confirmation');},
   notice:async message=>notices.push(message)
  };
@@ -56,7 +56,7 @@ test('re-uploading a document archived by a new BR cycle makes it active and sta
  assert.equal(after.archivedSources.length,0);assert.equal(after.sourceDocuments[0].byteDigest,doc.byteDigest);
  assert.equal(after.brs[0].approvedContent.title,'Previous approved requirement');assert.equal(after.synced['BR-001'].key,'TC-123');
  assert.equal(upload.notices.length,0);assert.equal(upload.mapped.length,1);
- assert.equal(upload.mapped[0].digests[0],doc.digest);
+ assert.equal(upload.mapped[0],'source');
  const done=upload.messages.find(message=>message.type==='discoveryUploadDone');
  assert.equal(done.restored,1);assert.equal(done.autoPreflight,true);
  assert.ok((await sourceStore.originalBytes(registry,'demo',after.sourceDocuments[0])).length>0);

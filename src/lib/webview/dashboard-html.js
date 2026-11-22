@@ -6,10 +6,11 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.37';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.38';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
+  const baAutomaticUi=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','ba-automatic-ui.js'));
   const myWorkAiJs=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-mywork-ai.js'));
   const myWorkWaveChatJs=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-mywork-wave-chat.js'));
   const myWorkAiCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-mywork-ai.css'));
@@ -197,7 +198,7 @@ function html(webview,{resumeLibrary=false}={}){
       <div id="overviewPhaseCircles" class="overview-phase-grid" role="group" aria-label="Seven SDLC phase progress indicators"></div>
       <p class="overview-phase-note muted">Based on local SDLC role checklists. This does not imply Jira approval, deployment, or completion of BR acceptance tests.</p>
     </div>
-    <div class="overview-stat-grid"><div class="stat-tile"><span>PROJECT</span><strong id="overviewActive">None selected</strong></div><div class="stat-tile"><span>INDEXED DOCUMENTS</span><strong id="overviewDocs">0</strong></div><div class="stat-tile"><span>SDLC PROGRESS</span><strong id="overviewProgress">0 / 0</strong></div><div class="stat-tile"><span>PUBLISHED JIRA ISSUES</span><strong id="overviewJiraCount">0</strong><small id="overviewJiraBreakdown">No published issues</small></div></div>
+    <div class="overview-stat-grid"><div class="stat-tile"><strong id="overviewActive">None selected</strong></div><div class="stat-tile"><span>INDEXED DOCUMENTS</span><strong id="overviewDocs">0</strong></div><div class="stat-tile"><span>SDLC PROGRESS</span><strong id="overviewProgress">0 / 0</strong></div><div class="stat-tile"><span>PUBLISHED JIRA ISSUES</span><strong id="overviewJiraCount">0</strong><small id="overviewJiraBreakdown">No published issues</small></div></div>
     <div class="overview-connections-grid overview-connections-flat" role="group" aria-label="Jira project and Confluence space">
         <div class="overview-connection-card" id="overviewJiraConnection">
           <div class="overview-connection-top"><span>JIRA PROJECT</span><button type="button" id="overviewJiraMappingStatus" class="overview-mapping-status overview-mapping-action" aria-label="Edit Jira Project Key">Project setting</button></div>
@@ -373,8 +374,80 @@ function html(webview,{resumeLibrary=false}={}){
       <div class="ba-my-work-head"><div><h2>Business Requirements</h2><p class="muted">Review requirements, approvals and action items. Open a requirement to continue the approved process.</p></div><button type="button" id="baMyWorkOpen">Open Business Requirements</button></div>
       <div id="baMyWorkMetrics" class="ba-my-work-metrics" aria-label="Business Requirements counts"></div>
     </section>
-  <section id="discoveryView" class="hidden work-container ba-embedded-requirements"><h2 class="ba-single-heading">Business Requirements</h2>
-    <section class="discovery-overview" aria-label="Business Requirement workflow status"><div class="discovery-overview-top"><div class="discovery-overview-item"><span>PROJECT</span><strong id="discoveryProjectName">—</strong><small id="discoveryUpdatedAt">Not saved yet.</small></div><div class="discovery-overview-item"><div class="discovery-readiness-head"><span>READINESS</span></div><strong id="discoveryReadiness">0 / 12 answered</strong><small id="discoveryMissing">Complete all questions to continue.</small></div><div class="ba-overview-actions"><button id="baNewRequirement" type="button" title="Create a new independent Business Requirement">+ New Business Requirement</button></div></div>
+  <section id="discoveryView" class="hidden work-container ba-embedded-requirements ba-automatic-view">
+    <div class="ba-auto-heading">
+      <h2 class="ba-single-heading">Business Requirements <span id="baAutoTitle"></span></h2>
+      <div class="ba-auto-heading-actions">
+        <div id="baAutoSkillSlot"></div>
+        <button id="baNewRequirement" type="button" title="Create a new independent Business Requirement">+ New Business Requirement</button>
+      </div>
+    </div>
+    <div id="baAutoFeedback"></div>
+    <section class="ba-auto-progress" aria-label="Business Requirements workflow">
+      <div class="ba-auto-progress-head">
+        <strong>Workflow</strong>
+        <div class="ba-auto-ai" id="baAutoAI" role="status"><span class="ba-auto-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span id="baAutoAIStatus">ATGV AI idle</span></div>
+      </div>
+      <ol class="ba-auto-steps">
+        <li data-ba-auto-stage="source"><span>1</span><div><strong>Prepare Source</strong><small>Source and ISO BRD</small></div></li>
+        <li data-ba-auto-stage="requirements"><span>2</span><div><strong>Develop Requirements</strong><small>Discovery and individual BRs</small></div></li>
+        <li data-ba-auto-stage="jira"><span>3</span><div><strong>Prepare Jira Preview</strong><small>Hierarchy and fields</small></div></li>
+        <li data-ba-auto-stage="publish"><span>4</span><div><strong>Publish to Jira</strong><small>Manual confirmation</small></div></li>
+      </ol>
+    </section>
+    <div class="ba-auto-artifacts">
+      <details id="baAutoSource" class="ba-auto-artifact" open>
+        <summary><strong>Business Documents</strong><span id="baAutoSourceBadge" class="ba-auto-badge">Draft</span></summary>
+        <div class="ba-auto-body">
+          <div id="baAutoOriginalFiles"></div>
+          <div id="baAutoSourceEditor" hidden>
+            <div id="baAutoDocumentTabs" class="ba-auto-tabs" role="group" aria-label="Business document view">
+              <button type="button" data-ba-document="iso" aria-pressed="true">Structured ISO BRD</button>
+              <button type="button" data-ba-document="source" aria-pressed="false">Editable source</button>
+              <button type="button" data-ba-document="original" aria-pressed="false">Original upload</button>
+            </div>
+            <label for="baAutoArtifactText" id="baAutoArtifactLabel">Structured ISO BRD</label>
+            <textarea id="baAutoArtifactText" rows="11" maxlength="1000000" spellcheck="false" readonly></textarea>
+            <div class="ba-auto-inline"><span id="baAutoArtifactStatus" role="status"></span><button type="button" id="baAutoArtifactSave" disabled>Save Document</button></div>
+          </div>
+        </div>
+      </details>
+      <details id="baAutoDiscovery" class="ba-auto-artifact">
+        <summary><strong>Discovery <small>12 questions</small></strong><span id="baAutoDiscoveryBadge" class="ba-auto-badge">Draft</span></summary>
+        <div class="ba-auto-body" id="baAutoDiscoveryForm"></div>
+      </details>
+      <details id="baAutoRequirements" class="ba-auto-artifact">
+        <summary><strong>Generated Requirements <small id="baAutoBRCount"></small></strong><span id="baAutoRequirementsBadge" class="ba-auto-badge">Draft</span></summary>
+        <div class="ba-auto-body" id="baAutoBRList"></div>
+      </details>
+      <details id="baAutoJira" class="ba-auto-artifact" open>
+        <summary><strong>Jira Work Items <small id="baAutoJiraCount"></small></strong><span id="baAutoJiraBadge" class="ba-auto-badge">Draft</span></summary>
+        <div class="ba-auto-body">
+          <div id="baAutoJiraTabs" class="ba-auto-tabs" role="group" aria-label="Jira issue category">
+            <button type="button" data-ba-jira-tab="hierarchy" aria-pressed="true">Hierarchy</button>
+            <button type="button" data-ba-jira-tab="br">BRs</button>
+            <button type="button" data-ba-jira-tab="epic">Epics</button>
+            <button type="button" data-ba-jira-tab="feature">Features</button>
+            <button type="button" data-ba-jira-tab="story">Stories</button>
+            <button type="button" data-ba-jira-tab="task">Tasks</button>
+            <button type="button" data-ba-jira-tab="subtask">Subtasks</button>
+          </div>
+          <div id="baAutoJiraItems"></div>
+          <ul id="baAutoJiraBlockers" hidden></ul>
+        </div>
+      </details>
+    </div>
+    <div class="ba-auto-actions">
+      <p id="baAutoStatus" role="status" aria-live="polite"></p>
+      <div class="stack">
+        <button type="button" id="baAutoStop" class="secondary hidden">Stop</button>
+        <button type="button" id="baAutoRefresh" class="secondary" disabled>Refresh Affected Artifacts</button>
+        <button type="button" id="baAutoPublish" disabled>Publish to Jira</button>
+      </div>
+    </div>
+    <details id="baAutoHistory" class="ba-auto-artifact"><summary><strong>Completed requirements</strong></summary><div id="baAutoHistoryContent" class="ba-auto-body"></div></details>
+
+    <section class="discovery-overview" aria-label="Business Requirement workflow status"><div class="discovery-overview-top"><div class="discovery-overview-item"><span>PROJECT</span><strong id="discoveryProjectName">—</strong><small id="discoveryUpdatedAt">Not saved yet.</small></div><div class="discovery-overview-item"><div class="discovery-readiness-head"></div><strong id="discoveryReadiness">0 / 12 answered</strong><small id="discoveryMissing">Complete all questions to continue.</small></div><div class="ba-overview-actions"></div></div>
 <div id="baInlineStatus" class="ba-inline-status hidden" role="alert" aria-live="polite"></div><div id="brDeletionProgress" class="br-deletion-progress hidden" data-phase="idle" role="status" aria-live="polite"><div class="br-deletion-progress-heading"><span class="br-deletion-spinner" aria-hidden="true"></span><strong id="brDeletionProgressText">Preparing deletion…</strong><small id="brDeletionProgressCount"></small><button id="brDeletionDismiss" type="button" class="br-deletion-dismiss hidden" aria-label="Dismiss deletion status" title="Dismiss deletion status">×</button></div><div id="brDeletionTrack" class="br-deletion-progress-track" role="progressbar" aria-label="Delete Business Requirement progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="brDeletionFill" class="br-deletion-progress-fill"></div></div></div><div id="baMilestoneError" class="ba-milestone-error hidden" role="alert" aria-live="polite"></div>
       <div class="ba-detailed-steps" id="baDetailedSteps">
       <div class="workflow-step-list discovery-workflow atgv-milestone-flow" role="group" aria-label="Business Requirements progress — select a completed or active step">
@@ -459,7 +532,7 @@ function html(webview,{resumeLibrary=false}={}){
     <div class="ba-step-reopen"><button id="baOpenChangeProposal" type="button" class="secondary ba-step-reopen-btn hidden">Propose Requirement Change</button></div>
     <div class="hidden" aria-hidden="true"><input id="opsIssueKey"><input id="opsSummary"><button type="button" id="opsJiraCreate"></button><button type="button" id="opsJiraUpdate"></button><input type="checkbox" id="opsJiraAuto"></div>
     <div id="brJiraIssueModal" class="modal-overlay hidden" aria-hidden="true"><div class="modal-card modal-wide jira-issue-modal-card" role="dialog" aria-modal="true" aria-labelledby="brJiraIssueModalTitle"><div class="section-title"><h2 id="brJiraIssueModalTitle">Jira Issue Preview</h2><button id="brJiraIssueModalClose" type="button" class="secondary" aria-label="Close Jira issue preview">Close</button></div><div id="brJiraIssueModalContent" class="jira-issue-modal-content" tabindex="0"></div></div></div>\n    <div id="brCompareModal" class="modal-overlay hidden" aria-hidden="true"><div class="modal-card modal-wide br-compare-card" role="dialog" aria-modal="true" aria-labelledby="brCompareTitle"><div class="section-title"><h2 id="brCompareTitle">Business Requirements Revision Comparison</h2><button id="brCompareClose" type="button" class="secondary">Close</button></div><div id="brCompareContent" class="br-compare-grid"></div></div></div>
-    <div id="brEditModal" class="modal-overlay hidden" aria-hidden="true"><div class="modal-card modal-wide br-edit-card" role="dialog" aria-modal="true" aria-labelledby="brEditTitle"><div class="section-title"><div><h2 id="brEditTitle">Business Requirement Preview</h2><p id="brEditStatus" class="muted">Review the document. Approval will save the current draft automatically, then lock the approved revision.</p></div><button id="brEditClose" type="button" class="secondary">Close</button></div><div id="brQuillMount" class="br-quill-mount"><div id="brQuillEditor" aria-label="Business Requirement document editor"></div></div><p id="brEditError" role="alert"></p><section id="brApprovalGuidance" class="br-approval-guidance hidden" role="status" aria-live="polite" aria-label="Business Requirements approval prerequisites"><strong>Approval prerequisites</strong><ul id="brApprovalGuidanceList"></ul><div class="stack"><button type="button" id="brApprovalEditDiscovery" class="secondary hidden">Resolve Discovery Questions</button><button type="button" id="brApprovalReviewAI" class="secondary hidden">Open AI Review</button></div></section><div class="stack actions"><button id="brEditSave" type="button">Save Draft</button><button id="brEditEndorse" type="button" class="secondary" disabled>Business Owner Approve</button><button id="brEditApprove" type="button" disabled>Approve Business Requirements</button><button id="brEditRevision" type="button" class="secondary hidden" disabled>Create New Revision</button></div></div></div>
+    <div id="brEditModal" class="modal-overlay hidden" aria-hidden="true"><div class="modal-card modal-wide br-edit-card" role="dialog" aria-modal="true" aria-labelledby="brEditTitle"><div class="section-title"><div><h2 id="brEditTitle">Business Requirement Preview</h2><p id="brEditStatus" class="muted">Review the document. Approval will save the current draft automatically, then lock the approved revision.</p></div><button id="brEditClose" type="button" class="secondary">Close</button></div><div id="brQuillMount" class="br-quill-mount"><div id="brQuillEditor" aria-label="Business Requirement document editor"></div></div><label id="brEditPlacementField" class="hidden">Suggested Jira placement<textarea id="brSuggestedPlacement" rows="2" maxlength="500"></textarea></label><p id="brEditError" role="alert"></p><section id="brApprovalGuidance" class="br-approval-guidance hidden" role="status" aria-live="polite" aria-label="Business Requirements approval prerequisites"><strong>Approval prerequisites</strong><ul id="brApprovalGuidanceList"></ul><div class="stack"><button type="button" id="brApprovalEditDiscovery" class="secondary hidden">Resolve Discovery Questions</button><button type="button" id="brApprovalReviewAI" class="secondary hidden">Open AI Review</button></div></section><div class="stack actions"><button id="brEditSave" type="button">Save Draft</button><button id="brEditEndorse" type="button" class="secondary" disabled>Business Owner Approve</button><button id="brEditApprove" type="button" disabled>Approve Business Requirements</button><button id="brEditRevision" type="button" class="secondary hidden" disabled>Create New Revision</button></div></div></div>
     <div id="brUnsavedModal" class="modal-overlay hidden" aria-hidden="true"><div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="brUnsavedHeading"><h2 id="brUnsavedHeading">Unsaved Business Requirements changes</h2><p>Save your edits before closing?</p><div class="stack actions"><button type="button" id="brUnsavedSave">Save Draft</button><button type="button" id="brUnsavedDiscard" class="secondary">Discard Changes</button><button type="button" id="brUnsavedCancel" class="secondary">Keep Editing</button></div></div></div>
   </section>
     <section id="baJiraInventorySection" class="ba-jira-inventory-panel hidden" aria-labelledby="baJiraInventoryTitle">
@@ -807,7 +880,7 @@ function html(webview,{resumeLibrary=false}={}){
   <div id="guideMenu" class="guide-menu-overlay hidden" aria-hidden="true"><div class="guide-menu-card" role="dialog" aria-modal="true" aria-labelledby="guideMenuTitle"><div class="guide-title-row"><div><span class="guide-kicker">ATGV HELP</span><h2 id="guideMenuTitle">Interactive User Guide</h2><p class="muted">Step-by-step guidance on real controls. No code, Jira, or approval action is performed by this guide.</p></div><button type="button" id="guideMenuClose" class="secondary" aria-label="Close guide">✕</button></div><div id="guideMenuTours" class="guide-tour-list" role="group" aria-label="Available walkthroughs"></div><fieldset class="guide-mode-control"><legend>Guidance mode</legend><label><input type="radio" name="guideMode" value="explain" checked> Explain steps</label><label><input type="radio" name="guideMode" value="practice"> Practice safe navigation</label></fieldset><div class="guide-menu-footer"><span id="guideMenuStatus" class="muted" role="status"></span><button type="button" id="guideMenuStart">Start Guide</button></div></div></div>
   <div id="guideOverlay" class="guide-overlay hidden" aria-hidden="true"><div class="guide-shade" data-edge="top"></div><div class="guide-shade" data-edge="left"></div><div class="guide-shade" data-edge="right"></div><div class="guide-shade" data-edge="bottom"></div><div id="guideSpotlight" class="guide-spotlight"></div><div id="guideCard" class="guide-card" role="dialog" aria-modal="true" aria-labelledby="guideStepTitle" tabindex="-1"><div class="guide-card-top"><span id="guideStepCounter" class="guide-counter">Step 1 of 1</span><button type="button" id="guideClose" class="guide-close" aria-label="Close tutorial">✕</button></div><h2 id="guideStepTitle"></h2><p id="guideStepDescription"></p><p id="guideStepNote" class="guide-step-note hidden" role="status"></p><button id="guideStepTokenLink" type="button" class="guide-step-token-link hidden">Open official token page ↗</button><div class="guide-progress" aria-label="Tutorial progress"><div id="guideProgressFill"></div></div><div class="guide-card-actions"><button type="button" id="guideSkip" class="guide-skip">Skip tour</button><button type="button" id="guideBack" class="secondary">Back</button><button type="button" id="guideNext">Next</button></div></div></div>
   <div id="status" class="status hidden" role="status" aria-live="polite"></div>
-  </div></div>${quillJs?`<script src="${quillJs}"></script>`:''}${ganttJs?`<script src="${ganttJs}"></script>`:''}<script src="${diagramCanvas}"></script><script src="${ownershipFilters}"></script><script src="${ownershipPresentation}"></script><script src="${userGuideJs}"></script><script src="${aiChangeResolutionJs}"></script><script src="${baStageFlowJs}"></script><script src="${baProgressJs}"></script><script src="${workspaceBreadcrumbsJs}"></script><script src="${apiSimulatorJs}"></script><script src="${jiraOverviewJs}"></script><script src="${dataTablesJs}"></script><script src="${pmDeliveryJs}"></script><script src="${jiraWorkflowTablesJs}"></script><script src="${completedBrHistoryJs}"></script><script src="${baJiraEpicsJs}"></script><script src="${overviewSdlcJs}"></script><script src="${js}"></script><script src="${myWorkAiJs}"></script><script src="${myWorkWaveChatJs}"></script>${vendorAssets?cmFiles.map(file=>`<script src="${cmAsset(file)}"></script>`).join(''):''}<script src="${studioJs}"></script><script src="${userGuideControllerJs}"></script><script src="${assetBootJs}"></script></body></html>`;
+  </div></div>${quillJs?`<script src="${quillJs}"></script>`:''}${ganttJs?`<script src="${ganttJs}"></script>`:''}<script src="${diagramCanvas}"></script><script src="${ownershipFilters}"></script><script src="${ownershipPresentation}"></script><script src="${userGuideJs}"></script><script src="${aiChangeResolutionJs}"></script><script src="${baStageFlowJs}"></script><script src="${baProgressJs}"></script><script src="${workspaceBreadcrumbsJs}"></script><script src="${apiSimulatorJs}"></script><script src="${jiraOverviewJs}"></script><script src="${dataTablesJs}"></script><script src="${pmDeliveryJs}"></script><script src="${jiraWorkflowTablesJs}"></script><script src="${completedBrHistoryJs}"></script><script src="${baJiraEpicsJs}"></script><script src="${overviewSdlcJs}"></script><script src="${js}"></script><script src="${myWorkAiJs}"></script><script src="${myWorkWaveChatJs}"></script><script src="${baAutomaticUi}"></script>${vendorAssets?cmFiles.map(file=>`<script src="${cmAsset(file)}"></script>`).join(''):''}<script src="${studioJs}"></script><script src="${userGuideControllerJs}"></script><script src="${assetBootJs}"></script></body></html>`;
 }
 return html;
 }

@@ -6,7 +6,7 @@ const path=require('node:path');
 const crypto=require('node:crypto');
 const jiraFieldValues=require('../src/jira-field-values');
 const source=fs.readFileSync(path.join(__dirname,'../test/generated/extension-source.txt'),'utf8');
-const code=source.slice(source.indexOf('async function syncApprovedBRs(expectedRevision){'),source.indexOf('\nlet aiChangeResolutionRuntime=null;'));
+const code=source.slice(source.indexOf('async function syncApprovedBRs('),source.indexOf('\nlet aiChangeResolutionRuntime=null;'));
 const sha=s=>crypto.createHash('sha256').update(s).digest('hex');
 function setup({failCreate=false,approval='Publish Jira'}={}){
  const item={path:'BR-777',action:'create',kind:'Epic',title:'Controlled test Epic',description:'Mock only',hash:'fixed-hash',parent:null};

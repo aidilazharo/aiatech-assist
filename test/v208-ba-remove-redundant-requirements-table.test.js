@@ -8,7 +8,7 @@ const host=fs.readFileSync(path.join(root,'test/generated/extension-source.txt')
 const ui=fs.readFileSync(path.join(root,'media/start.js'),'utf8');
 test('Business Analyst My Work has no redundant Requirements table or Show filter',()=>{
  const start=host.indexOf('<section id="baMyWorkDashboard"');
- const end=host.indexOf('<section id="baJiraInventorySection"',start);
+ const end=host.indexOf('<section id="discoveryView"',start);
  const content=host.slice(start,end);
  assert.match(content,/id="baMyWorkOpen"/);
  assert.match(content,/id="baMyWorkMetrics"/);

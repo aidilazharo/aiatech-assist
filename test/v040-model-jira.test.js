@@ -53,11 +53,11 @@ test('Model picker is an accessible modal connected to model selection commands'
 });
 test('Jira preview verifies target project before preflight and offers an explicit picker',()=>{
  const code=source('test/generated/extension-source.txt');
- assert.match(code,/async function ensureJiraPreviewTarget\(register\)/);
+ assert.match(code,/async function ensureJiraPreviewTarget\(register,\{automatic=false\}/);
  assert.match(code,/discoverJiraProjects\(initial,token\)/);
  assert.match(code,/uiQuickPick\(picks,\{title:'Select Jira project for BR preview'/);
  assert.match(code,/registry\.update\(activeProject\.id/);
  assert.match(code,/Object\.keys\(register\.synced\|\|\{\}\)\.length/);
- assert.match(code,/if\(changes\.length\)\{const target=await ensureJiraPreviewTarget\(register\)/);
+ assert.match(code,/const target=await ensureJiraPreviewTarget\(register,\{automatic\}\)/);
  assert.match(source('media/start.js'),/baBusyTask==='jiraPreview'/);
 });

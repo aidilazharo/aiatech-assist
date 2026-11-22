@@ -67,9 +67,10 @@ test('re-selecting or replacing evidence invalidates the previous mapped stage',
  state=await br.selectSources(registry,'demo',state.revision,[b]);
  assert.equal(state.mappingCompleted,null);
 }));
-test('Start, upload, mapping, Discovery Questions, AI Review and documents have exclusive visibility',()=>{
+test('The four-stage BA screen hides legacy milestone metadata',()=>{
  const host=read('test/generated/extension-source.txt'),ui=read('media/start.js');
- assert.match(host,/class="discovery-readiness-head"[^>]*><span>READINESS<\/span>/);
+ assert.doesNotMatch(host,/<span>READINESS<\/span>/);
+ assert.equal((host.match(/data-ba-auto-stage=/g)||[]).length,4);
  assert.match(host,/id="baStartPanel"[^>]*>[\s\S]*id="baCompletedSection"/);
  assert.match(host,/id="baReviewFinish"/);
  assert.match(ui,/ATGVBAStageFlow\.select/);
