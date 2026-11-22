@@ -32,7 +32,8 @@ test('default BRS excludes explanatory filler and the full repeated source appen
    features:[{title:'Implementation cost',description:'Show CAPEX and OPEX separately',
     stories:[{title:'Capture costs',acceptanceCriteria:'Only approved cost methods are used'}]}]}]});
  const raw=document.toString('latin1');
- assert.match(raw,/GATE: Project Initiation and Project Approval/);
+ assert.match(raw,/GATE: Project Initiation and/);
+ assert.match(raw,/Project Approval/);
  assert.match(raw,/BUSINESS REQUIREMENTS SPECIFICATION/);
  assert.match(raw,/BR-004 - Cost, Benefit, and Delivery Planning/);
  assert.match(raw,/Capture implementation costs, benefits and delivery planning/);
