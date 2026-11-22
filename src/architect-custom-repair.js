@@ -134,4 +134,4 @@ async function createFixBranch(root,{expectedSha,driver=developer,run=executeGit
  if(after.branch!==ref||!after.clean||after.sha===before.sha)throw Error('Fix branch verification failed; review the checkout.');
  return {branch:ref,sha:after.sha,previousBranch:before.branch,message:'Created and committed local preview fix branch '+ref+'. Mock services/database fixtures are isolated; real backend integration remains unverified. No remote push was performed.'};
 }
-module.exports={analyse,branches,switchBranch,createFixBranch};
+module.exports={analyse,branches,switchBranch,createFixBranch,PREVIEW_SERVICE};

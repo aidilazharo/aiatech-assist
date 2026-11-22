@@ -425,6 +425,51 @@ async function runLocal(root, { relative = '', env = {}, previewUrl = '', apiPor
     }
     return { pid: child.pid, relative, head: entry.head, message: 'Application process started'+(previewUrl?' at '+previewUrl:'. Review logs for the actual local URL.') };
 }
+// Run only ATGV-generated, localhost-only synthetic API fixtures from a reviewed
+// local fix branch. Reuse the normal managed-process tracker so Stop and Status work.
+async function runMockServices(root,{relative='',previewUrl=''}={}){
+    if(activeProcess&&activeProcess.child.exitCode===null&&activeProcess.child.signalCode===null)
+        throw Error('An ATGV-managed application is already running.');
+    const info=await inspectScripts(root);
+    const target=info.targets.find(t=>t.relative===relative);
+    if(!target||target.kind!=='npm')throw Error('Select a detected Node application for synthetic API preview.');
+    if(!/^fix\/atgv-custom-stack-[a-f0-9]{10}$/.test(info.repo.branch||''))
+        throw Error('Synthetic API runner is allowed only on an isolated ATGV local fix branch.');
+    const url=require('./architect-custom-stack').loopbackPreview(previewUrl);
+    const parsed=new URL(url);
+    const port=Number(parsed.port);
+    if(!Number.isInteger(port)||port<1||port>65535||parsed.pathname!=='/api/v1/health')
+        throw Error('Mock API requires an explicit localhost port and /api/v1/health endpoint.');
+    const file=path.join(info.repo.root,'atgv-preview','mock-services.mjs');
+    const stat=await fs.lstat(file).catch(()=>null);
+    if(!stat?.isFile()||stat.isSymbolicLink())
+        throw Error('ATGV mock service source is missing or unsafe.');
+    const trusted=require('./architect-custom-repair').PREVIEW_SERVICE;
+    if(await fs.readFile(file,'utf8')!==trusted)
+        throw Error('The local synthetic mock service differs from the verified ATGV template.');
+    const cwd=path.join(info.repo.root,relative);
+    const child=spawn(process.execPath,[file],{
+        cwd,env:{ATGV_MOCK_PORT:String(port),PATH:process.env.PATH||'',SystemRoot:process.env.SystemRoot||'',
+          TEMP:process.env.TEMP||'',TMP:process.env.TMP||'',HOME:process.env.HOME||''},
+        windowsHide:true,stdio:['ignore','pipe','pipe'],shell:false,detached:process.platform!=='win32'
+    });
+    const entry={child,cwd,previewUrl:url,apiPort:null,instanceId:'',runtimeProxy:null,
+        mockPreview:true,command:'node [ATGV synthetic mock service]',logs:'',head:info.repo.sha,
+        relative,exitCode:null,signal:null};
+    activeProcess=entry;lastProcess=entry;
+    const read=(label,data)=>{entry.logs=(entry.logs+'['+label+'] '+String(data)).slice(-256*1024);};
+    child.stdout?.on('data',data=>read('stdout',data));
+    child.stderr?.on('data',data=>read('stderr',data));
+    child.on('error',error=>read('spawn-error',error.message));
+    child.on('exit',(code,signal)=>{entry.exitCode=code;entry.signal=signal;if(activeProcess===entry)activeProcess=null;});
+    try{
+        await new Promise((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject);});
+    }catch(error){
+        if(activeProcess===entry)activeProcess=null;
+        throw Error('Cannot launch isolated ATGV mock API: '+error.message);
+    }
+    return {pid:child.pid,relative,previewUrl:url,mockPreview:true};
+}
 async function stopLocal() { if (!activeProcess)
     return { stopped: false }; const entry = activeProcess; if (process.platform !== 'win32') {
     try {
@@ -503,4 +548,4 @@ async function artifactSnapshot(root, key, base='main') {
         source:'Git files from '+found.basis+' on '+repo.branch};
 }
 
-module.exports = { readinessFlags, checkReadiness, readArtifactFiles, artifactSnapshot, createRuntimeProxyOverlay, findLocalStoryBranch, jiraKey, branchName, repository, findStoryBranch, matchesGithubRepo, createBranch, resumeBranch, initLocalBaseline, commitBootstrap, configureOrigin, publishBootstrap, cloneConfigured, pushStory, inspectScripts, executeLocal, previewCommand, runLocal, stopLocal, localLogs };
+module.exports = { readinessFlags, checkReadiness, readArtifactFiles, artifactSnapshot, createRuntimeProxyOverlay, findLocalStoryBranch, jiraKey, branchName, repository, findStoryBranch, matchesGithubRepo, createBranch, resumeBranch, initLocalBaseline, commitBootstrap, configureOrigin, publishBootstrap, cloneConfigured, pushStory, inspectScripts, executeLocal, previewCommand, runLocal, runMockServices, stopLocal, localLogs };
