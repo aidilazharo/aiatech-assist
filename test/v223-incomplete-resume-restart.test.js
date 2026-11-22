@@ -13,16 +13,16 @@ test('incomplete cycle gets exactly one Resume/Restart section while approved hi
  for(const id of ['baUncompletedPanel','baIncompleteTitle','baIncompleteMeta','baIncompleteSource','baResumeIncomplete','baRestartIncomplete']){
   assert.equal((host.match(new RegExp('id="'+id+'"','g'))||[]).length,1,id);
  }
- assert.match(host,/<section id="baUncompletedPanel" class="ba-incomplete-panel hidden"/);
+ assert.match(host,/<section id="baUncompletedPanel" class="ba-incomplete-panel"/);
  assert.match(host,/id="baCompletedSection" class="ba-completed-flat"/);
  assert.match(host,/id="baCompletedJiraHistory"/);
- assert.match(css,/#discoveryView \.ba-incomplete-panel\{display:flex/);
+ assert.match(css,/#baRequirementsOverview \.ba-incomplete-panel\{display:flex/);
 });
-test('render only for a started but unfinished cycle, with exact saved milestone and source',()=>{
- assert.match(ui,/const started=hasSources\|\|!!brState\?\.restartPending\|\|activeBrs\.length>0/);
- assert.match(ui,/const unfinished=baResumeCardReady&&started&&baHasRecoverableBR\(brState\)&&!progress\.every\(step=>step\.complete\)/);
- assert.match(ui,/Resume at: Step \$\{current\.index\+1\} of \$\{progress\.length\}/);
- assert.match(ui,/renderBAUncompleted\(progress,activeStep,activeBrs,hasSources,displayed\)/);
+test('the overview renders the saved milestone and source for an unfinished cycle',()=>{
+ assert.match(ui,/if\(!panel\|\|view!=='baOverview'\)return/);
+ assert.match(ui,/const unfinished=baHasRecoverableBR\(brState\)&&\(!baPublishedCurrent\(\)/);
+ assert.match(ui,/ATGVBusinessRequirements\?\.stageSummary\(\)/);
+ assert.match(ui,/baResumeIncomplete'\)\.classList\.toggle\('hidden',!unfinished\)/);
  assert.equal(progress.derive({}).find(item=>item.current).key,'start');
  assert.equal(progress.derive({started:true,hasSources:false}).find(item=>item.current).key,'upload');
  assert.equal(progress.derive({started:true,hasSources:true}).find(item=>item.current).key,'mapping');
@@ -32,15 +32,14 @@ test('resume navigates to saved active step without restarting or submitting wor
  const start=ui.indexOf("$('baResumeIncomplete').addEventListener('click'");
  const end=ui.indexOf("$('baDeleteIncomplete').addEventListener('click'",start);
  const resume=ui.slice(start,end);
- assert.match(resume,/baViewedStep=key/);
- assert.match(resume,/renderDiscoverySummary\(\)/);
+ assert.match(resume,/navigate\('discovery'\)/);
  assert.doesNotMatch(resume,/send\(|startOrRestartBusinessRequirements|importDiscovery/);
 });
 test('restart uses host confirmation, preserves protected records and guards unsafe states',()=>{
  const start=ui.indexOf("$('baRestartIncomplete').addEventListener('click'");
  const end=ui.indexOf('// v0.1.21:',start);
  assert.match(ui.slice(start,end),/send\('restartUncompletedBusinessRequirement',\{revision:brState\.revision,openUploadImmediately:true\}\)/);
- assert.match(ui,/const canRestart=hasSources&&!Object\.keys\(brState\?\.pending\|\|\{\}\)\.length&&!discoveryDirty&&!brEditorDirty&&!baBusyTask&&!discoveryImportBusy/);
+ assert.match(ui,/const canRestart=sources\.length>0&&!Object\.keys\(brState\?\.pending\|\|\{\}\)\.length&&!discoveryDirty&&!brEditorDirty&&!busy/);
  const hostStart=host.indexOf("case 'restartUncompletedBusinessRequirement':");
  const hostEnd=host.indexOf("case 'restartDiscoverySources':",hostStart);
  const restart=host.slice(hostStart,hostEnd);

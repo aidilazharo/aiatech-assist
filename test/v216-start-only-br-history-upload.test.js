@@ -24,10 +24,11 @@ test('completed BR record panels retain their identity and dark gray styling',()
 });
 
 test('new BR action starts cycle then opens native upload; resume pending cycle without duplicate start',()=>{
- assert.match(ui,/function beginNewBusinessRequirement\(\)/);
+ assert.match(ui,/function beginNewBusinessRequirement\(event\)/);
  assert.match(ui,/if\(brState\.restartPending&&[!]\(brState\.sourceDocuments\|\|\[\]\)\.length\)/);
  assert.match(ui,/send\('startOrRestartBusinessRequirements',\{revision:brState\.revision,openUploadImmediately:true\}\)/);
  assert.match(ui,/\$\('baNewRequirement'\)\.addEventListener\('click',beginNewBusinessRequirement\)/);
+ assert.match(ui,/\$\('baOverviewNew'\)\.addEventListener\('click',beginNewBusinessRequirement\)/);
  const action=host.slice(host.indexOf("case 'startOrRestartBusinessRequirements':"),host.indexOf("case 'restartDiscoverySources':"));
  assert.match(action,/if\(msg\.openUploadImmediately\)\{/);
  assert.match(action,/await importDiscoveryDocument\('business-analyst'\)/);

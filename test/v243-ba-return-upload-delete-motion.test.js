@@ -14,11 +14,10 @@ function recoverable(state){
  assert.ok(section,'Expected resumable BR predicate');
  return vm.runInNewContext(`${section[0]};baHasRecoverableBR(state)`,{state});
 }
-test('in-progress visibility is deferred until leaving and returning to Business Requirements Start',()=>{
- assert.match(ui,/if\(view==='discovery'&&next!=='discovery'\)\{\s*if\(!baProcessRunning\)\{baResumeCardReady=baHasRecoverableBR\(brState\)/);
- assert.match(ui,/else if\(next==='discovery'&&view!=='discovery'&&baResumeCardReady&&!baProcessRunning\)\{\s*baViewedStep='start'/);
- assert.match(ui,/const unfinished=baResumeCardReady&&started&&baHasRecoverableBR\(brState\)/);
- assert.match(ui,/panel\.classList\.toggle\('hidden',!unfinished\|\|displayed!=='start'\)/);
+test('in-progress visibility derives from saved state in the separate BA overview',()=>{
+ assert.match(ui,/if\(!panel\|\|view!=='baOverview'\)return/);
+ assert.match(ui,/const unfinished=baHasRecoverableBR\(brState\)&&\(!baPublishedCurrent\(\)/);
+ assert.match(ui,/baResumeIncomplete'\)\.classList\.toggle\('hidden',!unfinished\)/);
  assert.match(ui,/if\(m\.type==='discoveryRestarted'\)\{baPreflightInfo=null;mappingFailurePhase='';baResumeCardReady=false/);
 });
 test('new uploaded source reveals Step 2 and its documents area after upload completes',()=>{
@@ -35,7 +34,7 @@ test('in-progress deletion removes the card after authoritative register update'
  assert.equal(!!recoverable({sourceDocuments:[],brs:[],restartPending:false}),false);
  assert.equal(!!recoverable({sourceDocuments:[],brs:[{status:'retired'}],restartPending:false}),false);
  assert.match(ui,/if\(!baHasRecoverableBR\(brState\)\)\{\s*baResumeCardReady=false/);
- assert.match(ui,/\$\('baUncompletedPanel'\)\.classList\.add\('hidden'\)/);
+ assert.match(ui,/baResumeIncomplete'\)\.classList\.toggle\('hidden',!unfinished\)/);
  assert.match(workflow,/Deleting the final in-progress source discards the empty cycle/);
 });
 test('circular progress animation differentiates selected, completed and reduced-motion states',()=>{

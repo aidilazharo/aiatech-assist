@@ -10,13 +10,13 @@ const ui=fs.readFileSync(path.join(root,'media/start.js'),'utf8');
 const css=fs.readFileSync(path.join(root,'media/start.css'),'utf8');
 const datatables=fs.readFileSync(path.join(root,'media/atgv-datatables.js'),'utf8');
 
-test('Business Analyst My Work displays the project Jira DataTable beneath restored BR summary',()=>{
+test('Business Analyst overview displays the project Jira DataTable beside resumable work',()=>{
  const ids=['baJiraInventorySection','baJiraInventoryTable','baJiraInventoryRefresh','baJiraTypeFilter','baJiraStatusFilter','baJiraInventoryStatus'];
  for(const id of ids)assert.ok(host.includes('id="'+id+'"'),id);
  assert.match(host,/id="baMyWorkDashboard"/);assert.match(host,/id="baMyWorkMetrics"/);assert.doesNotMatch(host,/id="baMyWorkItems"/);
  assert.match(host,/All Jira Project Items/);
  assert.match(host,/original creator and latest status/);
- assert.match(ui,/\$\('baJiraInventorySection'\)\.classList\.toggle\('hidden',roleId!=='business-analyst'\|\|baInventoryVisibleStep!=='start'\)/);
+ assert.match(ui,/\$\('baRequirementsOverview'\)\?\.classList\.toggle\('hidden',next!=='baOverview'\)/);
  assert.match(css,/\.ba-jira-inventory-panel/);
 });
 
@@ -43,8 +43,8 @@ test('DataTable supports incremental refresh without replacing search, sort or p
  assert.equal(result.filtered,2);
 });
 
-test('BA Jira request respects project scope and loads on BA My Work and discovery',()=>{
- assert.match(ui,/\['work','discovery'\]\.includes\(view\)/);
+test('BA Jira request respects project scope and loads in the BA overview',()=>{
+ assert.match(ui,/view!=='baOverview'\|\|selectedRole!=='business-analyst'/);
  assert.match(ui,/jiraInventoryProject!==activeId\|\|jiraInventoryKey!==key/);
  assert.match(ui,/function updateBAJiraFilterOptions\(/);
  assert.match(ui,/jiraInventoryError/);

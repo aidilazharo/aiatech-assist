@@ -34,10 +34,10 @@ test('v399: packaged webview styles precede controllers, without duplicate fallb
  assert.ok(!read('media/start.js').includes("$('openAtgvAi').addEventListener"),'No event handler should reference the removed button');
 });
 
-test('v399: Business Analyst My Work triggers live Jira scan from discovery view',()=>{
+test('v399: Business Analyst overview triggers the Jira inventory scan',()=>{
  const ui=read('media/start.js');
  assert.match(ui,/function ensureBAJiraInventory\(force=false\)/);
- assert.match(ui,/\['work','discovery'\]\.includes\(view\)/);
+ assert.match(ui,/view!=='baOverview'\|\|selectedRole!=='business-analyst'/);
  assert.match(ui,/ensureBAJiraInventory\(true\)/);
  assert.match(ui,/ensurePMJiraInventory\(true\)/);
  assert.match(ui,/child issue\(s\) in progress \(Epic status unchanged\)/);

@@ -8,10 +8,10 @@ const source=fs.readFileSync(path.join(__dirname,'../media/start.js'),'utf8');
 const css=fs.readFileSync(path.join(__dirname,'../media/start.css'),'utf8');
 const host=fs.readFileSync(path.join(__dirname,'../test/generated/extension-source.txt'),'utf8');
 
-test('All Jira Project Items is limited to BA Start milestone',()=>{
- assert.match(source,/baInventoryVisibleStep=displayed;/);
- assert.match(source,/\$\('baJiraInventorySection'\)\.classList\.toggle\('hidden',selectedRole!=='business-analyst'\|\|displayed!=='start'\)/);
- assert.match(source,/roleId!=='business-analyst'\|\|baInventoryVisibleStep!=='start'/);
+test('All Jira Project Items stays on the separate BA overview',()=>{
+ assert.match(host,/<section id="baRequirementsOverview"[^>]+>\s*<section id="baJiraInventorySection"/);
+ assert.match(source,/setView\(destination==='discovery'\?'discovery':'baOverview'\)/);
+ assert.match(source,/view!=='baOverview'\|\|selectedRole!=='business-analyst'/);
  assert.equal((host.match(/id="baJiraInventorySection"/g)||[]).length,1);
 });
 test('Next Step turns primary blue only once the current milestone is completed',()=>{

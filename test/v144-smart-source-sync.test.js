@@ -71,7 +71,7 @@ test('UI has no duplicate cleanup action or destructive issue DELETE route',()=>
  assert.doesNotMatch(host,/id="baUpdateSources"/);
  assert.match(web,/function requestSourceReupload\(\)/);
  assert.match(web,/send\('updateSourceDocuments'\)/);
- assert.match(host,/prePublishIdentityGuard\(register,target\.config,target\.token,changes\)/);
+ assert.match(host,/prePublishIdentityGuard\(register,target\.config,target\.token,changes,inventory\)/);
  assert.match(host,/prePublishIdentityGuard\(state,config,token,items\)/);
  assert.equal(typeof jira.deleteVerifiedDuplicate,'undefined');
 });

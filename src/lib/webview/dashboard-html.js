@@ -6,7 +6,7 @@ function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
   const installedVendorAssets=getVendorAssets();
   const vendorAssets=typeof installedVendorAssets==='undefined'?null:installedVendorAssets;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.38';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.39';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -379,6 +379,7 @@ function html(webview,{resumeLibrary=false}={}){
       <h2 class="ba-single-heading">Business Requirements <span id="baAutoTitle"></span></h2>
       <div class="ba-auto-heading-actions">
         <div id="baAutoSkillSlot"></div>
+        <button id="baAutoBack" type="button" class="secondary">Project Items</button>
         <button id="baNewRequirement" type="button" title="Create a new independent Business Requirement">+ New Business Requirement</button>
       </div>
     </div>
@@ -386,9 +387,8 @@ function html(webview,{resumeLibrary=false}={}){
     <section class="ba-auto-progress" aria-label="Business Requirements workflow">
       <div class="ba-auto-progress-head">
         <strong>Workflow</strong>
-        <div class="ba-auto-ai" id="baAutoAI" role="status"><span class="ba-auto-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span id="baAutoAIStatus">ATGV AI idle</span></div>
       </div>
-      <ol class="ba-auto-steps">
+      <ol class="ba-auto-steps" id="baAutoSteps" aria-busy="false">
         <li data-ba-auto-stage="source"><span>1</span><div><strong>Prepare Source</strong><small>Source and ISO BRD</small></div></li>
         <li data-ba-auto-stage="requirements"><span>2</span><div><strong>Develop Requirements</strong><small>Discovery and individual BRs</small></div></li>
         <li data-ba-auto-stage="jira"><span>3</span><div><strong>Prepare Jira Preview</strong><small>Hierarchy and fields</small></div></li>
@@ -414,7 +414,9 @@ function html(webview,{resumeLibrary=false}={}){
       </details>
       <details id="baAutoDiscovery" class="ba-auto-artifact">
         <summary><strong>Discovery <small>12 questions</small></strong><span id="baAutoDiscoveryBadge" class="ba-auto-badge">Draft</span></summary>
-        <div class="ba-auto-body" id="baAutoDiscoveryForm"></div>
+        <div class="ba-auto-body"><div id="baAutoDiscoveryForm"></div>
+          <details id="baAutoSourceNotes" hidden><summary>Source decisions and excluded drafts</summary><ul id="baAutoSourceNotesList"></ul></details>
+        </div>
       </details>
       <details id="baAutoRequirements" class="ba-auto-artifact">
         <summary><strong>Generated Requirements <small id="baAutoBRCount"></small></strong><span id="baAutoRequirementsBadge" class="ba-auto-badge">Draft</span></summary>
@@ -423,8 +425,12 @@ function html(webview,{resumeLibrary=false}={}){
       <details id="baAutoJira" class="ba-auto-artifact" open>
         <summary><strong>Jira Work Items <small id="baAutoJiraCount"></small></strong><span id="baAutoJiraBadge" class="ba-auto-badge">Draft</span></summary>
         <div class="ba-auto-body">
+          <div id="baAutoJiraView" class="ba-auto-tabs" role="group" aria-label="Jira work item view">
+            <button type="button" data-ba-jira-view="list" aria-pressed="true">List</button>
+            <button type="button" data-ba-jira-view="hierarchy" aria-pressed="false">Hierarchy</button>
+          </div>
           <div id="baAutoJiraTabs" class="ba-auto-tabs" role="group" aria-label="Jira issue category">
-            <button type="button" data-ba-jira-tab="hierarchy" aria-pressed="true">Hierarchy</button>
+            <button type="button" data-ba-jira-tab="all" aria-pressed="true">All types</button>
             <button type="button" data-ba-jira-tab="br">BRs</button>
             <button type="button" data-ba-jira-tab="epic">Epics</button>
             <button type="button" data-ba-jira-tab="feature">Features</button>
@@ -467,19 +473,6 @@ function html(webview,{resumeLibrary=false}={}){
       <div id="baRunning" class="ba-running hidden" role="status" aria-live="polite"><span class="ba-spinner" aria-hidden="true"></span><span id="baRunningText">Processing…</span><div id="baMappingActions" class="ba-mapping-actions hidden"><button id="baStopMapping" type="button" class="secondary">Stop Mapping</button><button id="baRetryMapping" type="button" class="secondary hidden">Retry Mapping</button></div><div class="ba-running-track" role="progressbar" aria-label="Business Requirements process running" aria-valuetext="Working"><div class="ba-running-indeterminate"></div></div></div>
       <div id="baMappingRecovery" class="ba-mapping-recovery hidden" role="status" aria-live="polite"><span id="baMappingRecoveryMessage"></span><button type="button" id="baMappingRetry" class="secondary">Retry Mapping</button></div>
       <div class="discovery-progress-row" id="baDiscoveryProgress"><div id="discoveryProgress" class="pill">0 / 12 answered</div><div class="progress-track discovery-progress-track"><div id="discoveryProgressFill" class="progress-fill" style="width:0%"></div></div></div><div class="discovery-status-row hidden" aria-hidden="true"><p id="discoveryProgressHint" class="muted"></p><p id="discoveryImportStatus" class="muted">No file selected.</p></div>
-    </section>
-    <section id="baUncompletedPanel" class="ba-incomplete-panel hidden" aria-label="Uncompleted Business Requirement" aria-live="polite">
-      <div class="ba-incomplete-copy">
-        <span class="ba-incomplete-kicker">BUSINESS REQUIREMENT IN PROGRESS</span>
-        <h2 id="baIncompleteTitle">Uncompleted Business Requirement</h2>
-        <p id="baIncompleteMeta" class="muted">Resume your last saved step.</p>
-        <p id="baIncompleteSource" class="muted"></p>
-      </div>
-      <div class="ba-incomplete-actions" role="group" aria-label="Uncompleted requirement actions">
-        <button id="baResumeIncomplete" type="button">Resume</button>
-        <button id="baRestartIncomplete" class="secondary" type="button">Restart</button>
-        <button id="baDeleteIncomplete" class="danger" type="button" data-br-delete-action>Delete</button>
-      </div>
     </section>
     <!-- Step 1 is retained in the milestone tracker. Its only content is the
          historical BR/Jira register; the redundant Start hero/card/count was removed. -->
@@ -535,7 +528,8 @@ function html(webview,{resumeLibrary=false}={}){
     <div id="brEditModal" class="modal-overlay hidden" aria-hidden="true"><div class="modal-card modal-wide br-edit-card" role="dialog" aria-modal="true" aria-labelledby="brEditTitle"><div class="section-title"><div><h2 id="brEditTitle">Business Requirement Preview</h2><p id="brEditStatus" class="muted">Review the document. Approval will save the current draft automatically, then lock the approved revision.</p></div><button id="brEditClose" type="button" class="secondary">Close</button></div><div id="brQuillMount" class="br-quill-mount"><div id="brQuillEditor" aria-label="Business Requirement document editor"></div></div><label id="brEditPlacementField" class="hidden">Suggested Jira placement<textarea id="brSuggestedPlacement" rows="2" maxlength="500"></textarea></label><p id="brEditError" role="alert"></p><section id="brApprovalGuidance" class="br-approval-guidance hidden" role="status" aria-live="polite" aria-label="Business Requirements approval prerequisites"><strong>Approval prerequisites</strong><ul id="brApprovalGuidanceList"></ul><div class="stack"><button type="button" id="brApprovalEditDiscovery" class="secondary hidden">Resolve Discovery Questions</button><button type="button" id="brApprovalReviewAI" class="secondary hidden">Open AI Review</button></div></section><div class="stack actions"><button id="brEditSave" type="button">Save Draft</button><button id="brEditEndorse" type="button" class="secondary" disabled>Business Owner Approve</button><button id="brEditApprove" type="button" disabled>Approve Business Requirements</button><button id="brEditRevision" type="button" class="secondary hidden" disabled>Create New Revision</button></div></div></div>
     <div id="brUnsavedModal" class="modal-overlay hidden" aria-hidden="true"><div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="brUnsavedHeading"><h2 id="brUnsavedHeading">Unsaved Business Requirements changes</h2><p>Save your edits before closing?</p><div class="stack actions"><button type="button" id="brUnsavedSave">Save Draft</button><button type="button" id="brUnsavedDiscard" class="secondary">Discard Changes</button><button type="button" id="brUnsavedCancel" class="secondary">Keep Editing</button></div></div></div>
   </section>
-    <section id="baJiraInventorySection" class="ba-jira-inventory-panel hidden" aria-labelledby="baJiraInventoryTitle">
+    <section id="baRequirementsOverview" class="hidden" aria-label="Business Requirements overview">
+    <section id="baJiraInventorySection" class="ba-jira-inventory-panel" aria-labelledby="baJiraInventoryTitle">
       <div class="ba-jira-inventory-heading"><div><h2 id="baJiraInventoryTitle">All Jira Project Items</h2><p class="muted">All visible Jira issues for this project, with the original creator and latest status.</p></div><div class="stack"><button id="baReviewDeletedJira" class="secondary hidden" type="button" title="Review ATGV-owned Jira issues left by previously local-only deleted Business Requirements">Review Deleted Jira</button><button id="baJiraInventoryRefresh" class="secondary" type="button">Refresh Jira Items</button></div></div>
       <div class="ba-jira-inventory-filters">
         <label for="baJiraBrFilter">Business Requirement <select id="baJiraBrFilter"><option value="">All BRs / project</option></select></label>
@@ -546,6 +540,21 @@ function html(webview,{resumeLibrary=false}={}){
       <p id="baJiraInventoryStatus" class="muted" role="status" aria-live="polite">Open Business Analyst My Work to load Jira project items.</p>
       <div id="baJiraInventoryTable" aria-label="All Jira project issues with creator"></div><div id="baJiraHierarchy" class="ba-jira-hierarchy hidden" aria-label="Jira issue hierarchy"></div>
       <p class="ba-jira-inventory-note muted">BRs appear first. Other Jira issues created by your connected account follow, then remaining issues. Local BRs without a visible Jira Epic are labelled separately.</p>
+    </section>
+    <section id="baUncompletedPanel" class="ba-incomplete-panel" aria-label="Uncompleted Business Requirement" aria-live="polite">
+      <div class="ba-incomplete-copy">
+        <span class="ba-incomplete-kicker">BUSINESS REQUIREMENT IN PROGRESS</span>
+        <h2 id="baIncompleteTitle">Uncompleted Business Requirement</h2>
+        <p id="baIncompleteMeta" class="muted">Resume your last saved step.</p>
+        <p id="baIncompleteSource" class="muted"></p>
+      </div>
+      <div class="ba-incomplete-actions" role="group" aria-label="Uncompleted requirement actions">
+        <button id="baOverviewNew" type="button">New Business Requirement</button>
+        <button id="baResumeIncomplete" type="button">Resume</button>
+        <button id="baRestartIncomplete" class="secondary" type="button">Restart</button>
+        <button id="baDeleteIncomplete" class="danger" type="button" data-br-delete-action>Delete</button>
+      </div>
+    </section>
     </section>
     <section id="pmDailyCockpit" class="pm-daily-cockpit hidden" aria-label="Project Manager daily delivery cockpit">
       <div class="pm-dashboard-head"><div><h2>Daily Delivery Cockpit</h2></div><button id="pmRefreshJira" type="button" class="secondary">Refresh Jira</button></div>

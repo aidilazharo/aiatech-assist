@@ -11,7 +11,7 @@ test('My Work canvas overlays the actual #D31145 header border on all screen siz
  const html=read('src/lib/webview/dashboard-html.js');
  const header=html.slice(html.indexOf('<header class="app-header"'),html.indexOf('</header>')+9);
  const main=html.slice(html.indexOf('<main id="myWorkView"'),html.indexOf('<main id="workView"'));
- const headerRule=css.match(/body\.atgv-mywork-chat-mode:not\(\.gate-mode\) #appHeader\.app-header\{([^}]+)\}/)?.[1]||'';
+ const headerRule=css.match(/body\.atgv-mywork-chat-mode:not\(\.gate-mode\) #appHeader\.app-header,\s*body\.atgv-ba-ai-active:not\(\.gate-mode\) #appHeader\.app-header\{([^}]+)\}/)?.[1]||'';
  const carrier=css.match(/#appHeader #myWorkHeaderWave\.mywork-header-wave\{([^}]+)\}/)?.[1]||'';
  const visual=css.match(/#appHeader #myWorkHeaderWave \.mywork-header-wave-visual\{([^}]+)\}/)?.[1]||'';
  const canvas=css.match(/#appHeader #myWorkHeaderWave canvas#atgvMyWorkAiOrb\{([^}]+)\}/)?.[1]||'';
@@ -36,7 +36,7 @@ test('waveform blends from exact header red to CMYK and back to header red',()=>
  const js=read('media/atgv-mywork-wave-chat.js');
  assert.match(js,/const redRGB=\[211,17,69\],cmykRGB=/);
  assert.match(js,/\[0,219,230\],\[230,36,187\],\[249,212,58\],\[110,125,143\]/);
- assert.match(js,/colorMix=smooth\(colorMix,engaged\|\|idle<3\.9\?1:0/);
+ assert.match(js,/colorMix=smooth\(colorMix,brActivity\|\|engaged\|\|idle<3\.9\?1:0/);
  assert.match(js,/redGradient\.addColorStop\(0,blendedRGBA\(strand,colorMix,0\)\)/);
  assert.match(js,/window\.addEventListener\('atgv:viewchange',resize\)/);
  assert.match(js,/requestAnimationFrame\(frame\)/);

@@ -18,7 +18,7 @@
  const blendedRGBA=(target,mix,alpha)=>'rgba('+redRGB.map((v,i)=>
   Math.round(v+(target[i]-v)*mix)).join(',')+','+alpha+')';
  let project='',role='',pendingId=0,sequence=0,pending=false;
- let brActivity=false,brWaveMode=false;
+ let brActivity=false;
  let greetingNode=null,briefingNode=null,lastBriefRequest=0,submittedText='',handoffDraft='';
  const dayLocal=(date=new Date())=>[date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');
  let sessionDay=dayLocal(),dayTimer=null;
@@ -117,8 +117,11 @@
  window.ATGVMyWorkChat={showSuggestion(text){if(suggestion)typewriter(suggestion,text);},
   saveHandoffDraft(text){handoffDraft=String(text||'').slice(0,4000);},
   setBusinessRequirementsActivity(active){
-   brActivity=active===true;
-   if(brActivity)brWaveMode=true;
+   const running=active===true;
+   if(brActivity===running)return;
+   brActivity=running;
+   ripples=[];
+   if(brActivity)resize();
   }};
  input.addEventListener('input',()=>{
   pulse(.22+Math.min(1,input.value.length/380));
@@ -277,23 +280,22 @@
    // Quiet idle heartbeat: keep a faint red waveform fading in/out.
    targetOpacity=.34;targetHeight=.1;targetSpeed=.22;stage='SLEEPING';
   }
-  if(brWaveMode&&!pending&&!thinking&&!writer){
-   targetHeight=brActivity&&!reduceMotion?Math.min(.12,6/Math.max(h,1)):0;
-   targetOpacity=.58;targetSpeed=brActivity ? .72 : 0;
-   if(!brActivity){height=0;speed=0;ripples=[];}
-  }else if((pending||thinking||writer)&&!brActivity)brWaveMode=false;
+  if(brActivity){
+   targetHeight=reduceMotion?0:Math.min(.15,8/Math.max(h,1));
+   targetOpacity=.75;targetSpeed=reduceMotion?0:.85;stage='THINKING';
+  }
   const smooth=(a,b,k)=>a+(b-a)*(1-Math.exp(-k*dt));
   height=smooth(height,targetHeight,engaged?6:3);
   opacity=smooth(opacity,targetOpacity,engaged?9:4);
   speed=smooth(speed,targetSpeed,engaged?5:2);
   // Keep CMYK during active thinking and slow-down; shift back toward red as opacity fades.
-  colorMix=smooth(colorMix,engaged||idle<3.9?1:0,engaged?1.25:2.8);
+  colorMix=smooth(colorMix,brActivity||engaged||idle<3.9?1:0,engaged?1.25:2.8);
   phase+=dt*speed;energy=Math.max(0,energy-dt*.66);
   if(ctx){
    ctx.clearRect(0,0,w,h);
    if(opacity>.005){
     const mid=h*.48;
-    const redBreath=reduceMotion?1:(brWaveMode&&!brActivity?1:.35+.65*(.5+.5*Math.sin(now*.0024)));
+    const redBreath=reduceMotion?1:.35+.65*(.5+.5*Math.sin(now*.0024));
     const baseline=ctx.createLinearGradient(0,0,w,0);
     baseline.addColorStop(0,blendedRGBA(cmykRGB[0],colorMix,0));
     baseline.addColorStop(.5,blendedRGBA(cmykRGB[0],colorMix,.8));

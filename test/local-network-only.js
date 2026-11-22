@@ -2,6 +2,9 @@
 const net = require('node:net');
 const http = require('node:http');
 const https = require('node:https');
+// Repository fixtures use local Git remotes. Child Git processes must not
+// contact a remote if a test misses a mock.
+process.env.GIT_ALLOW_PROTOCOL = 'file';
 function local(host) { return !host || ['localhost','localhost.localdomain','127.0.0.1','::1','[::1]'].includes(String(host).toLowerCase()); }
 function allowed(host) {
  if (!local(host)) throw new Error('Offline verification rejected an external request.');
