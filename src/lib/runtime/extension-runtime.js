@@ -6874,11 +6874,16 @@ async function handleDashboardMessage(msg){
         try{
           requireOpened();
           await recordStackActivity(projectId,'Install & Run / requested','Six-stage workflow requested. Verifying the repository before asking for approval.');
+          await dashboard?.webview.postMessage({type:'architectCustomProgress',projectId,percent:2,phase:'preflight',
+            message:'Extension host received Install & Run. Verifying the configured Git checkout before asking for approval.'});
           if(msg.projectId!==projectId)throw Error('Project changed. Reopen the Custom Stack workflow.');
           const conf=effectiveConfig(activeProject);
           const root=await architectRepository.resolve(context.workspaceState,projectId,developerGit,{
             projectRoot:aiRoot(),githubOwner:conf.get('github.owner'),githubRepo:conf.get('github.repo')});
           const stack=require('../../architect-custom-stack');
+          await recordStackActivity(projectId,'Install & Run / preflight','Checking repository manifests, application targets, Git SHA and clean checkout.');
+          await dashboard?.webview.postMessage({type:'architectCustomProgress',projectId,percent:3,phase:'preflight',
+            message:'Scanning manifests and verifying Git SHA and local checkout; approval has not been requested yet.'});
           const inspected=await stack.scan(root);
           if(msg.expectedSha&&msg.expectedSha!==inspected.sha)
             throw Error('Local Git revision has changed. Refresh and retry without overwriting any files.');
@@ -6890,7 +6895,7 @@ async function handleDashboardMessage(msg){
           const workflow=require('../../architect-custom-workflow');
           workflow.beginConsent(root);
           await recordStackActivity(projectId,'Install & Run / approval','Awaiting ATGV confirmation in VS Code. No application scripts have started.');
-          await dashboard?.webview.postMessage({type:'architectCustomProgress',projectId,percent:4,
+          await dashboard?.webview.postMessage({type:'architectCustomProgress',projectId,percent:4,phase:'approval',
             message:'Waiting for approval in the ATGV dialog (inside VS Code). No code or dependencies have run.'});
           let approved,consentCancelled=false;
           const approvalStarted=Date.now();
