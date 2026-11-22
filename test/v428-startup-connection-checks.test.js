@@ -38,7 +38,7 @@ function pageFixture(){
   segment('function invalidateStartupConnection(){',"for(const id of Object.values(startupFieldMap))"),
   segment("$('startupConnectionForm').addEventListener('submit'", "$('startupProceed').addEventListener('click'"),
   'function receive(message){',
-  segment(" if(message.type==='startupConnectionCheck'", " if(message.type==='startupProceedResult')"),
+  segment(" if(message.type==='startupConnectionCheck'", " if(message.type==='startupProceedResult'"),
   '}',
   'return {renderStartupConfig,renderStartupPage,toggleStartupConnectionEdit,checkSavedStartupConnections,receive,isVerified:()=>startupConnectionVerified};'
  ].join('\n');

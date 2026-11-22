@@ -66,7 +66,8 @@ test('Jira-only Epic uses identical completed BR accordion structure, without du
  assert.equal(answers.disabled,true);
  assert.match(answers.attributes['aria-label'],/unavailable/);
  assert.equal(jira.textContent,'↗');
- assert.match(jira.title,/1 linked/);
+ assert.match(jira.title,/Open Jira Epic TC-761/);
+ assert.match(jira.dataset.tooltip,/1 linked/);
  assert.equal(body.className,'ba-completed-br-body');
  assert.match(body.children[0].children[1].textContent,/Jira alone cannot reconstruct it/);
  let prevented=false,stopped=false;

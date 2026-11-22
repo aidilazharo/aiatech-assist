@@ -54,11 +54,23 @@ test('collapsed summary still reports checks that need attention',()=>{
  assert.equal(message.textContent,'');
 });
 
-test('opening prerequisite details pauses automatic navigation',()=>{
- const start=ui.indexOf("$('startupPrerequisiteDetails').addEventListener('toggle'"),end=ui.indexOf("$('startupRefresh').addEventListener",start);
- assert.ok(start>=0&&end>start);let toggle,reason='';
- const details={open:true,addEventListener(_type,fn){toggle=fn;}};
- const context={$:()=>details,startupAutoEnabled:true,stopStartupAuto(message){reason=message;}};
- vm.runInNewContext(ui.slice(start,end),context);toggle();
- assert.match(reason,/paused while reviewing prerequisites/);
+test('Previous opens prerequisite checks on demand from the connection step',()=>{
+ const start=ui.indexOf("$('startupPrevious').addEventListener"),end=ui.indexOf("$('startupEmail').addEventListener",start);
+ assert.ok(start>=0&&end>start);
+ let previous,requested=0,rendered=0,focused=0;
+ const elements={
+  startupPrevious:{addEventListener(_type,handler){previous=handler;}},
+  startupPrerequisiteDetails:{open:true},
+  startupRefresh:{focus(){focused++;}}
+ };
+ const context={$:id=>elements[id],startupPage:1,startupVerifying:false,startupInstallingModule:'',
+  startupProceedMode:'manual',requestStartupReadiness(){requested++;},renderStartupPage(){rendered++;}};
+ vm.runInNewContext(ui.slice(start,end),context);
+ previous();
+ assert.equal(context.startupPage,1,'wait while navigation is already pending');
+ context.startupProceedMode='';
+ previous();
+ assert.equal(context.startupPage,0);
+ assert.equal(elements.startupPrerequisiteDetails.open,false);
+ assert.equal(requested,1);assert.equal(rendered,1);assert.equal(focused,1);
 });

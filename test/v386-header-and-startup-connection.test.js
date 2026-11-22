@@ -19,7 +19,7 @@ function createPageHarness(){
  const start=ui.indexOf('function renderStartupPage(){');
  const end=ui.indexOf('function showStartupStep(required)',start);
  const invalidateStart=ui.indexOf('function invalidateStartupConnection(){');
- const invalidateEnd=ui.indexOf('for(const id of Object.values(startupFieldMap))',invalidateStart);
+ const invalidateEnd=ui.indexOf('function toggleStartupConnectionEdit(){',invalidateStart);
  assert.ok(start>0&&end>start&&invalidateStart>0&&invalidateEnd>invalidateStart);
  const nodes=new Map();
  const node=id=>{
