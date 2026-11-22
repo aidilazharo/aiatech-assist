@@ -8346,9 +8346,9 @@ $('architectCustomRun').addEventListener('click',()=>{
  const current=architectCustomInfo?.projectId===activeId?architectCustomInfo:null;
  const selected=current?.targets?.find(row=>row.relative===$('architectCustomTarget').value);
  architectCustomBusy=true;architectCustomScanPending=false;architectCustomStage=1;architectCustomAiActive=false;
- architectCustomOperation='WAITING FOR VS CODE CONFIRMATION';architectCustomLastError='';
- architectCustomSetProgress(4,'Awaiting approval for six-stage Install & Run');
- architectCustomNotify('Check the ATGV confirmation dialog inside VS Code. No scripts have run; download the diagnostic log to troubleshoot.');
+ architectCustomOperation='VERIFYING REPOSITORY BEFORE APPROVAL';architectCustomLastError='';
+ architectCustomSetProgress(2,'Verifying checkout before requesting consent');
+ architectCustomNotify('Checking the configured Git checkout and application target. ATGV will request explicit confirmation before running scripts; download the diagnostic log to troubleshoot.');
  renderArchitectCustomPanel();
  send('architectCustomInstallRun',{projectId:activeId,expectedSha:current?.sha||'',
   relative:selected?.relative,previewUrl:selected?$('architectCustomPreviewUrl').value.trim():''});
@@ -8407,7 +8407,8 @@ window.addEventListener('message',event=>{
   if(Number.isInteger(m.step)&&m.step>=1&&m.step<=6)architectCustomStage=m.step;
   architectCustomAiActive=m.ai===true;
   const message=String(m.message||'Working with custom application…');
-  if(/waiting for|confirmation|approval/i.test(message))architectCustomOperation='WAITING FOR VS CODE CONFIRMATION';
+  if(m.phase==='preflight')architectCustomOperation='VERIFYING REPOSITORY BEFORE APPROVAL';
+  else if(m.phase==='approval'||/waiting for|confirmation|approval/i.test(message))architectCustomOperation='WAITING FOR VS CODE CONFIRMATION';
   else if(/Verifying localhost|health at /i.test(message))architectCustomOperation='VERIFYING LOCALHOST HEALTH';
   else if(/Starting /i.test(message))architectCustomOperation='STARTING APPLICATION';
   else if(/installing|dependencies|npm /i.test(message))architectCustomOperation='INSTALLING DEPENDENCIES';
