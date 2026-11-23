@@ -36,8 +36,8 @@ function scopeName(input){
  if(!isAllowedPath(value))throw Error('Copy scope includes protected Git, credential or generated paths.');
  return value;
 }
-const BLOCKED_DIRS=new Set(['.git','node_modules','dist','build','coverage','.atgv','.venv','venv','.next','.cache','tmp','temp']);
-const BLOCKED_FILES=new Set(['.env','.npmrc','.pypirc','id_rsa','id_ed25519','credentials.json']);
+const BLOCKED_DIRS=new Set(['.git','.github','node_modules','dist','build','coverage','.atgv','.venv','venv','.next','.cache','tmp','temp']);
+const BLOCKED_FILES=new Set(['action.yml','action.yaml','.env','.npmrc','.pypirc','id_rsa','id_ed25519','credentials.json']);
 function isAllowedPath(relative){
  const segments=String(relative||'').replace(/\\/g,'/').split('/');
  if(segments.some(s=>!s||s==='.'||s==='..'||BLOCKED_DIRS.has(s.toLowerCase())))return false;
@@ -150,9 +150,7 @@ function prDetails({source,destination,sha,scope,base,branch,count,changedFiles=
  const relevant=sourceCommitFiles.length?sourceCommitFiles:changedFiles;
  const action=meaningfulSubject(sourceMessage,relevant);
  const label=readableTitle(sourceMessage,relevant);
- // Keep verifiable source identity before long path lists. The formatter limits
- // descriptions to ten bullets; prior versions lost the source SHA as soon as
- // more than a few .github files were included.
+ // Keep verifiable source identity before long path lists in the ten-bullet summary.
  const paths=changedFiles.slice(0,25).map(file=>'`'+String(file).replace(/[\r\n\0`]/g,'?')+'`');
  return {
   title:label.slice(0,110),
@@ -213,15 +211,8 @@ async function destinationFileSafe(root,rel){
 async function trackedFiles(source,scope){
  const raw=await run('git',['ls-files','-z'],{cwd:source});
  const candidates=raw.split('\0').filter(Boolean).map(p=>p.replace(/\\/g,'/'));
- const eligible=candidates.filter(isAllowedPath);
- const scoped=eligible.filter(p=>scope==='.'||p===scope||p.startsWith(scope+'/'));
- if(!scoped.length)throw Error('Repo A has no eligible tracked files in '+scope+'.');
- // GitHub metadata (workflows, CODEOWNERS, templates, Dependabot and custom
- // actions) must travel with the source even when the selected scope is narrow.
- // Include only eligible tracked files, never .git or credential/secret paths.
- // Destination-only .github files are preserved; no directory pruning occurs.
- const githubFiles=eligible.filter(p=>p.startsWith('.github/'));
- const paths=[...new Set([...scoped,...githubFiles])];
+ const paths=candidates.filter(p=>isAllowedPath(p)&&(scope==='.'||p===scope||p.startsWith(scope+'/')));
+ if(!paths.length)throw Error('Repo A has no eligible tracked files in '+scope+'.');
  if(paths.length>MAX_FILES)throw Error('Copy exceeds '+MAX_FILES+' tracked files. Select a smaller scope.');
  let bytes=0;
  const valid=[];
@@ -459,8 +450,7 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
     ...proposed,sourceSha:sha,baseSha,sourceBranch:chosenBranch,sourceRepo:source.name,
     destinationRepo:destination.name,base,copyScope:scope,
     sourcePrUrl:sourcePr?.url||'',fileCount:files.length,sourceCode:facts.codeOverview,
-    sourceCommitFiles,excludedSourceCommitFiles,githubFiles:files.filter(file=>file.startsWith('.github/')),
-     workflowFiles:files.filter(file=>file.startsWith('.github/workflows/')),
+    sourceCommitFiles,excludedSourceCommitFiles,
     notice:'Suggestions use verified source code structure and latest source commit. No Repo B files were changed.'
    }};
   }
@@ -525,13 +515,7 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   await notify('push','Pushing '+branch+' using the destination PAT…');
   // An empty expected ref means the remote branch must still not exist at push
   // time, even if another actor creates it after the earlier preflight check.
-  try{
-   await runner('git',['push','--force-with-lease=refs/heads/'+branch+':','--set-upstream','origin',branch],{cwd:destRoot,timeout:180000,env:destinationEnv});
-  }catch(error){
-   if(files.some(file=>file.startsWith('.github/workflows/'))&&/workflow/i.test(String(error?.message||error)))
-    throw Error('GitHub rejected the workflow update. Grant the destination PAT Workflows: Read and write (fine-grained) or workflow scope (classic), then retry. '+String(error?.message||error));
-   throw error;
-  }
+  await runner('git',['push','--force-with-lease=refs/heads/'+branch+':','--set-upstream','origin',branch],{cwd:destRoot,timeout:180000,env:destinationEnv});
   pushed=true;
   let body=details.body;
   if(approvedReview){

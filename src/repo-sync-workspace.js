@@ -236,8 +236,7 @@ window.addEventListener('message',e=>{
    '\\nSource files: '+(analysis.keyFiles||[]).slice(0,8).join(', ')+
    '\\nSymbols inspected: '+(analysis.symbols||[]).slice(0,8).map(x=>x.name).join(', ')+
    '\\nDependencies: '+(analysis.dependencies||[]).slice(0,12).join(', ')+
-   '\\n.github files included ('+(review.githubFiles||review.workflowFiles||[]).length+'): '+(review.githubFiles||review.workflowFiles||[]).slice(0,12).join(', ')+
-    ((review.githubFiles||review.workflowFiles||[]).length>12?' and '+((review.githubFiles||review.workflowFiles||[]).length-12)+' more':'')+
+   '\\nExcluded from copy: .github/ and GitHub Action manifests.'+
    '\\nExcluded commit paths: '+(review.excludedSourceCommitFiles||[]).slice(0,8).join(', ')+
    '\\nDestination base: '+String(review.base||'');
   buttons();show('Source study completed. Review or edit the four suggestions, then approve the full operation. Destination is unchanged.','success');

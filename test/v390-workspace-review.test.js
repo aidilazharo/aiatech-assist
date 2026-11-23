@@ -59,10 +59,10 @@ test('Study reads real source code and does not mutate Repo B until reviewed pub
  assert.equal(preview.preview,true);assert.equal(preview.review.sourceSha,sha);
  assert.equal(preview.review.prTitle,'Book service update');
  assert.equal(preview.review.branch,'feat/book-service-2');
- assert.deepEqual(preview.review.workflowFiles,['.github/workflows/ci.yml']);
- assert.deepEqual(preview.review.githubFiles.sort(),['.github/CODEOWNERS','.github/ISSUE_TEMPLATE/bug.yml','.github/workflows/ci.yml'].sort());
- assert.ok(preview.review.excludedSourceCommitFiles.includes('.github/credentials.json'));
- assert.equal(preview.review.fileCount,4);
+ assert.deepEqual(preview.review.sourceCommitFiles,['src/service.js']);
+ for(const file of ['.github/CODEOWNERS','.github/ISSUE_TEMPLATE/bug.yml','.github/workflows/ci.yml','.github/credentials.json'])
+  assert.ok(preview.review.excludedSourceCommitFiles.includes(file),file);
+ assert.equal(preview.review.fileCount,1);
  assert.equal(git(['rev-parse','HEAD'],dest),before);
  assert.equal(git(['status','--porcelain'],dest),'');
  assert.equal(fs.existsSync(path.join(dest,'src')),false);
@@ -87,9 +87,6 @@ test('Study reads real source code and does not mutate Repo B until reviewed pub
  assert.equal(git(['log','-1','--pretty=%s'],dest),'feat: reviewed book service');
  assert.equal(git(['rev-parse','refs/remotes/origin/main'],dest),before);
  assert.equal(fs.readFileSync(path.join(dest,'target.txt'),'utf8'),'keep\n');
- assert.equal(fs.readFileSync(path.join(dest,'.github','workflows','ci.yml'),'utf8'),'name: source-ci\n');
- assert.equal(fs.readFileSync(path.join(dest,'.github','CODEOWNERS'),'utf8'),'@example/reviewers\n');
- assert.equal(fs.readFileSync(path.join(dest,'.github','ISSUE_TEMPLATE','bug.yml'),'utf8'),'name: Bug report\n');
- assert.equal(fs.existsSync(path.join(dest,'.github','credentials.json')),false);
+ assert.equal(fs.existsSync(path.join(dest,'.github')),false);
  assert.equal(fs.existsSync(path.join(dest,'package.json')),false);
 });
