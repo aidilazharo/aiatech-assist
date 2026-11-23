@@ -11,7 +11,7 @@ const AUTO_REASON='startup-jira-not-found-or-not-visible';
 const MAX_ISSUES=250;
 const is404=error=>/^HTTP 404\b/.test(String(error?.message||error||''));
 const own=(p,id)=>p===id||p.startsWith(id+'/');
-const empty=()=>({schema:1,brs:{},links:{}});
+const empty=()=>({schema:1,brs:{},links:{},verification:{}});
 const copy=x=>structuredClone(x);
 
 function stateOf(register){
@@ -170,33 +170,44 @@ function restoreLink(next,saved,meta){
  return true;
 }
 function apply(next,plan){
+ // Jira 404 means "deleted OR not visible". Never remove approved BRs or
+ // published mappings automatically on the basis of a 404, even after retry.
+ // Keep verified evidence and track unresolved links for an explicit review.
  const meta=next.startupJiraReconciliation=copy(stateOf(next));
- const result={brsRemoved:0,linksRemoved:0,brsRestored:0,linksRestored:0,conflicts:0};
+ meta.verification=meta.verification||{};
+ const result={brsRemoved:0,linksRemoved:0,brsRestored:0,linksRestored:0,
+   pendingVerification:0,verificationCleared:0,conflicts:0,changed:false};
  for(const item of plan.items){
   if(item.archived){
    const saved=meta.brs[item.brId];
    if(saved&&item.rows.some(row=>plan.status.get(row.key)==='available')){
     if(!restoreBR(next,saved,meta)){result.conflicts++;continue;}
-    result.brsRestored++;
-    for(const row of item.rows){
-     const old=meta.links[idFor(item.brId,row.key)];
-     if(plan.status.get(row.key)==='available'&&old){if(restoreLink(next,old,meta))result.linksRestored++;else result.conflicts++;}
-     else if(plan.status.get(row.key)==='unavailable'&&!old&&archiveLink(next,item.brId,row,plan,meta))result.linksRemoved++;
-    }
+    result.brsRestored++;result.changed=true;
    }
-   continue;
-  }
-  if(plan.status.get(item.root)==='unavailable'&&item.rows.every(row=>plan.status.get(row.key)==='unavailable')){
-   archiveBR(next,item,plan,meta);result.brsRemoved++;continue;
   }
   for(const row of item.rows){
-   const old=meta.links[idFor(item.brId,row.key)];
-   if(plan.status.get(row.key)==='available'&&old){if(restoreLink(next,old,meta))result.linksRestored++;else result.conflicts++;}
-   else if(plan.status.get(row.key)==='unavailable'&&!old&&archiveLink(next,item.brId,row,plan,meta))result.linksRemoved++;
+   const id=idFor(item.brId,row.key),status=plan.status.get(row.key);
+   if(status==='unavailable'){
+    result.pendingVerification++;
+    if(!meta.verification[id]){
+     meta.verification[id]={brId:item.brId,key:row.key,nodePath:row.nodePath,
+       site:plan.site,projectKey:plan.projectKey,status:'verification-required',
+       reason:'jira-404-not-found-or-not-visible',at:new Date().toISOString()};
+     result.changed=true;
+    }
+    continue;
+   }
+   if(status!=='available')continue;
+   if(meta.verification[id]){delete meta.verification[id];result.verificationCleared++;result.changed=true;}
+   const old=meta.links[id];
+   if(old){if(restoreLink(next,old,meta)){result.linksRestored++;result.changed=true;}else result.conflicts++;}
   }
  }
- if(result.brsRemoved||result.linksRemoved||result.brsRestored||result.linksRestored){
-  next.events=(next.events||[]).concat({at:new Date().toISOString(),action:'startup-jira-unavailable-reconciled',...result}).slice(-200);
+ if(result.changed){
+  next.events=(next.events||[]).concat({at:new Date().toISOString(),
+   action:'startup-jira-visibility-checked',pendingVerification:result.pendingVerification,
+   verificationCleared:result.verificationCleared,brsRestored:result.brsRestored,
+   linksRestored:result.linksRestored}).slice(-200);
  }
  return result;
 }
@@ -206,7 +217,7 @@ async function run({registry,projectId,config,token,request,readIssue,shouldCont
  if(!shouldContinue())return {cancelled:true};
  // Calculate against a clone first so a clean scan does not churn the register.
  const preview=apply(copy(register),plan);
- if(!preview.brsRemoved&&!preview.linksRemoved&&!preview.brsRestored&&!preview.linksRestored)return {...preview,changed:false};
+ if(!preview.changed)return {...preview,changed:false};
  let result;
  const updated=await workflow.write(registry,projectId,register.revision,next=>{
   if(!shouldContinue())throw Error('Project changed during startup Jira reconciliation.');
