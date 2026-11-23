@@ -103,14 +103,14 @@ test('Host progress reflects actual pull and verification milestones before comp
  const from=host.indexOf("case 'catalogPull':{"),to=host.indexOf("case 'openingSelect':{",from);
  assert.ok(from>=0&&to>from);
  const segment=host.slice(from,to);
- for(const key of ['catalogPullProgress','libraryUpdateProgress','libraryReleaseUpdater.downloadVerified',
-  'offlineLibrary.inspectZip','offlineLibrary.importZip','refreshDashboard',
+ for(const key of ['catalogPullProgress','libraryUpdateProgress','sdlcCatalog.remoteVersion',
+  'sdlcCatalog.syncGitWorkspace','refreshDashboard',
   "progress('completed',100","progress('failed',completedStage"])
   assert.ok(segment.includes(key),key);
  const sourceCheckout=segment.indexOf('sdlcCatalog.syncGitWorkspace');
  const sourceCompletion=segment.indexOf("progress('completed',100",sourceCheckout);
  assert.ok(sourceCheckout>=0&&sourceCompletion>sourceCheckout,'source checkout completes before its own success; an already-newer no-op may complete earlier');
- assert.ok(segment.lastIndexOf('offlineLibrary.importZip')<segment.lastIndexOf("progress('completed',100"),'mirror fallback import completes before its success');
+ assert.doesNotMatch(segment,/importZip|inspectZip|downloadVerified\(release/,'ZIP-based Library activation is removed');
  assert.ok(segment.lastIndexOf('refreshDashboard()')<segment.lastIndexOf("progress('completed',100"),'workspace refresh precedes final completion');
  assert.match(host,/case 'libraryUpdateRetry':/);
  assert.match(host,/activeLibraryUpdatePullRequestId===msg.requestId/);
