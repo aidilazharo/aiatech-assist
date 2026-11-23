@@ -93,6 +93,8 @@ test('remote sync is read-only and has a visible reviewable SQLite status panel'
  assert.match(source,/connectedSync\.observeMany\(registry,project\.id/);
  assert.match(source,/case 'refreshSQLiteSync'/);
  assert.match(source,/case 'refreshConnectedSources'/);
+ assert.match(source,/Remote refresh failed; see live provider status/);
+ assert.match(source,/await postConnectedSyncState\(\);/);
  assert.match(source,/connectedSync\.checkpoint\(registry,projectId/);
  assert.match(html,/id="connectedSyncPanel"/);
  assert.match(html,/id="connectedSyncReport"/);
