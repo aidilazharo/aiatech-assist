@@ -20,7 +20,8 @@
 
  let state=null,requestedProject='',artifactProject='',jiraView='list',jiraTab='all',tableKey='',brKey='',kind='iso',sourceDigest='',artifactContext=null,request=0;
  const collapsed=new Set();
- const input=get('baAutoArtifactText');
+ const input=get('baAutoArtifactText'),quillMount=get('baAutoQuillEditor');
+ let artifactQuill=null,quillKey='',quillHadFinalLine=false;
 
  const active=()=>view==='discovery'&&selectedRole==='business-analyst';
  const busy=()=>state?.phase==='running'||state?.phase==='publishing';
@@ -75,6 +76,38 @@
   primary.disabled=!action||action.disabled||action.classList.contains('hidden')||busy()&&kind!=='source';
   get('baAutoOverflowActions').dataset.kind=kind;
  }
+ // Quill provides a document-text surface, while the original extracted text
+ // remains the persisted artifact. Formatting is not silently inserted into
+ // a source document or its downstream approved requirements.
+ function resetQuill(){
+  artifactQuill=null;quillKey='';quillMount.replaceChildren();
+ }
+ function quillText(){
+  const value=artifactQuill?.getText()||'';
+  return !quillHadFinalLine&&value.endsWith('\n')?value.slice(0,-1):value;
+ }
+ function syncQuill(){
+  if(!['source','original'].includes(kind)||!artifactContext||typeof window.Quill!=='function')return false;
+  const key=activeId+'|'+sourceDigest+'|'+kind+'|'+artifactContext.revision;
+  if(quillKey!==key){
+   resetQuill();
+   const editor=document.createElement('div');
+   editor.setAttribute('aria-label',kind==='source'?'Editable source document text':'Original source document text');
+   quillMount.append(editor);
+   artifactQuill=new window.Quill(editor,{theme:'snow',readOnly:kind!=='source',
+    modules:{toolbar:false},formats:[],placeholder:'Document text'});
+   quillHadFinalLine=artifactContext.text.endsWith('\n');
+   artifactQuill.setText(artifactContext.text,'api');
+   artifactQuill.on('text-change',(_delta,_old,origin)=>{
+    if(origin!=='user'||kind!=='source')return;
+    input.value=quillText();
+    render();
+   });
+   quillKey=key;
+  }
+  artifactQuill.enable(kind==='source'&&!busy()&&baCanEdit('ba-discovery'));
+  return true;
+ }
  function renderFormattedDocument(text){
   if(!window.ATGVDocumentViewer?.render){
    viewer.textContent=String(text||'');
@@ -101,7 +134,7 @@
   const changed=currentSource!==sourceDigest||artifactProject!==activeId;
   if(changed){
    sourceDigest=currentSource;artifactProject=activeId;artifactContext=null;input.value='';
-   viewer.replaceChildren();
+   resetQuill();viewer.replaceChildren();
    get('baAutoArtifactStatus').textContent='';
   }
   get('baAutoDocumentTools').hidden=!sourceDigest;
@@ -112,7 +145,9 @@
   get('baAutoDocumentPanel').hidden=preflight;
   get('baAutoArtifactSave').hidden=kind!=='source';
   viewer.hidden=kind!=='iso';
-  input.hidden=kind==='iso'||preflight;
+  const showQuill=syncQuill();
+  quillMount.hidden=!showQuill;
+  input.hidden=kind==='iso'||preflight||showQuill;
   get('baAutoArtifactLabel').hidden=kind==='iso'||preflight;
   get('baAutoPreflightPlaceholder').hidden=!get('baSourcePreflight').classList.contains('hidden');
   const documentPanel=get('baAutoDocumentPanel');
@@ -458,7 +493,7 @@
   }else if(m.projectId===activeId&&m.requestId===request){
    if(m.type==='baArtifactRead'&&m.digest===sourceDigest&&m.kind===kind){
     artifactContext={revision:m.revision,text:m.text};
-    input.value=m.text;
+    input.value=m.text;resetQuill();
     get('baAutoArtifactStatus').textContent='';
     if(kind==='iso')renderFormattedDocument(m.text);
     render();
