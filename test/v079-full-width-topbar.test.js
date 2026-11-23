@@ -12,9 +12,9 @@ test('notification and application header occupy full webview width while conten
  assert.match(css,/\.top-notification\{justify-content:center;min-height:67px\}/);
  assert.ok(!css.includes('.app-header,.app-layout{width:100%;max-width:1560px'));
 });
-test('notification replacement is full bleed and adapts to narrow webviews',()=>{
+test('additional notification row is full bleed without hiding permanent header',()=>{
  assert.match(css,/@media\(max-width:750px\)\{\.app-header,\.top-notification\{padding-inline:14px\}/);
  assert.match(css,/\.top-notification-text\{flex:0 1 auto;max-width:780px\}/);
- assert.match(ui,/\$\('appHeader'\)\.classList\.add\('hidden'\)/);
+ assert.doesNotMatch(ui,/\$\('appHeader'\)\.classList\.add\('hidden'\)/);
  assert.match(ui,/\$\('topNotification'\)\.classList\.add\('hidden'\)/);
 });
