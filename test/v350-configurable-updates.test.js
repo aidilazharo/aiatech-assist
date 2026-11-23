@@ -22,7 +22,7 @@ test('release settings accept GitHub Releases URLs and normalize repo landing UR
   repository:repo,url:alternate,api:`https://api.github.com/repos/${repo}/releases?per_page=30`,listApi:`https://api.github.com/repos/${repo}/releases?per_page=30`
  });
  assert.equal(updater.parseRepositoryUrl(alternate).repository,repo);
- assert.equal(updater.parseRepositoryUrl().repository,'aidilazharo/aiatech-assist');
+ assert.equal(updater.parseRepositoryUrl().repository,'aiamalaysia/my-fow-technology-app-techassists-dev-sdlc');
 });
 test('release settings reject arbitrary API endpoints, spoofed hosts and unsafe paths',()=>{
  for(const value of [
@@ -69,15 +69,15 @@ test('verification downloads from selected repository only and enforces checksum
  await assert.rejects(updater.downloadVerified(selected,{directory:temp,request:bad}),/checksum verification/);
 });
 test('fixed extension source checks latest first and accepts signed prereleases from the same repo',async()=>{
- assert.equal(updater.PINNED_RELEASE_URL,'https://github.com/aidilazharo/aiatech-assist/releases/latest');
+ assert.equal(updater.PINNED_RELEASE_URL,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc/releases/latest');
  const calls=[];
  const fetch=async url=>{
   calls.push(url);
   if(url.endsWith('/latest'))throw Error('No stable release');
   const version='0.4.20',tag='v'+version+'-build.100';
-  return Buffer.from(JSON.stringify([{tag_name:tag,html_url:'https://github.com/aidilazharo/aiatech-assist/releases/tag/'+tag,assets:[
-   {name:'atgv-aiatech-assist-'+version+'.vsix',size:11,url:'https://api.github.com/repos/aidilazharo/aiatech-assist/releases/assets/1'},
-   {name:'vsix.sha256',size:80,url:'https://api.github.com/repos/aidilazharo/aiatech-assist/releases/assets/2'}
+  return Buffer.from(JSON.stringify([{tag_name:tag,html_url:'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc/releases/tag/'+tag,assets:[
+   {name:'atgv-aiatech-assist-'+version+'.vsix',size:11,url:'https://api.github.com/repos/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc/releases/assets/1'},
+   {name:'vsix.sha256',size:80,url:'https://api.github.com/repos/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc/releases/assets/2'}
   ]}]));
  };
  const got=await updater.latestRelease({repositoryUrl:updater.PINNED_RELEASE_URL,version:'0.4.13',request:fetch});
@@ -91,7 +91,7 @@ test('extension and library release sources are immutable; both check every hour
  const html=read('src/lib/webview/dashboard-html.js');
  const ui=read('media/start.js');
  const library=require('../src/lib/updates/library-release-updater');
- assert.equal(library.LATEST_URL,'https://github.com/aidilazharo/tech-stacks-skills/releases/latest');
+ assert.equal(library.LATEST_URL,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills/releases/latest');
  assert.match(runtime,/releaseRepositoryUrl:startupSetup\.RELEASES\.extension/);
  assert.match(runtime,/libraryReleaseUrl:startupSetup\.RELEASES\.library/);
  assert.match(runtime,/60\*60\*1000/);
