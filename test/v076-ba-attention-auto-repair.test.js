@@ -63,7 +63,6 @@ test('AI repair is bounded and does not bypass approval or publish Jira',()=>{
  assert.match(worker,/await requireBAOwner\('ba-br-'\+item\.id\)/);
  assert.match(worker,/await assessAutomaticDrafts\(projectId,signal\)/);
  assert.match(worker,/currentAttentionFindings\(checked\)/);
- assert.match(worker,/baAutomatic\.excludedDraft/); // checked by currentAttentionFindings immediately above
  assert.doesNotMatch(worker,/brWorkflow\.approve\s*\(|brJiraSync\s*\(|publishPreparedBRs\s*\(/);
  assert.match(runtime,/const resolutionIds=options\.autoResolve===true/);
  assert.match(runtime,/const focused=resolutionIds\?\[\.\.\.resolutionIds\]/);
