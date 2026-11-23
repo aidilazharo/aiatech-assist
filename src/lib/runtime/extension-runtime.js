@@ -58,6 +58,7 @@ const brDeletionPreview=require('../../br-deletion-preview');
 const orphanJiraCleanup=require('../../orphaned-jira-cleanup');
 const jiraOwnerBRDeletion=require('../../jira-owner-br-deletion');
 const jiraLinkReconciliation=require('../../jira-link-reconciliation');
+const jiraMappingAudit=require('../../jira-mapping-audit');
 const startupJiraReconciliation=require('../../startup-jira-reconciliation');
 const resetEverywhere=require('../../reset-everywhere');
 const localReset=require('../reset/local-reset');
@@ -3852,7 +3853,8 @@ function jiraScopedMarker(reg,config,nodePath){
  return known?.marker||(known?.key?jiraMarker(config,nodePath):jiraMarker(config,nodePath,activeProject.id));
 }
 function verifyLinkedJiraIdentity(reg,config,nodePath,issue){
- const tracked=reg.synced?.[nodePath];if(!tracked?.key||issue?.key!==tracked.key)throw Error('JIRA issue mapping changed: '+nodePath);
+ const tracked=reg.synced?.[nodePath];if(!tracked?.key||issue?.key!==tracked.key)throw Error('JIRA issue mapping changed: '+nodePath+' (saved '+String(tracked?.key||'unlinked')+', live '+String(issue?.key||'unavailable')+'). Do not replace the link automatically.');
+ if(tracked.issueId&&String(issue?.id||'')!==String(tracked.issueId))throw Error('JIRA numeric issue identity changed: '+tracked.key+' (saved ID '+tracked.issueId+', live ID '+String(issue?.id||'unavailable')+'). Reconcile before publishing.');
  const fields=issue.fields||{};
  if(fields.project?.key!==validProjectKey(config.get('jira.projectKey'))||!Array.isArray(fields.labels)||!fields.labels.includes(jiraScopedMarker(reg,config,nodePath)))throw Error('JIRA issue marker or project changed: '+tracked.key);
  if(tracked.issueType&&String(fields.issuetype?.name||'').toLowerCase()!==String(tracked.issueType).toLowerCase())throw Error('JIRA issue type changed: '+tracked.key);
@@ -3861,7 +3863,12 @@ function verifyLinkedJiraIdentity(reg,config,nodePath,issue){
  const mapped=published&&brWorkflow.flattenApproved([{...published,status:'approved',needsRefresh:false}],{ignoreExternalBlocks:true}).find(item=>item.path===nodePath);
  const parent=mapped?.parent??(nodePath.split('/').length===4?nodePath.split('/').slice(0,2).join('/'):nodePath.includes('/')?nodePath.slice(0,nodePath.lastIndexOf('/')):null);
  const expected=parent?reg.synced?.[parent]?.key:null;
- if((fields.parent?.key||null)!==(expected||null))throw Error('JIRA parent relationship changed: '+tracked.key);
+ const liveParentKey=fields.parent?.key||null;
+ if((liveParentKey||null)!==(expected||null)){
+  const sameParentId=tracked.parentIssueId&&String(fields.parent?.id||'')===String(tracked.parentIssueId);
+  throw Error('JIRA parent relationship changed: '+tracked.key+' (expected '+String(expected||'none')+', live '+String(liveParentKey||'none')+(sameParentId?', permanent parent ID unchanged; its key may have changed':'')+'). Review the Jira hierarchy before changing mappings.');
+ }
+ if(tracked.parentIssueId&&String(fields.parent?.id||'')!==String(tracked.parentIssueId))throw Error('JIRA parent numeric ID changed: '+tracked.key+'. The expected Jira parent key may have been reused; reconcile before publishing.');
 }
 async function jiraProtectionAssessment(reg,config,token,items,{approvedPlan=items}={}){
  const cache=new Map();
@@ -4268,7 +4275,7 @@ async function prepareBRJiraPreview({automatic=false,signal,qualityBlocker=''}={
  }
  try{
   assertCurrent();
-  if(!qualityBlocker&&(changes.length||reopenRoots.length)){
+  if(!qualityBlocker&&(changes.length||reopenRoots.length||jiraMappingAudit.mappedRows(register).length)){
    await progress('Verifying Jira project and checking planned changes…',10);
    const target=await ensureJiraPreviewTarget(register,{automatic});
    assertCurrent();
@@ -4336,9 +4343,11 @@ async function prepareBRJiraPreview({automatic=false,signal,qualityBlocker=''}={
    await progress('Verifying Jira issue identities and existing mappings…',30);
    const duplicateGate=await prePublishIdentityGuard(register,target.config,target.token,changes,inventory);
    conflicts.push(...formatIdentityConflicts(duplicateGate));
+   const mappingAudit=await jiraMappingAudit.audit({register,projectKey:targetKey,readIssue:key=>jiraReadIssue(target.config,target.token,key),verify:(nodePath,issue)=>verifyLinkedJiraIdentity(register,target.config,nodePath,issue),signal});
+   conflicts.push(...mappingAudit.conflicts);
    const checked=await jiraPreflight(register,target.config,target.token,changes,
     (count,total)=>progress('Checking Jira issues '+count+'/'+total+'…',30+Math.floor(count/total*30)),{automatic,inventory,signal});
-   checkedCount=changes.length;
+   checkedCount=changes.length+mappingAudit.checked;
    linkCandidates=checked.linkCandidates||[];
    protection=checked.assessment?.protection||[];
    conflicts.push(...checked);
@@ -4434,6 +4443,8 @@ async function syncApprovedBRs(expectedRevision,automatic=null){
   await publishProgress('preparing','Checking Jira identities and publication prerequisites…');
   const duplicateGate=await prePublishIdentityGuard(state,config,token,items);
   if(!duplicateGate.safe)throw Error('Jira publication blocked by possible duplicates: '+formatIdentityConflicts(duplicateGate).join('; '));
+  const mappingAudit=await jiraMappingAudit.audit({register:state,projectKey:validProjectKey(config.get('jira.projectKey')),readIssue:key=>jiraReadIssue(config,token,key),verify:(nodePath,issue)=>verifyLinkedJiraIdentity(state,config,nodePath,issue)});
+  if(mappingAudit.conflicts.length)throw Error('Jira publication blocked by existing identity or parent changes: '+mappingAudit.conflicts.join('; '));
   const conflicts=await jiraPreflight(state,config,token,items,undefined,{automatic:!!automatic});
   if(conflicts.length)throw Error('Jira synchronization blocked: '+conflicts.join('; '));
   if(items.some(item=>item.action!=='retire'&&!jiraPreviewFieldPlans[item.path]))throw Error('Jira issue field metadata was not verified. Generate Jira Preview again.');
@@ -4494,11 +4505,13 @@ async function syncApprovedBRs(expectedRevision,automatic=null){
     }
    }else if(item.action==='update'){
     const current=await jiraReadIssue(config,token,key);
+    verifyLinkedJiraIdentity(state,config,item.path,current);
     if(!previous?.remoteDigest||remoteFingerprint(current)!==previous.remoteDigest)throw Error('Jira content conflict: '+key);
     if(Object.keys(fieldPlan.updateCore).length||Object.keys(fieldPlan.extraFields).length)
      await jiraUpdateIssue(config,token,{key,...fieldPlan.updateCore,extraFields:fieldPlan.extraFields,fieldMetadata:actualMeta});
    }else if(item.action==='retire'){
     const current=await jiraReadIssue(config,token,key);
+    verifyLinkedJiraIdentity(state,config,item.path,current);
     if(!previous?.remoteDigest||remoteFingerprint(current)!==previous.remoteDigest)throw Error('Jira retirement blocked: missing trusted baseline or external changes on '+key);
     await jiraRetireIssue(config,token,{key});
    }
@@ -4508,7 +4521,7 @@ async function syncApprovedBRs(expectedRevision,automatic=null){
     const field=actualMeta.find(entry=>entry.id===id);
     if(!jiraFieldValues.sameValue(field,fieldPlan.extraFields[id],remote?.fields?.[id]))throw Error('Jira did not confirm '+field.name+' for '+key+'. Refresh Jira before retrying.');
    }
-   state=await brWorkflow.recorded(registry,activeProject.id,state.revision,{path:item.path,action:item.action,key,hash:item.hash,kind:item.kind,issueType:remote?.fields?.issuetype?.name||previous?.issueType||plannedIssueType(item),title:item.title,remoteDigest:remote?remoteFingerprint(remote):null,marker:jiraScopedMarker(state,config,item.path)});
+   state=await brWorkflow.recorded(registry,activeProject.id,state.revision,{path:item.path,action:item.action,key,hash:item.hash,kind:item.kind,issueType:remote?.fields?.issuetype?.name||previous?.issueType||plannedIssueType(item),title:item.title,remoteDigest:remote?remoteFingerprint(remote):null,marker:jiraScopedMarker(state,config,item.path),issueId:remote?.id,parentIssueId:remote?.fields?.parent?.id});
    // Only report a completed operation AFTER its confirmed Jira state is persisted locally.
    confirmed++;
    await publishProgress('publishing',`Confirmed ${confirmed} of ${total}: ${item.kind} · ${key}`,{currentPath:item.path,currentKey:key,currentAction:item.action});
