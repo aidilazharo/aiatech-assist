@@ -30,7 +30,7 @@ test('repository component inventory exists only in activated versioned catalog'
 test('save stack automatically clones only a missing approved project repo into project root',()=>withTemp(async root=>{
  const data=new Map();const state={get:key=>data.get(key),update:async(key,value)=>data.set(key,value)};
  let cloned=0;const git={repository:async p=>({root:p,remote:'https://github.com/example-org/tech-cockpit.git'}),matchesGithubRepo:(remote,owner,name)=>remote===`https://github.com/${owner}/${name}.git`,cloneConfigured:async(parent,owner,name)=>{cloned++;const target=path.join(parent,name);await fs.mkdir(target);return {root:target};}};
- await assert.rejects(repos.ensure(state,'test',git,{projectRoot:root,githubOwner:'example-org',githubRepo:'tech-stacks-skills',catalogRepositoryUrl:'https://github.com/example-org/tech-stacks-skills'}),/Catalog repository is not a project/);
+ await assert.rejects(repos.ensure(state,'test',git,{projectRoot:root,githubOwner:'example-org',githubRepo:'tech-stacks-skills',catalogRepositoryUrl:'https://github.com/example-org/tech-stacks-skills'}),/Library repository is not a project/);
  assert.equal(cloned,0);
  const checkout=await repos.ensure(state,'test',git,{projectRoot:root,githubOwner:'example-org',githubRepo:'tech-cockpit'});
  assert.equal(checkout,path.join(root,'repository','tech-cockpit'));assert.equal(cloned,1);

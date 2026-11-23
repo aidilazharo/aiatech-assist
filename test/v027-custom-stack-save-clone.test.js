@@ -108,7 +108,7 @@ test('Populated non-Git folder, symlink, and mismatched origins fail safely',asy
 test('No configured repository or catalog-as-project is rejected before filesystem writes',async()=>{
  await fixture(async({root,state,driver})=>{
   await assert.rejects(ensureCustom(state,'demo',driver,{projectRoot:root,githubOwner:'',githubRepo:''}),/Choose a valid GitHub/);
-  await assert.rejects(ensureCustom(state,'demo',driver,{...opts(root),catalogRepositoryUrl:'https://github.com/acme/project'}),/SDLC Catalog/);
+  await assert.rejects(ensureCustom(state,'demo',driver,{...opts(root),catalogRepositoryUrl:'https://github.com/acme/project'}),/Library/);
   assert.equal((await fs.readdir(root)).length,0);
  });
 });
