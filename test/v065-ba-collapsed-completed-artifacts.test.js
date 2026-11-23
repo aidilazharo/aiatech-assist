@@ -66,6 +66,17 @@ test('visibility follows verified completion and allows explicit unfinished acce
  for(const id of ids){assert.equal(nodes[id].hidden,false);assert.equal(nodes[id].open,false)}
  assert.equal(nodes.baAutoContinueRow.hidden,true);
 
+ // An expanded completed editor must stay visible when edits make it Draft.
+ nodes.baAutoSource.open=true;
+ nodes.baAutoSourceBadge.dataset.state='draft';
+ sync();
+ assert.equal(nodes.baAutoSource.hidden,false);
+ assert.equal(nodes.baAutoSource.open,true);
+ assert.equal(context.revealedSection,'baAutoSource');
+ nodes.baAutoSourceBadge.dataset.state='ready';
+ sync();
+ assert.equal(nodes.baAutoSource.open,false);
+
  nodes.baAutoDiscoveryBadge.dataset.state='draft';
  sync();
  assert.equal(nodes.baAutoDiscovery.hidden,true);
