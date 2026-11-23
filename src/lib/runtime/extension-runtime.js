@@ -140,7 +140,7 @@ const uxFrameworkKey=(projectId,key)=>'atgvAssist.uxDesignFramework.'+projectId+
 const uxDesignReferences=require('../../ux-design-references');
 const developerCompletion=require('../../developer-delivery-completion');
 const sdlcCatalog=require('../../github-sdlc-catalog');
-const offlineLibrary=require('../../offline-sdlc-library');
+const legacyOfflineCleanup=require('../../legacy-offline-library-cleanup');
 const libraryStudio=require('../../sdlc-library-studio');
 const imageBenchmark=require('../../agent-image-test');
 const agentVisionTest=require('../../agent-vision-test');
@@ -1580,6 +1580,7 @@ async function storedStartupVerification(){
   return {signature};
  }catch{return null;}
 }
+const legacyOfflineCleanupScheduled=new Set();
 async function startupStatus(){
  // Cache already-verified OS keychain credentials during an opened session.
  const alreadyOpened=openingLocked||openingFlow.phase!=='search'||!!activeProject;
@@ -1588,8 +1589,18 @@ async function startupStatus(){
  startupSessionVerified=!!verified;
  startupVerifiedSignature=verified?.signature||'';
  const workspace=getWorkspace()?.uri.fsPath;
- let offline=null;
- try{if(workspace){const installed=await sdlcCatalog.activeRoot(workspace);offline=installed.offline?installed:null;}}catch(e){if(!/not activated/.test(e.message))report('Offline Library startup status: '+e.message);}
+ // Retire the old .atgv/offline-sdlc-library snapshot only after a verified
+ // equal-or-newer Git checkout is present and all legacy files are unchanged.
+ if(workspace&&!legacyOfflineCleanupScheduled.has(workspace)){
+  legacyOfflineCleanupScheduled.add(workspace);
+  Promise.resolve().then(async()=>{
+   const live=await sdlcCatalog.gitInstalled(workspace,catalogConfig());
+   const result=await legacyOfflineCleanup.retire(workspace,{verifiedGit:live});
+   if(result.removed)report('Retired obsolete offline SDLC Library ZIP snapshot.');
+   else if(!['not-present','verified-git-required'].includes(result.reason))
+    report('Legacy offline Library preserved for safety: '+result.reason);
+  }).catch(error=>report('Legacy offline Library safe migration: '+error.message));
+ }
  // An in-flight or already-open project must not be replaced by the startup
  // credential wizard during an unrelated dashboard refresh. The setup gate is
  // only for the unselected Start screen; credential errors stay in the project
@@ -1597,7 +1608,7 @@ async function startupStatus(){
  const openingActive=openingLocked||openingFlow.phase!=='search'||!!activeProject;
  return {required:!startupSessionProceedApproved&&!openingActive,defaults:startupSetup.DEFAULTS,
   prerequisitesVerified:startupPrerequisitesVerified(),
-  verified:!!verified,offlineLibrary:offline?{version:offline.version,filename:offline.filename,repository:offline.repository}:null,
+  verified:!!verified,
   saved:typeof startupSavedConnectionFields==='function'?startupSavedConnectionFields():{}};
 }
 async function requireAutomaticStartup(projectId){
@@ -5878,65 +5889,6 @@ async function handleDashboardMessage(msg){
         if(entry&&entry.toolId===msg.id)entry.resolve(msg.action==='Install'?'Install':undefined);
         break;
       }
-      case 'importLibraryZip':{
-        try{
-          const workspace=getWorkspace()?.uri.fsPath;
-          if(!workspace)throw Error('Open a VS Code workspace folder before importing the SDLC Library ZIP.');
-          const repositoryUrl=String(msg.repositoryUrl||'').trim();
-          if(!sdlcCatalog.parseRepository(repositoryUrl))throw Error('Enter a valid SDLC Library repository URL first.');
-          const chosen=await vscode.window.showOpenDialog({canSelectFiles:true,canSelectFolders:false,canSelectMany:false,
-            openLabel:'Import SDLC Library ZIP',filters:{'ZIP archives':['zip']}});
-          if(!chosen?.length)break;
-          const zip=await offlineLibrary.inspectZip(chosen[0].fsPath);
-          const previous=catalogConfig(),config=sdlcCatalog.normalizeConfig({...previous,repositoryUrl,ref:'main'});
-          let remote=null,token='',comparisonNote='';
-          try{
-            token=await catalogToken(config,{interactive:false});
-            remote=await sdlcCatalog.remoteVersion(config,token);
-          }catch(error){
-            // Offline import remains available, but never claim GitHub was checked.
-            comparisonNote=' GitHub version could not be verified: '+error.message+'.';
-            report('Library version check deferred: '+error.message);
-          }
-          let imported;
-          if(remote&&offlineLibrary.compareVersions(remote.version,zip.version)>=0){
-            // At equal versions prefer the authenticated, immutable GitHub revision.
-            // A failed verified pull is not permission to activate a known older ZIP.
-            await ensureWorkspaceLibrary(workspace);
-            await sdlcCatalog.syncGitWorkspace(config,token,workspace,context.globalStorageUri.fsPath);
-            imported=await sdlcCatalog.activeRoot(workspace);
-          }else imported=await offlineLibrary.importZip({file:chosen[0].fsPath,workspace,repositoryUrl});
-          const active=await sdlcCatalog.activeManifest(workspace);
-          if(active.version!==imported.version||active.techStacks.length!==imported.stackCount)
-            throw Error('Selected Library version could not be verified. Review the import in Unified Error Log.');
-          await context.globalState.update('atgvAssist.sdlcCatalog',config);
-          catalogLastError='';
-          const source=imported.offline?'ZIP':'GitHub';
-          const comparison='Uploaded ZIP v'+zip.version+'; '+(remote?'GitHub main v'+remote.version:'GitHub version unavailable');
-          await recordStartupDiagnostic({stage:'library-zip',status:'verified',detail:comparison+'; activated '+source+' v'+active.version});
-          await dashboard?.webview.postMessage({type:'offlineLibraryZipResult',success:true,
-            message:comparison+'. Using latest verified '+source+' library v'+active.version+' ('+imported.roleCount+' roles, '+imported.stackCount+' stacks).'+comparisonNote});
-          await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});
-          // A successful ZIP import is also the source of trusted browser editor
-          // assets. Update localResourceRoots and rebuild this webview so the
-          // CodeMirror scripts execute; otherwise the old plain textarea remains.
-          await prepareVendorAssets({syncIfMissing:false});
-          if(installedVendorAssets&&dashboard){
-            vendorBootRecoveryCount=0;vendorWebviewReady=false;
-            dashboard.webview.options={...dashboard.webview.options,localResourceRoots:[vscode.Uri.joinPath(context.extensionUri,'media'),vscode.Uri.file(installedVendorAssets.dir)]};
-            webviewCoreReady=false;dashboard.webview.html=html(dashboard.webview,{resumeLibrary:true});
-            webviewVendorDir=installedVendorAssets.dir;
-          }else if(vendorLibraryLastError){
-            report('Offline Library CodeMirror activation: '+vendorLibraryLastError);
-            await dashboard?.webview.postMessage({type:'libraryEditorHealth',ready:false,reason:vendorLibraryLastError});
-          }
-          await refreshDashboard();
-        }catch(error){
-          report('Offline SDLC Library ZIP import: '+error.message);
-          await dashboard?.webview.postMessage({type:'offlineLibraryZipResult',success:false,message:error.message});
-        }
-        break;
-      }
       case 'startupGetConnectionLogs':{
         try{await publishStartupConnectionDiagnostics();}
         catch(error){await dashboard?.webview.postMessage({type:'startupConnectionLogError',message:'Unable to load local connection diagnostics: '+startupConnectionFailure(error)});}
@@ -9224,7 +9176,7 @@ async function handleDashboardMessage(msg){
         }
         const config=catalogConfig();
         catalogBusy=true;
-        await progress('running',5,'Preparing SDLC Library update…','Checking your selected GitHub Library source main and trusted public release mirror.');
+        await progress('running',5,'Preparing SDLC Library update…','Verifying the configured GitHub SDLC Catalog main branch.');
         await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});
         try{
           if(!getWorkspace())throw Error('Open a workspace before pulling the SDLC Library.');
@@ -9233,96 +9185,33 @@ async function handleDashboardMessage(msg){
             if(/not activated|no such file|ENOENT/i.test(String(error.message)))return null;
             throw error;
           });
-          // GitHub main is the owner's authoritative source. First check its
-          // verified VERSION + catalog.json through the configured credentials.
-          await progress('running',20,'Checking selected GitHub source','Verifying main branch VERSION and catalog.json at '+config.repositoryUrl+'.');
-          let remote=null,token='',sourceError=null;
-          try{
-            token=await catalogToken(config,{interactive:true});
-            remote=await sdlcCatalog.remoteVersion(config,token);
-          }catch(error){sourceError=error;}
-          if(remote){
-            catalogRemote={repository:remote.repository,version:remote.version,sha:remote.sha};
-            const newer=!installed||libraryUpdateVersion.compareInstalledRemote(installed.version,remote.version).available;
-            // A verified ZIP may contain a newer source-build under the same VERSION.
-            // Only use the aidilazharo release mirror for its own configured Library.
-            const newerReleaseBuild=!!installed&&
-              config.repositoryUrl===startupSetup.SOURCE_REPOS.aidilazharo.library&&
-              !!libraryRelease&&
-              libraryUpdateVersion.compareInstalledRelease(installed,libraryRelease).reason==='newer-build';
-            if(!newer&&!newerReleaseBuild){
-              const message='Active Library v'+installed.version+' is equal to or newer than the selected '+config.repositoryUrl+' main v'+remote.version+'. No downgrade was performed. The public release mirror is checked separately.';
-              await dashboard?.webview.postMessage({type:'catalogAction',action:'pull',success:true,message});
-              await progress('completed',100,'SDLC Library already newer',message);
-              activeLibraryUpdatePullRequestId=null;
-              return;
-            }
-            if(newer){
-            await progress('running',55,'Pulling verified Library main','Cloning or fast-forwarding the owner-selected source repository after verifying its commit and manifest.');
-            const pulled=await sdlcCatalog.syncGitWorkspace(config,token,workspace,context.globalStorageUri.fsPath,{expectedSha:remote.sha});
-            const active=await sdlcCatalog.activeRoot(workspace);
-            if(active.version!==remote.version||active.sha!==remote.sha)throw Error('Pulled source Library did not match the verified main-branch commit. Review local changes.');
-            await context.globalState.update('atgvAssist.sdlcCatalog',config);
-            await prepareVendorAssets({syncIfMissing:false});
-            const message='Verified Library v'+active.version+' from '+config.repositoryUrl+' main ('+active.sha.slice(0,12)+'). '+(pulled.action||'Pulled')+'.';
+          await progress('running',20,'Checking GitHub Library source','Verifying main VERSION and catalog.json at '+config.repositoryUrl+'.');
+          const token=await catalogToken(config,{interactive:true});
+          const remote=await sdlcCatalog.remoteVersion(config,token);
+          if(!remote?.sha||!remote?.version)
+            throw Error('Cannot verify the GitHub SDLC Catalog main branch. Update your GitHub credentials in Settings, then retry Pull Library.');
+          catalogRemote={repository:remote.repository,version:remote.version,sha:remote.sha};
+          const newer=!installed||libraryUpdateVersion.compareInstalledRemote(installed.version,remote.version).available;
+          if(!newer){
+            const message='Active GitHub Library v'+installed.version+' is equal to or newer than '+config.repositoryUrl+' main v'+remote.version+'. No downgrade was performed.';
             await dashboard?.webview.postMessage({type:'catalogAction',action:'pull',success:true,message});
-            if(activeProject&&getWorkspace()){
-              const available=await sdlcCatalog.designFrameworkAvailability(workspace);
-              await dashboard?.webview.postMessage({type:'uxFrameworkCatalogChanged',projectId:activeProject.id,...available});
-            }
-            await progress('running',95,'Refreshing workspace','Applying the verified source Library snapshot.');
-            await refreshDashboard();
-            await progress('completed',100,'SDLC Library update complete',message);
-            activeLibraryUpdatePullRequestId=null;
-            return;
-            }
+            await progress('completed',100,'SDLC Library up to date',message);
+            activeLibraryUpdatePullRequestId=null;return;
           }
-          // The public mirror distributes the aidilazharo source only.
-          // Never activate it as the aiamalaysia catalogue if its source is inaccessible.
-          if(config.repositoryUrl!==startupSetup.SOURCE_REPOS.aidilazharo.library)
-            throw Error('Cannot verify selected Library source '+config.repositoryUrl+': '+String(sourceError?.message||'GitHub authentication unavailable')+'. Public mirror belongs to aidilazharo and cannot replace this source.');
-          await progress('running',35,remote?'Checking newer verified Library build':'Checking fallback GitHub release',
-            remote?'Selected source VERSION is unchanged. Checking for a newer checksum-verified release build.':'Selected source is unavailable. Checking the checksum-verified public release without downgrading existing work.');
-          const checked=await libraryReleaseUpdater.latestAcrossRepositories();
-          const release=checked.release;libraryLatest=checked.latest;libraryReleaseWarnings=checked.errors;
-          if(!release)throw Error(checked.latest?'The latest public Library release is missing its verified ZIP or checksum.':'No public SDLC Library release is available.');
-          libraryRelease=release;
-          if(installed&&!libraryUpdateVersion.compareInstalledRelease(installed,release).available){
-            const message='Active Library v'+installed.version+' is newer than or equal to public mirror v'+release.version+'. No downgrade was performed. Source check: '+String(sourceError?.message||'unavailable').slice(0,180)+'.';
-            await dashboard?.webview.postMessage({type:'catalogAction',action:'pull',success:true,message});
-            await progress('completed',100,'SDLC Library already newer',message);
-            activeLibraryUpdatePullRequestId=null;
-            return;
-          }
-          const stage=path.join(context.globalStorageUri.fsPath,'updates','library-'+crypto.randomUUID());
-          let selected,downloadedHash='';
-          try{
-            await progress('running',45,'Downloading Library archive','Downloading the public GitHub release ZIP and checksum.');
-            const archive=await libraryReleaseUpdater.downloadVerified(release,{directory:stage});
-            downloadedHash=crypto.createHash('sha256').update(await fs.readFile(archive)).digest('hex');
-            await progress('running',65,'Verifying Library contents','Checking archive entries, VERSION and catalog.json metadata.');
-            const inspected=await offlineLibrary.inspectZip(archive);
-            if(inspected.version!==release.version)throw Error('Released Library ZIP version does not match GitHub release tag.');
-            selected=await offlineLibrary.importZip({file:archive,workspace:getWorkspace().uri.fsPath,repositoryUrl:config.repositoryUrl,verifiedRelease:release});
-          }finally{await fs.rm(stage,{recursive:true,force:true}).catch(()=>{});}
+          await progress('running',55,'Pulling verified Library main','Cloning or fast-forwarding the selected source after verifying its commit and manifest.');
+          const pulled=await sdlcCatalog.syncGitWorkspace(config,token,workspace,context.globalStorageUri.fsPath,{expectedSha:remote.sha});
+          const active=await sdlcCatalog.activeRoot(workspace);
+          if(active.version!==remote.version||active.sha!==remote.sha)
+            throw Error('Pulled Library does not match the verified main commit. Review local changes.');
           await context.globalState.update('atgvAssist.sdlcCatalog',config);
-          const active=await sdlcCatalog.activeManifest(getWorkspace().uri.fsPath);
-          if(active.version!==selected.version)throw Error('Imported Library manifest version does not match activated files.');
-          const activeRoot=await sdlcCatalog.activeRoot(getWorkspace().uri.fsPath);
-          if(selected.version===release.version&&(!activeRoot.offline||activeRoot.releaseTag!==release.tag||activeRoot.archiveHash!==downloadedHash))throw Error('Downloaded Library release was not activated. Existing files were preserved.');
-          await progress('running',85,'Library verified','Activating the checksum-verified release and refreshing available roles and stacks.');
-          catalogRemote={sha:'',repository:release.repository,version:release.version,tag:release.tag};catalogLastError='';catalogLastCheck=new Date().toISOString();
-          const message=selected.version===release.version?'Verified Library v'+selected.version+' from GitHub Releases ('+release.tag+'). '+selected.roleCount+' roles and '+selected.stackCount+' tech stacks.':'The active Library v'+selected.version+' is newer than release v'+release.version+'; no downgrade was performed.';
-          // Install only checksum-pinned browser libraries from the verified
-          // Library snapshot. SortableJS remains optional: native Kanban works
-          // if a trusted asset is unavailable.
           await prepareVendorAssets({syncIfMissing:false});
+          const message='Verified GitHub Library v'+active.version+' from '+config.repositoryUrl+' main ('+active.sha.slice(0,12)+'). '+(pulled.action||'Pulled')+'.';
           await dashboard?.webview.postMessage({type:'catalogAction',action:'pull',success:true,message});
           if(activeProject&&getWorkspace()){
-            const available=await sdlcCatalog.designFrameworkAvailability(getWorkspace().uri.fsPath);
+            const available=await sdlcCatalog.designFrameworkAvailability(workspace);
             await dashboard?.webview.postMessage({type:'uxFrameworkCatalogChanged',projectId:activeProject.id,...available});
           }
-          await progress('running',96,'Refreshing workspace…','Finalizing the verified Library release update.');
+          await progress('running',95,'Refreshing workspace','Applying verified GitHub Library skills and technology stacks.');
           await refreshDashboard();
           await progress('completed',100,'SDLC Library update complete',message);
           if(installedVendorAssets&&dashboard&&webviewVendorDir!==installedVendorAssets.dir){
