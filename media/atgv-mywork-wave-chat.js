@@ -8,7 +8,6 @@
  const input=get('atgvMyWorkAiInput'),form=get('atgvMyWorkAiChatForm'),button=get('atgvMyWorkAiSend');
  const transcript=get('atgvMyWorkAiConversation'),resultsViewport=get('atgvMyWorkAiResults'),status=get('atgvMyWorkAiChatStatus');
  const suggestion=get('atgvMyWorkAiText');
- const tasksSection=get('atgvMyWorkToday'),tasksList=get('atgvMyWorkTodayList'),tasksTitle=get('atgvMyWorkTodayTitle');
  const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
  // Red intro -> CMYK (cyan, magenta, yellow, key/graphite) -> red fade-out.
  // Key is highlighted graphite so it remains visible against the black page.
@@ -74,8 +73,6 @@
   writer=null;queue.length=0;thinkingBefore=false;
   // Clear all displayed role AI messages; no previous-day dialogue remains.
   transcript.replaceChildren();
-  tasksList?.replaceChildren();
-  if(tasksSection)tasksSection.hidden=true;
   greetingNode=null;briefingNode=null;lastBriefRequest=0;
   input.value='';status.textContent='';button.disabled=true;
   activity();
@@ -103,7 +100,6 @@
    // Keep the role context accessible without displaying an extra chat heading.
    input.setAttribute('aria-label','Message ATGV AI · '+String(snapshot.roleName||nextRole).slice(0,100));
    writer=null;queue.length=0;transcript.replaceChildren();input.value='';
-   tasksList?.replaceChildren();if(tasksSection)tasksSection.hidden=true;
    greetingNode=null;briefingNode=null;lastBriefRequest=0;
    greetingNode=addMessage('assistant','Hello! I am reviewing your '+String(snapshot.roleName||'project')+' work for today.');
    if(handoffDraft){input.value=handoffDraft.slice(0,4000);handoffDraft='';}
@@ -163,33 +159,6 @@
   wrapper.append(title,description);parent.append(wrapper);
   return wrapper;
  }
- function renderTasks(brief){
-  if(!tasksSection||!tasksList)return;
-  const today=String(brief.today||dayLocal()).slice(0,15);
-  if(tasksTitle)tasksTitle.textContent='Today\u2019s tasks \u00b7 '+today;
-  tasksList.replaceChildren();
-  const actions=Array.isArray(brief.todayActions)?brief.todayActions.slice(0,6):[];
-  const tasks=actions.filter(item=>item&&item.completed!==true&&item.done!==true&&item.label);
-  for(const item of tasks){
-   const card=document.createElement('div');card.className='atgv-mywork-ai-task-card';
-   card.setAttribute('role','listitem');card.dataset.taskId=String(item.id||'').slice(0,180);
-   const details=document.createElement('div');details.className='atgv-mywork-ai-task-details';
-   const label=document.createElement('strong');label.textContent=String(item.label).slice(0,140);
-   const reason=document.createElement('span');reason.textContent=String(item.reason||'').slice(0,160);
-   details.append(label,reason);
-   const button=document.createElement('button');button.type='button';
-   button.className='atgv-mywork-ai-task-open';button.textContent='Go to task';
-   button.setAttribute('aria-label','Go to task: '+label.textContent);
-   button.addEventListener('click',()=>window.ATGVMyWorkAI?.openTask?.(item));
-   card.append(details,button);tasksList.append(card);
-  }
-  if(tasks.length===0){
-   const empty=document.createElement('p');empty.className='atgv-mywork-ai-task-empty';
-   empty.textContent='No outstanding verified tasks for this role.';
-   tasksList.append(empty);
-  }
-  tasksSection.hidden=false;
- }
  function renderBrief(b){
   if(!b||typeof b!=='object')return;
   if(!greetingNode)greetingNode=addMessage('assistant','');
@@ -215,7 +184,6 @@
    }
    block.append(people);
   }else section(briefingNode,teamTitle,String(b.teamSummary||'Shared roster not verified').slice(0,220));
-  renderTasks(b);
   activity();
  }
  // Host activity is independent of the selected role and the currently open page.
