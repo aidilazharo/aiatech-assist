@@ -321,3 +321,134 @@ body:not(.gate-mode) #topNotification .top-notification-actions button{
  #discoveryView .ba-auto-quill-editor .ql-container.ql-snow,
  #discoveryView .ba-auto-quill-editor .ql-editor{min-height:270px}
 }
+
+/* BA requirements unified components: one spacing scale, text treatment and
+   edit language across Generated Requirements, BR editor and Jira Preview. */
+#discoveryView .ba-auto-body{padding:16px;min-width:0}
+#discoveryView #baAutoBRList{display:grid;gap:12px;min-width:0}
+#discoveryView .ba-auto-requirement{
+ margin:0;padding:0;border:1px solid var(--atgv-consistency-border);
+ border-radius:var(--atgv-consistency-radius);
+ background:var(--atgv-consistency-surface);overflow:hidden;min-width:0
+}
+#discoveryView .ba-auto-requirement > summary{
+ display:flex;align-items:center;justify-content:space-between;gap:10px;
+ min-height:44px;padding:12px 14px;line-height:1.45;cursor:pointer;
+ overflow-wrap:anywhere;list-style-position:inside
+}
+#discoveryView .ba-auto-requirement > summary strong{min-width:0;flex:1 1 auto}
+#discoveryView .ba-auto-requirement[open] > summary{
+ border-bottom:1px solid var(--atgv-consistency-border)
+}
+#discoveryView .ba-auto-requirement-field{padding:12px 14px 0;min-width:0}
+#discoveryView .ba-auto-requirement-field > strong{
+ display:block;font-size:12px;font-weight:700;line-height:1.5;margin:0 0 5px
+}
+#discoveryView .ba-auto-requirement-field > p{
+ margin:0;color:var(--vscode-foreground);
+ font-family:var(--vscode-font-family,inherit);
+ font-size:13px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere
+}
+#discoveryView .ba-auto-requirement-actions{
+ display:flex;justify-content:flex-end;align-items:center;gap:8px;
+ padding:12px 14px;margin-top:4px
+}
+#discoveryView .ba-auto-requirement-actions button{
+ min-height:var(--atgv-consistency-control-height);
+ border-radius:var(--atgv-consistency-radius-sm)
+}
+#discoveryView .ba-auto-requirement-status{
+ font-size:11px;font-weight:700;line-height:1.25;
+ color:var(--atgv-consistency-warning);
+ border:1px solid currentColor;border-radius:var(--atgv-consistency-radius-sm);
+ padding:5px 8px;flex:0 0 auto
+}
+#discoveryView .ba-auto-attention-summary{
+ padding:14px 16px;border:1px solid var(--atgv-consistency-warning);
+ border-radius:var(--atgv-consistency-radius);
+ background:var(--atgv-consistency-surface);min-width:0
+}
+#discoveryView .ba-auto-attention-summary > strong{display:block;margin:0 0 10px}
+#discoveryView .ba-auto-attention-summary ul{margin:0;padding-left:20px;display:grid;gap:8px}
+#discoveryView .ba-auto-attention-summary li{line-height:1.55;overflow-wrap:anywhere}
+#discoveryView .ba-auto-attention-summary li > strong{display:block}
+#discoveryView .ba-auto-attention-summary li > span{display:block;font-size:13px}
+#discoveryView .ba-auto-attention-guidance{
+ margin:10px 0 0;color:var(--atgv-consistency-muted);
+ line-height:1.55;font-size:12px
+}
+#discoveryView .ba-auto-generation-result{
+ margin:0;padding:10px 14px;border:1px solid var(--atgv-consistency-border);
+ border-radius:var(--atgv-consistency-radius-sm);
+ color:var(--atgv-consistency-muted);font-size:12px;line-height:1.5
+}
+#discoveryView .ba-auto-generation-unchanged{display:block;margin-top:5px}
+#discoveryView .ba-auto-requirement-attention{
+ margin:12px 14px 0;padding:10px 12px;border-left:3px solid var(--atgv-consistency-warning);
+ background:var(--vscode-inputValidation-warningBackground,transparent);
+ overflow-wrap:anywhere;white-space:pre-wrap;line-height:1.55;font-size:13px
+}
+#discoveryView .ba-auto-requirement-quote{
+ margin:8px 14px 0;padding:8px 12px;
+ border-left:2px solid var(--atgv-consistency-border);
+ color:var(--atgv-consistency-muted);
+ white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px
+}
+/* Preserve literal Jira DoD [ ] markers: only typography and form style change. */
+#brEditModal :is(input:not([type="checkbox"]),select,textarea),
+.jira-issue-modal-content :is(input:not([type="checkbox"]),select,textarea){
+ box-sizing:border-box;width:100%;min-width:0;
+ border:1px solid var(--atgv-consistency-border);
+ border-radius:var(--atgv-consistency-radius-sm);
+ background:var(--vscode-input-background,var(--atgv-consistency-surface));
+ color:var(--vscode-input-foreground,var(--vscode-foreground));
+ padding:10px 12px;font-family:var(--vscode-font-family,inherit);
+ font-size:13px;line-height:1.55
+}
+#brEditModal :is(textarea, input:not([type="checkbox"])):focus-visible,
+.jira-issue-modal-content :is(textarea, input:not([type="checkbox"])):focus-visible{
+ outline:2px solid var(--atgv-consistency-focus);outline-offset:1px
+}
+.jira-issue-modal-content .jira-preview-detail-form{
+ display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,270px),1fr));
+ gap:14px;margin:14px 0
+}
+.jira-issue-modal-content .jira-preview-detail-form label{display:grid;gap:7px;align-content:start}
+.jira-issue-modal-content .jira-preview-detail-form textarea{min-height:120px;resize:vertical}
+.jira-issue-modal-content .jira-preview-field-list{gap:10px;margin:16px 0}
+.jira-issue-modal-content .jira-preview-field{
+ padding:12px 14px;border-radius:var(--atgv-consistency-radius);
+ background:var(--atgv-consistency-surface)
+}
+.jira-issue-modal-content .jira-preview-field strong{margin:0 0 6px}
+.jira-issue-modal-content .jira-preview-field small{margin-top:7px;line-height:1.5}
+.jira-issue-modal-content .jira-preview-detail{gap:12px;padding:12px 0}
+.jira-issue-modal-content .jira-preview-detail-value{font-family:var(--vscode-font-family,inherit);line-height:1.6}
+.jira-issue-modal-content :is(h2,h3){margin:0 0 10px}
+#brEditModal .ql-toolbar.ql-snow{
+ border-color:var(--atgv-consistency-border);
+ border-radius:var(--atgv-consistency-radius-sm) var(--atgv-consistency-radius-sm) 0 0;
+ background:var(--atgv-consistency-surface)
+}
+#brEditModal .ql-container.ql-snow{
+ border-color:var(--atgv-consistency-border);
+ border-radius:0 0 var(--atgv-consistency-radius-sm) var(--atgv-consistency-radius-sm);
+ background:var(--vscode-input-background,var(--atgv-consistency-surface));
+ color:var(--vscode-input-foreground,var(--vscode-foreground))
+}
+#brEditModal .ql-editor{
+ padding:16px;font-family:var(--vscode-font-family,inherit);
+ font-size:13px;line-height:1.65;overflow-wrap:anywhere
+}
+#brEditModal .ql-snow .ql-stroke{stroke:var(--vscode-foreground)}
+#brEditModal .ql-snow .ql-fill{fill:var(--vscode-foreground)}
+#brEditModal .ql-snow .ql-picker{color:var(--vscode-foreground)}
+#brEditModal .ql-toolbar.ql-snow .ql-picker-options{
+ background:var(--atgv-consistency-surface);border-color:var(--atgv-consistency-border)
+}
+@media(max-width:620px){
+ #discoveryView .ba-auto-body{padding:12px}
+ #discoveryView .ba-auto-requirement > summary{align-items:flex-start;flex-wrap:wrap}
+ #discoveryView .ba-auto-requirement-status{margin-left:auto}
+ .jira-issue-modal-content .jira-preview-detail-form{grid-template-columns:minmax(0,1fr)}
+}

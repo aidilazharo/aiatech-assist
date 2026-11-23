@@ -43,6 +43,10 @@
   const node=get(id);
   const next=statusLabels[status]?status:'not-started';
   node.dataset.state=next;node.textContent=statusLabels[next];
+  if(id==='baAutoRequirementsBadge'&&next==='needs-attention'){
+   const findings=(brState?.baDraftQuality?.excluded||[]).filter(row=>requirements().some(br=>br.id===row.id));
+   node.title=findings.map(row=>row.id+': '+row.reason).join('\n')||'Expand Generated Requirements to review the findings.';
+  }else node.removeAttribute('title');
  }
 
  function placeSkill(){
@@ -169,29 +173,68 @@
  function renderRequirements(){
   const brs=requirements();
   const body=get('baAutoBRList');
-  get('baAutoBRCount').textContent=brs.length?brs.length+' individual BR'+(brs.length===1?'':'s'):'';
-  const excluded=new Set((brState?.baDraftQuality?.excluded||[]).map(row=>row.id));
-  const key=String(brState?.revision||'')+'|'+busy()+'|'+brs.map(br=>baCanEdit('ba-br-'+br.id)).join('');
+  const activeIds=new Set(brs.map(br=>br.id));
+  const findings=(brState?.baDraftQuality?.excluded||[]).filter(row=>activeIds.has(row.id));
+  const byId=new Map(findings.map(row=>[row.id,row]));
+  const impact=(brState?.impact||[]).filter(row=>activeIds.has(row.id));
+  get('baAutoBRCount').textContent=brs.length?brs.length+' individual BR'+(brs.length===1?'':'s')+(findings.length?' · '+findings.length+' need attention':''):'';
+  const key=JSON.stringify([brState?.revision,busy(),findings,impact,brs.map(br=>baCanEdit('ba-br-'+br.id))]);
   if(brKey===key)return;
   brKey=key;
   const expanded=new Set([...body.querySelectorAll('details[open]')].map(node=>node.dataset.br));
   body.replaceChildren();
   if(!brs.length){body.textContent='Generated requirements will appear here.';return;}
+  if(findings.length){
+   const notice=document.createElement('section');notice.className='ba-auto-attention-summary';notice.setAttribute('role','status');
+   const heading=document.createElement('strong');heading.textContent='What needs attention ('+findings.length+')';
+   const list=document.createElement('ul');
+   for(const row of findings){
+    const item=document.createElement('li');
+    const name=document.createElement('strong');name.textContent=row.id+(row.field?' · '+row.field:'');
+    const message=document.createElement('span');message.textContent=row.reason||'Unresolved requirement quality finding.';
+    item.append(name,message);list.append(item);
+   }
+   const guidance=document.createElement('p');guidance.className='ba-auto-attention-guidance';
+   guidance.textContent='Edit the affected BR using verified evidence, Save Draft, and regenerate with specific feedback. Repeating identical content cannot clear a quality finding.';
+   notice.append(heading,list,guidance);body.append(notice);
+  }
+  if(impact.length){
+   const counts={new:0,modified:0,unchanged:0,removed:0};
+   for(const row of impact)if(Object.hasOwn(counts,row.change))counts[row.change]++;
+   const status=document.createElement('p');status.className='ba-auto-generation-result';
+   status.textContent='Latest generation · '+counts.new+' new · '+counts.modified+' changed · '+counts.unchanged+' unchanged';
+   if(!counts.new&&!counts.modified&&counts.unchanged){
+    const note=document.createElement('span');note.className='ba-auto-generation-unchanged';
+    note.textContent='No BR content changed. Provide correction feedback or update verified source/Discovery evidence before regenerating.';
+    status.append(note);
+   }
+   body.append(status);
+  }
   for(const br of brs){
+   const problem=byId.get(br.id);
    const item=document.createElement('details');
-   item.dataset.br=br.id;item.className='ba-auto-requirement';item.open=expanded.has(br.id);
+   item.dataset.br=br.id;item.className='ba-auto-requirement'+(problem?' has-attention':'');item.open=expanded.has(br.id);
    const summary=document.createElement('summary');
-   summary.textContent=br.id+' · '+br.title;
-   if(excluded.has(br.id))summary.append(document.createTextNode(' · Excluded from Jira preview'));
+   const title=document.createElement('strong');title.textContent=br.id+' · '+br.title;summary.append(title);
+   if(problem){const mark=document.createElement('span');mark.className='ba-auto-requirement-status';mark.textContent='Needs attention';summary.append(mark);}
    item.append(summary);
+   if(problem){
+    const detail=document.createElement('p');detail.className='ba-auto-requirement-attention';
+    detail.textContent=(problem.field?problem.field+': ':'')+problem.reason;
+    item.append(detail);
+    if(problem.quote){const quote=document.createElement('blockquote');quote.className='ba-auto-requirement-quote';quote.textContent=problem.quote;item.append(quote);}
+   }
    for(const [label,value] of [['Business purpose',br.objective],['Scope',br.scope],['Acceptance criteria',br.acceptanceCriteria],
     ['Suggested Jira placement',br.jiraPlacement||(brState.synced?.[br.id]?.key?'Keep the existing Epic '+brState.synced[br.id].key+'.':'Create an Epic for '+br.title+'.')]]){
-    const title=document.createElement('strong'),text=document.createElement('p');
-    title.textContent=label;text.textContent=value||'Unspecified';item.append(title,text);
+    const field=document.createElement('div');field.className='ba-auto-requirement-field';
+    const name=document.createElement('strong');name.textContent=label;
+    const text=document.createElement('p');text.textContent=value||'Unspecified';
+    field.append(name,text);item.append(field);
    }
+   const actions=document.createElement('div');actions.className='ba-auto-requirement-actions';
    const writable=baCanEdit('ba-br-'+br.id);
    const edit=button(writable?'Edit '+br.id:'View '+br.id,()=>openBREditor(br.id,{artifact:true}));
-   edit.disabled=busy();item.append(edit);body.append(item);
+   edit.disabled=busy();actions.append(edit);item.append(actions);body.append(item);
   }
  }
 

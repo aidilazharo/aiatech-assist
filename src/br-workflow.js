@@ -1099,13 +1099,20 @@ async function generated(registry,id,revision,{discoveryRevision,requirements,ri
     used.add(existing.id);
     const candidate=automatic?{...proposal,...existing.baManualFields}:proposal;
     const stable={...stableProposal(candidate,existing),id:existing.id},previous=existing.approvedContent||existing;
-    if(existing.status==='draft'){
-     existing.previousDrafts=(existing.previousDrafts||[]).concat({at:new Date().toISOString(),discoveryRevision:existing.source?.discoveryRevision||'',draftSavedAt:existing.draftSavedAt||null,content:structuredClone(contentOf(existing))}).slice(-20);
-    }
-    if(normalizedContent(previous)===normalizedContent(stable)&&existing.approvedContent){
-     Object.assign(existing,stable,{evidence:verified,questionRefs,status:'approved',needsRefresh:false,staleReason:'',draftSavedAt:existing.draftSavedAt||null,source:{name:next.importName,digest:next.importDigest,discoveryRevision}});
-     impact.push({id:existing.id,title:stable.title,change:'unchanged',approved:true});
+    const unchanged=normalizedContent(previous)===normalizedContent(stable);
+    if(unchanged){
+     // An identical regenerated draft is not a modification. Preserve its
+     // saved state and history while refreshing verified source references.
+     if(existing.approvedContent){
+      Object.assign(existing,stable,{evidence:verified,questionRefs,status:'approved',needsRefresh:false,staleReason:'',draftSavedAt:existing.draftSavedAt||null,source:{name:next.importName,digest:next.importDigest,discoveryRevision}});
+     }else{
+      Object.assign(existing,stable,{evidence:verified,questionRefs,status:'draft',source:{name:next.importName,digest:next.importDigest,discoveryRevision}});
+     }
+     impact.push({id:existing.id,title:stable.title,change:'unchanged',approved:!!existing.approvedContent});
     }else{
+     if(existing.status==='draft'){
+      existing.previousDrafts=(existing.previousDrafts||[]).concat({at:new Date().toISOString(),discoveryRevision:existing.source?.discoveryRevision||'',draftSavedAt:existing.draftSavedAt||null,content:structuredClone(contentOf(existing))}).slice(-20);
+     }
      const before=existing.title;Object.assign(existing,stable,{evidence:verified,questionRefs,status:'draft',needsRefresh:true,staleReason:'Revision awaiting approval',draftSavedAt:null,modifiedEpoch:next.importEpoch,source:{name:next.importName,digest:next.importDigest,discoveryRevision}});
      impact.push({id:existing.id,title:stable.title,previousTitle:before,change:'modified',approved:false});
     }
