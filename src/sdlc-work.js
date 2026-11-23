@@ -189,19 +189,21 @@ async function openTaskDocument(registry, projectId, roleId, taskId, vscode, ext
     await fs.mkdir(parent, { recursive: true });
     if (task.template) {
         let content;
-        try {
-            const resolved = await safePath(path.join(registry.workspace, '.atgv', 'library'), path.join('templates', task.template));
-            content = await fs.readFile(resolved, 'utf8');
-        }
-        catch (e) {
-            if (e.code !== 'ENOENT') throw e;
-            // One last read-only fallback for workspaces not yet migrated by Start.
-            try {
-                const legacy=await safePath(path.join(registry.workspace,'.atgv'),path.join('templates',task.template));
-                content=await fs.readFile(legacy,'utf8');
-            } catch (legacyError) {
-                if(legacyError.code!=='ENOENT') throw legacyError;
-                content=await fs.readFile(path.join(extensionRoot,'resources','defaults','templates',task.template),'utf8');
+        const override=await safePath(path.join(root,'overrides'),path.join('templates',task.template));
+        try{content=await fs.readFile(override,'utf8');}
+        catch(error){
+            if(error.code!=='ENOENT')throw error;
+            const catalog=require('./github-sdlc-catalog');
+            content=await catalog.activeFile(registry.workspace,'templates/'+task.template,{maxBytes:65536});
+            if(!content){
+                try{
+                    const legacy=await safePath(path.join(registry.workspace,'.atgv'),path.join('templates',task.template));
+                    content=await fs.readFile(legacy,'utf8');
+                }catch(legacyError){
+                    if(legacyError.code!=='ENOENT')throw legacyError;
+                    try{content=await fs.readFile(path.join(extensionRoot,'resources','defaults','templates',task.template),'utf8');}
+                    catch(e){if(e.code!=='ENOENT')throw e;content='# '+task.label+'\n\n## Details\n\nTBD\n';}
+                }
             }
         }
         await fs.writeFile(file, content, { flag: 'wx', mode: 0o600 }).catch(e => { if (e.code !== 'EEXIST')
