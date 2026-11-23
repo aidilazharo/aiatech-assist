@@ -68,8 +68,12 @@ test('document and Jira views use icon buttons with accessible tooltip labels',(
  assert.match(css,/\.ba-auto-title-icon:focus-visible::after\{[^}]*content:attr\(title\)/);
  const start=html.indexOf('<summary class="ba-auto-jira-heading">');
  const end=html.indexOf('</summary>',start);
- const jira=html.slice(start,end);
- assert.match(jira,/id="baAutoJiraView"/);
- assert.match(jira,/id="baAutoJiraTabs"/);
+ const heading=html.slice(start,end);
+ const inside=html.slice(end,html.indexOf('id="baAutoJiraBlockers"',end));
+ assert.match(heading,/id="baAutoJiraBadge"/);
+ assert.doesNotMatch(heading,/id="baAutoJiraView"|id="baAutoJiraTabs"/);
+ assert.match(inside,/class="ba-auto-jira-toolbar"/);
+ assert.match(inside,/id="baAutoJiraView"/);
+ assert.match(inside,/id="baAutoJiraTabs"/);
  assert.match(ba,/event\.preventDefault\(\);\s+get\('baAutoJira'\)\.open=true/);
 });
