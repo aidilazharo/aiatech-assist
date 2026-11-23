@@ -658,7 +658,19 @@ function setView(next){
 function cell(row,text){const el=document.createElement('td');el.textContent=text;row.append(el);}
 function showGate(){
   workspaceOpened=false;gateBusy=false;document.body.classList.add('gate-mode');
-  setView('gate');renderGate();
+  setView('gate');
+  // The initial HTML must never be an empty branded shell. Keep the first
+  // prerequisites panel visible even before the host returns startup state.
+  if(startupSetupRequired){
+   $('startupSetup').classList.remove('hidden');
+   $('gateFinder').classList.add('hidden');
+   renderStartupPage();
+   if(startupPage===0)requestStartupReadiness();
+  }else{
+   $('startupSetup').classList.add('hidden');
+   $('gateFinder').classList.remove('hidden');
+  }
+  renderGate();
 }
 function gateOpeningPercent(percent,message){
  const value=Math.max(0,Math.min(100,Number(percent)||0));
@@ -676,6 +688,16 @@ function launchFromGate(selection={}){
   renderGate();
   send('openingAuto',selection);
 }
+function startupAtlassianAccessVerified(){
+ // A GitHub failure must not make Skip visible when both Atlassian APIs passed.
+ const jira=startupConnectionCheckResults.get('jira');
+ const confluence=startupConnectionCheckResults.get('confluence');
+ if(jira?.state==='ok'&&confluence?.state==='ok')return true;
+ if(jira?.state==='error'||jira?.state==='offline'||confluence?.state==='error'||confluence?.state==='offline')return false;
+ // Previously saved, signed Atlassian verification also counts while neither
+ // service has since reported a failure. It never grants remote API permission.
+ return startupConnectionVerified===true;
+}
 function renderGate(){
   // Project row actions already launch the complete opening sequence.
   $('gateFinder').classList.toggle('hidden',startupSetupRequired);
@@ -685,7 +707,10 @@ function renderGate(){
   $('gateRecovery').classList.toggle('hidden',!gateOfflineAvailable);
   $('gateOffline').disabled=gateBusy;
   $('gateSearchPrevious').disabled=gateBusy;
-  $('gateSkip').disabled=gateBusy||!workspaceFolderAvailable;
+  const skipAllowed=!startupAtlassianAccessVerified();
+  $('gateSkip').hidden=!skipAllowed;
+  $('gateSkip').classList.toggle('hidden',!skipAllowed);
+  $('gateSkip').disabled=!skipAllowed||gateBusy||!workspaceFolderAvailable;
   renderGateResults();
 }
 function gateProjectRow(root,project,{recent=false}={}){
@@ -8877,6 +8902,7 @@ window.addEventListener('message',event=>{
 const startupFieldMap={jiraUrl:'startupJiraUrl',email:'startupEmail',githubUrl:'startupGithubUrl',
  projectRepository:'startupProjectRepository'};
 let startupFormInitialized=false,startupPrereqRequested=false,startupConnectionVerified=false,startupSetupRequired=true,startupReturnToConnections=false;
+let startupWizardCompletedThisSession=false;
 let startupConnectionEditSnapshot=null;
 let startupConnectionCheckSequence=0,startupConnectionCheckPending=false,startupConnectionHealthError=false;
 const startupConnectionCheckResults=new Map();
@@ -9153,7 +9179,9 @@ function renderStartupConfig(config){
  if(!config)return;
  // Keep an in-flight or opened project visible across state refreshes.
  const openingInProgress=gateBusy||!!gateError||workspaceOpened||(opening?.phase&&opening.phase!=='search');
- const required=config.required===true&&!openingInProgress;
+ // Always visit the first Start screen once per ATGV command, even when
+ // credentials were verified in a previous VS Code session.
+ const required=!startupWizardCompletedThisSession&&!openingInProgress;
  if(!startupFormInitialized){
   const saved=config.saved||{},defaults=config.defaults||{};
   updateHeaderUserName(saved.email||extensionSettings.jira?.email);
@@ -9484,6 +9512,7 @@ window.addEventListener('message',event=>{
  if(message.type==='startupProceedResult'&&startupProceedMode){
   startupProceedMode='';
   if(message.success){
+   startupWizardCompletedThisSession=true;
    startupReturnToConnections=false;showStartupStep(false);
    // Never choose or open a remembered project on behalf of the user.
    $('gateQuery').focus();
