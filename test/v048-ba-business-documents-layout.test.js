@@ -64,7 +64,7 @@ test('Document textarea has independent height, readable line spacing and unclip
  assert.match(rule('#discoveryView #baAutoArtifactStatus'),/overflow-wrap:anywhere/);
  assert.match(rule('#discoveryView #baAutoArtifactSave'),/min-height:38px;min-width:138px/);
  assert.match(html,/textarea id="baAutoArtifactText" rows="11"/);
- assert.match(html,/id="baAutoArtifactSave" disabled/);
+ assert.match(html,/id="baAutoArtifactSave"[^>]*aria-label="Save Document" disabled/);
  assert.match(js,/panel\.open=false;panel\.dataset\.lastPhase=phase/);
  // This change is styling only: approval and source repair handlers remain untouched.
  assert.match(js,/send\('downloadISO29148BRPDF',\{projectId:activeId\}\)/);
