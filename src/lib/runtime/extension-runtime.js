@@ -347,18 +347,15 @@ async function prepareVendorAssets({syncIfMissing=false}={}){
     // depend on previously bundled assets. Once cached, it can work offline.
     let activeRoot=active?.checkout||active?.root;
     const hasBundle=activeRoot&&fsSync.existsSync(path.join(activeRoot,...catalogVendorLibraries.MANIFEST.split('/')));
-    if(syncIfMissing&&!installedVendorAssets&&!hasBundle&&!active?.offline&&catalogConfig().repositoryUrl){
+    if(syncIfMissing&&!installedVendorAssets&&!hasBundle&&catalogConfig().repositoryUrl){
       const config=catalogConfig(),token=await catalogToken(config,{interactive:false});
       await sdlcCatalog.syncGitWorkspace(config,token,workspace,storageRoot);
       active=await sdlcCatalog.activeRoot(workspace);
       activeRoot=active?.checkout||active?.root;
     }
-    // Imported ZIP scripts may run in a webview only when EVERY file matches
-    // the trusted, extension-pinned vendor manifest and SHA-256 checksums.
+    // Only the Git commit pinned webview assets may be installed.
     if(active){
-      const result=active.offline
-        ? await catalogVendorLibraries.installOffline({catalogRoot:activeRoot,storageRoot,archiveHash:active.archiveHash})
-        : await catalogVendorLibraries.install({catalogRoot:activeRoot,storageRoot,commit:active.sha});
+      const result=await catalogVendorLibraries.install({catalogRoot:activeRoot,storageRoot,commit:active.sha});
       installedVendorAssets=result;vendorLibraryLastError='';
     }
   }catch(error){vendorLibraryLastError=error.message;report('Verified webview library download deferred: '+error.message);}
@@ -1648,7 +1645,7 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
   enteredGithub?Promise.resolve(enteredGithub):readToken(globalSecretKey('github'),gitIdentity).catch(()=>undefined)
  ]);
  const gitHeaders={Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'};
- const libraryConf=sdlcCatalog.normalizeConfig({repositoryUrl:data.libraryRepoUrl,ref:'main',authentication:'token',autoCheck:true,offlineCache:true});
+ const libraryConf=sdlcCatalog.normalizeConfig({repositoryUrl:data.libraryRepoUrl,ref:'main',authentication:'token',autoCheck:true});
  let library,offlineFallback=null;
  const jiraApi=data.jiraUrl+'/rest/api/3/myself';
  const confluenceApi=data.confluenceUrl+'/api/v2/spaces';
@@ -5685,7 +5682,7 @@ async function startupStackCatalog(){
    const active=await sdlcCatalog.activeRoot(workspace);
    if(configured&&active.repository&&String(active.repository).toLowerCase()!==(configured.owner+'/'+configured.repo).toLowerCase())throw Error('Active library belongs to a different configured repository.');
    const stacks=await listStacks(workspace);
-   if(stacks.length)return {source:active.offline?'Imported SDLC Library':'Active SDLC Library',version:active.version||'',stacks};
+   if(stacks.length)return {source:'Active GitHub SDLC Library',version:active.version||'',stacks};
   }catch(error){report('Startup catalog inventory: '+String(error.message||error).slice(0,240));}
  }
  if(!config.repositoryUrl)throw Error('Connect the SDLC Library, then return here and refresh.');
@@ -8829,9 +8826,7 @@ async function handleDashboardMessage(msg){
           const selected=await sdlcCatalog.activeRoot(workspace);
           let libraryNotice='', activateEditorAssets=false;
           try{
-            const installed=selected.offline
-              ? await catalogVendorLibraries.installOffline({catalogRoot:selected.root,storageRoot:context.globalStorageUri.fsPath,archiveHash:selected.archiveHash})
-              : await catalogVendorLibraries.install({catalogRoot:selected.checkout||selected.root,storageRoot:context.globalStorageUri.fsPath,commit:selected.sha});
+            const installed=await catalogVendorLibraries.install({catalogRoot:selected.checkout||selected.root,storageRoot:context.globalStorageUri.fsPath,commit:selected.sha});
             const changed=webviewVendorDir!==installed.dir||!vendorWebviewReady;
             installedVendorAssets=installed;
             if(changed){activateEditorAssets=true;libraryNotice=' Verified UI libraries installed. Reloading editor.';}vendorLibraryLastError='';
@@ -8851,9 +8846,7 @@ async function handleDashboardMessage(msg){
             const available=await sdlcCatalog.designFrameworkAvailability(workspace);
             await dashboard?.webview.postMessage({type:'uxFrameworkCatalogChanged',projectId:activeProject.id,...available});
           }
-          const syncMessage=selected.offline
-            ? 'Kept newer offline ZIP v'+selected.version+'; GitHub main v'+snapshot.version+' is older.'
-            : (updated?'Catalog updated to ':'Catalog already current: ')+snapshot.version+' ('+snapshot.sha.slice(0,12)+').';
+          const syncMessage=(updated?'Catalog updated to ':'Catalog already current: ')+snapshot.version+' ('+snapshot.sha.slice(0,12)+').';
           await dashboard?.webview.postMessage({type:'librarySyncResult',success:true,clearSelection,message:syncMessage+' Library refreshed; local overrides preserved.'+libraryNotice});
           if(activateEditorAssets&&dashboard){vendorBootRecoveryCount=0;vendorWebviewReady=false;
             // Rebuild the existing webview only AFTER the local cache is verified.
