@@ -5522,6 +5522,16 @@ function renderJiraIssueDetails(entry,readOnly=false,{automatic=false}={}){
  addValue('Summary',entry.title);addValue('Action',String(entry.action||'').toUpperCase());addValue('Jira project',jiraPreviewProject||'Not verified');
  addValue('Jira issue type',jiraPreviewIssueTypes[entry.path]||'Not verified');
  addValue('ATGV issue type and path',(entry.kind||'Issue')+' · '+entry.path);
+ const roleChoices=[['','Select responsible SDLC role'],['business-analyst','Business Analyst'],['solution-architect','Solution Architect'],['ux-designer','UI/UX Designer'],['software-developer','Developer'],['project-manager','Project Manager'],['qa-engineer','QA Engineer'],['uat-tester','UAT Tester'],['security-engineer','Security Engineer'],['data-engineer','Data Engineer / DBA'],['technical-writer','Technical Writer'],['release-manager','Release / DevOps'],['product-owner','Product Owner'],['scrum-master','Scrum Master'],['operations-support','Operations / Support'],['technical-lead','Technical Lead'],['business-owner','Business Owner'],['ai-ml-engineer','AI/ML Engineer'],['compliance-officer','Compliance Officer']];
+ const roleSelected=entry.staleJiraDetails?.roleId||entry.jiraDetails?.roleId||entry.roleId||'';
+ addValue('Responsible SDLC role',roleChoices.find(item=>item[0]===roleSelected)?.[1]||'Not assigned');
+ let roleSelect=null;
+ if(!readOnly&&entry.action!=='retire'){
+  const roleControl=document.createElement('label');roleControl.textContent='Responsible SDLC role (role label; Jira assignee is managed separately)';
+  roleSelect=document.createElement('select');roleSelect.setAttribute('aria-label','Responsible SDLC role');
+  for(const [id,name] of roleChoices){const option=document.createElement('option');option.value=id;option.textContent=name;roleSelect.append(option);}
+  roleSelect.value=roleSelected;roleControl.append(roleSelect);root.append(roleControl);
+ }
  const parentKey=entry.parent?brState?.synced?.[entry.parent]?.key:'';
  addValue('Parent',entry.parent?(entry.parent+(parentKey?' · '+parentKey:' · key assigned during publication')):'None');addValue('Existing Jira key',entry.key||'Not created yet');
  if(entry.action!=='retire'){
@@ -5557,7 +5567,7 @@ function renderJiraIssueDetails(entry,readOnly=false,{automatic=false}={}){
  if(!readOnly){const save=document.createElement('button');save.type='button';save.textContent='Save Jira details & refresh preview';save.addEventListener('click',()=>{
    if(!brPlanRevision||baBusyTask)return;
    baBusy('jiraDetails','Saving Jira details and refreshing the preview…');
-   const draft={revision:brPlanRevision,path:entry.path,hash:entry.hash,acceptanceCriteria:inputs.acceptanceCriteria.value,definitionOfDone:inputs.definitionOfDone.value};
+   const draft={revision:brPlanRevision,path:entry.path,hash:entry.hash,acceptanceCriteria:inputs.acceptanceCriteria.value,definitionOfDone:inputs.definitionOfDone.value,roleId:roleSelect?.value||''};
    if(fieldPlan){
     for(const field of ['summary','description'])if(inputs[field]?.value!==originalText[field])draft[field]=inputs[field].value;
     draft.fieldValues=changedJiraFieldInputs(fieldInputs);
@@ -5571,11 +5581,11 @@ function renderJiraIssueDetails(entry,readOnly=false,{automatic=false}={}){
   const title=document.createElement('h3');title.textContent='All available Jira fields ('+(fieldPlan.fields||[]).length+')';section.append(title);
   const explanation=document.createElement('p');explanation.className='muted';explanation.textContent='Values come from the approved BR, Jira defaults, or an existing issue. Choose valid Jira values for fields that need input.';section.append(explanation);
   const totals=fieldPlan.autofillSummary;
-  if(totals){const summary=document.createElement('p');summary.className='muted';summary.textContent='Auto-filled: '+totals.mapped+' · Text placeholders: '+totals.textPlaceholders+' · Existing Jira values: '+totals.preserved+' · Jira defaults: '+totals.jiraDefaults+' · Preview-only / needs valid Jira value: '+totals.previewOnly;section.append(summary);}
+  if(totals){const summary=document.createElement('p');summary.className='muted';summary.textContent='Evidence-mapped: '+totals.mapped+' · Missing evidence: '+(totals.missingEvidence||0)+' · Preserved: '+totals.preserved+' · Jira defaults: '+totals.jiraDefaults+' · Needs valid Jira value: '+totals.previewOnly;section.append(summary);}
   for(const field of fieldPlan.fields||[]){
    const row=document.createElement('div');row.className='jira-preview-field';
    const caption=document.createElement('strong');caption.textContent=field.name+(field.required?' · Required':'');
-   const value=document.createElement('div');value.className='jira-preview-detail-value';value.textContent=field.display||'Information not available in the approved Business Requirements document.';
+   const value=document.createElement('div');value.className='jira-preview-detail-value';value.textContent=field.display||'Not available in approved project evidence';
    const status=document.createElement('small');status.textContent='Field ID: '+field.id+' · Type: '+field.type+' · '+field.status+' · Source: '+field.source;
    row.append(caption,value,status);
    if(!readOnly&&entry.action!=='retire'&&field.editor&&!field.detailText){

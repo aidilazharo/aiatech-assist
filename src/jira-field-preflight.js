@@ -24,7 +24,7 @@ function namedEvidence(field,item,{approvedBR={},discoveryAnswers={}}){
 function availableText(field,item,details,{approvedBR={},discoveryAnswers={}}={}){
  const key=normalize(field.name);
  const section=jiraDetails.fieldSection(field.name);
- if(section)return {text:details[section],source:'Issue-specific '+(section==='acceptanceCriteria'?'acceptance criteria':'Definition of Done')};
+ if(section&&details[section])return {text:details[section],source:'Issue-specific '+(section==='acceptanceCriteria'?'acceptance criteria':'Definition of Done')};
  const exact=namedEvidence(field,item,{approvedBR,discoveryAnswers});
  if(exact)return {text:exact,source:'Named field in approved BR evidence'};
  const mappings=[
@@ -64,7 +64,7 @@ function planFields(item, metadata, context={}){
   seen.add(id);
   const type=String(raw?.schema?.type||'unknown');
   const required=raw.required===true,hasDefault=raw.hasDefaultValue===true;
-  const old=existing[id],hasOld=has(old),editable=fieldValues.isEditable(raw);
+  const old=existing[id],hasOld=has(old)&&valueText(raw,old)!==MISSING,editable=fieldValues.isEditable(raw);
   const section=jiraDetails.fieldSection(name);
   const detailText=section&&type==='string'&&!raw.allowedValues?.length;
   let display=MISSING,source='Missing Jira value',status='not-available',value;
@@ -101,11 +101,9 @@ function planFields(item, metadata, context={}){
      }else source=mapped.source+' needs a compatible Jira value';
     }
    }
-   if(status==='not-available'&&!hasOld&&!hasDefault&&type==='string'&&!raw.allowedValues?.length&&source==='Missing Jira value'){
-    status='placeholder';
-    source='Missing BR evidence';
-    value=fieldValues.encode(raw,MISSING);
-    display=MISSING;
+   if(status==='not-available'&&!hasOld&&!hasDefault&&source==='Missing Jira value'){
+    status='missing-evidence';
+    source='Missing approved BR evidence';
    }
   }
 
@@ -114,11 +112,11 @@ function planFields(item, metadata, context={}){
   }else if(status==='not-available'&&hasDefault){
    display=valueText(raw,raw.defaultValue)||'Jira default';source='Jira';status='default';
   }
-  if(required&&status==='not-available')blocking.push(name+' ('+id+') requires a valid Jira value that the approved BR does not provide.');
+  if(required&&['not-available','missing-evidence'].includes(status))blocking.push(name+' ('+id+') requires real approved Jira evidence; a placeholder cannot be published.');
   if(value!==undefined&&!fieldValues.sameValue(raw,old,value))extraFields[id]=value;
   const editor=fieldValues.editorField(raw,value!==undefined?value:hasOld?old:raw.defaultValue);
   fields.push({id,name,type,required,status,source,display:String(display||'').slice(0,800),editor,detailText,
-   publishable:['planned','placeholder','preserved','default'].includes(status)});
+   publishable:['planned','preserved','default'].includes(status)});
  }
 
  for(const id of Object.keys(overrides)){
@@ -140,7 +138,7 @@ function planFields(item, metadata, context={}){
 
  return {fields,extraFields,blocking,details,description,updateCore,baseDescription:jiraDetails.baseDescription(item),schema:fieldValues.schemaFingerprint(metadata),
   autofillSummary:{total:fields.length,mapped:fields.filter(field=>field.status==='planned').length,
-   textPlaceholders:fields.filter(field=>field.status==='placeholder').length,
+   textPlaceholders:0,missingEvidence:fields.filter(field=>field.status==='missing-evidence').length,
    previewOnly:fields.filter(field=>!field.publishable).length,
    preserved:fields.filter(field=>field.status==='preserved').length,
    jiraDefaults:fields.filter(field=>field.status==='default').length,blocking:blocking.length}};

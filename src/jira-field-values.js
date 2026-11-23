@@ -124,6 +124,8 @@ function encode(field,input){
  const list=isArray(field);
  if(typeof input!=='string'&&!(list&&Array.isArray(input)&&input.every(value=>typeof value==='string')))throw Error('Invalid Jira field input.');
  const raw=list?(Array.isArray(input)?input:input.split(/\r?\n/)).map(value=>value.trim()).filter(Boolean):input.trim();
+ if((list?raw:[raw]).some(v=>v==='Information not available in the approved Business Requirements document.'))
+  throw Error('Replace the missing-information placeholder with actual approved evidence.');
  if(list?!raw.length:!raw){
   if(field.required)throw Error('This Jira field is required.');
   return list?[]:null;

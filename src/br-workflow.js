@@ -1431,8 +1431,9 @@ async function keep(registry,id,revision,{brId}){
  });
 }
 function jiraTaskRole(node){
- const id=typeof node.roleId==='string'&&node.roleId;
- return id&&Object.hasOwn(jiraWorkRoles,id)?{roleId:id}:{};
+ const {resolveRole,roleLabel}=require('./jira-role-routing');
+ const id=resolveRole({...node,kind:'Task'});
+ return id?{roleId:id,roleLabel:roleLabel(id)}:{};
 }
 function generatedJiraChecks(node){
  const checks=jiraPreviewDetails.issueChecks(node);
@@ -1500,8 +1501,8 @@ function plan(reg){
  obsolete.sort((a,b)=>b.path.split('/').length-a.path.split('/').length);
  return [...changes,...obsolete];
 }
-async function saveJiraIssueDetails(registry,id,revision,{path:issuePath,hash,acceptanceCriteria,definitionOfDone,summary,description,fieldValues,automatic=false,actor='Business Analyst'}={}){
- const details=jiraPreviewDetails.normalizeDetails({acceptanceCriteria,definitionOfDone,summary,description,fieldValues});
+async function saveJiraIssueDetails(registry,id,revision,{path:issuePath,hash,acceptanceCriteria,definitionOfDone,summary,description,fieldValues,roleId,automatic=false,actor='Business Analyst'}={}){
+ const details=jiraPreviewDetails.normalizeDetails({acceptanceCriteria,definitionOfDone,summary,description,fieldValues,roleId});
  return write(registry,id,revision,next=>{
   const state=automatic?projectPreparedJira(next):next;
   const item=plan(state).find(row=>row.path===issuePath&&row.action!=='retire');
@@ -1509,7 +1510,7 @@ async function saveJiraIssueDetails(registry,id,revision,{path:issuePath,hash,ac
   const br=state.brs.find(row=>row.id===item.path.split('/')[0]);
   if(!br||br.status!=='approved'||!br.approvedContent)throw Error('An approved Business Requirement is required.');
   if(!next.jiraIssueDetails||typeof next.jiraIssueDetails!=='object'||Array.isArray(next.jiraIssueDetails))next.jiraIssueDetails={};
-  if(details.acceptanceCriteria||details.definitionOfDone||details.summary!==undefined||details.description!==undefined||details.fieldValues)next.jiraIssueDetails[item.path]={...details,approvedHash:digest(br.approvedContent)};
+  if(details.acceptanceCriteria||details.definitionOfDone||details.summary!==undefined||details.description!==undefined||details.fieldValues||details.roleId)next.jiraIssueDetails[item.path]={...details,approvedHash:digest(br.approvedContent)};
   else delete next.jiraIssueDetails[item.path];
   event(next,'jira-preview-details-saved',{path:item.path,actor:String(actor).slice(0,120)});
  });

@@ -9,14 +9,21 @@ const ROLES=Object.freeze({
  'uiux':{role:'UI/UX Designer',label:'atgv-role-ux-designer',title:'UI/UX Design'},
  'developer':{role:'Developer',label:'atgv-role-software-developer',title:'Development'},
  'qa':{role:'QA Engineer',label:'atgv-role-qa-engineer',title:'QA Verification'},
- 'uat':{role:'UAT Tester',label:'atgv-role-uat-tester',title:'User Acceptance Testing'}
+ 'uat':{role:'UAT Tester',label:'atgv-role-uat-tester',title:'User Acceptance Testing'},
+ 'pm':{role:'Project Manager',label:'atgv-role-project-manager',title:'Project Coordination'},
+ 'sa':{role:'Solution Architect',label:'atgv-role-solution-architect',title:'Architecture Review'},
+ 'ba':{role:'Business Analyst',label:'atgv-role-business-analyst',title:'Requirements Analysis'}
 });
 function isVisual(text){return /\b(dashboard|user interface|ui\/ux|screen|page|wireframe|mockup|form|navigation|frontend|front.end|responsive|modal|button|visual|web app|user journey|table view|user portal|mobile app|search filter)\b/i.test(text);}
 function isTechnical(text){return /\b(api|database|sql|backend|service|infrastructure|server|migration|integration|endpoint|batch|pipeline|algorithm|data processing|security policy)\b/i.test(text);}
 function applicable(story,feature){
  const text=[story.title,story.description].join(' ').trim()||[feature.title,feature.description].join(' ');
  const uiux=isVisual(text),technical=isTechnical(text);
- return ['developer','qa',...(uiux?['uiux']:[]),...(uiux||!technical?['uat']:[])].sort((a,b)=>['uiux','developer','qa','uat'].indexOf(a)-['uiux','developer','qa','uat'].indexOf(b));
+ const pm=/\b(project plan|project schedule|milestone|raid log|risk register|steering committee|project management|delivery coordination)\b/i.test(text);
+ const sa=/\b(solution architecture|architecture review|technical architecture|system design|architecture decision)\b/i.test(text);
+ const ba=/\b(requirements analysis|business analysis|brd review|requirements discovery)\b/i.test(text);
+ const roles=['developer','qa',...(uiux?['uiux']:[]),...(uiux||!technical?['uat']:[]),...(pm?['pm']:[]),...(sa?['sa']:[]),...(ba?['ba']:[])];
+ return roles.sort((a,b)=>['ba','sa','uiux','developer','qa','uat','pm'].indexOf(a)-['ba','sa','uiux','developer','qa','uat','pm'].indexOf(b));
 }
 function approvedBR(register,brId){
  const br=(register.brs||[]).find(x=>x.id===brId&&x.approvedContent&&x.status==='approved');

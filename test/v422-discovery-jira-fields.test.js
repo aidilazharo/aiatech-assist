@@ -19,7 +19,7 @@ test('large discovery merges keep the screenshot 5,569-character business rules 
  assert.equal(merged.businessRules,'A'.repeat(3000)+'\n\n'+'B'.repeat(2567));
  assert.equal(importer.MAX_SECTION_ANSWER_LENGTH,5000);
 });
-test('Jira metadata maps known BR fields and uses safe placeholder for unsupported text',()=>{
+test('Jira metadata maps known BR fields without inventing missing evidence',()=>{
  const meta=[
   {id:'summary',name:'Summary',required:true,schema:{type:'string'}},
   {id:'customfield_10011',name:'Epic Name',required:true,schema:{type:'string'}},
@@ -29,12 +29,14 @@ test('Jira metadata maps known BR fields and uses safe placeholder for unsupport
   {id:'customfield_10104',name:'Risk Score',required:true,schema:{type:'number'}},
   {id:'assignee',name:'Assignee',required:false,schema:{type:'user'}}
  ];
- const item={title:'Create visitor',description:'Visitor workflow',jiraDetails:{definitionOfDone:'Tests pass'}};
+ const item={kind:'Story',title:'Create visitor',description:'Visitor workflow',issueChecks:{acceptanceCriteria:'Visitor confirmed'},jiraDetails:{definitionOfDone:'Tests pass'}};
  const plan=planFields(item,meta,{approvedBR:{acceptanceCriteria:'Visitor confirmed'}});
  assert.equal(plan.extraFields.customfield_10011,'Create visitor');
  assert.equal(plan.extraFields.customfield_10101,'Visitor confirmed');
  assert.match(JSON.stringify(plan.extraFields.customfield_10102),/Tests pass/);
- assert.equal(plan.extraFields.customfield_10103,MISSING);
+ assert.equal(plan.extraFields.customfield_10103,undefined);
+ assert.equal(plan.fields.find(x=>x.id==='customfield_10103').status,'missing-evidence');
+ assert.equal(plan.autofillSummary.textPlaceholders,0);
  assert.equal(plan.extraFields.customfield_10104,undefined);
  assert.equal(plan.fields.find(x=>x.id==='customfield_10104').display,MISSING);
  assert.equal(plan.blocking.length,1);
@@ -61,7 +63,7 @@ test('Jira edits retain existing unsupported values rather than overwrite',()=>{
  assert.deepEqual(plan.blocking,[]);
 });
 test('Jira API writer allows text/ADF custom fields but forbids unrelated writes',()=>{
- assert.deepEqual(safeExtraFields({customfield_12001:MISSING}),{customfield_12001:MISSING});
+ assert.throws(()=>safeExtraFields({customfield_12001:MISSING}),/missing-information placeholder/i);
  assert.throws(()=>safeExtraFields({status:'Done'}),/Unsafe Jira field ID/);
  assert.throws(()=>safeExtraFields({customfield_12001:100}),/Unsupported Jira field value/);
 });
@@ -89,9 +91,9 @@ test('Jira create and update payloads include only validated custom fields',asyn
    requests.push({uri:String(uri),data:JSON.parse(opt.body)});
    return {ok:true,status:201,json:async()=>({key:'TC-57'})};
   };
-  await jiraCreateIssue(config,'token',{summary:'New',description:'Approved',issueType:'Story',issueTypes:[{id:'10001',name:'Story',subtask:false}],extraFields:{customfield_10103:MISSING}});
+  await jiraCreateIssue(config,'token',{summary:'New',description:'Approved',issueType:'Story',issueTypes:[{id:'10001',name:'Story',subtask:false}],extraFields:{customfield_10103:'Reviewed by BA'}});
   await jiraUpdateIssue(config,'token',{key:'TC-57',summary:'Updated',extraFields:{customfield_10103:'Accepted'}});
-  assert.equal(requests[0].data.fields.customfield_10103,MISSING);
+  assert.equal(requests[0].data.fields.customfield_10103,'Reviewed by BA');
   assert.equal(requests[1].data.fields.customfield_10103,'Accepted');
  }finally{global.fetch=old;}
 });

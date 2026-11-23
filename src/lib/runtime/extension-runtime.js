@@ -4384,6 +4384,7 @@ async function prepareBRJiraPreview({automatic=false,signal,qualityBlocker=''}={
     const template=await jiraTemplateKnowledge.load(path.dirname(registry.fileFor(projectId)));
     for(const item of changes.filter(entry=>entry.action!=='retire')){
      assertCurrent();
+     if(item.kind==='Task'&&!item.roleLabel)conflicts.push(item.path+': Select a responsible SDLC role in Edit Jira item before approving this preview.');
      try{
       const type=previewTypes.find(value=>value.name===issueTypes[item.path]);
       const identifier=item.action==='create'?{issueTypeId:type?.id}:{key:item.key};
@@ -4392,6 +4393,13 @@ async function prepareBRJiraPreview({automatic=false,signal,qualityBlocker=''}={
       if(!metaCache.has(cacheKey))metaCache.set(cacheKey,jiraIssueFieldMetadata(target.config,target.token,identifier));
       const metadata=await metaCache.get(cacheKey);
       const existing=item.action==='update'?await jiraReadIssueAllFields(target.config,target.token,item.key):null;
+      if(existing&&item.roleLabel){
+       const remoteRoles=(existing.fields?.labels||[]).filter(label=>typeof label==='string'&&label.startsWith('atgv-role-'));
+       if(remoteRoles.length&&!remoteRoles.includes(item.roleLabel))
+        conflicts.push(item.path+': Jira role changed remotely; reconcile its current role and assignee first.');
+       if(!remoteRoles.length&&existing.fields?.assignee?.accountId)
+        conflicts.push(item.path+': the existing Jira assignee has no verified SDLC role; review assignment before adding '+item.roleLabel+'.');
+      }
       const approvedBR=register.brs.find(br=>br.id===item.path.split('/')[0])?.approvedContent||{};
       const fieldPlan=jiraFieldPreflight.planFields(item,metadata,{approvedBR,discoveryAnswers:register.discoveryAnswers||{},existing,template});
       const selected=Object.keys(fieldPlan.extraFields);
@@ -4524,8 +4532,12 @@ async function syncApprovedBRs(expectedRevision,automatic=null){
    }else if(item.action==='update'){
     const current=await jiraReadIssue(config,token,key);
     if(!previous?.remoteDigest||remoteFingerprint(current)!==previous.remoteDigest)throw Error('Jira content conflict: '+key);
-    if(Object.keys(fieldPlan.updateCore).length||Object.keys(fieldPlan.extraFields).length)
-     await jiraUpdateIssue(config,token,{key,...fieldPlan.updateCore,extraFields:fieldPlan.extraFields,fieldMetadata:actualMeta});
+    const currentRoles=(current.fields?.labels||[]).filter(label=>typeof label==='string'&&label.startsWith('atgv-role-'));
+    if(item.roleLabel&&currentRoles.length&&!currentRoles.includes(item.roleLabel))throw Error('Jira role conflict: '+key+'. Reconcile the existing role before updating.');
+    if(item.roleLabel&&!currentRoles.length&&current.fields?.assignee?.accountId)throw Error('Jira assigned issue has no verified role: '+key+'. Review its assignee first.');
+    const newRoleLabel=item.roleLabel&&!currentRoles.includes(item.roleLabel)?item.roleLabel:undefined;
+    if(Object.keys(fieldPlan.updateCore).length||Object.keys(fieldPlan.extraFields).length||newRoleLabel)
+     await jiraUpdateIssue(config,token,{key,...fieldPlan.updateCore,extraFields:fieldPlan.extraFields,fieldMetadata:actualMeta,roleLabel:newRoleLabel});
    }else if(item.action==='retire'){
     const current=await jiraReadIssue(config,token,key);
     if(!previous?.remoteDigest||remoteFingerprint(current)!==previous.remoteDigest)throw Error('Jira retirement blocked: missing trusted baseline or external changes on '+key);
@@ -10150,7 +10162,7 @@ async function handleDashboardMessage(msg){
           path:item.path,hash:item.hash,
           acceptanceCriteria:msg.acceptanceCriteria===reference.acceptanceCriteria?saved.acceptanceCriteria:msg.acceptanceCriteria,
           definitionOfDone:msg.definitionOfDone===reference.definitionOfDone?saved.definitionOfDone:msg.definitionOfDone,
-          summary:msg.summary??saved.summary,description:msg.description??saved.description,fieldValues,automatic,actor:owner.actor
+          summary:msg.summary??saved.summary,description:msg.description??saved.description,fieldValues,roleId:msg.roleId??saved.roleId,automatic,actor:owner.actor
         });
         approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;jiraPreviewValidation=null;
         await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
