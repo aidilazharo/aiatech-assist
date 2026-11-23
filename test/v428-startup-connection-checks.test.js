@@ -205,7 +205,7 @@ test('GitHub read-only PAT is sufficient to save all required connections',async
   assert.match(row.message,/read verified/i);
   assert.match(row.message,/write access is optional/i);
  }
- assert.ok(!h.events.includes('releases'),'source checks do not query release assets');
+ assert.equal(h.events.filter(event=>event==='releases').length,2,'only the two optional release mirror checks should request releases');
 });
 test('Repository read denial remains a blocking error',async()=>{
  const h=hostFixture({readDenied:true});
