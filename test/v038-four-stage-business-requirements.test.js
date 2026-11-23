@@ -80,7 +80,7 @@ test('a source-supported draft is previewable without recording approval until t
  const fields=checks.planFields(plan[0],[{id:'customfield_10011',name:'Acceptance Criteria',schema:{type:'string',custom:'textarea'},operations:['set']}],
   {approvedBR:candidate.brs[0].approvedContent});
  assert.ok(fields.extraFields.customfield_10011);
- assert.match(fields.description,/Definition of done/);
+ assert.doesNotMatch(fields.description,/Definition of done/,'DoD cannot be invented without an approved project policy');
  const saved=await workflow.approvePreparedJira(registry,'demo',draft.revision,{
   actor:'verified BA',publication:{roots:[],rows:[]},expectedPlan:sha(JSON.stringify(plan))
  });
