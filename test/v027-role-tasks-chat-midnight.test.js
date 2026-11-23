@@ -77,15 +77,15 @@ test('yesterday slow reply cannot be stored in new-day history',async()=>{
  assert.doesNotMatch(prompt,/Sensitive yesterday question/);
  chat.clear(options.projectId,options.roleId);
 });
-test('daily task cards and midnight reset replace generic next-action dock',()=>{
+test('midnight chat reset remains while the redundant task cards and action buttons are removed',()=>{
  const html=read('src/lib/webview/dashboard-html.js'),wave=read('media/atgv-mywork-wave-chat.js');
  const main=read('media/start.js'),css=read('media/atgv-mywork-ai.css');
- assert.match(html,/id="atgvMyWorkTodayList"/);
+ assert.doesNotMatch(html,/id="atgvMyWorkTodayList"/);
  assert.doesNotMatch(html,/id="atgvMyWorkAiNextButton"/);
  assert.match(wave,/function scheduleLocalMidnight/);
  assert.match(wave,/function expireConversationAtMidnight/);
- assert.match(wave,/tasksList\.replaceChildren\(\)/);
- assert.match(wave,/button\.textContent='Go to task'/);
+ assert.match(wave,/transcript\.replaceChildren\(\)/);
+ assert.doesNotMatch(wave,/button\.textContent='Go to task'/);
  assert.match(main,/window\.addEventListener\('atgv:mywork-open-task'/);
  assert.match(css,/\.atgv-mywork-ai-task-card/);
 });

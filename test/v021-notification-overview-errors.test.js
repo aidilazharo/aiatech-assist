@@ -7,7 +7,7 @@ const root=path.resolve(__dirname,'..');
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');
 const ui=read('media/start.js'),css=read('media/atgv-mywork-ai.css'),html=read('src/lib/webview/dashboard-html.js');
 
-test('notification keeps the existing live My Work canvas above its own red border',()=>{
+test('notification keeps live My Work canvas in permanent header above the red credential strip',()=>{
  const first=ui.indexOf('function syncMyWorkHeaderWaveHost(){');
  const last=ui.indexOf('function showTopNotification(item){',first);
  assert.ok(first>=0&&last>first);
@@ -19,11 +19,11 @@ test('notification keeps the existing live My Work canvas above its own red bord
  const make=new Function('$','document','window','topNoticeCurrent',ui.slice(first,last)+'return syncMyWorkHeaderWaveHost;');
  const active={body:{classList:{contains:x=>x==='atgv-mywork-chat-mode'}}};
  make(id=>nodes[id],active,fakeWindow,{message:'warning'})();
- assert.equal(wave.parentElement,notice,'wave must be hosted by visible notification');
+ assert.equal(wave.parentElement,header,'wave must stay in the permanent application header');
  make(id=>nodes[id],active,fakeWindow,null)();
  assert.equal(wave.parentElement,header,'wave must return to original header on dismissal');
  assert.match(ui,/topNoticeCurrent=item;\s*syncMyWorkHeaderWaveHost\(\);/);
- assert.match(ui,/\$\('appHeader'\)\.classList\.remove\('hidden'\);\s*syncMyWorkHeaderWaveHost\(\);/);
+ assert.doesNotMatch(ui,/\$\('appHeader'\)\.classList\.add\('hidden'\)/);
  assert.match(css,/#topNotification #myWorkHeaderWave\.mywork-header-wave\{/);
  assert.match(css,/#topNotification #myWorkHeaderWave canvas#atgvMyWorkAiOrb\{/);
  assert.match(css,/body\.atgv-mywork-chat-mode:not\(\.gate-mode\) #topNotification\.top-notification,\s*body\.atgv-ba-ai-active:not\(\.gate-mode\) #topNotification\.top-notification,\s*body\.atgv-global-ai-active:not\(\.gate-mode\) #topNotification\.top-notification\{/);

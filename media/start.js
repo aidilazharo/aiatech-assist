@@ -398,7 +398,9 @@ function syncMyWorkHeaderWaveHost(){
  const aiVisible=document.body.classList.contains('atgv-mywork-chat-mode')||
   document.body.classList.contains('atgv-ba-ai-active')||
   document.body.classList.contains('atgv-global-ai-active');
- const host=topNoticeCurrent&&aiVisible?notice:header;
+ // The permission strip must remain directly beneath the permanent app header.
+ // Transient notifications occupy their own row below it, not the header slot.
+ const host=header;
  if(wave.parentElement!==host)host.appendChild(wave);
 }
 if(typeof window!=='undefined'){
@@ -418,7 +420,8 @@ function showTopNotification(item){
  const button=$('topNotificationAction');
  button.classList.toggle('hidden',!item.route);
  button.textContent=item.route?.label||'';
- $('appHeader').classList.add('hidden');
+ // Never replace/hide the app header: doing so makes the permanent
+ // credential reminder jump up and down whenever notifications rotate.
  clearTimeout(topNoticeTimer);
  // Process questions and actionable BA instructions stay visible until explicitly dismissed or acted upon.
  if(!item.consentRequestId&&!item.persistent)topNoticeTimer=setTimeout(closeTopNotification,item.error?20000:11000);
@@ -430,11 +433,15 @@ function closeTopNotification(){
  const next=topNoticeQueue.shift();
  if(next){showTopNotification(next);return;}
  $('topNotification').classList.add('hidden');
- $('appHeader').classList.remove('hidden');
  syncMyWorkHeaderWaveHost();
 }
 function notifyTop(message,{error=false,success=false,route=null,persistent=false}={}){
  const content=String(message||'').trim();if(!content)return;
+ // Obsolete connection notices must not appear as yellow transient banners.
+ // The role-aware red reminder is the single authority for these messages.
+ if(typeof workspaceOpened!=='undefined'&&workspaceOpened&&/update permissions in settings|required permissions not verified/i.test(content)){
+  renderRoleCredentialBanner();return;
+ }
  const now=Date.now(),key=content+'|'+error;
  if(key===topNoticeLastKey&&now-topNoticeLastAt<7000)return;
  topNoticeLastAt=now;topNoticeLastKey=key;

@@ -12,7 +12,8 @@
  const primary=get('baAutoPrimaryAction'),overflow=get('baAutoOverflowMenu');
  const sourcePanel=root.querySelector('.source-documents-panel');
  const skill=get('workSkill');
- get('baAutoOriginalFiles').append(sourcePanel);
+ // Source upload must remain usable even while all five result panels are hidden.
+ get('baAutoSourceEntry').append(sourcePanel);
  get('baAutoDiscoveryForm').append(get('discoveryForm'));
  get('baAutoHistoryContent').append(get('baStartPanel'));
  get('baAutoFeedback').append(get('baInlineStatus'),get('brDeletionProgress'),get('baMilestoneError'));
@@ -263,6 +264,36 @@
   ],{label:'Business Requirements Jira work items',pageSize:5,preserveOrder:hierarchy});
  }
 
+
+ // Hide each of the five result sections until the corresponding content exists.
+ // Keep task forms outside these result sections while work is incomplete.
+ function setReadyPanel(id,isReady){
+  const panel=get(id),wasHidden=panel.hidden;
+  panel.hidden=!isReady;
+  if(!isReady||wasHidden)panel.open=false;
+ }
+ function renderReadyPanels(phase){
+  const sourceReady=!!source()?.digest;
+  const discoveryReady=!!brState?.discoveryRevision&&!!brState?.mappingCompleted&&!discoveryDirty;
+  const requirementsReady=requirements().length>0&&phase!=='running'&&!brState?.baDraftQuality?.excluded?.length;
+  const jiraReady=rowsForTable().length>0&&phase!=='running';
+  const completedReady=phase==='published'||(brState?.brs||[]).some(br=>
+   br.archivedFromRestart===true||['approved','published','completed'].includes(String(br.status||'').toLowerCase()))||
+   Object.values(brState?.synced||{}).some(link=>!!link?.key);
+  const uploadTarget=sourceReady?get('baAutoOriginalFiles'):get('baAutoSourceEntry');
+  if(sourcePanel.parentElement!==uploadTarget)uploadTarget.append(sourcePanel);
+  get('baAutoSourceEntry').hidden=sourceReady;
+  const discoveryTarget=discoveryReady?get('baAutoDiscoveryForm'):get('baAutoDiscoveryEntry');
+  const discoveryForm=get('discoveryForm');
+  if(discoveryForm.parentElement!==discoveryTarget)discoveryTarget.append(discoveryForm);
+  get('baAutoDiscoveryEntry').hidden=!sourceReady||discoveryReady;
+  setReadyPanel('baAutoSource',sourceReady);
+  setReadyPanel('baAutoDiscovery',discoveryReady);
+  setReadyPanel('baAutoRequirements',requirementsReady);
+  setReadyPanel('baAutoJira',jiraReady);
+  setReadyPanel('baAutoHistory',completedReady);
+ }
+
  function render(){
   placeSkill();
   const showingBusinessRequirements=selectedRole==='business-analyst'&&['baOverview','discovery'].includes(view);
@@ -328,6 +359,7 @@
   get('baStartPanel').classList.remove('hidden');
   get('baCompletedSection').classList.remove('hidden');
   sourcePanel.classList.remove('hidden');
+  renderReadyPanels(phase);
   renderArtifacts();renderRequirements();renderJira();
  }
 
@@ -443,6 +475,12 @@
    jiraPreview:'baAutoJira',jiraApprove:'baAutoJira',publish:'baAutoJira'};
   const target=get(sections[key]);
   if(!target)return false;
+  if(target.hidden){
+   const entry=key==='upload'?get('baAutoSourceEntry'):
+    ['mapping','review'].includes(key)?get('baAutoDiscoveryEntry'):null;
+   if(!entry||entry.hidden)return false;
+   entry.scrollIntoView({block:'nearest'});return true;
+  }
   target.open=true;target.scrollIntoView({block:'nearest'});return true;
  }
  window.ATGVBusinessRequirements={render,active,busy,placeSkill,dirty,openStage,stageSummary,syncDocumentActions};

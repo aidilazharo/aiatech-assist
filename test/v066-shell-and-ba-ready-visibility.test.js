@@ -1,0 +1,61 @@
+'use strict';
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const root=path.resolve(__dirname,'..');
+const read=file=>fs.readFileSync(path.join(root,file),'utf8');
+
+test('permanent connection banner is red and never replaced by transient notifications',()=>{
+ const html=read('src/lib/webview/dashboard-html.js');
+ const css=read('media/start.css');
+ const js=read('media/start.js');
+ assert.ok(html.indexOf('id="appHeader"')<html.indexOf('id="roleCredentialBanner"'));
+ assert.ok(html.indexOf('id="roleCredentialBanner"')<html.indexOf('id="topNotification"'));
+ assert.match(css,/body:not\(\.gate-mode\) #roleCredentialBanner\.atgv-role-credential-banner\{[^}]*border-bottom:3px solid #ff3647!important/);
+ assert.match(css,/body:not\(\.gate-mode\) #topNotification\.top-notification\{[^}]*order:2/);
+ assert.match(css,/body:not\(\.gate-mode\) #appHeader\.app-header\{[^}]*order:0/);
+ assert.match(css,/body:not\(\.gate-mode\) #roleCredentialBanner\.atgv-role-credential-banner\{[^}]*order:1/);
+ const show=js.slice(js.indexOf('function showTopNotification(item){'),js.indexOf('function closeTopNotification(){'));
+ assert.doesNotMatch(show,/\$\('appHeader'\)\.classList\.add\('hidden'\)/);
+ assert.match(show,/target\.classList\.remove/);
+ assert.match(js,/const host=header;/);
+});
+test('five BR result panels start hidden and only show as their data becomes ready',()=>{
+ const html=read('src/lib/webview/dashboard-html.js');
+ const ui=read('media/ba-automatic-ui.js');
+ const css=read('media/start.css');
+ const ids=['baAutoSource','baAutoDiscovery','baAutoRequirements','baAutoJira','baAutoHistory'];
+ for(const id of ids)assert.match(html,new RegExp('<details id="'+id+'" class="ba-auto-artifact" hidden>'));
+ assert.match(ui,/function renderReadyPanels\(phase\)/);
+ assert.match(ui,/setReadyPanel\('baAutoSource',sourceReady\)/);
+ assert.match(ui,/setReadyPanel\('baAutoDiscovery',discoveryReady\)/);
+ assert.match(ui,/setReadyPanel\('baAutoRequirements',requirementsReady\)/);
+ assert.match(ui,/setReadyPanel\('baAutoJira',jiraReady\)/);
+ assert.match(ui,/setReadyPanel\('baAutoHistory',completedReady\)/);
+ assert.match(ui,/if\(!isReady\|\|wasHidden\)panel\.open=false/);
+ assert.match(css,/#discoveryView details\.ba-auto-artifact\[hidden\]\{display:none!important\}/);
+});
+test('upload/discovery remain available before results are ready, and publish actions are below history',()=>{
+ const html=read('src/lib/webview/dashboard-html.js');
+ const ui=read('media/ba-automatic-ui.js');
+ const source=html.indexOf('id="baAutoSourceEntry"');
+ const discovery=html.indexOf('id="baAutoDiscoveryEntry"');
+ const firstPanel=html.indexOf('id="baAutoSource"');
+ const lastPanel=html.indexOf('id="baAutoHistory"');
+ const actions=html.indexOf('class="ba-auto-actions"');
+ assert.ok(source>0&&source<firstPanel);
+ assert.ok(discovery>source&&discovery<firstPanel);
+ assert.ok(lastPanel>firstPanel&&actions>lastPanel);
+ assert.match(ui,/sourceReady\?get\('baAutoOriginalFiles'\):get\('baAutoSourceEntry'\)/);
+ assert.match(ui,/discoveryReady\?get\('baAutoDiscoveryForm'\):get\('baAutoDiscoveryEntry'\)/);
+ assert.match(ui,/if\(target\.hidden\)\{/);
+});
+test('My Work has no redundant incomplete task section or Go to task button',()=>{
+ const html=read('src/lib/webview/dashboard-html.js');
+ const chat=read('media/atgv-mywork-wave-chat.js');
+ assert.doesNotMatch(html,/id="atgvMyWorkToday"|id="atgvMyWorkTodayList"/);
+ assert.doesNotMatch(chat,/function renderTasks\(|button\.textContent='Go to task'/);
+ assert.match(html,/id="atgvMyWorkAiConversation"/);
+ assert.match(chat,/function renderBrief\(/);
+});

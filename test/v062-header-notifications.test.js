@@ -19,8 +19,8 @@ test('header has a severity-aware dividing line, version under logo title and a 
  assert.match(css,/\.top-notification.error\{border-bottom-color:#ff5964\}/);
  assert.match(html,/id="topNotification"[^>]*role="status" aria-live="polite"/);
  for(const id of ['topNotificationIcon','topNotificationText','topNotificationAction','topNotificationDismiss'])assert.match(html,new RegExp('id="'+id+'"'));
- assert.match(ui,/\$\('appHeader'\)\.classList\.add\('hidden'\)/);
- assert.match(ui,/\$\('appHeader'\)\.classList\.remove\('hidden'\)/);
+ assert.doesNotMatch(ui,/\$\('appHeader'\)\.classList\.add\('hidden'\)/);
+ assert.doesNotMatch(ui,/\$\('appHeader'\)\.classList\.remove\('hidden'\)/);
 });
 test('discovery workflow has no process assignment and upload remains in document section',()=>{
  const start=html.indexOf('<section id="discoveryView"'),end=html.indexOf('<section id="baJiraInventorySection"',start);
@@ -55,11 +55,11 @@ function mock(){
  vm.runInNewContext(script,sandbox);
  return {node,notifications,navigation,api:sandbox.api};
 }
-test('header notice replaces top bar with icon and restores it on dismiss without triggering actions',()=>{
+test('header remains visible when notification appears and dismisses without triggering actions',()=>{
  const {node,api,navigation}=mock();
  api.notifyTop('Ownership synchronized.',{success:true});
  assert.equal(node('topNotification').states.has('hidden'),false);
- assert.equal(node('appHeader').states.has('hidden'),true);
+ assert.equal(node('appHeader').states.has('hidden'),false);
  assert.equal(node('topNotificationText').textContent,'Ownership synchronized.');
  assert.equal(node('topNotificationAction').textContent,'View Ownership');
  assert.deepEqual(navigation,[]);

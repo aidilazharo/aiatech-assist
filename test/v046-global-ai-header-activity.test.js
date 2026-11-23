@@ -57,7 +57,7 @@ test('shared red/CMYK top waveform appears across all app pages only for real AI
  assert.doesNotMatch(host,/case 'architectCustomStatus':\{[\s\S]{0,900}?beginAiActivity\(/);
 });
 
-test('waveform follows an active AI request when a global notification replaces the header',()=>{
+test('waveform remains on the main header while a global notification appears below it',()=>{
  const ui=read('media/start.js');
  const start=ui.indexOf('function syncMyWorkHeaderWaveHost(){');
  const end=ui.indexOf('function showTopNotification(item){',start);
@@ -71,7 +71,7 @@ test('waveform follows an active AI request when a global notification replaces 
  const make=new Function('$','document','window','topNoticeCurrent',ui.slice(start,end)+'return syncMyWorkHeaderWaveHost;');
  const fakeWindow={addEventListener(){}};
  make(id=>nodes[id],doc,fakeWindow,{type:'info'})();
- assert.equal(nodes.myWorkHeaderWave.parentElement,nodes.topNotification);
+ assert.equal(nodes.myWorkHeaderWave.parentElement,nodes.appHeader);
  make(id=>nodes[id],doc,fakeWindow,null)();
  assert.equal(nodes.myWorkHeaderWave.parentElement,nodes.appHeader);
 });
