@@ -2,6 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const {projectDatabasePath}=require('../../src/workspace-memory');
 const hash = value => crypto.createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 function databaseCtor() { try {
     return require('node:sqlite').DatabaseSync;
@@ -14,11 +15,15 @@ function safeRoot(root) { const resolved = path.resolve(root); if (!fs.statSync(
 class ProjectMemory {
     constructor(root) {
         this.root = safeRoot(root);
-        const folder = path.join(this.root, 'knowledge');
-        if (fs.existsSync(folder) && fs.lstatSync(folder).isSymbolicLink())
-            throw Error('Unsafe memory directory.');
-        fs.mkdirSync(folder, { recursive: true, mode: 0o700 });
-        const file = path.join(folder, 'ai-memory.sqlite');
+        const knowledge=path.join(this.root,'knowledge');
+        if(fs.existsSync(knowledge)&&fs.lstatSync(knowledge).isSymbolicLink())throw Error('Unsafe project knowledge directory.');
+        fs.mkdirSync(knowledge,{recursive:true,mode:0o700});
+        // Standalone projects retain the legacy path for compatibility.
+        // Managed ATGV projects use one isolated SQLite file per project in
+        // workspace/.atgv/memory/; legacy data migrates without losing rows.
+        const file=projectDatabasePath(this.root);
+        const folder=path.dirname(file);
+        if(fs.existsSync(folder)&&fs.lstatSync(folder).isSymbolicLink())throw Error('Unsafe memory directory.');
         if (fs.existsSync(file) && fs.lstatSync(file).isSymbolicLink())
             throw Error('Unsafe AI memory database.');
         this.file = file;
@@ -29,7 +34,7 @@ class ProjectMemory {
         catch { }
         this.db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=8000; PRAGMA foreign_keys=ON;');
         try {
-            fs.writeFileSync(path.join(folder, '.gitignore'), 'ai-memory.sqlite*\nai-service.json\n', { flag: 'wx', mode: 0o600 });
+            fs.writeFileSync(path.join(knowledge, '.gitignore'), 'ai-memory.sqlite*\nai-service.json\n', { flag: 'wx', mode: 0o600 });
         }
         catch (e) {
             if (e.code !== 'EEXIST')

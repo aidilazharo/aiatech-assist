@@ -254,7 +254,16 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
     assert.equal(stagedClones.length,3);
     assert.equal(stagedCatalogs.length,1);
     assert.equal(await fs.readFile(path.join(root,'keep.txt'),'utf8'),'outside projects');
-    assert.equal(secrets.size,2,'Reset must retain Atlassian and GitHub credentials');
+    // Credentials now share an encrypted workspace SQLite vault. Local Reset
+    // must preserve BOTH decrypted values, not raw SecretStorage entries.
+    const restoredVault=require('../src/workspace-memory').secretStorageBridge({
+      secrets:ctx.secrets,workspaceRoot:()=>root
+    });
+    assert.equal(JSON.parse(await restoredVault.get('atgvAssist.extension.atlassianToken')).token,'first-secret');
+    assert.equal(JSON.parse(await restoredVault.get('atgvAssist.extension.githubToken')).token,'github-personal');
+    assert.equal([...secrets.values()].some(value=>String(value).includes('first-secret')||String(value).includes('github-personal')),false,
+      'No unencrypted credential remains in SecretStorage once migrated');
+    assert.ok(await fs.stat(path.join(root,'.atgv','memory','credentials.sqlite')));
     assert.equal(globalState.get('atgvAssist.extensionSettings').github.repo,'shared-docs');
     assert.equal(globalState.get('atgvAssist.extensionSettings').jira.projectKey,'FIN');
     assert.equal(globalState.get('atgvAssist.sdlcCatalog').repositoryUrl,'https://github.com/aidilazharo/tech-stacks-skills');

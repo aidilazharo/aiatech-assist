@@ -105,6 +105,7 @@ const {modelAvailability,inactive}=require('../../model-status');
 const {resolveAiTarget,sendAiText,selectLatest,modelIdentity,rankModel,modelVendor,modelLabel}=require('../../ai-models');
 const {checkCodex,installCodex}=require('../../ai-provider-runtime');
 const aiMemory=require('../../../service/ai/memory');
+const workspaceMemory=require('../../workspace-memory');
 const aiOrchestrator=require('../../../service/ai/orchestrator');
 const aiServiceConfig=require('../../../service/ai/config');
 const {SharedMemory}=require('../../../service/ai/shared');
@@ -5695,11 +5696,23 @@ async function startupStackCatalog(){
 // One durable metadata journal across all role workspaces. Sources, tokens,
 // prompts and approval bodies are never recorded in this journal.
 const activeHostProcesses=new Map();
-let atgvDurableJobs=null;
+let atgvDurableJobs=null,atgvDurableJobsRoot='';
 const atgvRecoveredProjects=new Set();
 function atgvJobJournal(){
  if(!context?.globalStorageUri?.fsPath)throw Error('ATGV storage is not ready.');
- if(!atgvDurableJobs)atgvDurableJobs=new DurableWorkflowEngine({root:path.join(context.globalStorageUri.fsPath,'workflow-jobs')});
+ {
+  const legacy=path.join(context.globalStorageUri.fsPath,'workflow-jobs');
+  const workspace=getWorkspace()?.uri.fsPath;
+  let target=legacy;
+  if(workspace)try{target=workspaceMemory.memoryDirectory(workspace);}catch(error){if(!/workspace marker required|Initialize ATGV workspace/.test(error.message))throw error;}
+  if(atgvDurableJobs&&atgvDurableJobsRoot!==target){
+   atgvDurableJobs.close();atgvDurableJobs=null;atgvRecoveredProjects.clear();
+  }
+  if(!atgvDurableJobs){
+   atgvDurableJobs=new DurableWorkflowEngine({root:target,migrateFrom:target===legacy?null:legacy});
+   atgvDurableJobsRoot=target;
+  }
+ }
  return atgvDurableJobs;
 }
 async function atgvPostJobs(id=activeProject?.id){
@@ -11604,7 +11617,12 @@ async function installationStartup(){
   await vscode.commands.executeCommand('atgvAssist.start',{skipReload:true});
 }
 function activate(ctx){
-  context=ctx;output=vscode.window.createOutputChannel('ATGV AIATECH Assist');
+  // VS Code SecretStorage retains only the non-exportable workspace vault key.
+  // Provider passwords/PATs/API tokens are encrypted in .atgv/memory/credentials.sqlite.
+  // The AI service is never given the decryption key or unscoped credentials.
+  const vault=workspaceMemory.secretStorageBridge({secrets:ctx.secrets,workspaceRoot:()=>getWorkspace()?.uri.fsPath||''});
+  context=Object.create(ctx);Object.defineProperty(context,'secrets',{value:vault,enumerable:true});
+  output=vscode.window.createOutputChannel('ATGV AIATECH Assist');
   selfImprovementManager=new SelfImprovement({root:ctx.globalStorageUri.fsPath,askCopilot:options=>copilotRepairSdk.analyze(ctx.globalStorageUri.fsPath,options)});
   ctx.subscriptions.push(output);
   ready=(async()=>{
@@ -11688,5 +11706,5 @@ function activate(ctx){
   void installationStartup().catch(e=>{captureLocalIssue('installationStartup',e);report('Install/start workflow: '+e.message);uiError('ATGV startup: '+e.message);});
   report('ATGV extension activated. Run ATGV: Start to manage workspace projects.');
 }
-function deactivate(){if(idleImprovementTimer){clearInterval(idleImprovementTimer);idleImprovementTimer=null;}if(liveRemoteTimer){clearInterval(liveRemoteTimer);liveRemoteTimer=null;}if(catalogWatch){clearInterval(catalogWatch);catalogWatch=null;}if(softwareUpdateTimer)clearInterval(softwareUpdateTimer);if(softwareStartupTimer)clearTimeout(softwareStartupTimer);void developerGit.stopLocal().catch(()=>{});}
+function deactivate(){atgvDurableJobs?.close();atgvDurableJobs=null;atgvDurableJobsRoot='';if(idleImprovementTimer){clearInterval(idleImprovementTimer);idleImprovementTimer=null;}if(liveRemoteTimer){clearInterval(liveRemoteTimer);liveRemoteTimer=null;}if(catalogWatch){clearInterval(catalogWatch);catalogWatch=null;}if(softwareUpdateTimer)clearInterval(softwareUpdateTimer);if(softwareStartupTimer)clearTimeout(softwareStartupTimer);void developerGit.stopLocal().catch(()=>{});}
 module.exports={activate,deactivate};

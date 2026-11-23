@@ -18,7 +18,7 @@ The independent worker also needs an authorized Confluence token supplied by the
 
 ## Data and recovery
 
-The local SQLite database is at `projects/<id>/knowledge/ai-memory.sqlite`, with WAL files as needed, and is excluded from Git by a local `.gitignore`. Existing project JSON data remains intact. Confluence memory includes approved BR revision snapshots, decision records, project context and fingerprints. Accepted Markdown documents synchronize through the existing Confluence document mapping. Document owners must use Assign to Me and explicitly accept or reject generated proposals before changes are saved.
+The local SQLite database is at `<workspace>/.atgv/memory/ai-memory-<id>.sqlite`, with WAL files as needed, and is excluded from Git by a local `.gitignore`. Existing project JSON data remains intact. Confluence memory includes approved BR revision snapshots, decision records, project context and fingerprints. Accepted Markdown documents synchronize through the existing Confluence document mapping. Document owners must use Assign to Me and explicitly accept or reject generated proposals before changes are saved.
 
 Both Confluence lease operations and document writes are guarded by revision checks. Offline synchronization attempts remain queued locally. Scheduled executions retry at the next trigger. Changes to published JIRA tickets are never performed automatically.
 

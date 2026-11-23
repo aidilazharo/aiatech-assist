@@ -177,6 +177,11 @@ async function ensureWorkspaceLibrary(workspace) {
         if (e.code !== 'EEXIST')
             throw e;
     }
+    // Shared local SQLite state stays separate from the Git Library checkout.
+    require('./workspace-memory').memoryDirectory(workspace);
+    // The extension-level SQLite index is separate from each project's AI database.
+    try{require('./workspace-memory').extensionMemoryPath(workspace);}
+    catch(error){if(!/requires Node.js 22\.13\+/.test(error.message))throw error;}
     return base;
 }
 function stackMarkdown(stack) {
