@@ -1,17 +1,19 @@
-# ATGV AIATECH Assist v0.0.67
+# ATGV AIATECH Assist v0.0.68
 
 Release date: 2026-11-23
 
-## Unified ATGV interface
+## Legacy library removal
+- Remove the former `.atgv/offline-sdlc-library` ZIP importer, manual ZIP import message, ZIP update fallback, version-selection precedence, and offline executable asset cache support.
+- Use verified GitHub SDLC Catalog checkout as the authoritative source for installed role skills, technology stacks, and approved browser libraries. Preserve cached files of verified Git commits for offline UI operation.
+- Retire an existing managed `.atgv/offline-sdlc-library` directory at startup or after the next Git catalog pull, **only** when its files match stored hashes and a verified equal-or-newer Git catalog exists. Do not delete modified, unexpected, or unverified user files.
+- Extract semantic version comparison to a Git-independent version helper and keep pinned Git commit verification.
+- Remove obsolete ZIP-only tests; retain startup, DOCX, Jira, catalog and editor regressions and add v0.0.68 migration tests.
 
-- Add one shared, last-loaded presentation layer (`media/atgv-consistency.css`) for Overview, Startup, Settings, Project, BA, SA, UI/UX, Developer, PM and other role workspaces; respect VS Code themes, accessibility focus and reduced-motion preferences.
-- Fix the blank startup by rendering the Technology stack prerequisites panel directly in initial HTML, without requiring successful host-state hydration. Startup checks and manual Next remain unchanged, and each ATGV Start command begins with the prerequisites step.
-- Move **Previous** to the far-left of project selection and log/optional **Skip · Enter ATGV** controls to the far-right.
-- Hide **Skip · Enter ATGV** when both Jira and Confluence account checks are verified; GitHub write is not part of this visibility rule. Other roles' remote-operation permission rules stay enforced.
-- Move the Jira Work Items list/hierarchy/type filter icons from the section summary into an inner, top-right toolbar above the DataTable. Summary keeps only title and readiness status.
-- Apply one green outline, padding, shape and text scale to every **Ready** indicator, including Business Documents and Completed Requirements; keep warning/error states distinct.
-- Harmonize button sizing, field radii, status pills, panel spacing, table headers/pagination and keyboard focus across the extension without changing backend actions, Jira data or task workflows.
+## Notification overlay
+- Display temporary top notices above the persistent Business Analyst (or other role) credentials bar at a higher stacking order without moving the workspace.
+- Match the temporary notification height to the rendered credentials bar, with only a bottom status-colored border for both bars. No surrounding outline.
+- Auto-dismiss temporary notifications after five seconds; retain action and dismiss controls, and return the persistent red credential reminder when the temporary notice closes.
+- Keep the permanent credential reminder until active-role permission checks pass.
 
-## Testing and release
-- Added `test/v067-ui-consistency.test.js` to protect nonblank startup, credential-aware Skip visibility, Jira toolbar placement, status consistency and shared theme use.
-- Publish only after required GitHub Actions Linux/Windows tests and VSIX packaging succeed.
+## Validation
+- Verify Linux full regression suite, Windows stack-reset smoke tests, production VSIX compilation/size budget and release checksums before release.
