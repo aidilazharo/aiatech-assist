@@ -1,15 +1,13 @@
-# ATGV AIATECH Assist v0.0.73
-
-Release date: 2026-11-23
+# ATGV AIATECH Assist v0.0.74
 
 ## Changes
-- Use accessible SVG icon buttons with tooltips for source document Replace & Reprocess, Delete, PDF/report download, Save, Refresh and Publish controls.
-- Always show the five Business Analyst result sections, initially collapsed: Business Documents, Discovery, Generated Requirements, Jira Work Items and Completed requirements.
-- Display independent section states: Not started, In progress, Ready, Needs attention and Completed, based on available BR/Jira evidence.
-- Move document upload and discovery form controls inside their corresponding always-available sections.
-- Reuse the verified, pinned Quill library to display and edit source document text; original document text remains read-only.
-- Preserve plain-text source persistence and the existing ISO 29148 formatted viewer, Jira publishing approvals and deletion confirmations.
-- Continue to use the textarea fallback when the approved Quill assets have not been installed; no CDN script or extra third-party JS is bundled in the VSIX.
+- New Jira Preview responsible-role selector with all 18 ATGV SDLC roles; conservative task-title suggestions for UI/UX, Developer, PM, architecture, BA, QA and related roles.
+- Jira creates receive role labels, and published issue role changes are conflict-checked before controlled update; existing assigned users are never silently reassigned.
+- Jira metadata-driven preflight no longer writes generic missing-information placeholders. Required unresolved fields block publication; optional unsupported fields are not filled.
+- Acceptance Criteria and Definition of Done are taken only from approved evidence, explicit BA edits or approved project DoD templates. Draft TRM checklists are not silently adopted.
+- Existing BR revision history, manual Jira preview approval and stable issue-key reconciliation are retained.
 
 ## Verification
-- Run the full Node.js regression suite, Windows reset checks, UI validation and VSIX production packaging before publishing.
+- New regression tests: test/v074-jira-role-field-safety.test.js.
+- GitHub workflow runs npm test, Windows verification and VSIX packaging before creating a prerelease.
+- Live Jira account assignment and site-specific field permission checks require integration testing.
