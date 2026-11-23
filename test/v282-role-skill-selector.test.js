@@ -10,7 +10,7 @@ const {execFileSync}=require('node:child_process');
 const git=(cwd,...args)=>execFileSync('git',args,{cwd,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
 async function fixture(fn){
  const temp=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-role-variants-'));
- const workspace=path.join(temp,'workspace'),checkout=path.join(workspace,'.atgv','library','repository');
+ const workspace=path.join(temp,'workspace'),checkout=path.join(workspace,'.atgv','library');
  const root=path.join(checkout,'roles','business-analyst');
  await fs.mkdir(path.join(root,'skills','waterfall'),{recursive:true});
  await fs.writeFile(path.join(root,'SKILL.md'),'---\nid: ba.standard\n---\nStandard guidance');

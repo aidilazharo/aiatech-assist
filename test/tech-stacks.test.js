@@ -37,10 +37,10 @@ test('workspace library is project-owned but stacks and skills are remote and no
   assert.match(await fs.readFile(path.join(home,'documents','architecture','tech-stack.md'),'utf8'),/Playwright/);
   for(const folder of ['sdlc/processes','sdlc/roles','sdlc/workflows','documents/requirements','documents/deployment','documents/meetings','knowledge','overrides/branding','overrides/templates','overrides/skills'])
    assert.ok((await fs.stat(path.join(home,folder))).isDirectory(),folder);
-  assert.ok(await fs.stat(path.join(root,'.atgv','library','templates','user-story.md')));
-  assert.ok(await fs.stat(path.join(root,'.atgv','library','sdlc','roles')));
+  assert.equal(await fs.stat(path.join(root,'.atgv','library','templates','user-story.md')).then(()=>true,()=>false),false);
+  assert.equal(await fs.stat(path.join(root,'.atgv','library','sdlc','roles')).then(()=>true,()=>false),false);
   assert.ok(await fs.stat(path.join(root,'.atgv','branding','theme.json')));
-  const override=path.join(root,'.atgv','library','templates','tech-stacks','react.json');
+  const override=path.join(root,'.atgv','overrides','templates','tech-stacks','react.json');
   await fs.mkdir(path.dirname(override),{recursive:true});await fs.writeFile(override,JSON.stringify({...selected,notes:'untrusted local override'}));
   assert.notEqual((await loadStack('react',root)).notes,'untrusted local override','pinned remote asset must win');
   await ensureWorkspaceLibrary(root);

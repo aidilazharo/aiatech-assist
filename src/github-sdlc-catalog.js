@@ -63,7 +63,7 @@ function validPath(raw) {
         throw Error('Unsafe catalog path.');
     return raw;
 }
-function relevantPath(p) { return p === 'catalog.json' || p === 'VERSION' || p === 'README.md' || p === 'catalog.yaml' || p.startsWith('roles/') || p.startsWith('shared/') || p.startsWith('tech-stacks/') || /^\.memory\/[a-z][a-z0-9-]*\.json$/.test(p); }
+function relevantPath(p) { return p === 'catalog.json' || p === 'VERSION' || p === 'README.md' || p === 'catalog.yaml' || p.startsWith('roles/') || p.startsWith('shared/') || p.startsWith('tech-stacks/') || p.startsWith('sdlc/') || p.startsWith('templates/') || /^\.memory\/[a-z][a-z0-9-]*\.json$/.test(p); }
 function blobSha(buffer) { return crypto.createHash('sha1').update(Buffer.from(`blob ${buffer.length}\0`)).update(buffer).digest('hex'); }
 function parseSimpleYaml(raw) {
     const output = {}, rows = String(raw).split(/\r?\n/);
@@ -433,8 +433,14 @@ async function migrateLegacyLibraryCheckout(workspace) {
     const oldMetadata=await entry(legacyState),newMetadata=await entry(currentState);
     if(oldMetadata&&(!oldMetadata.isFile()||oldMetadata.isSymbolicLink()))throw Error('Unsafe legacy Library state.');
     if(newMetadata&&(!newMetadata.isFile()||newMetadata.isSymbolicLink()))throw Error('Unsafe Library state.');
-    if(oldMetadata&&!newMetadata&&await gitMarker(target))
-        await fs.rename(legacyState,currentState);
+    if(oldMetadata&&!newMetadata&&await gitMarker(target)) {
+        // Do not attach the state of a conflicting legacy checkout to an
+        // unrelated existing Git repository.
+        const state=JSON.parse(await fs.readFile(legacyState,'utf8'));
+        const head=await runCatalogGit(target,['rev-parse','HEAD'],process.env).catch(()=>'');
+        if(state.ref==='main'&&state.sha===head)
+            await fs.rename(legacyState,currentState);
+    }
 }
 async function withCatalogGitCredentials(token, perform) {
     if (!token) return perform({ ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'Never' });
@@ -1037,6 +1043,14 @@ async function activeFile(workspace, relative, { maxBytes = 65536 } = {}) {
         const stat = await fs.lstat(file).catch(e => e.code === 'ENOENT' ? null : Promise.reject(e));
         if (!stat) return null;
         if (!stat.isFile() || stat.isSymbolicLink() || stat.size > maxBytes) throw Error('Unsafe catalog asset: ' + relative);
+        // Shared document templates and lifecycle defaults are versioned
+        // reference DATA. Read the pinned Git HEAD, not a locally edited
+        // working-tree copy (project overrides belong under projects/).
+        if(relative.startsWith('templates/')||relative.startsWith('sdlc/')){
+            const raw=await runCatalogGit(gitRoot,['show','HEAD:'+relative],process.env);
+            if(Buffer.byteLength(raw,'utf8')>maxBytes)throw Error('Oversized Library default: '+relative);
+            return raw;
+        }
         return fs.readFile(file, 'utf8');
     }
     const base = path.join(workspace, '.atgv', 'catalog-assets');
