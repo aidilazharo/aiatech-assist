@@ -21,19 +21,16 @@ test('Atlassian onboarding derives Confluence /wiki from one editable site URL',
  assert.doesNotMatch(form,/id="startupConfluenceUrl"/);
  assert.match(form,/id="startupProjectRepository"/);
 });
-test('both supported organization mappings point to exact required and optional repos',()=>{
- const a=setup.validate({...setup.DEFAULTS,githubUrl:'github.com/aidilazharo'});
- assert.equal(a.extensionRepoUrl,'https://github.com/aidilazharo/aiatech-assist');
- assert.equal(a.libraryRepoUrl,'https://github.com/aidilazharo/tech-stacks-skills');
+test('only aiMalaysia maps to trusted repositories',()=>{
  const b=setup.validate({...setup.DEFAULTS,githubUrl:'https://github.com/aiamalaysia'});
  assert.equal(b.extensionRepoUrl,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc');
  assert.equal(b.libraryRepoUrl,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills');
- assert.equal(b.extensionReleasesUrl,'https://github.com/aidilazharo/extension');
- assert.equal(b.libraryReleasesUrl,'https://github.com/aidilazharo/library');
+ assert.equal(b.extensionReleasesUrl,'https://github.com/aiamalaysia/extension');
+ assert.equal(b.libraryReleasesUrl,'https://github.com/aiamalaysia/library');
  assert.equal(b.projectRepoUrl,'https://github.com/aiamalaysia/my-fow-technology-app-techassists');
 });
 test('unsafe organization/project URLs cannot redirect PAT checks to unknown hosts',()=>{
- for(const raw of ['https://github.com/aidilazharo/extra','https://evil.com/aidilazharo','http://github.com/aiamalaysia',
+ for(const raw of ['https://github.com/aiamalaysia/extra','https://evil.com/aiamalaysia','http://github.com/aiamalaysia',
   'https://attacker@github.com/aiamalaysia','github.com/other-user']){
   assert.throws(()=>setup.validate({...setup.DEFAULTS,githubUrl:raw}));
  }
