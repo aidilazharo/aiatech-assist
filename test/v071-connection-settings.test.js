@@ -12,7 +12,7 @@ async function fixture(fn){
  }finally{await fs.rm(root,{recursive:true,force:true});}
 }
 const config={jira:{baseUrl:'https://aiamy-jira-azure.atlassian.net',email:'person@example.com',projectKey:'TC'},confluence:{baseUrl:'https://aiamy-jira-azure.atlassian.net/wiki'},github:{owner:'aiamalaysia',repo:'tech-cockpit',branch:'main'}};
-const library={repositoryUrl:'https://github.com/aidilazharo/tech-stacks-skills',ref:'main',authentication:'token',autoCheck:true};
+const library={repositoryUrl:'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills',ref:'main',authentication:'token',autoCheck:true};
 test('Start and Settings share validated, non-secret SQLite connection data',()=>fixture(async root=>{
  const k=store.KEYS,mirror=new Map(),state={update:async(key,value)=>mirror.set(key,value)};
  assert.equal((await store.save(root,{[k.extension]:config,[k.library]:library,[k.onboarding]:true},state)).sqlite,true);
