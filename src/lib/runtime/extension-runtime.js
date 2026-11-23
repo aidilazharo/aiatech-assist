@@ -4073,55 +4073,6 @@ function brPreparationTitle(register){
   register.brs.filter(br=>!br.archivedFromRestart&&br.status!=='retired'));
 }
 
-async function assessAutomaticDrafts(projectId,signal){
- const register=await brWorkflow.load(registry,projectId);
- const drafts=register.brs.filter(br=>br.status==='draft'&&!br.archivedFromRestart);
- const checked=Object.fromEntries(drafts.map(br=>[br.id,baAutomatic.qualityFingerprint(register,br)]));
- if(JSON.stringify(checked)===JSON.stringify(register.baDraftQuality?.checked||{}))return;
- const preserved=(register.baDraftQuality?.excluded||[]).filter(row=>checked[row.id]===row.fingerprint);
- const excluded=[...preserved];
- const concerns=baAutomatic.sourceConcerns(register);
- const questions=register.discoveryAnswers?.questions||'';
- let target,skill;
- for(const draft of drafts){
-  if(register.baDraftQuality?.checked?.[draft.id]===checked[draft.id])continue;
-  signal.throwIfAborted();
-  const local=baAutomatic.invalidDraft(draft);
-  const crossSource=(register.sourceConflicts||[]).some(item=>item.brId===draft.id&&register.sourceConflictDecisions?.[item.id]!==true);
-  let reason=local||(crossSource?'This draft has conflicting rules in its verified sources.':'');
-  let finding=null;
-  if(!reason){
-   target||=await activeAiTarget();skill||=await roleSkillPrompt('business-analyst');
-   const review=baAutomatic.draftForReview(draft),parts=[[]];
-   for(const work of review.work){
-    if(parts.at(-1).length>=12)parts.push([]);
-    parts.at(-1).push(work);
-   }
-   for(const part of parts){
-    const input=[{...review,work:part}];
-    const prompt=baAutomatic.qualityPrompt(input,concerns,questions);
-    for(let attempt=0;attempt<2;attempt++){
-     const answer=await aiAnswer(target,prompt+(attempt?'\nReturn the required JSON and an exact quote from the draft.':'')+skill,55000,{json:true,signal});
-     signal.throwIfAborted();
-     try{finding=baAutomatic.parseQuality(answer,input,concerns)[0]||null;reason=finding?.reason||'';break;}
-     catch(error){if(attempt)throw Error(draft.id+' quality review failed validation. Refresh affected artifacts to retry.');}
-    }
-    if(reason)break;
-   }
-  }
-  if(reason){
-   const inferred=local?/acceptance criteria|business purpose|scope/i.exec(local)?.[0]:crossSource?'Source evidence':'';
-   excluded.push({id:draft.id,reason,fingerprint:checked[draft.id],
-    ...(finding?.field||inferred?{field:finding?.field||inferred}:{}),
-    ...(finding?.quote?{quote:finding.quote}:{})});
-  }
- }
- signal.throwIfAborted();
- if(activeProject?.id!==projectId)throw Error('Project changed during BR quality review.');
- const updated=await brWorkflow.write(registry,projectId,register.revision,next=>{next.baDraftQuality={checked,excluded};});
- await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
-}
-
 // A user-initiated, bounded AI repair for rejected draft BRs. This never
 // approves a BR, alters an approved revision, or publishes a Jira issue.
 function currentAttentionFindings(register){
@@ -4205,10 +4156,59 @@ async function resolveBAAttention(msg){
  }
 }
 
+async function assessAutomaticDrafts(projectId,signal){
+ const register=await brWorkflow.load(registry,projectId);
+ const drafts=register.brs.filter(br=>br.status==='draft'&&!br.archivedFromRestart);
+ const checked=Object.fromEntries(drafts.map(br=>[br.id,baAutomatic.qualityFingerprint(register,br)]));
+ if(JSON.stringify(checked)===JSON.stringify(register.baDraftQuality?.checked||{}))return;
+ const preserved=(register.baDraftQuality?.excluded||[]).filter(row=>checked[row.id]===row.fingerprint);
+ const excluded=[...preserved];
+ const concerns=baAutomatic.sourceConcerns(register);
+ const questions=register.discoveryAnswers?.questions||'';
+ let target,skill;
+ for(const draft of drafts){
+  if(register.baDraftQuality?.checked?.[draft.id]===checked[draft.id])continue;
+  signal.throwIfAborted();
+  const local=baAutomatic.invalidDraft(draft);
+  const crossSource=(register.sourceConflicts||[]).some(item=>item.brId===draft.id&&register.sourceConflictDecisions?.[item.id]!==true);
+  let reason=local||(crossSource?'This draft has conflicting rules in its verified sources.':'');
+  let finding=null;
+  if(!reason){
+   target||=await activeAiTarget();skill||=await roleSkillPrompt('business-analyst');
+   const review=baAutomatic.draftForReview(draft),parts=[[]];
+   for(const work of review.work){
+    if(parts.at(-1).length>=12)parts.push([]);
+    parts.at(-1).push(work);
+   }
+   for(const part of parts){
+    const input=[{...review,work:part}];
+    const prompt=baAutomatic.qualityPrompt(input,concerns,questions);
+    for(let attempt=0;attempt<2;attempt++){
+     const answer=await aiAnswer(target,prompt+(attempt?'\nReturn the required JSON and an exact quote from the draft.':'')+skill,55000,{json:true,signal});
+     signal.throwIfAborted();
+     try{finding=baAutomatic.parseQuality(answer,input,concerns)[0]||null;reason=finding?.reason||'';break;}
+     catch(error){if(attempt)throw Error(draft.id+' quality review failed validation. Refresh affected artifacts to retry.');}
+    }
+    if(reason)break;
+   }
+  }
+  if(reason){
+   const inferred=local?/acceptance criteria|business purpose|scope/i.exec(local)?.[0]:crossSource?'Source evidence':'';
+   excluded.push({id:draft.id,reason,fingerprint:checked[draft.id],
+    ...(finding?.field||inferred?{field:finding?.field||inferred}:{}),
+    ...(finding?.quote?{quote:finding.quote}:{})});
+  }
+ }
+ signal.throwIfAborted();
+ if(activeProject?.id!==projectId)throw Error('Project changed during BR quality review.');
+ const updated=await brWorkflow.write(registry,projectId,register.revision,next=>{next.baDraftQuality={checked,excluded};});
+ await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
+}
+
 async function runBRPreparation(from){
  requireOpened();
  const projectId=activeProject.id;
- if(baPreparationRun||baAttentionRun||jiraSyncBusy||baPublishIntent)throw Error('A Business Requirements operation is already running.');
+ if(baPreparationRun||(typeof baAttentionRun!=='undefined'&&baAttentionRun)||jiraSyncBusy||baPublishIntent)throw Error('A Business Requirements operation is already running.');
  const run={projectId,controller:new AbortController(),stage:null};
  baPreparationRun=run;
  const signal=run.controller.signal;
