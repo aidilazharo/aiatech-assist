@@ -452,3 +452,40 @@ body:not(.gate-mode) #topNotification .top-notification-actions button{
  #discoveryView .ba-auto-requirement-status{margin-left:auto}
  .jira-issue-modal-content .jira-preview-detail-form{grid-template-columns:minmax(0,1fr)}
 }
+
+
+/* BA v0.0.76: one grid and one spacing scale for all five panels. */
+#discoveryView.ba-automatic-view{--atgv-ba-section-gap:12px}
+#discoveryView.ba-automatic-view .ba-auto-artifacts{
+ display:grid;grid-template-columns:minmax(0,1fr);gap:var(--atgv-ba-section-gap);margin:0
+}
+#discoveryView.ba-automatic-view .ba-auto-artifacts > .ba-auto-artifact{
+ margin:0!important;min-width:0;width:100%
+}
+#discoveryView.ba-automatic-view .ba-auto-artifacts > .ba-auto-artifact > summary{
+ min-height:48px;padding:12px 16px
+}
+#discoveryView.ba-automatic-view .ba-auto-artifacts .ba-auto-body{padding:16px}
+#discoveryView.ba-automatic-view #baAutoHistory{margin:0!important}
+#discoveryView .ba-auto-requirements-toolbar{
+ display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;
+ gap:10px;padding-bottom:12px;margin-bottom:12px;
+ border-bottom:1px solid var(--atgv-consistency-border)
+}
+#discoveryView .ba-auto-requirements-toolbar[hidden],
+#discoveryView .ba-auto-requirements-actions button[hidden]{display:none!important}
+#discoveryView #baAutoResolveStatus{
+ flex:1 1 240px;min-width:0;color:var(--atgv-consistency-muted);
+ font-size:12px;line-height:1.5;overflow-wrap:anywhere
+}
+#discoveryView .ba-auto-requirements-actions{
+ display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px
+}
+#discoveryView .ba-auto-requirements-actions button{
+ min-height:36px;border-radius:var(--atgv-consistency-radius-sm);font-weight:600
+}
+@media(max-width:620px){
+ #discoveryView.ba-automatic-view .ba-auto-artifacts > .ba-auto-artifact > summary{padding:12px}
+ #discoveryView.ba-automatic-view .ba-auto-artifacts .ba-auto-body{padding:12px}
+ #discoveryView .ba-auto-requirements-actions{justify-content:flex-start;width:100%}
+}
