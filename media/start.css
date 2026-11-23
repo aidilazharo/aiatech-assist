@@ -3203,3 +3203,33 @@ body.gate-mode #roleCredentialBanner{display:none!important}
 .atgv-role-credential-actions{width:100%;justify-content:flex-end}
 .atgv-role-credential-message{flex-basis:calc(100% - 32px)}
 .gate-search-footer #gateSkip{grid-column:1/-1;justify-self:end}}
+
+
+/* v0.0.65 — Completed BA panels appear collapsed; ongoing work opens by request. */
+#discoveryView.ba-automatic-view .ba-auto-artifact[hidden],
+#discoveryView.ba-automatic-view #baAutoContinueRow[hidden]{display:none!important}
+#discoveryView #baAutoContinueRow{
+ display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;
+ margin:0 0 14px;padding:11px 14px;
+ border:1px dashed var(--vscode-panel-border,#555d67);
+ border-radius:8px;background:var(--vscode-editor-background,#181c23)
+}
+#discoveryView #baAutoContinueLabel{
+ min-width:0;font-size:13px;color:var(--vscode-descriptionForeground,#a8b0be)
+}
+#discoveryView #baAutoContinue{margin-inline-start:auto;white-space:normal;text-align:center}
+#discoveryView #baAutoJira .ba-auto-jira-toolbar{
+ display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;
+ gap:8px;min-width:0;margin:0 0 12px;padding:0 0 10px;
+ border-bottom:1px solid var(--vscode-panel-border,#424955)
+}
+#discoveryView #baAutoJira .ba-auto-jira-toolbar .ba-auto-title-tools{
+ margin-inline-start:0;justify-content:flex-end;gap:9px
+}
+#discoveryView #baAutoJira .ba-auto-jira-toolbar .ba-auto-tabs{margin-bottom:0}
+@media(max-width:620px){
+ #discoveryView #baAutoContinueRow{align-items:stretch}
+ #discoveryView #baAutoContinue{margin-inline-start:0;width:100%}
+ #discoveryView #baAutoJira .ba-auto-jira-toolbar{justify-content:flex-start}
+ #discoveryView #baAutoJira .ba-auto-jira-toolbar .ba-auto-title-tools{justify-content:flex-start}
+}
