@@ -3,6 +3,7 @@
 // These are Jira description sections, not assumptions about site-specific
 // custom field IDs. The approved BR remains the source of the base text.
 const {extractGwt}=require('./jira-template-knowledge');
+const jiraRoleRouting=require('./jira-role-routing');
 const MAX_DETAIL_LENGTH=5000;
 const CHECK_FIELDS=['acceptanceCriteria','definitionOfDone'];
 function normalizeDetails(value={}){
@@ -12,6 +13,10 @@ function normalizeDetails(value={}){
   const text=value[field]??'';
   if(typeof text!=='string'||text.length>MAX_DETAIL_LENGTH)throw Error('Jira '+(field==='acceptanceCriteria'?'acceptance criteria':'definition of done')+' must be plain text up to '+MAX_DETAIL_LENGTH+' characters.');
   result[field]=text.trim();
+ }
+ if(value.roleId!==undefined){
+  if(typeof value.roleId!=='string'||(value.roleId&&!jiraRoleRouting.normalizeRole(value.roleId)))throw Error('Choose a valid responsible SDLC role.');
+  result.roleId=value.roleId?jiraRoleRouting.normalizeRole(value.roleId):'';
  }
  if(value.summary!==undefined){
   if(typeof value.summary!=='string'||!value.summary.trim()||value.summary.trim().length>254||/[\r\n]/.test(value.summary))throw Error('Jira summary must be 1–254 characters on one line.');
@@ -54,18 +59,13 @@ function fieldSection(name){
 const labels={acceptanceCriteria:'Acceptance criteria',definitionOfDone:'Definition of done'};
 function generalize(item,approvedBR={},template){
  const manual=item.jiraDetails||{}, proposed=item.issueChecks||{};
- const text=baseDescription(item).split(/\n+/)
-  .map(line=>line.trim()).filter(line=>line&&!/^(Feature( identity)?|BR story|ATGV (SDLC role|story reference)|Approved Business Requirement|Source Story):/.test(line)).join('\n');
- const relevant=item.kind&&item.kind!=='Epic'?text:'';
- const statements=relevant.split(/\n|(?<=[.!?])\s+(?=[A-Z])/).filter(Boolean);
- const checks=statements.slice(0,6).map((statement,index)=>(index+1)+'. Verify '+statement.replace(/^[-•]\s*/,'')).join('\n');
- const acceptanceCriteria=manual.acceptanceCriteria||proposed.acceptanceCriteria||extractGwt(relevant)||checks||
-  approvedBR.acceptanceCriteria||('Verify the expected outcome for '+(item.title||'this Jira item')+' against the approved requirement.');
- const approvedChecklist=template?.status==='approved'&&item.kind==='Story'?template.items.map(text=>'[ ] '+text).join('\n'):'';
- const completion=['Verify the issue-specific acceptance criteria and attach the results.'];
- if(['Epic','Feature'].includes(item.kind))completion.push('Confirm the linked work satisfies the approved scope and record any open exceptions.');
- else completion.push('Review the delivered change and record applicable positive and negative checks.');
- const definitionOfDone=manual.definitionOfDone||approvedChecklist||proposed.definitionOfDone||completion.map(text=>'[ ] '+text).join('\n');
+ const relevant=item.kind&&item.kind!=='Epic'?baseDescription(item):'';
+ // Approved issue-specific evidence only; no synthetic acceptance or DoD claims.
+ const acceptanceCriteria=manual.acceptanceCriteria||proposed.acceptanceCriteria||extractGwt(relevant)||
+  (item.kind==='Epic'?approvedBR.acceptanceCriteria:'')||'';
+ const approvedChecklist=template?.status==='approved'&&item.kind==='Story'&&Array.isArray(template.items)
+  ?template.items.map(text=>'[ ] '+text).join('\n'):'';
+ const definitionOfDone=manual.definitionOfDone||proposed.definitionOfDone||approvedChecklist||'';
  return {acceptanceCriteria,definitionOfDone};
 }
 
@@ -89,9 +89,11 @@ function publishDescription(item,details,mapped){
 function applyDetails(item,details){
  const clean=normalizeDetails(details);
  const sections=sectionsFor(clean);
- if(!sections.length&&clean.summary===undefined&&clean.description===undefined&&!clean.fieldValues)return item;
+ if(!sections.length&&clean.summary===undefined&&clean.description===undefined&&!clean.fieldValues&&clean.roleId===undefined)return item;
  const description=clean.description??String(item.description||'');
- return {...item,title:clean.summary??item.title,description:[description,...sections].filter(Boolean).join('\n\n'),jiraDetails:clean};
+ const selectedRole=clean.roleId||jiraRoleRouting.resolveRole(item);
+ return {...item,title:clean.summary??item.title,description:[description,...sections].filter(Boolean).join('\n\n'),
+  ...(selectedRole?{roleId:selectedRole,roleLabel:jiraRoleRouting.roleLabel(selectedRole)}:{}),jiraDetails:clean};
 }
 function issueType(item,types=[],previous={}){
  if(item.action!=='create')return previous.issueType||'';
