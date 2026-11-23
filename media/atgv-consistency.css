@@ -452,3 +452,53 @@ body:not(.gate-mode) #topNotification .top-notification-actions button{
  #discoveryView .ba-auto-requirement-status{margin-left:auto}
  .jira-issue-modal-content .jira-preview-detail-form{grid-template-columns:minmax(0,1fr)}
 }
+
+
+/* BA v0.0.76: all five workflow panels now share one grid and spacing scale. */
+#discoveryView.ba-automatic-view{
+ --atgv-ba-section-gap:12px;
+ --atgv-ba-section-inset:16px;
+}
+#discoveryView.ba-automatic-view .ba-auto-artifacts{
+ display:grid;grid-template-columns:minmax(0,1fr);
+ gap:var(--atgv-ba-section-gap);margin:0;padding:0;align-items:stretch
+}
+#discoveryView.ba-automatic-view .ba-auto-artifacts > .ba-auto-artifact{
+ box-sizing:border-box;margin:0!important;min-width:0;width:100%;
+ border-radius:var(--atgv-consistency-radius)
+}
+#discoveryView.ba-automatic-view .ba-auto-artifacts > .ba-auto-artifact > summary,
+#discoveryView.ba-automatic-view #baAutoSource > summary{
+ box-sizing:border-box;min-height:48px;padding:12px var(--atgv-ba-section-inset);
+ display:flex;align-items:center;gap:12px
+}
+#discoveryView.ba-automatic-view .ba-auto-artifacts .ba-auto-body,
+#discoveryView.ba-automatic-view #baAutoSource .ba-auto-body{
+ padding:var(--atgv-ba-section-inset);min-width:0
+}
+#discoveryView.ba-automatic-view #baAutoHistory{margin:0!important}
+#discoveryView .ba-auto-requirements-toolbar{
+ display:flex;justify-content:space-between;align-items:center;
+ flex-wrap:wrap;gap:10px 12px;min-height:36px;
+ border-bottom:1px solid var(--atgv-consistency-border);
+ padding:0 0 12px;margin:0 0 12px;min-width:0
+}
+#discoveryView .ba-auto-requirements-toolbar[hidden]{display:none!important}
+#discoveryView #baAutoResolveStatus{
+ flex:1 1 250px;min-width:0;overflow-wrap:anywhere;
+ font-size:12px;color:var(--atgv-consistency-muted);line-height:1.5
+}
+#discoveryView .ba-auto-requirements-actions{
+ display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end
+}
+#discoveryView .ba-auto-requirements-actions button{
+ min-height:var(--atgv-consistency-control-height);
+ padding:7px 12px;border-radius:var(--atgv-consistency-radius-sm);
+ font-family:var(--vscode-font-family,inherit);font-size:12px;font-weight:600
+}
+#discoveryView .ba-auto-requirements-actions button[hidden]{display:none!important}
+#discoveryView .ba-auto-requirements-actions button:disabled{opacity:.65}
+@media(max-width:620px){
+ #discoveryView.ba-automatic-view{--atgv-ba-section-inset:12px}
+ #discoveryView .ba-auto-requirements-actions{justify-content:flex-start;width:100%}
+}
