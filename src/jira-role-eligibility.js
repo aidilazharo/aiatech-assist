@@ -4,7 +4,10 @@ const LABELS=Object.freeze({
  'ux-designer':'atgv-role-ux-designer',
  'software-developer':'atgv-role-software-developer',
  'qa-engineer':'atgv-role-qa-engineer',
- 'uat-tester':'atgv-role-uat-tester'
+ 'uat-tester':'atgv-role-uat-tester',
+ 'business-analyst':'atgv-role-business-analyst',
+ 'solution-architect':'atgv-role-solution-architect',
+ 'project-manager':'atgv-role-project-manager'
 });
 const STORY=/^[A-Z][A-Z0-9]{1,19}-[1-9][0-9]*$/;
 function roleLabel(roleId){return LABELS[String(roleId||'')]||'';}
