@@ -14,6 +14,9 @@ const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
 const blob=Buffer.from('ATGV verified release test artifact');
 const file='atgv-aiatech-assist-0.0.79.vsix';
 const checksum=Buffer.from(sha(blob)+'  '+file+'\n');
+const extraName='ATGV-AIATECH-Assist-v0.0.79-Source.zip';
+const extraBlob=Buffer.from('source zip artifact');
+const extraHash=Buffer.from(sha(extraBlob)+'  '+extraName+'\n');
 const source=release.SOURCES.extension, dest=release.DESTINATIONS.extension,tag='v0.0.79-build.1';
 function fixture(){
  return {tag_name:tag,draft:false,prerelease:false,html_url:'https://github.com/'+source+'/releases/tag/'+tag,
@@ -22,13 +25,21 @@ function fixture(){
    {id:12,name:'vsix.sha256',size:checksum.length,state:'uploaded',url:'https://api.github.com/repos/'+source+'/releases/assets/12'}
   ]};
 }
-function fake({existing=null,badChecksum=false}={}){
+function fake({existing=null,badChecksum=false,extra=false}={}){
  const calls=[],api='https://api.github.com/repos/'+dest;
  const io=async(method,url,options={})=>{
   calls.push({method,url,options});
-  if(url.includes('/releases?per_page=100'))return Buffer.from(JSON.stringify([fixture()]));
+  if(url.includes('/releases?per_page=100')){
+   const row=fixture();
+   if(extra)row.assets.push(
+    {id:13,name:extraName,size:extraBlob.length,state:'uploaded',url:'https://api.github.com/repos/'+source+'/releases/assets/13'},
+    {id:14,name:'source.sha256',size:extraHash.length,state:'uploaded',url:'https://api.github.com/repos/'+source+'/releases/assets/14'});
+   return Buffer.from(JSON.stringify([row]));
+  }
   if(url.endsWith('/releases/assets/11'))return blob;
   if(url.endsWith('/releases/assets/12'))return badChecksum?Buffer.from('broken hash'):checksum;
+  if(url.endsWith('/releases/assets/13'))return extraBlob;
+  if(url.endsWith('/releases/assets/14'))return extraHash;
   if(url.includes('/releases/tags/'))return existing===null?null:Buffer.from(JSON.stringify(existing));
   if(method==='POST'&&url===api+'/releases')return Buffer.from(JSON.stringify({id:42,draft:true}));
   if(method==='POST'&&url.startsWith('https://uploads.github.com/'))return Buffer.from(JSON.stringify({id:88,state:'uploaded'}));
@@ -71,6 +82,13 @@ test('copy publishes only validated VSIX and checksum and keeps source provenanc
  assert.equal(uploads.length,2);
  assert.deepEqual(uploads.map(c=>c.options.body),[blob,checksum]);
  assert.equal(calls.at(-1).method,'PATCH');
+});
+test('release copy also includes source ZIP and its verified checksum',async()=>{
+ const {io,calls}=fake({extra:true});
+ const result=await release.copy({kind:'extension',sourceToken:'read',destinationToken:'write',io});
+ assert.equal(result.uploaded,4);
+ const uploaded=calls.filter(c=>c.url.startsWith('https://uploads.github.com/'));
+ assert.deepEqual(uploaded.map(c=>new URL(c.url).searchParams.get('name')),[file,'vsix.sha256',extraName,'source.sha256']);
 });
 test('release copying rejects a mismatched checksum before any destination write',async()=>{
  const {io,calls}=fake({badChecksum:true});
