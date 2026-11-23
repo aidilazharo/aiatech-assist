@@ -29,7 +29,7 @@ test('Jira metadata maps known BR fields without inventing missing evidence',()=
   {id:'customfield_10104',name:'Risk Score',required:true,schema:{type:'number'}},
   {id:'assignee',name:'Assignee',required:false,schema:{type:'user'}}
  ];
- const item={title:'Create visitor',description:'Visitor workflow',jiraDetails:{definitionOfDone:'Tests pass'}};
+ const item={kind:'Story',title:'Create visitor',description:'Visitor workflow',issueChecks:{acceptanceCriteria:'Visitor confirmed'},jiraDetails:{definitionOfDone:'Tests pass'}};
  const plan=planFields(item,meta,{approvedBR:{acceptanceCriteria:'Visitor confirmed'}});
  assert.equal(plan.extraFields.customfield_10011,'Create visitor');
  assert.equal(plan.extraFields.customfield_10101,'Visitor confirmed');
