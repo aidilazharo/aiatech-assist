@@ -470,7 +470,16 @@ function html(webview,{resumeLibrary=false}={}){
       </details>
       <details id="baAutoRequirements" class="ba-auto-artifact" data-status="not-started">
         <summary><strong>Generated Requirements <small id="baAutoBRCount"></small></strong><span id="baAutoRequirementsBadge" class="ba-auto-badge" data-state="not-started">Not started</span></summary>
-        <div class="ba-auto-body" id="baAutoBRList"></div>
+        <div class="ba-auto-body">
+          <div id="baAutoRequirementsToolbar" class="ba-auto-requirements-toolbar" hidden>
+            <span id="baAutoResolveStatus" role="status" aria-live="polite"></span>
+            <div class="ba-auto-requirements-actions">
+              <button id="baAutoResolveStop" type="button" class="secondary" hidden>Stop AI</button>
+              <button id="baAutoResolveAttention" type="button" title="Repair source-backed BR quality findings and rerun validation; Jira remains unchanged" disabled>Resolve with AI</button>
+            </div>
+          </div>
+          <div id="baAutoBRList"></div>
+        </div>
       </details>
       <details id="baAutoJira" class="ba-auto-artifact" data-status="not-started">
         <summary class="ba-auto-jira-heading">
@@ -497,8 +506,8 @@ function html(webview,{resumeLibrary=false}={}){
           <div id="baAutoJiraItems"></div>
         </div>
       </details>
+      <details id="baAutoHistory" class="ba-auto-artifact" data-status="not-started"><summary><strong>Completed requirements</strong><span id="baAutoHistoryBadge" class="ba-auto-badge" data-state="not-started">Not started</span></summary><div id="baAutoHistoryContent" class="ba-auto-body"></div></details>
     </div>
-    <details id="baAutoHistory" class="ba-auto-artifact" data-status="not-started"><summary><strong>Completed requirements</strong><span id="baAutoHistoryBadge" class="ba-auto-badge" data-state="not-started">Not started</span></summary><div id="baAutoHistoryContent" class="ba-auto-body"></div></details>
     <div class="ba-auto-actions">
       <p id="baAutoStatus" role="status" aria-live="polite"></p>
       <div class="stack">
