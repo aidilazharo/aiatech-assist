@@ -50,7 +50,7 @@ test('React stack becomes incompatible when an old Node.js version is detected',
 test('start page and branded extension-update modal are separate surfaces',()=>{
  const html=read('src/lib/webview/dashboard-html.js');
  const ui=read('media/start.js');const css=read('media/start.css');
- assert.match(html,/id="startupSetup" class="atgv-startup-setup hidden"/);
+ assert.match(html,/id="startupSetup" class="atgv-startup-setup" aria-label="ATGV computer readiness and connection setup"/);
  assert.match(html,/id="startupProceed" disabled/);
  assert.match(html,/id="startupStackGrid"/);
  assert.match(html,/id="extensionUpgradeModal" class="modal-overlay hidden"/);
