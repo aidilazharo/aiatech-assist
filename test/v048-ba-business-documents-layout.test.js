@@ -30,8 +30,10 @@ test('Business Documents file cards separate selection, long filenames and indep
  assert.match(rule('#discoveryView #baAutoOriginalFiles .source-document-actions button'),
   /min-height:36px/);
  assert.match(js,/item\.append\(selector,info,actions\)/);
- assert.match(js,/replace\.textContent='Replace & Reprocess'/);
- assert.match(js,/remove\.textContent='Delete'/);
+ assert.match(js,/replace\.setAttribute\('aria-label','Replace & Reprocess'\)/);
+ assert.match(js,/replace\.append\(sourceActionIcon\('replace'\)\)/);
+ assert.match(js,/remove\.setAttribute\('aria-label','Delete source document'\)/);
+ assert.match(js,/remove\.append\(sourceActionIcon\('delete'\)\)/);
  assert.match(css,/@media\(max-width:850px\)\{/);
  assert.match(css,/@media\(max-width:500px\)\{/);
  assert.match(layout,/#discoveryView #baAutoOriginalFiles \.source-document-actions\{[\s\S]*?grid-column:1\/-1\}/);
