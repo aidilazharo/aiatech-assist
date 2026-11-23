@@ -18,37 +18,37 @@ function apiRequest(repositories,calls){return async(url,options)=>{
 test('public extension and Library update checks select the newest release across both repositories without credentials',async()=>{
  const calls=[];
  const repos={
-  'aidilazharo/aiatech-assist':[release('aidilazharo/aiatech-assist','v0.4.24-build.1',['atgv-aiatech-assist-0.4.24.vsix','vsix.sha256'])],
-  'aidilazharo/extension':[release('aidilazharo/extension','v0.4.25-build.2',['atgv-aiatech-assist-0.4.25.vsix','vsix.sha256'])],
-  'aidilazharo/tech-stacks-skills':[release('aidilazharo/tech-stacks-skills','v1.1.17-source-build.1',['tech-stacks-skills-1.1.17-source.zip','library-source.sha256'])],
-  'aidilazharo/library':[release('aidilazharo/library','v1.1.18-source-build.2',['tech-stacks-skills-1.1.18-source.zip','library-source.sha256'])]
+  'aiamalaysia/my-fow-technology-app-techassists-dev-sdlc':[release('aiamalaysia/my-fow-technology-app-techassists-dev-sdlc','v0.4.24-build.1',['atgv-aiatech-assist-0.4.24.vsix','vsix.sha256'])],
+  'aiamalaysia/extension':[release('aiamalaysia/extension','v0.4.25-build.2',['atgv-aiatech-assist-0.4.25.vsix','vsix.sha256'])],
+  'aiamalaysia/my-fow-technology-app-techassists-enterprise-skills':[release('aiamalaysia/my-fow-technology-app-techassists-enterprise-skills','v1.1.17-source-build.1',['tech-stacks-skills-1.1.17-source.zip','library-source.sha256'])],
+  'aiamalaysia/library':[release('aiamalaysia/library','v1.1.18-source-build.2',['tech-stacks-skills-1.1.18-source.zip','library-source.sha256'])]
  };
  const request=apiRequest(repos,calls);
  const extension=await ext.latestAcrossRepositories({version:'0.4.24',request});
  const library=await lib.latestAcrossRepositories({request});
- assert.equal(extension.latest.version,'0.4.25');assert.equal(extension.release.repository,'aidilazharo/extension');
- assert.equal(library.latest.version,'1.1.18');assert.equal(library.release.repository,'aidilazharo/library');
- assert.ok(calls.some(url=>url.includes('aidilazharo/extension'))&&calls.some(url=>url.includes('aidilazharo/library')));
+ assert.equal(extension.latest.version,'0.4.25');assert.equal(extension.release.repository,'aiamalaysia/extension');
+ assert.equal(library.latest.version,'1.1.18');assert.equal(library.release.repository,'aiamalaysia/library');
+ assert.ok(calls.some(url=>url.includes('aiamalaysia/extension'))&&calls.some(url=>url.includes('aiamalaysia/library')));
 });
 test('only dedicated public release mirrors are queried, never their source repositories',async()=>{
  const calls=[];
- const extension=await ext.latestAcrossRepositories({version:'0.4.20',request:apiRequest({'aidilazharo/extension':[release('aidilazharo/extension','v0.4.25-build.2',['atgv-aiatech-assist-0.4.25.vsix','vsix.sha256'])]},calls)});
- const library=await lib.latestAcrossRepositories({request:apiRequest({'aidilazharo/library':[release('aidilazharo/library','v1.1.18-source-build.2',['tech-stacks-skills-1.1.18-source.zip','library-source.sha256'])]},calls)});
- assert.deepEqual(ext.RELEASE_REPOSITORIES,['aidilazharo/extension']);
- assert.deepEqual(lib.RELEASE_REPOSITORIES,['aidilazharo/library']);
- assert.equal(extension.release.repository,'aidilazharo/extension');
- assert.equal(library.release.repository,'aidilazharo/library');
+ const extension=await ext.latestAcrossRepositories({version:'0.4.20',request:apiRequest({'aiamalaysia/extension':[release('aiamalaysia/extension','v0.4.25-build.2',['atgv-aiatech-assist-0.4.25.vsix','vsix.sha256'])]},calls)});
+ const library=await lib.latestAcrossRepositories({request:apiRequest({'aiamalaysia/library':[release('aiamalaysia/library','v1.1.18-source-build.2',['tech-stacks-skills-1.1.18-source.zip','library-source.sha256'])]},calls)});
+ assert.deepEqual(ext.RELEASE_REPOSITORIES,['aiamalaysia/extension']);
+ assert.deepEqual(lib.RELEASE_REPOSITORIES,['aiamalaysia/library']);
+ assert.equal(extension.release.repository,'aiamalaysia/extension');
+ assert.equal(library.release.repository,'aiamalaysia/library');
  assert.ok(calls.every(url=>!url.includes('/aiatech-assist/')&&!url.includes('/tech-stacks-skills/')));
 });
 test('a newer release without a verified package is shown but cannot silently downgrade installation',async()=>{
- const repos={'aidilazharo/aiatech-assist':[release('aidilazharo/aiatech-assist','v0.4.24-build.1',['atgv-aiatech-assist-0.4.24.vsix','vsix.sha256'])],
-  'aidilazharo/extension':[release('aidilazharo/extension','v0.4.25-build.2',[])]};
+ const repos={'aiamalaysia/my-fow-technology-app-techassists-dev-sdlc':[release('aiamalaysia/my-fow-technology-app-techassists-dev-sdlc','v0.4.24-build.1',['atgv-aiatech-assist-0.4.24.vsix','vsix.sha256'])],
+  'aiamalaysia/extension':[release('aiamalaysia/extension','v0.4.25-build.2',[])]};
  const result=await ext.latestAcrossRepositories({version:'0.4.20',request:apiRequest(repos,[])});
  assert.equal(result.latest.version,'0.4.25');assert.equal(result.latest.installable,false);assert.equal(result.release,null);
 });
 test('public mirror verifies the source and publishes only the requested extension artifacts',async()=>{
  const artifact=Buffer.from('verified vsix'),name='atgv-aiatech-assist-0.4.25.vsix',checksum=Buffer.from(digest(artifact)+'  '+name+'\n');
- const tag='v0.4.25-build.1',source='aidilazharo/aiatech-assist',target='aidilazharo/extension';
+ const tag='v0.4.25-build.1',source='aiamalaysia/my-fow-technology-app-techassists-dev-sdlc',target='aiamalaysia/extension';
  const row={tag_name:tag,draft:false,target_commitish:'a'.repeat(40),assets:[{name,state:'uploaded',size:artifact.length,browser_download_url:mirror.assetUrl(source,tag,name)},{name:'vsix.sha256',state:'uploaded',size:checksum.length,browser_download_url:mirror.assetUrl(source,tag,'vsix.sha256')}]};
  const calls=[];
  const fetcher=async url=>{calls.push(url);if(url.includes('/releases?'))return Buffer.from(JSON.stringify([row]));if(url.includes('/releases/tags/'))return null;if(url.endsWith('/'+name))return artifact;if(url.endsWith('/vsix.sha256'))return checksum;throw Error(url);};
@@ -64,8 +64,8 @@ test('release mirror uses its Actions token only for the GitHub API',async()=>{
   calls.push({url,headers:options.headers});
   return {ok:true,status:200,headers:{get:()=>null},arrayBuffer:async()=>Buffer.from('ok')};
  };
- for(const url of ['https://api.github.com/repos/aidilazharo/extension/releases',
-  'https://github.com/aidilazharo/extension/releases/download/v1/file.vsix',
+ for(const url of ['https://api.github.com/repos/aiamalaysia/extension/releases',
+  'https://github.com/aiamalaysia/extension/releases/download/v1/file.vsix',
   'https://api.github.com.example.org/repos/attacker/repo'])
   await mirror.fetchBytes(url,{fetchImpl,token:'temporary-actions-token'});
  assert.equal(calls[0].headers.Authorization,'Bearer temporary-actions-token');
@@ -74,8 +74,8 @@ test('release mirror uses its Actions token only for the GitHub API',async()=>{
 });
 test('mirror reports the failing API endpoint and rate limit without leaking the token',async()=>{
  const fetchImpl=async()=>({ok:false,status:403,headers:{get:name=>name==='x-ratelimit-remaining'?'0':null}});
- await assert.rejects(mirror.fetchBytes('https://api.github.com/repos/aidilazharo/extension/releases?access_token=private',{fetchImpl,token:'temporary-actions-token'}),error=>{
-  assert.match(error.message,/api\.github\.com\/repos\/aidilazharo\/extension\/releases: HTTP 403/);
+ await assert.rejects(mirror.fetchBytes('https://api.github.com/repos/aiamalaysia/extension/releases?access_token=private',{fetchImpl,token:'temporary-actions-token'}),error=>{
+  assert.match(error.message,/api\.github\.com\/repos\/aiamalaysia\/extension\/releases: HTTP 403/);
   assert.match(error.message,/rate limit/);assert.doesNotMatch(error.message,/temporary-actions-token|private/);return true;
  });
 });
@@ -93,7 +93,7 @@ test('mirror rejects checksum mismatches, foreign repositories and conflicting t
 });
 test('the release mirror never overwrites a target tag with an unrelated source',async()=>{
  const artifact=Buffer.from('vsix'),name='atgv-aiatech-assist-0.4.25.vsix',checksum=Buffer.from(digest(artifact)+'  '+name+'\n');
- const tag='v0.4.25-build.1',source='aidilazharo/aiatech-assist',target='aidilazharo/extension';
+ const tag='v0.4.25-build.1',source='aiamalaysia/my-fow-technology-app-techassists-dev-sdlc',target='aiamalaysia/extension';
  const row={tag_name:tag,target_commitish:'a'.repeat(40),assets:[{name,state:'uploaded',size:artifact.length,browser_download_url:mirror.assetUrl(source,tag,name)},{name:'vsix.sha256',state:'uploaded',size:checksum.length,browser_download_url:mirror.assetUrl(source,tag,'vsix.sha256')}]};
  const fetcher=async url=>url.includes('/releases?')?Buffer.from(JSON.stringify([row])):url.includes('/releases/tags/')?Buffer.from(JSON.stringify({body:'Different source',assets:[]})):url.endsWith('/vsix.sha256')?checksum:artifact;
  let called=false;
