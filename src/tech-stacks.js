@@ -212,7 +212,9 @@ async function scaffoldProject(workspace, project) {
     }
     await fs.mkdir(base, { recursive: true });
     const sharedSdlc=path.join(workspace, '.atgv', 'library', 'sdlc');
-    await copyDefaults(await fs.stat(sharedSdlc).then(st=>st.isDirectory()?sharedSdlc:path.join(ROOT,'defaults','sdlc'),()=>path.join(ROOT,'defaults','sdlc')), path.join(base, 'sdlc'));
+    const sharedStat=await fs.lstat(sharedSdlc).catch(error=>error.code==='ENOENT'?null:Promise.reject(error));
+    if(sharedStat&&(!sharedStat.isDirectory()||sharedStat.isSymbolicLink())) throw Error('Unsafe shared SDLC library folder.');
+    await copyDefaults(sharedStat?sharedSdlc:path.join(ROOT,'defaults','sdlc'),path.join(base,'sdlc'));
     for (const name of ['requirements', 'architecture', 'development', 'testing', 'deployment', 'meetings']) {
         const folder = path.join(base, 'documents', name);
         await fs.mkdir(folder, { recursive: true });

@@ -11,7 +11,7 @@ async function setup(){
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'atgv276-'));
  const ws=path.join(root,'project'),store=path.join(root,'cache');
  const config={repositoryUrl:'https://github.com/example-org/tech-stacks-skills',ref:'main'};
- const cache=path.join(store,'sdlc-catalog','example-org','tech-stacks-skills');
+ const cache=path.join(store,'library','example-org','tech-stacks-skills');
  await fs.mkdir(path.join(ws,'.atgv'),{recursive:true});
  for(const sha of [shaA,shaB]){
   const dir=path.join(cache,sha);await fs.mkdir(dir,{recursive:true});
@@ -30,7 +30,7 @@ test('activating a new catalog keeps one verified SHA asset directory',async()=>
   const active=JSON.parse(await fs.readFile(path.join(x.base,'active.json'),'utf8'));
   assert.equal(active.sha,shaB);
   // The global verified cache remains for audit/other workspaces.
-  assert.equal((await fs.stat(path.join(x.store,'sdlc-catalog','example-org','tech-stacks-skills',shaA))).isDirectory(),true);
+  assert.equal((await fs.stat(path.join(x.store,'library','example-org','tech-stacks-skills',shaA))).isDirectory(),true);
  }finally{await fs.rm(x.root,{recursive:true,force:true});}
 });
 test('edited old assets and unrelated workspace files are preserved',async()=>{

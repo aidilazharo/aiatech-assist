@@ -24,19 +24,18 @@ test('legacy sdlc-catalog checkout and state migrate to library/repository witho
   assert.equal((await catalog.gitInstalled(workspace,{repositoryUrl:'https://github.com/example/library'})).sha,sha);
  }finally{await fs.rm(root,{recursive:true,force:true});}
 });
-test('existing library checkout never overwrites a separate legacy checkout',async()=>{
+test('existing library repository never overwrites a separate legacy checkout',async()=>{
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-library-conflict-')),base=path.join(root,'.atgv');
  try{
   await fs.mkdir(path.join(base,'sdlc-catalog'),{recursive:true});
-  await fs.mkdir(path.join(base,'library'),{recursive:true});
+  await fs.mkdir(path.join(base,'library','repository'),{recursive:true});
   await fs.writeFile(path.join(base,'sdlc-catalog','keep.txt'),'legacy');
-  await fs.writeFile(path.join(base,'library','keep.txt'),'current');
+  await fs.writeFile(path.join(base,'library','repository','keep.txt'),'current');
   await catalog.migrateLegacyLibraryCheckout(root);
-  assert.equal(await fs.readFile(path.join(base,'library','keep.txt'),'utf8'),'current');
+  assert.equal(await fs.readFile(path.join(base,'library','repository','keep.txt'),'utf8'),'current');
   assert.equal(await fs.readFile(path.join(base,'sdlc-catalog','keep.txt'),'utf8'),'legacy');
  }finally{await fs.rm(root,{recursive:true,force:true});}
 });
-
 test('an existing library Git checkout is relocated under repository without changes to revision or local files',async()=>{
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-library-nested-')),base=path.join(root,'.atgv'),old=path.join(base,'library');
  try{

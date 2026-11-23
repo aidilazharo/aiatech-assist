@@ -28,7 +28,7 @@ async function harness() {
  git(writer,'add','.');git(writer,'commit','-m','Initial catalog');git(writer,'push','origin','main');
  return {root,origin,workspace};
 }
-function stages(workspace) {return fs.readdir(path.join(workspace,'.atgv')).then(x=>x.filter(n=>n.startsWith('.sdlc-catalog-clone-')));}
+function stages(workspace) {return fs.readdir(path.join(workspace,'.atgv')).then(x=>x.filter(n=>/^(?:\.sdlc-catalog|\.library)-clone-/.test(n)));}
 
 test('EPERM on directory rename retries then installs verified catalog by exclusive copy',async()=>{
  const x=await harness();try{
