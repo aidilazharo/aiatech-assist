@@ -19,6 +19,12 @@
 
  let state=null,requestedProject='',artifactProject='',jiraView='list',jiraTab='all',tableKey='',brKey='',kind='iso',sourceDigest='',artifactContext=null,request=0;
  const collapsed=new Set();
+ // Completed artifacts are discoverable as collapsed panels. An unfinished
+ // section is visible only when deliberately opened to continue the workflow.
+ const sectionIds=['baAutoSource','baAutoDiscovery','baAutoRequirements','baAutoJira'];
+ const sectionLabels={baAutoSource:'Business Documents',baAutoDiscovery:'Discovery',baAutoRequirements:'Generated Requirements',baAutoJira:'Jira Work Items'};
+ const completionSeen=new Map();
+ let revealedSection='';
  const input=get('baAutoArtifactText');
 
  const active=()=>view==='discovery'&&selectedRole==='business-analyst';
@@ -39,6 +45,41 @@
   const node=get(id);
   node.dataset.state=isReady?'ready':'draft';
   node.textContent=isReady?'Ready':'Draft';
+ }
+
+ function manageSectionVisibility(){
+  const completed={
+   baAutoSource:!!source()&&get('baAutoSourceBadge').dataset.state==='ready',
+   baAutoDiscovery:get('baAutoDiscoveryBadge').dataset.state==='ready',
+   baAutoRequirements:get('baAutoRequirementsBadge').dataset.state==='ready',
+   baAutoJira:get('baAutoJiraBadge').dataset.state==='ready'
+  };
+  for(const id of sectionIds){
+   const node=get(id),done=completed[id];
+   // The transition to completed must not leave an in-progress editor open.
+   if(done&&completionSeen.get(id)===false)node.open=false;
+   if(!done&&revealedSection!==id)node.open=false;
+   node.hidden=!done&&revealedSection!==id;
+   completionSeen.set(id,done);
+  }
+  if(completed[revealedSection])revealedSection='';
+  const history=get('baAutoHistory');
+  const hasHistory=!!brState?.completedCycles?.length||
+   Object.values(brState?.synced||{}).some(item=>!!item?.key);
+  history.hidden=!hasHistory&&revealedSection!=='baAutoHistory';
+  if(history.hidden)history.open=false;
+  const next=sectionIds.find(id=>!completed[id]);
+  const continueRow=get('baAutoContinueRow'),continueButton=get('baAutoContinue');
+  continueRow.hidden=!next;
+  if(next){
+   const label=sectionLabels[next];
+   get('baAutoContinueLabel').textContent=busy()?'Preparing '+label+'…':'In progress · '+label;
+   continueButton.dataset.section=next;
+   continueButton.setAttribute('aria-controls',next);
+   const opened=get(next).open&&!get(next).hidden;
+   continueButton.setAttribute('aria-expanded',String(opened));
+   continueButton.textContent=(opened?'Close ':'Open ')+label;
+  }
  }
 
  function placeSkill(){
@@ -278,6 +319,8 @@
   if(!source()&&sourceDigest)state=null;
   if(requestedProject!==activeId){
    requestedProject=activeId;state=null;collapsed.clear();brKey='';tableKey='';
+   revealedSection='';completionSeen.clear();
+   for(const id of [...sectionIds,'baAutoHistory'])get(id).open=false;
    invoke('baPreparationState');
   }
   const baNew=get('baNewRequirement');
@@ -328,7 +371,7 @@
   get('baStartPanel').classList.remove('hidden');
   get('baCompletedSection').classList.remove('hidden');
   sourcePanel.classList.remove('hidden');
-  renderArtifacts();renderRequirements();renderJira();
+  renderArtifacts();renderRequirements();renderJira();manageSectionVisibility();
  }
 
  get('baAutoDocumentTabs').addEventListener('click',event=>{
@@ -366,6 +409,26 @@
   event.preventDefault();event.stopImmediatePropagation();
   get('baAutoArtifactStatus').textContent='Save your source edits before replacing or deleting the document.';
  },true);
+ get('baAutoContinue').addEventListener('click',()=>{
+  const id=get('baAutoContinue').dataset.section,section=sectionIds.includes(id)?get(id):null;
+  if(!section)return;
+  if(section.open&&!section.hidden){
+   section.open=false;revealedSection='';section.hidden=true;
+  }else{
+   revealedSection=id;section.hidden=false;section.open=true;
+  }
+  render();
+  if(section.open)section.scrollIntoView({block:'nearest'});
+ });
+ for(const id of sectionIds){
+  get(id).addEventListener('toggle',()=>{
+   const node=get(id);
+   if(!node.open&&!node.hidden&&revealedSection===id&&completionSeen.get(id)===false){
+    revealedSection='';node.hidden=true;
+    manageSectionVisibility();
+   }
+  });
+ }
  get('baAutoJiraTabs').addEventListener('click',event=>{
   const tab=event.target.closest('[data-ba-jira-tab]');
   if(!tab)return;
@@ -402,7 +465,10 @@
  });
 
  window.addEventListener('atgv:viewchange',()=>{
-  if(!active())requestedProject='';
+  if(!active()){
+   requestedProject='';revealedSection='';completionSeen.clear();
+   for(const id of [...sectionIds,'baAutoHistory'])get(id).open=false;
+  }
   render();
  });
  window.addEventListener('message',({data:m})=>{
@@ -443,7 +509,10 @@
    jiraPreview:'baAutoJira',jiraApprove:'baAutoJira',publish:'baAutoJira'};
   const target=get(sections[key]);
   if(!target)return false;
-  target.open=true;target.scrollIntoView({block:'nearest'});return true;
+  // Milestone navigation intentionally reveals unfinished work when requested.
+  revealedSection=target.id;
+  target.hidden=false;target.open=true;
+  target.scrollIntoView({block:'nearest'});return true;
  }
  window.ATGVBusinessRequirements={render,active,busy,placeSkill,dirty,openStage,stageSummary,syncDocumentActions};
  render();
