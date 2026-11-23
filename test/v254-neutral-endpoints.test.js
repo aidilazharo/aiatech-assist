@@ -16,6 +16,6 @@ test('catalog exclusion is configured per owner, without a named account hardcod
  const root=await fsp.mkdtemp(path.join(os.tmpdir(),'atgv254-'));
  try{
  const state={get:()=>undefined};const git={repository:async()=>{throw Error('no checkout');}};
- await assert.rejects(repos.ensure(state,'p',git,{projectRoot:root,githubOwner:'another-team',githubRepo:'catalog',catalogRepositoryUrl:'https://github.com/another-team/catalog'}),/Catalog repository/);
+ await assert.rejects(repos.ensure(state,'p',git,{projectRoot:root,githubOwner:'another-team',githubRepo:'catalog',catalogRepositoryUrl:'https://github.com/another-team/catalog'}),/Library repository/);
  } finally {await fsp.rm(root,{recursive:true,force:true});}
 });

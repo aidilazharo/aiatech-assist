@@ -100,7 +100,7 @@ test('Dirty catalog activation failure restores original folder and leaves a rec
   assert.equal(await fs.readFile(localFile,'utf8'),'keep my draft');
   assert.equal(git(originalRoot,'rev-parse','HEAD'),before.sha);
   assert.equal((await catalog.activeRoot(x.workspace)).sha,before.sha);
-  assert.equal((await fs.readdir(path.join(x.workspace,'.atgv'))).filter(n=>n.startsWith('.sdlc-catalog-clone-')).length,1);
+  assert.equal((await fs.readdir(path.join(x.workspace,'.atgv'))).filter(n=>/^(?:\.sdlc-catalog|\.library)-clone-/.test(n)).length,1);
  }finally{await fs.rm(x.tmp,{force:true,recursive:true});}
 });
 test('Invalid upstream catalog never archives or replaces a dirty local checkout',async()=>{
@@ -132,7 +132,7 @@ test('migration retires verified legacy SHA folders after new Git checkout is ac
  const x=await harness();try{
   const oldSha='c'.repeat(40);
   const store=path.join(x.tmp,'global-store');
-  const cache=path.join(store,'sdlc-catalog','example','skills',oldSha);
+  const cache=path.join(store,'library','example','skills',oldSha);
   const base=path.join(x.workspace,'.atgv','catalog-assets');
   await fs.mkdir(cache,{recursive:true});await fs.mkdir(path.join(base,oldSha),{recursive:true});
   await fs.writeFile(path.join(cache,'catalog.json'),'verified content');

@@ -4,7 +4,7 @@
 const fs=require('node:fs/promises');
 const path=require('node:path');
 const SIGNATURE_KEY='atgvAssist.cacheCleanedInstallationSignature';
-const CACHE_DIRS=Object.freeze(['sdlc-catalog','verified-webview-libraries','updates']);
+const CACHE_DIRS=Object.freeze(['library','sdlc-catalog','verified-webview-libraries','updates']);
 async function clearOnReinstall({storageRoot,signature,globalState}={}){
  if(!storageRoot||!path.isAbsolute(storageRoot))throw Error('Trusted absolute VS Code global storage path required.');
  if(typeof signature!=='string'||!signature.trim()||signature.length>1200)throw Error('Invalid extension installation fingerprint.');

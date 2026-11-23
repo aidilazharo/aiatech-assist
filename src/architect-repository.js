@@ -44,7 +44,7 @@ async function ensure(state,projectId,developerGit,options={}){
  const catalogUrl=String(options.catalogRepositoryUrl||'').trim();
  const catalogIdentity=catalogUrl.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/?$/i);
  if(catalogIdentity&&catalogIdentity[1].toLowerCase()===owner.toLowerCase()&&catalogIdentity[2].toLowerCase()===repoName.toLowerCase())
-  throw Error('The SDLC Catalog repository is not a project code repository. Select a separate GitHub project repository in Settings.');
+  throw Error('The Library repository is not a project code repository. Select a separate GitHub project repository in Settings.');
  try{return await resolve(state,projectId,developerGit,options);}
  catch(error){if(!String(error.message).startsWith('The GitHub repository is configured, but no local checkout is selected.'))throw error;}
  const root=await fs.realpath(options.projectRoot),parent=path.join(root,'repository');
@@ -76,7 +76,7 @@ async function ensureCustom(state,projectId,developerGit,options={}){
   throw Error('Choose a valid GitHub owner and project repository in Settings before Save Stack.');
  const catalog=String(options.catalogRepositoryUrl||'').trim().match(/^https:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/i);
  if(catalog&&catalog[1].toLowerCase()===owner.toLowerCase()&&catalog[2].toLowerCase()===repoName.toLowerCase())
-  throw Error('The SDLC Catalog is not a project source repository. Configure a separate project GitHub repository.');
+  throw Error('The Library is not a project source repository. Configure a separate project GitHub repository.');
  const root=await fs.realpath(options.projectRoot);
  const parent=path.join(root,'repository');
  await fs.mkdir(parent,{recursive:true});

@@ -38,7 +38,7 @@ function parseRepository(raw) {
 }
 function normalizeConfig(input = {}) {
     if (!input || typeof input !== 'object' || Array.isArray(input))
-        throw Error('Invalid SDLC Catalog configuration.');
+        throw Error('Invalid Library configuration.');
     const repositoryUrl = String(input.repositoryUrl ?? '').trim();
     const parsed = parseRepository(repositoryUrl);
     const ref = 'main'; // Catalog assets always come from main.
@@ -52,7 +52,7 @@ function normalizeConfig(input = {}) {
 function apiRoute(config) {
     const parsed = parseRepository(config.repositoryUrl);
     if (!parsed)
-        throw Error('Set a GitHub SDLC Catalog repository URL first.');
+        throw Error('Set a GitHub Library repository URL first.');
     return `https://api.github.com/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}`;
 }
 function validPath(raw) {
@@ -268,7 +268,7 @@ async function updateActivePointer(parent, info, ref) {
 async function downloadOnce(config, token, storeRoot, { request = requestJson } = {}) {
     const normalized = normalizeConfig(config), info = await getTree(normalized, token, request);
     const { owner, repo } = parseRepository(normalized.repositoryUrl);
-    const parent = path.join(storeRoot, 'sdlc-catalog', owner.toLowerCase(), repo.toLowerCase());
+    const parent = path.join(storeRoot, 'library', owner.toLowerCase(), repo.toLowerCase());
     const target = path.join(parent, info.sha);
     await fs.mkdir(parent, { recursive: true });
     const existing = await verifyInstalledSnapshot(target, info);
@@ -331,7 +331,7 @@ async function cached(config, storeRoot) {
     const normalized = normalizeConfig(config), parsed = parseRepository(normalized.repositoryUrl);
     if (!parsed)
         return null;
-    const parent = path.join(storeRoot, 'sdlc-catalog', parsed.owner.toLowerCase(), parsed.repo.toLowerCase());
+    const parent = path.join(storeRoot, 'library', parsed.owner.toLowerCase(), parsed.repo.toLowerCase());
     try {
         const active = JSON.parse(await fs.readFile(path.join(parent, 'active.json'), 'utf8'));
         if (!/^[a-f0-9]{40}$/.test(String(active.sha || '')))
@@ -350,10 +350,74 @@ async function cached(config, storeRoot) {
 // The active catalog is a normal Git checkout at a stable location. The Git
 // revision belongs in metadata, never in a directory name. Git pull updates
 // tracked assets, including removals, without creating another revision folder.
-const WORKSPACE_GIT_CATALOG = 'sdlc-catalog';
+const WORKSPACE_GIT_CATALOG = path.join('library', 'repository');
 const gitCatalogUpdates = new Map();
 function gitCatalogFolder(workspace) { return path.join(workspace, '.atgv', WORKSPACE_GIT_CATALOG); }
-function gitCatalogState(workspace) { return path.join(workspace, '.atgv', 'sdlc-catalog-state.json'); }
+function gitCatalogState(workspace) { return path.join(workspace, '.atgv', 'library-state.json'); }
+// Upgrade the legacy stable checkout without resetting, deleting or recloning it.
+// Keep existing VS Code configuration keys and the original Git history intact.
+// The library root contains ATGV-managed shared content; the GitHub checkout
+// lives in repository/ so user templates never dirty its verified Git history.
+async function migrateLegacyLibraryCheckout(workspace) {
+    if (!workspace) return;
+    const base=path.join(workspace,'.atgv'),root=path.join(base,'library');
+    const checkout=path.join(root,'repository'),legacy=path.join(base,'sdlc-catalog');
+    const legacyState=path.join(base,'sdlc-catalog-state.json'),currentState=gitCatalogState(workspace);
+    const entry=async file=>fs.lstat(file).catch(error=>error.code==='ENOENT'?null:Promise.reject(error));
+    const directory=(st,where)=>{if(st&&(!st.isDirectory()||st.isSymbolicLink()))throw Error('Unsafe '+where+' directory. No files were overwritten.');};
+    const parent=await entry(base);if(!parent)return;
+    directory(parent,'ATGV workspace');
+    let rootStat=await entry(root),checkoutStat=await entry(checkout),oldStat=await entry(legacy);
+    directory(rootStat,'library');directory(checkoutStat,'library repository');directory(oldStat,'legacy library');
+    if(rootStat){
+        // Previous releases used .atgv/library itself as a Git checkout.
+        // Relocate the entire directory (including .git and untracked files)
+        // before creating the new library root. Never reset or discard edits.
+        const gitMarker=await entry(path.join(root,'.git'));
+        if(gitMarker){
+            if(gitMarker.isSymbolicLink()||(!gitMarker.isDirectory()&&!gitMarker.isFile()))
+                throw Error('Unsafe existing library Git metadata. No files were moved.');
+            if(checkoutStat)throw Error('Conflicting library repository folder; inspect both folders before migration.');
+            const stage=path.join(base,'.library-relocate-'+crypto.randomUUID());
+            await fs.rename(root,stage);
+            let created=false;
+            try{
+                await fs.mkdir(root);created=true;
+                await fs.rename(stage,checkout);
+            }catch(error){
+                const problems=[];
+                if(created)try{await fs.rmdir(root);}catch(e){problems.push(e.message);}
+                try{await fs.rename(stage,root);}catch(e){problems.push('Preserved original at '+stage+': '+e.message);}
+                throw Error('Library directory migration failed: '+error.message+(problems.length?'; '+problems.join('; '):'; original location restored'),{cause:error});
+            }
+        }
+    }
+    await fs.mkdir(root,{recursive:true});
+    rootStat=await entry(root);directory(rootStat,'library');
+    checkoutStat=await entry(checkout);directory(checkoutStat,'library repository');
+    if(oldStat&&!checkoutStat){
+        try{await fs.rename(legacy,checkout);}
+        catch(error){if(error.code!=='ENOENT'||!await entry(checkout))throw Error('Could not move legacy library Git checkout: '+error.message,{cause:error});}
+    }
+    // Existing shared folders are moved in place only if no destination exists.
+    // A collision preserves both folders for review rather than mixing content.
+    for(const name of ['sdlc','templates']){
+        const from=path.join(base,name),to=path.join(root,name);
+        const former=await entry(from),existing=await entry(to);
+        directory(former,'legacy '+name);directory(existing,'library '+name);
+        if(former&&!existing){
+            try{await fs.rename(from,to);}
+            catch(error){if(error.code!=='ENOENT'||!await entry(to))throw Error('Could not migrate '+name+': '+error.message,{cause:error});}
+        }
+    }
+    const oldMetadata=await entry(legacyState),newMetadata=await entry(currentState);
+    if(oldMetadata&&(!oldMetadata.isFile()||oldMetadata.isSymbolicLink()))throw Error('Unsafe legacy library metadata. No files were overwritten.');
+    if(newMetadata&&(!newMetadata.isFile()||newMetadata.isSymbolicLink()))throw Error('Unsafe library metadata. No files were overwritten.');
+    if(await entry(checkout)&&oldMetadata&&!newMetadata){
+        try{await fs.rename(legacyState,currentState);}
+        catch(error){if(error.code!=='ENOENT'||!await entry(currentState))throw Error('Could not migrate library state safely: '+error.message,{cause:error});}
+    }
+}
 async function withCatalogGitCredentials(token, perform) {
     if (!token) return perform({ ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'Never' });
     // Token is never embedded in the Git remote, command arguments, or helper.
@@ -410,14 +474,14 @@ async function runCatalogGit(dir, args, env, token='') {
             }
             const detail = String(error.stderr || error.message || '').replaceAll(token || '\u0000', '[redacted]').slice(0, 450);
             const hint = githubIpAllowlistHint(403, detail);
-            throw Error('SDLC Catalog Git command failed: ' + detail + (hint ? ' ' + hint : ''), { cause: error });
+            throw Error('Library Git command failed: ' + detail + (hint ? ' ' + hint : ''), { cause: error });
         }
     }
-    throw Error('SDLC Catalog cannot find the Git executable. Install Git, configure VS Code git.path, and reload VS Code. ' + String(missing?.message || 'Git is unavailable.').slice(0, 150));
+    throw Error('Library cannot find the Git executable. Install Git, configure VS Code git.path, and reload VS Code. ' + String(missing?.message || 'Git is unavailable.').slice(0, 150));
 }
 async function inspectGitCheckout(root, expectedRepository) {
     const stat = await fs.lstat(root);
-    if (!stat.isDirectory() || stat.isSymbolicLink()) throw Error('Unsafe SDLC Catalog checkout folder.');
+    if (!stat.isDirectory() || stat.isSymbolicLink()) throw Error('Unsafe Library checkout folder.');
     const all = (await runCatalogGit(root, ['ls-files', '-z', '--cached'], process.env)).split('\0').filter(Boolean);
     const paths = new Set(); let bytes = 0;
     for (const item of all) {
@@ -426,12 +490,12 @@ async function inspectGitCheckout(root, expectedRepository) {
         const file = path.join(root, ...item.split('/'));
         const st = await fs.lstat(file);
         if (!st.isFile() || st.isSymbolicLink() || st.size > MAX_FILE_BYTES) throw Error('Unsafe or oversized catalog asset: ' + item);
-        if ((bytes += st.size) > MAX_CATALOG_BYTES || paths.size >= MAX_FILES) throw Error('SDLC Catalog exceeds safe file limits.');
+        if ((bytes += st.size) > MAX_CATALOG_BYTES || paths.size >= MAX_FILES) throw Error('Library exceeds safe file limits.');
         paths.add(item);
     }
     const yaml = !paths.has('catalog.json');
     const manifestName = yaml ? 'catalog.yaml' : 'catalog.json';
-    if (!paths.has(manifestName)) throw Error('SDLC Catalog main branch has no catalog manifest.');
+    if (!paths.has(manifestName)) throw Error('Library main branch has no catalog manifest.');
     const content = await fs.readFile(path.join(root, manifestName));
     const manifest = inspectManifest(content, paths, yaml ? 'yaml' : 'json');
     const sha = await runCatalogGit(root, ['rev-parse', 'HEAD'], process.env);
@@ -453,14 +517,14 @@ function sameGitRemote(a, b) {
 async function verifiedExistingCatalog(target, remoteUrl, repository, expectedSha, git) {
     const meta = await fs.lstat(target).catch(error => error.code === 'ENOENT' ? null : Promise.reject(error));
     if (!meta) return null;
-    if (!meta.isDirectory() || meta.isSymbolicLink()) throw Error('Existing sdlc-catalog is not a safe directory. No files were overwritten.');
+    if (!meta.isDirectory() || meta.isSymbolicLink()) throw Error('Existing library is not a safe directory. No files were overwritten.');
     const origin = await git(target, ['remote', 'get-url', 'origin']).catch(() => '');
     const branch = await git(target, ['branch', '--show-current']).catch(() => '');
     const sha = await git(target, ['rev-parse', 'HEAD']).catch(() => '');
     if (!sameGitRemote(origin, remoteUrl) || branch !== 'main' || sha !== expectedSha)
-        throw Error('An existing sdlc-catalog checkout differs from the validated main-branch clone. No files were overwritten.');
+        throw Error('An existing library checkout differs from the validated main-branch clone. No files were overwritten.');
     const dirty = await git(target, ['status', '--porcelain', '--untracked-files=all']);
-    if (dirty) throw Error('Existing sdlc-catalog has local edits. No files were overwritten.');
+    if (dirty) throw Error('Existing library has local edits. No files were overwritten.');
     return inspectGitCheckout(target, repository);
 }
 // Windows Defender/Explorer can temporarily hold .git pack files while Git
@@ -511,22 +575,22 @@ async function promoteStagedGitCatalog(stage, target, remoteUrl, repository, sna
         }
         const installed = await verifiedExistingCatalog(target, remoteUrl, repository, snapshot.sha, git);
         if (!installed || installed.version !== snapshot.version || installed.fileCount !== snapshot.fileCount)
-            throw Error('Copied SDLC Catalog failed verification.');
+            throw Error('Copied Library failed verification.');
         return { action: 'copied' };
     } catch (error) {
         // We alone created this fallback destination. Remove ONLY that new,
         // unverified copy, never an existing checkout or the valid stage.
         if (createdTarget) await fs.rm(target, { recursive:true, force:true }).catch(() => {});
-        throw Error('Windows blocked SDLC Catalog activation after retry and verified-copy fallback (' +
+        throw Error('Windows blocked Library activation after retry and verified-copy fallback (' +
             String(error.code || lastError?.code || 'unknown') + '). The validated temporary clone is preserved for recovery.', { cause:error });
     }
 }
-// A previous failed Windows promotion leaves a validated .sdlc-catalog-clone
+// A previous failed Windows promotion leaves a validated .library-clone
 // behind. Reuse only a matching, clean main-branch checkout and fast-forward
 // it before activation. Never delete or adopt unrelated staged directories.
 async function recoverStagedGitCatalog(root, remoteUrl, repository, git) {
     const entries = (await fs.readdir(root, { withFileTypes:true }))
-        .filter(item => item.isDirectory() && /^\.sdlc-catalog-clone-[0-9a-f-]{36}$/i.test(item.name));
+        .filter(item => item.isDirectory() && /^\.(?:library|sdlc-catalog)-clone-[0-9a-f-]{36}$/i.test(item.name));
     const candidates = [];
     for (const entry of entries.slice(0, 40)) {
         const candidate = path.join(root, entry.name);
@@ -566,7 +630,7 @@ async function preserveDirtyGitCatalog({workspace,root,target,remoteUrl,reposito
     if(existingBackupRoot&&(!existingBackupRoot.isDirectory()||existingBackupRoot.isSymbolicLink()))
         throw Error('Unsafe catalog-local-backups path. No library changes were made.');
     const reusedStage=await recoverStagedGitCatalog(root,remoteUrl,repository,git);
-    const stage=reusedStage||path.join(root,'.sdlc-catalog-clone-'+crypto.randomUUID());
+    const stage=reusedStage||path.join(root,'.library-clone-'+crypto.randomUUID());
     let validated=false,movedOriginal=false,activated=false,backupPath='';
     try{
         await report(54,'Preparing clean library checkout','Downloading and inspecting GitHub main without touching the existing catalog.');
@@ -578,13 +642,13 @@ async function preserveDirtyGitCatalog({workspace,root,target,remoteUrl,reposito
         const branch=await git(stage,['branch','--show-current']);
         const dirty=await git(stage,['status','--porcelain','--untracked-files=all']);
         if(!sameGitRemote(origin,remoteUrl)||branch!=='main'||dirty)
-            throw Error('The new SDLC Catalog checkout did not pass Git origin, main branch or cleanliness checks.');
+            throw Error('The new Library checkout did not pass Git origin, main branch or cleanliness checks.');
         validated=true;
         // Recheck the original after the network operation. Never silently
         // preserve a different repository or replace an unexpected checkout.
         const current=await fs.lstat(target);
         if(!current.isDirectory()||current.isSymbolicLink())
-            throw Error('The original SDLC Catalog folder changed while the new catalog was prepared.');
+            throw Error('The original Library folder changed while the new catalog was prepared.');
         if(!sameGitRemote(await git(target,['remote','get-url','origin']),remoteUrl)||
            await git(target,['branch','--show-current'])!=='main'||
            await git(target,['rev-parse','HEAD'])!==originalSha)
@@ -596,7 +660,7 @@ async function preserveDirtyGitCatalog({workspace,root,target,remoteUrl,reposito
         const backupStat=await fs.lstat(backupRoot);
         if(!backupStat.isDirectory()||backupStat.isSymbolicLink())
             throw Error('Unsafe catalog backup destination. No library changes were made.');
-        backupPath=path.join(backupRoot,'sdlc-catalog-preserved-'+new Date().toISOString().replace(/[:.]/g,'-')+'-'+crypto.randomUUID());
+        backupPath=path.join(backupRoot,'library-preserved-'+new Date().toISOString().replace(/[:.]/g,'-')+'-'+crypto.randomUUID());
         await fs.rename(target,backupPath);
         movedOriginal=true;
         await report(68,'Activating verified library','Installing the clean GitHub main checkout. The original remains in its backup folder.');
@@ -604,7 +668,7 @@ async function preserveDirtyGitCatalog({workspace,root,target,remoteUrl,reposito
         activated=true;
         const installed=await verifiedExistingCatalog(target,remoteUrl,repository,snapshot.sha,git);
         if(!installed||installed.version!==snapshot.version)
-            throw Error('The new SDLC Catalog checkout failed final verification.');
+            throw Error('The new Library checkout failed final verification.');
         await writeGitCatalogState(workspace,installed);
         await report(73,'Original changes safely preserved','Verified main installed. Local edits and untracked files are preserved at '+backupPath);
         return {...installed,checkout:target,action:'preserved-and-updated',backupPath};
@@ -619,10 +683,10 @@ async function preserveDirtyGitCatalog({workspace,root,target,remoteUrl,reposito
                     await fs.rename(target,failedPath);
                 }
                 await fs.rename(backupPath,target);
-                throw Error('SDLC Catalog update failed; the original modified checkout was restored. '+error.message);
+                throw Error('Library update failed; the original modified checkout was restored. '+error.message);
             }catch(rollbackError){
-                if(String(rollbackError.message||'').startsWith('SDLC Catalog update failed;'))throw rollbackError;
-                throw Error('SDLC Catalog activation failed and automatic restore was blocked. Your original catalog is preserved at '+backupPath+'. Restore it manually when filesystem locks are cleared. Original error: '+error.message+'. Restore error: '+rollbackError.message);
+                if(String(rollbackError.message||'').startsWith('Library update failed;'))throw rollbackError;
+                throw Error('Library activation failed and automatic restore was blocked. Your original catalog is preserved at '+backupPath+'. Restore it manually when filesystem locks are cleared. Original error: '+error.message+'. Restore error: '+rollbackError.message);
             }
         }
         throw error;
@@ -634,6 +698,7 @@ async function preserveDirtyGitCatalog({workspace,root,target,remoteUrl,reposito
     }
 }
 async function syncGitCatalogCheckout(workspace, remoteUrl, repository, token='', options={}) {
+    await migrateLegacyLibraryCheckout(workspace);
     const root = path.join(workspace, '.atgv');
     const dirStat = await fs.lstat(root);
     if (!dirStat.isDirectory() || dirStat.isSymbolicLink()) throw Error('Initialize the ATGV workspace before pulling the catalog.');
@@ -643,25 +708,25 @@ async function syncGitCatalogCheckout(workspace, remoteUrl, repository, token=''
         let existing = await fs.lstat(target).catch(e => e.code === 'ENOENT' ? null : Promise.reject(e));
         if (!existing) {
             const reusedStage = await recoverStagedGitCatalog(root, remoteUrl, repository, git);
-            const stage = reusedStage || path.join(root, '.sdlc-catalog-clone-' + crypto.randomUUID());
+            const stage = reusedStage || path.join(root, '.library-clone-' + crypto.randomUUID());
             let validated = false, promoted = false;
             try {
                 if (!reusedStage) {
                     try { await git(root, ['clone', '--single-branch', '--branch', 'main', '--', remoteUrl, stage]); }
                     catch (error) {
                         if (/Remote branch main not found in upstream origin/i.test(String(error?.message || error)))
-                            throw Error('SDLC Catalog GitHub repository has no main branch. The SDLC Library requires main; verify the configured library URL and initialize or publish main before pulling. No existing library files were replaced.');
+                            throw Error('Library GitHub repository has no main branch. The SDLC Library requires main; verify the configured library URL and initialize or publish main before pulling. No existing library files were replaced.');
                         throw error;
                     }
                 }
                 const snapshot = await inspectGitCheckout(stage, repository);
                 const stagedOrigin = await git(stage, ['remote', 'get-url', 'origin']);
-                if (!sameGitRemote(stagedOrigin, remoteUrl)) throw Error('Cloned SDLC Catalog origin does not match the configured repository.');
+                if (!sameGitRemote(stagedOrigin, remoteUrl)) throw Error('Cloned Library origin does not match the configured repository.');
                 validated = true;
                 await promoteStagedGitCatalog(stage, target, remoteUrl, repository, snapshot, git, options);
                 promoted = true;
                 const installed = await verifiedExistingCatalog(target, remoteUrl, repository, snapshot.sha, git);
-                if (!installed) throw Error('SDLC Catalog checkout is missing after activation.');
+                if (!installed) throw Error('Library checkout is missing after activation.');
                 await writeGitCatalogState(workspace, installed);
                 return { ...installed, checkout: target, action: reusedStage ? 'recovered' : 'cloned' };
             } catch (error) {
@@ -674,12 +739,12 @@ async function syncGitCatalogCheckout(workspace, remoteUrl, repository, token=''
                 if ((!validated && !reusedStage) || promoted) await fs.rm(stage, { recursive:true, force:true }).catch(() => {});
             }
         }
-        if (!existing.isDirectory() || existing.isSymbolicLink()) throw Error('Existing sdlc-catalog is not a safe directory.');
+        if (!existing.isDirectory() || existing.isSymbolicLink()) throw Error('Existing library is not a safe directory.');
         const origin = await git(target, ['remote', 'get-url', 'origin']);
         if (!sameGitRemote(origin, remoteUrl))
-            throw Error('SDLC Catalog remote does not match the configured GitHub repository. No files changed.');
+            throw Error('Library remote does not match the configured GitHub repository. No files changed.');
         const branch = await git(target, ['branch', '--show-current']);
-        if (branch !== 'main') throw Error('SDLC Catalog must remain on the main branch. No files changed.');
+        if (branch !== 'main') throw Error('Library must remain on the main branch. No files changed.');
         const dirty = await git(target, ['status', '--porcelain', '--untracked-files=all']);
         const before = await git(target, ['rev-parse', 'HEAD']);
         if (dirty) return preserveDirtyGitCatalog({workspace,root,target,remoteUrl,repository,git,token,originalSha:before,options});
@@ -760,8 +825,8 @@ async function retireLegacyCatalogAssets(workspace, storeRoot, repository) {
 async function syncGitWorkspace(config, token, workspace, storeRoot=null, options={}) {
     const normalized = normalizeConfig(config);
     const parsed = parseRepository(normalized.repositoryUrl);
-    if (!parsed) throw Error('Configure the GitHub SDLC Catalog before pulling.');
-    if (!workspace) throw Error('Open an ATGV workspace before pulling the SDLC Catalog.');
+    if (!parsed) throw Error('Configure the GitHub Library before pulling.');
+    if (!workspace) throw Error('Open an ATGV workspace before pulling the Library.');
     const repository = parsed.owner + '/' + parsed.repo;
     const key = path.resolve(workspace);
     if (gitCatalogUpdates.has(key)) return gitCatalogUpdates.get(key);
@@ -785,6 +850,7 @@ async function syncGitWorkspace(config, token, workspace, storeRoot=null, option
 }
 async function gitInstalled(workspace, config) {
     if (!workspace) return null;
+    await migrateLegacyLibraryCheckout(workspace);
     const target = gitCatalogFolder(workspace);
     try {
         const state = JSON.parse(await fs.readFile(gitCatalogState(workspace), 'utf8'));
@@ -841,7 +907,7 @@ async function pruneInactiveWorkspaceRevisions(workspace, storeRoot, repository,
     const parsed = parseRepository(repository.startsWith('https:') ? repository : 'https://github.com/' + repository);
     const result = { removed: [], preserved: [] };
     if (!parsed || !/^[a-f0-9]{40}$/.test(activeSha)) return result;
-    const cache = path.join(storeRoot, 'sdlc-catalog', parsed.owner.toLowerCase(), parsed.repo.toLowerCase());
+    const cache = path.join(storeRoot, 'library', parsed.owner.toLowerCase(), parsed.repo.toLowerCase());
     for (const entry of await fs.readdir(base, { withFileTypes: true })) {
         const revision = entry.name;
         if (!/^[a-f0-9]{40}$/.test(revision) || revision === activeSha) continue;
@@ -898,7 +964,7 @@ async function activateWorkspace(config, storeRoot, workspace) {
     const parsed = parseRepository(selected.repository.startsWith('https:') ? selected.repository : 'https://github.com/' + selected.repository);
     if (!parsed || selected.ref !== 'main')
         throw Error('Workspace assets must be from the approved main branch.');
-    const source = path.join(storeRoot, 'sdlc-catalog', parsed.owner.toLowerCase(), parsed.repo.toLowerCase(), selected.sha);
+    const source = path.join(storeRoot, 'library', parsed.owner.toLowerCase(), parsed.repo.toLowerCase(), selected.sha);
     const root = path.join(workspace, '.atgv');
     const st = await fs.lstat(root).catch(e => e.code === 'ENOENT' ? null : Promise.reject(e));
     if (!st || !st.isDirectory() || st.isSymbolicLink())
@@ -942,12 +1008,13 @@ async function activateWorkspace(config, storeRoot, workspace) {
 async function activeFile(workspace, relative, { maxBytes = 65536 } = {}) {
     if (!workspace)
         return null;
+    await migrateLegacyLibraryCheckout(workspace);
     validPath(relative);
     const gitRoot = gitCatalogFolder(workspace);
     const gitState = await fs.lstat(gitCatalogState(workspace)).catch(e => e.code === 'ENOENT' ? null : Promise.reject(e));
     if (gitState) {
         const meta = await fs.lstat(gitRoot).catch(e => e.code === 'ENOENT' ? null : Promise.reject(e));
-        if (!meta?.isDirectory() || meta.isSymbolicLink()) throw Error('Invalid Git checkout for active SDLC Catalog.');
+        if (!meta?.isDirectory() || meta.isSymbolicLink()) throw Error('Invalid Git checkout for active Library.');
         const file = path.join(gitRoot, ...relative.split('/'));
         const stat = await fs.lstat(file).catch(e => e.code === 'ENOENT' ? null : Promise.reject(e));
         if (!stat) return null;
@@ -975,25 +1042,26 @@ async function activeFile(workspace, relative, { maxBytes = 65536 } = {}) {
     return fs.readFile(file, 'utf8');
 }
 async function activeRoot(workspace) {
-    if (!workspace) throw Error('Open an ATGV workspace and pull the SDLC Catalog from GitHub main.');
+    await migrateLegacyLibraryCheckout(workspace);
+    if (!workspace) throw Error('Open an ATGV workspace and pull the Library from GitHub main.');
     const gitState = await fs.readFile(gitCatalogState(workspace), 'utf8').catch(e => e.code === 'ENOENT' ? null : Promise.reject(e));
     if (gitState) {
         const active = JSON.parse(gitState);
         const root = gitCatalogFolder(workspace);
         const stat = await fs.lstat(root);
         if (!stat.isDirectory() || stat.isSymbolicLink() || active.ref !== 'main' || !/^[a-f0-9]{40}$/.test(active.sha))
-            throw Error('Unsafe active SDLC Catalog Git checkout.');
+            throw Error('Unsafe active Library Git checkout.');
         const current = await gitInstalled(workspace, { repositoryUrl: 'https://github.com/' + active.repository });
         return { root, ...(current || active) };
     }
     const base = path.join(workspace, '.atgv', 'catalog-assets');
     let active;
     try { active = JSON.parse(await fs.readFile(path.join(base, 'active.json'), 'utf8')); }
-    catch (error) { if (error.code === 'ENOENT') throw Error('SDLC Catalog not activated. Use Check Updates → Pull Catalog first.'); throw error; }
+    catch (error) { if (error.code === 'ENOENT') throw Error('Library not activated. Use Check Updates → Pull Library first.'); throw error; }
     if (active.ref !== 'main' || !/^[a-f0-9]{40}$/.test(String(active.sha || '')))
-        throw Error('Invalid active SDLC Catalog revision. Pull the catalog again.');
+        throw Error('Invalid active Library revision. Pull the catalog again.');
     const root = path.join(base, active.sha), stat = await fs.lstat(root);
-    if (!stat.isDirectory() || stat.isSymbolicLink()) throw Error('Unsafe activated SDLC Catalog.');
+    if (!stat.isDirectory() || stat.isSymbolicLink()) throw Error('Unsafe activated Library.');
     return {root, ...active};
 }
 async function activeManifest(workspace) {
@@ -1065,7 +1133,7 @@ async function roleSkillChoices(workspace, roleId) {
 async function roleSkill(workspace, roleId, selectedSkillId = '') {
     const choices = await roleSkillChoices(workspace, roleId);
     const selected = selectedSkillId ? choices.find(item => item.id === selectedSkillId) : choices.find(item => item.default);
-    if (!selected) throw Error('Selected catalog role skill is unavailable. Pull Catalog or choose another role variant.');
+    if (!selected) throw Error('Selected catalog role skill is unavailable. Pull Library or choose another role variant.');
     const text = await activeFile(workspace, selected.source, {maxBytes:20000});
     if (!text) throw Error('Selected role skill no longer exists in the active catalog.');
     return text.slice(0, 12000);
@@ -1165,7 +1233,7 @@ async function designComponentCatalog(workspace, designId='aia-qi') {
         throw Error('The requested design system is not listed in the active GitHub catalog.');
     const file = `shared/design-systems/${designId}/kit/ai/component-catalog.json`;
     const raw = await activeFile(workspace,file,{maxBytes:120000});
-    if (!raw) throw Error('The selected framework component inventory is missing from the active catalog. Publish the updated tech-stacks-skills/main catalog, then Pull Catalog and activate it for this project.');
+    if (!raw) throw Error('The selected framework component inventory is missing from the active catalog. Publish the updated tech-stacks-skills/main catalog, then Pull Library and activate it for this project.');
     let data;try {data=JSON.parse(raw);} catch {throw Error('The GitHub component inventory is not valid JSON.');}
     if (!data || typeof data!=='object' || Array.isArray(data) || !Array.isArray(data.components) ||
         !data.components.length || data.components.length>200 ||
@@ -1185,4 +1253,4 @@ async function stackAsset(workspace, id) {
         throw Error('Invalid technology stack ID.');
     return activeFile(workspace, `tech-stacks/${id}/stack.json`, { maxBytes: 16000 });
 }
-module.exports = { runCatalogGit, catalogGitExecutables, promoteStagedGitCatalog, retireLegacyCatalogAssets, gitCatalogFolder, gitCatalogState, syncGitCatalogCheckout, syncGitWorkspace, gitInstalled, activeRoot, activeManifest, activeTree, designFrameworks, designFrameworkAvailability, designColorPalette, designTemplate, designReference, designComponentCatalog, designComponentsReference, CANONICAL_REPO, activateWorkspace, pruneInactiveWorkspaceRevisions, activeFile, roleSkill, roleSkillChoices, designGuidance, stackAsset, DEFAULT_CONFIG, normalizeConfig, parseRepository, apiRoute, validPath, relevantPath, blobSha, parseSimpleYaml, inspectManifest, remoteInfo, remoteVersion, getTree, download, cached };
+module.exports = { migrateLegacyLibraryCheckout, runCatalogGit, catalogGitExecutables, promoteStagedGitCatalog, retireLegacyCatalogAssets, gitCatalogFolder, gitCatalogState, syncGitCatalogCheckout, syncGitWorkspace, gitInstalled, activeRoot, activeManifest, activeTree, designFrameworks, designFrameworkAvailability, designColorPalette, designTemplate, designReference, designComponentCatalog, designComponentsReference, CANONICAL_REPO, activateWorkspace, pruneInactiveWorkspaceRevisions, activeFile, roleSkill, roleSkillChoices, designGuidance, stackAsset, DEFAULT_CONFIG, normalizeConfig, parseRepository, apiRoute, validPath, relevantPath, blobSha, parseSimpleYaml, inspectManifest, remoteInfo, remoteVersion, getTree, download, cached };

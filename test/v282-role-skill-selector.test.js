@@ -10,7 +10,7 @@ const {execFileSync}=require('node:child_process');
 const git=(cwd,...args)=>execFileSync('git',args,{cwd,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
 async function fixture(fn){
  const temp=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-role-variants-'));
- const workspace=path.join(temp,'workspace'),checkout=path.join(workspace,'.atgv','sdlc-catalog');
+ const workspace=path.join(temp,'workspace'),checkout=path.join(workspace,'.atgv','library','repository');
  const root=path.join(checkout,'roles','business-analyst');
  await fs.mkdir(path.join(root,'skills','waterfall'),{recursive:true});
  await fs.writeFile(path.join(root,'SKILL.md'),'---\nid: ba.standard\n---\nStandard guidance');
@@ -19,7 +19,7 @@ async function fixture(fn){
  await fs.writeFile(path.join(checkout,'catalog.json'),JSON.stringify({schema:1,version:'1.1.3',roles:['business-analyst'],techStacks:[]}));
  git(checkout,'init','-b','main');git(checkout,'config','user.name','ATGV test');git(checkout,'config','user.email','test@example.invalid');git(checkout,'add','.');git(checkout,'commit','-m','catalog fixtures');
  const sha=git(checkout,'rev-parse','HEAD');
- await fs.writeFile(path.join(workspace,'.atgv','sdlc-catalog-state.json'),JSON.stringify({sha,ref:'main',repository:'example/skills',version:'1.1.3',roles:['business-analyst'],roleCount:1}));
+ await fs.writeFile(path.join(workspace,'.atgv','library-state.json'),JSON.stringify({sha,ref:'main',repository:'example/skills',version:'1.1.3',roles:['business-analyst'],roleCount:1}));
  try{return await fn({workspace,checkout,root})}finally{await fs.rm(temp,{recursive:true,force:true})}
 }
 test('one checkout exposes standard and alternate BA variants and reads chosen verified content',async()=>fixture(async({workspace})=>{

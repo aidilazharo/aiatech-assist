@@ -1,6 +1,26 @@
-# GitHub SDLC Catalog integration — ATGV v0.0.92
+# GitHub SDLC Library integration
 
-Open **Extension Settings → Integrations → GitHub — SDLC Catalog**. This is a global extension configuration, separate from the per-project GitHub repository.
+Open **Extension Settings → Integrations → GitHub — SDLC Library**. This is a global extension configuration, separate from the per-project GitHub repository.
+
+## Workspace library layout (current)
+
+The workspace uses one shared `.atgv/library/` directory:
+
+```text
+.atgv/
+├── atgv.workspace.json
+├── library/
+│   ├── repository/    # verified GitHub main-branch checkout (do not edit)
+│   ├── sdlc/          # shared SDLC defaults, workflows, roles
+│   └── templates/     # shared editable document templates
+├── library-state.json
+└── ...
+projects/<project-id>/sdlc/  # project-specific role settings and progress
+```
+
+The library updater only pulls inside `library/repository`. It never overwrites `library/sdlc` or `library/templates`. Existing `.atgv/sdlc-catalog`, direct `.atgv/library` Git checkouts and `.atgv/sdlc`/`.atgv/templates` are migrated without resetting Git history or overwriting conflicting local files.
+
+Existing project-specific `projects/<project-id>/sdlc` folders remain in place. Existing VS Code secret-storage and settings keys also remain compatible. The actual configured GitHub repository name is not changed.
 
 ## Create the central GitHub repository
 
@@ -50,8 +70,8 @@ All role IDs must match `roles/<role-id>/SKILL.md`. Each listed stack must conta
 
 1. Enter `https://github.com/organization/atgv-sdlc-catalog` and choose a pinned release tag (recommended) or branch.
 2. Select VS Code GitHub sign-in, fine-grained PAT (Contents: Read), or public access.
-3. Select **Test Connection** and **Save Catalog Settings**.
-4. Select **Pull Catalog** to retrieve role skills, shared workflows and all stack definitions into ATGV's **global storage cache**. The download is verified against GitHub blob hashes, size limits, and path safety checks before a versioned snapshot is activated.
+3. Select **Test Connection** and **Save Library Settings**.
+4. Select **Pull Library** to retrieve role skills, shared workflows and all stack definitions into ATGV's **global storage cache**. The download is verified against GitHub blob hashes, size limits, and path safety checks before a versioned snapshot is activated.
 5. Select **View Updates** to compare the remote commit SHA to the installed snapshot; it does not change project files.
 
 The optional hourly update check is independent from project opening. The catalog API performs read-only operations and never creates commits, branches or pull requests.

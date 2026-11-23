@@ -91,7 +91,7 @@ test('pulls and pins a validated catalog in an isolated local cache using only r
   assert.equal(installed.workflows,1);assert.equal(installed.templates,1);
   assert.equal(installed.sha,commitSha);
   const saved=await catalog.cached(configuration,root);assert.deepEqual(saved,installed);
-  const file=path.join(root,'sdlc-catalog','aia','atgv-sdlc-catalog',commitSha,'roles','developer','SKILL.md');
+  const file=path.join(root,'library','aia','atgv-sdlc-catalog',commitSha,'roles','developer','SKILL.md');
   assert.match(await fs.readFile(file,'utf8'),/Developer/);
   assert.equal(net.requests.every(req=>req.url.startsWith(net.route)),true);
   assert.deepEqual(await catalog.cached({...configuration,ref:'other'},root),installed); // All catalog references resolve to main.
@@ -114,7 +114,7 @@ test('refuses corrupted cached revision without overwriting it',async()=>{
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'catalog-integrity-'));
  try{
   const net=network();await catalog.download(configuration,'token',root,{request:net.request});
-  const file=path.join(root,'sdlc-catalog','aia','atgv-sdlc-catalog',commitSha,'roles','developer','SKILL.md');
+  const file=path.join(root,'library','aia','atgv-sdlc-catalog',commitSha,'roles','developer','SKILL.md');
   await fs.writeFile(file,'# Changed!\n');
   await assert.rejects(()=>catalog.download(configuration,'token',root,{request:net.request}),/incomplete or altered/);
   assert.equal(await fs.readFile(file,'utf8'),'# Changed!\n');

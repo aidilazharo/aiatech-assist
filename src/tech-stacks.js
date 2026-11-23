@@ -32,7 +32,7 @@ function normalizeStack(input, expectedId) {
     return { schema: 1, id, name: str('name'), label: str('label'), accent, runtime: str('runtime'), language: str('language'), framework: str('framework'), buildTool: str('buildTool'), unit: arr('unit'), integration: arr('integration'), e2e: arr('e2e'), templateRepository: str('templateRepository'), notes: str('notes', 1200), previewUrl, apiBaseUrl:opt('apiBaseUrl'), accessManual:opt('accessManual'), orm:opt('orm'), database:opt('database'), stackType:opt('stackType'), runCommand:opt('runCommand'), testCommand:opt('testCommand'), buildCommand:opt('buildCommand') };
 }
 async function loadStack(id, workspace) {
-    if (!workspace) throw Error('Open a workspace and pull the GitHub SDLC Catalog before choosing a stack.');
+    if (!workspace) throw Error('Open a workspace and pull the GitHub Library before choosing a stack.');
     const manifest = await catalogAssets.activeManifest(workspace);
     if (!manifest.techStacks.includes(id) || !ID_RE.test(id)) throw Error('Technology stack is not in the approved GitHub catalog: '+id);
     const raw = await catalogAssets.stackAsset(workspace,id);
@@ -155,7 +155,21 @@ async function ensureWorkspaceLibrary(workspace) {
         if (e.code !== 'ENOENT')
             throw e;
     }
-    await copyDefaults(path.join(ROOT, 'defaults'), base);
+    await fs.mkdir(base, { recursive: true });
+    await catalogAssets.migrateLegacyLibraryCheckout(workspace);
+    // Keep shared defaults outside the verified Git checkout.
+    for (const entry of await fs.readdir(path.join(ROOT,'defaults'), {withFileTypes:true})) {
+        if (entry.isSymbolicLink()) throw Error('Bundled library assets cannot contain symbolic links.');
+        const from=path.join(ROOT,'defaults',entry.name);
+        const parent=['sdlc','templates'].includes(entry.name) ? path.join(base,'library') : base;
+        const to=path.join(parent,entry.name);
+        if (entry.isDirectory()) await copyDefaults(from,to);
+        else if (entry.isFile()) {
+            await fs.mkdir(parent,{recursive:true});
+            try { await fs.copyFile(from,to,require('node:fs').constants.COPYFILE_EXCL); }
+            catch(error) { if(error.code!=='EEXIST') throw error; }
+        }
+    }
     const marker = path.join(base, 'atgv.workspace.json');
     try {
         await fs.writeFile(marker, JSON.stringify({ schema: 1, managedBy: 'aia-my.atgv-aiatech-assist' }, null, 2) + '\n', { flag: 'wx' });
@@ -197,7 +211,10 @@ async function scaffoldProject(workspace, project) {
             throw new Error('ATGV project folder must be a real directory.');
     }
     await fs.mkdir(base, { recursive: true });
-    await copyDefaults(path.join(ROOT, 'defaults', 'sdlc'), path.join(base, 'sdlc'));
+    const sharedSdlc=path.join(workspace, '.atgv', 'library', 'sdlc');
+    const sharedStat=await fs.lstat(sharedSdlc).catch(error=>error.code==='ENOENT'?null:Promise.reject(error));
+    if(sharedStat&&(!sharedStat.isDirectory()||sharedStat.isSymbolicLink())) throw Error('Unsafe shared SDLC library folder.');
+    await copyDefaults(sharedStat?sharedSdlc:path.join(ROOT,'defaults','sdlc'),path.join(base,'sdlc'));
     for (const name of ['requirements', 'architecture', 'development', 'testing', 'deployment', 'meetings']) {
         const folder = path.join(base, 'documents', name);
         await fs.mkdir(folder, { recursive: true });
@@ -228,7 +245,7 @@ async function scaffoldProject(workspace, project) {
             await fs.mkdir(path.dirname(destination), { recursive: true });
             let text = '';
             if (task.template) {
-                const template = path.join(workspace, '.atgv', 'templates', task.template);
+                const template = path.join(workspace, '.atgv', 'library', 'templates', task.template);
                 try {
                     text = await fs.readFile(template, 'utf8');
                 }

@@ -1,7 +1,7 @@
 'use strict';
 /**
  * Explicit, user-confirmed host-tool installs. All commands and arguments are
- * static allowlist entries; no instructions arrive from the SDLC Catalog and
+ * static allowlist entries; no instructions arrive from the Library and
  * webview messages can select only a known tool ID.
  */
 const {spawn}=require('node:child_process');

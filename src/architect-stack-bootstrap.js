@@ -246,12 +246,12 @@ async function bootstrap({root,stackId,generation=0,baseBranch='main',token='',o
   const migrated=await require('./architect-scaffold-migration').migrate({root,stackIds:[stackId],onProgress:progress});
   if(migrated.migrated){
    if(migrated.branch)base.branch=migrated.branch;
-   remember('Verified legacy '+stackId+' starter migrated to current SDLC Catalog without overwriting user work.');
+   remember('Verified legacy '+stackId+' starter migrated to current Library without overwriting user work.');
   }
   // Only known, byte-identical untracked legacy SQLite tests may be repaired.
   // The originals are backed up in Git metadata, and user edits are protected.
   const repaired=await require('./architect-scaffold-repair').repair({root,stackIds:[stackId],onProgress:progress});
-  if(repaired.repaired)remember('Legacy SQLite test safely reconciled with the activated SDLC Catalog.');
+  if(repaired.repaired)remember('Legacy SQLite test safely reconciled with the activated Library.');
   const inspect=await developer.inspectScripts(root);
   if(inspect.targets.length!==1)throw Error('Expected one runnable application target in the selected stack.');
   const target=inspect.targets[0];

@@ -13,7 +13,7 @@ const sha='e'.repeat(40);
 async function prepare(){
  const home=await fs.mkdtemp(path.join(os.tmpdir(),'atgv241activate-'));
  const store=path.join(home,'storage'),workspace=path.join(home,'project');
- const base=path.join(store,'sdlc-catalog','example-org','tech-stacks-skills');
+ const base=path.join(store,'library','example-org','tech-stacks-skills');
  const source=path.join(base,sha);
  await fs.mkdir(source,{recursive:true});await fs.mkdir(path.join(workspace,'.atgv'),{recursive:true});
  const config={repositoryUrl:'https://github.com/example-org/tech-stacks-skills',ref:'main'};
