@@ -461,6 +461,7 @@
   if(get('baAutoArtifactSave').disabled||!artifactContext)return;
   get('baAutoArtifactSave').disabled=true;
   input.readOnly=true;
+  artifactQuill?.enable(false);
   const text=input.value;
   get('baAutoArtifactStatus').textContent='Saving document…';
   invoke('baSaveArtifact',{kind,digest:sourceDigest,requestId:++request,revision:artifactContext.revision,text});
