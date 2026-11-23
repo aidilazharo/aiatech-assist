@@ -1707,9 +1707,9 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
    if(String(org?.login||'').toLowerCase()!==data.owner.toLowerCase())throw Error('Unexpected GitHub owner response');
   }},
   {id:'extension',label:'Extension · read/write/releases',url:repoApi(data.extension),required:true,
-   check:()=>validatedGithub(repoApi(data.extension),{requiredWrite:true})},
+   check:()=>validatedGithub(repoApi(data.extension),{requiredWrite:true,checkRelease:false})},
   {id:'library',label:'Library · read/write/releases',url:repoApi(data.library),required:true,check:async()=>{
-   const capabilities=await validatedGithub(repoApi(data.library),{requiredWrite:true});
+   const capabilities=await validatedGithub(repoApi(data.library),{requiredWrite:true,checkRelease:false});
    library=await sdlcCatalog.remoteInfo(libraryConf,github);
    if(!library?.sha)throw Error('Library main branch cannot be verified.');
    return capabilities;
@@ -1733,8 +1733,9 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
     message:info?.asset?'Read/write and authenticated release download verified.':info?.releases===0?
      'Repository access verified. No published release assets to download yet.':'Reachable and verified.'};
   }catch(error){
+   const sourceDenied=(spec.id==='extension'||spec.id==='library')&&/\bHTTP\s+403\b/i.test(String(error?.message||error));
    value={id:spec.id,label:spec.label,url:spec.url,required:spec.required,state:'error',
-    message:startupConnectionFailure(error)};
+    message:sourceDenied?'GitHub source HTTP 403. Authorize this repository in the organization PAT (Contents: read/write, Pull requests: read/write); obtain organization approval or SSO authorization if required.':startupConnectionFailure(error)};
   }
   checks.push(value);
   await onProgress(value);
@@ -6782,6 +6783,7 @@ async function handleDashboardMessage(msg){
           if(!live.running||!cwd||!(cwd===path.resolve(root)||cwd.startsWith(path.resolve(root)+path.sep)))
             throw Error('No ATGV-managed application is running in the selected project.');
           const safe=require('../../architect-custom-stack').loopbackPreview(live.previewUrl);
+          if(new URL(safe).pathname.startsWith('/api/'))throw Error('Only a mock API is running, not the frontend application. Stop it, then select Install & Run to launch the detected frontend.');
           const response=await fetch(safe,{method:'GET',redirect:'manual',signal:AbortSignal.timeout(2500)});
           if(!response.ok)throw Error('Application process is running but localhost preview is not healthy (HTTP '+response.status+').');
           await vscode.env.openExternal(vscode.Uri.parse(safe));
@@ -7003,7 +7005,9 @@ async function handleDashboardMessage(msg){
           if(msg.expectedSha&&msg.expectedSha!==inspected.sha)
             throw Error('Local Git revision has changed. Refresh and retry without overwriting any files.');
           if(!inspected.clean)throw Error('Local checkout contains uncommitted changes. Commit or stash them before Install & Run.');
-          const target=inspected.targets.find(row=>row.relative===msg.relative&&row.runnable)||
+          const requested=inspected.targets.find(row=>row.relative===msg.relative&&row.runnable);
+          const target=requested?.mockable?requested:
+            inspected.targets.find(row=>row.runnable&&row.mockable)||requested||
             (!msg.relative?inspected.targets.find(row=>row.runnable):null);
           if(!target)throw Error('No runnable application target is detected in this repository.');
           const action='Install & Run Custom Stack';
