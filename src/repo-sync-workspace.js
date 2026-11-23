@@ -2,6 +2,7 @@
 // Independent ATGV: Workspace webview for Source main -> Destination pull request.
 const crypto=require('node:crypto');
 const repoSync=require('./repo-sync-pr');
+const repoReleases=require('./repo-sync-release');
 const repoCredentials=require('./repo-sync-credentials');
 const SAVED_URL_KEYS=Object.freeze({Source:'atgvAssist.repoSync.lastSourceUrl',Destination:'atgvAssist.repoSync.lastDestinationUrl'});
 const SAVED_LIST_KEYS=Object.freeze({Source:'atgvAssist.repoSync.savedSourceUrls',Destination:'atgvAssist.repoSync.savedDestinationUrls'});
@@ -94,6 +95,12 @@ ol{line-height:1.85;padding-left:20px}
 <label for="reviewTitle">PR title (for pull requests)</label><input id="reviewTitle" type="text" maxlength="110">
 <label for="reviewDescription">PR description (for pull requests)</label><textarea id="reviewDescription" rows="4" maxlength="4000"></textarea>
 <div class="actions"><button id="publishReviewed" type="button">Push & Create PR</button><button id="pushBranchOnly" type="button" class="secondary">Push Branch Only</button><button id="redoReview" type="button" class="secondary">Pull & Study Again</button></div>
+</section>
+<section class="card full" id="releaseCopyPanel"><h2>5. Copy GitHub Release Artifacts</h2>
+<p class="muted">Verified aiMalaysia source Releases only. Copies the VSIX/ZIP, SHA-256 checksum and release notes to the matching aiMalaysia distribution repository. No destination Git folder or PR is required.</p>
+<label for="releaseKind">Artifact type</label><select id="releaseKind"><option value="extension">Extension · aiMalaysia/extension</option><option value="library">Library · aiMalaysia/library</option></select>
+<label for="releaseTag">Source Release tag (optional)</label><input id="releaseTag" type="text" maxlength="100" placeholder="Latest (automatic), or v1.2.3">
+<div class="actions"><button id="copyReleaseArtifacts" type="button">Copy Release Artifacts</button></div>
 </section></div></form>
 
 </main>
@@ -113,6 +120,7 @@ function buttons(){
  get('publishReviewed').disabled=busy||!reviewReady;
  get('pushBranchOnly').disabled=busy||!reviewReady;
  get('redoReview').disabled=busy;
+ get('copyReleaseArtifacts').disabled=busy;
  get('selectRepoB').disabled=busy;
  get('testSource').disabled=busy;get('testDestination').disabled=busy;
  for(const kind of ['Source','Destination']){
@@ -207,6 +215,11 @@ get('publishReviewed').addEventListener('click',()=>publishReviewed(false));
 get('pushBranchOnly').addEventListener('click',()=>publishReviewed(true));
 get('redoReview').addEventListener('click',()=>get('repoSyncForm').requestSubmit());
 get('openPr').addEventListener('click',()=>{if(createdPr)vscode.postMessage({command:'openCreatedPr'});});
+get('copyReleaseArtifacts').addEventListener('click',()=>{
+ if(busy)return;
+ busy=true;buttons();show('Preparing trusted aiMalaysia Release artifact copy...');
+ vscode.postMessage({command:'copyReleaseArtifacts',kind:get('releaseKind').value,tag:get('releaseTag').value.trim()});
+});
 window.addEventListener('message',e=>{
  const data=e.data||{};
  if(data.type==='repoSyncSavedList')showSavedRepos(data.kind,data.entries);
@@ -262,6 +275,7 @@ window.addEventListener('message',e=>{
  if(data.type==='repoSyncForgetResult'){
   busy=false;buttons();show(data.message||'Saved connection action finished.',data.success?'success':'ready');
  }
+ if(data.type==='repoReleaseResult'){busy=false;buttons();show(data.message||'Release operation finished.',data.success?'success':'error');}
  if(data.type==='repoSyncResult'){busy=false;createdPr=data.success?String(data.prUrl||''):'';if(data.success){reviewReady=false;get('reviewPanel').hidden=true;}buttons();show(data.message||'Sync finished.',data.success?'success':'error');}
 });
 buttons();
@@ -386,6 +400,41 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
    return;
   }
   if(message.command==='openCreatedPr'){if(createdPr)await vscode.env.openExternal(vscode.Uri.parse(createdPr));return;}
+  if(message.command==='copyReleaseArtifacts'){
+   if(busy){await post({type:'repoReleaseResult',success:false,message:'Another Workspace operation is running.'});return;}
+   busy=true;
+   let source=null,destination=null,sourcePat='',destPat='';
+   try{
+    const kind=String(message.kind||''),tag=repoReleases.safeTag(message.tag);
+    const pair=repoReleases.destinations(kind);
+    source=repoCredentials.parseCredentialUrl('https://github.com/'+pair.source);
+    destination=repoCredentials.parseCredentialUrl('https://github.com/'+pair.destination);
+    const accepted=await vscode.window.showWarningMessage(
+     'Copy the '+(tag||'latest')+' '+kind+' GitHub Release artifacts?\nSource: '+pair.source+
+     '\nDestination: '+pair.destination+'\n\nThe verified VSIX/ZIP and checksum will be published without replacing conflicting existing assets.',
+     {modal:true},'Copy Release Artifacts');
+    if(accepted!=='Copy Release Artifacts'){
+     await post({type:'repoReleaseResult',success:false,message:'Cancelled. No Release artifacts copied.'});return;
+    }
+    await post({type:'repoSyncProgress',message:'Verifying aiMalaysia repository permissions...'});
+    const srcCred=await verifiedPat('Source',source);sourcePat=srcCred.token;
+    await rememberRepo('Source',source);
+    const destCred=await verifiedPat('Destination',destination);destPat=destCred.token;
+    await rememberRepo('Destination',destination);
+    const outcome=await repoReleases.copy({kind,tag,sourceToken:sourcePat,destinationToken:destPat,
+     onProgress:async message=>post({type:'repoSyncProgress',message})});
+    const summary='Release '+outcome.tag+' verified and copied.\nSource: '+outcome.source+
+     '\nDestination: '+outcome.destination+'\nUploaded: '+outcome.uploaded+
+     '\nAlready identical: '+outcome.unchanged+'\nSHA-256: '+outcome.sha256;
+    await post({type:'repoReleaseResult',success:true,message:summary});
+    onLog('Workspace Release copy: '+summary);
+   }catch(error){
+    const reason=sanitize(error,[sourcePat,destPat,source?.token,destination?.token]);
+    onLog('Workspace Release copy failed: '+reason);
+    await post({type:'repoReleaseResult',success:false,message:reason});
+   }finally{busy=false;}
+   return;
+  }
   if(message.command==='testRepoConnection'){
    const kind=message.kind;
    if(busy){await post({type:'repoConnectionResult',kind,success:false,message:'A repository operation is already running.'});return;}
