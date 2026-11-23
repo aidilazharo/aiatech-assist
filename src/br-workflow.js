@@ -1116,6 +1116,7 @@ async function generated(registry,id,revision,{discoveryRevision,requirements,ri
      const before=existing.title;Object.assign(existing,stable,{evidence:verified,questionRefs,status:'draft',needsRefresh:true,staleReason:'Revision awaiting approval',draftSavedAt:null,modifiedEpoch:next.importEpoch,source:{name:next.importName,digest:next.importDigest,discoveryRevision}});
      impact.push({id:existing.id,title:stable.title,previousTitle:before,change:'modified',approved:false});
     }
+   }else{
     const max=Math.max(next.lastBrSequence||0,...next.brs.map(b=>Number(b.id?.slice(3))||0));next.lastBrSequence=max+1;
     const identity='BR-'+String(max+1).padStart(3,'0'),stable=stableProposal(proposal,null);
     if(automatic&&!stable.jiraPlacement)stable.jiraPlacement='Create an Epic for '+stable.title+' and group the related Features and Stories under it.';
