@@ -164,7 +164,7 @@ async function listJira(config, token, limit) {
         const res = await requestJson(`${site}/rest/api/3/search/jql`, { ...atlassianAuth(config, token), method: 'POST', data: args });
         for (const issue of res.issues || []) {
             const f = issue.fields || {};
-            docs.push({ id: `jira:${site}:${issue.key}`, provider: 'Jira', title: `${issue.key} — ${f.summary || ''}`,
+            docs.push({ id: `jira:${site}:${issue.key}`, provider: 'Jira', remoteId: /^\d+$/.test(String(issue.id||''))?String(issue.id):String(issue.key), issueKey: String(issue.key), status: f.status?.name || '', title: `${issue.key} — ${f.summary || ''}`,
                 url: `${site}/browse/${encodeURIComponent(issue.key)}`, text: `${issue.key} ${f.summary || ''}\nStatus: ${f.status?.name || ''}\nType: ${f.issuetype?.name || ''}\n${textFromAdf(f.description)}`,
                 updated: f.updated || '' });
         }

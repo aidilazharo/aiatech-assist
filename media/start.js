@@ -4343,14 +4343,34 @@ function renderDocumentGroups(){
   }
 }
 function renderKnowledgeState(summary){$('knowledgeDocs').textContent=String(summary.documents||0);$('knowledgeChunks').textContent=String(summary.chunks||0);$('knowledgeSync').disabled=!activeId;}
+function renderConnectedSyncState(message){
+ if(message.projectId!==activeId)return;
+ const node=$('connectedSyncReport');if(!node)return;
+ const state=message.state||{},providers=state.providers||[];
+ if(state.legacy){node.textContent='SQLite metadata is unavailable until this ATGV workspace is initialized.';return;}
+ const lines=providers.map(row=>{
+  const source=row.provider.charAt(0).toUpperCase()+row.provider.slice(1);
+  const stamp=row.last_success_at?new Date(row.last_success_at).toLocaleString():'Never';
+  const note=row.last_error?' · Last refresh failed':'';
+  return source+' · '+row.scope+' · '+row.count+' records · Last successful sync: '+stamp+note;
+ });
+ lines.push('Pending approved writes: '+(state.outbox||[]).filter(row=>row.state==='pending').length);
+ lines.push('Conflicts needing review: '+(state.conflicts||[]).length);
+ if((state.conflicts||[]).length)lines.push(...state.conflicts.slice(0,5).map(row=>
+  row.provider+' · '+row.resource_id+' · '+row.reason));
+ node.textContent=lines.join('\n')||'No remote synchronization records yet.';
+}
+window.addEventListener('message',({data})=>{
+ if(data?.type==='connectedSyncState')renderConnectedSyncState(data);
+});
 function renderLiveRemoteState(value){
  if(!value||value.projectId!==activeId)return;
  const node=$('knowledgeSyncStatus');if(!node)return;
- if(value.phase==='running'){node.textContent='Fetching current Jira and Confluence data automatically…';return;}
+ if(value.phase==='running'){node.textContent='Fetching Jira and Confluence data plus GitHub metadata…';return;}
  if(value.phase==='offline'){node.textContent='Offline mode · cached data retained; live refresh is paused.';return;}
  const results=Object.entries(value.results||{}).map(([name,count])=>name+': '+count+' fetched');
  const errors=Object.entries(value.errors||{}).map(([name,message])=>name+': unavailable ('+String(message).slice(0,130)+')');
- node.textContent=[...results,...errors].join(' · ')||'Automatic Jira and Confluence refresh enabled; no connected sources found.';
+ node.textContent=[...results,...errors].join(' · ')||'Automatic Jira, Confluence and GitHub metadata checks enabled; no connected sources found.';
  if(value.lastAttempt)node.textContent+=' · Checked '+new Date(value.lastAttempt).toLocaleString();
 }
 function roleUnsaved(){roleSettingsDirty=true;updateExtensionSettingBadges();$('saveRoleSettings').disabled=false;$('roleSettingsStatus').textContent='Unsaved changes';}
@@ -5056,6 +5076,7 @@ window.addEventListener('message',event=>{
   &&view==='work'&&['business-analyst','project-manager'].includes(selectedRole))
   searchJiraInventory();
 });
+$('connectedSyncRefresh').addEventListener('click',()=>{if(!activeId)return;const node=$('connectedSyncReport');node.textContent='Checking configured Jira, Confluence and GitHub endpoints…';send('refreshSQLiteSync',{projectId:activeId});});
 $('knowledgeSync').addEventListener('click',()=>{if(!activeId)return;$('knowledgeSync').disabled=true;$('knowledgeSyncStatus').textContent='Syncing local project documents and available connected sources…';send('sync',{id:activeId});});
 $('jiraTemplatePreview').addEventListener('click',()=>send('jiraTemplatePreview'));
 $('jiraTemplateApprove').addEventListener('click',()=>send('jiraTemplateApprove'));
