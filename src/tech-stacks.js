@@ -157,17 +157,16 @@ async function ensureWorkspaceLibrary(workspace) {
     }
     await fs.mkdir(base, { recursive: true });
     await catalogAssets.migrateLegacyLibraryCheckout(workspace);
-    // Keep shared defaults outside the verified Git checkout.
+    // Shared sdlc/ and templates/ are tracked in GitHub Library main.
+    // Only workspace-specific metadata/branding is copied locally.
     for (const entry of await fs.readdir(path.join(ROOT,'defaults'), {withFileTypes:true})) {
-        if (entry.isSymbolicLink()) throw Error('Bundled library assets cannot contain symbolic links.');
-        const from=path.join(ROOT,'defaults',entry.name);
-        const parent=['sdlc','templates'].includes(entry.name) ? path.join(base,'library') : base;
-        const to=path.join(parent,entry.name);
-        if (entry.isDirectory()) await copyDefaults(from,to);
-        else if (entry.isFile()) {
-            await fs.mkdir(parent,{recursive:true});
-            try { await fs.copyFile(from,to,require('node:fs').constants.COPYFILE_EXCL); }
-            catch(error) { if(error.code!=='EEXIST') throw error; }
+        if (entry.isSymbolicLink()) throw Error('Bundled workspace defaults cannot contain symbolic links.');
+        if(['sdlc','templates'].includes(entry.name)) continue;
+        const from=path.join(ROOT,'defaults',entry.name),to=path.join(base,entry.name);
+        if(entry.isDirectory())await copyDefaults(from,to);
+        else if(entry.isFile()){
+            try {await fs.copyFile(from,to,require('node:fs').constants.COPYFILE_EXCL);}
+            catch(error){if(error.code!=='EEXIST')throw error;}
         }
     }
     const marker = path.join(base, 'atgv.workspace.json');
@@ -211,10 +210,10 @@ async function scaffoldProject(workspace, project) {
             throw new Error('ATGV project folder must be a real directory.');
     }
     await fs.mkdir(base, { recursive: true });
-    const sharedSdlc=path.join(workspace, '.atgv', 'library', 'sdlc');
-    const sharedStat=await fs.lstat(sharedSdlc).catch(error=>error.code==='ENOENT'?null:Promise.reject(error));
-    if(sharedStat&&(!sharedStat.isDirectory()||sharedStat.isSymbolicLink())) throw Error('Unsafe shared SDLC library folder.');
-    await copyDefaults(sharedStat?sharedSdlc:path.join(ROOT,'defaults','sdlc'),path.join(base,'sdlc'));
+    // Runtime progress stays project-specific; process and role definitions live
+    // in the versioned Library. Existing project YAML files are never deleted.
+    for(const name of ['sdlc','sdlc/processes','sdlc/roles','sdlc/workflows'])
+        await fs.mkdir(path.join(base,name),{recursive:true});
     for (const name of ['requirements', 'architecture', 'development', 'testing', 'deployment', 'meetings']) {
         const folder = path.join(base, 'documents', name);
         await fs.mkdir(folder, { recursive: true });
@@ -245,14 +244,14 @@ async function scaffoldProject(workspace, project) {
             await fs.mkdir(path.dirname(destination), { recursive: true });
             let text = '';
             if (task.template) {
-                const template = path.join(workspace, '.atgv', 'library', 'templates', task.template);
-                try {
-                    text = await fs.readFile(template, 'utf8');
-                }
-                catch (e) {
-                    if (e.code !== 'ENOENT')
-                        throw e;
-                    text = await fs.readFile(path.join(ROOT, 'defaults', 'templates', task.template), 'utf8');
+                // Project override wins, otherwise use the pinned Library.
+                const local=path.join(base,'overrides','templates',task.template);
+                const lib=await catalogAssets.activeFile(workspace,'templates/'+task.template,{maxBytes:65536});
+                try {text=await fs.readFile(local,'utf8');}
+                catch(e) {if(e.code!=='ENOENT')throw e;text=lib||'';}
+                if(!text) {
+                    try {text=await fs.readFile(path.join(ROOT,'defaults','templates',task.template),'utf8');}
+                    catch(e){if(e.code!=='ENOENT')throw e;text='# '+task.label+'\n\n## Details\n\nTBD\n';}
                 }
             }
             else if (!task.template) {

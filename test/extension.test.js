@@ -137,7 +137,8 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
     handler({command:'openingInitialize'});
     await until(()=>messages.some(m=>m.type==='state'&&m.opening?.phase==='initialized'));
     assert.equal(await fs.stat(path.join(root,'.atgv','library','templates','tech-stacks','react.json')).then(()=>true,()=>false),false);
-    assert.ok(await fs.stat(path.join(root,'projects','finance-knowledge','sdlc','roles','business-analyst.yaml')));
+    assert.ok((await fs.stat(path.join(root,'projects','finance-knowledge','sdlc','roles'))).isDirectory());
+     assert.equal(await fs.stat(path.join(root,'projects','finance-knowledge','sdlc','roles','business-analyst.yaml')).then(()=>true,()=>false),false,'shared SDLC role definitions are not copied into each project');
     handler({command:'openingOpen'});
     await until(()=>messages.some(m=>m.type==='state'&&m.opening?.phase==='open'));
     await until(()=>messages.some(m=>m.type==='notice'&&/SDLC navigation is now available/.test(m.message)));

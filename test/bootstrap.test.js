@@ -21,7 +21,8 @@ test('ATGV: Start initializes an empty workspace but does not invent a project',
     assert.equal(await exists(path.join(root,'.atgv','library','templates','tech-stacks','nestjs.json')),false,'stack templates are remote-only');
     assert.equal(await exists(path.join(root,'.atgv','skills','business-analyst','SKILL.md')),false,'role skills are remote-only');
     assert.deepEqual(await fs.readdir(path.join(root,'projects')),[]);
-    const custom=path.join(root,'.atgv','library','templates','business-requirement.md');
+    const custom=path.join(root,'.atgv','overrides','templates','business-requirement.md');
+    await fs.mkdir(path.dirname(custom),{recursive:true});
     await fs.writeFile(custom,'Enterprise custom template');
     await initializeWorkspaceFolders(root,registry);
     assert.equal(await fs.readFile(custom,'utf8'),'Enterprise custom template');
@@ -45,7 +46,7 @@ test('ATGV: Start repairs missing existing project folders without replacing doc
     assert.ok(await exists(path.join(root,'projects',project.id,'documents','architecture','tech-stack.md')));
     await fs.rm(path.join(root,'projects',project.id,'sdlc'),{recursive:true});
     await initializeWorkspaceFolders(root,reg);
-    assert.ok(await exists(path.join(root,'projects',project.id,'sdlc','roles','business-analyst.yaml')));
+    assert.ok(await exists(path.join(root,'projects',project.id,'sdlc','roles')));
     assert.equal(await fs.readFile(path.join(documents,'business.md'),'utf8'),'Edited customer acceptance criteria');
   }finally{await fs.rm(root,{recursive:true,force:true});}
 });

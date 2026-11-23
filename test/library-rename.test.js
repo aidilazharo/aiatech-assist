@@ -4,66 +4,74 @@ const fs=require('node:fs/promises'),path=require('node:path'),os=require('node:
 const {execFileSync}=require('node:child_process');
 const catalog=require('../src/github-sdlc-catalog');
 const git=(dir,...args)=>execFileSync('git',args,{cwd:dir,encoding:'utf8'}).trim();
-test('legacy sdlc-catalog checkout and state migrate to library/repository without losing Git history',async()=>{
- const root=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-library-migration-')),workspace=path.join(root,'workspace');
- const base=path.join(workspace,'.atgv'),legacy=path.join(base,'sdlc-catalog');
- try{
-  await fs.mkdir(legacy,{recursive:true});
-  git(legacy,'init','-b','main');git(legacy,'config','user.name','Migration Test');git(legacy,'config','user.email','migration@example.invalid');
-  await fs.writeFile(path.join(legacy,'catalog.json'),JSON.stringify({schema:1,version:'1.0.0',roles:[],techStacks:[]}));
-  git(legacy,'add','.');git(legacy,'commit','-m','library content');
-  const sha=git(legacy,'rev-parse','HEAD');
-  await fs.writeFile(path.join(base,'sdlc-catalog-state.json'),JSON.stringify({schema:1,sha,repository:'example/library',ref:'main',version:'1.0.0'}));
-  const result=await catalog.activeRoot(workspace);
-  assert.equal(result.root,path.join(base,'library','repository'));
-  assert.equal(result.sha,sha);
-  assert.equal(git(result.root,'rev-parse','HEAD'),sha);
-  assert.equal(await catalog.activeFile(workspace,'catalog.json'),JSON.stringify({schema:1,version:'1.0.0',roles:[],techStacks:[]}));
-  await assert.rejects(fs.lstat(legacy),{code:'ENOENT'});
-  await assert.rejects(fs.lstat(path.join(base,'sdlc-catalog-state.json')),{code:'ENOENT'});
-  assert.equal((await catalog.gitInstalled(workspace,{repositoryUrl:'https://github.com/example/library'})).sha,sha);
- }finally{await fs.rm(root,{recursive:true,force:true});}
-});
-test('existing library repository never overwrites a separate legacy checkout',async()=>{
- const root=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-library-conflict-')),base=path.join(root,'.atgv');
- try{
-  await fs.mkdir(path.join(base,'sdlc-catalog'),{recursive:true});
-  await fs.mkdir(path.join(base,'library','repository'),{recursive:true});
-  await fs.writeFile(path.join(base,'sdlc-catalog','keep.txt'),'legacy');
-  await fs.writeFile(path.join(base,'library','repository','keep.txt'),'current');
-  await catalog.migrateLegacyLibraryCheckout(root);
-  assert.equal(await fs.readFile(path.join(base,'library','repository','keep.txt'),'utf8'),'current');
-  assert.equal(await fs.readFile(path.join(base,'sdlc-catalog','keep.txt'),'utf8'),'legacy');
- }finally{await fs.rm(root,{recursive:true,force:true});}
-});
-test('an existing library Git checkout is relocated under repository without changes to revision or local files',async()=>{
- const root=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-library-nested-')),base=path.join(root,'.atgv'),old=path.join(base,'library');
- try{
-  await fs.mkdir(old,{recursive:true});
-  git(old,'init','-b','main');git(old,'config','user.name','Nested Test');git(old,'config','user.email','nested@example.invalid');
-  await fs.writeFile(path.join(old,'catalog.json'),JSON.stringify({schema:1,version:'1.0.0',roles:[],techStacks:[]}));
-  git(old,'add','.');git(old,'commit','-m','verified library');
-  const sha=git(old,'rev-parse','HEAD');
-  await fs.writeFile(path.join(old,'custom-note.txt'),'locally added');
-  await fs.writeFile(path.join(base,'library-state.json'),JSON.stringify({schema:1,sha,repository:'example/library',ref:'main',version:'1.0.0'}));
-  const active=await catalog.activeRoot(root);
-  assert.equal(active.root,path.join(base,'library','repository'));
-  assert.equal(active.sha,sha);
-  assert.equal(git(active.root,'rev-parse','HEAD'),sha);
-  assert.equal(await fs.readFile(path.join(active.root,'custom-note.txt'),'utf8'),'locally added');
- }finally{await fs.rm(root,{recursive:true,force:true});}
-});
-test('shared SDLC defaults and templates move into library without replacing custom documents',async()=>{
- const root=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-shared-library-')),base=path.join(root,'.atgv');
- try{
-  await fs.mkdir(path.join(base,'sdlc'),{recursive:true});
-  await fs.mkdir(path.join(base,'templates'),{recursive:true});
-  await fs.writeFile(path.join(base,'sdlc','custom.yaml'),'role: custom');
-  await fs.writeFile(path.join(base,'templates','custom.md'),'# Custom');
-  await catalog.migrateLegacyLibraryCheckout(root);
-  assert.equal(await fs.readFile(path.join(base,'library','sdlc','custom.yaml'),'utf8'),'role: custom');
-  assert.equal(await fs.readFile(path.join(base,'library','templates','custom.md'),'utf8'),'# Custom');
-  assert.equal((await fs.stat(path.join(base,'library','sdlc'))).isDirectory(),true);
-  assert.equal((await fs.stat(path.join(base,'library','templates'))).isDirectory(),true);
- }finally{await fs.rm(root,{recursive:true,force:true});}
-});
+async function setup(fn){
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-library-root-')),base=path.join(root,'.atgv');
+ await fs.mkdir(base,{recursive:true});
+ try{return await fn({root,base});}finally{await fs.rm(root,{recursive:true,force:true});}
+}
+async function fixture(checkout,base){
+ await fs.mkdir(checkout,{recursive:true});
+ git(checkout,'init','-b','main');git(checkout,'config','user.name','Library Root Test');git(checkout,'config','user.email','library-root@example.invalid');
+ await fs.writeFile(path.join(checkout,'catalog.json'),JSON.stringify({schema:1,version:'0.0.7',roles:[],techStacks:[]}));
+ await fs.mkdir(path.join(checkout,'templates'),{recursive:true});
+ await fs.writeFile(path.join(checkout,'templates','user-story.md'),'# Git template');
+ git(checkout,'add','.');git(checkout,'commit','-m','Library fixture');
+ const sha=git(checkout,'rev-parse','HEAD');
+ await fs.writeFile(path.join(base,'library-state.json'),JSON.stringify({schema:1,sha,ref:'main',repository:'example/library',version:'0.0.7'}));
+ return sha;
+}
+test('migrates legacy sdlc-catalog directly to library without losing Git history',()=>setup(async({root,base})=>{
+ const old=path.join(base,'sdlc-catalog'),sha=await fixture(old,base);
+ const result=await catalog.activeRoot(root);
+ assert.equal(result.root,path.join(base,'library'));assert.equal(result.sha,sha);
+ assert.equal(git(result.root,'rev-parse','HEAD'),sha);
+ assert.equal(await catalog.activeFile(root,'templates/user-story.md'),'# Git template');
+ await assert.rejects(fs.stat(old),{code:'ENOENT'});
+}));
+test('previous nested library/repository is promoted to direct library and user files are backed up',()=>setup(async({root,base})=>{
+ const nested=path.join(base,'library','repository');
+ const sha=await fixture(nested,base);
+ await fs.mkdir(path.join(base,'library','sdlc'),{recursive:true});
+ await fs.writeFile(path.join(base,'library','sdlc','custom.yaml'),'author edits');
+ await fs.mkdir(path.join(base,'library','templates'),{recursive:true});
+ await fs.writeFile(path.join(base,'library','templates','custom.md'),'human template');
+ const result=await catalog.activeRoot(root);
+ assert.equal(result.root,path.join(base,'library'));assert.equal(result.sha,sha);
+ assert.equal(git(result.root,'rev-parse','HEAD'),sha);
+ await assert.rejects(fs.stat(path.join(result.root,'repository')),{code:'ENOENT'});
+ const dir=path.join(base,'library-migration-backups');
+ const backups=await fs.readdir(dir);
+ assert.equal(backups.length,1);
+ assert.equal(await fs.readFile(path.join(dir,backups[0],'templates','custom.md'),'utf8'),'human template');
+ assert.equal(await fs.readFile(path.join(dir,backups[0],'sdlc','custom.yaml'),'utf8'),'author edits');
+ await catalog.migrateLegacyLibraryCheckout(root);
+ assert.equal(git(result.root,'rev-parse','HEAD'),sha);
+}));
+test('Library files are always loaded from pinned Git HEAD, not untracked workspace edits',()=>setup(async({root,base})=>{
+ await fixture(path.join(base,'library'),base);
+ await fs.writeFile(path.join(base,'library','templates','user-story.md'),'# Tampered');
+ assert.equal(await catalog.activeFile(root,'templates/user-story.md'),'# Git template');
+}));
+test('never replaces a valid direct Library when another legacy checkout exists',()=>setup(async({root,base})=>{
+ const sha=await fixture(path.join(base,'library'),base);
+ const previous=path.join(base,'sdlc-catalog');
+ await fs.mkdir(previous);await fs.writeFile(path.join(previous,'private.md'),'preserve');
+ await catalog.migrateLegacyLibraryCheckout(root);
+ assert.equal(git(path.join(base,'library'),'rev-parse','HEAD'),sha);
+ assert.equal(await fs.readFile(path.join(previous,'private.md'),'utf8'),'preserve');
+}));
+test('defaults-only library folders are archived instead of modifying a future Git checkout',()=>setup(async({root,base})=>{
+ const lib=path.join(base,'library');await fs.mkdir(path.join(lib,'sdlc'),{recursive:true});
+ await fs.writeFile(path.join(lib,'sdlc','user.yaml'),'important');
+ await catalog.migrateLegacyLibraryCheckout(root);
+ await assert.rejects(fs.stat(lib),{code:'ENOENT'});
+ const backups=await fs.readdir(path.join(base,'library-migration-backups'));
+ assert.equal(await fs.readFile(path.join(base,'library-migration-backups',backups[0],'sdlc','user.yaml'),'utf8'),'important');
+}));
+test('legacy unmodified external defaults remain accessible without entering the Git checkout',()=>setup(async({root,base})=>{
+ await fs.mkdir(path.join(base,'templates'),{recursive:true});
+ await fs.writeFile(path.join(base,'templates','custom.md'),'legacy');
+ await catalog.migrateLegacyLibraryCheckout(root);
+ assert.equal(await fs.readFile(path.join(base,'templates','custom.md'),'utf8'),'legacy');
+ await assert.rejects(fs.stat(path.join(base,'library')),{code:'ENOENT'});
+}));

@@ -54,6 +54,9 @@ for folder in ('src', 'assets', 'media', 'resources', 'design-system'):
 
 files += ['service/server.js', 'scripts/create-service-user.js']
 files += sorted(p.relative_to(root).as_posix() for p in (root/'service'/'ai').rglob('*.js'))
+# The GitHub Library main branch provides shared SDLC definitions/templates.
+# Do not bundle these replicated assets inside every extension release.
+files=[name for name in files if not (name.startswith('resources/defaults/sdlc/') or name.startswith('resources/defaults/templates/'))]
 files=list(dict.fromkeys(files))
 for name in files:
     if not (root/name).is_file(): raise SystemExit(f'Expected VSIX file missing: {name}')

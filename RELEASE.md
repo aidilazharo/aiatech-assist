@@ -1,19 +1,15 @@
-# ATGV AIATECH Assist v0.0.68
+# ATGV AIATECH Assist v0.0.69
 
 Release date: 2026-11-23
 
-## Legacy library removal
-- Remove the former `.atgv/offline-sdlc-library` ZIP importer, manual ZIP import message, ZIP update fallback, version-selection precedence, and offline executable asset cache support.
-- Use verified GitHub SDLC Catalog checkout as the authoritative source for installed role skills, technology stacks, and approved browser libraries. Preserve cached files of verified Git commits for offline UI operation.
-- Retire an existing managed `.atgv/offline-sdlc-library` directory at startup or after the next Git catalog pull, **only** when its files match stored hashes and a verified equal-or-newer Git catalog exists. Do not delete modified, unexpected, or unverified user files.
-- Extract semantic version comparison to a Git-independent version helper and keep pinned Git commit verification.
-- Remove obsolete ZIP-only tests; retain startup, DOCX, Jira, catalog and editor regressions and add v0.0.68 migration tests.
+## Library-first lightweight extension
+- Correct the Library Git checkout to `.atgv/library/` (no nested `repository`).
+- Migrate `.atgv/sdlc-catalog` and the previous nested Library checkout without discarding Git history; preserve old user-created templates and SDLC assets in a reviewable backup.
+- Keep shared SDLC process/role/workflow definitions and Markdown templates in GitHub Library v0.0.7 instead of copying default files into every new project.
+- Read shared templates from pinned Git HEAD, with project-level overrides and an initial safe fallback when no Library is installed.
+- Exclude duplicate `resources/defaults/sdlc` and `resources/defaults/templates` assets from the VSIX; retain essential runtime code, safety checks and local project state.
+- Preserve project documents, approvals, knowledge, memory, Git repositories and customized SDLC files.
 
-## Notification overlay
-- Display temporary top notices above the persistent Business Analyst (or other role) credentials bar at a higher stacking order without moving the workspace.
-- Match the temporary notification height to the rendered credentials bar, with only a bottom status-colored border for both bars. No surrounding outline.
-- Auto-dismiss temporary notifications after five seconds; retain action and dismiss controls, and return the persistent red credential reminder when the temporary notice closes.
-- Keep the permanent credential reminder until active-role permission checks pass.
-
-## Validation
-- Verify Linux full regression suite, Windows stack-reset smoke tests, production VSIX compilation/size budget and release checksums before release.
+## Verification
+- Added migration and Git integrity regressions, plus updated project initialization tests.
+- GitHub Actions regression, Windows checks, UI check and VSIX build are required before releasing.

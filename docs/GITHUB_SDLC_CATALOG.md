@@ -10,7 +10,6 @@ The workspace uses one shared `.atgv/library/` directory:
 .atgv/
 ├── atgv.workspace.json
 ├── library/
-│   ├── repository/    # verified GitHub main-branch checkout (do not edit)
 │   ├── sdlc/          # shared SDLC defaults, workflows, roles
 │   └── templates/     # shared editable document templates
 ├── library-state.json
@@ -18,7 +17,7 @@ The workspace uses one shared `.atgv/library/` directory:
 projects/<project-id>/sdlc/  # project-specific role settings and progress
 ```
 
-The library updater only pulls inside `library/repository`. It never overwrites `library/sdlc` or `library/templates`. Existing `.atgv/sdlc-catalog`, direct `.atgv/library` Git checkouts and `.atgv/sdlc`/`.atgv/templates` are migrated without resetting Git history or overwriting conflicting local files.
+The library updater pulls the entire Git checkout at `library/`. It never overwrites `library/sdlc` or `library/templates`. Existing `.atgv/sdlc-catalog`, direct `.atgv/library` Git checkouts and `.atgv/sdlc`/`.atgv/templates` are migrated without resetting Git history or overwriting conflicting local files.
 
 Existing project-specific `projects/<project-id>/sdlc` folders remain in place. Existing VS Code secret-storage and settings keys also remain compatible. The actual configured GitHub repository name is not changed.
 
@@ -87,3 +86,7 @@ This release integrates **catalog configuration, authentication, read-only downl
 - Symlinks, path traversal, unsupported Git tree objects, oversized files and corrupted blob hashes are rejected.
 - Downloads are staged and validated before updating the active catalog cache pointer.
 - Published projects are not modified by pulling a new catalog.
+
+## Lightweight extension v0.0.69
+
+The GitHub Library repository itself is checked out into `.atgv/library/` with `.git/` at that root. Reusable `sdlc/` and `templates/` are tracked in Library v0.0.7, never injected as untracked files by ATGV. Project-specific state remains in `projects/<id>/sdlc/`. Prior nested `library/repository/` layouts are safely migrated, with existing shared local files archived for review in `.atgv/library-migration-backups/`.
