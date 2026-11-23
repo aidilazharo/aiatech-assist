@@ -418,8 +418,12 @@ function html(webview,{resumeLibrary=false}={}){
         <li data-ba-auto-stage="publish"><span>4</span><div><strong>Publish to Jira</strong><small>Manual confirmation</small></div></li>
       </ol>
     </section>
+    <div id="baAutoContinueRow" class="ba-auto-continue" role="group" aria-label="Continue unfinished Business Requirements" hidden>
+      <span id="baAutoContinueLabel"></span>
+      <button id="baAutoContinue" type="button" class="secondary" aria-controls="baAutoSource" aria-expanded="false">Open current section</button>
+    </div>
     <div class="ba-auto-artifacts">
-      <details id="baAutoSource" class="ba-auto-artifact" open>
+      <details id="baAutoSource" class="ba-auto-artifact">
         <summary><strong>Business Documents</strong><span id="baAutoSourceBadge" class="ba-auto-badge">Draft</span></summary>
         <div class="ba-auto-body">
           <div id="baAutoDocumentToolbar" class="ba-auto-document-toolbar" role="group" aria-label="Business document controls">
@@ -468,11 +472,15 @@ function html(webview,{resumeLibrary=false}={}){
         <summary><strong>Generated Requirements <small id="baAutoBRCount"></small></strong><span id="baAutoRequirementsBadge" class="ba-auto-badge">Draft</span></summary>
         <div class="ba-auto-body" id="baAutoBRList"></div>
       </details>
-      <details id="baAutoJira" class="ba-auto-artifact" open>
+      <details id="baAutoJira" class="ba-auto-artifact">
         <summary class="ba-auto-jira-heading">
           <strong>Jira Work Items <small id="baAutoJiraCount"></small></strong>
-          <span class="ba-auto-title-tools">
-            <span id="baAutoJiraBadge" class="ba-auto-badge">Draft</span>
+          <span id="baAutoJiraBadge" class="ba-auto-badge">Draft</span>
+        </summary>
+        <div class="ba-auto-body">
+          <div class="ba-auto-jira-toolbar" role="group" aria-label="Jira DataTable controls">
+            <div class="ba-auto-title-tools">
+              <span id="baAutoJiraBadge" class="ba-auto-badge">Draft</span>
             <span id="baAutoJiraView" class="ba-auto-tabs" role="group" aria-label="Jira work item view">
               <button class="ba-auto-title-icon" type="button" data-ba-jira-view="list" aria-pressed="true" aria-label="List view" title="List view">${baHeaderIcon('list')}</button>
               <button class="ba-auto-title-icon" type="button" data-ba-jira-view="hierarchy" aria-pressed="false" aria-label="Hierarchy view" title="Hierarchy view">${baHeaderIcon('tree')}</button>
@@ -486,9 +494,8 @@ function html(webview,{resumeLibrary=false}={}){
               <button class="ba-auto-title-icon" type="button" data-ba-jira-tab="task" aria-pressed="false" aria-label="Tasks" title="Tasks">${baHeaderIcon('task')}</button>
               <button class="ba-auto-title-icon" type="button" data-ba-jira-tab="subtask" aria-pressed="false" aria-label="Subtasks" title="Subtasks">${baHeaderIcon('subtask')}</button>
             </span>
-          </span>
-        </summary>
-        <div class="ba-auto-body">
+            </div>
+          </div>
           <ul id="baAutoJiraBlockers" aria-label="Jira preview blockers" hidden></ul>
           <div id="baAutoJiraItems"></div>
         </div>
