@@ -9,7 +9,7 @@ async function fixture(run){
   await fs.mkdir(path.join(root,'.atgv'));
   await fs.writeFile(path.join(root,'.atgv','atgv.workspace.json'),
    JSON.stringify({schema:1,managedBy:'aia-my.atgv-aiatech-assist'}));
-  const registry=new ProjectRegistry(path.join(root,'projects'));
+  const registry=new ProjectRegistry(root);
   await registry.create({id:'demo',name:'Demo'});
   await run({root,registry,projectId:'demo'});
  }finally{await fs.rm(root,{recursive:true,force:true});}
