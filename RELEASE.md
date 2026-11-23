@@ -1,19 +1,19 @@
-# ATGV AIATECH Assist v0.0.68
+# ATGV AIATECH Assist v0.0.69
 
 Release date: 2026-11-23
 
-## Legacy library removal
-- Remove the former `.atgv/offline-sdlc-library` ZIP importer, manual ZIP import message, ZIP update fallback, version-selection precedence, and offline executable asset cache support.
-- Use verified GitHub SDLC Catalog checkout as the authoritative source for installed role skills, technology stacks, and approved browser libraries. Preserve cached files of verified Git commits for offline UI operation.
-- Retire an existing managed `.atgv/offline-sdlc-library` directory at startup or after the next Git catalog pull, **only** when its files match stored hashes and a verified equal-or-newer Git catalog exists. Do not delete modified, unexpected, or unverified user files.
-- Extract semantic version comparison to a Git-independent version helper and keep pinned Git commit verification.
-- Remove obsolete ZIP-only tests; retain startup, DOCX, Jira, catalog and editor regressions and add v0.0.68 migration tests.
+## Jira identity and parent relationship safeguards
+- Audit active saved BR-to-Jira links before Jira preview and publication, including unchanged mapped issues.
+- Verify canonical numeric Jira issue identity when recorded; retain the permanent numeric issue and parent IDs following confirmed publication.
+- Detect duplicate local keys, numeric ID reuse, cross-project mappings, inaccessible Jira issues, and changed parent relationships.
+- Block unsafe Jira publication or retirement until the mapping is manually reviewed; never automatically reparent, unlink, recreate, or delete an issue.
+- Treat Jira HTTP 404 as deletion **or** insufficient visibility; retain historical evidence.
+- Revalidate remote issue identities immediately before updating or retiring an issue.
 
-## Notification overlay
-- Display temporary top notices above the persistent Business Analyst (or other role) credentials bar at a higher stacking order without moving the workspace.
-- Match the temporary notification height to the rendered credentials bar, with only a bottom status-colored border for both bars. No surrounding outline.
-- Auto-dismiss temporary notifications after five seconds; retain action and dismiss controls, and return the persistent red credential reminder when the temporary notice closes.
-- Keep the permanent credential reminder until active-role permission checks pass.
+## Business Analyst layout
+- Restore Business Documents above Discovery Questions without removing the source, discovery, generated requirements, Jira Work Items, or completed history sections.
+- Keep existing collapsible-by-default panels and workflow controls.
 
 ## Validation
-- Verify Linux full regression suite, Windows stack-reset smoke tests, production VSIX compilation/size budget and release checksums before release.
+- Added v0.0.69 read-only Jira mapping audit regressions for unchanged links, parent changes, numeric ID drift, duplicate local keys and ambiguous 404 responses.
+- Source and test changes reviewed in GitHub. Full extension test suite, VS Code runtime integration, and VSIX packaging require a local checkout with Node and approved dependencies.
