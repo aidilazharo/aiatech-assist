@@ -415,7 +415,7 @@ function showTopNotification(item){
  // Use its rendered height so all notices match at every VS Code zoom level.
  const header=$('appHeader'),credential=$('roleCredentialBanner');
  const headerBottom=header?.getBoundingClientRect?.()?.bottom;
- const credentialHeight=!credential?.classList?.contains('hidden')?credential?.getBoundingClientRect?.()?.height:0;
+ const credentialHeight=!credential?.classList?.contains?.('hidden')?credential?.getBoundingClientRect?.()?.height:0;
  if(target?.style){
   if(Number.isFinite(headerBottom))target.style.top=Math.round(headerBottom)+'px';
   target.style.setProperty?.('--atgv-notice-row-height',Math.max(48,Math.round(credentialHeight||52))+'px');
@@ -953,7 +953,7 @@ function renderCatalog(state,{forceFields=false}={}){
  $('catalogToken').placeholder=state.credentialSaved?'Token saved securely; leave blank to retain':'Read-only token with Contents: Read';
  const installed=state.installed;settingsCatalogInstalled=installed||null;updateExtensionSettingBadges();
  $('catalogInstalled').textContent=installed?
-  `Installed GitHub SDLC Catalogue v${installed.version} · Git SHA ${String(installed.sha||'').slice(0,12)} · ${installed.repository||'GitHub'}`:'No downloaded catalogue yet.';
+  `Installed SDLC Catalogue v${installed.version} · Git SHA ${String(installed.sha||'').slice(0,12)} · ${installed.repository||'GitHub'}`:'No downloaded catalogue yet.';
  const counts=$('catalogContents');counts.replaceChildren();
  for(const [label,value] of [['Role skills',installed?.roleCount],['Tech stacks',installed?.stackCount],['Workflows',installed?.workflows],['Templates',installed?.templates]]){
   const span=document.createElement('span');span.textContent=`${label}: ${value??'—'}`;counts.append(span);
