@@ -41,12 +41,13 @@ test('unsafe organization/project URLs cannot redirect PAT checks to unknown hos
   assert.throws(()=>setup.validate({...setup.DEFAULTS,projectRepository:value}));
  }
 });
-test('host checks services sequentially, enforces write PAT for sources and separates optional failures',()=>{
+test('host checks services sequentially, enforces read PAT for sources with optional write and separates optional failures',()=>{
  const host=read('src/lib/runtime/extension-runtime.js');
  assert.match(host,/for\(const spec of specifications\)/);
  assert.match(host,/await spec\.check\(\)/);
  assert.match(host,/await onProgress\(value\)/);
- assert.match(host,/meta\.permissions\?\.push!==true/);
+ assert.match(host,/meta\.permissions\?\.pull===false/);
+ assert.match(host,/sourceAccess=\{read:true,write:meta\.permissions\?\.push===true\}/);
  assert.match(host,/await verifyReleaseAssetDownload\(url,asset\.id\)/);
  assert.match(host,/redirect:'manual'/);
  assert.match(host,/release-assets\|github-releases\|objects/);
