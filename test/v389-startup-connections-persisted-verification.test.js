@@ -118,14 +118,16 @@ function webviewFixture(startPage=0){
  const create=new Function('$','updateHeaderUserName','extensionSettings','startupScanPercent','renderStartupScanPlaceholders','send',source);
  return {find,sent,client:create(find,()=>{}, {jira:{}},()=>{},()=>{},(command,extra)=>sent.push({command,...extra}))};
 }
-test('Verified settings restore the connection page with locked fields, Test Connections and navigation',()=>{
+test('Verified settings still open the prerequisite page first and retain locked saved connection fields',()=>{
  const {find,client}=webviewFixture(1);
  client.renderStartupConfig({required:true,verified:true,saved:setup.DEFAULTS,defaults:setup.DEFAULTS});
  assert.equal(client.isVerified(),true);
- assert.equal(client.getPage(),1);
+ assert.equal(client.getPage(),0,'ATGV: Start must not skip Technology stack prerequisites');
  assert.equal(find('startupProceed').textContent,'Next: Search Project →');
  assert.equal(find('startupProceed').disabled,false);
- assert.equal(find('startupPrevious').disabled,false);
+ assert.equal(find('startupPrevious').disabled,true,'Previous is unavailable on the first screen');
+ assert.equal(find('startupComputerCard').classList.contains('hidden'),false);
+ assert.equal(find('startupConnectionForm').classList.contains('hidden'),true);
  assert.equal(find('startupTestSavedConnections').disabled,false);
  assert.equal(find('startupTestSavedConnections').classList.contains('hidden'),false);
  assert.equal(find('startupTestConnections').disabled,true);
