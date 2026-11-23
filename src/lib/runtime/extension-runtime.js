@@ -4131,7 +4131,7 @@ async function resolveBAAttention(msg){
   if(activeProject?.id===projectId)await postBAPreparation(projectId,{phase:'draft',stage:'requirements',preview:null,error:'',sourceNotes:baAutomatic.sourceNotes(final)});
  }catch(error){
   const cancelled=error?.name==='AbortError'||run?.controller.signal.aborted;
-  const message=cancelled?'AI repair stopped. Drafts and Jira remain unchanged.':'AI repair failed: '+String(error?.message||error).slice(0,1000);
+  const message=cancelled?'AI repair stopped; saved drafts preserved, Jira unchanged.':'AI repair failed: '+String(error?.message||error).slice(0,1000);
   await report('baAutoResolveResult',message,{failed:!cancelled,cancelled});
   if(!cancelled)await notice(message);
  }finally{if(baAttentionRun===run)baAttentionRun=null;}
