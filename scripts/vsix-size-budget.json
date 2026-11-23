@@ -1,6 +1,6 @@
 {
-  "maxCompressedBytes": 1416000,
+  "maxCompressedBytes": 1430000,
   "baselineVersion": "0.4.40",
   "baselineBytes": 1327153,
-  "notes": "Audited VSIX cap 1,416,000 bytes. v0.0.67 unified cross-role UI stylesheet measured 1,412,765 compressed bytes on CI (a 2,326-byte increase from v0.0.66 build 813). Ceiling rises only 5,000 bytes (0.35%) to allow that intentional, shared UI layer. Keep production minification, per-file size report, checksum, compilation, activation checks and all prior exclusions unchanged."
+  "notes": "Audited cap 1,430,000 bytes for v0.0.77: adds a three-provider SQLite metadata ledger, version/conflict checkpoints and read-only Knowledge status UI. Increase of 14,000 bytes (0.99%) over the previous 1,416,000-byte cap. Production minification, per-file reports, checksums and source exclusions remain unchanged."
 }
