@@ -75,6 +75,7 @@ async function run(root,{sha,relative='',previewUrl,mock=false,mockDatabase=fals
  if(!selected||!selected.runnable)throw Error('Select a detected application with a dev, start or run command.');
  if(mock&&!selected.mockable)throw Error('Mock Preview is only supported for detected Vite applications.');
  const url=loopbackPreview(previewUrl||selected.previewUrl);
+ if(mock&&new URL(url).pathname!=='/')throw Error('Frontend Mock Preview must use the application root URL, not an API route.');
  const cwd=path.join(check.root,selected.relative);
  const existing=driver.localLogs();
  if(existing.running)throw Error('An ATGV-managed application is already running. Stop it before running Custom Stack.');
@@ -90,9 +91,25 @@ async function run(root,{sha,relative='',previewUrl,mock=false,mockDatabase=fals
   await driver.runLocal(root,{relative:selected.relative,previewUrl:url,...(mock?{mockPreview:true,mockDatabase:!!mockDatabase}:{})});started=true;
   await onProgress('Verifying localhost health at '+url+'…');
   await bootstrapApi.waitForHttp(url,()=>driver.localLogs().running,60000,driver.localLogs().instanceId||'');
+  if(mock){
+   // HTTP 200 from a standalone API is not proof that the frontend exists.
+   const frontend=await fetch(url,{redirect:'manual',signal:AbortSignal.timeout(3500)});
+   const frontendHtml=frontend.ok&&/text\/html/i.test(frontend.headers.get('content-type')||'');
+   await frontend.body?.cancel().catch(()=>{});
+   if(!frontendHtml)throw Error('Mock service responded, but the frontend application did not serve HTML at '+url+'. Select a runnable Vite frontend.');
+   const apiUrl=new URL('/api/v1/health',url).toString();
+   const api=await fetch(apiUrl,{redirect:'manual',signal:AbortSignal.timeout(3500)});
+   if(!api.ok||api.headers.get('x-atgv-mock-preview')!=='true'){
+    await api.body?.cancel().catch(()=>{});
+    throw Error('Frontend is running but the isolated mock API is not healthy at '+apiUrl+'.');
+   }
+   const state=await api.json();
+   if(state.status!=='mock'||state.database!=='simulated')
+    throw Error('Frontend API did not return verified synthetic health. Production services were not used.');
+  }
   const current=driver.localLogs();
   if(!current.running||path.resolve(current.cwd||'')!==path.resolve(cwd))throw Error('The custom application stopped or switched during health verification.');
-  return {running:true,url,framework:selected.framework,relative:selected.relative,sha,mockPreview:mock,mockDatabase:!!(mock&&mockDatabase),message:mock?'MOCK DATA · Local Vite preview running at '+url+'. '+(mockDatabase?'Synthetic database fixtures enabled. ':'')+'External APIs and real databases are NOT connected. No source files were committed.':'Custom Stack running at '+url+'. No Git branch, commit or push was created.'};
+  return {running:true,url,framework:selected.framework,relative:selected.relative,sha,mockPreview:mock,mockDatabase:!!(mock&&mockDatabase),message:mock?'MOCK DATA · Frontend and isolated mock API running at '+url+'. '+(mockDatabase?'Synthetic database fixtures enabled. ':'')+'External APIs and real databases are NOT connected. No source files were committed.':'Custom Stack running at '+url+'. No Git branch, commit or push was created.'};
  }catch(error){
   if(started)await driver.stopLocal().catch(()=>{});
   throw error;
