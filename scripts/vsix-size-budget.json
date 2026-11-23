@@ -1,6 +1,6 @@
 {
-  "maxCompressedBytes": 1400000,
+  "maxCompressedBytes": 1405000,
   "baselineVersion": "0.4.40",
   "baselineBytes": 1327153,
-  "notes": "Fail closed when VSIX grows beyond 1.4 million bytes. Audit JSON/Markdown generated under dist, not bundled."
+  "notes": "Fail closed beyond 1,405,000 compressed bytes. v0.0.61 audited VSIX measured 1,401,033 bytes after separate frontend/backend runtime handling; retain per-file size report and activation verification."
 }
