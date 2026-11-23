@@ -41,9 +41,13 @@ async function request(method,url,{token='',body=null,contentType='',maxBytes=2*
  if(response.status===404&&allow404)return null;
  if(!response.ok)throw Error('GitHub '+method+' returned HTTP '+response.status+'.');
  if(Number(response.headers.get('content-length')||0)>maxBytes)throw Error('GitHub response exceeds size limit.');
- const bytes=Buffer.from(await response.arrayBuffer());
- if(bytes.length>maxBytes)throw Error('GitHub response exceeds size limit.');
- return bytes;
+ const chunks=[];let length=0;
+ for await(const chunk of response.body){
+  length+=chunk.byteLength;
+  if(length>maxBytes)throw Error('GitHub response exceeds size limit.');
+  chunks.push(Buffer.from(chunk));
+ }
+ return Buffer.concat(chunks,length);
 }
 async function json(io,method,url,token,data=null,allow404=false){
  const bytes=await io(method,url,{token,allow404,body:data===null?null:Buffer.from(JSON.stringify(data)),
@@ -105,6 +109,24 @@ async function copy({kind,tag='',sourceToken,destinationToken,io=request,onProgr
  if(current&&!String(current.body||'').includes(marker))throw Error('Destination Release has another origin; nothing was overwritten.');
  if(current&&!Number.isSafeInteger(current.id))throw Error('Destination Release ID is invalid.');
  const files=[[name,file],[checksum,sum]];
+ // Preserve every trusted Release attachment, including source ZIPs and build reports.
+ const extras=(row.assets||[]).filter(a=>a.name!==name&&a.name!==checksum);
+ if(extras.length>18)throw Error('Source Release has too many additional assets.');
+ let combined=file.length+sum.length;
+ for(const extra of extras){
+  if(typeof extra.name!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,150}$/.test(extra.name))
+   throw Error('Unsafe GitHub Release asset name.');
+  const info=asset(row,extra.name,source);
+  combined+=info.size;
+  if(combined>160*1024*1024)throw Error('Release total exceeds the size limit.');
+  const content=await io('GET',info.url,{token:sourceToken,contentType:'application/octet-stream',maxBytes:info.size});
+  if(content.length!==info.size)throw Error('Additional Release asset size mismatch: '+info.name);
+  if(info.digest&&info.digest!=='sha256:'+digest(content))throw Error('Additional Release asset SHA-256 mismatch: '+info.name);
+  files.push([info.name,content]);
+ }
+ const zip=files.find(([n])=>n.endsWith('-Source.zip'));
+ const sourceHash=files.find(([n])=>n==='source.sha256');
+ if(zip&&sourceHash)verify(zip[1],sourceHash[1],zip[0]);
  let uploaded=0,unchanged=0;
  if(current){
   // Check all collisions BEFORE any upload, and do not mutate an existing asset.
