@@ -9,6 +9,7 @@
 ## ATGV: Workspace GitHub Release artifacts
 - Add explicit Extension/Library Release copy action with an optional exact version tag.
 - Download and verify the release archive/VSIX and its SHA-256 file before uploading.
+- Copy additional safe Release assets (source ZIP, checksum files, build reports), with bounded downloads and integrity/collision checks.
 - Preserve release notes, enforce source identity, prevent conflicting overwrites and report progress/errors.
 
 ## Verification
