@@ -60,16 +60,16 @@ test('deadline pressure and active role tasks are surfaced without claiming comp
  assert.ok(value.todayActions.every(item=>item.target!=='project-settings'));
  assert.equal(value.teamSummary,'No other distinct verified members listed');
 });
-test('My Work daily tasks have a standalone section and no generic What to do next dock',()=>{
+test('My Work removes standalone checklist cards and Go to task buttons but retains AI conversation',()=>{
  const html=read('src/lib/webview/dashboard-html.js'),wave=read('media/atgv-mywork-wave-chat.js');
  const start=html.indexOf('id="atgvMyWorkAiContent"'),end=html.indexOf('id="atgvMyWorkAiChatForm"');
- const tasks=html.indexOf('id="atgvMyWorkToday"'),chat=html.indexOf('id="atgvMyWorkAiConversation"');
- assert.ok(start>=0&&end>start&&tasks>start&&chat>tasks&&end>chat);
+ const chat=html.indexOf('id="atgvMyWorkAiConversation"');
+ assert.ok(start>=0&&end>start&&chat>start&&end>chat);
  assert.doesNotMatch(html,/id="atgvMyWorkAiNextButton"/);
- assert.match(html,/id="atgvMyWorkTodayList"/);
- assert.match(wave,/button\.textContent='Go to task'/);
- assert.match(wave,/window\.ATGVMyWorkAI\?\.openTask\?\.\(item\)/);
- assert.match(wave,/tasksList\.replaceChildren\(\)/);
+ assert.doesNotMatch(html,/id="atgvMyWorkToday"|id="atgvMyWorkTodayList"/);
+ assert.doesNotMatch(wave,/button\.textContent='Go to task'/);
+ assert.doesNotMatch(wave,/function renderTasks\(/);
+ assert.match(wave,/function renderBrief\(/);
 });
 test('daily brief is based on host-verified account, saved schedule and shared roster, not the chat prompt',()=>{
  const host=read('src/lib/runtime/extension-runtime.js');
