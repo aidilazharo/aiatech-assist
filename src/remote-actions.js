@@ -102,6 +102,8 @@ function safeExtraFields(extraFields,metadata){
  const byId=metadata?new Map(metadata.map(field=>[field.id,field])):null;
  for(const key of keys){
   const value=extraFields[key];
+  if(value==='Information not available in the approved Business Requirements document.')
+   throw Error('Unsupported missing-information placeholder in Jira field '+key+'. Provide approved evidence.');
   if(byId){
    const field=byId.get(key);
    if(!field||!fieldValues.isEditable(field))throw Error('Unsafe Jira field ID: '+key);
