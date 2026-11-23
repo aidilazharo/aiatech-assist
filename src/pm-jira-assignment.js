@@ -16,15 +16,8 @@ function group(type){
  return 'other';
 }
 const DEV_LABEL='atgv-role-software-developer';
-const ROLE_LABELS=Object.freeze({
- 'atgv-role-software-developer':'Developer',
- 'atgv-role-ux-designer':'UI/UX Designer',
- 'atgv-role-qa-engineer':'QA Engineer',
- 'atgv-role-uat-tester':'UAT Tester',
- 'atgv-role-business-analyst':'Business Analyst',
- 'atgv-role-solution-architect':'Solution Architect',
- 'atgv-role-project-manager':'Project Manager'
-});
+const {ROLES}=require('./my-work-role-prompts');
+const ROLE_LABELS=Object.freeze(Object.fromEntries(Object.entries(ROLES).map(([id,role])=>['atgv-role-'+id,role.name])));
 function roleForIssue(issue,register){
  if(!issue)return '';
  const labels=(Array.isArray(issue.labels)?issue.labels:[]).map(s=>String(s).toLowerCase()).filter(s=>s.startsWith('atgv-role-'));
