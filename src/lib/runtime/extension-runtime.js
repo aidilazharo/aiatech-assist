@@ -4275,7 +4275,7 @@ async function prepareBRJiraPreview({automatic=false,signal,qualityBlocker=''}={
  }
  try{
   assertCurrent();
-  if(!qualityBlocker&&(changes.length||reopenRoots.length||jiraMappingAudit.mappedRows(register).length)){
+  if(!qualityBlocker&&(changes.length||reopenRoots.length||(typeof jiraMappingAudit==='object'&&jiraMappingAudit.mappedRows(register).length))){
    await progress('Verifying Jira project and checking planned changes…',10);
    const target=await ensureJiraPreviewTarget(register,{automatic});
    assertCurrent();
@@ -4343,7 +4343,7 @@ async function prepareBRJiraPreview({automatic=false,signal,qualityBlocker=''}={
    await progress('Verifying Jira issue identities and existing mappings…',30);
    const duplicateGate=await prePublishIdentityGuard(register,target.config,target.token,changes,inventory);
    conflicts.push(...formatIdentityConflicts(duplicateGate));
-   const mappingAudit=await jiraMappingAudit.audit({register,projectKey:targetKey,readIssue:key=>jiraReadIssue(target.config,target.token,key),verify:(nodePath,issue)=>verifyLinkedJiraIdentity(register,target.config,nodePath,issue),signal});
+   const mappingAudit=typeof jiraMappingAudit==='object'?await jiraMappingAudit.audit({register,projectKey:targetKey,readIssue:key=>jiraReadIssue(target.config,target.token,key),verify:(nodePath,issue)=>verifyLinkedJiraIdentity(register,target.config,nodePath,issue),signal}):{checked:0,conflicts:[]};
    conflicts.push(...mappingAudit.conflicts);
    const checked=await jiraPreflight(register,target.config,target.token,changes,
     (count,total)=>progress('Checking Jira issues '+count+'/'+total+'…',30+Math.floor(count/total*30)),{automatic,inventory,signal});
