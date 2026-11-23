@@ -45,7 +45,8 @@ test('upload/discovery remain available before results are ready, and publish ac
  const lastPanel=html.indexOf('id="baAutoHistory"');
  const actions=html.indexOf('class="ba-auto-actions"');
  assert.ok(source>0&&source<firstPanel);
- assert.ok(discovery>source&&discovery<firstPanel);
+ const discoveryPanel=html.indexOf('id="baAutoDiscovery"');
+ assert.ok(discovery>firstPanel&&discovery<discoveryPanel,'Business Documents must precede pending Discovery questions');
  assert.ok(lastPanel>firstPanel&&actions>lastPanel);
  assert.match(ui,/sourceReady\?get\('baAutoOriginalFiles'\):get\('baAutoSourceEntry'\)/);
  assert.match(ui,/discoveryReady\?get\('baAutoDiscoveryForm'\):get\('baAutoDiscoveryEntry'\)/);
