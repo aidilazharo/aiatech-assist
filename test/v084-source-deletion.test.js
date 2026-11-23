@@ -59,9 +59,9 @@ test('archiving a published BR source preserves approved revision and existing J
 test('webview offers replacement and verified Delete while archive/restore remains internal',()=>{
  const html=read('test/generated/extension-source.txt'),ui=read('media/start.js'),css=read('media/start.css');
  assert.match(html,/id="discoveryImport" class="ba-source-icon-btn" title="Upload Word, PDF or Excel workbook"/);
- assert.match(ui,/remove.textContent='Delete'/);
+ assert.match(ui,/remove\.setAttribute\('aria-label','Delete source document'\)/);
  assert.doesNotMatch(ui,/archive.textContent='Remove Source'/);
- assert.match(ui,/replace.textContent='Replace & Reprocess'/);
+ assert.match(ui,/replace\.setAttribute\('aria-label','Replace & Reprocess'\)/);
  assert.match(ui,/deleteBREverywhere/);
  assert.match(html,/id="archivedSources"/);
  assert.match(ui,/function renderArchivedSources\(\)/);assert.doesNotMatch(ui,/Archived & superseded documents/);

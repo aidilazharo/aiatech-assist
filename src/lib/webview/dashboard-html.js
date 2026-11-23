@@ -14,6 +14,10 @@ function html(webview,{resumeLibrary=false}={}){
     download:"<path d=\"M12 4v11m-4-4 4 4 4-4M5 16v4h14v-4\"/>",
     save:"<path d=\"M4 4h13l3 3v13H4zM8 4v6h8V4M8 20v-6h8v6\"/>",
     replace:"<path d=\"M8 5h10l-3-3m3 3-3 3M16 19H6l3 3m-3-3 3-3M5 8v5m14-2v5\"/>",
+    delete:"<path d=\"M3 6h18M8 6V4h8v2m3 0-1 14H6L5 6m4 4v7m6-7v7\"/>",
+    refresh:"<path d=\"M20 7v5h-5M4 17v-5h5M5.5 9A7 7 0 0 1 18 6.5L20 12M4 12l2 5.5A7 7 0 0 0 18.5 15\"/>",
+    publish:"<path d=\"m22 2-7 20-4-9-9-4 20-7zM11 13l11-11\"/>",
+    stop:"<rect x=\"5\" y=\"5\" width=\"14\" height=\"14\" rx=\"2\"/>",
     more:"<circle cx=\"5\" cy=\"12\" r=\"1\"/><circle cx=\"12\" cy=\"12\" r=\"1\"/><circle cx=\"19\" cy=\"12\" r=\"1\"/>",
     list:"<path d=\"M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01\"/>",
     tree:"<path d=\"M7 3v15h5M7 9h5M12 7h6v4h-6zM12 16h6v4h-6z\"/>",
@@ -26,7 +30,7 @@ function html(webview,{resumeLibrary=false}={}){
     subtask:"<path d=\"M5 5v7h4m-3-3 3 3-3 3M12 8h7v8h-7zM14 12l1 1 2-2\"/>"
   };
   const baHeaderIcon=(name,variant='')=>`<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${variant}>${baHeaderIcons[name]}</svg>`;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.72';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.73';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const uiConsistencyCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-consistency.css'));
@@ -418,8 +422,8 @@ function html(webview,{resumeLibrary=false}={}){
     <div id="baAutoSourceEntry" class="ba-auto-source-entry" aria-label="Upload and prepare source documents"></div>
     <div id="baAutoDiscoveryEntry" class="ba-auto-discovery-entry" aria-label="Complete discovery answers" hidden></div>
     <div class="ba-auto-artifacts">
-      <details id="baAutoSource" class="ba-auto-artifact" hidden>
-        <summary><strong>Business Documents</strong><span id="baAutoSourceBadge" class="ba-auto-badge">Draft</span></summary>
+      <details id="baAutoSource" class="ba-auto-artifact" data-status="not-started">
+        <summary><strong>Business Documents</strong><span id="baAutoSourceBadge" class="ba-auto-badge" data-state="not-started">Not started</span></summary>
         <div class="ba-auto-body">
           <div id="baAutoDocumentToolbar" class="ba-auto-document-toolbar" role="group" aria-label="Business document controls">
             <div id="baAutoOriginalFiles"></div>
@@ -435,8 +439,8 @@ function html(webview,{resumeLibrary=false}={}){
                 <details id="baAutoOverflowMenu" class="ba-auto-overflow-menu">
                   <summary class="ba-auto-title-icon" aria-label="More document actions" title="More document actions">${baHeaderIcon('more')}</summary>
                   <div id="baAutoOverflowActions" class="ba-auto-overflow-actions" data-kind="iso" role="group" aria-label="Additional document actions">
-                    <div id="baAutoIsoPreflightActions" class="ba-auto-iso-preflight-actions"><button id="baPreflightDownload" type="button" class="secondary hidden" title="Download the Business Analyst preflight findings (.txt)" aria-label="Download Pre-flight Analyst text report" disabled>Download Pre-flight Analyst</button><button id="baWorkingBrDownload" type="button" class="secondary hidden" title="Download an ISO/IEC/IEEE 29148-aligned Business Requirements Specification PDF based on verified evidence" disabled>Download ISO 29148 Business Requirements</button><button id="baPreflightRetry" type="button" class="secondary hidden" title="Retry document AI preflight and 12-question mapping">Retry Mapping</button><button id="baPreflightSkip" type="button" class="secondary hidden" title="Proceed with original source evidence; AI checks remain unverified." disabled>Skip AI Preflight · Source-Only</button></div>
-                    <button type="button" id="baAutoArtifactSave" disabled>Save Document</button>
+                    <div id="baAutoIsoPreflightActions" class="ba-auto-iso-preflight-actions"><button id="baPreflightDownload" type="button" class="secondary ba-overflow-icon hidden" title="Download Pre-flight Analyst report (.txt)" aria-label="Download Pre-flight Analyst text report" disabled>${baHeaderIcon('download')}</button><button id="baWorkingBrDownload" type="button" class="secondary ba-overflow-icon hidden" title="Download ISO 29148 Business Requirements (PDF)" aria-label="Download ISO 29148 Business Requirements" disabled>${baHeaderIcon('download')}</button><button id="baPreflightRetry" type="button" class="secondary ba-overflow-icon hidden" title="Retry document AI preflight and 12-question mapping" aria-label="Retry Mapping">${baHeaderIcon('refresh')}</button><button id="baPreflightSkip" type="button" class="secondary ba-overflow-icon hidden" title="Skip AI preflight and use source evidence only" aria-label="Skip AI Preflight · Source-Only" disabled>${baHeaderIcon('publish')}</button></div>
+                    <button type="button" id="baAutoArtifactSave" class="secondary ba-overflow-icon" title="Save Document" aria-label="Save Document" disabled>${baHeaderIcon('save')}</button>
                     <div id="baAutoFileActions" class="ba-auto-file-actions" aria-label="Uploaded source actions"></div>
                   </div>
                 </details>
@@ -451,26 +455,27 @@ function html(webview,{resumeLibrary=false}={}){
             <div id="baAutoDocumentPanel" role="tabpanel" aria-labelledby="baAutoTabIso">
               <label for="baAutoArtifactText" id="baAutoArtifactLabel">Structured ISO BRD</label>
               <div id="baAutoFormattedDocument" class="ba-document-viewer" role="document" aria-label="Formatted ISO 29148 Business Requirements" hidden></div>
+              <div id="baAutoQuillEditor" class="ba-auto-quill-editor" aria-label="Quill document text editor" hidden></div>
               <textarea id="baAutoArtifactText" rows="11" maxlength="1000000" spellcheck="false" readonly></textarea>
               <div class="ba-auto-inline"><span id="baAutoArtifactStatus" role="status"></span></div>
             </div>
           </div>
         </div>
       </details>
-      <details id="baAutoDiscovery" class="ba-auto-artifact" hidden>
-        <summary><strong>Discovery <small>12 questions</small></strong><span id="baAutoDiscoveryBadge" class="ba-auto-badge">Draft</span></summary>
+      <details id="baAutoDiscovery" class="ba-auto-artifact" data-status="not-started">
+        <summary><strong>Discovery <small>12 questions</small></strong><span id="baAutoDiscoveryBadge" class="ba-auto-badge" data-state="not-started">Not started</span></summary>
         <div class="ba-auto-body"><div id="baAutoDiscoveryForm"></div>
           <details id="baAutoSourceNotes" hidden><summary>Source decisions and excluded drafts</summary><ul id="baAutoSourceNotesList"></ul></details>
         </div>
       </details>
-      <details id="baAutoRequirements" class="ba-auto-artifact" hidden>
-        <summary><strong>Generated Requirements <small id="baAutoBRCount"></small></strong><span id="baAutoRequirementsBadge" class="ba-auto-badge">Draft</span></summary>
+      <details id="baAutoRequirements" class="ba-auto-artifact" data-status="not-started">
+        <summary><strong>Generated Requirements <small id="baAutoBRCount"></small></strong><span id="baAutoRequirementsBadge" class="ba-auto-badge" data-state="not-started">Not started</span></summary>
         <div class="ba-auto-body" id="baAutoBRList"></div>
       </details>
-      <details id="baAutoJira" class="ba-auto-artifact" hidden>
+      <details id="baAutoJira" class="ba-auto-artifact" data-status="not-started">
         <summary class="ba-auto-jira-heading">
           <strong>Jira Work Items <small id="baAutoJiraCount"></small></strong>
-          <span id="baAutoJiraBadge" class="ba-auto-badge">Draft</span>
+          <span id="baAutoJiraBadge" class="ba-auto-badge" data-state="not-started">Not started</span>
         </summary>
         <div class="ba-auto-body">
           <div class="atgv-section-table-toolbar" role="toolbar" aria-label="Jira Work Items table display and filters">
@@ -493,13 +498,13 @@ function html(webview,{resumeLibrary=false}={}){
         </div>
       </details>
     </div>
-    <details id="baAutoHistory" class="ba-auto-artifact" hidden><summary><strong>Completed requirements</strong><span id="baAutoHistoryBadge" class="ba-auto-badge">Draft</span></summary><div id="baAutoHistoryContent" class="ba-auto-body"></div></details>
+    <details id="baAutoHistory" class="ba-auto-artifact" data-status="not-started"><summary><strong>Completed requirements</strong><span id="baAutoHistoryBadge" class="ba-auto-badge" data-state="not-started">Not started</span></summary><div id="baAutoHistoryContent" class="ba-auto-body"></div></details>
     <div class="ba-auto-actions">
       <p id="baAutoStatus" role="status" aria-live="polite"></p>
       <div class="stack">
-        <button type="button" id="baAutoStop" class="secondary hidden">Stop</button>
-        <button type="button" id="baAutoRefresh" class="secondary" disabled>Refresh Affected Artifacts</button>
-        <button type="button" id="baAutoPublish" disabled>Publish to Jira</button>
+        <button type="button" id="baAutoStop" class="secondary ba-workflow-icon hidden" title="Stop preparation" aria-label="Stop preparation">${baHeaderIcon('stop')}</button>
+        <button type="button" id="baAutoRefresh" class="secondary ba-workflow-icon" title="Refresh Affected Artifacts" aria-label="Refresh Affected Artifacts" disabled>${baHeaderIcon('refresh')}</button>
+        <button type="button" id="baAutoPublish" class="ba-workflow-icon" title="Publish to Jira" aria-label="Publish to Jira" disabled>${baHeaderIcon('publish')}</button>
       </div>
     </div>
 

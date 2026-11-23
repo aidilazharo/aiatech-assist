@@ -57,9 +57,9 @@ test('stale revision, identical content, wrong digest and pending Jira operation
 test('UI exposes safe replacement and Delete; legacy archival handler is still retained',()=>{
  const ui=fsSync.readFileSync(path.join(__dirname,'../media/start.js'),'utf8');
  const host=fsSync.readFileSync(path.join(__dirname,'../src/lib/runtime/extension-runtime.js'),'utf8');
- assert.match(ui,/replace.textContent='Replace & Reprocess'/);
+ assert.match(ui,/replace\.setAttribute\('aria-label','Replace & Reprocess'\)/);
  assert.doesNotMatch(ui,/archive.textContent='Remove Source'/);
- assert.match(ui,/remove.textContent='Delete'/);
+ assert.match(ui,/remove\.setAttribute\('aria-label','Delete source document'\)/);
  assert.match(ui,/send\('replaceDiscoverySource',\{roleId:selectedRole,digest:doc.digest,revision:brState.revision\}\)/);
  assert.match(host,/case 'archiveDiscoverySourceSafe':/);
  assert.match(host,/case 'replaceDiscoverySource':/);

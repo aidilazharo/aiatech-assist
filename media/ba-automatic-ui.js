@@ -12,7 +12,7 @@
  const primary=get('baAutoPrimaryAction'),overflow=get('baAutoOverflowMenu');
  const sourcePanel=root.querySelector('.source-documents-panel');
  const skill=get('workSkill');
- // Source upload must remain usable even while all five result panels are hidden.
+ // The five workflow panels stay visible and collapsed until opened by the user.
  get('baAutoSourceEntry').append(sourcePanel);
  get('baAutoDiscoveryForm').append(get('discoveryForm'));
  get('baAutoHistoryContent').append(get('baStartPanel'));
@@ -20,7 +20,8 @@
 
  let state=null,requestedProject='',artifactProject='',jiraView='list',jiraTab='all',tableKey='',brKey='',kind='iso',sourceDigest='',artifactContext=null,request=0;
  const collapsed=new Set();
- const input=get('baAutoArtifactText');
+ const input=get('baAutoArtifactText'),quillMount=get('baAutoQuillEditor');
+ let artifactQuill=null,quillKey='',quillHadFinalLine=false;
 
  const active=()=>view==='discovery'&&selectedRole==='business-analyst';
  const busy=()=>state?.phase==='running'||state?.phase==='publishing';
@@ -36,10 +37,12 @@
  const requirements=()=>brState?.brs?.filter(br=>!br.archivedFromRestart&&!['retired','retire-proposed'].includes(br.status))||[];
  const source=()=>brState?.sourceDocuments?.[0];
 
- function badge(id,isReady){
+ const statusLabels={'not-started':'Not started','in-progress':'In progress',
+   ready:'Ready','needs-attention':'Needs attention',completed:'Completed'};
+ function badge(id,status){
   const node=get(id);
-  node.dataset.state=isReady?'ready':'draft';
-  node.textContent=isReady?'Ready':'Draft';
+  const next=statusLabels[status]?status:'not-started';
+  node.dataset.state=next;node.textContent=statusLabels[next];
  }
 
  function placeSkill(){
@@ -73,6 +76,38 @@
   primary.disabled=!action||action.disabled||action.classList.contains('hidden')||busy()&&kind!=='source';
   get('baAutoOverflowActions').dataset.kind=kind;
  }
+ // Quill provides a document-text surface, while the original extracted text
+ // remains the persisted artifact. Formatting is not silently inserted into
+ // a source document or its downstream approved requirements.
+ function resetQuill(){
+  artifactQuill=null;quillKey='';quillMount.replaceChildren();
+ }
+ function quillText(){
+  const value=artifactQuill?.getText()||'';
+  return !quillHadFinalLine&&value.endsWith('\n')?value.slice(0,-1):value;
+ }
+ function syncQuill(){
+  if(!['source','original'].includes(kind)||!artifactContext||typeof window.Quill!=='function')return false;
+  const key=activeId+'|'+sourceDigest+'|'+kind+'|'+artifactContext.revision;
+  if(quillKey!==key){
+   resetQuill();
+   const editor=document.createElement('div');
+   editor.setAttribute('aria-label',kind==='source'?'Editable source document text':'Original source document text');
+   quillMount.append(editor);
+   artifactQuill=new window.Quill(editor,{theme:'snow',readOnly:kind!=='source',
+    modules:{toolbar:false},formats:[],placeholder:'Document text'});
+   quillHadFinalLine=artifactContext.text.endsWith('\n');
+   artifactQuill.setText(artifactContext.text,'api');
+   artifactQuill.on('text-change',(_delta,_old,origin)=>{
+    if(origin!=='user'||kind!=='source')return;
+    input.value=quillText();
+    render();
+   });
+   quillKey=key;
+  }
+  artifactQuill.enable(kind==='source'&&!busy()&&baCanEdit('ba-discovery'));
+  return true;
+ }
  function renderFormattedDocument(text){
   if(!window.ATGVDocumentViewer?.render){
    viewer.textContent=String(text||'');
@@ -99,7 +134,7 @@
   const changed=currentSource!==sourceDigest||artifactProject!==activeId;
   if(changed){
    sourceDigest=currentSource;artifactProject=activeId;artifactContext=null;input.value='';
-   viewer.replaceChildren();
+   resetQuill();viewer.replaceChildren();
    get('baAutoArtifactStatus').textContent='';
   }
   get('baAutoDocumentTools').hidden=!sourceDigest;
@@ -110,7 +145,9 @@
   get('baAutoDocumentPanel').hidden=preflight;
   get('baAutoArtifactSave').hidden=kind!=='source';
   viewer.hidden=kind!=='iso';
-  input.hidden=kind==='iso'||preflight;
+  const showQuill=syncQuill();
+  quillMount.hidden=!showQuill;
+  input.hidden=kind==='iso'||preflight||showQuill;
   get('baAutoArtifactLabel').hidden=kind==='iso'||preflight;
   get('baAutoPreflightPlaceholder').hidden=!get('baSourcePreflight').classList.contains('hidden');
   const documentPanel=get('baAutoDocumentPanel');
@@ -265,12 +302,12 @@
  }
 
 
- // Hide each of the five result sections until the corresponding content exists.
- // Keep task forms outside these result sections while work is incomplete.
- function setReadyPanel(id,isReady){
-  const panel=get(id),wasHidden=panel.hidden;
-  panel.hidden=!isReady;
-  if(!isReady||wasHidden)panel.open=false;
+ // Keep all five panels visible and initially collapsed. Do not forcibly
+ // collapse a panel a user has explicitly expanded during a refresh.
+ function setReadyPanel(id,status){
+  const panel=get(id);
+  panel.hidden=false;panel.dataset.status=status;
+  if(!panel.dataset.initialized){panel.open=false;panel.dataset.initialized='true';}
  }
  function renderReadyPanels(phase){
   const sourceReady=!!source()?.digest;
@@ -280,19 +317,28 @@
   const completedReady=phase==='published'||(brState?.brs||[]).some(br=>
    br.archivedFromRestart===true||['approved','published','completed'].includes(String(br.status||'').toLowerCase()))||
    Object.values(brState?.synced||{}).some(link=>!!link?.key);
-  const uploadTarget=sourceReady?get('baAutoOriginalFiles'):get('baAutoSourceEntry');
+  const uploadTarget=get('baAutoOriginalFiles');
   if(sourcePanel.parentElement!==uploadTarget)uploadTarget.append(sourcePanel);
-  get('baAutoSourceEntry').hidden=sourceReady;
-  const discoveryTarget=discoveryReady?get('baAutoDiscoveryForm'):get('baAutoDiscoveryEntry');
-  const discoveryForm=get('discoveryForm');
+  get('baAutoSourceEntry').hidden=true;
+  const discoveryTarget=get('baAutoDiscoveryForm'),discoveryForm=get('discoveryForm');
   if(discoveryForm.parentElement!==discoveryTarget)discoveryTarget.append(discoveryForm);
-  get('baAutoDiscoveryEntry').hidden=!sourceReady||discoveryReady;
-  setReadyPanel('baAutoSource',sourceReady);
-  setReadyPanel('baAutoDiscovery',discoveryReady);
-  setReadyPanel('baAutoRequirements',requirementsReady);
-  setReadyPanel('baAutoJira',jiraReady);
-  setReadyPanel('baAutoHistory',completedReady);
-  badge('baAutoHistoryBadge',completedReady);
+  get('baAutoDiscoveryEntry').hidden=true;
+  const phaseRunning=phase==='running'||phase==='publishing';
+  const excluded=!!brState?.baDraftQuality?.excluded?.length;
+  const allApproved=requirementsReady&&requirements().every(br=>['approved','published','completed'].includes(String(br.status||'').toLowerCase()));
+  const sourceStatus=!sourceReady?'not-started':artifactDirty()||phase==='running'&&!brState.mappingCompleted?'in-progress':brState.mappingCompleted?'ready':'in-progress';
+  const discoveryStatus=!sourceReady?'not-started':discoveryDirty?'in-progress':discoveryReady?'ready':'in-progress';
+  const requirementsStatus=!sourceReady||!discoveryReady?'not-started':excluded?'needs-attention':!requirementsReady?(phaseRunning?'in-progress':'not-started'):allApproved?'completed':'in-progress';
+  const jiraStatus=state?.preview?.conflicts?.length?'needs-attention':phase==='published'?'completed':
+   phaseRunning?'in-progress':phase==='ready'&&!dirty()?'ready':jiraReady?'in-progress':'not-started';
+  const historyStatus=completedReady?'completed':'not-started';
+  for(const [id,status] of [
+   ['baAutoSource',sourceStatus],['baAutoDiscovery',discoveryStatus],
+   ['baAutoRequirements',requirementsStatus],['baAutoJira',jiraStatus],
+   ['baAutoHistory',historyStatus]]){
+   setReadyPanel(id,status);
+   badge(id+'Badge',status);
+  }
  }
 
  function render(){
@@ -334,19 +380,11 @@
    if(!complete&&((busy()&&index===current)||(phase==='ready'&&index===3)))step.setAttribute('aria-current','step');
    else step.removeAttribute('aria-current');
   }
-  badge('baAutoSourceBadge',!!brState.mappingCompleted&&!artifactDirty()&&phase!=='running'&&(current>0||ready));
-  badge('baAutoDiscoveryBadge',!!brState.discoveryRevision&&!discoveryDirty&&(current>1||ready));
-  badge('baAutoRequirementsBadge',!!requirements().length&&!brState.baDraftQuality?.excluded?.length&&!brEditorDirty&&phase!=='running'&&(current>1||ready));
-  badge('baAutoJiraBadge',ready&&!unsaved);
-  if(!busy()&&state?.preview?.conflicts?.length){
-   const jiraBadge=get('baAutoJiraBadge');
-   jiraBadge.dataset.state='blocked';
-   jiraBadge.textContent='Needs attention';
-  }
   const refresh=get('baAutoRefresh'),stop=get('baAutoStop'),publish=get('baAutoPublish');
   refresh.disabled=!source()||busy()||unsaved||!!baBusyTask||discoveryImportBusy;
   stop.classList.toggle('hidden',phase!=='running');
-  publish.textContent=phase==='publishing'?'Publishing…':state?.preview?.republish?'Republish to Jira':'Publish to Jira';
+  const publishLabel=phase==='publishing'?'Publishing…':state?.preview?.republish?'Republish to Jira':'Publish to Jira';
+  publish.title=publishLabel;publish.setAttribute('aria-label',publishLabel);
   publish.disabled=phase!=='ready'||unsaved||!!baBusyTask||state?.preview?.revision!==brState.revision;
   const reopen=state?.preview?.reopenRows?.length||0;
   const messages={idle:source()?'Preparing source…':'Upload a document to start.',running:'Preparing affected artifacts…',draft:'Draft. Refresh affected artifacts to continue.',
@@ -423,6 +461,7 @@
   if(get('baAutoArtifactSave').disabled||!artifactContext)return;
   get('baAutoArtifactSave').disabled=true;
   input.readOnly=true;
+  artifactQuill?.enable(false);
   const text=input.value;
   get('baAutoArtifactStatus').textContent='Saving document…';
   invoke('baSaveArtifact',{kind,digest:sourceDigest,requestId:++request,revision:artifactContext.revision,text});
@@ -455,7 +494,7 @@
   }else if(m.projectId===activeId&&m.requestId===request){
    if(m.type==='baArtifactRead'&&m.digest===sourceDigest&&m.kind===kind){
     artifactContext={revision:m.revision,text:m.text};
-    input.value=m.text;
+    input.value=m.text;resetQuill();
     get('baAutoArtifactStatus').textContent='';
     if(kind==='iso')renderFormattedDocument(m.text);
     render();

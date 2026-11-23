@@ -57,7 +57,8 @@ test('all five BR panels use the same green OUTLINED Ready badge',()=>{
  for(const id of ['baAutoSourceBadge','baAutoDiscoveryBadge','baAutoRequirementsBadge','baAutoJiraBadge','baAutoHistoryBadge']){
   assert.match(html,new RegExp('id="'+id+'" class="ba-auto-badge"'));
  }
- assert.match(ui,/badge\('baAutoHistoryBadge',completedReady\)/);
+ assert.match(ui,/\['baAutoHistory',historyStatus\]/);
+ for(const status of ['not-started','in-progress','ready','needs-attention','completed'])assert.ok(ui.includes(status));
  assert.match(css,/#discoveryView \.ba-auto-badge\[data-state="ready"\],\s*#discoveryView #baAutoSourceBadge\[data-state="ready"\]/);
  assert.match(css,/border:1px solid var\(--atgv-consistency-ready\)!important/);
  assert.match(css,/background:transparent!important/);

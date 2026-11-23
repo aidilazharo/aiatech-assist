@@ -30,8 +30,10 @@ test('Business Documents file cards separate selection, long filenames and indep
  assert.match(rule('#discoveryView #baAutoOriginalFiles .source-document-actions button'),
   /min-height:36px/);
  assert.match(js,/item\.append\(selector,info,actions\)/);
- assert.match(js,/replace\.textContent='Replace & Reprocess'/);
- assert.match(js,/remove\.textContent='Delete'/);
+ assert.match(js,/replace\.setAttribute\('aria-label','Replace & Reprocess'\)/);
+ assert.match(js,/replace\.append\(sourceActionIcon\('replace'\)\)/);
+ assert.match(js,/remove\.setAttribute\('aria-label','Delete source document'\)/);
+ assert.match(js,/remove\.append\(sourceActionIcon\('delete'\)\)/);
  assert.match(css,/@media\(max-width:850px\)\{/);
  assert.match(css,/@media\(max-width:500px\)\{/);
  assert.match(layout,/#discoveryView #baAutoOriginalFiles \.source-document-actions\{[\s\S]*?grid-column:1\/-1\}/);
@@ -62,7 +64,7 @@ test('Document textarea has independent height, readable line spacing and unclip
  assert.match(rule('#discoveryView #baAutoArtifactStatus'),/overflow-wrap:anywhere/);
  assert.match(rule('#discoveryView #baAutoArtifactSave'),/min-height:38px;min-width:138px/);
  assert.match(html,/textarea id="baAutoArtifactText" rows="11"/);
- assert.match(html,/id="baAutoArtifactSave" disabled/);
+ assert.match(html,/id="baAutoArtifactSave"[^>]*aria-label="Save Document" disabled/);
  assert.match(js,/panel\.open=false;panel\.dataset\.lastPhase=phase/);
  // This change is styling only: approval and source repair handlers remain untouched.
  assert.match(js,/send\('downloadISO29148BRPDF',\{projectId:activeId\}\)/);

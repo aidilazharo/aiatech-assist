@@ -21,34 +21,29 @@ test('permanent connection banner is red and never replaced by transient notific
  assert.match(show,/target\.classList\.remove/);
  assert.match(js,/const host=header;/);
 });
-test('five BR result panels start hidden and only show as their data becomes ready',()=>{
+test('all five BR panels remain visible, initially collapsed, with independent status',()=>{
  const html=read('src/lib/webview/dashboard-html.js');
  const ui=read('media/ba-automatic-ui.js');
- const css=read('media/start.css');
  const ids=['baAutoSource','baAutoDiscovery','baAutoRequirements','baAutoJira','baAutoHistory'];
- for(const id of ids)assert.match(html,new RegExp('<details id="'+id+'" class="ba-auto-artifact" hidden>'));
+ for(const id of ids){
+  assert.match(html,new RegExp('<details id="'+id+'" class="ba-auto-artifact" data-status="not-started">'));
+  assert.match(html,new RegExp('id="'+id+'Badge" class="ba-auto-badge" data-state="not-started">Not started'));
+ }
  assert.match(ui,/function renderReadyPanels\(phase\)/);
- assert.match(ui,/setReadyPanel\('baAutoSource',sourceReady\)/);
- assert.match(ui,/setReadyPanel\('baAutoDiscovery',discoveryReady\)/);
- assert.match(ui,/setReadyPanel\('baAutoRequirements',requirementsReady\)/);
- assert.match(ui,/setReadyPanel\('baAutoJira',jiraReady\)/);
- assert.match(ui,/setReadyPanel\('baAutoHistory',completedReady\)/);
- assert.match(ui,/if\(!isReady\|\|wasHidden\)panel\.open=false/);
- assert.match(css,/#discoveryView details\.ba-auto-artifact\[hidden\]\{display:none!important\}/);
+ assert.match(ui,/panel\.hidden=false;panel\.dataset\.status=status/);
+ assert.match(ui,/panel\.open=false;panel\.dataset\.initialized='true'/);
+ for(const id of ids)assert.ok(ui.includes("['"+id+"',"),id+' has independent state');
+ assert.ok(!ui.includes("panel.hidden=!isReady"));
 });
-test('upload/discovery remain available before results are ready, and publish actions are below history',()=>{
+test('source and discovery forms are reachable inside permanent panels; publication remains after history',()=>{
  const html=read('src/lib/webview/dashboard-html.js');
  const ui=read('media/ba-automatic-ui.js');
- const source=html.indexOf('id="baAutoSourceEntry"');
- const discovery=html.indexOf('id="baAutoDiscoveryEntry"');
  const firstPanel=html.indexOf('id="baAutoSource"');
  const lastPanel=html.indexOf('id="baAutoHistory"');
  const actions=html.indexOf('class="ba-auto-actions"');
- assert.ok(source>0&&source<firstPanel);
- assert.ok(discovery>source&&discovery<firstPanel);
- assert.ok(lastPanel>firstPanel&&actions>lastPanel);
- assert.match(ui,/sourceReady\?get\('baAutoOriginalFiles'\):get\('baAutoSourceEntry'\)/);
- assert.match(ui,/discoveryReady\?get\('baAutoDiscoveryForm'\):get\('baAutoDiscoveryEntry'\)/);
+ assert.ok(firstPanel>0&&lastPanel>firstPanel&&actions>lastPanel);
+ assert.match(ui,/const uploadTarget=get\('baAutoOriginalFiles'\)/);
+ assert.match(ui,/const discoveryTarget=get\('baAutoDiscoveryForm'\)/);
  assert.match(ui,/if\(target\.hidden\)\{/);
 });
 test('My Work has no redundant incomplete task section or Go to task button',()=>{
