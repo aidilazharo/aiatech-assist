@@ -3233,3 +3233,9 @@ body:not(.gate-mode) .app-layout{
 #discoveryView .ba-auto-discovery-entry[hidden]{display:none!important}
 #discoveryView .ba-auto-source-entry,
 #discoveryView .ba-auto-discovery-entry{min-width:0;max-width:100%;margin:10px 0}
+
+/* v0.0.71: Connection instructions appear once per surface, not in each form. */
+#startupConnectionForm .atgv-connection-caption{margin:0 0 12px;font-size:12px;line-height:1.45}
+.unified-settings-view .atgv-settings-intro{margin:2px 0 14px;font-size:12px;line-height:1.45}
+.unified-settings-view .guide-token-hint{margin:5px 0 0;font-size:11px}
+.unified-settings-view [hidden]{display:none!important}
