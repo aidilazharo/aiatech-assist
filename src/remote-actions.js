@@ -200,7 +200,7 @@ async function jiraReadIssueChangelog(config, token, key) {
     return { entries, complete: false };
 }
 function remoteFingerprint(issue) { return sha(JSON.stringify({ summary: String(issue.fields?.summary || ''), description: textFromAdf(issue.fields?.description) })); }
-async function jiraUpdateIssue(config, token, { key, summary, description, extraFields = {}, fieldMetadata } = {}) {
+async function jiraUpdateIssue(config, token, { key, summary, description, extraFields = {}, fieldMetadata, roleLabel } = {}) {
     validIssueKey(key);
     const fields = {};
     if (summary !== undefined) {
@@ -211,9 +211,15 @@ async function jiraUpdateIssue(config, token, { key, summary, description, extra
     if (description !== undefined)
         fields.description = adf(description);
     Object.assign(fields,safeExtraFields(extraFields,fieldMetadata));
-    if (!Object.keys(fields).length)
+    const update={};
+    if(roleLabel!==undefined){
+        if(!/^atgv-role-[a-z-]{2,45}$/.test(String(roleLabel)))throw Error('Invalid responsible SDLC role label.');
+        update.labels=[{add:roleLabel}];
+    }
+    if(!Object.keys(fields).length&&!Object.keys(update).length)
         throw new Error('No Jira fields changed.');
-    return requestJson(`${baseAtlassian(config)}/rest/api/3/issue/${encodeURIComponent(key)}`, { ...jiraAuth(config, token), method: 'PUT', data: { fields } });
+    const data={...(Object.keys(fields).length?{fields}:{}),...(Object.keys(update).length?{update}:{})};
+    return requestJson(`${baseAtlassian(config)}/rest/api/3/issue/${encodeURIComponent(key)}`, { ...jiraAuth(config, token), method: 'PUT', data });
 }
 async function jiraRetireIssue(config, token, { key } = {}) {
     validIssueKey(key);
