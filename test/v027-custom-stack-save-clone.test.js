@@ -124,3 +124,54 @@ test('Custom Stack Save is enabled and no automatic scan runs on selection',()=>
  assert.match(git,/allowExistingEmpty=false/);
  assert.match(repo,/existing files but is not a valid Git checkout/);
 });
+
+test('switch to Custom Stack scans a pushed migration checkout in place after confirmation',async()=>{
+ const source=read('src/lib/runtime/extension-runtime.js');
+ const start=source.indexOf("          const projectId=activeProject.id,current=await registry.read(projectId);",
+  source.indexOf("case 'architectSaveStack':{"));
+ const end=source.indexOf('\n          break;',start);
+ assert.ok(start>0&&end>start);
+ const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
+ const run=new AsyncFunction('deps','let {activeProject,registry,effectiveConfig,aiRoot,catalogConfig,context,developerGit,architectRepository,getWorkspace,path,uiWarning,dashboard,recordStackActivity,refreshDashboard,require}=deps; do {\n'+source.slice(start,end)+'\n} while(false);');
+ const root=path.join(os.tmpdir(),'atgv-existing-checkout');
+ const branch='migration/react-catalog-1-1-14-07bbe5e6',sha='a'.repeat(40);
+ const activeProject={id:'demo',techStackId:'react',techStackPrepared:{stackId:'react',branch,sha,remotePushed:true},techStackApproval:{status:'approved'}};
+ const events=[],messages=[];
+ let confirmed=false,scanSha=sha;
+ const deps={
+  activeProject,path,context:{workspaceState:{}},aiRoot:()=>root,catalogConfig:()=>({}),
+  effectiveConfig:()=>({get:key=>key==='github.owner'?'acme':'project'}),
+  getWorkspace:()=>({uri:{fsPath:os.tmpdir()}}),
+  registry:{read:async()=>activeProject,update:async(_id,value)=>{events.push('update');return value}},
+  uiWarning:async(message,_options,action)=>{assert.ok(message.includes(branch));return confirmed?action:undefined},
+  architectRepository:{resolve:async()=>root,ensureCustom:async()=>assert.fail('Switch must reuse the checkout')},
+  developerGit:{repository:async()=>({root,branch,sha,remote:'https://github.com/acme/project',clean:false}),matchesGithubRepo:()=>true,localLogs:()=>({})},
+  dashboard:{webview:{postMessage:async msg=>messages.push(msg)}},
+  recordStackActivity:async()=>{},refreshDashboard:async()=>{},
+  require:name=>{
+   if(name.endsWith('architect-stack-reset'))return {
+    planProjectStackArchive:async()=>({}),archiveProjectStackDocuments:async()=>{events.push('archive');return {}}
+   };
+   assert.ok(name.endsWith('architect-custom-stack'));
+   return {scan:async folder=>{assert.equal(folder,root);events.push('scan');return {branch,sha:scanSha,targets:[]}}};
+  }
+ };
+ await run(deps);
+ assert.deepEqual(events,[]);
+ assert.equal(messages.at(-1).type,'architectStackCancelled');
+ confirmed=true;
+ scanSha='b'.repeat(40);
+ await assert.rejects(run(deps),/branch or revision changed/);
+ assert.deepEqual(events.splice(0),['scan']);
+ scanSha=sha;
+ deps.registry.update=async(_id,value)=>{
+  events.push('update');
+  assert.equal(value.techStackId,'custom');
+  assert.equal(value.techStackPrepared,null);
+  assert.equal(value.techStackApproval,null);
+  return value;
+ };
+ await run(deps);
+ assert.deepEqual(events,['scan','archive','update']);
+ assert.equal(messages.at(-1).value.branch,branch);
+});

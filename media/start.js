@@ -2447,7 +2447,8 @@ function refreshArchitectStageClasses(project){
 function syncArchitectStackButtons(project){
  const stackId=$('architectStackSelect').value;
  const prepared=project?.techStackPrepared;
- const switching=!!(prepared?.stackId&&prepared.stackId!==stackId&&stackId);
+ const savedStackId=prepared?.stackId||project?.techStackId;
+ const switching=!!(stackId&&savedStackId&&savedStackId!==stackId&&(prepared?.stackId||stackId==='custom'));
  const saved=!!(prepared?.stackId===stackId&&project?.techStackId===stackId);
  const tested=saved&&project?.techStackValidation?.status==='tested'&&project.techStackValidation.stackId===stackId;
  const approved=tested&&project?.techStackApproval?.status==='approved'&&project.techStackApproval.stackId===stackId;
@@ -2464,9 +2465,9 @@ function syncArchitectStackButtons(project){
  save.setAttribute('aria-label',locked?'Technology stack saved. Change the selection to enable Save Stack.':'Save selected technology stack');
  save.disabled=architectActionBusy||!activeId||!stackId||locked;
  save.textContent=locked?'Saved Stack':switching?'Switch & Save Stack':'Save Stack';
+ $('architectResetStack').disabled=architectActionBusy||!activeId||!savedStackId||savedStackId==='custom';
  if(stackId==='custom'){
-  save.title=locked?'Custom Stack saved. Change the stack selection to save again.':'Save Custom Stack: clone the configured project GitHub repository into its missing or empty repository folder. Never overwrite existing files.';
-  $('architectResetStack').disabled=true;
+  save.title=locked?'Custom Stack saved. Change the stack selection to save again.':switching?'Use the current Git checkout as Custom Stack and clear the saved stack approval after confirmation.':'Save Custom Stack: clone the configured project GitHub repository into its missing or empty repository folder. Never overwrite existing files.';
   $('architectTestStack').disabled=true;
   // A verified mock preview unlocks REQUESTING handoff validation, not
   // approval itself. Host execution checks every target and confirms a push.
@@ -2488,7 +2489,6 @@ function syncArchitectStackButtons(project){
  // A different prepared stack can be replaced only through a confirmed,
  // clean-checkout Git reset. Keep the action available and explain that path.
  save.title=locked?'Technology stack saved. Change the selection to save again.':switching?'Review Git safety checks and confirm switching from '+prepared.stackId+' to '+stackId+'. Previous branches remain intact.':'';
- $('architectResetStack').disabled=architectActionBusy||!project?.techStackId;
  $('architectTestStack').disabled=architectActionBusy||!saved||approved;
  // Leave the action available once Save and Test & Run have been verified.
  // Host-side approval requires SHA-pinned HTTP verification and passed tests.
@@ -8600,6 +8600,7 @@ $('architectStackSelect').addEventListener('change',event=>{
  architectChecklistSession(event.target.value);
  const project=projects.find(p=>p.id===activeId);
  syncArchitectStackButtons(project);
+ refreshArchitectStageClasses(project);
  renderArchitectRequirements(project);
  renderArchitectCustomPanel();
  if(event.target.value==='custom'&&activeId){
