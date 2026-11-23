@@ -480,7 +480,6 @@ function html(webview,{resumeLibrary=false}={}){
         <div class="ba-auto-body">
           <div class="ba-auto-jira-toolbar" role="group" aria-label="Jira DataTable controls">
             <div class="ba-auto-title-tools">
-              <span id="baAutoJiraBadge" class="ba-auto-badge">Draft</span>
             <span id="baAutoJiraView" class="ba-auto-tabs" role="group" aria-label="Jira work item view">
               <button class="ba-auto-title-icon" type="button" data-ba-jira-view="list" aria-pressed="true" aria-label="List view" title="List view">${baHeaderIcon('list')}</button>
               <button class="ba-auto-title-icon" type="button" data-ba-jira-view="hierarchy" aria-pressed="false" aria-label="Hierarchy view" title="Hierarchy view">${baHeaderIcon('tree')}</button>
