@@ -156,7 +156,7 @@
         "atgvAssist.updates.autoCheckLibrary": {
           "type": "boolean",
           "default": true,
-          "description": "Check SDLC Catalog main for newer commits. Saved across ATGV resets."
+          "description": "Check SDLC Library main for newer commits. Saved across ATGV resets."
         },
         "atgvAssist.updates.promptForUpdates": {
           "type": "boolean",

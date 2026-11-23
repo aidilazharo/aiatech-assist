@@ -194,9 +194,15 @@ async function openTaskDocument(registry, projectId, roleId, taskId, vscode, ext
             content = await fs.readFile(resolved, 'utf8');
         }
         catch (e) {
-            if (e.code !== 'ENOENT')
-                throw e;
-            content = await fs.readFile(path.join(extensionRoot, 'resources', 'defaults', 'templates', task.template), 'utf8');
+            if (e.code !== 'ENOENT') throw e;
+            // One last read-only fallback for workspaces not yet migrated by Start.
+            try {
+                const legacy=await safePath(path.join(registry.workspace,'.atgv'),path.join('templates',task.template));
+                content=await fs.readFile(legacy,'utf8');
+            } catch (legacyError) {
+                if(legacyError.code!=='ENOENT') throw legacyError;
+                content=await fs.readFile(path.join(extensionRoot,'resources','defaults','templates',task.template),'utf8');
+            }
         }
         await fs.writeFile(file, content, { flag: 'wx', mode: 0o600 }).catch(e => { if (e.code !== 'EEXIST')
             throw e; });

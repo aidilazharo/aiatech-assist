@@ -136,7 +136,7 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
     assert.equal(await fs.readdir(root).then(a=>a.includes('projects')),false,'Testing must not create files');
     handler({command:'openingInitialize'});
     await until(()=>messages.some(m=>m.type==='state'&&m.opening?.phase==='initialized'));
-    assert.equal(await fs.stat(path.join(root,'.atgv','templates','tech-stacks','react.json')).then(()=>true,()=>false),false);
+    assert.equal(await fs.stat(path.join(root,'.atgv','library','templates','tech-stacks','react.json')).then(()=>true,()=>false),false);
     assert.ok(await fs.stat(path.join(root,'projects','finance-knowledge','sdlc','roles','business-analyst.yaml')));
     handler({command:'openingOpen'});
     await until(()=>messages.some(m=>m.type==='state'&&m.opening?.phase==='open'));
@@ -168,7 +168,7 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
     const saved=JSON.parse(await fs.readFile(path.join(root,'projects','claims','atgv.project.json'),'utf8'));
     assert.equal(saved.schema,4);
     assert.equal(saved.settings.jira.projectKey,'CLM');
-    assert.equal(await fs.stat(path.join(root,'.atgv','templates','tech-stacks','react.json')).then(()=>true,()=>false),false,'No hardcoded local stack templates');
+    assert.equal(await fs.stat(path.join(root,'.atgv','library','templates','tech-stacks','react.json')).then(()=>true,()=>false),false,'No hardcoded local stack templates');
     await assert.rejects(()=>fs.access(path.join(root,'projects','claims','sdlc','roles','business-analyst.yaml')),{code:'ENOENT'});
     assert.match(panel.webview.html,/id="techStackGrid"/);
     assert.equal(saved.settings.jira.baseUrl,undefined);
