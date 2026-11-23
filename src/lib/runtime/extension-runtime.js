@@ -546,7 +546,7 @@ function scheduleCatalogChecks(){
 // Fixed trusted update repositories; never use a saved URL for code updates.
 const extensionSourceRepository=require('../../../package.json').repository.url;
 const libraryReleaseUpdater=require('../updates/library-release-updater');
-const FIXED_LIBRARY_REPOSITORY='https://github.com/aidilazharo/tech-stacks-skills';
+const FIXED_LIBRARY_REPOSITORY='https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills';
 let softwareUpdateTimer=null,softwareStartupTimer=null,softwareCheckBusy=false;
 let extensionRelease=null,extensionLatest=null,libraryRelease=null,extensionUpdateChecked='',extensionUpdateError='',libraryUpdateError='';
 let libraryLatest=null,libraryReleaseAvailable=false;
