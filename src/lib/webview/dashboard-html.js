@@ -26,7 +26,7 @@ function html(webview,{resumeLibrary=false}={}){
     subtask:"<path d=\"M5 5v7h4m-3-3 3 3-3 3M12 8h7v8h-7zM14 12l1 1 2-2\"/>"
   };
   const baHeaderIcon=(name,variant='')=>`<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${variant}>${baHeaderIcons[name]}</svg>`;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.65';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.66';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -377,10 +377,6 @@ function html(webview,{resumeLibrary=false}={}){
           <p id="atgvMyWorkAiText" class="atgv-mywork-ai-text" role="status" aria-live="polite"></p>
           <div id="atgvMyWorkAiActions" class="atgv-mywork-ai-actions" aria-label="Suggested next actions"></div>
         </div>
-        <section id="atgvMyWorkToday" class="atgv-mywork-ai-tasks" aria-label="Today's outstanding tasks" hidden>
-          <h2 id="atgvMyWorkTodayTitle">Today's tasks</h2>
-          <div id="atgvMyWorkTodayList" class="atgv-mywork-ai-task-list" role="list"></div>
-        </section>
         <div id="atgvMyWorkAiConversation" class="atgv-mywork-ai-conversation" role="log" aria-label="Role AI conversation" aria-live="polite"></div>
       </div>
       <form id="atgvMyWorkAiChatForm" class="atgv-mywork-ai-chat">
@@ -418,8 +414,9 @@ function html(webview,{resumeLibrary=false}={}){
         <li data-ba-auto-stage="publish"><span>4</span><div><strong>Publish to Jira</strong><small>Manual confirmation</small></div></li>
       </ol>
     </section>
+    <div id="baAutoSourceEntry" class="ba-auto-source-entry" aria-label="Upload and prepare source documents"></div>
     <div class="ba-auto-artifacts">
-      <details id="baAutoSource" class="ba-auto-artifact" open>
+      <details id="baAutoSource" class="ba-auto-artifact" hidden>
         <summary><strong>Business Documents</strong><span id="baAutoSourceBadge" class="ba-auto-badge">Draft</span></summary>
         <div class="ba-auto-body">
           <div id="baAutoDocumentToolbar" class="ba-auto-document-toolbar" role="group" aria-label="Business document controls">
@@ -458,17 +455,17 @@ function html(webview,{resumeLibrary=false}={}){
           </div>
         </div>
       </details>
-      <details id="baAutoDiscovery" class="ba-auto-artifact">
+      <details id="baAutoDiscovery" class="ba-auto-artifact" hidden>
         <summary><strong>Discovery <small>12 questions</small></strong><span id="baAutoDiscoveryBadge" class="ba-auto-badge">Draft</span></summary>
         <div class="ba-auto-body"><div id="baAutoDiscoveryForm"></div>
           <details id="baAutoSourceNotes" hidden><summary>Source decisions and excluded drafts</summary><ul id="baAutoSourceNotesList"></ul></details>
         </div>
       </details>
-      <details id="baAutoRequirements" class="ba-auto-artifact">
+      <details id="baAutoRequirements" class="ba-auto-artifact" hidden>
         <summary><strong>Generated Requirements <small id="baAutoBRCount"></small></strong><span id="baAutoRequirementsBadge" class="ba-auto-badge">Draft</span></summary>
         <div class="ba-auto-body" id="baAutoBRList"></div>
       </details>
-      <details id="baAutoJira" class="ba-auto-artifact" open>
+      <details id="baAutoJira" class="ba-auto-artifact" hidden>
         <summary class="ba-auto-jira-heading">
           <strong>Jira Work Items <small id="baAutoJiraCount"></small></strong>
           <span class="ba-auto-title-tools">
@@ -494,6 +491,7 @@ function html(webview,{resumeLibrary=false}={}){
         </div>
       </details>
     </div>
+    <details id="baAutoHistory" class="ba-auto-artifact" hidden><summary><strong>Completed requirements</strong></summary><div id="baAutoHistoryContent" class="ba-auto-body"></div></details>
     <div class="ba-auto-actions">
       <p id="baAutoStatus" role="status" aria-live="polite"></p>
       <div class="stack">
@@ -502,7 +500,6 @@ function html(webview,{resumeLibrary=false}={}){
         <button type="button" id="baAutoPublish" disabled>Publish to Jira</button>
       </div>
     </div>
-    <details id="baAutoHistory" class="ba-auto-artifact"><summary><strong>Completed requirements</strong></summary><div id="baAutoHistoryContent" class="ba-auto-body"></div></details>
 
     <section class="discovery-overview" aria-label="Business Requirement workflow status"><div class="discovery-overview-top"><div class="discovery-overview-item"><span>PROJECT</span><strong id="discoveryProjectName">—</strong><small id="discoveryUpdatedAt">Not saved yet.</small></div><div class="discovery-overview-item"><div class="discovery-readiness-head"></div><strong id="discoveryReadiness">0 / 12 answered</strong><small id="discoveryMissing">Complete all questions to continue.</small></div><div class="ba-overview-actions"></div></div>
 <div id="baInlineStatus" class="ba-inline-status hidden" role="alert" aria-live="polite"></div><div id="brDeletionProgress" class="br-deletion-progress hidden" data-phase="idle" role="status" aria-live="polite"><div class="br-deletion-progress-heading"><span class="br-deletion-spinner" aria-hidden="true"></span><strong id="brDeletionProgressText">Preparing deletion…</strong><small id="brDeletionProgressCount"></small><button id="brDeletionDismiss" type="button" class="br-deletion-dismiss hidden" aria-label="Dismiss deletion status" title="Dismiss deletion status">×</button></div><div id="brDeletionTrack" class="br-deletion-progress-track" role="progressbar" aria-label="Delete Business Requirement progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="brDeletionFill" class="br-deletion-progress-fill"></div></div></div><div id="baMilestoneError" class="ba-milestone-error hidden" role="alert" aria-live="polite"></div>
