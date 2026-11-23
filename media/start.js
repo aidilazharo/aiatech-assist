@@ -439,7 +439,7 @@ function notifyTop(message,{error=false,success=false,route=null,persistent=fals
  const content=String(message||'').trim();if(!content)return;
  // Obsolete connection notices must not appear as yellow transient banners.
  // The role-aware red reminder is the single authority for these messages.
- if(workspaceOpened&&/update permissions in settings|required permissions not verified/i.test(content)){
+ if(typeof workspaceOpened!=='undefined'&&workspaceOpened&&/update permissions in settings|required permissions not verified/i.test(content)){
   renderRoleCredentialBanner();return;
  }
  const now=Date.now(),key=content+'|'+error;
