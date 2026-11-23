@@ -367,7 +367,7 @@ function startupLibraryRepository(){
  if(!owner)return startupSetup.FIXED_LIBRARY_REPOSITORY;
  const source=startupSetup.SOURCE_REPOS[owner];
  // Existing project settings may use a custom GitHub repository owner. Keep
- // their SDLC Catalog pinned to the legacy trusted source; only the Start
+ // their Library pinned to the legacy trusted source; only the Start
  // account onboarding may change between the two verified source mappings.
  return source?.library||startupSetup.FIXED_LIBRARY_REPOSITORY;
 }
@@ -380,7 +380,7 @@ async function catalogToken(config,{interactive=false,enteredToken=''}={}){
   if(config.authentication==='public')return '';
   if(config.authentication==='token'){
     const token=String(enteredToken||'').trim()||await context.secrets.get('atgvAssist.sdlcCatalogToken');
-    if(!token)throw Error('Configure a read-only GitHub token before testing or pulling the SDLC Catalog.');
+    if(!token)throw Error('Configure a read-only GitHub token before testing or pulling the Library.');
     return token;
   }
   const session=await vscode.authentication.getSession('github',['repo'],{createIfNone:interactive});
@@ -391,7 +391,7 @@ async function refreshUxFrameworkCatalog(workspace, projectId, { force = false, 
   if (!workspace || !projectId) return;
   const conf=catalogConfig(), key=path.resolve(workspace), now=Date.now();
   if (!conf.repositoryUrl) {
-    if (force) await dashboard?.webview.postMessage({type:'uxFrameworkCatalogRefreshError',projectId,message:'Configure the SDLC Catalog repository in Settings first.'});
+    if (force) await dashboard?.webview.postMessage({type:'uxFrameworkCatalogRefreshError',projectId,message:'Configure the Library repository in Settings first.'});
     return;
   }
   if (!force && !conf.autoCheck) return;
@@ -480,15 +480,15 @@ async function roleSkillPrompt(roleId) {
    }
   }catch(error){if(error.code!=='ENOENT')report('Shared project artifact index: '+error.message);}
  }
- return shared+(skill ? '\nActive SDLC Catalog role guidance (reference only; requirements, safety and approvals take precedence):\n'+skill.slice(0,9500)+'\n' : '');
+ return shared+(skill ? '\nActive Library role guidance (reference only; requirements, safety and approvals take precedence):\n'+skill.slice(0,9500)+'\n' : '');
 }
 let lastKnownCatalogVersion='';
 async function catalogUiState(){
  const config=catalogConfig();let installed=null,roleSkillDescriptions={},roleSkillIdentifiers={},roleSkillOptions={},roleSkillSelections={};
   const workspace=getWorkspace()?.uri.fsPath||'';
   // Never report a downloaded global cache as an activated workspace Library.
-  try{if(workspace)installed=await sdlcCatalog.activeRoot(workspace);}catch(e){if(!/not activated/.test(e.message))report('Active SDLC Catalog: '+e.message);}
-  if(!installed&&workspace)try{installed=await sdlcCatalog.gitInstalled(workspace,config);}catch(e){report('SDLC Catalog checkout: '+e.message);}
+  try{if(workspace)installed=await sdlcCatalog.activeRoot(workspace);}catch(e){if(!/not activated/.test(e.message))report('Active Library: '+e.message);}
+  if(!installed&&workspace)try{installed=await sdlcCatalog.gitInstalled(workspace,config);}catch(e){report('Library checkout: '+e.message);}
   lastKnownCatalogVersion=String(installed?.version||'');
 if((installed?.offline||installed?.sha&&/^[a-f0-9]{40}$/.test(installed.sha))&&Array.isArray(installed.roles)&&getWorkspace()){
    for(const id of installed.roles.slice(0,100)){
@@ -515,7 +515,7 @@ async function catalogCheck({interactive=false}={}){
  catalogBusy=true;catalogLastError='';
  try{
   const token=await catalogToken(config,{interactive});
-  // Verified read-only version check. Only approved Pull Catalog updates Git.
+  // Verified read-only version check. Only approved Pull Library updates Git.
   const info=await sdlcCatalog.remoteVersion(config,token);
   catalogRemote={sha:info.sha,repository:info.repository,private:info.private,version:info.version||''};
   catalogLastCheck=new Date().toISOString();
@@ -526,16 +526,16 @@ async function catalogCheck({interactive=false}={}){
     return null;
    });
    if(installed?.version&&libraryUpdateVersion.compareInstalledRemote(installed.version,info.version).available)
-    report('Library update available: active v'+installed.version+'; verified GitHub main v'+info.version+'. Awaiting Pull Catalog approval.');
+    report('Library update available: active v'+installed.version+'; verified GitHub main v'+info.version+'. Awaiting Pull Library approval.');
   }
- }catch(error){catalogRemote=null;catalogLastError=error.message;report('SDLC Catalog check: '+error.message);if(interactive)throw error;}
+ }catch(error){catalogRemote=null;catalogLastError=error.message;report('Library check: '+error.message);if(interactive)throw error;}
  finally{catalogBusy=false;await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});}
 }
 function scheduleCatalogChecks(){
   if(catalogWatch){clearInterval(catalogWatch);catalogWatch=null;}
   const config=catalogConfig();
   if(!config.repositoryUrl||!config.autoCheck)return;
-  catalogWatch=setInterval(()=>{catalogCheck().catch(e=>report('SDLC Catalog background check: '+e.message));},60*60*1000);
+  catalogWatch=setInterval(()=>{catalogCheck().catch(e=>report('Library background check: '+e.message));},60*60*1000);
   catalogWatch.unref?.();
 }
 
@@ -6190,7 +6190,7 @@ async function handleDashboardMessage(msg){
         }catch(error){
           // An inactive or malformed catalog is a recoverable UI state. Keep the
           // framework picker visible and show the actionable cause beside it.
-          await dashboard?.webview.postMessage({type:'uxFrameworkLoaded',projectId:activeProject.id,key,value:'',frameworks:[],unavailable:[],declared:0,error:'Design frameworks unavailable: '+String(error.message||error).slice(0,450)+' Pull Catalog in Settings.'});
+          await dashboard?.webview.postMessage({type:'uxFrameworkLoaded',projectId:activeProject.id,key,value:'',frameworks:[],unavailable:[],declared:0,error:'Design frameworks unavailable: '+String(error.message||error).slice(0,450)+' Pull Library in Settings.'});
         }
         break;
       }
@@ -6205,7 +6205,7 @@ async function handleDashboardMessage(msg){
       case 'uxFrameworkSave':{
         requireOpened();const key=developerArtifacts.safeKey(msg.key),framework=String(msg.framework||'');
         const frameworks=await sdlcCatalog.designFrameworks(getWorkspace()?.uri.fsPath);
-        if(!frameworks.some(entry=>entry.id===framework))throw Error('Selected framework is not in the activated SDLC Catalog. Pull Catalog and retry.');
+        if(!frameworks.some(entry=>entry.id===framework))throw Error('Selected framework is not in the activated Library. Pull Library and retry.');
         if(uxPipelineRunning.has(activeProject.id+':'+key))throw Error('Cannot change design framework during generation.');
         const existing=await uxDesignPipeline.read(aiRoot(),key);
         if(existing.exists&&existing.status!=='rejected')throw Error('Disapprove the current design before changing its framework.');
@@ -6224,7 +6224,7 @@ async function handleDashboardMessage(msg){
         if(!workspace)throw Error('Open an ATGV workspace before activating frameworks.');
         const config=catalogConfig();
         const installed=(getWorkspace()?await sdlcCatalog.gitInstalled(getWorkspace().uri.fsPath,config):await sdlcCatalog.cached(config,context.globalStorageUri.fsPath));
-        if(!installed)throw Error('No verified SDLC Catalog is installed. Use Settings → SDLC Catalog → Pull Catalog first.');
+        if(!installed)throw Error('No verified Library is installed. Use Settings → Library → Pull Library first.');
         await ensureWorkspaceLibrary(workspace);
         await sdlcCatalog.syncGitWorkspace(config,await catalogToken(config,{interactive:true}),workspace,context.globalStorageUri.fsPath);
         const availability=await sdlcCatalog.designFrameworkAvailability(workspace);
@@ -6345,7 +6345,7 @@ async function handleDashboardMessage(msg){
           const workspace=getWorkspace()?.uri.fsPath;
           const availableFrameworks=await sdlcCatalog.designFrameworks(workspace);
           const selectedFramework=availableFrameworks.find(item=>item.id===designFramework);
-          if(!selectedFramework||designFramework!==String(msg.framework||''))throw Error('Selected framework is not active or has changed. Pull Catalog, reload the ticket and retry.');
+          if(!selectedFramework||designFramework!==String(msg.framework||''))throw Error('Selected framework is not active or has changed. Pull Library, reload the ticket and retry.');
           const [baseGuide,componentsGuide]=await Promise.all([
             sdlcCatalog.designReference(workspace,designFramework),
             sdlcCatalog.designComponentsReference(workspace,designFramework)
@@ -6738,7 +6738,7 @@ async function handleDashboardMessage(msg){
       case 'architectPullStackUpdates':{
         requireOpened();
         if(catalogBusy)throw Error('A catalog operation is already running.');
-        const config=catalogConfig();if(!config.repositoryUrl)throw Error('Configure the GitHub SDLC Catalog in Extension Settings.');
+        const config=catalogConfig();if(!config.repositoryUrl)throw Error('Configure the GitHub Library in Extension Settings.');
         const installed=(getWorkspace()?await sdlcCatalog.gitInstalled(getWorkspace().uri.fsPath,config):await sdlcCatalog.cached(config,context.globalStorageUri.fsPath));
         // Recheck the remote before confirmation so a stale badge cannot trigger an unintended pull.
         const token=await catalogToken(config,{interactive:true});
@@ -6746,11 +6746,11 @@ async function handleDashboardMessage(msg){
         const pinned=await sdlcCatalog.remoteVersion(config,token);
         catalogRemote={sha:pinned.sha,repository:pinned.repository,private:pinned.private,version:pinned.version};catalogLastCheck=new Date().toISOString();
         if(installed?.sha===remote.sha){await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});await dashboard?.webview.postMessage({type:'architectCatalogAction',success:true,message:'Technology stack catalog is already up to date.'});break;}
-        const confirmation=await uiWarning(`Install the latest verified SDLC Catalog from ${remote.repository} (main)?\n\nCurrent: ${installed?.sha?.slice(0,12)||'not installed'}\nLatest: ${remote.sha.slice(0,12)}\n\nThe stable .atgv/sdlc-catalog Git checkout will fast-forward from origin/main, preserving your generated application code, Git branches and approved documents. Local catalog modifications will block the pull rather than be overwritten.`,{modal:true},'Pull & Update');
+        const confirmation=await uiWarning(`Install the latest verified Library from ${remote.repository} (main)?\n\nCurrent: ${installed?.sha?.slice(0,12)||'not installed'}\nLatest: ${remote.sha.slice(0,12)}\n\nThe stable .atgv/library Git checkout will fast-forward from origin/main, preserving your generated application code, Git branches and approved documents. Local catalog modifications will block the pull rather than be overwritten.`,{modal:true},'Pull & Update');
         if(confirmation!=='Pull & Update'){await dashboard?.webview.postMessage({type:'architectCatalogAction',success:false,message:'Catalog update cancelled; nothing downloaded.'});break;}
         catalogBusy=true;await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});
         try{
-          if(!getWorkspace())throw Error('Open a workspace before pulling the SDLC Catalog.');
+          if(!getWorkspace())throw Error('Open a workspace before pulling the Library.');
           await ensureWorkspaceLibrary(getWorkspace().uri.fsPath);
           const snapshot=await sdlcCatalog.syncGitWorkspace(config,token,getWorkspace().uri.fsPath,context.globalStorageUri.fsPath);
           const selected=await sdlcCatalog.activeRoot(getWorkspace().uri.fsPath);
@@ -8811,9 +8811,9 @@ async function handleDashboardMessage(msg){
       case 'librarySync':{
         if(catalogBusy){await dashboard?.webview.postMessage({type:'librarySyncResult',success:false,message:'A catalog update is already running.'});break;}
         const config=catalogConfig();
-        if(!config.repositoryUrl){await dashboard?.webview.postMessage({type:'librarySyncResult',success:false,message:'Configure the GitHub SDLC Catalog repository in Settings first.'});break;}
+        if(!config.repositoryUrl){await dashboard?.webview.postMessage({type:'librarySyncResult',success:false,message:'Configure the GitHub Library repository in Settings first.'});break;}
         const workspace=getWorkspace()?.uri.fsPath;
-        if(!workspace){await dashboard?.webview.postMessage({type:'librarySyncResult',success:false,message:'Open a workspace before syncing the SDLC Catalog.'});break;}
+        if(!workspace){await dashboard?.webview.postMessage({type:'librarySyncResult',success:false,message:'Open a workspace before syncing the Library.'});break;}
         catalogBusy=true;catalogLastError='';
         try{
           const token=await catalogToken(config,{interactive:true});
@@ -9115,7 +9115,7 @@ async function handleDashboardMessage(msg){
       }
       case 'catalogSave':{
         const config=sdlcCatalog.normalizeConfig({...msg.config,repositoryUrl:startupLibraryRepository(),ref:'main'});
-        if(!config.repositoryUrl)throw Error('Enter the central GitHub SDLC Catalog repository URL.');
+        if(!config.repositoryUrl)throw Error('Enter the central GitHub Library repository URL.');
         if(config.authentication==='token'&&!String(msg.token||'').trim()&&!await context.secrets.get('atgvAssist.sdlcCatalogToken'))throw Error('Enter a read-only GitHub token.');
         if(config.authentication==='token'&&String(msg.token||'').trim())await context.secrets.store('atgvAssist.sdlcCatalogToken',String(msg.token).trim());
         if(config.authentication==='public')await context.secrets.delete('atgvAssist.sdlcCatalogToken');
@@ -9124,15 +9124,15 @@ async function handleDashboardMessage(msg){
         catalogRemote=null;catalogLastCheck='';catalogLastError='';scheduleCatalogChecks();
         await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});
         await publishUpdateStatus();
-        await dashboard?.webview.postMessage({type:'catalogAction',action:'save',success:true,message:'Read-only GitHub SDLC Catalog settings saved.'});
-        await notice('Read-only GitHub SDLC Catalog settings saved.');break;
+        await dashboard?.webview.postMessage({type:'catalogAction',action:'save',success:true,message:'Read-only GitHub Library settings saved.'});
+        await notice('Read-only GitHub Library settings saved.');break;
       }
       case 'selectRoleSkill':{
         requireOpened();
         const roleId=String(msg.roleId||''),skillId=String(msg.skillId||'');
         if(!/^[a-z][a-z0-9-]{0,79}$/.test(roleId)||!skillId||skillId.length>128)throw Error('Invalid role variant selection.');
         const installed=await sdlcCatalog.gitInstalled(getWorkspace().uri.fsPath,catalogConfig());
-        if(!installed?.roles?.includes(roleId))throw Error('Role not available in the installed SDLC Catalog.');
+        if(!installed?.roles?.includes(roleId))throw Error('Role not available in the installed Library.');
         const options=await sdlcCatalog.roleSkillChoices(getWorkspace().uri.fsPath,roleId);
         if(!options.some(item=>item.id===skillId))throw Error('Requested role variant is not installed in the verified catalog.');
         await context.workspaceState.update(roleSkillSelectionKey(activeProject.id,roleId),skillId);
@@ -9147,7 +9147,7 @@ async function handleDashboardMessage(msg){
       }
       case 'catalogCheck':{
         const config=catalogConfig();
-        if(!config.repositoryUrl)throw Error('Save the SDLC Catalog configuration first.');
+        if(!config.repositoryUrl)throw Error('Save the Library configuration first.');
         await catalogCheck({interactive:true});
         await dashboard?.webview.postMessage({type:'catalogAction',action:'check',success:true,message:'Catalog update check completed.'});break;
       }
@@ -9169,7 +9169,7 @@ async function handleDashboardMessage(msg){
         }
         const config=catalogConfig();
         catalogBusy=true;
-        await progress('running',5,'Preparing SDLC Library update…','Verifying the configured GitHub SDLC Catalog main branch.');
+        await progress('running',5,'Preparing SDLC Library update…','Verifying the configured GitHub Library main branch.');
         await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});
         try{
           if(!getWorkspace())throw Error('Open a workspace before pulling the SDLC Library.');
@@ -9182,7 +9182,7 @@ async function handleDashboardMessage(msg){
           const token=await catalogToken(config,{interactive:true});
           const remote=await sdlcCatalog.remoteVersion(config,token);
           if(!remote?.sha||!remote?.version)
-            throw Error('Cannot verify the GitHub SDLC Catalog main branch. Update your GitHub credentials in Settings, then retry Pull Library.');
+            throw Error('Cannot verify the GitHub Library main branch. Update your GitHub credentials in Settings, then retry Pull Library.');
           catalogRemote={repository:remote.repository,version:remote.version,sha:remote.sha};
           const newer=!installed||libraryUpdateVersion.compareInstalledRemote(installed.version,remote.version).available;
           if(!newer){
@@ -11506,7 +11506,7 @@ async function reset(){
   const token=catalog.repositoryUrl?await catalogToken(catalog,{interactive:false}):'';
   let staged=null,destructionStarted=false;
   try{
-    report(`ATGV Reset: preparing ${projects.length} fresh project(s) and SDLC Catalog without changing existing work.`);
+    report(`ATGV Reset: preparing ${projects.length} fresh project(s) and Library without changing existing work.`);
     staged=await localReset.stageFreshWorkspace({workspace,projects,connections,catalogConfig:catalog,catalogToken:token});
     // Stop background readers before removing local files. Do not touch any
     // global settings, VS Code configuration overrides, secrets or remote work.
@@ -11520,7 +11520,7 @@ async function reset(){
     if(replacement.warnings?.length)for(const warning of replacement.warnings)report('ATGV Reset cleanup: '+warning);
     staged=null;
     // Clear only per-project runtime selections. All extension-wide settings,
-    // configured accounts, tokens and SDLC Catalog connection details survive.
+    // configured accounts, tokens and Library connection details survive.
     for(const stateKey of typeof context.workspaceState.keys==='function'?context.workspaceState.keys():[]){
       if(stateKey.startsWith('atgvAssist.')&&!['atgvAssist.startAfterWindowReload','atgvAssist.restartAfterWindowReload'].includes(stateKey))
         await context.workspaceState.update(stateKey,undefined);

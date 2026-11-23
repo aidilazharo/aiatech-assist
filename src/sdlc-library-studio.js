@@ -33,7 +33,7 @@ function category(relative){
 function name(relative){return relative.split('/').at(-1)==='SKILL.md' ? relative.split('/').at(-2) : relative.split('/').at(-1);}
 function safeRepo(repositoryUrl){
  const parsed=parseRepository(repositoryUrl);
- if(!parsed)throw Error('Configure a GitHub SDLC Catalog repository first.');
+ if(!parsed)throw Error('Configure a GitHub Library repository first.');
  return parsed;
 }
 async function checkedRead(root,relative){
@@ -114,7 +114,7 @@ function primaryResource(relative){
  return false;
 }
 async function listing({root,storage,workspace,repositoryUrl,query='',type='All',limit=250,includeSupporting=false}){
- if(!root)throw Error('Pull the GitHub SDLC Catalog in Settings first.');
+ if(!root)throw Error('Pull the GitHub Library in Settings first.');
  const scopes=['user',...(workspace?['project']:[])];
  const sources=await Promise.all([walk(root),...scopes.map(scope=>walk(storageRoot({storage,workspace,repositoryUrl,scope})))]);
  const merged=new Map();

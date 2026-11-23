@@ -32,7 +32,7 @@ function normalizeStack(input, expectedId) {
     return { schema: 1, id, name: str('name'), label: str('label'), accent, runtime: str('runtime'), language: str('language'), framework: str('framework'), buildTool: str('buildTool'), unit: arr('unit'), integration: arr('integration'), e2e: arr('e2e'), templateRepository: str('templateRepository'), notes: str('notes', 1200), previewUrl, apiBaseUrl:opt('apiBaseUrl'), accessManual:opt('accessManual'), orm:opt('orm'), database:opt('database'), stackType:opt('stackType'), runCommand:opt('runCommand'), testCommand:opt('testCommand'), buildCommand:opt('buildCommand') };
 }
 async function loadStack(id, workspace) {
-    if (!workspace) throw Error('Open a workspace and pull the GitHub SDLC Catalog before choosing a stack.');
+    if (!workspace) throw Error('Open a workspace and pull the GitHub Library before choosing a stack.');
     const manifest = await catalogAssets.activeManifest(workspace);
     if (!manifest.techStacks.includes(id) || !ID_RE.test(id)) throw Error('Technology stack is not in the approved GitHub catalog: '+id);
     const raw = await catalogAssets.stackAsset(workspace,id);
