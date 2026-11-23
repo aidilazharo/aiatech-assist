@@ -423,7 +423,7 @@ function html(webview,{resumeLibrary=false}={}){
     <div id="baAutoDiscoveryEntry" class="ba-auto-discovery-entry" aria-label="Complete discovery answers" hidden></div>
     <div class="ba-auto-artifacts">
       <details id="baAutoSource" class="ba-auto-artifact" data-status="not-started">
-        <summary><strong>Business Documents</strong><span id="baAutoSourceBadge" class="ba-auto-badge">Draft</span></summary>
+        <summary><strong>Business Documents</strong><span id="baAutoSourceBadge" class="ba-auto-badge" data-state="not-started">Not started</span></summary>
         <div class="ba-auto-body">
           <div id="baAutoDocumentToolbar" class="ba-auto-document-toolbar" role="group" aria-label="Business document controls">
             <div id="baAutoOriginalFiles"></div>
@@ -463,19 +463,19 @@ function html(webview,{resumeLibrary=false}={}){
         </div>
       </details>
       <details id="baAutoDiscovery" class="ba-auto-artifact" data-status="not-started">
-        <summary><strong>Discovery <small>12 questions</small></strong><span id="baAutoDiscoveryBadge" class="ba-auto-badge">Draft</span></summary>
+        <summary><strong>Discovery <small>12 questions</small></strong><span id="baAutoDiscoveryBadge" class="ba-auto-badge" data-state="not-started">Not started</span></summary>
         <div class="ba-auto-body"><div id="baAutoDiscoveryForm"></div>
           <details id="baAutoSourceNotes" hidden><summary>Source decisions and excluded drafts</summary><ul id="baAutoSourceNotesList"></ul></details>
         </div>
       </details>
       <details id="baAutoRequirements" class="ba-auto-artifact" data-status="not-started">
-        <summary><strong>Generated Requirements <small id="baAutoBRCount"></small></strong><span id="baAutoRequirementsBadge" class="ba-auto-badge">Draft</span></summary>
+        <summary><strong>Generated Requirements <small id="baAutoBRCount"></small></strong><span id="baAutoRequirementsBadge" class="ba-auto-badge" data-state="not-started">Not started</span></summary>
         <div class="ba-auto-body" id="baAutoBRList"></div>
       </details>
       <details id="baAutoJira" class="ba-auto-artifact" data-status="not-started">
         <summary class="ba-auto-jira-heading">
           <strong>Jira Work Items <small id="baAutoJiraCount"></small></strong>
-          <span id="baAutoJiraBadge" class="ba-auto-badge">Draft</span>
+          <span id="baAutoJiraBadge" class="ba-auto-badge" data-state="not-started">Not started</span>
         </summary>
         <div class="ba-auto-body">
           <div class="atgv-section-table-toolbar" role="toolbar" aria-label="Jira Work Items table display and filters">
@@ -498,7 +498,7 @@ function html(webview,{resumeLibrary=false}={}){
         </div>
       </details>
     </div>
-    <details id="baAutoHistory" class="ba-auto-artifact" data-status="not-started"><summary><strong>Completed requirements</strong><span id="baAutoHistoryBadge" class="ba-auto-badge">Draft</span></summary><div id="baAutoHistoryContent" class="ba-auto-body"></div></details>
+    <details id="baAutoHistory" class="ba-auto-artifact" data-status="not-started"><summary><strong>Completed requirements</strong><span id="baAutoHistoryBadge" class="ba-auto-badge" data-state="not-started">Not started</span></summary><div id="baAutoHistoryContent" class="ba-auto-body"></div></details>
     <div class="ba-auto-actions">
       <p id="baAutoStatus" role="status" aria-live="polite"></p>
       <div class="stack">
