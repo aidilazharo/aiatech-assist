@@ -4163,7 +4163,7 @@ async function resolveBAAttention(msg){
    rounds=attempt;
    await report('baAutoResolveProgress','AI repair '+attempt+'/2 · comparing '+targets.length+' affected BR'+(targets.length===1?'':'s')+' against verified documents and Discovery.');
    const updated=await generateBusinessRequirements({
-    autoResolve:true,regenerate:true,targetBrIds:targets,signal,
+    autoResolve:true,automatic:true,regenerate:true,targetBrIds:targets,signal,
     feedback:'Resolve only the cited draft quality findings for the requested BR IDs. Correct unsupported or contradictory statements only when the uploaded source and saved Discovery contain evidence. Preserve stable IDs, all unaffected features and acceptance criteria. Keep unresolved business decisions explicitly open.'
    });
    if(!updated)throw Error('AI repair did not save a draft. The existing Business Requirements remain available.');
