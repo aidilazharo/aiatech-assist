@@ -25,29 +25,36 @@ async function fixture(fn){
   await fn({registry,request,read});
  }finally{await fs.rm(root,{recursive:true,force:true});}
 }
-test('unavailable published BR and links leave the active register and return when Jira visibility returns',()=>fixture(async({registry,request,read})=>{
+test('Jira 404 preserves published BR records and links until verified',()=>fixture(async({registry,request,read})=>{
  const opts={registry,projectId:'demo',config,token:'test',request};
- const removed=await sync.run({...opts,readIssue:read(['TC-200'])});
- assert.equal(removed.brsRemoved,1);assert.deepEqual(removed.register.brs.map(x=>x.id),['BR-002','BR-003']);
- assert.equal(removed.register.synced['BR-001'],undefined);assert.equal(removed.register.synced['BR-002'].key,'TC-200');
- assert.equal(removed.register.startupJiraReconciliation.brs['BR-001'].br.approvedContent.title,'BR-001');
- assert.deepEqual(removed.register.completedCycles[0].requirements.map(x=>x.id),['BR-002']);
- assert.equal(removed.register.jiraWorkHistory['TC-100'],undefined);
+ const missing=await sync.run({...opts,readIssue:read(['TC-200'])});
+ assert.equal(missing.brsRemoved,0);assert.equal(missing.linksRemoved,0);
+ assert.deepEqual(missing.register.brs.map(x=>x.id),['BR-001','BR-002','BR-003']);
+ assert.equal(missing.register.synced['BR-001'].key,'TC-100');
+ assert.equal(missing.register.synced['BR-001/F-1'].key,'TC-101');
+ assert.equal(missing.register.jiraWorkHistory['TC-100'].status,'Done');
+ assert.equal(missing.register.startupJiraReconciliation.verification['BR-001|TC-100'].status,'verification-required');
+ assert.equal(missing.pendingVerification,2);
+ const revision=missing.register.revision;
+ const unchanged=await sync.run({...opts,readIssue:read(['TC-200'])});
+ assert.equal(unchanged.changed,false);
+ assert.equal((await workflow.load(registry,'demo')).revision,revision);
  const restored=await sync.run({...opts,readIssue:read(['TC-100','TC-101','TC-200'])});
- assert.equal(restored.brsRestored,1);assert.ok(restored.register.brs.some(x=>x.id==='BR-001'));
- assert.equal(restored.register.synced['BR-001/F-1'].key,'TC-101');
- assert.equal(restored.register.jiraWorkHistory['TC-100'].status,'Done');
- assert.deepEqual(restored.register.completedCycles[0].requirements.map(x=>x.id).sort(),['BR-001','BR-002']);
+ assert.equal(restored.verificationCleared,2);
+ assert.deepEqual(restored.register.startupJiraReconciliation.verification,{});
+ assert.equal(restored.register.synced['BR-001'].key,'TC-100');
 }));
-test('an unavailable child link is removed locally without deleting its available BR and is restored later',()=>fixture(async({registry,request,read})=>{
+test('an unavailable child stays linked and cannot be re-created by accident',()=>fixture(async({registry,request,read})=>{
  const opts={registry,projectId:'demo',config,token:'test',request};
  const missing=await sync.run({...opts,readIssue:read(['TC-100','TC-200'])});
- assert.equal(missing.linksRemoved,1);assert.ok(missing.register.brs.some(x=>x.id==='BR-001'));
- assert.equal(missing.register.synced['BR-001/F-1'],undefined);
+ assert.equal(missing.linksRemoved,0);
+ assert.equal(missing.register.synced['BR-001/F-1'].key,'TC-101');
  assert.equal(workflow.plan(missing.register).some(x=>x.path==='BR-001/F-1'&&x.action==='create'),false);
  const restored=await sync.run({...opts,readIssue:read(['TC-100','TC-101','TC-200'])});
- assert.equal(restored.linksRestored,1);assert.equal(restored.register.synced['BR-001/F-1'].key,'TC-101');
+ assert.equal(restored.verificationCleared,1);
+ assert.equal(restored.register.synced['BR-001/F-1'].key,'TC-101');
 }));
+
 test('authorization, network and project failures leave the register unchanged',()=>fixture(async({registry,request,read})=>{
  const opts={registry,projectId:'demo',config,token:'test'};
  const before=await workflow.load(registry,'demo');
