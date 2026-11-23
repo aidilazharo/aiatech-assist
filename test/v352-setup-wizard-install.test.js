@@ -63,7 +63,7 @@ test('Wizard replaces headings with separate Previous/Next navigation, Refresh i
  assert.match(html,/id="startupComputerCard"/);assert.match(html,/id="startupPrevious"/);assert.match(html,/id="startupProceed" disabled>Next/);
  assert.match(html,/atgv-startup-section-title.*Technology stack prerequisites.*id="startupRefresh"/);
  assert.doesNotMatch(html,/Recheck Computer|Computer &amp; Connection Readiness|1\. Computer|2\. Connections|3\. Search Project/);
- assert.match(js,/startupPage===0\?\!startupScanComplete:\!startupConnectionVerified/);
+ assert.match(js,/\$\('startupProceed'\)\.disabled=busy\|\|!!startupInstallingModule/);
  assert.match(js,/startupPage=1;renderStartupPage\(\)/);
  assert.match(js,/send\('startupInstallModule'/);
  assert.match(js,/startupModuleProgress/);
