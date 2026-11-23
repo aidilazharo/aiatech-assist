@@ -51,7 +51,9 @@ test('renderer renders blank state and preserves code text safely',()=>{
 test('only one document panel is visible per selected tab',()=>{
  for(const id of ['baAutoDocumentTabs','baAutoFormattedDocument','baAutoPrimaryAction','baAutoOverflowMenu','baAutoArtifactText'])assert.match(html,new RegExp('id="'+id+'"'));
  assert.match(ba,/viewer\.hidden=kind!=='iso'/);
- assert.match(ba,/input\.hidden=kind==='iso'\|\|preflight/);
+ assert.match(ba,/input\.hidden=kind==='iso'\|\|preflight\|\|showQuill/);
+ assert.match(ba,/const showQuill=syncQuill\(\)/);
+ assert.match(html,/id="baAutoQuillEditor"/);
  assert.match(ba,/get\('baAutoIsoPreflight'\)\.hidden=!preflight/);
  assert.match(ba,/get\('baAutoDocumentPanel'\)\.hidden=preflight/);
  assert.match(ba,/input\.readOnly=kind!=='source'/);
