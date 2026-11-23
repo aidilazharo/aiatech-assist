@@ -1,25 +1,22 @@
-# ATGV AIATECH Assist v0.0.59
+# ATGV AIATECH Assist v0.0.60
 
 Release date: 2026-11-23
 
-## GitHub connection policy
-- Repository **read** access is required for the extension and SDLC Library source checks.
-- **Write** access is optional. A read-only GitHub PAT can complete setup and save the connections.
-- Release listing and download checks remain optional and do not block source verification.
-- Connection logs distinguish missing repository read access from missing optional write access.
-- This change does not grant write access: actions that create branches, push code, publish releases or change remote files may still require a token with additional scopes.
+## Custom Stack full-stack startup
 
-## Custom Stack frontend and mock API preview
-- Prefer the runnable Vite frontend if a previously selected target points to an API-only backend.
-- Require frontend HTML at the web-app root and a verified synthetic mock-health response before reporting the preview as ready.
-- Keep the selected target and preview URL synchronized with the running frontend.
-- Never open an API-health endpoint as if it were the frontend web app.
-- Preserve isolated local fix branches, synthetic fixtures, and existing main-branch safety controls.
+- Detect nested Vite frontend and NestJS backend applications from their real manifests.
+- With an explicitly configured development `NestJS_Backend/.env`, install both applications, run the real NestJS API on port 3000, verify PostgreSQL health, then start Vite on port 5173.
+- Track both service processes, preserve separate logs, and stop both through the existing Stop control.
+- Show frontend URL rather than API-only health URL. Reject synthetic API responses during live-backend verification.
+- Where backend configuration is absent, retain a clearly labeled MOCK DATA ONLY frontend preview, not a claim of real database access.
 
-## Regression coverage
-- Added read-only-PAT, mandatory-read, and optional-release tests.
-- Added frontend-target selection and synthetic health endpoint tests.
+## Safety and compatibility
 
-## Verification status
-- Source JavaScript syntax checked for modified modules.
-- Full extension integration tests and VSIX packaging require a complete local checkout with project dependencies; do not treat source-only checks as a validated release artifact.
+- Preserve existing .github workflows, tech stacks, source contracts, and credential configuration.
+- Local Custom Stack branch handling remains unchanged; no automatic GitHub push or PR from Install & Run.
+- PostgreSQL, Okta, and external integrations require separately verified approved development credentials.
+
+## Validation
+
+- New focused full-stack tests cover target pairing, mode gating, health integrity, dual-process lifecycle.
+- Extension-level regression suite and package verification are executed during release.

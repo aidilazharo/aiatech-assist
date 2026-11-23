@@ -371,6 +371,7 @@ async function createViteMockOverlay(repoRoot,cwd,port,mockDatabase=false){
 let activeProcess = null;
 let lastProcess = null;
 async function runLocal(root, { relative = '', env = {}, previewUrl = '', apiPort = null, mockPreview = false, mockDatabase = false } = {}) {
+    if (require('./architect-custom-fullstack').hasManagedSession())throw Error('Stop the full-stack session before starting another application.');
     if (activeProcess && activeProcess.child.exitCode === null)
         throw Error('An application is already running. Stop it before starting another.');
     const info = await inspectScripts(root), target = info.targets.find(t => t.relative === relative);
@@ -429,6 +430,7 @@ async function runLocal(root, { relative = '', env = {}, previewUrl = '', apiPor
 // Run only ATGV-generated, localhost-only synthetic API fixtures from a reviewed
 // local fix branch. Reuse the normal managed-process tracker so Stop and Status work.
 async function runMockServices(root,{relative='',previewUrl=''}={}){
+    if(require('./architect-custom-fullstack').hasManagedSession())throw Error('Stop the real full-stack session before starting a mock API.');
     if(activeProcess&&activeProcess.child.exitCode===null&&activeProcess.child.signalCode===null)
         throw Error('An ATGV-managed application is already running.');
     const info=await inspectScripts(root);
@@ -472,7 +474,10 @@ async function runMockServices(root,{relative='',previewUrl=''}={}){
     }
     return {pid:child.pid,relative,previewUrl:url,mockPreview:true};
 }
-async function stopLocal() { if (!activeProcess)
+async function stopLocal() {
+ const fullstack=require('./architect-custom-fullstack');
+ if(fullstack.hasManagedSession())return fullstack.stop();
+ if (!activeProcess)
     return { stopped: false }; const entry = activeProcess; if (process.platform !== 'win32') {
     try {
         process.kill(-entry.child.pid, 'SIGTERM');
@@ -497,7 +502,10 @@ if(entry.child.exitCode===null&&entry.child.signalCode===null)
  throw Error('ATGV-managed process did not exit; it remains tracked.');
 if(activeProcess===entry)activeProcess=null;
 return { stopped: true, logs: entry.logs }; }
-function localLogs() { const entry=activeProcess||lastProcess;return entry ? { running: !!activeProcess&&entry.child.exitCode === null && entry.child.signalCode === null, pid:entry.child.pid, logs: entry.logs, cwd: entry.cwd, relative: entry.relative, head: entry.head, command:entry.command, previewUrl:entry.previewUrl, apiPort:entry.apiPort, instanceId:entry.instanceId, mockPreview:entry.mockPreview===true, exitCode:entry.exitCode, signal:entry.signal } : { running: false, pid:null, logs: '' }; }
+function localLogs() {
+ const fullstack=require('./architect-custom-fullstack');
+ if(fullstack.hasManagedSession())return fullstack.log();
+ const entry=activeProcess||lastProcess;return entry ? { running: !!activeProcess&&entry.child.exitCode === null && entry.child.signalCode === null, pid:entry.child.pid, logs: entry.logs, cwd: entry.cwd, relative: entry.relative, head: entry.head, command:entry.command, previewUrl:entry.previewUrl, apiPort:entry.apiPort, instanceId:entry.instanceId, mockPreview:entry.mockPreview===true, exitCode:entry.exitCode, signal:entry.signal } : { running: false, pid:null, logs: '' }; }
 function readinessFlags({hasRepo=false, clean=false, matched=false, baseFound=false, stackId='', targets=[]}={}) {
   const blockers=[];
   if(!stackId) blockers.push('Solution Architect has not selected a technology stack');
