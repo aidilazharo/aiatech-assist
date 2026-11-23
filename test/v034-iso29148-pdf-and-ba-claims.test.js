@@ -59,7 +59,7 @@ test('BA source UI removes redundant archive button, defaults preflight collapse
  const ui=read('media/start.js'),html=read('src/lib/webview/dashboard-html.js'),host=read('src/lib/runtime/extension-runtime.js'),css=read('media/start.css');
  const sourceUi=ui.slice(ui.indexOf('function renderSourceDocuments(){'),ui.indexOf('function renderSourceSelection(){'));
  assert.doesNotMatch(sourceUi,/archive.textContent='Remove Source'/);
- assert.match(sourceUi,/remove.textContent='Delete'/);
+ assert.match(sourceUi,/remove\.setAttribute\('aria-label','Delete source document'\)/);
  assert.match(sourceUi,/requestBRDeletion\(\{target:'active-source'/);
  assert.match(sourceUi,/actions.append\(replace,remove\)/);
  assert.match(html,/<details id="baSourcePreflight"/);
