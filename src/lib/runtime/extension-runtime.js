@@ -5696,16 +5696,22 @@ async function startupStackCatalog(){
 // One durable metadata journal across all role workspaces. Sources, tokens,
 // prompts and approval bodies are never recorded in this journal.
 const activeHostProcesses=new Map();
-let atgvDurableJobs=null;
+let atgvDurableJobs=null,atgvDurableJobsRoot='';
 const atgvRecoveredProjects=new Set();
 function atgvJobJournal(){
  if(!context?.globalStorageUri?.fsPath)throw Error('ATGV storage is not ready.');
- if(!atgvDurableJobs){
+ {
   const legacy=path.join(context.globalStorageUri.fsPath,'workflow-jobs');
   const workspace=getWorkspace()?.uri.fsPath;
   let target=legacy;
   if(workspace)try{target=workspaceMemory.memoryDirectory(workspace);}catch(error){if(!/workspace marker required|Initialize ATGV workspace/.test(error.message))throw error;}
-  atgvDurableJobs=new DurableWorkflowEngine({root:target,migrateFrom:target===legacy?null:legacy});
+  if(atgvDurableJobs&&atgvDurableJobsRoot!==target){
+   atgvDurableJobs.close();atgvDurableJobs=null;atgvRecoveredProjects.clear();
+  }
+  if(!atgvDurableJobs){
+   atgvDurableJobs=new DurableWorkflowEngine({root:target,migrateFrom:target===legacy?null:legacy});
+   atgvDurableJobsRoot=target;
+  }
  }
  return atgvDurableJobs;
 }
@@ -11700,5 +11706,5 @@ function activate(ctx){
   void installationStartup().catch(e=>{captureLocalIssue('installationStartup',e);report('Install/start workflow: '+e.message);uiError('ATGV startup: '+e.message);});
   report('ATGV extension activated. Run ATGV: Start to manage workspace projects.');
 }
-function deactivate(){if(idleImprovementTimer){clearInterval(idleImprovementTimer);idleImprovementTimer=null;}if(liveRemoteTimer){clearInterval(liveRemoteTimer);liveRemoteTimer=null;}if(catalogWatch){clearInterval(catalogWatch);catalogWatch=null;}if(softwareUpdateTimer)clearInterval(softwareUpdateTimer);if(softwareStartupTimer)clearTimeout(softwareStartupTimer);void developerGit.stopLocal().catch(()=>{});}
+function deactivate(){atgvDurableJobs?.close();atgvDurableJobs=null;atgvDurableJobsRoot='';if(idleImprovementTimer){clearInterval(idleImprovementTimer);idleImprovementTimer=null;}if(liveRemoteTimer){clearInterval(liveRemoteTimer);liveRemoteTimer=null;}if(catalogWatch){clearInterval(catalogWatch);catalogWatch=null;}if(softwareUpdateTimer)clearInterval(softwareUpdateTimer);if(softwareStartupTimer)clearTimeout(softwareStartupTimer);void developerGit.stopLocal().catch(()=>{});}
 module.exports={activate,deactivate};
