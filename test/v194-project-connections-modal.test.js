@@ -49,10 +49,16 @@ test('Jira Test Permissions confirms both Browse Projects and Create Issues with
  assert.ok(requests.every(x=>!x.opts.method&&x.opts.token==='secret'&&x.opts.basicEmail==='developer@example.org'));
 });
 
-test('Jira denial or inconclusive permission blocks save',async()=>{
+test('Jira project can be mapped read-only; only Browse Projects is mandatory',async()=>{
  for(const create of [false,undefined]){
-  await assert.rejects(validateProjectConnection({kind:'jira',key:'TC',config,token:'secret',request:async(url)=>url.includes('/mypermissions')?{permissions:{BROWSE_PROJECTS:{havePermission:true},CREATE_ISSUES:{havePermission:create}}}:{key:'TC'}}),/Create Issues.*not saved/);
+  const result=await validateProjectConnection({kind:'jira',key:'TC',config,token:'secret',
+   request:async url=>url.includes('/mypermissions')?{permissions:{BROWSE_PROJECTS:{havePermission:true},CREATE_ISSUES:{havePermission:create}}}:{key:'TC'}});
+  assert.deepEqual(result.permissions,['Browse Projects']);
+  assert.equal(result.capabilities.createIssues,false);
+  assert.match(result.message,/read-only/);
  }
+ await assert.rejects(validateProjectConnection({kind:'jira',key:'TC',config,token:'secret',
+  request:async url=>url.includes('/mypermissions')?{permissions:{BROWSE_PROJECTS:{havePermission:false},CREATE_ISSUES:{havePermission:true}}}:{key:'TC'}}),/Browse Projects.*not saved/);
  await assert.rejects(validateProjectConnection({kind:'jira',key:'TC',config,token:'secret',request:async()=>({key:'OTHER'})}),/different project key/);
 });
 
