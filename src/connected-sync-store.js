@@ -152,6 +152,19 @@ function queueApproved(registry,projectId,{provider,origin,id,baseRevision,hash,
   return {id:jobId};
  }finally{store.db.close();}
 }
+function reportConflict(registry,projectId,{provider,origin,id,localRevision='',remoteRevision='',reason}){
+ provider=validateProvider(provider);origin=validateOrigin(provider,origin);id=safeId(id);
+ localRevision=safeRevision(localRevision);remoteRevision=safeRevision(remoteRevision);
+ const message=String(reason||'Remote content conflicts with an approved local revision.').replace(/[\r\n\t]/g,' ').slice(0,160);
+ const store=open(registry,projectId);if(!store)return {legacy:true};
+ try{
+  const key=fingerprint([provider,origin,id,localRevision,remoteRevision]);
+  store.db.prepare(`INSERT OR IGNORE INTO connected_sync_conflicts
+   (id,provider,origin,resource_id,local_revision,remote_revision,reason,detected_at)
+   VALUES(?,?,?,?,?,?,?,?)`).run(key,provider,origin,id,localRevision,remoteRevision,message,timestamp());
+  return {id:key};
+ }finally{store.db.close();}
+}
 function snapshot(registry,projectId){
  const store=open(registry,projectId);
  if(!store)return {legacy:true,providers:[],conflicts:[],outbox:[]};
@@ -165,4 +178,4 @@ function snapshot(registry,projectId){
   return {providers,conflicts,outbox};
  }finally{store.db.close();}
 }
-module.exports={open,observeMany,checkpoint,queueApproved,snapshot,fingerprint,validateOrigin};
+module.exports={open,observeMany,checkpoint,queueApproved,reportConflict,snapshot,fingerprint,validateOrigin};
