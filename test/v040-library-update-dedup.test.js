@@ -8,8 +8,8 @@ const read=p=>fs.readFileSync(path.join(root,p),'utf8');
 test('matching semantic version without a verified installed build does not repeatedly offer an update',()=>{
  const remote={version:'0.0.6',tag:'v0.0.6-source-build.21'};
  for(const installed of [
-  {version:'0.0.6',sha:'a'.repeat(40),offline:false},
-  {version:'0.0.6',offline:true},
+  {version:'0.0.6',sha:'a'.repeat(40)},
+  {version:'0.0.6'},
   {version:'0.0.6',releaseTag:'invalid'}
  ]){
   const result=versions.compareInstalledRelease(installed,remote);
@@ -18,7 +18,7 @@ test('matching semantic version without a verified installed build does not repe
  }
 });
 test('verified source-build comparisons still offer only truly newer builds',()=>{
- const installed={version:'0.0.6',releaseTag:'v0.0.6-source-build.8',offline:true};
+ const installed={version:'0.0.6',releaseTag:'v0.0.6-source-build.8'};
  assert.deepEqual(
   {available:versions.compareInstalledRelease(installed,{version:'0.0.6',tag:'v0.0.6-source-build.9'}).available,
    reason:versions.compareInstalledRelease(installed,{version:'0.0.6',tag:'v0.0.6-source-build.9'}).reason},
@@ -36,17 +36,13 @@ test('startup deduplicates Library prompts and does not force the same release',
  assert.doesNotMatch(check,/promptLibraryRelease\(libraryRelease,\{force:startup\}\)/);
  assert.match(host,/if\(!force&&context\.globalState\.get\(key\)===promptId\)return/);
 });
-test('same VERSION with a genuinely newer release build routes through the verified ZIP importer',()=>{
+test('Pull Library uses verified Git main and cannot activate obsolete ZIP archives',()=>{
  const host=read('src/lib/runtime/extension-runtime.js');
  const pull=host.slice(host.indexOf("case 'catalogPull':{"),host.indexOf("case 'openingSelect':{"));
- assert.match(pull,/const newerReleaseBuild=!!installed&&/);
- assert.match(pull,/config\.repositoryUrl===startupSetup\.SOURCE_REPOS\.aidilazharo\.library/);
- assert.match(pull,/compareInstalledRelease\(installed,libraryRelease\)\.reason==='newer-build'/);
- assert.match(pull,/if\(!newer&&!newerReleaseBuild\)/);
- assert.match(pull,/if\(newer\)\{/);
- assert.match(pull,/libraryReleaseUpdater\.downloadVerified\(release/);
- assert.match(pull,/offlineLibrary\.importZip\(/);
- assert.match(pull,/activeRoot\.releaseTag!==release\.tag/);
+ assert.match(pull,/sdlcCatalog\.remoteVersion\(config,token\)/);
+ assert.match(pull,/sdlcCatalog\.syncGitWorkspace\(config,token,workspace/);
+ assert.match(pull,/active\.version!==remote\.version\|\|active\.sha!==remote\.sha/);
+ assert.doesNotMatch(pull,/importZip|inspectZip|downloadVerified\(release/);
 });
 test('the update modal makes differing build numbers visible to the user',()=>{
  const ui=read('media/start.js');
