@@ -5,7 +5,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const diagnostic = require('./stack-process-diagnostics');
-const {npmCommand,mavenCommand} = require('./platform-process');
+const {nodeExecutable,npmCommand,mavenCommand} = require('./platform-process');
 const run = promisify(execFile);
 const KEY = /^[A-Z][A-Z0-9]{1,19}-[1-9][0-9]*$/;
 const BRANCH = /^[a-z0-9][a-z0-9/_-]{0,110}$/;
@@ -449,7 +449,8 @@ async function runMockServices(root,{relative='',previewUrl=''}={}){
     if(await fs.readFile(file,'utf8')!==trusted)
         throw Error('The local synthetic mock service differs from the verified ATGV template.');
     const cwd=path.join(info.repo.root,relative);
-    const child=spawn(process.execPath,[file],{
+    // The desktop extension host's executable may open the script in VS Code.
+    const child=spawn(nodeExecutable(),[file],{
         cwd,env:{ATGV_MOCK_PORT:String(port),PATH:process.env.PATH||'',SystemRoot:process.env.SystemRoot||'',
           TEMP:process.env.TEMP||'',TMP:process.env.TMP||'',HOME:process.env.HOME||''},
         windowsHide:true,stdio:['ignore','pipe','pipe'],shell:false,detached:process.platform!=='win32'

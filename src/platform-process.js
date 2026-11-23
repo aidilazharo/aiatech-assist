@@ -5,6 +5,29 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
+function isExecutableFile(file) {
+    try {
+        fs.accessSync(file, fs.constants.X_OK);
+        return fs.statSync(file).isFile();
+    } catch {
+        return false;
+    }
+}
+
+function nodeExecutable({ platform = process.platform, env = process.env,
+    executable = isExecutableFile } = {}) {
+    const windows = platform === 'win32';
+    const paths = windows ? path.win32 : path.posix;
+    const folders = (windows ? env.Path || env.PATH || '' : env.PATH || '').split(paths.delimiter);
+    for (const entry of folders) {
+        const folder = windows ? entry.replace(/^"|"$/g, '') : entry;
+        if (!paths.isAbsolute(folder)) continue;
+        const file = paths.join(folder, windows ? 'node.exe' : 'node');
+        if (executable(file)) return file;
+    }
+    throw Error('Node.js is unavailable for the mock API. Install Node.js, add it to PATH, and restart VS Code.');
+}
+
 function npmCommand(args = [], { platform = process.platform, env = process.env,
     exists = fs.existsSync } = {}) {
     if (platform !== 'win32') return { bin: 'npm', args: [...args] };
@@ -44,4 +67,4 @@ function mavenCommand(args = [], { platform = process.platform, env = process.en
         throw Error('Unsafe argument for the Windows Maven launcher.');
     return { bin: env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', 'mvn.cmd ' + args.map(arg => '"' + arg + '"').join(' ')] };
 }
-module.exports = { npmCommand, codexCommand, mavenCommand };
+module.exports = { nodeExecutable, npmCommand, codexCommand, mavenCommand };
