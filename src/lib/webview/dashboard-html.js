@@ -26,7 +26,7 @@ function html(webview,{resumeLibrary=false}={}){
     subtask:"<path d=\"M5 5v7h4m-3-3 3 3-3 3M12 8h7v8h-7zM14 12l1 1 2-2\"/>"
   };
   const baHeaderIcon=(name,variant='')=>`<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${variant}>${baHeaderIcons[name]}</svg>`;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.62';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.63';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
@@ -187,7 +187,7 @@ function html(webview,{resumeLibrary=false}={}){
        <div class="field"><label for="startupProjectRepository">Project Repository</label><input type="text" id="startupProjectRepository" placeholder="my-fow-technology-app-techassists" required><small class="muted" id="startupProjectRepositoryPreview" hidden></small></div>
        <div class="field"><label for="startupGithubToken">GitHub personal access token</label><input type="password" id="startupGithubToken" autocomplete="new-password" placeholder="Enter PAT or retain securely saved token"><button type="button" id="startupEditConnections" class="secondary hidden" aria-label="Edit Atlassian and GitHub connections">Edit</button></div>
       </div>
-      <div class="atgv-startup-actions"><button type="submit" id="startupTestConnections">Test &amp; Save Connections</button><button type="button" id="startupTestSavedConnections" class="secondary hidden">Test Connections</button><span id="startupConnectionMessage" role="status" aria-live="polite">Verify Atlassian and GitHub connections to continue.</span></div>
+      <div class="atgv-startup-actions"><button type="submit" id="startupTestConnections">Test &amp; Save Connections</button><button type="button" id="startupTestSavedConnections" class="secondary hidden">Test Connections</button><span id="startupConnectionMessage" role="status" aria-live="polite">Verify Jira and Confluence to continue. GitHub read/write checks are optional.</span></div>
       <div id="startupConnectionProgress" class="atgv-connection-progress" aria-label="Sequential connection checks" role="group" aria-live="polite"></div>
       <details id="startupConnectionLogPanel" class="atgv-connection-log-panel">
         <summary>Connection Logs <span id="startupConnectionLogCount" class="muted">Open to view saved checks and errors</span></summary>

@@ -1575,7 +1575,7 @@ async function storedStartupVerification(){
    readToken(globalSecretKey('github'),globalCredentialEndpoint('github'))
   ]);
   const libraryToken=await context.secrets.get('atgvAssist.sdlcCatalogToken');
-  if(!atlassian||!github||github!==libraryToken||proof.tokenDigest!==sha(atlassian+'\\0'+github))return null;
+  if(!atlassian||String(github||'')!==String(libraryToken||'')||proof.tokenDigest!==sha(atlassian+'\\0'+(github||'')))return null;
   return {signature};
  }catch{return null;}
 }
@@ -1700,18 +1700,18 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
    const spaces=await requestJson(confluenceApi+'?limit=1',{token:atlassian,basicEmail:data.email});
    if(!Array.isArray(spaces?.results))throw Error('Unexpected Confluence response');
   }},
-  {id:'github',label:'GitHub account',url:accountApi,required:true,check:async()=>{
+  {id:'github',label:'GitHub account · optional',url:accountApi,required:false,check:async()=>{
    if(!github)throw Error('GitHub token required');
    const user=await requestJson(accountApi,{token:github,headers:gitHeaders});
    if(!user?.login)throw Error('Unexpected GitHub account response');
   }},
-  {id:'organization',label:'GitHub organization',url:organizationApi,required:true,check:async()=>{
+  {id:'organization',label:'GitHub organization · optional',url:organizationApi,required:false,check:async()=>{
    const org=await requestJson(organizationApi,{token:github,headers:gitHeaders});
    if(String(org?.login||'').toLowerCase()!==data.owner.toLowerCase())throw Error('Unexpected GitHub owner response');
   }},
-  {id:'extension',label:'Extension · read required / write optional',url:repoApi(data.extension),required:true,
+  {id:'extension',label:'Extension · read/write optional',url:repoApi(data.extension),required:false,
    check:()=>validatedGithub(repoApi(data.extension),{requireRead:true,checkRelease:false})},
-  {id:'library',label:'Library · read required / write optional',url:repoApi(data.library),required:true,check:async()=>{
+  {id:'library',label:'Library · read/write optional',url:repoApi(data.library),required:false,check:async()=>{
    const capabilities=await validatedGithub(repoApi(data.library),{requireRead:true,checkRelease:false});
    library=await sdlcCatalog.remoteInfo(libraryConf,github);
    if(!library?.sha)throw Error('Library main branch cannot be verified.');
@@ -1739,19 +1739,23 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
   }catch(error){
    const sourceDenied=(spec.id==='extension'||spec.id==='library')&&/\bHTTP\s+403\b/i.test(String(error?.message||error));
    value={id:spec.id,label:spec.label,url:spec.url,required:spec.required,state:'error',
-    message:sourceDenied?'GitHub repository HTTP 403. Grant read access to this repository (Contents: read-only); organization approval or SSO authorization may be required. Write access is optional.':startupConnectionFailure(error)};
+    message:sourceDenied?'GitHub repository HTTP 403. Read/write checks are optional for Start; continue with Next. Grant repository read access to enable GitHub operations.':startupConnectionFailure(error)};
   }
   checks.push(value);
   await onProgress(value);
  }
  if(checks.some(check=>check.required&&check.state==='error'))
-  return {success:false,checks,message:'Required Atlassian or GitHub source checks failed. No changes were saved.'};
- if(!save)return {success:true,checks,message:'Atlassian and GitHub sources verified. Optional release mirrors are reported separately.'};
+  return {success:false,checks,message:'Required Jira or Confluence checks failed. No changes were saved.'};
+ const githubWarnings=checks.filter(check=>!check.required&&check.state==='error');
+ const connectionMessage=githubWarnings.length?
+  'Jira and Confluence verified. GitHub checks need attention (optional); you can continue with Next. GitHub actions requiring permissions may be unavailable.':
+  'Jira and Confluence verified. GitHub permission checks completed; write permission is optional.';
+ if(!save)return {success:true,checks,message:connectionMessage};
  // Do not store raw tokens in extension settings or send them to the webview.
  await context.globalState.update('atgvAssist.extensionSettings',settings);
  if(enteredAtlassian)await storeToken(globalSecretKey('atlassian'),atlIdentity,atlassian);
  if(enteredGithub)await storeToken(globalSecretKey('github'),gitIdentity,github);
- await context.secrets.store('atgvAssist.sdlcCatalogToken',github);
+ await context.secrets.store('atgvAssist.sdlcCatalogToken',github||'');
  await context.globalState.update('atgvAssist.sdlcCatalog',libraryConf);
  extensionSettings=settings;pendingTests={jira:null,github:null};
  catalogRemote=null;catalogLastCheck='';catalogLastError='';scheduleCatalogChecks();
@@ -1760,10 +1764,10 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
  // when the user originally entered trailing slashes or a GitHub .git suffix.
  const persistedSignature=sha(JSON.stringify(startupSetup.validate(startupSavedConnectionFields())));
  await context.secrets.store(STARTUP_VERIFIED_SECRET,JSON.stringify({
-  signature:persistedSignature,tokenDigest:sha(atlassian+'\\0'+github)
+  signature:persistedSignature,tokenDigest:sha(atlassian+'\\0'+(github||''))
  }));
- return {success:true,checks,librarySha:library.sha?.slice(0,12)||'',
-  message:'Jira and Confluence authenticated; GitHub extension and Library read access verified. Write permission is optional. Project repository: '+data.projectRepoUrl+'.'};
+ return {success:true,checks,librarySha:library?.sha?.slice(0,12)||'',
+  message:connectionMessage+' Project repository: '+data.projectRepoUrl+'.'};
 }
 async function dashboardState(){
   const projects=registry?await registry.list():[];
@@ -2136,7 +2140,11 @@ async function testOpeningProject(){
   if(!config.get('confluence.spaceKey'))throw new Error('Select a Confluence space or configure its key in Project Settings.');
   const token=await getAtlassianToken(project);
   const gOwner=config.get('github.owner'),gRepo=config.get('github.repo');
-  const gToken=gOwner&&gRepo?await getGithubToken(project):undefined;
+  let gToken;
+  if(gOwner&&gRepo){
+   try{gToken=await getGithubToken(project);}
+   catch(error){report('Optional GitHub token unavailable during project opening: '+startupConnectionFailure(error));}
+  }
   const verifyKey=sha(JSON.stringify({project:project.id,config:{jira:config.get('jira.baseUrl'),email:config.get('jira.email'),key:config.get('jira.projectKey'),confluence:config.get('confluence.baseUrl'),space:config.get('confluence.spaceKey'),spaceId:config.get('confluence.spaceId'),githubOwner:gOwner,githubRepo:gRepo},tokenHash:sha(token),githubTokenHash:sha(gToken||'')}));
   const cached=verifiedConnections.get(project.id);
   if(cached?.key===verifyKey && Date.now()-cached.at<90000){
@@ -2162,9 +2170,18 @@ async function testOpeningProject(){
   // incomplete project repo or prevent access to the main SDLC interface.
   // A repository name (not the account owner) opts into project GitHub checks.
   if(gRepo){
-    if(!gOwner)throw new Error('This project specifies a GitHub repository without an owner. Set the owner in Project Settings or clear the repository.');
-    await openingProgress('connection','Checking GitHub repository permissions…',33);
-    await testGithubConnection(config,gToken);
+    if(!gOwner){
+     warnings.push('GitHub repository owner is not configured (optional). Set it in Project Settings to enable GitHub operations.');
+    }else{
+     await openingProgress('connection','Checking GitHub repository read/write permissions (optional)…',33);
+     try{
+      const result=await testGithubConnection(config,gToken);
+      if(result?.permissions?.push===false)warnings.push('GitHub repository write access is unavailable (optional). Project access continues; push/publish needs permission.');
+     }catch(error){
+      warnings.push('GitHub repository access is unavailable (optional): '+startupConnectionFailure(error)+' Project access continues.');
+      await recordStartupDiagnostic({stage:'project-opening',projectId:project.id,status:'optional-github-unavailable',detail:startupConnectionFailure(error)});
+     }
+    }
   }else{
     warnings.push('Project GitHub repository not configured (optional). Connect a repository later in Project Settings.');
     await recordStartupDiagnostic({stage:'project-opening',projectId:project.id,status:'optional-github-skipped',detail:'GitHub account owner may be saved independently of a project repository; project opening is allowed.'});
@@ -5834,7 +5851,7 @@ async function handleDashboardMessage(msg){
         try{
          const verified=await storedStartupVerification();
          verifiedFields=!!verified&&verified.signature===sha(JSON.stringify(startupSetup.validate(msg.settings)));
-         if(!verifiedFields)throw Error('Test Jira, Confluence and GitHub connections with the current fields before proceeding.');
+         if(!verifiedFields)throw Error('Test and save Jira and Confluence connections with the current fields before proceeding. GitHub checks are optional.');
          // The Start screen is manual: never issue automatic project selection.
          if(msg.autoResume===true)throw Error('Automatic sign-in is disabled. Click Next on the Start screen.');
          await context.globalState.update('atgvAssist.startupSetup.completed',true);

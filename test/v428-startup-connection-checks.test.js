@@ -208,16 +208,43 @@ test('GitHub read-only PAT is sufficient to save all required connections',async
  }
  assert.equal(h.events.filter(event=>event==='releases').length,2,'only the two optional release mirror checks should request releases');
 });
-test('Repository read denial remains a blocking error',async()=>{
+test('GitHub source read denial is advisory; Jira and Confluence can still authorize Next',async()=>{
  const h=hostFixture({readDenied:true});
  const result=await h.run();
- assert.equal(result.success,false);
+ assert.equal(result.success,true);
  for(const key of ['extension','library']){
   const row=result.checks.find(check=>check.id===key);
   assert.equal(row.state,'error');
+  assert.equal(row.required,false);
   assert.match(row.message,/read|permission/i);
  }
- assert.deepEqual(h.writes,[]);
+ assert.match(result.message,/GitHub checks need attention.*optional/i);
+ assert.ok(h.writes.includes('setting'),'settings must save after Atlassian verification despite Github read failure');
+});
+test('GitHub account, organization and source HTTP 403 failures stay visible but never block Next',async()=>{
+ const denied=new Error('HTTP 403 forbidden');
+ const h=hostFixture({github:denied,organization:denied,library:denied});
+ const result=await h.run();
+ assert.equal(result.success,true,result.message);
+ assert.equal(result.checks.find(row=>row.id==='jira').state,'ok');
+ assert.equal(result.checks.find(row=>row.id==='confluence').state,'ok');
+ for(const key of ['github','organization','extension','library']){
+  const row=result.checks.find(item=>item.id===key);
+  assert.equal(row.required,false);
+  assert.equal(row.state,'error');
+ }
+ assert.ok(h.writes.includes('setting'));
+});
+test('A missing GitHub token does not prevent startup setup when Atlassian connections pass',async()=>{
+ const h=hostFixture();
+ h.context.readToken=async kind=>kind==='atlassian'?'saved-atl':undefined;
+ const result=await h.context.testAndSaveStartupConnections({settings:setup.DEFAULTS,atlassianToken:'test-atl',githubToken:''});
+ assert.equal(result.success,true,result.message);
+ assert.equal(result.checks.find(row=>row.id==='jira').state,'ok');
+ assert.equal(result.checks.find(row=>row.id==='confluence').state,'ok');
+ assert.equal(result.checks.find(row=>row.id==='github').state,'error');
+ assert.match(result.message,/GitHub checks need attention/);
+ assert.ok(h.writes.includes('setting'));
 });
 test('Optional release checks can fail without blocking read-only source access',async()=>{
  const h=hostFixture({readonly:true,releases:new Error('HTTP 403 release download not allowed')});

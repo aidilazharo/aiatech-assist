@@ -81,7 +81,7 @@ test('version and AIA email placeholders are consistent',()=>{
  assert.doesNotMatch(html,/id="startupLibraryRepo"/);
 });
 
-test('setup host saves no credentials before all five remote access checks succeed',async()=>{
+test('setup host requires Jira and Confluence but treats GitHub source access as advisory',async()=>{
  const vm=require('node:vm');
  const crypto=require('node:crypto');
  const normalized=require('../src/projects').normalizeExtensionSettings;
@@ -120,9 +120,11 @@ test('setup host saves no credentials before all five remote access checks succe
  vm.createContext(testContext);vm.runInContext(setupText.slice(start,end),testContext);
  const form=defaults.DEFAULTS;
  denyLibrary=true;
- const rejected=await testContext.testAndSaveStartupConnections({settings:form,atlassianToken:'ATL',githubToken:'PAT'});
- assert.equal(rejected.success,false);assert.equal(rejected.checks.find(check=>check.id==='library').state,'error');
- assert.equal(state.size,0);assert.equal(secrets.size,0);
+ const advisory=await testContext.testAndSaveStartupConnections({settings:form,atlassianToken:'ATL',githubToken:'PAT'});
+ assert.equal(advisory.success,true);assert.equal(advisory.checks.find(check=>check.id==='library').state,'error');
+ assert.match(advisory.message,/GitHub checks need attention.*optional/);
+ assert.equal(state.has('atgvAssist.extensionSettings'),true,'GitHub permission failure does not block saving Atlassian verified fields');
+ assert.equal(secrets.has('atgvAssist.startupConnections.verified'),true);
  denyLibrary=false;
  const accepted=await testContext.testAndSaveStartupConnections({settings:form,atlassianToken:'ATL',githubToken:'PAT'});
  assert.equal(accepted.success,true);

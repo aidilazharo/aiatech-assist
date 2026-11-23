@@ -9,7 +9,7 @@ const {projectConfig,normalizeExtensionSettings,normalizeProjectInput}=require('
 const host=fs.readFileSync(path.join(__dirname,'../src/lib/runtime/extension-runtime.js'),'utf8');
 const start=host.indexOf('async function testOpeningProject(){'),end=host.indexOf('async function initializeOpeningProject(){',start);
 assert.ok(start>0&&end>start,'Project opening implementation must be found');
-function harness({accountOwner='',repo='',repoOwner='',jiraProjectKey=''}={}){
+function harness({accountOwner='',repo='',repoOwner='',jiraProjectKey='',githubFailure=false,tokenFailure=false}={}){
  const calls=[],events=[],project=normalizeProjectInput({name:'Tech Cockpit',id:'tech-cockpit',settings:{
   jira:{projectKey:jiraProjectKey},confluence:{spaceKey:'TECH'},
   github:{owner:repoOwner,repo}}});
@@ -22,7 +22,7 @@ function harness({accountOwner='',repo='',repoOwner='',jiraProjectKey=''}={}){
  const openingFlow={candidate:project,warnings:null,require:phase=>assert.equal(phase,'selected'),tested(warnings){this.warnings=warnings;}};
  const sandbox={openingFlow,effectiveConfig:()=>config,sha,JSON,Date,verifiedConnections:new Map(),
   getAtlassianToken:async()=>{calls.push('atlassian-token');return 'TEST_TOKEN';},
-  getGithubToken:async()=>{calls.push('github-token');return 'TEST_GH_TOKEN';},
+  getGithubToken:async()=>{calls.push('github-token');if(tokenFailure)throw Error('HTTP 403 token unavailable');return 'TEST_GH_TOKEN';},
   testJiraConnection:async()=>{calls.push('jira');return {displayName:'Tester'};},
   getConfluenceSpace:async()=>{calls.push('confluence');return {name:'Tech Cockpit'};},
   jiraIssueTypes:async()=>{calls.push('jira-types');return [];},
@@ -30,7 +30,8 @@ function harness({accountOwner='',repo='',repoOwner='',jiraProjectKey=''}={}){
   baseAtlassian:()=> 'https://example.atlassian.net',
   openingProgress:async()=>{},
   recordStartupDiagnostic:async x=>{events.push(x);},
-  testGithubConnection:async()=>{calls.push('github-repo');return {name:'tech-cockpit'};}
+  testGithubConnection:async()=>{calls.push('github-repo');if(githubFailure)throw Error('HTTP 403 repository permission denied');return {name:'tech-cockpit'};},
+  report:()=>{},startupConnectionFailure:e=>String(e.message||e)
  };
  vm.createContext(sandbox);
  vm.runInContext(host.slice(start,end)+'\nthis.open=testOpeningProject;',sandbox);
@@ -59,10 +60,26 @@ test('configured project repo still performs permission validation before openin
  assert.ok(!h.events.some(x=>x.status==='optional-github-skipped'));
  assert.match(result,/GitHub verified/);
 });
-test('project repo without GitHub owner gives actionable configuration error',async()=>{
+test('project repo without GitHub owner produces an advisory warning, never blocks opening',async()=>{
  const h=harness({repo:'tech-cockpit'});
- await assert.rejects(h.open(),/repository without an owner/);
+ const result=await h.open();
+ assert.match(result,/Jira authenticated/);
+ assert.match(h.openingFlow.warnings.join(' '),/GitHub repository owner is not configured.*optional/i);
  assert.ok(!h.calls.includes('github-repo'));
+});
+test('GitHub 403 project repository permission failure is non-blocking and recorded',async()=>{
+ const h=harness({accountOwner:'aidilazharo',repo:'tech-cockpit',githubFailure:true});
+ const result=await h.open();
+ assert.match(result,/Jira authenticated/);
+ assert.match(h.openingFlow.warnings.join(' '),/GitHub repository access is unavailable.*optional/);
+ assert.ok(h.calls.includes('github-repo'));
+ assert.ok(h.events.some(x=>x.status==='optional-github-unavailable'));
+});
+test('Missing project GitHub token does not block opening the Jira and Confluence project',async()=>{
+ const h=harness({accountOwner:'aidilazharo',repo:'tech-cockpit',tokenFailure:true,githubFailure:true});
+ const result=await h.open();
+ assert.match(result,/Jira authenticated/);
+ assert.match(h.openingFlow.warnings.join(' '),/GitHub repository access is unavailable.*optional/);
 });
 test('account-only GitHub owner is not cleared from saved account settings',()=>{
  const ext=normalizeExtensionSettings({github:{owner:'aidilazharo',repo:''}});

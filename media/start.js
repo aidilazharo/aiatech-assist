@@ -8818,7 +8818,7 @@ let startupConnectionCheckSequence=0,startupConnectionCheckPending=false,startup
 const startupConnectionCheckResults=new Map();
 const STARTUP_CONNECTION_CHECK_LABELS=[
  ['jira','Jira API'],['confluence','Confluence API'],['github','GitHub account'],['organization','GitHub organization'],
- ['extension','Extension · read required / write optional'],['library','Library · read required / write optional'],
+ ['extension','Extension · read/write optional'],['library','Library · read/write optional'],
  ['extension-releases','Extension releases · optional'],['library-releases','Library releases · optional']
 ];
 let startupVerifying=false,startupScanComplete=false,startupPage=0,startupInstallingModule='';
@@ -9059,7 +9059,7 @@ function renderStartupPage(){
  $('startupProceedInfo').textContent=startupProceedMode?'Opening project search…':
   startupPage===0?(startupScanComplete?'Review available modules, then select Next.':'Checking computer prerequisites…'):
   startupConnectionCheckPending?'Testing saved connections…':
-  startupConnectionHealthError&&startupConnectionVerified?'Open Connection Logs to review the latest test.':
+  startupConnectionHealthError&&startupConnectionVerified?'GitHub checks need attention (optional). Select Next to continue.':
   startupConnectionVerified?'Connections verified. Select Next to search projects.':'Test & Save Connections to enable Next.';
 }
 function showStartupStep(required){
@@ -9392,16 +9392,16 @@ window.addEventListener('message',event=>{
   startupConnectionCheckPending=false;
   if(Array.isArray(message.checks)){for(const check of message.checks)if(startupConnectionCheckResults.has(check.id))startupConnectionCheckResults.set(check.id,check);renderStartupConnectionChecks();}
   else resetStartupConnectionChecks();
-  startupConnectionHealthError=!message.success||!!message.checks?.some(check=>check.state==='offline');
+  startupConnectionHealthError=!message.success||!!message.checks?.some(check=>check.state==='offline'||check.state==='error');
   if(startupConnectionHealthError){
-   $('startupConnectionMessage').textContent='Some connections need attention. Open Connection Logs for details.';
-   $('startupConnectionMessage').className='test-status error';
+   $('startupConnectionMessage').textContent=message.success?'GitHub checks need attention (optional). Select Next to continue.':'Some required connections need attention. Open Connection Logs for details.';
+   $('startupConnectionMessage').className=message.success?'test-status muted':'test-status error';
   }else{$('startupConnectionMessage').textContent=message.message||'Connections verified.';$('startupConnectionMessage').className='test-status success';}
   renderStartupPage();
  }
  if(message.type==='startupConnectionsResult'){
   if(message.requestId!==startupConnectionCheckSequence)return;
-  startupConnectionCheckPending=false;startupConnectionHealthError=!message.success;
+  startupConnectionCheckPending=false;startupConnectionHealthError=!message.success||!!message.checks?.some(check=>check.state==='error');
   if(Array.isArray(message.checks)){for(const check of message.checks)if(startupConnectionCheckResults.has(check.id))startupConnectionCheckResults.set(check.id,check);renderStartupConnectionChecks();}
   else resetStartupConnectionChecks();
   startupVerifying=false;
@@ -9411,7 +9411,7 @@ window.addEventListener('message',event=>{
    const failed=message.checks.filter(check=>check.state==='error').map(check=>check.label);
    if(failed.length)$('startupConnectionMessage').textContent='Check '+failed.join(', ')+'. Open Connection Logs for details.';
   }
-  $('startupConnectionMessage').className=startupConnectionVerified?'test-status success':'test-status error';
+  $('startupConnectionMessage').className=startupConnectionVerified?(startupConnectionHealthError?'test-status muted':'test-status success'):'test-status error';
   if(startupConnectionVerified){
    startupConnectionEditSnapshot=null;
    $('startupAtlassianToken').value='';$('startupGithubToken').value='';

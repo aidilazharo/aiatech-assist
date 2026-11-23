@@ -57,6 +57,18 @@ test('Saved successful Test & Save verification restores across VS Code restart 
  assert.equal(x.sandbox.startupVerifiedSignature,x.signature);
  assert.ok(await x.stored());
 });
+test('Saved Atlassian verification remains valid when no GitHub PAT is configured',async()=>{
+ const x=hostFixture();
+ x.env.tokens.github=undefined;
+ x.env.secrets.set('atgvAssist.sdlcCatalogToken','');
+ x.env.secrets.set('atgvAssist.startupConnections.verified',JSON.stringify({
+  signature:x.signature,tokenDigest:hash('ATL'+'\\0'+'')
+ }));
+ assert.ok(await x.stored(),'GitHub token absence must not invalidate verified Jira and Confluence credentials');
+ const status=await x.state();
+ assert.equal(status.verified,true);
+ assert.equal(status.required,true,'user must still press Next manually');
+});
 test('Changed endpoint, revoked token, missing catalog PAT or altered proof cannot bypass verification',async()=>{
  const x=hostFixture();
  const ok=await x.stored();assert.ok(ok);
