@@ -68,7 +68,7 @@ async function scan(root,{driver=developer,fsApi=fs}={}){
  return {root:found.repo.root,sha:String(found.repo.sha||''),branch:String(found.repo.branch||''),clean:found.repo.clean===true,
   targets:entries,recognized:entries.length,ready:entries.some(entry=>entry.runnable)};
 }
-async function run(root,{sha,relative='',previewUrl,mock=false,mockDatabase=false,onProgress=async()=>{},driver=developer,helper=dependencies,bootstrapApi=bootstrap}={}){
+async function run(root,{sha,relative='',previewUrl,mock=false,mockDatabase=false,onProgress=async()=>{},driver=developer,helper=dependencies,bootstrapApi=bootstrap,httpRequest=fetch}={}){
  const check=await scan(root,{driver});
  if(!/^[a-f0-9]{40}$/.test(String(sha||''))||check.sha!==sha)throw Error('Project Git revision changed after the scan. Scan the Custom Stack again.');
  const selected=check.targets.find(t=>t.relative===relative);
@@ -93,12 +93,12 @@ async function run(root,{sha,relative='',previewUrl,mock=false,mockDatabase=fals
   await bootstrapApi.waitForHttp(url,()=>driver.localLogs().running,60000,driver.localLogs().instanceId||'');
   if(mock){
    // HTTP 200 from a standalone API is not proof that the frontend exists.
-   const frontend=await fetch(url,{redirect:'manual',signal:AbortSignal.timeout(3500)});
+   const frontend=await httpRequest(url,{redirect:'manual',signal:AbortSignal.timeout(3500)});
    const frontendHtml=frontend.ok&&/text\/html/i.test(frontend.headers.get('content-type')||'');
    await frontend.body?.cancel().catch(()=>{});
    if(!frontendHtml)throw Error('Mock service responded, but the frontend application did not serve HTML at '+url+'. Select a runnable Vite frontend.');
    const apiUrl=new URL('/api/v1/health',url).toString();
-   const api=await fetch(apiUrl,{redirect:'manual',signal:AbortSignal.timeout(3500)});
+   const api=await httpRequest(apiUrl,{redirect:'manual',signal:AbortSignal.timeout(3500)});
    if(!api.ok||api.headers.get('x-atgv-mock-preview')!=='true'){
     await api.body?.cancel().catch(()=>{});
     throw Error('Frontend is running but the isolated mock API is not healthy at '+apiUrl+'.');
