@@ -178,10 +178,9 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
                                                               
     const savedFetch=global.fetch;global.fetch=async()=>{throw new Error('Simulated network outage');};
     handler({command:'openingAuto',projectId:'claims'});
-    await until(()=>messages.some(m=>m.type==='openingError'&&m.canOffline&&/Simulated network outage/.test(m.message)));
-    assert.equal((await fs.readdir(path.join(root,'projects','claims'))).includes('sdlc'),false,'Failed remote check must not scaffold');
-    handler({command:'openingOffline'});
     await until(()=>lastState()?.opening?.phase==='open'&&lastState()?.openingOffline===true);
+    assert.equal(messages.some(m=>m.type==='openingError'&&m.canOffline&&/Simulated network outage/.test(m.message)),false,
+      'Connectivity failures must not demand another click to enter local ATGV');
     assert.equal(workspaceState.get('atgvAssist.activeProject'),'claims');
     assert.ok(await fs.stat(path.join(root,'projects','claims','documents','requirements')));
                                                                         
