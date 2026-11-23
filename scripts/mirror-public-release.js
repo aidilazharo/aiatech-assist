@@ -29,16 +29,26 @@ function selectAssets(selected,kind){
  if(!/^[a-f0-9]{40}$/.test(String(row.target_commitish||'')))throw Error('The source release is not pinned to a commit.');
  const chosen=[filename,cfg.checksum].map(name=>{
   const asset=(row.assets||[]).find(x=>x.name===name);
-  if(!asset||asset.state!=='uploaded'||!Number.isSafeInteger(asset.size)||asset.size<=0||asset.size>80*1024*1024||asset.browser_download_url!==assetUrl(cfg.source,row.tag_name,name))throw Error('Latest source release is missing a trusted '+name+'.');
+  if(!asset||asset.state!=='uploaded'||!Number.isSafeInteger(asset.size)||asset.size<=0||asset.size>80*1024*1024||asset.browser_download_url!==assetUrl(cfg.source,row.tag_name,name)||
+   (asset.url&&(!Number.isSafeInteger(asset.id)||asset.url!=='https://api.github.com/repos/'+cfg.source+'/releases/assets/'+asset.id)))throw Error('Latest source release is missing a trusted '+name+'.');
   return asset;
  });
  return {filename,chosen};
 }
-async function fetchBytes(url,{allow404=false,maxBytes=80*1024*1024,fetchImpl=fetch,token=process.env.GH_TOKEN||''}={}){
- const destination=new URL(url),headers={'User-Agent':'ATGV-public-release-mirror','Accept':'application/vnd.github+json'};
+async function fetchBytes(url,{allow404=false,maxBytes=80*1024*1024,fetchImpl=fetch,token=process.env.GH_TOKEN||'',redirects=3,accept='application/vnd.github+json'}={}){
+ const destination=new URL(url),headers={'User-Agent':'ATGV-public-release-mirror','Accept':accept};
+ if(destination.protocol!=='https:'||destination.username||destination.password||destination.port||
+  !['api.github.com','github.com','release-assets.githubusercontent.com','objects.githubusercontent.com'].includes(destination.hostname))
+  throw Error('Unexpected release download URL.');
  // Never forward the Actions credential to download URLs or other hosts.
  if(destination.protocol==='https:'&&destination.hostname==='api.github.com'&&!destination.port&&token)headers.Authorization='Bearer '+token;
- const response=await fetchImpl(url,{headers,signal:AbortSignal.timeout(60000)});
+ const response=await fetchImpl(url,{headers,redirect:'manual',signal:AbortSignal.timeout(60000)});
+ if([301,302,303,307,308].includes(response.status)){
+  if(!redirects||!response.headers.get('location'))throw Error('Unexpected GitHub release redirect.');
+  const next=new URL(response.headers.get('location'),destination);
+  return fetchBytes(next.toString(),{allow404,maxBytes,fetchImpl,redirects:redirects-1,
+   token:next.hostname==='api.github.com'?token:'',accept});
+ }
  if(response.status===404&&allow404)return null;
  if(!response.ok){
   const limit=response.status===403&&response.headers.get('x-ratelimit-remaining')==='0'?' GitHub API rate limit reached.':'';
@@ -58,15 +68,17 @@ function verifyChecksum(bytes,checksum,filename){
 async function mirror({kind,target=process.env.GITHUB_REPOSITORY,fetcher=fetchBytes,runner=exec}={}){
  const cfg=configs[kind];
  if(!cfg||target!==cfg.target)throw Error('Unexpected release mirror repository.');
- const json=await fetcher(`https://api.github.com/repos/${cfg.source}/releases?per_page=100`,{maxBytes:4*1024*1024});
+ const sourceToken=process.env.ATGV_SOURCE_READ_TOKEN||process.env.GH_TOKEN||'';
+ const targetToken=process.env.GH_TOKEN||'';
+ const json=await fetcher(`https://api.github.com/repos/${cfg.source}/releases?per_page=100`,{maxBytes:4*1024*1024,token:sourceToken});
  const selected=latestRelease(JSON.parse(json.toString('utf8')),kind);
  if(!selected)return {status:'no-source-release'};
  const {row,parsed}=selected,{filename,chosen}=selectAssets(selected,kind);
- const [artifact,checksum]=await Promise.all(chosen.map(asset=>fetcher(asset.browser_download_url,{maxBytes:asset.size})));
+ const [artifact,checksum]=await Promise.all(chosen.map(asset=>fetcher(asset.url||asset.browser_download_url,{maxBytes:asset.size,token:sourceToken,accept:'application/octet-stream'})));
  if(artifact.length!==chosen[0].size||checksum.length!==chosen[1].size)throw Error('Source asset size differs from the release metadata.');
  verifyChecksum(artifact,checksum,filename);
  const marker=`ATGV source: https://github.com/${cfg.source}/commit/${row.target_commitish}`;
- const existingBytes=await fetcher(`https://api.github.com/repos/${target}/releases/tags/${row.tag_name}`,{allow404:true,maxBytes:1024*1024});
+ const existingBytes=await fetcher(`https://api.github.com/repos/${target}/releases/tags/${row.tag_name}`,{allow404:true,maxBytes:1024*1024,token:targetToken});
  const existing=existingBytes?JSON.parse(existingBytes.toString('utf8')):null;
  if(existing&&!String(existing.body||'').includes(marker))throw Error('An existing target release has a different source identity; it was not replaced.');
  const files=[[filename,artifact],[cfg.checksum,checksum]],temp=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-release-mirror-'));
@@ -77,7 +89,7 @@ async function mirror({kind,target=process.env.GITHUB_REPOSITORY,fetcher=fetchBy
     const asset=(existing.assets||[]).find(a=>a.name===name);
     if(asset){
      if(asset.browser_download_url!==assetUrl(target,row.tag_name,name))throw Error('Unexpected existing public release asset URL.');
-     const actual=await fetcher(asset.browser_download_url,{maxBytes:80*1024*1024});
+     const actual=await fetcher(asset.url||asset.browser_download_url,{maxBytes:80*1024*1024,token:targetToken,accept:'application/octet-stream'});
      if(sha(actual)!==sha(bytes))throw Error('Existing target release differs from the verified source.');
     }else await runner('gh',['release','upload',row.tag_name,path.join(temp,name),'--repo',target]);
    }
