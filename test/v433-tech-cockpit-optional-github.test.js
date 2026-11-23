@@ -38,13 +38,13 @@ function harness({accountOwner='',repo='',repoOwner='',jiraProjectKey='',githubF
  return {open:sandbox.open,calls,events,openingFlow,config};
 }
 test('tech-cockpit opens with saved GitHub account owner but no project repository',async()=>{
- const h=harness({accountOwner:'aidilazharo'});
+ const h=harness({accountOwner:'aiamalaysia'});
  const result=await h.open();
  assert.match(result,/Jira authenticated/);
  assert.deepEqual(h.calls,['atlassian-token','jira','confluence']);
  assert.match(h.openingFlow.warnings.join(' '),/Project GitHub repository not configured \(optional\)/);
  assert.ok(h.events.some(x=>x.status==='optional-github-skipped'&&x.projectId==='tech-cockpit'));
- assert.equal(h.config.get('github.owner'),'aidilazharo');
+ assert.equal(h.config.get('github.owner'),'aiamalaysia');
  assert.equal(h.config.get('github.repo'),'');
 });
 test('project with no GitHub account or repository opens successfully',async()=>{
@@ -53,7 +53,7 @@ test('project with no GitHub account or repository opens successfully',async()=>
  assert.equal(h.openingFlow.warnings.length,1);
 });
 test('configured project repo still performs permission validation before opening',async()=>{
- const h=harness({accountOwner:'aidilazharo',repo:'tech-cockpit'});
+ const h=harness({accountOwner:'aiamalaysia',repo:'tech-cockpit'});
  const result=await h.open();
  assert.ok(h.calls.includes('github-token'));
  assert.ok(h.calls.includes('github-repo'));
@@ -68,7 +68,7 @@ test('project repo without GitHub owner produces an advisory warning, never bloc
  assert.ok(!h.calls.includes('github-repo'));
 });
 test('GitHub 403 project repository permission failure is non-blocking and recorded',async()=>{
- const h=harness({accountOwner:'aidilazharo',repo:'tech-cockpit',githubFailure:true});
+ const h=harness({accountOwner:'aiamalaysia',repo:'tech-cockpit',githubFailure:true});
  const result=await h.open();
  assert.match(result,/Jira authenticated/);
  assert.match(h.openingFlow.warnings.join(' '),/GitHub repository access is unavailable.*optional/);
@@ -76,13 +76,13 @@ test('GitHub 403 project repository permission failure is non-blocking and recor
  assert.ok(h.events.some(x=>x.status==='optional-github-unavailable'));
 });
 test('Missing project GitHub token does not block opening the Jira and Confluence project',async()=>{
- const h=harness({accountOwner:'aidilazharo',repo:'tech-cockpit',tokenFailure:true,githubFailure:true});
+ const h=harness({accountOwner:'aiamalaysia',repo:'tech-cockpit',tokenFailure:true,githubFailure:true});
  const result=await h.open();
  assert.match(result,/Jira authenticated/);
  assert.match(h.openingFlow.warnings.join(' '),/GitHub repository access is unavailable.*optional/);
 });
 test('account-only GitHub owner is not cleared from saved account settings',()=>{
- const ext=normalizeExtensionSettings({github:{owner:'aidilazharo',repo:''}});
- assert.equal(ext.github.owner,'aidilazharo');
+ const ext=normalizeExtensionSettings({github:{owner:'aiamalaysia',repo:''}});
+ assert.equal(ext.github.owner,'aiamalaysia');
  assert.equal(ext.github.repo||'','');
 });
