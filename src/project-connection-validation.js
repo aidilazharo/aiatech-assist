@@ -39,11 +39,16 @@ async function validateProjectConnection({kind,key,config,token,request=requestJ
     catch(e){throw Error(`Could not confirm Jira permissions for ${selected}: ${e.message}. Mapping was not saved.`);}
     const browse=permissions?.permissions?.BROWSE_PROJECTS?.havePermission;
     const create=permissions?.permissions?.CREATE_ISSUES?.havePermission;
-    if(browse!==true||create!==true){
-      const denied=[browse!==true?'Browse Projects':'',create!==true?'Create Issues':''].filter(Boolean).join(' and ');
-      throw Error(`Jira project ${selected}: ${denied} permission is missing or could not be confirmed. Ask a project administrator to grant access. Mapping was not saved.`);
-    }
-    return {kind,key:selected,name:String(project.name||selected).slice(0,160),id:String(project.id||''),permissions:['Browse Projects','Create Issues'],message:`Jira ${selected}: Browse Projects and Create Issues verified. You can save this mapping.`};
+    if(browse!==true)throw Error(`Jira project ${selected}: Browse Projects permission is missing or could not be confirmed. Mapping was not saved.`);
+    // A readable Jira project can be mapped even without publishing rights.
+    // Creation, assignment, edit, transitions and deletion have separate
+    // operation-specific permission checks at the point of mutation.
+    const writable=create===true;
+    return {kind,key:selected,name:String(project.name||selected).slice(0,160),id:String(project.id||''),
+      permissions:writable?['Browse Projects','Create Issues']:['Browse Projects'],
+      capabilities:{browse:true,createIssues:writable},
+      message:writable?`Jira ${selected}: Browse Projects and Create Issues verified. You can save this mapping.`:
+        `Jira ${selected}: read-only Browse Projects access verified. You can save this mapping; publishing remains disabled until Create Issues is granted.`};
   }
   const site=baseConfluence(config);
   let result;
