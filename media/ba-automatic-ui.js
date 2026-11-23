@@ -25,7 +25,7 @@
  let artifactQuill=null,quillKey='',quillHadFinalLine=false;
 
  const active=()=>view==='discovery'&&selectedRole==='business-analyst';
- const busy=()=>state?.phase==='running'||state?.phase==='publishing';
+ const busy=()=>aiResolve.running||state?.phase==='running'||state?.phase==='publishing';
  function stageSummary(){
   const current=state?.projectId===activeId?state:null;
   const phase=current?.phase||'idle';
