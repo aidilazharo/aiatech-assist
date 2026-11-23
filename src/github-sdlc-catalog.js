@@ -8,9 +8,10 @@ const { promisify } = require('node:util');
 const execFileAsync = promisify(execFile);
 const { requestJson } = require('./clients');
 const { githubIpAllowlistHint } = require('./github-ip-allowlist');
-const offlineLibrary = require('./offline-sdlc-library');
+const {compareVersions}=require('./library-semver');
+const legacyOfflineCleanup=require('./legacy-offline-library-cleanup');
 const CANONICAL_REPO = 'https://github.com/example-org/tech-stacks-skills';
-const DEFAULT_CONFIG = Object.freeze({ repositoryUrl: '', ref: 'main', authentication: 'github', autoCheck: true, offlineCache: true });
+const DEFAULT_CONFIG = Object.freeze({ repositoryUrl: '', ref: 'main', authentication: 'github', autoCheck: true, });
 const MAX_FILES = 600, MAX_FILE_BYTES = 1024 * 1024, MAX_CATALOG_BYTES = 24 * 1024 * 1024;
 const API_HEADERS = { 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
 const idPattern = /^[a-z0-9][a-z0-9_.-]{0,79}$/i;
@@ -46,7 +47,7 @@ function normalizeConfig(input = {}) {
     const authentication = String(input.authentication ?? 'github');
     if (!['github', 'token', 'public'].includes(authentication))
         throw Error('Unknown GitHub authentication mode.');
-    return { repositoryUrl: parsed ? `https://github.com/${parsed.owner}/${parsed.repo}` : '', ref, authentication, autoCheck: input.autoCheck !== false, offlineCache: input.offlineCache !== false };
+    return { repositoryUrl: parsed ? `https://github.com/${parsed.owner}/${parsed.repo}` : '', ref, authentication, autoCheck: input.autoCheck !== false };
 }
 function apiRoute(config) {
     const parsed = parseRepository(config.repositoryUrl);
@@ -193,7 +194,7 @@ async function remoteVersion(config,token,request=requestJson){
     let manifest;
     try{manifest=JSON.parse(await read('catalog.json',32768));}
     catch{throw Error('GitHub catalog.json is not valid JSON.');}
-    offlineLibrary.compareVersions(version,version);
+    compareVersions(version,version);
     if(manifest.schema!==1||manifest.version!==version)
         throw Error('GitHub VERSION and catalog.json version do not match.');
     return {...remote,version};
@@ -767,12 +768,15 @@ async function syncGitWorkspace(config, token, workspace, storeRoot=null, option
     const action = (async () => {
         const snapshot = await syncGitCatalogCheckout(workspace, normalized.repositoryUrl, repository, token, options);
         const cleanup = await retireLegacyCatalogAssets(workspace, storeRoot, repository);
-        // Delete only the temporary ZIP snapshot after verified Git main is active.
-        // A modified offline snapshot remains untouched and is reported for inspection.
-        let removedOffline=false,offlineCleanupError='';
-        try{removedOffline=await offlineLibrary.removeAfterVerifiedGit(workspace,normalized.repositoryUrl);}
-        catch(error){offlineCleanupError=error.message;}
-        return { ...snapshot, removedOffline,offlineCleanupError,
+        // Retire only an unchanged old ZIP snapshot after the real Git checkout
+        // has been verified. Unknown/edited workspace files are never deleted.
+        let retiredLegacyOffline={removed:false,reason:'verified-git-required'};
+        try{
+            const verifiedGit=await gitInstalled(workspace,normalized);
+            retiredLegacyOffline=await legacyOfflineCleanup.retire(workspace,{verifiedGit});
+        }catch(error){retiredLegacyOffline={removed:false,reason:String(error.message||error)};}
+        return { ...snapshot, removedLegacyOffline:retiredLegacyOffline.removed,
+            legacyOfflineCleanup:retiredLegacyOffline.reason,
             removedLegacyVersions: cleanup.removed.length, preservedLegacyVersions: cleanup.preserved.length, archivedLegacyVersions: cleanup.archived.length };
     })();
     gitCatalogUpdates.set(key, action);
@@ -939,16 +943,6 @@ async function activeFile(workspace, relative, { maxBytes = 65536 } = {}) {
     if (!workspace)
         return null;
     validPath(relative);
-    // Offline ZIP is a temporary user-supplied data snapshot, never represented as a Git commit.
-    const offline=await offlineLibrary.imported(workspace);
-    const installed=offline?await gitInstalled(workspace,{repositoryUrl:'https://github.com/'+offline.repository}):null;
-    if(offline&&(!installed||offlineLibrary.compareVersions(offline.version,installed.version)>0)){
-        const file=path.join(offline.root,...relative.split('/'));
-        const stat=await fs.lstat(file).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
-        if(!stat)return null;
-        if(!stat.isFile()||stat.isSymbolicLink()||stat.size>maxBytes)throw Error('Unsafe offline catalog asset: '+relative);
-        return fs.readFile(file,'utf8');
-    }
     const gitRoot = gitCatalogFolder(workspace);
     const gitState = await fs.lstat(gitCatalogState(workspace)).catch(e => e.code === 'ENOENT' ? null : Promise.reject(e));
     if (gitState) {
@@ -982,10 +976,6 @@ async function activeFile(workspace, relative, { maxBytes = 65536 } = {}) {
 }
 async function activeRoot(workspace) {
     if (!workspace) throw Error('Open an ATGV workspace and pull the SDLC Catalog from GitHub main.');
-    // An explicitly imported, checksum-verified ZIP remains active until a verified Git pull replaces it.
-    const offline=await offlineLibrary.imported(workspace);
-    const installed=offline?await gitInstalled(workspace,{repositoryUrl:'https://github.com/'+offline.repository}):null;
-    if(offline&&(!installed||offlineLibrary.compareVersions(offline.version,installed.version)>0||offline.releaseTag&&offlineLibrary.compareVersions(offline.version,installed.version)===0))return offline;
     const gitState = await fs.readFile(gitCatalogState(workspace), 'utf8').catch(e => e.code === 'ENOENT' ? null : Promise.reject(e));
     if (gitState) {
         const active = JSON.parse(gitState);
