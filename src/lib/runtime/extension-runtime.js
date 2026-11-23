@@ -6840,11 +6840,17 @@ async function handleDashboardMessage(msg){
           shouldContinue:()=>activeProject?.id===projectId,
           onPage:async page=>{
             all.push(...page.issues);
-            try{jiraLocalStore.saveIssuePage(registry,projectId,{site:jiraSite,projectKey,issues:page.issues});}
-            catch(error){report('Jira SQLite cache unavailable: '+String(error.message||error));}
+            try{
+              jiraLocalStore.saveIssuePage(registry,projectId,{site:jiraSite,projectKey,issues:page.issues});
+              connectedSync.observeMany(registry,projectId,{provider:'jira',origin:jiraSite,
+               resources:page.issues.filter(issue=>/^\\d+$/.test(String(issue.id||''))).map(issue=>({
+                id:issue.id,revision:issue.updated||'',value:{key:issue.key,status:issue.status,updated:issue.updated},
+                metadata:{key:issue.key,status:issue.status,kind:'issue'}}))});
+             }catch(error){report('Jira SQLite cache unavailable: '+String(error.message||error));}
           }});
         if(!result.cancelled)try{
           jiraLocalStore.finishScan(registry,projectId,{site:jiraSite,projectKey,count:result.count,completed:!result.truncated});
+            connectedSync.checkpoint(registry,projectId,{provider:'jira',origin:jiraSite,scope:projectKey,count:result.count,complete:!result.truncated});
         }catch(error){report('Jira SQLite sync state unavailable: '+String(error.message||error));}
         if(activeProject?.id!==projectId||result.cancelled)return;
         const items=require('../../role-jira-inventory').enrich(all,register,self.accountId);
@@ -8576,12 +8582,18 @@ async function handleDashboardMessage(msg){
             shouldContinue:()=>activeProject?.id===projectId&&jiraInventoryCurrentRequest===requestId,
             onPage:async batch=>{if(activeProject?.id===projectId&&jiraInventoryCurrentRequest===requestId){
               completeItems.push(...batch.issues);
-              try{jiraLocalStore.saveIssuePage(registry,projectId,{site:jiraSite,projectKey:key,issues:batch.issues});}
-              catch(error){report('Jira SQLite cache unavailable: '+String(error.message||error));}
+              try{
+                jiraLocalStore.saveIssuePage(registry,projectId,{site:jiraSite,projectKey:key,issues:batch.issues});
+                connectedSync.observeMany(registry,projectId,{provider:'jira',origin:jiraSite,
+                 resources:batch.issues.filter(issue=>/^\\d+$/.test(String(issue.id||''))).map(issue=>({
+                  id:issue.id,revision:issue.updated||'',value:{key:issue.key,status:issue.status,updated:issue.updated},
+                  metadata:{key:issue.key,status:issue.status,kind:'issue'}}))});
+               }catch(error){report('Jira SQLite cache unavailable: '+String(error.message||error));}
               await dashboard?.webview.postMessage({type:'jiraInventoryBatch',projectId,requestId,...batch});}}
           });
           if(!result.cancelled)try{
             jiraLocalStore.finishScan(registry,projectId,{site:jiraSite,projectKey:key,count:result.count,completed:!result.truncated});
+              connectedSync.checkpoint(registry,projectId,{provider:'jira',origin:jiraSite,scope:key,count:result.count,complete:!result.truncated});
           }catch(error){report('Jira SQLite sync state unavailable: '+String(error.message||error));}
           if(activeProject?.id===projectId&&jiraInventoryCurrentRequest===requestId){
             pmLatestSnapshot=!result.cancelled&&!result.truncated?{projectId,requestId,projectKey:key,items:completeItems,at:Date.now()}:null;
