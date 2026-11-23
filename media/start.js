@@ -5737,6 +5737,18 @@ $('baWorkingBrDownload').addEventListener('click',()=>{
  if($('baWorkingBrDownload').disabled||!activeId)return;
  $('baWorkingBrDownload').disabled=true;send('downloadISO29148BRPDF',{projectId:activeId});
 });
+function sourceActionIcon(kind){
+ const icon=document.createElementNS('http://www.w3.org/2000/svg','svg');
+ icon.setAttribute('viewBox','0 0 24 24');icon.setAttribute('fill','none');
+ icon.setAttribute('stroke','currentColor');icon.setAttribute('stroke-width','1.8');
+ icon.setAttribute('stroke-linecap','round');icon.setAttribute('stroke-linejoin','round');
+ icon.setAttribute('aria-hidden','true');
+ const shape=document.createElementNS('http://www.w3.org/2000/svg','path');
+ shape.setAttribute('d',kind==='delete'?
+  'M3 6h18M8 6V4h8v2m3 0-1 14H6L5 6m4 4v7m6-7v7':
+  'M8 5h10l-3-3m3 3-3 3M16 19H6l3 3m-3-3 3-3M5 8v5m14-2v5');
+ icon.append(shape);return icon;
+}
 function renderSourceDocuments(){
  const root=$('sourceDocuments');root.replaceChildren();
  const fileToolbar=$('baAutoFileActions');if(fileToolbar)fileToolbar.replaceChildren();
@@ -5770,7 +5782,7 @@ function renderSourceDocuments(){
   info.append(name,detail);
   const actions=document.createElement('div');actions.className='source-document-actions';
   const replace=document.createElement('button');replace.type='button';replace.className='secondary ba-process-btn';
-  replace.textContent='Replace & Reprocess';replace.title='Safely replace this source with an updated Word/PDF (even with a different filename). Old evidence, approved BR history and existing Jira keys are retained; remapping runs automatically.';
+  replace.classList.add('ba-source-icon-action');replace.setAttribute('aria-label','Replace & Reprocess');replace.append(sourceActionIcon('replace'));replace.title='Safely replace this source with an updated Word/PDF (even with a different filename). Old evidence, approved BR history and existing Jira keys are retained; remapping runs automatically.';
   replace.disabled=!!baBusyTask||!!sourceRemoving||discoveryImportBusy||brDeletionBusy||!baCanEdit('ba-discovery')||Object.keys(brState?.pending||{}).length>0;
   replace.addEventListener('click',()=>{
     if(replace.disabled||discoveryImportBusy)return;
@@ -5778,7 +5790,7 @@ function renderSourceDocuments(){
     send('replaceDiscoverySource',{roleId:selectedRole,digest:doc.digest,revision:brState.revision});
   });
   const remove=document.createElement('button');remove.type='button';remove.className='secondary ba-process-btn archive-remote-delete br-danger';
-  remove.textContent='Delete';remove.title='Destructive: permanently delete this source and its linked BR/Jira/Confluence records after verification and separate confirmation. Replace & Reprocess retains existing approvals and Jira.';
+  remove.classList.add('ba-source-icon-action');remove.setAttribute('aria-label','Delete source document');remove.append(sourceActionIcon('delete'));remove.title='Destructive: permanently delete this source and its linked BR/Jira/Confluence records after verification and separate confirmation. Replace & Reprocess retains existing approvals and Jira.';
   remove.dataset.brDeleteAction='true';
   remove.disabled=!!baBusyTask||!!sourceRemoving||brDeletionBusy||!baCanEdit('ba-discovery');
   remove.addEventListener('click',()=>{if(remove.disabled)return;requestBRDeletion({target:'active-source',digest:doc.digest,revision:brState.revision});});
