@@ -5,10 +5,10 @@ const crypto=require('node:crypto');
 const fs=require('node:fs/promises');
 const path=require('node:path');
 const updater=require('./github-release-updater');
-const REPO='aidilazharo/tech-stacks-skills';
+const REPO='aiamalaysia/my-fow-technology-app-techassists-enterprise-skills';
 // Only the public distribution mirror appears in release discovery.
 // The source repository remains available for the pinned catalogue and legacy verification.
-const RELEASE_REPOSITORIES=Object.freeze(['aidilazharo/library']);
+const RELEASE_REPOSITORIES=Object.freeze(['aiamalaysia/library']);
 const LATEST_URL='https://github.com/'+REPO+'/releases/latest';
 const API_LATEST='https://api.github.com/repos/'+REPO+'/releases/latest';
 const API_LIST='https://api.github.com/repos/'+REPO+'/releases?per_page=30';
