@@ -78,7 +78,7 @@ test('Discovery questions cannot schedule an unrequested background write',()=>{
  assert.match(host,/importDiscovery\|saveDiscovery\|processDiscoverySources/);
 });
 test('all Jira fields have reviewable values or missing-evidence markers without fabricated values',()=>{
- const item={title:'Finance approval',description:'Approve a charge code'};
+ const item={kind:'Story',title:'Finance approval',description:'Approve a charge code',issueChecks:{acceptanceCriteria:'When approved, create the code'}};
  const meta=[
   {id:'summary',name:'Summary',required:true,schema:{type:'string'}},
   {id:'description',name:'Description',required:true,schema:{type:'string'}},
