@@ -12,13 +12,13 @@ function normalizeIssue(issue,projectKey){
     const user=f.creator||{};
     const assignee=f.assignee||{};
     const reporter=f.reporter||{};
-    return {key,summary:clean(f.summary,350),type:clean(f.issuetype?.name||'Unknown',80),status:clean(f.status?.name||'Unknown',80),creator:clean(user.displayName||user.name||user.accountId||'Unavailable',160),creatorId:clean(user.accountId,200),created:clean(f.created,50),
+    return {id:clean(issue.id,30),key,summary:clean(f.summary,350),type:clean(f.issuetype?.name||'Unknown',80),status:clean(f.status?.name||'Unknown',80),creator:clean(user.displayName||user.name||user.accountId||'Unavailable',160),creatorId:clean(user.accountId,200),created:clean(f.created,50),
       assignee:clean(assignee.displayName||assignee.accountId||'',160),assigneeId:clean(assignee.accountId,200),
       reporter:clean(reporter.displayName||reporter.accountId||'',160),reporterId:clean(reporter.accountId,200),
       priority:clean(f.priority?.name||'',80),dueDate:clean(f.duedate,30),updated:clean(f.updated,50),
       resolution:clean(f.resolution?.name||'',80),statusCategory:clean(f.status?.statusCategory?.key||'',30),
       blocked:(Array.isArray(f.issuelinks)&&f.issuelinks.some(link=>/blocks|is blocked by/i.test(String(link.type?.name||''))&&!!link.inwardIssue)),
-      parentKey:clean(f.parent?.key,80),sourceStoryKey:clean((textFromAdf(f.description||'').match(/^Jira parent Story:\s*([A-Z][A-Z0-9]{1,19}-[1-9][0-9]*)\s*$/m)||[])[1],80),labels:(Array.isArray(f.labels)?f.labels:[]).filter(x=>typeof x==='string').slice(0,60).map(x=>clean(x,100)),
+      parentKey:clean(f.parent?.key,80),parentId:clean(f.parent?.id,30),sourceStoryKey:clean((textFromAdf(f.description||'').match(/^Jira parent Story:\s*([A-Z][A-Z0-9]{1,19}-[1-9][0-9]*)\s*$/m)||[])[1],80),labels:(Array.isArray(f.labels)?f.labels:[]).filter(x=>typeof x==='string').slice(0,60).map(x=>clean(x,100)),
       originalEstimateSeconds:Number(f.timeoriginalestimate||f.timetracking?.originalEstimateSeconds)||0,
       remainingEstimateSeconds:Number(f.timeestimate||f.timetracking?.remainingEstimateSeconds)||0,
       timeSpentSeconds:Number(f.timespent)||0,

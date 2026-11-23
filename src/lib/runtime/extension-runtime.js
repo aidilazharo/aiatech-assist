@@ -86,6 +86,7 @@ const baAutomatic=require('../../ba-automatic-workflow');
 const baJiraRepublish=require('../../ba-jira-republish');
 const baJiraDraftIds=require('../../ba-jira-draft-ids');
 const jiraProjectInventory=require('../../jira-project-inventory');
+const jiraLocalStore=require('../../jira-local-store');
 const pmJiraAssignment=require('../../pm-jira-assignment');
 const baBRTransfer=require('../../ba-br-transfer');
 const jiraItemEditor=require('../../jira-item-editor');
@@ -1257,9 +1258,9 @@ async function reconcileStartupPublishedJira(project,epoch){
    approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;
    await dashboard?.webview.postMessage({type:'brUpdated',register:result.register});
    await refreshDashboard();
-   const removed=result.brsRemoved+result.linksRemoved,restored=result.brsRestored+result.linksRestored;
-   await notice('Startup Jira check: '+result.brsRemoved+' published BR(s) and '+result.linksRemoved+' Jira link(s) removed from the active list; '+restored+' restored. Unavailable items have a local recovery copy because Jira may also return 404 for restricted items.',false);
-   report(`Startup Jira reconciliation: ${removed} unavailable, ${restored} restored; no remote changes.`);
+   const pending=result.pendingVerification||0,restored=result.brsRestored+result.linksRestored;
+   await notice('Startup Jira verification: '+pending+' issue(s) are not visible. Published BRs and Jira links were preserved; '+restored+' restored from prior recovery copies.',false);
+   report(`Startup Jira verification: ${pending} not visible, ${restored} restored; no local unlink or remote changes.`);
   }else if(result.conflicts)report('Startup Jira reconciliation retained recovery copies because a local mapping changed.');
  }finally{remoteBRDeletionBusy=false;}
 }
@@ -6724,10 +6725,19 @@ async function handleDashboardMessage(msg){
         const auth={token,basicEmail:String(config.get('jira.email')||'').trim()};
         const self=await requestJson(`${baseAtlassian(config)}/rest/api/3/myself`,auth);
         if(!self?.accountId)throw Error('Jira account identity is unavailable.');
-        const register=await brWorkflow.load(registry,projectId),all=[];
+        const register=await brWorkflow.load(registry,projectId),all=[],jiraSite=baseAtlassian(config);
+        try{jiraLocalStore.saveMappings(registry,projectId,{site:jiraSite,register});}
+        catch(error){report('Jira SQLite mapping index unavailable: '+String(error.message||error));}
         const result=await jiraProjectInventory.scanProject({config,token,projectKey,
           shouldContinue:()=>activeProject?.id===projectId,
-          onPage:async page=>{all.push(...page.issues);}});
+          onPage:async page=>{
+            all.push(...page.issues);
+            try{jiraLocalStore.saveIssuePage(registry,projectId,{site:jiraSite,projectKey,issues:page.issues});}
+            catch(error){report('Jira SQLite cache unavailable: '+String(error.message||error));}
+          }});
+        if(!result.cancelled)try{
+          jiraLocalStore.finishScan(registry,projectId,{site:jiraSite,projectKey,count:result.count,completed:!result.truncated});
+        }catch(error){report('Jira SQLite sync state unavailable: '+String(error.message||error));}
         if(activeProject?.id!==projectId||result.cancelled)return;
         const items=require('../../role-jira-inventory').enrich(all,register,self.accountId);
         await dashboard?.webview.postMessage({type:'roleJiraIssues',projectId:activeProject.id,items,incomplete:!!result.truncated,requestId});break;
@@ -8451,13 +8461,20 @@ async function handleDashboardMessage(msg){
           }).catch(()=>null);
           if(activeProject?.id===projectId&&jiraInventoryCurrentRequest===requestId)
             await dashboard?.webview.postMessage({type:'jiraInventoryViewer',projectId,requestId,accountId:String(viewer?.accountId||'')});
-          const completeItems=[];
+          const completeItems=[],jiraSite=baseAtlassian(config);
+          try{jiraLocalStore.saveMappings(registry,projectId,{site:jiraSite,register:await brWorkflow.load(registry,projectId)});}
+          catch(error){report('Jira SQLite mapping index unavailable: '+String(error.message||error));}
           const result=await jiraProjectInventory.scanProject({config,token,projectKey:key,
             shouldContinue:()=>activeProject?.id===projectId&&jiraInventoryCurrentRequest===requestId,
             onPage:async batch=>{if(activeProject?.id===projectId&&jiraInventoryCurrentRequest===requestId){
               completeItems.push(...batch.issues);
+              try{jiraLocalStore.saveIssuePage(registry,projectId,{site:jiraSite,projectKey:key,issues:batch.issues});}
+              catch(error){report('Jira SQLite cache unavailable: '+String(error.message||error));}
               await dashboard?.webview.postMessage({type:'jiraInventoryBatch',projectId,requestId,...batch});}}
           });
+          if(!result.cancelled)try{
+            jiraLocalStore.finishScan(registry,projectId,{site:jiraSite,projectKey:key,count:result.count,completed:!result.truncated});
+          }catch(error){report('Jira SQLite sync state unavailable: '+String(error.message||error));}
           if(activeProject?.id===projectId&&jiraInventoryCurrentRequest===requestId){
             pmLatestSnapshot=!result.cancelled&&!result.truncated?{projectId,requestId,projectKey:key,items:completeItems,at:Date.now()}:null;
             let forecast=null;

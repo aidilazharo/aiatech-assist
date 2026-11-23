@@ -8,6 +8,7 @@
 | `ai-memory-<project-id>.sqlite` | One isolated SQLite store per project: approvals, document metadata, decisions, proposal states, delivery records and AI generation history. |
 | `credentials.sqlite` | Shared extension/project credential vault. Credentials are encrypted with AES-256-GCM; each record has an independent nonce/authentication tag. |
 | `atgv-workflow-jobs.sqlite` | Cross-role persistent workflow journal and retry metadata. |
+| `project-<project-id>.sqlite` | Non-authoritative Jira issue cache and per-project BR/Jira mapping index. Existing BR register remains the source of truth until an explicitly validated migration. |
 
 **Credential security:** Only ciphertext is written to SQLite. The 256-bit encryption key stays in VS Code SecretStorage, scoped to the workspace. No API keys, passwords, GitHub PATs or Jira tokens are placed in AI prompts, project notes, the GitHub Library or the extension AI database. Extension and project callers use the same authenticated vault interface. The unattended AI service does not gain direct access to the decryption key; it continues to use approved credential delivery (environment/secure provider settings), not arbitrary credential-store reads.
 
