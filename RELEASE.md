@@ -1,13 +1,15 @@
-# ATGV AIATECH Assist v0.0.74
+# ATGV AIATECH Assist v0.0.75
 
 ## Changes
-- New Jira Preview responsible-role selector with all 18 ATGV SDLC roles; conservative task-title suggestions for UI/UX, Developer, PM, architecture, BA, QA and related roles.
-- Jira creates receive role labels, and published issue role changes are conflict-checked before controlled update; existing assigned users are never silently reassigned.
-- Jira metadata-driven preflight no longer writes generic missing-information placeholders. Required unresolved fields block publication; optional unsupported fields are not filled.
-- Acceptance Criteria and Definition of Done are taken only from approved evidence, explicit BA edits or approved project DoD templates. Draft TRM checklists are not silently adopted.
-- Existing BR revision history, manual Jira preview approval and stable issue-key reconciliation are retained.
+- Generated Requirements now identifies each BR marked "Needs attention", the affected section, the quality-review reason and the exact cited text when available.
+- Regeneration receives unresolved draft-quality findings alongside user feedback, so it can try to correct the actual issue using verified source evidence.
+- Identical regenerated drafts are reported as unchanged instead of modified; repeating unchanged content cannot silently clear a quality finding.
+- Generation results show counts for new, changed and unchanged BRs, with a specific explanation when no requirement content changes.
+- Uniform section spacing, readable typography, buttons, dark-theme Quill and Jira Preview fields; the raw `[ ]` notation remains plain text, not a checkbox.
+- BR source identities, approved content, Jira publication approvals and existing linked Jira issue keys remain protected.
 
 ## Verification
-- New regression tests: test/v074-jira-role-field-safety.test.js.
-- GitHub workflow runs npm test, Windows verification and VSIX packaging before creating a prerelease.
-- Live Jira account assignment and site-specific field permission checks require integration testing.
+- Added test/v075-ba-attention-consistency.test.js.
+- JavaScript syntax validation passed for modified client, backend and runtime modules.
+- GitHub Actions runs npm test, UI validation and VSIX packaging for this version.
+- Changes to already published Jira issues still require the existing approval and reconciliation workflow.
