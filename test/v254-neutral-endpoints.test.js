@@ -7,7 +7,7 @@ const ext=fs.readFileSync(path.join(__dirname,'../test/generated/extension-sourc
 test('generic catalog defaults stay neutral but ATGV fixes its verified Library source',()=>{
  assert.equal(catalog.DEFAULT_CONFIG.repositoryUrl,'');
  assert.match(ext,/startupSetup\.FIXED_LIBRARY_REPOSITORY/);
- assert.match(ext,/https:\/\/github\.com\/aiamalaysia\/tech-stacks-skills/);
+ assert.match(ext,/https:\/\/github\.com\/aiamalaysia\/my-fow-technology-app-techassists-enterprise-skills/);
  // The reusable catalog module stays neutral while ATGV host pins its trusted source.
  assert.doesNotMatch(catalog.DEFAULT_CONFIG.repositoryUrl,/aiamalaysia/i);
  assert.equal(catalog.normalizeConfig({...catalog.DEFAULT_CONFIG,repositoryUrl:'https://github.com/your-team/catalog'}).repositoryUrl,'https://github.com/your-team/catalog');
