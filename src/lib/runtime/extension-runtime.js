@@ -87,6 +87,7 @@ const baJiraRepublish=require('../../ba-jira-republish');
 const baJiraDraftIds=require('../../ba-jira-draft-ids');
 const jiraProjectInventory=require('../../jira-project-inventory');
 const jiraLocalStore=require('../../jira-local-store');
+const connectedSync=require('../../connected-sync-store');
 const pmJiraAssignment=require('../../pm-jira-assignment');
 const baBRTransfer=require('../../ba-br-transfer');
 const jiraItemEditor=require('../../jira-item-editor');
@@ -6246,6 +6247,13 @@ async function handleDashboardMessage(msg){
       case 'refreshConnectedSources':{
         requireOpened();
         await refreshLiveRemoteData({reason:'view-open'});
+        await postConnectedSyncState();
+        break;
+      }
+      case 'refreshSQLiteSync':{
+        requireOpened();
+        await refreshLiveRemoteData({reason:'manual-sqlite-sync',force:true});
+        await postConnectedSyncState();
         break;
       }
       case 'devCopilotTasks':{
@@ -11382,6 +11390,14 @@ async function syncConfluence(target=current(),{background=false}={}){
   let conflicts=0;for(const d of filtered){if(!liveRefreshStillCurrent(target))throw Error('Project changed during Confluence mirror refresh.');if((await local.mirrorConfluence(d)).locallyEdited)conflicts++;}
   if(!liveRefreshStillCurrent(target))throw Error('Project changed during Confluence refresh.');
   await local.saveMirrors();await local.replace('Confluence',filtered);tree?.refresh();if(!background)await refreshDashboard();
+  try{
+   const origin=new URL(baseConfluence(config)).origin;
+   connectedSync.observeMany(registry,project.id,{provider:'confluence',origin,
+    resources:docs.map(d=>({id:d.remoteId,revision:String(d.version||''),
+     value:d.rawHtml||d.text||'',metadata:{key:d.remoteId,scope:d.spaceId,kind:'page'}}))});
+   connectedSync.checkpoint(registry,project.id,{provider:'confluence',origin,scope:String(config.get('confluence.spaceKey')||'default'),
+    count:docs.length,complete:docs.length<maxItems()});
+  }catch(error){report('Confluence SQLite ledger: '+String(error.message||error).slice(0,180));}
   report(`[${project.id}] Confluence: ${filtered.length} independent pages, ${docs.length-filtered.length} already represented in the canonical repository (${conflicts} locally edited mirrors preserved)`);
   if(conflicts&&!background)uiWarning(`${conflicts} locally edited Confluence mirrors preserved. Resolve and publish manually.`);
   return docs.length;
@@ -11392,7 +11408,40 @@ async function syncJira(target=current(),{background=false}={}){
   // scoped JQL still takes precedence when configured.
   const docs=await listJira(liveRemoteRefresh.jiraConfig(config),await getAtlassianToken(project),maxItems());
   if(!liveRefreshStillCurrent(target))throw Error('Project changed during Jira refresh; stale result discarded.');
-  await local.replace('Jira',docs);tree?.refresh();if(!background)await refreshDashboard();report(`[${project.id}] Jira: ${docs.length} issues`);return docs.length;
+  await local.replace('Jira',docs);tree?.refresh();if(!background)await refreshDashboard();
+  try{
+   const origin=baseAtlassian(config);
+   connectedSync.observeMany(registry,project.id,{provider:'jira',origin,
+    resources:docs.map(d=>({id:d.remoteId||String(d.id).split(':').at(-1),revision:d.updated||'',
+     value:d.text||'',metadata:{key:d.issueKey||'',status:d.status||'',kind:'issue'}}))});
+   connectedSync.checkpoint(registry,project.id,{provider:'jira',origin,scope:String(config.get('jira.projectKey')||'default'),
+    count:docs.length,complete:docs.length<maxItems()});
+  }catch(error){report('Jira SQLite ledger: '+String(error.message||error).slice(0,180));}
+  report(`[${project.id}] Jira: ${docs.length} issues`);return docs.length;
+}
+async function syncGithubMetadata(target=current()){
+ const {project,config}=target,repo=githubRepoInfo(config);
+ if(new URL(repo.api).hostname!=='api.github.com')throw Error('GitHub Cloud API required for the local metadata ledger.');
+ const token=await getGithubToken(project);
+ const headers={'X-GitHub-Api-Version':'2022-11-28','Accept':'application/vnd.github+json'};
+ const info=await requestJson(repo.route,{token,headers});
+ const branch=String(config.get('github.branch')||info.default_branch||'');
+ if(!branch||branch.length>140)throw Error('GitHub branch is missing or invalid.');
+ const details=await requestJson(repo.route+'/branches/'+encodeURIComponent(branch),{token,headers});
+ if(!/^[a-f0-9]{40}$/i.test(String(details?.commit?.sha||'')))throw Error('GitHub returned an invalid branch SHA.');
+ if(!liveRefreshStillCurrent(target))throw Error('Project changed during GitHub metadata refresh.');
+ const origin='https://api.github.com',id=repo.owner+'/'+repo.repo+'@'+branch;
+ connectedSync.observeMany(registry,project.id,{provider:'github',origin,
+  resources:[{id,revision:details.commit.sha,value:details.commit.sha,
+   metadata:{key:repo.owner+'/'+repo.repo,branch,kind:'branch'}}]});
+ connectedSync.checkpoint(registry,project.id,{provider:'github',origin,scope:repo.owner+'/'+repo.repo,count:1,complete:true});
+ return 1;
+}
+async function postConnectedSyncState(){
+ if(!dashboard||!activeProject)return;
+ try{await dashboard.webview.postMessage({type:'connectedSyncState',projectId:activeProject.id,
+  state:connectedSync.snapshot(registry,activeProject.id)});}
+ catch(error){report('SQLite sync status: '+String(error.message||error).slice(0,180));}
 }
 async function refreshLiveRemoteData({reason='scheduled',force=false}={}){
  if(!activeProject||!store||openingFlow.phase!=='open')return {skipped:'no-open-project'};
@@ -11406,7 +11455,9 @@ async function refreshLiveRemoteData({reason='scheduled',force=false}={}){
  if(!liveRemoteRefresh.canRefresh({lastAttempt:last,busy:liveRemoteBusy,force,offline:openingOffline}))
   return {skipped:liveRemoteBusy?'busy':'recent'};
  const target=current(),sources=liveRemoteRefresh.configState(target.config);
- if(!sources.jira&&!sources.confluence){
+ const githubConfigured=!!String(target.config.get('github.owner')||'').trim()&&
+  !!String(target.config.get('github.repo')||'').trim();
+ if(!sources.jira&&!sources.confluence&&!githubConfigured){
   liveRemoteState={projectId,phase:'ready',lastAttempt:new Date().toISOString(),lastSuccess:'',results:{},errors:{}};
   await dashboard?.webview.postMessage({type:'liveRemoteState',value:liveRemoteState});
   return {skipped:'unconfigured'};
@@ -11420,7 +11471,8 @@ async function refreshLiveRemoteData({reason='scheduled',force=false}={}){
   // local Jira or Confluence data just because the network is unavailable.
   for(const [name,enabled,read] of [
    ['Jira',sources.jira,()=>syncJira(target,{background:true})],
-   ['Confluence',sources.confluence,()=>syncConfluence(target,{background:true})]
+   ['Confluence',sources.confluence,()=>syncConfluence(target,{background:true})],
+   ['GitHub',githubConfigured,()=>syncGithubMetadata(target)]
   ]){
    if(!enabled)continue;
    if(!liveRefreshStillCurrent(target))return {skipped:'project-changed'};
@@ -11431,6 +11483,7 @@ async function refreshLiveRemoteData({reason='scheduled',force=false}={}){
   liveRemoteState={projectId,phase:Object.keys(errors).length?'partial':'ready',lastAttempt:started,
    lastSuccess:Object.keys(results).length?new Date().toISOString():liveRemoteState.lastSuccess||'',results,errors};
   await dashboard?.webview.postMessage({type:'liveRemoteState',value:liveRemoteState});
+  await postConnectedSyncState();
   // Background synchronization must not automatically rerender the webview.
   // Manual Refresh still publishes a new dashboard snapshot.
   return {results,errors};
