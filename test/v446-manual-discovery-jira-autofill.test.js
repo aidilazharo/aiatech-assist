@@ -77,7 +77,7 @@ test('Discovery questions cannot schedule an unrequested background write',()=>{
  assert.match(ui,/Save partially completed · Retry manually/);
  assert.match(host,/importDiscovery\|saveDiscovery\|processDiscoverySources/);
 });
-test('all Jira fields have a reviewable value or preview placeholder, without invented structured values',()=>{
+test('all Jira fields have reviewable values or missing-evidence markers without fabricated values',()=>{
  const item={title:'Finance approval',description:'Approve a charge code'};
  const meta=[
   {id:'summary',name:'Summary',required:true,schema:{type:'string'}},
@@ -91,12 +91,14 @@ test('all Jira fields have a reviewable value or preview placeholder, without in
  const plan=planFields(item,meta,{approvedBR:{acceptanceCriteria:'When approved, create the code'}});
  assert.equal(plan.fields.length,meta.length);
  assert.equal(plan.fields.every(field=>field.display.length>0),true);
- assert.equal(plan.extraFields.customfield_11000,MISSING);
+ assert.equal(plan.extraFields.customfield_11000,undefined);
+ assert.equal(plan.fields.find(field=>field.id==='customfield_11000').status,'missing-evidence');
  assert.equal(plan.extraFields.customfield_11001,'When approved, create the code');
  assert.equal(plan.extraFields.customfield_11002,undefined);
  assert.equal(plan.extraFields.customfield_11003,undefined);
  assert.equal(plan.autofillSummary.total,meta.length);
- assert.equal(plan.autofillSummary.textPlaceholders,1);
+ assert.equal(plan.autofillSummary.textPlaceholders,0);
+ assert.equal(plan.autofillSummary.missingEvidence,1);
  assert.ok(plan.autofillSummary.previewOnly>=2);
  assert.match(plan.blocking.join(' '),/Risk Option/);
 });
