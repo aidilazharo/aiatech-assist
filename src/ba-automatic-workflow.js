@@ -123,7 +123,10 @@ function parseQuality(raw,drafts,concerns){
    throw Error('BR quality review did not identify a specific draft statement.');
   if(row.conflict!=null&&(!Number.isInteger(row.conflict)||!concerns[row.conflict]))throw Error('BR quality review named an unknown source conflict.');
   used.add(row.id);
-  return {id:row.id,reason:(row.conflict==null?row.reason:concerns[row.conflict].detail).trim().slice(0,400)};
+  const match=[['Title',draft.title],['Business purpose',draft.objective],['Scope',draft.scope],
+   ['Acceptance criteria',draft.acceptanceCriteria]].find(([,text])=>typeof text==='string'&&text.includes(quote));
+  return {id:row.id,reason:(row.conflict==null?row.reason:concerns[row.conflict].detail).trim().slice(0,400),
+   field:match?.[0]||'Features and user stories',quote:quote.slice(0,500)};
  });
 }
 
