@@ -60,3 +60,21 @@ test('bare Vite dependency cannot make a backend mockable without a local config
  assert.equal(frontend.role,'frontend');
  assert.equal(frontend.mockType,'vite');
 });
+
+
+test('Custom Install & Run prioritizes the frontend even when the old selection is an API',()=>{
+ const workflow=require('../src/architect-custom-workflow');
+ const api={relative:'apps/api',role:'backend',runnable:true,mockApi:true,previewUrl:'http://127.0.0.1:3000/api/v1/health'};
+ const web={relative:'apps/web',role:'frontend',runnable:true,mockable:true,previewUrl:'http://127.0.0.1:5173/'};
+ assert.equal(workflow.selectPreviewTarget({targets:[api,web]},'apps/api'),web);
+ assert.equal(workflow.selectPreviewTarget({targets:[api,web]},''),web);
+ assert.equal(workflow.selectPreviewTarget({targets:[api]},'apps/api'),api);
+});
+test('Frontend mock preview serves both the web UI and synthetic health endpoint',()=>{
+ const preview=require('../src/stack-mock-preview');
+ const source=preview.render({source:'vite.config.ts',port:5173,mockDatabase:true});
+ assert.match(source,/GET \/api\/v1\/health/);
+ assert.match(source,/status: 'mock', database: 'simulated'/);
+ assert.match(source,/transformIndexHtml/);
+ assert.match(source,/proxy: \{\}/);
+});
