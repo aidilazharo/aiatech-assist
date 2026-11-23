@@ -11512,8 +11512,7 @@ async function refreshLiveRemoteData({reason='scheduled',force=false}={}){
    if(!enabled)continue;
    if(!liveRefreshStillCurrent(target))return {skipped:'project-changed'};
    try{results[name]=await read();}
-   catch(error){
-    errors[name]=String(error.message||error).slice(0,240);
+   catch(error){errors[name]=String(error.message||error).slice(0,240);
     report('Live '+name+' refresh ('+reason+'): '+errors[name]);
     try{
      const provider=name.toLowerCase(),config=target.config;
