@@ -292,6 +292,7 @@
   setReadyPanel('baAutoRequirements',requirementsReady);
   setReadyPanel('baAutoJira',jiraReady);
   setReadyPanel('baAutoHistory',completedReady);
+  badge('baAutoHistoryBadge',completedReady);
  }
 
  function render(){

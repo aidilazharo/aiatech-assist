@@ -26,9 +26,10 @@ function html(webview,{resumeLibrary=false}={}){
     subtask:"<path d=\"M5 5v7h4m-3-3 3 3-3 3M12 8h7v8h-7zM14 12l1 1 2-2\"/>"
   };
   const baHeaderIcon=(name,variant='')=>`<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${variant}>${baHeaderIcons[name]}</svg>`;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.66';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.67';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
+  const uiConsistencyCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-consistency.css'));
   const js=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.js'));
   const baAutomaticUi=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','ba-automatic-ui.js'));
   const baDocumentViewerJs=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','ba-document-viewer.js'));
@@ -71,7 +72,7 @@ function html(webview,{resumeLibrary=false}={}){
   const csp=`default-src 'none'; img-src ${webview.cspSource} data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource}; font-src ${webview.cspSource}; form-action 'none'; connect-src 'none'`;
   const field=(id,label,placeholder='',opts='')=>`<div class="field"><label for="${id}">${label}</label><input id="${id}" ${opts} placeholder="${placeholder}" autocomplete="off"></div>`;
   const spaceTable=(id)=>`<div id="${id}" class="space-list"></div>`;
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="atgv-vendor-libs" content="${vendorAssets?'ready':'missing'}"><meta name="atgv-resume-library" content="${resumeLibrary?'yes':'no'}"><script src="${vendorProbeJs}"></script>${sortableJs?`<script src="${sortableJs}"></script>`:''}<script src="${pmKanbanJs}"></script>${quillCss?`<link rel="stylesheet" href="${quillCss}">`: ''}${ganttCss?`<link rel="stylesheet" href="${ganttCss}">`: ''}<link rel="stylesheet" href="${css}"><link rel="stylesheet" href="${myWorkAiCss}"><link rel="stylesheet" href="${aiChangeResolutionCss}"><link rel="stylesheet" href="${uiThemeCss}"><link rel="stylesheet" href="${studioCss}"><link rel="stylesheet" href="${pmKanbanCss}"><link rel="stylesheet" href="${userRosterCss}">${cmCss?`<link rel="stylesheet" href="${cmCss}">`: ''}<title>ATGV AIATECH Assist</title></head><body class="gate-mode">
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="atgv-vendor-libs" content="${vendorAssets?'ready':'missing'}"><meta name="atgv-resume-library" content="${resumeLibrary?'yes':'no'}"><script src="${vendorProbeJs}"></script>${sortableJs?`<script src="${sortableJs}"></script>`:''}<script src="${pmKanbanJs}"></script>${quillCss?`<link rel="stylesheet" href="${quillCss}">`: ''}${ganttCss?`<link rel="stylesheet" href="${ganttCss}">`: ''}<link rel="stylesheet" href="${css}"><link rel="stylesheet" href="${myWorkAiCss}"><link rel="stylesheet" href="${aiChangeResolutionCss}"><link rel="stylesheet" href="${uiThemeCss}"><link rel="stylesheet" href="${studioCss}"><link rel="stylesheet" href="${pmKanbanCss}"><link rel="stylesheet" href="${userRosterCss}">${cmCss?`<link rel="stylesheet" href="${cmCss}">`: ''}<link rel="stylesheet" href="${uiConsistencyCss}"><title>ATGV AIATECH Assist</title></head><body class="gate-mode">
   <header class="app-header" id="appHeader" role="banner">
     <div class="brand-area"><span class="brand-logo-stack"><img src="${brand}" alt="ATGV" class="brand-logo"></span><span class="brand-identity"><span class="brand-name">AIATECH <b>ASSIST</b></span><span class="brand-versions">Extension v${extensionVersion}<span id="headerLibraryVersion"> · Library —</span></span></span></div>
     <div class="header-context"></div>
@@ -174,7 +175,7 @@ function html(webview,{resumeLibrary=false}={}){
    <main id="gateView" class="gate-container">
     <div class="gate-top"><div class="gate-identity gate-lead-identity"><span class="gate-logo-stack"><img src="${brand}" alt="ATGV" class="gate-logo"/></span><span class="gate-product-title"><h1>AIATECH ASSIST</h1><small class="gate-brand-versions">Extension v${extensionVersion}<span id="gateLibraryVersion"> · Library —</span></small></span></div><div class="gate-header-actions"><button id="gateReportIssue" type="button" class="guide-icon-button" aria-label="Report an issue" title="Report an Issue"><svg class="guide-help-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.5 0-3-.4-4.3-1.2L3 20l1.3-4A8.5 8.5 0 1 1 21 11.5Z"/><path d="M12 7.5v4.5M12 15.5h.01"/></svg></button><button id="gateGuideHelp" type="button" class="guide-icon-button" aria-label="Open interactive user guide" title="Interactive User Guide" aria-haspopup="dialog" aria-controls="guideMenu"><svg class="guide-help-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.65 9a2.5 2.5 0 0 1 4.7 1.2c0 1.8-2.35 2-2.35 3.7"/><path d="M12 17.3h.01"/></svg></button></div></div>
     <div id="gateFolderAlert" class="gate-folder-alert hidden" role="alert"><div><strong>Open a VS Code folder to continue</strong><p>ATGV needs an open folder to find or create project files. Select a folder before searching or creating a project.</p></div><button id="gateOpenFolder" type="button">Open Folder</button></div>
-    <section id="startupSetup" class="atgv-startup-setup hidden" aria-label="ATGV computer readiness and connection setup">
+    <section id="startupSetup" class="atgv-startup-setup" aria-label="ATGV computer readiness and connection setup">
       <div id="startupComputerCard" class="atgv-startup-card">
        <div class="atgv-startup-section-title"><h3>Technology stack prerequisites</h3><button id="startupRefresh" type="button" class="secondary" aria-label="Refresh computer prerequisites" title="Refresh computer prerequisites">↻ Refresh</button></div>
        <details id="startupPrerequisiteDetails" class="atgv-startup-prerequisites">
@@ -213,7 +214,7 @@ function html(webview,{resumeLibrary=false}={}){
       <div id="gateRemoteSection" class="hidden"><div class="gate-local-header"><h2>Confluence Spaces</h2><span id="gateResultsCount" class="muted"></span></div><div id="gateRemote" class="gate-list"></div></div>
       <div id="gateWorkspaceSection"><div class="gate-local-header"><h2>Workspace Projects</h2></div><div id="gateLocal" class="gate-list"></div></div>
       <section id="gateUnmanagedSection" class="hidden" aria-label="Unregistered project folders"><h3>Existing folders to import</h3><p class="muted">These folders already exist under projects/ but are not registered. Import preserves their files and normalizes project IDs to lowercase.</p><div id="gateUnmanaged" class="gate-list"></div></section>
-      <div class="atgv-startup-footer gate-search-footer"><button id="gateUnifiedLog" type="button" class="secondary atgv-icon-only" aria-label="Download unified error log" title="Download unified error log (prerequisites and project opening)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m-4-4 4 4 4-4M5 17v4h14v-4"/></svg></button><button id="gateSearchPrevious" type="button" class="secondary" title="Return to Atlassian and GitHub connections">← Previous</button><button id="gateSkip" type="button" title="Enter the local ATGV main interface without selecting a remote project">Skip · Enter ATGV</button></div>
+      <div class="atgv-startup-footer gate-search-footer"><button id="gateSearchPrevious" type="button" class="secondary" title="Return to Atlassian and GitHub connections">← Previous</button><span class="atgv-footer-spacer" aria-hidden="true"></span><button id="gateUnifiedLog" type="button" class="secondary atgv-icon-only" aria-label="Download unified error log" title="Download unified error log (prerequisites and project opening)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m-4-4 4 4 4-4M5 17v4h14v-4"/></svg></button><button id="gateSkip" type="button" hidden title="Enter the local ATGV main interface without selecting a remote project">Skip · Enter ATGV</button></div>
     </section>
     </section>
    </main>
@@ -469,30 +470,30 @@ function html(webview,{resumeLibrary=false}={}){
       <details id="baAutoJira" class="ba-auto-artifact" hidden>
         <summary class="ba-auto-jira-heading">
           <strong>Jira Work Items <small id="baAutoJiraCount"></small></strong>
-          <span class="ba-auto-title-tools">
-            <span id="baAutoJiraBadge" class="ba-auto-badge">Draft</span>
-            <span id="baAutoJiraView" class="ba-auto-tabs" role="group" aria-label="Jira work item view">
-              <button class="ba-auto-title-icon" type="button" data-ba-jira-view="list" aria-pressed="true" aria-label="List view" title="List view">${baHeaderIcon('list')}</button>
-              <button class="ba-auto-title-icon" type="button" data-ba-jira-view="hierarchy" aria-pressed="false" aria-label="Hierarchy view" title="Hierarchy view">${baHeaderIcon('tree')}</button>
-            </span>
-            <span id="baAutoJiraTabs" class="ba-auto-tabs" role="group" aria-label="Jira issue category">
-              <button class="ba-auto-title-icon" type="button" data-ba-jira-tab="all" aria-pressed="true" aria-label="All Jira issue types" title="All Jira issue types">${baHeaderIcon('all')}</button>
-              <button class="ba-auto-title-icon" type="button" data-ba-jira-tab="br" aria-pressed="false" aria-label="Business Requirements" title="Business Requirements">${baHeaderIcon('br')}</button>
-              <button class="ba-auto-title-icon" type="button" data-ba-jira-tab="epic" aria-pressed="false" aria-label="Epics" title="Epics">${baHeaderIcon('epic')}</button>
-              <button class="ba-auto-title-icon" type="button" data-ba-jira-tab="feature" aria-pressed="false" aria-label="Features" title="Features">${baHeaderIcon('feature')}</button>
-              <button class="ba-auto-title-icon" type="button" data-ba-jira-tab="story" aria-pressed="false" aria-label="Stories" title="Stories">${baHeaderIcon('story')}</button>
-              <button class="ba-auto-title-icon" type="button" data-ba-jira-tab="task" aria-pressed="false" aria-label="Tasks" title="Tasks">${baHeaderIcon('task')}</button>
-              <button class="ba-auto-title-icon" type="button" data-ba-jira-tab="subtask" aria-pressed="false" aria-label="Subtasks" title="Subtasks">${baHeaderIcon('subtask')}</button>
-            </span>
-          </span>
+          <span id="baAutoJiraBadge" class="ba-auto-badge">Draft</span>
         </summary>
         <div class="ba-auto-body">
+          <div class="atgv-section-table-toolbar" role="toolbar" aria-label="Jira Work Items table display and filters">
+          <span id="baAutoJiraView" class="ba-auto-tabs" role="group" aria-label="Jira work item view">
+            <button class="ba-auto-title-icon" type="button" data-ba-jira-view="list" aria-pressed="true" aria-label="List view" title="List view">${baHeaderIcon('list')}</button>
+            <button class="ba-auto-title-icon" type="button" data-ba-jira-view="hierarchy" aria-pressed="false" aria-label="Hierarchy view" title="Hierarchy view">${baHeaderIcon('tree')}</button>
+          </span>
+          <span id="baAutoJiraTabs" class="ba-auto-tabs" role="group" aria-label="Jira issue category">
+            <button class="ba-auto-title-icon" type="button" data-ba-jira-tab="all" aria-pressed="true" aria-label="All Jira issue types" title="All Jira issue types">${baHeaderIcon('all')}</button>
+            <button class="ba-auto-title-icon" type="button" data-ba-jira-tab="br" aria-pressed="false" aria-label="Business Requirements" title="Business Requirements">${baHeaderIcon('br')}</button>
+            <button class="ba-auto-title-icon" type="button" data-ba-jira-tab="epic" aria-pressed="false" aria-label="Epics" title="Epics">${baHeaderIcon('epic')}</button>
+            <button class="ba-auto-title-icon" type="button" data-ba-jira-tab="feature" aria-pressed="false" aria-label="Features" title="Features">${baHeaderIcon('feature')}</button>
+            <button class="ba-auto-title-icon" type="button" data-ba-jira-tab="story" aria-pressed="false" aria-label="Stories" title="Stories">${baHeaderIcon('story')}</button>
+            <button class="ba-auto-title-icon" type="button" data-ba-jira-tab="task" aria-pressed="false" aria-label="Tasks" title="Tasks">${baHeaderIcon('task')}</button>
+            <button class="ba-auto-title-icon" type="button" data-ba-jira-tab="subtask" aria-pressed="false" aria-label="Subtasks" title="Subtasks">${baHeaderIcon('subtask')}</button>
+          </span>
+          </div>
           <ul id="baAutoJiraBlockers" aria-label="Jira preview blockers" hidden></ul>
           <div id="baAutoJiraItems"></div>
         </div>
       </details>
     </div>
-    <details id="baAutoHistory" class="ba-auto-artifact" hidden><summary><strong>Completed requirements</strong></summary><div id="baAutoHistoryContent" class="ba-auto-body"></div></details>
+    <details id="baAutoHistory" class="ba-auto-artifact" hidden><summary><strong>Completed requirements</strong><span id="baAutoHistoryBadge" class="ba-auto-badge">Draft</span></summary><div id="baAutoHistoryContent" class="ba-auto-body"></div></details>
     <div class="ba-auto-actions">
       <p id="baAutoStatus" role="status" aria-live="polite"></p>
       <div class="stack">

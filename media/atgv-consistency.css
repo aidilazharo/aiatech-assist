@@ -1,0 +1,211 @@
+/* ATGV unified interface layer (v0.0.67).
+   Authored separately from the generated media/atgv-ui-theme.css.
+   Loaded last so all SDLC role workspaces inherit one accessible visual
+   language. This stylesheet changes presentation, not workflow permissions. */
+:root{
+  --atgv-consistency-radius-sm:6px;
+  --atgv-consistency-radius:9px;
+  --atgv-consistency-radius-lg:12px;
+  --atgv-consistency-control-height:36px;
+  --atgv-consistency-section-gap:12px;
+  --atgv-consistency-surface:var(--vscode-editorWidget-background,var(--vscode-sideBar-background,#202329));
+  --atgv-consistency-border:var(--vscode-panel-border,#414957);
+  --atgv-consistency-muted:var(--vscode-descriptionForeground,#a5afbb);
+  --atgv-consistency-ready:var(--vscode-testing-iconPassed,#7bd99e);
+  --atgv-consistency-warning:var(--vscode-editorWarning-foreground,#e7ad46);
+  --atgv-consistency-danger:#ff3647;
+  --atgv-consistency-focus:var(--vscode-focusBorder,#66aaff);
+}
+
+/* Consistent typography and spacing across Overview, Settings and every role.
+   Respect native VS Code font and text contrast in both light and dark themes. */
+:where(#landingView,#settingsView,#projectView,#workView,#discoveryView,
+ #planningView,#documentsView,#knowledgeView,#operationsView,#flowView,
+ #myWorkView,#libraryView,#gateView) :is(h1,h2,h3){
+  letter-spacing:0;overflow-wrap:anywhere;
+}
+:where(#landingView,#settingsView,#projectView,#workView,#discoveryView,
+ #planningView,#documentsView,#knowledgeView,#operationsView,#flowView,
+ #myWorkView,#libraryView) :is(.section-title,.atgv-panel-header,
+ .ba-my-work-head,.gate-local-header){
+  display:flex;align-items:center;justify-content:space-between;
+  gap:12px;min-width:0;flex-wrap:wrap;
+}
+:where(#settingsView,#projectView,#workView,#discoveryView,#planningView,
+ #documentsView,#knowledgeView,#operationsView,#flowView,#landingView,
+ #myWorkView) :is(.ext-settings-accordion,.ba-auto-artifact,
+ .project-settings-panel,.atgv-workflow-card,.section-card,.modal-card){
+  border-radius:var(--atgv-consistency-radius);
+}
+
+/* Shared control language, without forcing icon-only/circular controls to
+   become oversized text buttons. */
+:where(#landingView,#settingsView,#projectView,#workView,#discoveryView,
+ #planningView,#documentsView,#knowledgeView,#operationsView,#flowView,
+ #myWorkView,#libraryView,#gateView) :is(
+ input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+ select,textarea){
+  border-radius:var(--atgv-consistency-radius-sm);
+  min-width:0;box-sizing:border-box;
+}
+:where(#settingsView,#projectView,#workView,#discoveryView,#planningView,
+ #documentsView,#knowledgeView,#operationsView,#flowView,#gateView)
+ :is(.stack.actions,.section-title,.atgv-startup-footer,.atgv-actions,
+ .form-actions,.atgv-section-table-toolbar) > button:not(.atgv-icon-only):not(.ba-auto-title-icon){
+  min-height:var(--atgv-consistency-control-height);
+  border-radius:var(--atgv-consistency-radius-sm);
+  font-weight:600;
+  white-space:normal;
+}
+:where(button,input,select,textarea,summary,[role="tab"],[role="button"]):focus-visible{
+  outline:2px solid var(--atgv-consistency-focus);
+  outline-offset:2px;
+}
+:where(button,select,input,textarea):disabled{cursor:not-allowed}
+
+/* Project selection: Previous stays at the far-left edge; the log/Skip
+   controls stay right-aligned. Hide Skip once Jira AND Confluence are verified,
+   regardless of GitHub access. */
+#gateFinder .gate-search-footer{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  justify-content:space-between;min-width:0;
+}
+#gateFinder .gate-search-footer #gateSearchPrevious{order:0;margin:0!important}
+#gateFinder .gate-search-footer .atgv-footer-spacer{order:1;flex:1 1 12px;min-width:8px}
+#gateFinder .gate-search-footer #gateUnifiedLog{order:2;margin:0!important;flex:0 0 auto}
+#gateFinder .gate-search-footer #gateSkip{order:3;margin:0!important;flex:0 0 auto}
+#gateFinder #gateSkip[hidden]{display:none!important}
+#gateFinder .gate-project-card{border-radius:var(--atgv-consistency-radius)}
+#gateFinder .gate-search-bar input{min-height:var(--atgv-consistency-control-height)}
+
+/* DataTables display controls are INSIDE the expanded panel, top-right.
+   Summary rows remain calm: title left, status badge right. */
+#discoveryView #baAutoJira > summary{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:12px;min-height:48px;
+}
+#discoveryView .atgv-section-table-toolbar{
+  display:flex;justify-content:flex-end;align-items:center;
+  gap:10px 12px;flex-wrap:wrap;min-width:0;
+  padding:2px 0 11px;margin-bottom:12px;
+  border-bottom:1px solid var(--atgv-consistency-border);
+}
+#discoveryView .atgv-section-table-toolbar .ba-auto-tabs{
+  display:inline-flex;align-items:center;gap:5px;
+  flex-wrap:wrap;margin:0!important;
+}
+#discoveryView .atgv-section-table-toolbar #baAutoJiraTabs{
+  padding-left:12px;border-left:1px solid var(--atgv-consistency-border);
+}
+#discoveryView .atgv-section-table-toolbar .ba-auto-title-icon{
+  width:36px;min-width:36px;height:36px;min-height:36px;
+  border-radius:var(--atgv-consistency-radius-sm);
+  border:1px solid transparent;
+}
+#discoveryView .atgv-section-table-toolbar .ba-auto-title-icon > svg{
+  display:block;width:18px;height:18px;min-width:18px;min-height:18px;
+  pointer-events:none;
+}
+#discoveryView .atgv-section-table-toolbar .ba-auto-title-icon[aria-pressed="true"]{
+  border-color:var(--atgv-consistency-focus);
+  background:var(--vscode-list-activeSelectionBackground,#1d3853);
+  color:var(--vscode-list-activeSelectionForeground,#f4f6f9);
+}
+:where(#discoveryView,#workView,#planningView,#operationsView,#documentsView)
+ .atgv-datatable-controls{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:12px;flex-wrap:wrap;margin:0 0 12px;
+}
+:where(#discoveryView,#workView,#planningView,#operationsView,#documentsView)
+ .atgv-datatable-search{min-height:var(--atgv-consistency-control-height);
+ border-radius:var(--atgv-consistency-radius-sm)}
+:where(#discoveryView,#workView,#planningView,#operationsView,#documentsView)
+ .atgv-datatable-table{
+  width:100%;border-collapse:collapse;
+}
+:where(#discoveryView,#workView,#planningView,#operationsView,#documentsView)
+ .atgv-datatable-table th{
+  font-weight:700;text-align:left;
+}
+:where(#discoveryView,#workView,#planningView,#operationsView,#documentsView)
+ .atgv-datatable-table :is(th,td){
+  padding:10px 12px;vertical-align:middle;
+}
+:where(#discoveryView,#workView,#planningView,#operationsView,#documentsView)
+ .atgv-datatable-pager{
+  display:flex;align-items:center;justify-content:flex-end;
+  gap:10px;flex-wrap:wrap;margin-top:12px;
+}
+
+/* One shape, border and position for every Ready badge. Previously the
+   Business Documents Ready badge intentionally lost its outline; override
+   that older declaration so all five BR panels match. */
+#discoveryView .ba-auto-badge{
+  display:inline-flex;align-items:center;justify-content:center;
+  box-sizing:border-box;flex:0 0 auto;margin-left:auto;
+  min-height:30px;min-width:68px;
+  padding:4px 11px;
+  border:1px solid currentColor;
+  border-radius:var(--atgv-consistency-radius-sm);
+  font-size:12px;line-height:1.2;font-weight:700;
+  background:transparent;
+}
+#discoveryView .ba-auto-badge[data-state="ready"],
+#discoveryView #baAutoSourceBadge[data-state="ready"]{
+  display:inline-flex!important;
+  align-items:center!important;justify-content:center!important;
+  min-height:30px!important;min-width:68px!important;
+  padding:4px 11px!important;
+  border:1px solid var(--atgv-consistency-ready)!important;
+  border-radius:var(--atgv-consistency-radius-sm)!important;
+  color:var(--atgv-consistency-ready)!important;
+  background:transparent!important;
+  font-size:12px!important;line-height:1.2!important;font-weight:700!important;
+}
+#discoveryView .ba-auto-badge[data-state="blocked"]{
+  color:var(--atgv-consistency-danger)!important;
+  border-color:var(--atgv-consistency-danger)!important;
+}
+.atgv-startup-stack.is-ready .atgv-stack-ready,
+.atgv-permission-row[data-state="ready"] .atgv-permission-status{
+  display:inline-flex;align-items:center;justify-content:center;
+  padding:3px 10px;min-height:28px;
+  border:1px solid var(--atgv-consistency-ready);
+  border-radius:var(--atgv-consistency-radius-sm);
+  color:var(--atgv-consistency-ready);
+  background:transparent;font-size:12px;font-weight:700;
+}
+:where(.atgv-ready-badge,.atgv-status-ready,[data-atgv-status="ready"]){
+  display:inline-flex;align-items:center;justify-content:center;
+  min-height:28px;padding:4px 10px;
+  border:1px solid var(--atgv-consistency-ready);
+  border-radius:var(--atgv-consistency-radius-sm);
+  background:transparent;color:var(--atgv-consistency-ready);
+  font-size:12px;line-height:1.25;font-weight:700;
+}
+
+/* The permissions warning stays in its own red row immediately beneath the
+   main app header. Other notices cannot shift or replace that row. */
+body:not(.gate-mode) #roleCredentialBanner.atgv-role-credential-banner{
+  border:1px solid var(--atgv-consistency-danger)!important;
+  border-bottom:3px solid var(--atgv-consistency-danger)!important;
+  order:1;position:relative;
+}
+body:not(.gate-mode) #topNotification.top-notification{order:2}
+body:not(.gate-mode) #appHeader.app-header{order:0}
+
+/* Narrow webviews still keep title, badge and table toolbar readable. */
+@media(max-width:740px){
+ #gateFinder .gate-search-footer{gap:8px}
+ #gateFinder .gate-search-footer .atgv-footer-spacer{flex-basis:100%;height:0}
+ #gateFinder .gate-search-footer #gateUnifiedLog{margin-left:auto!important}
+ #discoveryView .atgv-section-table-toolbar{justify-content:flex-start}
+ #discoveryView .atgv-section-table-toolbar #baAutoJiraTabs{
+  padding-left:0;border-left:0;
+ }
+ :where(#discoveryView,#workView,#planningView,#operationsView,#documentsView)
+  .atgv-datatable-table :is(th,td){padding:8px}
+}
+@media(prefers-reduced-motion:reduce){
+ :where(button,input,summary,[role="tab"]){scroll-behavior:auto}
+}
