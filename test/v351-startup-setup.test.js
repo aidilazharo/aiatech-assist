@@ -60,15 +60,16 @@ test('start page and branded extension-update modal are separate surfaces',()=>{
  assert.match(css,/\.atgv-upgrade-modal/);
  assert.equal((html.match(/id="extensionUpgradeModal"/g)||[]).length,1);
 });
-test('host checks Jira, Confluence, GitHub and Library before saving and verifies the saved proof before proceeding',()=>{
+test('host checks providers while allowing manual entry with unverified credentials',()=>{
  const host=read('src/lib/runtime/extension-runtime.js');
  assert.match(host,/await testJiraConnection\(config,atlassian\)/);
  assert.match(host,/confluenceApi\+'\?limit=1'/);
  assert.match(host,/await sdlcCatalog\.remoteInfo\(libraryConf,github\)/);
  assert.match(host,/atgvAssist\.startupSetup\.completed/);
  assert.match(host,/storedStartupVerification\(\)/);
- assert.match(host,/verifiedFields=!!verified&&verified\.signature===sha/);
- assert.match(host,/if\(!verifiedFields\)throw Error/);
+ assert.match(host,/verifiedFields=!!verified/);
+ assert.match(host,/startupSessionProceedApproved=true/);
+ assert.doesNotMatch(host,/if\(!verifiedFields\)throw Error/);
  assert.match(host,/offerBrandedExtensionUpgrade\(release\)/);
  assert.doesNotMatch(host,/showInformationMessage\(`ATGV v\$\{release\.version\} is available \(installed:/);
 });

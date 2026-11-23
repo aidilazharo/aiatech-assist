@@ -4,7 +4,7 @@ const fs=require('node:fs/promises');
 const fsSync=require('node:fs');
 const path=require('node:path');
 const {markdownToStorage,validateUrl,sha,textFromAdf}=require('../../utils');
-const {requestJson,baseAtlassian,getConfluenceSpace,listConfluence,getConfluencePage,writeConfluence,listJira,githubRepoInfo,listGithub,listGithubRepositories,listGithubBranches,discoverJiraProjects,discoverConfluenceSpaces,testJiraConnection,testGithubConnection}=require('../../clients');
+const {requestJson,baseAtlassian,baseConfluence,getConfluenceSpace,listConfluence,getConfluencePage,writeConfluence,listJira,githubRepoInfo,listGithub,listGithubRepositories,listGithubBranches,discoverJiraProjects,discoverConfluenceSpaces,testJiraConnection,testGithubConnection}=require('../../clients');
 const {KnowledgeStore}=require('../../knowledge');
 const jiraTemplateKnowledge=require('../../jira-template-knowledge');
 const baGeneralization=require('../../ba-generalization');
@@ -30,7 +30,8 @@ const handoffProgress=require('../../handoff-progress');
 const {loadDocument,saveDocument,saveDocumentMarkdown,taskFor,documentLocation}=require('../../document-editor');
 const {getRoleSettings,saveRoleSettings,createProjectRole,updateProjectRole,deleteProjectRole}=require('../../sdlc-catalog');
 const roleSkillIdentifier=require('../../role-skill-identifier');
-const {normalizeMapping,validateProjectConnection}=require('../../project-connection-validation');
+const {normalizeMapping,validateProjectConnection,canCreatePage}=require('../../project-connection-validation');
+const roleConnectionPolicy=require('../../role-connection-policy');
 const {projectHealth}=require('../../project-health');
 const {readTimeline,saveRoleTimeline,saveBulkRoleTimelines,readDiagram,saveDiagramModel}=require('../../planning');
 const discovery=require('../../ba-discovery');
@@ -1769,6 +1770,58 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
  return {success:true,checks,librarySha:library?.sha?.slice(0,12)||'',
   message:connectionMessage+' Project repository: '+data.projectRepoUrl+'.'};
 }
+
+/**
+ * Advisory capability probe. The UI must remain accessible when this fails;
+ * remote operations independently enforce credentials and permissions.
+ * Never transmit tokens or provider error bodies to the webview.
+ */
+async function roleConnectionAccess(roleId){
+ const project=openingFlow.phase==='open'?activeProject:null;
+ const observed={};
+ if(!project)return roleConnectionPolicy.evaluate(roleId,observed,'');
+ const config=effectiveConfig(project);
+ const token=await getAtlassianToken(project).catch(()=>undefined);
+ if(token&&config.get('jira.projectKey')){
+  try{
+   const projectKey=encodeURIComponent(config.get('jira.projectKey'));
+   const access=await requestJson(baseAtlassian(config)+'/rest/api/3/mypermissions?projectKey='+projectKey+'&permissions=BROWSE_PROJECTS%2CCREATE_ISSUES',
+    {token,basicEmail:config.get('jira.email'),timeoutMs:9000});
+   observed.jiraRead=access?.permissions?.BROWSE_PROJECTS?.havePermission===true;
+   observed.jiraWrite=observed.jiraRead&&access?.permissions?.CREATE_ISSUES?.havePermission===true;
+  }catch(error){report('Role access Jira check deferred: '+startupConnectionFailure(error));}
+ }
+ if(token&&config.get('confluence.spaceKey')){
+  try{
+   const space=await getConfluenceSpace(config,token);
+   observed.confluenceRead=!!space?.id;
+   if(observed.confluenceRead){
+    const detail=await requestJson(baseConfluence(config)+'/api/v2/spaces/'+encodeURIComponent(space.id)+'?include-operations=true',
+     {token,basicEmail:config.get('jira.email'),timeoutMs:9000});
+    observed.confluenceWrite=canCreatePage(detail?.operations?.results);
+   }
+  }catch(error){report('Role access Confluence check deferred: '+startupConnectionFailure(error));}
+ }
+ const owner=String(config.get('github.owner')||''),repo=String(config.get('github.repo')||'');
+ if(owner&&repo){
+  try{
+   const gitToken=await getGithubToken(project);
+   // An unauthenticated public repository is not proof that the selected
+   // user/token has the required read or write permission.
+   if(gitToken){
+    const info=githubRepoInfo(config);
+    const meta=await requestJson(info.route,{token:gitToken,timeoutMs:9000,
+     headers:{Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'}});
+    if(String(meta?.full_name||'').toLowerCase()===(info.owner+'/'+info.repo).toLowerCase()){
+     observed.githubRead=meta.permissions?.pull===true;
+     observed.githubWrite=observed.githubRead&&meta.permissions?.push===true;
+    }
+   }
+  }catch(error){report('Role access GitHub check deferred: '+startupConnectionFailure(error));}
+ }
+ return roleConnectionPolicy.evaluate(roleId,observed,project.id);
+}
+
 async function dashboardState(){
   const projects=registry?await registry.list():[];
   const workspaceFolder=getWorkspace()?.uri.fsPath||null;
@@ -2251,8 +2304,17 @@ async function launchProject(msg){
   if(openingFlow.phase!=='selected'&&openingFlow.candidate)openingFlow.select(openingFlow.candidate);
   openingFlow.require('selected');openingOffline=false;
   await openingProgress('connection','Checking connections…');
-  await testOpeningProject();
-  await openingProgress('connectionsVerified','Project connections verified.');
+  try{
+   await testOpeningProject();
+   await openingProgress('connectionsVerified','Project connections verified.');
+  }catch(error){
+   // A connection failure restricts remote actions, never access to local ATGV.
+   openingOffline=true;
+   const warning='Connection checks could not be verified: '+startupConnectionFailure(error)+'. Configure access in Settings.';
+   await recordStartupDiagnostic({stage:'project-opening',projectId:openingFlow.candidate.id,status:'advisory-connections-unavailable',detail:startupConnectionFailure(error)});
+   openingFlow.tested([warning]);
+   await openingProgress('connectionsVerified','Opening local project; remote permissions need attention.');
+  }
   await openingProgress('files','Preparing workspace…');
   await initializeOpeningProject();
   await openingProgress('workspaceReady','Project workspace prepared.');
@@ -2262,6 +2324,27 @@ async function launchProject(msg){
 }
                                                                                  
                                                                                        
+
+async function launchUnconfiguredWorkspace(){
+ if(!registry||!getWorkspace()||vscode.workspace.isTrusted===false)
+  throw Error('Open a trusted VS Code workspace folder to use ATGV.');
+ const id='atgv-local-workspace';
+ let project;
+ try{project=await registry.read(id);}
+ catch(error){
+  if(error.code!=='ENOENT')throw error;
+  project=await registry.create(normalizeProjectInput({id,name:'ATGV Local Workspace',settings:{}}));
+ }
+ openingFlow.select(project);
+ openingOffline=true;
+ openingFlow.tested(['Local workspace opened without remote connection verification. Configure Jira, Confluence and GitHub in Settings.']);
+ await openingProgress('files','Preparing local ATGV workspace…');
+ await initializeOpeningProject();
+ await openingProgress('workspace','Opening ATGV interface…');
+ await openVerifiedProject();
+ await openingProgress('done','ATGV local workspace ready');
+}
+
 async function launchLocalOffline(){
   openingFlow.require('selected');
   if(!registry||!getWorkspace())throw new Error('Open a trusted workspace first.');
@@ -5818,6 +5901,20 @@ async function handleDashboardMessage(msg){
         catch(error){await dashboard?.webview.postMessage({type:'startupConnectionLogError',message:'Unable to export connection diagnostics: '+startupConnectionFailure(error)});}
         break;
       }
+      case 'checkRoleConnections':{
+        const requestedRole=String(msg.roleId||'business-analyst').slice(0,80);
+        const requestedProject=String(msg.projectId||'');
+        if(requestedProject&&requestedProject!==activeProject?.id)break;
+        // Check the currently selected/enabled role only; role IDs are
+        // validated against the project role catalog before probing.
+        if(activeProject&&openingFlow.phase==='open'){
+         const roles=await getRoleSettings(registry,activeProject.id);
+         if(!roles.roles.some(role=>role.id===requestedRole&&role.enabled!==false))break;
+        }
+        const access=await roleConnectionAccess(requestedRole);
+        await dashboard?.webview.postMessage({type:'roleConnectionAccess',access});
+        break;
+      }
       case 'startupTestConnections':{
         const started=Date.now();
         await recordStartupDiagnostic({stage:'connection-result',tool:'Jira, Confluence & GitHub',status:'started',detail:'Test & Save Connections requested.'});
@@ -5850,13 +5947,13 @@ async function handleDashboardMessage(msg){
         let verifiedFields=false;
         try{
          const verified=await storedStartupVerification();
-         verifiedFields=!!verified&&verified.signature===sha(JSON.stringify(startupSetup.validate(msg.settings)));
-         if(!verifiedFields)throw Error('Test and save Jira and Confluence connections with the current fields before proceeding. GitHub checks are optional.');
-         // The Start screen is manual: never issue automatic project selection.
+         verifiedFields=!!verified;
+         // Manual access is always available. This does not grant remote
+         // permissions or falsely record a successful connection check.
          if(msg.autoResume===true)throw Error('Automatic sign-in is disabled. Click Next on the Start screen.');
          await context.globalState.update('atgvAssist.startupSetup.completed',true);
          startupSessionProceedApproved=true;
-         startupSessionVerified=true;startupVerifiedSignature=verified.signature;
+         startupSessionVerified=!!verified;startupVerifiedSignature=verified?.signature||'';
          await dashboard?.webview.postMessage({type:'startupProceedResult',success:true});
          await refreshDashboard();
         }catch(error){
@@ -9216,6 +9313,16 @@ async function handleDashboardMessage(msg){
         if(openingLocked)throw new Error('Wait for the current step to complete.');
         openingGeneration++;openingFlow.reset();openingOffline=false;++activationEpoch;activeProject=undefined;store=undefined;tree?.refresh();
         await refreshDashboard();break;
+      }
+      case 'openingSkip':{
+        if(openingLocked)break;
+        try{await guardedOpeningStep(()=>launchUnconfiguredWorkspace());await refreshDashboard();}
+        catch(error){
+         report('Local ATGV opening: '+error.message);
+         await dashboard?.webview.postMessage({type:'openingError',message:error.message,canOffline:false});
+         await refreshDashboard();
+        }
+        break;
       }
       case 'openingAuto':{
         if(hasActiveProjectProcess(activeProject?.id))

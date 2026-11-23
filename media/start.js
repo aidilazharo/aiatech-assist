@@ -678,6 +678,7 @@ function renderGate(){
   $('gateRecovery').classList.toggle('hidden',!gateOfflineAvailable);
   $('gateOffline').disabled=gateBusy;
   $('gateSearchPrevious').disabled=gateBusy;
+  $('gateSkip').disabled=gateBusy||!workspaceFolderAvailable;
   renderGateResults();
 }
 function gateProjectRow(root,project,{recent=false}={}){
@@ -744,6 +745,12 @@ $('gateSearch').addEventListener('click',()=>{
 $('gateQuery').addEventListener('input',()=>{gateSearchId=null;spaces=[];gateSearched=false;$('gateSearchMessage').textContent='';renderGateResults();});
 $('gateQuery').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('gateSearch').click();}});
 $('gateManual').addEventListener('click',()=>openProject());
+$('gateSkip').addEventListener('click',()=>{
+ if(gateBusy||!workspaceFolderAvailable)return;
+ gateBusy=true;gateError='';gateOfflineAvailable=false;
+ gateOpeningPercent(5,'Preparing local ATGV interface…');
+ renderGate();send('openingSkip');
+});
 $('gateSearchPrevious').addEventListener('click',()=>{
  if(gateBusy)return;
  startupReturnToConnections=true;startupPage=1;
@@ -925,11 +932,13 @@ function updateExtensionSettingBadges(){
  const optional=(name,ok)=>{const badge=$(name+'State');if(!badge)return;const state=ok?'ready':'optional';badge.dataset.state=state;badge.textContent=ok?'Ready':'Optional';};
  const jira=extensionSettings.jira||extensionSettings.atlassian||{};
  const jiraReady=!!(jira.baseUrl&&jira.email&&settingsTokenState.jira);
- required('settingsJiraGroup',jiraReady);
+ const roleAccess=roleConnectionAccessState?.projectId===activeId&&roleConnectionAccessState?.roleId===selectedRole?roleConnectionAccessState.capabilities:null;
+ required('settingsJiraGroup',roleAccess?roleAccess.jiraRead&&roleAccess.jiraWrite:jiraReady);
  const space=projects.find(p=>p.id===activeId)?.settings?.confluence;
- required('settingsConfluenceGroup',jiraReady&&!!(space?.spaceKey||space?.spaceId));
+ required('settingsConfluenceGroup',roleAccess?roleAccess.confluenceRead&&roleAccess.confluenceWrite:jiraReady&&!!(space?.spaceKey||space?.spaceId));
  const repo=extensionSettings.github||{};
- optional('settingsGithubGroup',!!(repo.owner&&repo.repo));
+ const permissions=roleConnectionAccessState?.projectId===activeId&&roleConnectionAccessState?.roleId===selectedRole?roleConnectionAccessState.capabilities:null;
+ required('settingsGithubGroup',permissions?permissions.githubRead&&(!(['developer','software-developer'].includes(selectedRole))||permissions.githubWrite):!!(repo.owner&&repo.repo&&settingsTokenState.github));
  optional('settingsCatalogGroup',!!(settingsCatalogInstalled?.sha||settingsCatalogInstalled?.offline));
  const provider=read('aiProviderChoice');
  required('settingsAiGroup',provider!=='none'&&(settingsAiTested||provider==='auto'&&settingsModelReady));
@@ -941,6 +950,46 @@ function updateExtensionSettingBadges(){
  optional('settingsScheduleGroup',!!(activeId&&timelineData?.tasks?.length));
  // Project Settings has a dedicated page. Technology stack is shown on that page.
 }
+
+let roleConnectionAccessState=null,roleConnectionRequestedAt=0,roleConnectionRequestedKey='';
+function renderRoleCredentialBanner(){
+ const bar=$('roleCredentialBanner');
+ if(!workspaceOpened||!activeId||opening.phase!=='open'){bar.classList.add('hidden');return;}
+ const access=roleConnectionAccessState?.projectId===activeId&&roleConnectionAccessState?.roleId===selectedRole?
+  roleConnectionAccessState:null;
+ if(access?.ready){bar.classList.add('hidden');return;}
+ const developer=selectedRole==='developer'||selectedRole==='software-developer';
+ const missing=access?.missing||['Jira read/write','Confluence read/write',developer?'GitHub read/write':'GitHub read'];
+ const current=visibleRoles().find(role=>role.id===selectedRole);
+ const label=current?visibleRoleLabel(current):selectedRole.replace(/-/g,' ');
+ $('roleCredentialMessage').textContent=access?
+  label+': update permissions in Settings — '+missing.join(', ')+'.':
+  'Checking '+label+' connection permissions…';
+ bar.classList.remove('hidden');
+}
+function requestRoleConnectionAccess(force=false){
+ if(!workspaceOpened||!activeId||opening.phase!=='open')return;
+ const key=activeId+'|'+selectedRole;
+ const now=Date.now();
+ if(!force&&key===roleConnectionRequestedKey&&now-roleConnectionRequestedAt<60000)return;
+ roleConnectionRequestedKey=key;roleConnectionRequestedAt=now;
+ if(!roleConnectionAccessState||roleConnectionAccessState.projectId!==activeId||roleConnectionAccessState.roleId!==selectedRole)
+  roleConnectionAccessState=null;
+ renderRoleCredentialBanner();
+ send('checkRoleConnections',{projectId:activeId,roleId:selectedRole});
+}
+$('roleCredentialSettings').addEventListener('click',()=>navigate('settings'));
+$('roleCredentialRecheck').addEventListener('click',()=>requestRoleConnectionAccess(true));
+window.addEventListener('message',event=>{
+ const msg=event.data||{};
+ if(msg.type!=='roleConnectionAccess'||!msg.access)return;
+ if(msg.access.projectId!==activeId||msg.access.roleId!==selectedRole)return;
+ roleConnectionAccessState=msg.access;
+ renderRoleCredentialBanner();
+ updateExtensionSettingBadges();
+});
+setInterval(()=>{if(workspaceOpened)requestRoleConnectionAccess(true);},120000);
+
 function collapseExtensionSettings(){for(const details of document.querySelectorAll('#settingsView details.ext-settings-accordion'))details.open=false;}
 function collapseProjectSettings(){const panel=$('projectSettingsPanel');if(panel)panel.open=false;for(const details of document.querySelectorAll('#projectView details.ext-settings-accordion'))details.open=false;}
 function updateState(msg){
@@ -1039,6 +1088,8 @@ function updateState(msg){
   }
   else if(!workspaceOpened)document.body.classList.add('gate-mode');
   renderGate();
+  renderRoleCredentialBanner();
+  if(opening.phase==='open')requestRoleConnectionAccess();
   if(typeof renderWorkspaceBreadcrumbs==='function')renderWorkspaceBreadcrumbs();
 }
 let navigationRefreshRequestId=0;
@@ -1116,7 +1167,7 @@ function navigate(destination){
     setView(openWorkspace?(baWorkspace?'baOverview':'work'):'myWork');
     renderSidebarRole();renderRoleWork();
     if(baWorkspace&&openWorkspace){renderBAUncompleted();send('baOwnersRefresh');}
-    renderRoleTimeline();ensurePMJiraInventory(true);ensureBAJiraInventory(true);send('roleHandoffOwners');return;
+    renderRoleTimeline();ensurePMJiraInventory(true);ensureBAJiraInventory(true);send('roleHandoffOwners');requestRoleConnectionAccess();renderRoleCredentialBanner();return;
   }
   if(destination==='overview'){setView('landing');$('overviewGanttDetails').open=false;send('loadPlanning');send('myWorkRosterRefresh',{projectId:activeId,roleId:selectedRole});return;}
   if(destination==='settings'){$('settingsBack').textContent=workspaceOpened?'← Back to Workspace':'← Back to Projects';collapseExtensionSettings();setView('settings');updateExtensionSettingBadges();if(workspaceOpened)send('devRepositoryStatus');return;}
@@ -9054,13 +9105,13 @@ function renderStartupPage(){
  $('startupPrevious').classList.toggle('hidden',startupPage===0);
  $('startupUnifiedLog').classList.toggle('hidden',startupPage!==0);
  $('startupPrevious').disabled=startupPage===0||busy||!!startupInstallingModule;
- $('startupProceed').disabled=busy||!!startupInstallingModule||(startupPage===0?!startupScanComplete:!startupConnectionVerified);
+ $('startupProceed').disabled=busy||!!startupInstallingModule;
  $('startupProceed').textContent=startupPage===0&&!startupConnectionVerified?'Next →':'Next: Search Project →';
  $('startupProceedInfo').textContent=startupProceedMode?'Opening project search…':
   startupPage===0?(startupScanComplete?'Review available modules, then select Next.':'Checking computer prerequisites…'):
   startupConnectionCheckPending?'Testing saved connections…':
   startupConnectionHealthError&&startupConnectionVerified?'GitHub checks need attention (optional). Select Next to continue.':
-  startupConnectionVerified?'Connections verified. Select Next to search projects.':'Test & Save Connections to enable Next.';
+  startupConnectionVerified?'Connections verified. Select Next to search projects.':'Verify connections or select Next to continue with restricted remote actions.';
 }
 function showStartupStep(required){
  if(!required&&startupOpenStackId)closeStartupStackModal();
@@ -9324,11 +9375,10 @@ $('startupConnectionForm').addEventListener('submit',event=>{
 });
 $('startupProceed').addEventListener('click',()=>{
  if(startupVerifying||startupInstallingModule||startupProceedMode)return;
- if(startupPage===0){
-  if(!startupScanComplete)return;
-  if(!startupConnectionVerified){startupPage=1;renderStartupPage();$('startupJiraUrl').focus();return;}
+ if(startupPage===0&&!startupConnectionVerified){
+  startupPage=1;renderStartupPage();$('startupJiraUrl').focus();return;
  }
- if(startupConnectionVerified)requestStartupProceed();
+ requestStartupProceed();
 });
 window.addEventListener('message',event=>{
  const message=event.data||{};
@@ -9394,7 +9444,7 @@ window.addEventListener('message',event=>{
   else resetStartupConnectionChecks();
   startupConnectionHealthError=!message.success||!!message.checks?.some(check=>check.state==='offline'||check.state==='error');
   if(startupConnectionHealthError){
-   $('startupConnectionMessage').textContent=message.success?'GitHub checks need attention (optional). Select Next to continue.':'Some required connections need attention. Open Connection Logs for details.';
+   $('startupConnectionMessage').textContent=message.success?'Some GitHub checks need attention. Select Next to continue.':'Some connections need attention. You can select Next and configure them later in Settings.';
    $('startupConnectionMessage').className=message.success?'test-status muted':'test-status error';
   }else{$('startupConnectionMessage').textContent=message.message||'Connections verified.';$('startupConnectionMessage').className='test-status success';}
   renderStartupPage();

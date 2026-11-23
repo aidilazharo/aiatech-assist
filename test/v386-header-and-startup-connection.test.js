@@ -58,7 +58,7 @@ test('successful Test & Save hides and disables action, changes restore it, and 
  page.invalidateStartupConnection();
  assert.equal(node('startupTestConnections').disabled,false);
  assert.equal(node('startupTestConnections').hiddenClasses.has('hidden'),false);
- assert.equal(node('startupProceed').disabled,true);
+ assert.equal(node('startupProceed').disabled,false,'manual Next remains available when checks have not passed');
  assert.match(node('startupConnectionMessage').textContent,/Test and save again/);
 
  page.setVerifying(true);

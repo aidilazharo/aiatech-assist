@@ -71,7 +71,7 @@ test('Editing invalidates an in-flight test, keeps edits through stale state and
  const staleRequest=sent.at(-1).requestId;
  page.toggleStartupConnectionEdit();
  assert.equal(page.isVerified(),false);
- assert.equal(node('startupProceed').disabled,true);
+ assert.equal(node('startupProceed').disabled,false,'manual Next must work with unverified credentials');
  assert.equal(node('startupTestConnections').disabled,false);
  for(const id of ['startupJiraUrl','startupEmail','startupAtlassianToken','startupGithubUrl','startupProjectRepository','startupGithubToken'])assert.equal(node(id).disabled,false,id);
  node('startupJiraUrl').value='https://other.atlassian.net';node('startupAtlassianToken').value='temporary-atl';
