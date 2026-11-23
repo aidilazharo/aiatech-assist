@@ -177,6 +177,8 @@ async function ensureWorkspaceLibrary(workspace) {
         if (e.code !== 'EEXIST')
             throw e;
     }
+    // Shared local SQLite state stays separate from the Git Library checkout.
+    require('./workspace-memory').memoryDirectory(workspace);
     return base;
 }
 function stackMarkdown(stack) {

@@ -58,9 +58,9 @@ async function safeFile(file){
  if(stat&&(!stat.isFile()||stat.isSymbolicLink()||stat.size>MAX_FILE))throw Error('Unsafe workflow journal file.');
 }
 class DurableWorkflowEngine{
- constructor({root,now=()=>new Date().toISOString(),preferSqlite=true}={}){
+ constructor({root,now=()=>new Date().toISOString(),preferSqlite=true,migrateFrom=null}={}){
   if(!root||typeof root!=='string')throw Error('Workflow journal needs a storage root.');
-  this.root=path.resolve(root);this.now=now;this.preferSqlite=preferSqlite;
+  this.root=path.resolve(root);this.now=now;this.preferSqlite=preferSqlite;this.migrateFrom=migrateFrom?path.resolve(migrateFrom):null;
   this.db=null;this.mode='uninitialized';this.pending=Promise.resolve();this.initialized=null;
   this.controllers=new Map();
  }
@@ -76,6 +76,12 @@ class DurableWorkflowEngine{
    if(DatabaseSync){
     const file=path.join(this.root,'atgv-workflow-jobs.sqlite');
     await safeFile(file);
+    if(this.migrateFrom&&!await fs.stat(file).then(()=>true).catch(e=>e.code==='ENOENT'?false:Promise.reject(e))){
+      const from=path.join(this.migrateFrom,'atgv-workflow-jobs.sqlite');
+      await safeFile(from);
+      if(await fs.stat(from).then(()=>true).catch(e=>e.code==='ENOENT'?false:Promise.reject(e)))
+        require('./workspace-memory').sqliteSnapshot(from,file,DatabaseSync);
+    }
     let db;
     try{
      db=new DatabaseSync(file);
