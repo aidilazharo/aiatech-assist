@@ -19,6 +19,7 @@
  get('baAutoFeedback').append(get('baInlineStatus'),get('brDeletionProgress'),get('baMilestoneError'));
 
  let state=null,requestedProject='',artifactProject='',jiraView='list',jiraTab='all',tableKey='',brKey='',kind='iso',sourceDigest='',artifactContext=null,request=0;
+ let aiResolve={running:false,message:'',stopping:false};
  const collapsed=new Set();
  const input=get('baAutoArtifactText'),quillMount=get('baAutoQuillEditor');
  let artifactQuill=null,quillKey='',quillHadFinalLine=false;
@@ -170,6 +171,16 @@
   syncDocumentActions();
  }
 
+ function renderAttentionActions(findings){
+  const bar=get('baAutoRequirementsToolbar');
+  const action=get('baAutoResolveAttention'),stop=get('baAutoResolveStop');
+  const eligible=findings.filter(row=>requirements().some(br=>br.id===row.id&&br.status==='draft'&&!br.approvedContent));
+  bar.hidden=!findings.length&&!aiResolve.running&&!aiResolve.message;
+  action.disabled=!eligible.length||aiResolve.running||busy()||dirty()||!!baBusyTask||discoveryImportBusy||!baCanEdit('ba-discovery');
+  action.title=eligible.length?'Repair '+eligible.length+' editable, source-backed draft'+(eligible.length===1?'':'s')+' with AI, then rerun quality validation. Jira stays unchanged.':'No eligible editable draft findings; approved revisions and unsupported decisions require human review.';
+  stop.hidden=!aiResolve.running;stop.disabled=aiResolve.stopping;
+  get('baAutoResolveStatus').textContent=aiResolve.message||(findings.length?findings.length+' requirement'+(findings.length===1?'':'s')+' need a source-backed correction.':'');
+ }
  function renderRequirements(){
   const brs=requirements();
   const body=get('baAutoBRList');
@@ -178,6 +189,7 @@
   const byId=new Map(findings.map(row=>[row.id,row]));
   const impact=(brState?.impact||[]).filter(row=>activeIds.has(row.id));
   get('baAutoBRCount').textContent=brs.length?brs.length+' individual BR'+(brs.length===1?'':'s')+(findings.length?' · '+findings.length+' need attention':''):'';
+  renderAttentionActions(findings);
   const key=JSON.stringify([brState?.revision,busy(),findings,impact,brs.map(br=>baCanEdit('ba-br-'+br.id))]);
   if(brKey===key)return;
   brKey=key;
@@ -398,7 +410,7 @@
   if(!active()||!activeId||!brState)return;
   if(!source()&&sourceDigest)state=null;
   if(requestedProject!==activeId){
-   requestedProject=activeId;state=null;collapsed.clear();brKey='';tableKey='';
+   requestedProject=activeId;state=null;collapsed.clear();brKey='';tableKey='';aiResolve={running:false,message:'',stopping:false};
    invoke('baPreparationState');
   }
   const baNew=get('baNewRequirement');
@@ -509,6 +521,20 @@
   get('baAutoArtifactStatus').textContent='Saving document…';
   invoke('baSaveArtifact',{kind,digest:sourceDigest,requestId:++request,revision:artifactContext.revision,text});
  });
+ get('baAutoResolveAttention').addEventListener('click',()=>{
+  if(get('baAutoResolveAttention').disabled)return;
+  aiResolve={running:true,message:'AI is reviewing the exact quality findings and verified source evidence…',stopping:false};
+  get('baAutoRequirements').open=true;
+  render();
+  invoke('baAutoResolveAttention',{revision:brState.revision});
+ });
+ get('baAutoResolveStop').addEventListener('click',()=>{
+  if(!aiResolve.running||aiResolve.stopping)return;
+  aiResolve.stopping=true;
+  aiResolve.message='Stopping AI repair without publishing to Jira…';
+  invoke('baStopAttentionResolve');
+  render();
+ });
  get('baAutoRefresh').addEventListener('click',()=>invoke('baRefreshArtifacts'));
  get('baAutoStop').addEventListener('click',()=>invoke('baStopPreparation'));
  get('baAutoPublish').addEventListener('click',()=>{
@@ -522,6 +548,16 @@
  });
  window.addEventListener('message',({data:m})=>{
   if(!m)return;
+  if(m.projectId===activeId&&m.type==='baAutoResolveProgress'){
+   aiResolve.running=true;aiResolve.stopping=false;
+   aiResolve.message=String(m.message||'AI is repairing source-backed quality findings…');
+   render();return;
+  }
+  if(m.projectId===activeId&&m.type==='baAutoResolveResult'){
+   aiResolve.running=false;aiResolve.stopping=false;
+   aiResolve.message=String(m.message||'AI repair finished. Review the updated quality findings.');
+   render();return;
+  }
   if(m.type==='baPreparation'&&m.state?.projectId===activeId){
    const previous=state?.phase;
    state=m.state;
