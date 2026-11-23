@@ -18,7 +18,7 @@ test('ATGV: Start immediately shows the prerequisites instead of an empty brande
  assert.match(show,/\$\('startupSetup'\)\.classList\.remove\('hidden'\)/);
  assert.match(show,/if\(startupPage===0\)requestStartupReadiness\(\)/);
  assert.match(js,/let startupWizardCompletedThisSession=false/);
- assert.match(js,/const required=!startupWizardCompletedThisSession&&!openingInProgress/);
+ assert.match(js,/const required=\(typeof startupWizardCompletedThisSession==='undefined'\|\|!startupWizardCompletedThisSession\)&&!openingInProgress/);
  assert.match(js,/startupWizardCompletedThisSession=true/);
 });
 test('project selection previous is left aligned and Skip is hidden if Jira and Confluence both passed',()=>{
