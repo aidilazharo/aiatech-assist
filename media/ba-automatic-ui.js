@@ -12,7 +12,7 @@
  const primary=get('baAutoPrimaryAction'),overflow=get('baAutoOverflowMenu');
  const sourcePanel=root.querySelector('.source-documents-panel');
  const skill=get('workSkill');
- // Source upload must remain usable even while all five result panels are hidden.
+ // The five workflow panels stay visible and collapsed until opened by the user.
  get('baAutoSourceEntry').append(sourcePanel);
  get('baAutoDiscoveryForm').append(get('discoveryForm'));
  get('baAutoHistoryContent').append(get('baStartPanel'));
@@ -36,10 +36,12 @@
  const requirements=()=>brState?.brs?.filter(br=>!br.archivedFromRestart&&!['retired','retire-proposed'].includes(br.status))||[];
  const source=()=>brState?.sourceDocuments?.[0];
 
- function badge(id,isReady){
+ const statusLabels={'not-started':'Not started','in-progress':'In progress',
+   ready:'Ready','needs-attention':'Needs attention',completed:'Completed'};
+ function badge(id,status){
   const node=get(id);
-  node.dataset.state=isReady?'ready':'draft';
-  node.textContent=isReady?'Ready':'Draft';
+  const next=statusLabels[status]?status:'not-started';
+  node.dataset.state=next;node.textContent=statusLabels[next];
  }
 
  function placeSkill(){
@@ -265,12 +267,12 @@
  }
 
 
- // Hide each of the five result sections until the corresponding content exists.
- // Keep task forms outside these result sections while work is incomplete.
- function setReadyPanel(id,isReady){
-  const panel=get(id),wasHidden=panel.hidden;
-  panel.hidden=!isReady;
-  if(!isReady||wasHidden)panel.open=false;
+ // Keep all five panels visible and initially collapsed. Do not forcibly
+ // collapse a panel a user has explicitly expanded during a refresh.
+ function setReadyPanel(id,status){
+  const panel=get(id);
+  panel.hidden=false;panel.dataset.status=status;
+  if(!panel.dataset.initialized){panel.open=false;panel.dataset.initialized='true';}
  }
  function renderReadyPanels(phase){
   const sourceReady=!!source()?.digest;
@@ -280,19 +282,28 @@
   const completedReady=phase==='published'||(brState?.brs||[]).some(br=>
    br.archivedFromRestart===true||['approved','published','completed'].includes(String(br.status||'').toLowerCase()))||
    Object.values(brState?.synced||{}).some(link=>!!link?.key);
-  const uploadTarget=sourceReady?get('baAutoOriginalFiles'):get('baAutoSourceEntry');
+  const uploadTarget=get('baAutoOriginalFiles');
   if(sourcePanel.parentElement!==uploadTarget)uploadTarget.append(sourcePanel);
-  get('baAutoSourceEntry').hidden=sourceReady;
-  const discoveryTarget=discoveryReady?get('baAutoDiscoveryForm'):get('baAutoDiscoveryEntry');
-  const discoveryForm=get('discoveryForm');
+  get('baAutoSourceEntry').hidden=true;
+  const discoveryTarget=get('baAutoDiscoveryForm'),discoveryForm=get('discoveryForm');
   if(discoveryForm.parentElement!==discoveryTarget)discoveryTarget.append(discoveryForm);
-  get('baAutoDiscoveryEntry').hidden=!sourceReady||discoveryReady;
-  setReadyPanel('baAutoSource',sourceReady);
-  setReadyPanel('baAutoDiscovery',discoveryReady);
-  setReadyPanel('baAutoRequirements',requirementsReady);
-  setReadyPanel('baAutoJira',jiraReady);
-  setReadyPanel('baAutoHistory',completedReady);
-  badge('baAutoHistoryBadge',completedReady);
+  get('baAutoDiscoveryEntry').hidden=true;
+  const phaseRunning=phase==='running'||phase==='publishing';
+  const excluded=!!brState?.baDraftQuality?.excluded?.length;
+  const allApproved=requirementsReady&&requirements().every(br=>['approved','published','completed'].includes(String(br.status||'').toLowerCase()));
+  const sourceStatus=!sourceReady?'not-started':artifactDirty()||phase==='running'&&!brState.mappingCompleted?'in-progress':brState.mappingCompleted?'ready':'in-progress';
+  const discoveryStatus=!sourceReady?'not-started':discoveryDirty?'in-progress':discoveryReady?'ready':'in-progress';
+  const requirementsStatus=!sourceReady||!discoveryReady?'not-started':excluded?'needs-attention':!requirementsReady?(phaseRunning?'in-progress':'not-started'):allApproved?'completed':'in-progress';
+  const jiraStatus=state?.preview?.conflicts?.length?'needs-attention':phase==='published'?'completed':
+   phaseRunning?'in-progress':phase==='ready'&&!dirty()?'ready':jiraReady?'in-progress':'not-started';
+  const historyStatus=completedReady?'completed':'not-started';
+  for(const [id,status] of [
+   ['baAutoSource',sourceStatus],['baAutoDiscovery',discoveryStatus],
+   ['baAutoRequirements',requirementsStatus],['baAutoJira',jiraStatus],
+   ['baAutoHistory',historyStatus]]){
+   setReadyPanel(id,status);
+   badge(id+'Badge',status);
+  }
  }
 
  function render(){
@@ -334,19 +345,11 @@
    if(!complete&&((busy()&&index===current)||(phase==='ready'&&index===3)))step.setAttribute('aria-current','step');
    else step.removeAttribute('aria-current');
   }
-  badge('baAutoSourceBadge',!!brState.mappingCompleted&&!artifactDirty()&&phase!=='running'&&(current>0||ready));
-  badge('baAutoDiscoveryBadge',!!brState.discoveryRevision&&!discoveryDirty&&(current>1||ready));
-  badge('baAutoRequirementsBadge',!!requirements().length&&!brState.baDraftQuality?.excluded?.length&&!brEditorDirty&&phase!=='running'&&(current>1||ready));
-  badge('baAutoJiraBadge',ready&&!unsaved);
-  if(!busy()&&state?.preview?.conflicts?.length){
-   const jiraBadge=get('baAutoJiraBadge');
-   jiraBadge.dataset.state='blocked';
-   jiraBadge.textContent='Needs attention';
-  }
   const refresh=get('baAutoRefresh'),stop=get('baAutoStop'),publish=get('baAutoPublish');
   refresh.disabled=!source()||busy()||unsaved||!!baBusyTask||discoveryImportBusy;
   stop.classList.toggle('hidden',phase!=='running');
-  publish.textContent=phase==='publishing'?'Publishing…':state?.preview?.republish?'Republish to Jira':'Publish to Jira';
+  const publishLabel=phase==='publishing'?'Publishing…':state?.preview?.republish?'Republish to Jira':'Publish to Jira';
+  publish.title=publishLabel;publish.setAttribute('aria-label',publishLabel);
   publish.disabled=phase!=='ready'||unsaved||!!baBusyTask||state?.preview?.revision!==brState.revision;
   const reopen=state?.preview?.reopenRows?.length||0;
   const messages={idle:source()?'Preparing source…':'Upload a document to start.',running:'Preparing affected artifacts…',draft:'Draft. Refresh affected artifacts to continue.',
