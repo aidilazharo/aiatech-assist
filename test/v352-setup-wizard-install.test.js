@@ -12,20 +12,20 @@ const root=path.join(__dirname,'..');
 const read=file=>fs.readFileSync(path.join(root,file),'utf8');
 
 test('Start derives Confluence /wiki from the unified Atlassian site URL',()=>{
- const data=setup.validate({...setup.DEFAULTS,jiraUrl:'https://aidilazharo.atlassian.net'});
- assert.equal(data.jiraUrl,'https://aidilazharo.atlassian.net');
- assert.equal(data.confluenceUrl,'https://aidilazharo.atlassian.net/wiki');
+ const data=setup.validate({...setup.DEFAULTS,jiraUrl:'https://aiamalaysia.atlassian.net'});
+ assert.equal(data.jiraUrl,'https://aiamalaysia.atlassian.net');
+ assert.equal(data.confluenceUrl,'https://aiamalaysia.atlassian.net/wiki');
  assert.equal(data.githubUrl,'https://github.com/aiamalaysia');
  for(const bad of ['https://other.example.com/wiki','https://other.atlassian.net/notwiki','http://other.atlassian.net/wiki']){
   assert.throws(()=>setup.validate({...data,jiraUrl:bad}));
  }
 });
 test('Existing extension settings support separate trusted Atlassian Cloud domains without allowing arbitrary hosts',()=>{
- const saved=projects.normalizeExtensionSettings({jira:{baseUrl:'https://aidilazharo.atlassian.net'},confluence:{baseUrl:'https://aiamy-jira-azure.atlassian.net'}});
+ const saved=projects.normalizeExtensionSettings({jira:{baseUrl:'https://aiamalaysia.atlassian.net'},confluence:{baseUrl:'https://aiamy-jira-azure.atlassian.net'}});
  assert.equal(saved.confluence.baseUrl,'https://aiamy-jira-azure.atlassian.net/wiki');
  const effective=projects.projectConfig(null,saved);
  assert.equal(clients.baseConfluence(effective),'https://aiamy-jira-azure.atlassian.net/wiki');
- assert.throws(()=>projects.normalizeExtensionSettings({jira:{baseUrl:'https://aidilazharo.atlassian.net'},confluence:{baseUrl:'https://not-atlassian.example.com'}}),/trusted Atlassian Cloud/);
+ assert.throws(()=>projects.normalizeExtensionSettings({jira:{baseUrl:'https://aiamalaysia.atlassian.net'},confluence:{baseUrl:'https://not-atlassian.example.com'}}),/trusted Atlassian Cloud/);
 });
 test('Only allowlisted module IDs are used by host installers, no webview shell commands',()=>{
  assert.throws(()=>installer.plan('node && rm -rf /','win32'),/Unknown/);
