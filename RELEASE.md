@@ -1,16 +1,13 @@
-# ATGV AIATECH Assist v0.0.77
+# ATGV AIATECH Assist v0.0.78
 
-## SQLite connected synchronization
-- Reuses the private `.atgv/memory/project-<project-id>.sqlite` database as a local synchronization ledger for Jira, Confluence and GitHub.
-- Stores remote IDs, version/commit SHAs, content fingerprints and safe metadata; no tokens, remote issue descriptions or GitHub source files are stored in the new ledger.
-- Jira inventory and Knowledge refresh record numeric IDs, statuses and successful scan checkpoints.
-- Confluence read refresh records page IDs/versions, and approved document publication journals verified receipts and conflicts.
-- GitHub branch metadata records verified commit SHAs without pushing code.
-- Knowledge & RAG shows SQLite checkpoints, pending approved intents and unresolved conflicts, with a manual read-only refresh.
-- Offline and failed refreshes retain the last successful checkpoint; outbox metadata is audit-only and not automatically replayed.
-- Existing role ownership, encrypted credentials and approval-gated publication are unchanged.
+## SQLite synchronization (Jira · Confluence · GitHub)
+- Extends v0.0.77's project SQLite sync ledger and Knowledge & RAG status panel.
+- Records remote refresh failures as safe, non-secret checkpoint metadata without replacing the last successful read, record count or completeness state.
+- Restores the SQLite status panel while the project is offline rather than dropping cached synchronization information.
+- Ensures remote refresh messages mention GitHub branch metadata alongside Jira and Confluence.
+- Retains read-only remote polling, conflict-aware approved-intent tracking and all platform-specific publish/approval gates.
 
 ## Verification
-- Regression tests cover provider isolation, revision conflicts, bad origins, failure recovery and UI actions.
-- GitHub Actions checks npm tests, UI theme, Windows reset and VSIX packaging.
-- An audited VSIX size ceiling increase of under 1% accommodates the new synchronization ledger.
+- Regression checks for Jira, Confluence and GitHub sync metadata, stale revisions, failed checkpoints and offline display.
+- Existing automated npm tests, Windows checks, UI checks and signed VSIX package verification.
+- This release is a code reliability update; production provider permission/configuration tests remain a deployment requirement.

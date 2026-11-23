@@ -1,5 +1,5 @@
 'use strict';
-// Read-only Jira and Confluence refresh policy. Publishing/approvals are never implied.
+// Read-only Jira, Confluence and GitHub metadata refresh. Publishing/approvals are never implied.
 const INTERVAL_MS=5*60*1000;
 const MIN_RETRY_MS=60*1000;
 function configState(config){
@@ -21,12 +21,12 @@ function canRefresh({now=Date.now(),lastAttempt=0,busy=false,force=false,offline
  return force||now-lastAttempt>=MIN_RETRY_MS;
 }
 function formatStatus(status){
- if(!status?.projectId)return 'Open a project to fetch live Jira and Confluence data.';
+ if(!status?.projectId)return 'Open a project to check live Jira, Confluence and GitHub metadata.';
  const successes=Object.entries(status.results||{}).map(([name,n])=>name+': '+n+' fetched');
  const failures=Object.entries(status.errors||{}).map(([name,message])=>name+': unavailable ('+String(message).slice(0,120)+')');
- if(status.phase==='running')return 'Refreshing live Jira and Confluence data…';
- if(status.phase==='offline')return 'Offline mode: local cached data retained; Jira and Confluence were not contacted.';
- return (successes.length||failures.length?[...successes,...failures].join(' · '):'No connected Jira or Confluence source configured.')+
+ if(status.phase==='running')return 'Refreshing live Jira, Confluence and GitHub metadata…';
+ if(status.phase==='offline')return 'Offline mode: local cached data retained; remote providers were not contacted.';
+ return (successes.length||failures.length?[...successes,...failures].join(' · '):'No connected Jira, Confluence or GitHub source configured.')+
   (status.lastAttempt?' · Checked '+new Date(status.lastAttempt).toLocaleString():'');
 }
 module.exports={INTERVAL_MS,MIN_RETRY_MS,configState,jiraConfig,canRefresh,formatStatus};
