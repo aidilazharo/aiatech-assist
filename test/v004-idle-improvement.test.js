@@ -3,7 +3,7 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const {mkdtemp,readdir,rm}=require('node:fs/promises');
 const path=require('node:path'),os=require('node:os');
 const m=require('../src/idle-improvement');
-const repo={name:'aidilazharo/aiatech-assist',owner:'aidilazharo',repo:'aiatech-assist'};
+const repo={name:'aiamalaysia/my-fow-technology-app-techassists-dev-sdlc',owner:'aiamalaysia',repo:'aiatech-assist'};
 function state(){const data=new Map();return {get:(k,d)=>data.get(k)??d,update:async(k,v)=>{data.set(k,v);}};}
 function api({write=true,reported=false}={}){
  const calls=[],request=async(_repo,_token,method,suffix,body)=>{
@@ -12,7 +12,7 @@ function api({write=true,reported=false}={}){
   if(method==='GET'&&suffix.startsWith('/git/ref/'))return {status:200,body:{object:{sha:'a'.repeat(40)}}};
   if(method==='POST'&&suffix==='/git/refs')return {status:write?201:403,body:{}};
   if(method==='DELETE'&&suffix.startsWith('/git/refs/'))return {status:204,body:null};
-  if(method==='GET'&&suffix.startsWith('/issues?'))return {status:200,body:reported?[{number:45,title:'Error in ATGV',html_url:'https://github.com/aidilazharo/aiatech-assist/issues/45',body:'Known failure'}]:[]};
+  if(method==='GET'&&suffix.startsWith('/issues?'))return {status:200,body:reported?[{number:45,title:'Error in ATGV',html_url:'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc/issues/45',body:'Known failure'}]:[]};
   throw Error('Unexpected API call: '+method+' '+suffix);
  };return {request,calls};
 }
@@ -54,7 +54,7 @@ test('PAT read-only disables automatic processing and retains error evidence',as
   const layout=await m.ensureLayout(root);
   await m.writeLog(root,{target:'extension',category:'error',title:'Error in ATGV',observed:'New failure'});
   let changed=false;const manager={run:async()=>{changed=true},store:{add:async()=>{changed=true}}};
-  const args={workspace:root,manager,getRepository:async()=> 'https://github.com/aidilazharo/aiatech-assist',
+  const args={workspace:root,manager,getRepository:async()=> 'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc',
    getToken:async()=> 'dummy-secret-not-real',isIdle:async()=>true,globalState:s,zone:'Asia/Kuala_Lumpur',
    now:()=>new Date('2026-11-21T04:15:00Z'),request:mock.request};
   assert.equal((await m.runWindow(args)).status,'disabled-read-only');
@@ -68,7 +68,7 @@ test('already reported GitHub issue deletes only matching log',async()=>{
  try{
   const layout=await m.ensureLayout(root);await m.writeLog(root,{target:'extension',title:'Error in ATGV',observed:'Known failure'});
   let changed=false;const manager={run:async()=>{changed=true},store:{add:async()=>{changed=true}}};
-  const result=await m.runWindow({workspace:root,manager,getRepository:async()=> 'https://github.com/aidilazharo/aiatech-assist',
+  const result=await m.runWindow({workspace:root,manager,getRepository:async()=> 'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc',
    getToken:async()=> 'dummy-secret-not-real',isIdle:async()=>true,globalState:s,zone:'Asia/Kuala_Lumpur',
    now:()=>new Date('2026-11-21T04:15:00Z'),request:mock.request});
   assert.equal(result.duplicates,1);assert.equal(changed,false);assert.deepEqual(await readdir(layout.logs),[]);
@@ -89,7 +89,7 @@ test('new errors are checked after an earlier empty noon scan',async()=>{
  const root=await mkdtemp(path.join(os.tmpdir(),'atgv-noon-')),s=state(),mock=api({reported:true});
  try{
   const manager={run:async()=>{throw Error('Coding should not run')},store:{add:async()=>{throw Error('Coding should not run')}}};
-  const opts={workspace:root,manager,getRepository:async()=> 'https://github.com/aidilazharo/aiatech-assist',
+  const opts={workspace:root,manager,getRepository:async()=> 'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc',
    getToken:async()=> 'dummy-secret-not-real',isIdle:async()=>true,globalState:s,
    zone:'Asia/Kuala_Lumpur',now:()=>new Date('2026-11-21T04:15:00Z'),request:mock.request};
   assert.equal((await m.runWindow(opts)).status,'empty');
@@ -106,11 +106,11 @@ test('verified automatic maintenance PR is merged on idle scan after CI passes',
  try{
   let merged=0;
   const manager={store:{list:async()=>[
-   {id:'ready-pr',origin:'automatic',target:'extension',status:'published',repositoryUrl:'https://github.com/aidilazharo/aiatech-assist'},
-   {id:'unrelated',origin:'user',target:'extension',status:'published',repositoryUrl:'https://github.com/aidilazharo/aiatech-assist'}]},
+   {id:'ready-pr',origin:'automatic',target:'extension',status:'published',repositoryUrl:'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc'},
+   {id:'unrelated',origin:'user',target:'extension',status:'published',repositoryUrl:'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc'}]},
    merge:async(id,{token})=>{assert.equal(id,'ready-pr');assert.equal(token,'dummy-secret-not-real');merged++;return {status:'merged'};}};
   const data=await m.runWindow({workspace:root,manager,
-    getRepository:async()=> 'https://github.com/aidilazharo/aiatech-assist',
+    getRepository:async()=> 'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc',
     getToken:async()=> 'dummy-secret-not-real',
     isIdle:async()=>true,globalState:s,
     zone:'Asia/Kuala_Lumpur',now:()=>new Date('2026-11-21T04:15:00Z'),request:mock.request});
@@ -127,11 +127,11 @@ test('pending CI blocks auto-merge and delays the next version, preserving error
   await m.writeLog(root,{target:'extension',category:'error',title:'Fix other bug',observed:'A new failing check'});
   let reviewed=0;
   const manager={store:{list:async()=>[
-   {id:'pending-pr',origin:'automatic',target:'extension',status:'published',repositoryUrl:'https://github.com/aidilazharo/aiatech-assist'}],
+   {id:'pending-pr',origin:'automatic',target:'extension',status:'published',repositoryUrl:'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc'}],
    add:async()=>{throw Error('New version must not start until PR merged');}},
    merge:async()=>{reviewed++;throw Error('GitHub checks are still running.');}};
   const result=await m.runWindow({workspace:root,manager,
-    getRepository:async()=> 'https://github.com/aidilazharo/aiatech-assist',
+    getRepository:async()=> 'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc',
     getToken:async()=> 'dummy-secret-not-real',isIdle:async()=>true,
     globalState:s,zone:'Asia/Kuala_Lumpur',
     now:()=>new Date('2026-11-21T04:15:00Z'),request:mock.request});
