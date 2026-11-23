@@ -3689,10 +3689,18 @@ async function generateBusinessRequirements(options={}){
  const activeRequirements=register.brs.filter(br=>!br.archivedFromRestart&&br.status!=='retired');
  const historic=register.brs.filter(br=>br.archivedFromRestart&&br.approvedContent).map(br=>({id:br.id,title:br.approvedContent.title}));
  const refinement=String(options.feedback||'').trim().slice(0,1500);
+ // Feed existing quality failures back to the generator instead of asking it
+ // to repeat the same draft without telling it what must be corrected.
+ const qualityFindings=(options.regenerate||automatic?(register.baDraftQuality?.excluded||[]):[])
+  .filter(row=>!focused||focused.includes(row.id)).slice(0,30)
+  .map(row=>({id:row.id,field:row.field||'',reason:row.reason||'',quote:row.quote||''}));
+ const qualityGuidance=qualityFindings.length?
+  '\nUNRESOLVED DRAFT QUALITY FINDINGS: '+JSON.stringify(qualityFindings)+
+  '\nFor each named BR, correct the specific source-backed problem when supported. Never invent a rule or silently claim a finding resolved. Preserve existing BR IDs, approved scope and feature identifiers. If no evidence supports a correction, retain the open decision.':'';
  const findings=automatic?'\nResolve these AI review findings where verified source supports a correction. Keep unsupported facts open: '+JSON.stringify((review.suggestions||[]).slice(0,12)):'';
  const generationInput=prompt=>aiAnswer(target,prompt+findings+roleSkillPromptText,125000,{json:true,signal:options.signal});
  const roleSkillPromptText=await roleSkillPrompt('business-analyst');
- const question=brWorkflow.promptForGeneration(saved.answers,focused?activeRequirements.filter(x=>focused.includes(x.id)):activeRequirements,supporting)+
+ const question=brWorkflow.promptForGeneration(saved.answers,focused?activeRequirements.filter(x=>focused.includes(x.id)):activeRequirements,supporting)+qualityGuidance+
   (refinement?'\nUSER REGENERATION FEEDBACK: '+refinement+'\nImprove the answer using verified source only; preserve required scope, identities, prior approvals and all testable criteria.':'')+
   (focused?'\nSELECTIVE UPDATE: Return ONLY these existing Business Requirements using their current titles. Do not create, remove, or revise unrelated requirements. Targets: '+JSON.stringify(activeRequirements.filter(x=>focused.includes(x.id)).map(x=>({id:x.id,title:x.title}))) : '')+
   (historic.length?'\nPREVIOUSLY COMPLETED BUSINESS REQUIREMENTS (READ ONLY): '+JSON.stringify(historic.slice(0,100))+'. These requirements belong to earlier published cycles. Do not regenerate, modify, remove, or return their IDs. For new independent source documents, return only genuinely new requirements. Overlap must be reconciled separately, not duplicated.':'');
@@ -3796,7 +3804,12 @@ async function generateBusinessRequirements(options={}){
  }catch(error){report('BA auto-claim: '+String(error.message||error));await notice('BR drafts saved; automatic assignment unavailable: '+String(error.message||error).slice(0,180));}
  await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
  queueBRActivity(updated);
- if(!automatic)await notice('Generated '+proposed.length+' editable BR drafts. Review and approve each before Jira sync.');
+ if(!automatic){
+  const outcome=(updated.impact||[]).filter(row=>!focused||focused.includes(row.id));
+  const unchanged=outcome.length>0&&outcome.every(row=>row.change==='unchanged');
+  if(options.regenerate&&unchanged)await notice('Regeneration completed: 0 Business Requirements changed. Existing source evidence and review feedback produced the same draft. Correct the cited finding in the source, Discovery answers, or BR draft before re-running.');
+  else await notice('Generated '+proposed.length+' editable BR drafts. Review and approve each before Jira sync.');
+ }
  return updated;
 }
 async function verifyRoleDocumentImpactTarget(roleId,taskId,brId){
@@ -4071,6 +4084,7 @@ async function assessAutomaticDrafts(projectId,signal){
   const local=baAutomatic.invalidDraft(draft);
   const crossSource=(register.sourceConflicts||[]).some(item=>item.brId===draft.id&&register.sourceConflictDecisions?.[item.id]!==true);
   let reason=local||(crossSource?'This draft has conflicting rules in its verified sources.':'');
+  let finding=null;
   if(!reason){
    target||=await activeAiTarget();skill||=await roleSkillPrompt('business-analyst');
    const review=baAutomatic.draftForReview(draft),parts=[[]];
@@ -4084,13 +4098,18 @@ async function assessAutomaticDrafts(projectId,signal){
     for(let attempt=0;attempt<2;attempt++){
      const answer=await aiAnswer(target,prompt+(attempt?'\nReturn the required JSON and an exact quote from the draft.':'')+skill,55000,{json:true,signal});
      signal.throwIfAborted();
-     try{reason=baAutomatic.parseQuality(answer,input,concerns)[0]?.reason||'';break;}
+     try{finding=baAutomatic.parseQuality(answer,input,concerns)[0]||null;reason=finding?.reason||'';break;}
      catch(error){if(attempt)throw Error(draft.id+' quality review failed validation. Refresh affected artifacts to retry.');}
     }
     if(reason)break;
    }
   }
-  if(reason)excluded.push({id:draft.id,reason,fingerprint:checked[draft.id]});
+  if(reason){
+   const inferred=local?/acceptance criteria|business purpose|scope/i.exec(local)?.[0]:crossSource?'Source evidence':'';
+   excluded.push({id:draft.id,reason,fingerprint:checked[draft.id],
+    ...(finding?.field||inferred?{field:finding?.field||inferred}:{}),
+    ...(finding?.quote?{quote:finding.quote}:{})});
+  }
  }
  signal.throwIfAborted();
  if(activeProject?.id!==projectId)throw Error('Project changed during BR quality review.');
