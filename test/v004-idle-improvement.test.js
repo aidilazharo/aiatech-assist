@@ -3,7 +3,7 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const {mkdtemp,readdir,rm}=require('node:fs/promises');
 const path=require('node:path'),os=require('node:os');
 const m=require('../src/idle-improvement');
-const repo={name:'aiamalaysia/my-fow-technology-app-techassists-dev-sdlc',owner:'aiamalaysia',repo:'aiatech-assist'};
+const repo={name:'aiamalaysia/my-fow-technology-app-techassists-dev-sdlc',owner:'aiamalaysia',repo:'my-fow-technology-app-techassists-dev-sdlc'};
 function state(){const data=new Map();return {get:(k,d)=>data.get(k)??d,update:async(k,v)=>{data.set(k,v);}};}
 function api({write=true,reported=false}={}){
  const calls=[],request=async(_repo,_token,method,suffix,body)=>{
