@@ -4,12 +4,26 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
-const {npmCommand,codexCommand} = require('../src/platform-process');
+const {nodeExecutable,npmCommand,codexCommand} = require('../src/platform-process');
 const {nativePlatformMismatch} = require('../src/stack-dependency-helper');
 const {nodeRuntime} = require('../service/ai/install');
 
 test('npm uses no shell on macOS and Linux',()=>{
  for(const platform of ['darwin','linux']) assert.deepEqual(npmCommand(['run','test'],{platform}),{bin:'npm',args:['run','test']});
+});
+test('mock API resolves standalone Node from an absolute Windows PATH entry with spaces',()=>{
+ const node='C:\\Program Files\\nodejs\\node.exe',probes=[];
+ const actual=nodeExecutable({platform:'win32',env:{Path:';relative;D:\\missing;"C:\\Program Files\\nodejs"'},executable:file=>{
+  probes.push(file);return file===node;
+ }});
+ assert.equal(actual,node);
+ assert.deepEqual(probes,['D:\\missing\\node.exe',node]);
+});
+test('mock API resolves standalone Node on macOS and Linux or reports missing Node',()=>{
+ for(const platform of ['darwin','linux']){
+  assert.equal(nodeExecutable({platform,env:{PATH:'.:/opt/node/bin:/usr/bin'},executable:file=>file==='/opt/node/bin/node'}),'/opt/node/bin/node');
+ }
+ assert.throws(()=>nodeExecutable({platform:'linux',env:{PATH:'.:relative:'},executable:()=>true}),/Node.js is unavailable for the mock API/);
 });
 test('Windows npm resolves npm-cli.js and node.exe from a path with spaces',()=>{
  const base='C:\\Program Files\\nodejs', cli=path.win32.join(base,'node_modules','npm','bin','npm-cli.js');

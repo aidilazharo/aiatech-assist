@@ -4,8 +4,51 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs/promises');
 const os=require('node:os');
 const path=require('node:path');
+const net=require('node:net');
+const {once}=require('node:events');
+const {execFileSync}=require('node:child_process');
 const workflow=require('../src/architect-custom-workflow');
 const custom=require('../src/architect-custom-stack');
+
+test('the Node API mock starts and serves HTTP independently of the extension host executable',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'atgv mock api '));
+ const developer=require('../src/developer-git'),repair=require('../src/architect-custom-repair');
+ const git=(...args)=>execFileSync('git',['-C',root,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
+ try{
+  git('init','-b','main');
+  git('config','user.name','ATGV Test');
+  git('config','user.email','atgv@example.invalid');
+  await fs.writeFile(path.join(root,'package.json'),'{"name":"atgv-test-api","scripts":{"start":"node api.js"},"dependencies":{"express":"^5"}}\n');
+  git('add','package.json');git('commit','-m','Create API fixture');
+  const sha=git('rev-parse','HEAD');
+  await repair.createFixBranch(root,{expectedSha:sha});
+  const socket=net.createServer();
+  const listening=once(socket,'listening');
+  socket.listen(0,'127.0.0.1');
+  await listening;
+  const url='http://127.0.0.1:'+socket.address().port+'/api/v1/health';
+  await new Promise((resolve,reject)=>socket.close(error=>error?reject(error):resolve()));
+  const original=process.execPath;
+  process.execPath=path.join(root,'unusable-extension-host');
+  try{await developer.runMockServices(root,{previewUrl:url});}
+  finally{process.execPath=original;}
+  let response;
+  for(let attempt=0;attempt<30&&!response;attempt++){
+   response=await fetch(url,{signal:AbortSignal.timeout(1000)}).catch(()=>null);
+   if(!response)await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  assert.ok(response?.ok,developer.localLogs().logs||'Mock API did not answer');
+  assert.equal(response.headers.get('x-atgv-mock-data'),'true');
+  const health=await response.json();
+  assert.equal(health.status,'mock');
+  assert.equal(health.database,'simulated');
+  assert.equal(developer.localLogs().previewUrl,url);
+  assert.equal(git('rev-parse','main'),sha);
+ }finally{
+  await developer.stopLocal();
+  await fs.rm(root,{recursive:true,force:true,maxRetries:5,retryDelay:100});
+ }
+});
 
 test('Install & Run performs ordered scan, local commit, dependency check and verified synthetic preview',async()=>{
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-install-run-'));
