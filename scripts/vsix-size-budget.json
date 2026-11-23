@@ -1,6 +1,6 @@
 {
-  "maxCompressedBytes": 1411000,
+  "maxCompressedBytes": 1416000,
   "baselineVersion": "0.4.40",
   "baselineBytes": 1327153,
-  "notes": "Strict optimized VSIX cap of 1,411,000 bytes. v0.0.62 full-stack/mock data and explicit Start Next release measured 1,406,925 bytes in CI (4,075 bytes headroom). Keep per-file size report, checksum and activation verification; no exclusions added."
+  "notes": "Audited VSIX cap 1,416,000 bytes. v0.0.67 unified cross-role UI stylesheet measured 1,412,765 compressed bytes on CI (a 2,326-byte increase from v0.0.66 build 813). Ceiling rises only 5,000 bytes (0.35%) to allow that intentional, shared UI layer. Keep production minification, per-file size report, checksum, compilation, activation checks and all prior exclusions unchanged."
 }
