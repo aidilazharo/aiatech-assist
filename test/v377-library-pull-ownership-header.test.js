@@ -7,27 +7,18 @@ const root=path.resolve(__dirname,'..');
 const read=name=>fs.readFileSync(path.join(root,name),'utf8');
 const verification=require('../src/library-update-version');
 
-test('library pull success requires matching installed SemVer and pinned main SHA',()=>{
+test('GitHub library pull only accepts an installed matching main SHA',()=>{
  const sha='a'.repeat(40),expected={version:'1.1.15',sha};
- assert.deepEqual(verification.verifyActivatedPull(expected,{version:'1.1.15',sha}),{version:'1.1.15',offline:false});
+ assert.deepEqual(verification.verifyActivatedPull(expected,{version:'1.1.15',sha}),{version:'1.1.15',source:'git'});
  assert.throws(()=>verification.verifyActivatedPull(expected,{version:'1.1.12',sha}),/verification failed/i);
  assert.throws(()=>verification.verifyActivatedPull(expected,{version:'1.1.15',sha:'b'.repeat(40)}),/verification failed/i);
- assert.throws(()=>verification.verifyActivatedPull(expected,{version:'1.1.12',offline:true}),/remains active/);
- assert.deepEqual(verification.verifyActivatedPull(expected,{version:'1.1.16',offline:true}),{version:'1.1.16',offline:true});
- assert.throws(()=>verification.verifyActivatedPull(expected,{version:'1.1.15',offline:true}),/remains active/);
 });
-test('Library Git and Releases paths verify the active contents before reporting success',()=>{
+test('Git-only Library pull requires verified main checkout and refresh before completion',()=>{
  const s=read('src/lib/runtime/extension-runtime.js');
- // The explicit Git-pinned Catalog action is still verified.
- assert.match(s,/const pinned=await sdlcCatalog\.remoteVersion\(config,token\)/);
- assert.equal((s.match(/libraryUpdateVersion\.verifyActivatedPull\(pinned,selected\)/g)||[]).length,1);
- // The Release ZIP path independently validates downloaded bytes, manifest,
- // VERSION and the actual activated Library, without relying on Git exit codes.
- assert.match(s,/libraryReleaseUpdater\.downloadVerified/);
- assert.match(s,/offlineLibrary\.inspectZip\(archive\)/);
- assert.match(s,/offlineLibrary\.importZip/);
- assert.match(s,/active\.version!==selected\.version/);
- assert.match(s,/Verified Library v'\+selected\.version/);
+ assert.match(s,/libraryUpdateVersion\.verifyActivatedPull\(pinned,selected\)/);
+ assert.match(s,/sdlcCatalog\.syncGitWorkspace/);
+ assert.doesNotMatch(s,/offlineLibrary\.inspectZip|offlineLibrary\.importZip/);
+ assert.match(s,/active\.version!==remote\.version\|\|active\.sha!==remote\.sha/);
 });
 test('all destructive BR pathways enforce verified BR owner, including source deletion and remote retries',()=>{
  const s=read('src/lib/runtime/extension-runtime.js'),remote=read('src/remote-br-deletion.js');
