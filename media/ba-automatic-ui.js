@@ -56,6 +56,10 @@
   };
   for(const id of sectionIds){
    const node=get(id),done=completed[id];
+   // Preserve an already-open editor when a completed artifact becomes Draft
+   // after a user's edits; never conceal unsaved changes.
+   if(!done&&node.open&&!node.hidden&&completionSeen.get(id)===true)
+    revealedSection=id;
    // The transition to completed must not leave an in-progress editor open.
    if(done&&completionSeen.get(id)===false)node.open=false;
    if(!done&&revealedSection!==id)node.open=false;
