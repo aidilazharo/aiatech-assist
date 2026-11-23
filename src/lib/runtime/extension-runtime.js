@@ -1610,6 +1610,7 @@ function startupConnectionFailure(error){
   const advice=status==='401'||status==='403'?'Check the account, token and permissions.':status==='404'?'Check the service URL and account access.':status==='429'?'The service is rate limiting requests; retry later.':'Check the service and retry.';
   return `Server responded (HTTP ${status}). ${advice}`;
  }
+ if(/repository read permission denied|read permission denied/i.test(text))return 'GitHub repository read access denied. Grant Contents: read-only to the repository. Write access is optional.';
  const cause=String(error?.cause?.code||error?.code||'');
  if(/timeout|timed out/i.test(text+' '+String(error?.name||'')+' '+cause))return 'Connection timed out. Check the network, DNS, proxy or firewall.';
  if(/fetch failed|network|connection|certificate|ENOTFOUND|EAI_AGAIN|ECONNRESET|ECONNREFUSED|EHOSTUNREACH|ENETUNREACH/i.test(text+' '+cause))return 'Cannot connect. Check the network, DNS, proxy or firewall.';
