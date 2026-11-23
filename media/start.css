@@ -3184,3 +3184,22 @@ body:not(.gate-mode) #sdlcWorkspaceShell.atgv-sdlc-workspace-shell{
   flex-basis:34px;width:34px;min-width:34px;height:34px;min-height:34px
  }
 }
+
+
+/* v0.0.64: persistent, role-aware connection permissions strip.
+   Remains visible below the header, even when transient notices replace it. */
+body.gate-mode #roleCredentialBanner{display:none!important}
+.atgv-role-credential-banner{flex:0 0 auto;display:flex;align-items:center;gap:11px;min-height:43px;padding:6px 14px;
+ color:var(--vscode-foreground);background:var(--vscode-editorWidget-background,var(--vscode-editor-background));
+ border-bottom:2px solid var(--vscode-editorWarning-foreground,#d9a441);z-index:21;min-width:0}
+.atgv-role-credential-icon{display:flex;align-items:center;justify-content:center;flex:0 0 21px;width:21px;height:21px;
+ border-radius:50%;color:var(--vscode-editor-background);background:var(--vscode-editorWarning-foreground,#d9a441);font-weight:800;font-size:12px}
+.atgv-role-credential-message{font-size:12px;line-height:1.45;min-width:0;flex:1;overflow-wrap:anywhere}
+.atgv-role-credential-actions{margin-left:auto;display:flex;gap:7px;align-items:center;flex:0 0 auto}
+.atgv-role-credential-actions button{padding:5px 12px;min-height:29px;font-size:11px}
+#roleCredentialSettings{font-weight:700}
+.gate-search-footer #gateSkip{margin-left:auto}
+@media(max-width:600px){.atgv-role-credential-banner{flex-wrap:wrap;gap:6px;padding:7px}
+.atgv-role-credential-actions{width:100%;justify-content:flex-end}
+.atgv-role-credential-message{flex-basis:calc(100% - 32px)}
+.gate-search-footer #gateSkip{grid-column:1/-1;justify-self:end}}
