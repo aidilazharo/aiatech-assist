@@ -257,3 +257,67 @@ body:not(.gate-mode) #topNotification .top-notification-actions button{
   min-height:29px;
   padding:5px 12px;
 }
+
+
+/* BA v0.0.73 — five permanent result panels, independent evidence statuses. */
+#discoveryView .ba-auto-artifact[data-status="not-started"] > summary{opacity:.86}
+#discoveryView .ba-auto-badge[data-state="not-started"]{
+ color:var(--vscode-descriptionForeground,#9ca5b4)!important;border-color:var(--vscode-panel-border,#727b89)!important;background:transparent!important
+}
+#discoveryView .ba-auto-badge[data-state="in-progress"]{
+ color:var(--vscode-charts-blue,#72baff)!important;border-color:currentColor!important;background:transparent!important
+}
+#discoveryView .ba-auto-badge[data-state="needs-attention"]{
+ color:var(--vscode-charts-orange,#ffbd6f)!important;border-color:currentColor!important;background:transparent!important
+}
+#discoveryView .ba-auto-badge[data-state="completed"]{
+ color:var(--vscode-charts-green,#7fdeb5)!important;border-color:currentColor!important;background:transparent!important
+}
+/* All actions keep accessible text in aria-label/title, but use icons only. */
+#discoveryView .ba-auto-overflow-actions .ba-overflow-icon,
+#discoveryView .ba-auto-overflow-actions .ba-source-icon-action,
+#discoveryView .ba-auto-actions .ba-workflow-icon{
+ width:38px!important;min-width:38px!important;max-width:38px!important;
+ height:38px!important;min-height:38px!important;
+ padding:7px!important;display:inline-flex;align-items:center;justify-content:center;
+ flex:0 0 38px!important;line-height:1!important;
+}
+#discoveryView .ba-auto-overflow-actions .ba-overflow-icon[hidden]{display:none!important}
+#discoveryView .ba-auto-overflow-actions .ba-overflow-icon svg,
+#discoveryView .ba-auto-overflow-actions .ba-source-icon-action svg,
+#discoveryView .ba-auto-actions .ba-workflow-icon svg{width:18px;height:18px;flex:0 0 18px}
+#discoveryView #baAutoOverflowActions #baAutoIsoPreflightActions{
+ display:flex;flex-wrap:wrap;align-items:center;gap:6px;grid-template-columns:none
+}
+#discoveryView #baAutoOverflowActions #baAutoFileActions .source-document-actions{
+ display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-start;gap:6px
+}
+#discoveryView .ba-auto-overflow-actions .ba-source-icon-action.br-danger:not(:disabled){border-color:var(--vscode-inputValidation-errorBorder,#a54b56)!important}
+#discoveryView .ba-auto-actions .stack{display:flex;align-items:center;gap:7px}
+#discoveryView .ba-auto-actions .ba-workflow-icon[hidden]{display:none!important}
+#discoveryView .ba-auto-actions .ba-workflow-icon:focus-visible,
+#discoveryView .ba-auto-overflow-actions .ba-overflow-icon:focus-visible,
+#discoveryView .ba-auto-overflow-actions .ba-source-icon-action:focus-visible{
+ outline:2px solid var(--vscode-focusBorder,#83bcff);outline-offset:2px
+}
+/* Quill is loaded from the pinned, verified Library bundle (not a CDN).
+   Keep the textarea fallback usable if the Library is not installed. */
+#discoveryView .ba-auto-quill-editor{width:100%;min-width:0;margin-top:8px}
+#discoveryView .ba-auto-quill-editor[hidden]{display:none!important}
+#discoveryView .ba-auto-quill-editor .ql-container.ql-snow{
+ min-height:clamp(290px,42vh,560px);max-height:560px;overflow:auto;
+ border:1px solid var(--vscode-input-border,#4b5563);border-radius:6px;
+ background:var(--vscode-editor-background,#0f141b);color:var(--vscode-editor-foreground,#e7ecf3)
+}
+#discoveryView .ba-auto-quill-editor .ql-editor{
+ min-height:clamp(290px,42vh,560px);padding:14px 16px;
+ white-space:pre-wrap;font-family:var(--vscode-editor-font-family,inherit);
+ font-size:var(--vscode-editor-font-size,13px);line-height:1.65;
+ overflow-wrap:anywhere
+}
+#discoveryView .ba-auto-quill-editor .ql-editor.ql-blank::before{color:var(--vscode-descriptionForeground)}
+@media(max-width:500px){
+ #discoveryView .ba-auto-actions .stack{flex-wrap:wrap}
+ #discoveryView .ba-auto-quill-editor .ql-container.ql-snow,
+ #discoveryView .ba-auto-quill-editor .ql-editor{min-height:270px}
+}
