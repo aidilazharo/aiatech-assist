@@ -3203,3 +3203,33 @@ body.gate-mode #roleCredentialBanner{display:none!important}
 .atgv-role-credential-actions{width:100%;justify-content:flex-end}
 .atgv-role-credential-message{flex-basis:calc(100% - 32px)}
 .gate-search-footer #gateSkip{grid-column:1/-1;justify-self:end}}
+
+
+/* v0.0.66 - stable shell row order and red role-specific connection warning.
+   Notification queue changes must not replace or move the top application bar. */
+body:not(.gate-mode) #appHeader.app-header{
+ order:0;flex-shrink:0!important;
+}
+body:not(.gate-mode) #roleCredentialBanner.atgv-role-credential-banner{
+ order:1;flex:0 0 auto!important;width:100%;align-self:stretch;
+ position:relative;z-index:21;margin:0!important;
+ border:1px solid #ff3647!important;
+ border-bottom:3px solid #ff3647!important;
+ background:var(--vscode-editorWidget-background,var(--vscode-editor-background));
+}
+body:not(.gate-mode) #roleCredentialBanner .atgv-role-credential-icon{
+ background:#dc253b!important;color:#fff!important;
+}
+body:not(.gate-mode) #topNotification.top-notification{
+ order:2;flex-shrink:0!important;position:relative;
+}
+body:not(.gate-mode) .app-layout{
+ order:3;min-height:0;
+}
+/* The five BR panels show only when their data is ready. Source upload and
+   discovery remain available independently, so hiding panels cannot deadlock. */
+#discoveryView details.ba-auto-artifact[hidden]{display:none!important}
+#discoveryView .ba-auto-source-entry[hidden],
+#discoveryView .ba-auto-discovery-entry[hidden]{display:none!important}
+#discoveryView .ba-auto-source-entry,
+#discoveryView .ba-auto-discovery-entry{min-width:0;max-width:100%;margin:10px 0}
