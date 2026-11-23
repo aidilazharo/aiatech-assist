@@ -8,6 +8,8 @@ Start and Settings use the same connection configuration database at <workspace>
 - Existing globalState values migrate to SQLite on the first initialization. SQLite then becomes authoritative; globalState remains a non-secret compatibility mirror.
 - Start can test connections before a workspace has been initialized without creating folders or databases.
 - Project-specific Jira keys, Confluence spaces and source checkouts remain independent in projects/<id>.
+- Jira project mappings can be saved with verified Browse Projects access only; publishing still requires Create Issues permission.
+- Jira inventory and BR links are indexed separately under `.atgv/memory/project-<id>.sqlite`; a Jira 404 never automatically removes approved BR records.
 - The GitHub Library remains at .atgv/library and never receives SQLite files.
 - A local backup includes the encrypted credential database but not its VS Code SecretStorage key. Backups must remain private.
 
