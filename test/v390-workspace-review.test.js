@@ -6,7 +6,7 @@ const sync=require('../src/repo-sync-pr'),workspace=require('../src/repo-sync-wo
 const git=(args,cwd)=>execFileSync('git',args,{cwd,encoding:'utf8',windowsHide:true,maxBuffer:8*1024*1024}).trim();
 test('Workspace has source review and separate approved publish action',()=>{
  const html=workspace.workspaceHtml({nonce:'r',version:'0.3.90',cspSource:'vscode-resource:'});
- for(const id of ['sourceAnalysis','reviewPanel','reviewBranch','reviewCommit','reviewTitle','reviewDescription','publishReviewed'])
+ for(const id of ['sourceAnalysis','reviewPanel','reviewBranch','reviewCommit','reviewTitle','reviewDescription','publishReviewed','pushBranchOnly'])
   assert.ok(html.includes('id="'+id+'"'),id);
  for(const str of ['Pull & Study Source Code','prepareSyncReview','sourceReviewReady','publishReviewedSync'])
   assert.ok(html.includes(str),str);
@@ -35,9 +35,9 @@ test('Study reads real source code and does not mutate Repo B until reviewed pub
  git(['remote','add','origin',bare],dest);git(['push','-u','origin','main'],dest);
  git(['push','origin','main:refs/heads/feat/book-service'],dest);
  const before=git(['rev-parse','HEAD'],dest),srcUrl='https://github.com/Acme/repo-a',dstUrl='https://github.com/Acme/repo-b';
- let actualPr,raceAtPush=false;
+ let actualPr,raceAtPush=false,prLookups=0,prCreates=0;
  const githubApi={getRepository:async()=>({nameWithOwner:'Acme/repo-b',defaultBranch:'main'}),
-  findOpenPr:async()=>'',createPr:async(r,pat,details)=>{actualPr=details;return 'https://github.com/Acme/repo-b/pull/20';}};
+  findOpenPr:async()=>{prLookups++;return '';},createPr:async(r,pat,details)=>{prCreates++;actualPr=details;return 'https://github.com/Acme/repo-b/pull/20';}};
  const runner=async(bin,args,{cwd}={})=>{
   if(bin==='git'&&args[0]==='clone'&&args.at(-1)!=='.'){git(['clone','--quiet','--single-branch','--branch','main',source,args.at(-1)],dir);return '';}
   if(bin==='git'&&args[0]==='remote'&&args[1]==='get-url')return dstUrl+'.git';
@@ -79,6 +79,15 @@ test('Study reads real source code and does not mutate Repo B until reviewed pub
  assert.equal(git(['rev-parse','refs/heads/'+approvedReview.branch],bare),before);
  git(['switch','main'],dest);git(['branch','-D',approvedReview.branch],dest);
  git(['push','origin','--delete',approvedReview.branch],dest);
+ const branchOnlyReview={...approvedReview,branch:'feat/book-service-branch-only',prTitle:'',prDescription:''};
+ const branchOnly=await sync.sync({...opts,branchOnly:true,approvedReview:branchOnlyReview});
+ assert.equal(branchOnly.branch,branchOnlyReview.branch);
+ assert.equal(branchOnly.prUrl,undefined);
+ assert.equal(prLookups,0);
+ assert.equal(prCreates,0);
+ assert.equal(git(['log','-1','--pretty=%s','refs/heads/'+branchOnly.branch],bare),approvedReview.commitMessage);
+ assert.deepEqual(git(['diff','--name-only','refs/heads/main','refs/heads/'+branchOnly.branch],bare).split('\n'),['src/service.js']);
+ git(['switch','main'],dest);
  const result=await sync.sync({...opts,approvedReview});
  assert.equal(result.commitMessage,approvedReview.commitMessage);
  assert.equal(actualPr.branch,preview.review.branch);

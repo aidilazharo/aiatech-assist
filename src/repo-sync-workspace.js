@@ -77,7 +77,7 @@ ol{line-height:1.85;padding-left:20px}
 <label for="destinationRepo">Destination GitHub URL with PAT</label><input id="destinationRepo" type="password" required placeholder="https://USERNAME:TOKEN@github.com/OWNER/repo-b" autocomplete="off" spellcheck="false">
 <div class="connection-action"><button id="testDestination" type="button" class="secondary">Test Connection</button><span id="destinationConnection" class="connection-status" role="status" aria-live="polite">Not tested</span></div>
 <label>Local Destination Git root or empty folder (outside ATGV workspace)</label><div class="folder"><button id="selectRepoB" type="button" class="secondary">Choose Destination folder</button><strong id="destinationLabel">No folder selected</strong></div>
-<label for="baseBranch">PR base branch</label><input id="baseBranch" type="text" maxlength="110" placeholder="GitHub default branch (auto)">
+<label for="baseBranch">Destination base branch</label><input id="baseBranch" type="text" maxlength="110" placeholder="GitHub default branch (auto)">
 
 </section>
 <section class="card full"><h2>3. Pull & Study Source</h2>
@@ -91,9 +91,9 @@ ol{line-height:1.85;padding-left:20px}
 <div id="sourceAnalysis" class="status" role="status"></div>
 <label for="reviewBranch">Destination branch name</label><input id="reviewBranch" type="text" maxlength="110">
 <label for="reviewCommit">Commit message</label><textarea id="reviewCommit" rows="3" maxlength="12000"></textarea>
-<label for="reviewTitle">PR title</label><input id="reviewTitle" type="text" maxlength="110">
-<label for="reviewDescription">Simple PR details</label><textarea id="reviewDescription" rows="4" maxlength="4000"></textarea>
-<div class="actions"><button id="publishReviewed" type="button">Approve & Run Full Sync · Push & Create PR</button><button id="redoReview" type="button" class="secondary">Pull & Study Again</button></div>
+<label for="reviewTitle">PR title (for pull requests)</label><input id="reviewTitle" type="text" maxlength="110">
+<label for="reviewDescription">PR description (for pull requests)</label><textarea id="reviewDescription" rows="4" maxlength="4000"></textarea>
+<div class="actions"><button id="publishReviewed" type="button">Push & Create PR</button><button id="pushBranchOnly" type="button" class="secondary">Push Branch Only</button><button id="redoReview" type="button" class="secondary">Pull & Study Again</button></div>
 </section></div></form>
 
 </main>
@@ -111,6 +111,7 @@ function show(message,state){get('syncStatus').textContent=String(message||'');g
 function buttons(){
  get('createPr').disabled=busy||!folder;
  get('publishReviewed').disabled=busy||!reviewReady;
+ get('pushBranchOnly').disabled=busy||!reviewReady;
  get('redoReview').disabled=busy;
  get('selectRepoB').disabled=busy;
  get('testSource').disabled=busy;get('testDestination').disabled=busy;
@@ -191,17 +192,19 @@ get('repoSyncForm').addEventListener('submit',e=>{
  busy=true;createdPr='';reviewReady=false;get('reviewPanel').hidden=true;buttons();show('Cloning and studying Source; Destination stays untouched.');
  vscode.postMessage({command:'prepareSyncReview',sourceUrl:consumeUrl('sourceUrl'),sourceBranch:get('sourceBranch').value.trim(),sourcePrNumber:get('sourcePrNumber').value.trim(),destinationUrl:consumeUrl('destinationRepo'),copyScope:get('copyScope').value.trim()||'.',baseBranch:get('baseBranch').value.trim()});
 });
-get('publishReviewed').addEventListener('click',()=>{
+function publishReviewed(branchOnly){
  if(busy||!reviewReady)return;
- const fields=['reviewBranch','reviewCommit','reviewTitle','reviewDescription'];
+ const fields=branchOnly?['reviewBranch','reviewCommit']:['reviewBranch','reviewCommit','reviewTitle','reviewDescription'];
  if(!fields.every(id=>get(id).value.trim()&&get(id).reportValidity())){
-  show('Enter a branch, commit message, PR title and PR description before publishing.','error');return;
+  show(branchOnly?'Enter a branch and commit message before pushing.':'Enter a branch, commit message, PR title and PR description before publishing.','error');return;
  }
  busy=true;buttons();show('Confirm final publication in VS Code. Source SHA is pinned to your review.');
- vscode.postMessage({command:'publishReviewedSync',branch:get('reviewBranch').value.trim(),
+ vscode.postMessage({command:'publishReviewedSync',branchOnly,branch:get('reviewBranch').value.trim(),
   commitMessage:get('reviewCommit').value.trim(),prTitle:get('reviewTitle').value.trim(),
   prDescription:get('reviewDescription').value.trim()});
-});
+}
+get('publishReviewed').addEventListener('click',()=>publishReviewed(false));
+get('pushBranchOnly').addEventListener('click',()=>publishReviewed(true));
 get('redoReview').addEventListener('click',()=>get('repoSyncForm').requestSubmit());
 get('openPr').addEventListener('click',()=>{if(createdPr)vscode.postMessage({command:'openCreatedPr'});});
 window.addEventListener('message',e=>{
@@ -402,6 +405,7 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
   }
   const isPrepare=message.command==='prepareSyncReview';
   const isPublish=message.command==='publishReviewedSync';
+  const branchOnly=isPublish&&message.branchOnly===true;
   if(!isPrepare&&!isPublish&&message.command!=='createSyncPr')return;
   if(busy){await post({type:'repoSyncResult',success:false,message:'A repository operation is already running.'});return;}
   busy=true;createdPr='';
@@ -424,20 +428,22 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
    const reviewed=isPublish?{...pendingReview.review,branch:message.branch,
     commitMessage:message.commitMessage,prTitle:message.prTitle,
     prDescription:message.prDescription}:null;
-   if(reviewed)repoSync.validateReviewPresentation(reviewed,reviewed.sourceSha);
+   if(reviewed)repoSync.validateReviewPresentation(reviewed,reviewed.sourceSha,{branchOnly});
+   const confirmAction=branchOnly?'Push Branch Only':isPublish?'Publish Reviewed PR':'Create Sync PR';
    const response=isPrepare?'Prepare Source Review':await vscode.window.showWarningMessage(
     'Source: '+source.name+' ('+(sourcePrNumber?'PR #'+sourcePrNumber:sourceBranch||'GitHub default branch (auto)')+')\nDestination: '+destination.name+' in '+selectedFolder+
-    '\nScope: '+scope+'\nPR base: '+(base||'GitHub default branch')+
-    (isPublish?'\n\nPublish the reviewed branch, commit message, PR title and description?':'\n\nVerify both PATs, clone to temp and create the PR?'),
-    {modal:true},isPublish?'Publish Reviewed PR':'Create Sync PR');
-   if(response!==(isPrepare?'Prepare Source Review':isPublish?'Publish Reviewed PR':'Create Sync PR')){
+    '\nScope: '+scope+'\nDestination base: '+(base||'GitHub default branch')+
+    (branchOnly?'\n\nCommit and push the reviewed changes to '+reviewed.branch+' without creating a pull request?':
+     isPublish?'\n\nPublish the reviewed branch, commit message, PR title and description?':'\n\nVerify both PATs, clone to temp and create the PR?'),
+    {modal:true},confirmAction);
+   if(response!==(isPrepare?'Prepare Source Review':confirmAction)){
     await post({type:'repoSyncResult',success:false,message:'Cancelled. No files were changed.'});return;
    }
    try{
     // Source and destination fingerprints only; credentials and URLs are never
     // written to the persistent Workflow Jobs journal.
     const inputHash=crypto.createHash('sha256').update(JSON.stringify({
-     source:source.name,destination:destination.name,scope,sourceBranch,sourcePrNumber,base,prepare:isPrepare
+     source:source.name,destination:destination.name,scope,sourceBranch,sourcePrNumber,base,prepare:isPrepare,branchOnly
     })).digest('hex');
     workflowJobId=await onWorkflowEvent({type:'begin',
      command:isPrepare?'workspacePrepareSync':'workspacePublishSync',inputHash})||null;
@@ -452,7 +458,7 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
    const outcome=await repoSync.sync({
     sourceUrl:source.url,sourceBranch,sourcePrNumber,destinationFolder:selectedFolder,copyScope:scope,baseBranch:base,
     sourcePat,destPat,workspaceRoot,destinationUrl:destination.url,
-    planSync,describePr,previewOnly:isPrepare,approvedReview:reviewed,
+    planSync,describePr,previewOnly:isPrepare,approvedReview:reviewed,branchOnly,
     onProgress:async event=>{
      await post({type:'repoSyncProgress',stage:event.stage,message:event.message});
      if(workflowJobId)try{await onWorkflowEvent({type:'stage',jobId:workflowJobId,stage:event.stage||'processing'});}
@@ -471,7 +477,7 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
    pendingReview=null;
    createdPr=outcome.prUrl||'';
    const summary=outcome.unchanged?outcome.message:
-    'PR created: '+outcome.prUrl+'\nSource: '+outcome.sourceRepo+' / '+outcome.sourceBranch+' @ '+outcome.sourceSha+
+    (branchOnly?'Branch pushed: '+outcome.branch:'PR created: '+outcome.prUrl)+'\nSource: '+outcome.sourceRepo+' / '+outcome.sourceBranch+' @ '+outcome.sourceSha+
     '\nDestination: '+outcome.destinationRepo+'/'+outcome.base+
     '\nBranch: '+outcome.branch+'\nFiles selected: '+outcome.fileCount;
    await post({type:'repoSyncResult',success:true,prUrl:createdPr,message:summary});

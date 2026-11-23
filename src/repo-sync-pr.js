@@ -139,9 +139,10 @@ function formatPrDetails(value,fallback=''){
  if(!bullets.length&&fallback)bullets.push('- '+String(fallback).trim());
  return bullets.join('\n').slice(0,4000).trim();
 }
-function validateReviewPresentation(review,sha){
+function validateReviewPresentation(review,sha,{branchOnly=false}={}){
  if(stripCommitHashSuffix(review.branch,sha)!==String(review.branch||'').trim())
   throw Error('Remove the trailing commit hash from the destination branch name.');
+ if(branchOnly)return;
  const lines=String(review.prDescription||'').trim().split(/\r?\n/).filter(line=>line.trim());
  if(!lines.length||lines.length>10||lines.some(line=>!/^\s*[-*+]\s+\S/.test(line)))
   throw Error('Enter PR details as bullet points, with a maximum of 10 points.');
@@ -289,7 +290,8 @@ async function readSourceFacts({cloned,source,chosenBranch,sha,sourceMessage,fil
   sourceCommitMessage:sourceMessage.slice(0,700),sourceCommitFiles:sourceCommitFiles.slice(0,30),project,codeOverview,
   destinationRepo:destination.name,baseBranch:base,files:files.slice(0,80),fileCount:files.length};
 }
-async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.',sourceBranch='',sourcePrNumber='',baseBranch='',sourcePat,destPat,workspaceRoot='',onProgress=()=>{},runner=run,githubApi=githubApiDefault,describePr=async()=>'',planSync=async()=>null,previewOnly=false,approvedReview=null}){
+async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.',sourceBranch='',sourcePrNumber='',baseBranch='',sourcePat,destPat,workspaceRoot='',onProgress=()=>{},runner=run,githubApi=githubApiDefault,describePr=async()=>'',planSync=async()=>null,previewOnly=false,approvedReview=null,branchOnly=false}){
+ if(branchOnly&&!approvedReview)throw Error('Review the source before pushing a branch.');
  const source=githubUrl(sourceUrl),scope=scopeName(copyScope);
  let chosenBranch=sourceBranch?baseName(sourceBranch):'';
  const sourceEnv=patEnvironment(sourcePat),destinationEnv=patEnvironment(destPat);
@@ -463,13 +465,15 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
     throw Error('Source or destination changed since review. Pull and study Repo A again before publishing.');
    const value=String(approvedReview.branch||'').trim();
    branch=baseName(value);
-   if(branch===base)throw Error('PR review branch must differ from destination base '+base+'.');
+   if(branch===base)throw Error('Destination branch must differ from base '+base+'.');
    if(!String(approvedReview.commitMessage||'').trim()||String(approvedReview.commitMessage).length>12000)throw Error('Enter a commit message up to 12000 characters.');
-   if(!String(approvedReview.prTitle||'').trim()||String(approvedReview.prTitle).length>110)throw Error('Enter a PR title up to 110 characters.');
-   if(!String(approvedReview.prDescription||'').trim()||String(approvedReview.prDescription).length>4000)throw Error('Enter a short PR description (up to 4000 characters).');
-   validateReviewPresentation(approvedReview,sha);
+   if(!branchOnly){
+    if(!String(approvedReview.prTitle||'').trim()||String(approvedReview.prTitle).length>110)throw Error('Enter a PR title up to 110 characters.');
+    if(!String(approvedReview.prDescription||'').trim()||String(approvedReview.prDescription).length>4000)throw Error('Enter a short PR description (up to 4000 characters).');
+   }
+   validateReviewPresentation(approvedReview,sha,{branchOnly});
   }
-  await notify('source','Source HEAD verified. '+(approvedReview?'Applying reviewed PR metadata.':'Using source commit and PR metadata.'));
+  await notify('source','Source HEAD verified. '+(approvedReview?'Using reviewed branch and commit details.':'Using source commit and PR metadata.'));
   await runner('git',['check-ref-format','--branch',branch],{cwd:destRoot});
   await notify('preflight',files.length+' tracked files; checking '+destination.name+' / '+base+'…');
   await runner('git',['fetch','origin','+refs/heads/'+base+':refs/remotes/origin/'+base],{cwd:destRoot,timeout:180000,env:destinationEnv});
@@ -508,7 +512,6 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
    const existingPr=remoteBranch?await githubApi.findOpenPr(destination,destPat,{branch,base}):'';
    return {unchanged:true,prUrl:existingPr,message:'Repo B already has the same eligible files from Repo A '+chosenBranch+'.'+(existingPr?' Existing PR: '+existingPr:''),sourceSha:sha,sourceBranch:chosenBranch,branch,fileCount:files.length};
   }
-  const details=prDetails({source,destination,sha,scope,base,branch,count:changedFiles.length,changedFiles,sourceBranch:chosenBranch,sourceMessage,sourceCommitFiles});
   const commitMessage=approvedReview?String(approvedReview.commitMessage).trim():formatCommitMessage(sourceMessage);
   await notify('commit','Committing the reviewed change…');
   await runner('git',['commit','-m',commitMessage],{cwd:destRoot,timeout:180000});
@@ -517,6 +520,10 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   // time, even if another actor creates it after the earlier preflight check.
   await runner('git',['push','--force-with-lease=refs/heads/'+branch+':','--set-upstream','origin',branch],{cwd:destRoot,timeout:180000,env:destinationEnv});
   pushed=true;
+  const result={branch,sourceBranch:chosenBranch,sourceSha:sha,sourceRepo:source.name,destinationRepo:destination.name,
+   base,fileCount:changedFiles.length,commitMessage,sourcePrUrl:sourcePr?.url||'',excludedSourceCommitFiles};
+  if(branchOnly)return result;
+  const details=prDetails({source,destination,sha,scope,base,branch,count:changedFiles.length,changedFiles,sourceBranch:chosenBranch,sourceMessage,sourceCommitFiles});
   let body=details.body;
   if(approvedReview){
    body=String(approvedReview.prDescription).trim();
@@ -538,7 +545,7 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   const prTitle=approvedReview?String(approvedReview.prTitle).trim():formatSubject(sourcePr?sourcePr.title:commitSubject(sourceMessage));
   const prUrl=await githubApi.findOpenPr(destination,destPat,{branch,base})||
    await githubApi.createPr(destination,destPat,{branch,base,title:prTitle,body});
-  return {prUrl,branch,sourceBranch:chosenBranch,sourceSha:sha,sourceRepo:source.name,destinationRepo:destination.name,base,fileCount:changedFiles.length,commitMessage,sourcePrUrl:sourcePr?.url||'',excludedSourceCommitFiles};
+  return {...result,prUrl};
  }catch(e){
   const suffix=switched?' Repo B remains on branch '+branch+(pushed?' (already pushed)':'')+' for review.':'';
   throw Error(e.message+suffix);
