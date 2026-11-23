@@ -67,6 +67,23 @@ function sqliteSnapshot(source,target,Database=databaseSync()){
   return true;
  }finally{if(entry(temp))fs.rmSync(temp,{force:true});}
 }
+function extensionMemoryPath(workspace){
+ const folder=memoryDirectory(workspace),file=path.join(folder,'ai-memory.sqlite');
+ safeSqliteFile(file);
+ const Database=databaseSync(),db=new Database(file);
+ try{
+  db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=8000; CREATE TABLE IF NOT EXISTS agent_memory (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated TEXT NOT NULL); CREATE TABLE IF NOT EXISTS project_memory_index (project_id TEXT PRIMARY KEY, sqlite_file TEXT NOT NULL, updated TEXT NOT NULL);');
+  try{fs.chmodSync(file,0o600);}catch{}
+ }finally{db.close();}
+ return file;
+}
+function indexProjectMemory(workspace,projectId,file){
+ // Metadata pointer only. No project prompts, private content or API tokens.
+ if(!ID.test(projectId))throw Error('Unsafe project identity in memory index.');
+ const Database=databaseSync(),db=new Database(extensionMemoryPath(workspace));
+ try{db.prepare('INSERT INTO project_memory_index(project_id,sqlite_file,updated) VALUES(?,?,?) ON CONFLICT(project_id) DO UPDATE SET sqlite_file=excluded.sqlite_file,updated=excluded.updated').run(projectId,path.basename(file),new Date().toISOString());}
+ finally{db.close();}
+}
 function projectDatabasePath(projectRoot){
  const loc=projectLocation(projectRoot);
  if(!loc)return path.join(path.resolve(projectRoot),'knowledge','ai-memory.sqlite'); // stand-alone/legacy callers
@@ -84,6 +101,7 @@ function projectDatabasePath(projectRoot){
    try{fs.renameSync(source,backup);}catch{} // no data loss if archiving is blocked
   }
  }
+ indexProjectMemory(loc.workspace,loc.projectId,target);
  return target;
 }
 function secretStorageBridge({secrets,workspaceRoot}={}){
@@ -152,4 +170,4 @@ function secretStorageBridge({secrets,workspaceRoot}={}){
   }
  };
 }
-module.exports={memoryDirectory,projectLocation,projectDatabasePath,sqliteSnapshot,secretStorageBridge,databaseSync};
+module.exports={memoryDirectory,extensionMemoryPath,indexProjectMemory,projectLocation,projectDatabasePath,sqliteSnapshot,secretStorageBridge,databaseSync};

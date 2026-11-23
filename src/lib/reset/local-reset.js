@@ -70,6 +70,13 @@ async function stageFreshWorkspace({workspace,projects,connections,catalogConfig
   try{
     await fs.mkdir(stagedWorkspace);
     await ensureWorkspaceLibrary(stagedWorkspace);
+    // Preserve encrypted workspace credentials during ATGV: Reset.
+    const oldVault=path.join(workspace,'.atgv','memory','credentials.sqlite');
+    if(await fs.stat(oldVault).then(()=>true).catch(e=>e.code==='ENOENT'?false:Promise.reject(e))){
+      const newVault=path.join(stagedWorkspace,'.atgv','memory','credentials.sqlite');
+      if(!require('../../workspace-memory').sqliteSnapshot(oldVault,newVault))
+        throw Error('Could not preserve encrypted workspace credentials. Reset aborted.');
+    }
     // Download the verified catalog first so rebuilt stack documents can use
     // current templates; a GitHub outage must never erase existing work.
     if(catalogConfig.repositoryUrl){
