@@ -1913,8 +1913,10 @@ async function dashboardState(){
   const recentProjects=Array.isArray(recentIds)?recentIds.filter(id=>projects.some(p=>p.id===id)).slice(0,5):[];
   const projectReadiness={};
   await Promise.all(projects.map(async p=>{try{
-    const stat=await fs.lstat(path.join(path.dirname(registry.fileFor(p.id)),'sdlc','roles','business-analyst.yaml'));
-    projectReadiness[p.id]=stat.isFile()&&!stat.isSymbolicLink();
+    // Role definitions are inherited from Library; only the project state
+    // directory must exist for a completed, lightweight project scaffold.
+    const stat=await fs.lstat(path.join(path.dirname(registry.fileFor(p.id)),'sdlc','roles'));
+    projectReadiness[p.id]=stat.isDirectory()&&!stat.isSymbolicLink();
   }catch{projectReadiness[p.id]=false;}}));
 
   let jiraTokenSaved=false,githubTokenSaved=false;

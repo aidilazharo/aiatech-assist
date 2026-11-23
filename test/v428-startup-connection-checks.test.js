@@ -147,6 +147,7 @@ function hostFixture(failures={}){
   projectConfig:(_p,settings)=>({get:key=>key==='github.apiUrl'?'https://api.github.com':settings[key.split('.')[0]]?.[key.split('.')[1]]||''}),
   validateUrl:s=>s,globalSecretKey:k=>k,readToken:async k=>k==='atlassian'?'saved-atl':'saved-git',
   storeToken:async()=>writes.push('token'),
+  persistConnectionSettings:async ({extension})=>{if(extension)context.extensionSettings=extension;writes.push('setting');},
   startupSavedConnectionFields:()=>setup.DEFAULTS,
   STARTUP_VERIFIED_SECRET:'atgv-test-startup-verified',
   testJiraConnection:async()=>{events.push('jira');if(failures.jira)throw failures.jira;return {displayName:'Tester'};},
