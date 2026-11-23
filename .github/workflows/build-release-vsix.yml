@@ -172,7 +172,7 @@ jobs:
   release:
     name: Publish GitHub prerelease
     needs: [build, windows-reset]
-    if: needs.build.outputs.source_ready == 'true' && github.event_name != 'pull_request'
+    if: needs.build.outputs.source_ready == 'true' && github.event_name != 'pull_request' && startsWith(github.repository, 'aiamalaysia/')
     runs-on: ${{ vars.ATGV_LINUX_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 10
     permissions:
