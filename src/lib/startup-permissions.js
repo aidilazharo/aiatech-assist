@@ -35,7 +35,7 @@ async function check({workspacePath,additionalWorkspacePaths=[],projectPath='',e
  const groups=[
   {id:'folders',label:'Workspace and project folders',paths:[workspacePath,...additionalWorkspacePaths,workspacePath?path.join(workspacePath,'projects'):'',...(projectPath?[projectPath,path.join(projectPath,'documents'),path.join(projectPath,'sdlc'),path.join(projectPath,'templates')]:[])]},
   {id:'extension',label:'Extension install and update',paths:[extensionPath,extensionPath?path.dirname(extensionPath):'',storagePath?path.join(storagePath,'updates'):'']},
-  {id:'library',label:'SDLC Library install and update',paths:[workspacePath?path.join(workspacePath,'.atgv'):'',workspacePath?path.join(workspacePath,'.atgv','offline-sdlc-library'):'',storagePath?path.join(storagePath,'updates'):'']}
+  {id:'library',label:'SDLC Library install and update',paths:[workspacePath?path.join(workspacePath,'.atgv'):'',workspacePath?path.join(workspacePath,'.atgv','sdlc-catalog'):'',storagePath?path.join(storagePath,'updates'):'']}
  ];
  await onProgress(trust);
  const rows=await Promise.all(groups.map(async group=>{
