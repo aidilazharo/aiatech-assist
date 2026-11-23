@@ -9,10 +9,10 @@ const fs=require('node:fs/promises');
 const path=require('node:path');
 const {URL}=require('node:url');
 
-const REPO='aidilazharo/aiatech-assist';
+const REPO='aiamalaysia/my-fow-technology-app-techassists-dev-sdlc';
 // Public release discovery uses only the dedicated distribution repository.
 // The source repository remains the fixed source-of-truth for signed update metadata.
-const RELEASE_REPOSITORIES=Object.freeze(['aidilazharo/extension']);
+const RELEASE_REPOSITORIES=Object.freeze(['aiamalaysia/extension']);
 const DEFAULT_RELEASE_URL=`https://github.com/${REPO}/releases`;
 const API=`https://api.github.com/repos/${REPO}/releases?per_page=30`;
 const PINNED_RELEASE_URL=`https://github.com/${REPO}/releases/latest`;
