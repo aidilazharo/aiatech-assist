@@ -69,7 +69,10 @@ test('document and Jira views use icon buttons with accessible tooltip labels',(
  const start=html.indexOf('<summary class="ba-auto-jira-heading">');
  const end=html.indexOf('</summary>',start);
  const jira=html.slice(start,end);
- assert.match(jira,/id="baAutoJiraView"/);
- assert.match(jira,/id="baAutoJiraTabs"/);
+ const panel=html.slice(start,html.indexOf('</details>',end));
+ assert.doesNotMatch(jira,/id="baAutoJiraView"|id="baAutoJiraTabs"/,'table controls must not clutter the section title');
+ assert.match(panel,/class="atgv-section-table-toolbar"/);
+ assert.match(panel,/id="baAutoJiraView"/);
+ assert.match(panel,/id="baAutoJiraTabs"/);
  assert.match(ba,/event\.preventDefault\(\);\s+get\('baAutoJira'\)\.open=true/);
 });
