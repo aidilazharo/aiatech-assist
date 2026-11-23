@@ -88,7 +88,10 @@ test('Mock execution is explicit, scoped to Vite and never silently selects a re
   };
   const helper={ensureForTarget:async(_root,target)=>{assert.equal(target.relative,'ReactTS_Frontend');installed=true}};
   const bootstrapApi={waitForHttp:async()=>true};
-  const result=await custom.run(root,{sha,relative:'ReactTS_Frontend',mock:true,driver,helper,bootstrapApi});
+  const httpRequest=async url=>String(url).includes('/api/v1/health')
+   ?{ok:true,headers:{get:name=>name==='x-atgv-mock-preview'?'true':'application/json'},json:async()=>({status:'mock',database:'simulated'})}
+   :{ok:true,headers:{get:name=>name==='content-type'?'text/html; charset=utf-8':''},body:{cancel:async()=>{}}};
+  const result=await custom.run(root,{sha,relative:'ReactTS_Frontend',mock:true,driver,helper,bootstrapApi,httpRequest});
   assert.equal(result.mockPreview,true);
   assert.equal(installed,true);
   assert.equal(called.mockPreview,true);
