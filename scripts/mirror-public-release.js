@@ -9,8 +9,8 @@ const {execFile}=require('node:child_process');
 const {promisify}=require('node:util');
 const exec=promisify(execFile);
 const configs=Object.freeze({
- extension:{source:'aidilazharo/aiatech-assist',target:'aidilazharo/extension',checksum:'vsix.sha256',title:'ATGV'},
- library:{source:'aidilazharo/tech-stacks-skills',target:'aidilazharo/library',checksum:'library-source.sha256',title:'SDLC Library'}
+ extension:{source:'aiamalaysia/my-fow-technology-app-techassists-dev-sdlc',target:'aiamalaysia/extension',checksum:'vsix.sha256',title:'ATGV'},
+ library:{source:'aiamalaysia/my-fow-technology-app-techassists-enterprise-skills',target:'aiamalaysia/library',checksum:'library-source.sha256',title:'SDLC Library'}
 });
 function versionFor(tag,kind){
  const re=kind==='extension'?/^v(\d+)\.(\d+)\.(\d+)(?:-build\.(\d+))?$/:/^v(\d+)\.(\d+)\.(\d+)(?:-source-build\.(\d+))?$/;
