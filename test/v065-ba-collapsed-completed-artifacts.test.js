@@ -17,9 +17,9 @@ test('Business Requirements sections load collapsed with no draft rows',()=>{
  }
  assert.match(html,/id="baAutoContinueRow"[^>]*hidden/);
  assert.match(html,/id="baAutoContinue"[^>]*aria-controls="baAutoSource"/);
- assert.match(css,/#discoveryView\\.ba-automatic-view \\.ba-auto-artifact\\[hidden\\]/);
- assert.match(js,/revealedSection='';completionSeen\\.clear\\(\\)/);
- assert.match(js,/target\\.hidden=false;target\\.open=true/);
+ assert.match(css,/#discoveryView\.ba-automatic-view \.ba-auto-artifact\[hidden\]/);
+ assert.match(js,/revealedSection='';completionSeen\.clear\(\)/);
+ assert.match(js,/target\.hidden=false;target\.open=true/);
 });
 
 test('Jira DataTable controls exist only inside expanded section, not heading',()=>{
@@ -49,7 +49,7 @@ test('visibility follows verified completion and allows explicit unfinished acce
   currentSource:null,brState:{completedCycles:[],synced:{}},Object
  };
  const begin=js.indexOf(' function manageSectionVisibility(){');
- const end=js.indexOf('\\n function placeSkill(){',begin);
+ const end=js.indexOf('\n function placeSkill(){',begin);
  assert.ok(begin>=0&&end>begin);
  vm.createContext(context);
  vm.runInContext(js.slice(begin,end),context);
