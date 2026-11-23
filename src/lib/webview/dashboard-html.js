@@ -416,7 +416,6 @@ function html(webview,{resumeLibrary=false}={}){
       </ol>
     </section>
     <div id="baAutoSourceEntry" class="ba-auto-source-entry" aria-label="Upload and prepare source documents"></div>
-    <div id="baAutoDiscoveryEntry" class="ba-auto-discovery-entry" aria-label="Complete discovery answers" hidden></div>
     <div class="ba-auto-artifacts">
       <details id="baAutoSource" class="ba-auto-artifact" hidden>
         <summary><strong>Business Documents</strong><span id="baAutoSourceBadge" class="ba-auto-badge">Draft</span></summary>
@@ -457,6 +456,7 @@ function html(webview,{resumeLibrary=false}={}){
           </div>
         </div>
       </details>
+      <div id="baAutoDiscoveryEntry" class="ba-auto-discovery-entry" aria-label="Complete discovery answers" hidden></div>
       <details id="baAutoDiscovery" class="ba-auto-artifact" hidden>
         <summary><strong>Discovery <small>12 questions</small></strong><span id="baAutoDiscoveryBadge" class="ba-auto-badge">Draft</span></summary>
         <div class="ba-auto-body"><div id="baAutoDiscoveryForm"></div>
