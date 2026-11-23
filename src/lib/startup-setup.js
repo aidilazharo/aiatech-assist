@@ -1,7 +1,7 @@
 'use strict';
 // Trusted ATGV source repositories are selected by the configured GitHub owner.
 // Release mirrors are optional and must never be mistaken for a writable source.
-const FIXED_LIBRARY_REPOSITORY='https://github.com/aidilazharo/tech-stacks-skills'; // legacy helper
+const FIXED_LIBRARY_REPOSITORY='https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills'; // legacy helper
 const DEFAULTS=Object.freeze({
  jiraUrl:'https://aiamy-jira-azure.atlassian.net',
  email:'user.name@aia.com',
@@ -9,14 +9,10 @@ const DEFAULTS=Object.freeze({
  projectRepository:'my-fow-technology-app-techassists'
 });
 const RELEASES=Object.freeze({
- extension:'https://github.com/aidilazharo/extension',
- library:'https://github.com/aidilazharo/library'
+ extension:'https://github.com/aiamalaysia/extension',
+ library:'https://github.com/aiamalaysia/library'
 });
 const SOURCE_REPOS=Object.freeze({
- aidilazharo:Object.freeze({
-  extension:'https://github.com/aidilazharo/aiatech-assist',
-  library:FIXED_LIBRARY_REPOSITORY
- }),
  aiamalaysia:Object.freeze({
   extension:'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc',
   library:'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills'
@@ -52,7 +48,7 @@ function validate(input){
  if(!/^[A-Za-z0-9_.-]{1,100}$/.test(projectRepository)||projectRepository.startsWith('.')||projectRepository.endsWith('.git'))
  throw Error('Enter a valid Project Repository name, without organization or https://.');
  const selected=SOURCE_REPOS[org.owner.toLowerCase()];
- if(!selected)throw Error('ATGV extension/library mapping is not configured for '+org.owner+'. Supported GitHub owners: aidilazharo or aiamalaysia.');
+ if(!selected)throw Error('ATGV extension/library mapping is not configured for '+org.owner+'. Supported GitHub owner: aiamalaysia.');
  const library=githubRepo(selected.library),extension=githubRepo(selected.extension);
  return {
   jiraUrl:site.origin,confluenceUrl:site.origin+'/wiki',email,githubUrl:org.url,owner:org.owner,
