@@ -148,6 +148,7 @@ function hostFixture(failures={}){
   validateUrl:s=>s,globalSecretKey:k=>k,readToken:async k=>k==='atlassian'?'saved-atl':'saved-git',
   storeToken:async()=>writes.push('token'),
   startupSavedConnectionFields:()=>setup.DEFAULTS,
+  STARTUP_VERIFIED_SECRET:'atgv-test-startup-verified',
   testJiraConnection:async()=>{events.push('jira');if(failures.jira)throw failures.jira;return {displayName:'Tester'};},
   requestJson:async url=>{
    const id=url.includes('/api/v2/spaces')?'confluence':url.endsWith('/user')?'github':url.includes('/users/')?'organization':url.includes('/releases?')?'releases':url.includes('/repos/')?'library':'jira-probe';
