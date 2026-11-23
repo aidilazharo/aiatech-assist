@@ -98,7 +98,7 @@ test('all Jira fields have reviewable values or missing-evidence markers without
  assert.equal(plan.extraFields.customfield_11003,undefined);
  assert.equal(plan.autofillSummary.total,meta.length);
  assert.equal(plan.autofillSummary.textPlaceholders,0);
- assert.equal(plan.autofillSummary.missingEvidence,1);
+ assert.equal(plan.autofillSummary.missingEvidence,2); // Unknown optional notes and date remain empty.
  assert.ok(plan.autofillSummary.previewOnly>=2);
  assert.match(plan.blocking.join(' '),/Risk Option/);
 });
