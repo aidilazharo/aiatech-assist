@@ -7,9 +7,8 @@ const routing=require('../src/lib/updates/repository-routes');
 const startup=require('../src/lib/startup-setup');
 const root=path.resolve(__dirname,'..');
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');
-test('both GitHub organizations resolve exactly to their sources and the same release distribution repositories',()=>{
+test('only aiMalaysia maps to trusted source and release repositories',()=>{
  const expected=[
-  ['aidilazharo','aiatech-assist','tech-stacks-skills'],
   ['aiamalaysia','my-fow-technology-app-techassists-dev-sdlc','my-fow-technology-app-techassists-enterprise-skills']
  ];
  for(const [owner,extension,library] of expected){
@@ -17,13 +16,13 @@ test('both GitHub organizations resolve exactly to their sources and the same re
   assert.equal(routes.owner,owner);
   assert.equal(routes.extensionSource,`https://github.com/${owner}/${extension}`);
   assert.equal(routes.librarySource,`https://github.com/${owner}/${library}`);
-  assert.equal(routes.extensionReleases,'https://github.com/aidilazharo/extension');
-  assert.equal(routes.libraryReleases,'https://github.com/aidilazharo/library');
+  assert.equal(routes.extensionReleases,'https://github.com/aiamalaysia/extension');
+  assert.equal(routes.libraryReleases,'https://github.com/aiamalaysia/library');
   assert.equal(routing.asRepository(routes.extensionSource),owner+'/'+extension);
   assert.equal(routing.asRepository(routes.librarySource),owner+'/'+library);
   assert.equal(startup.validate({jiraUrl:'https://example.atlassian.net',email:'user@example.com',githubUrl:'github.com/'+owner}).libraryRepoUrl,routes.librarySource);
  }
- for(const value of ['otherowner','github.com/otherowner','github.com/aiamalaysia/sneaky','https://evil.test/aiamalaysia','','../aidilazharo'])
+ for(const value of ['otherowner','github.com/otherowner','github.com/aiamalaysia/sneaky','https://evil.test/aiamalaysia','','../aiamalaysia'])
   assert.equal(routing.forOwner(value),null,value);
 });
 test('runtime uses chosen GitHub source main and never attributes one organization mirror to the other',()=>{
@@ -37,7 +36,7 @@ test('runtime uses chosen GitHub source main and never attributes one organizati
  assert.match(pull,/sdlcCatalog\.syncGitWorkspace\(config,token,workspace,context\.globalStorageUri\.fsPath,\{expectedSha:remote\.sha\}\)/);
  assert.match(pull,/libraryUpdateVersion\.compareInstalledRemote\(installed\.version,remote\.version\)/);
  assert.doesNotMatch(pull,/libraryUpdateVersion\.compareInstalledRelease\(installed,release\)/);
- assert.doesNotMatch(pull,/config\.repositoryUrl!==startupSetup\.SOURCE_REPOS\.aidilazharo\.library/);
+ assert.doesNotMatch(pull,/config\.repositoryUrl!==startupSetup\.SOURCE_REPOS\.aiamalaysia\.library/);
  assert.match(pull,/No downgrade was performed/);
  assert.doesNotMatch(pull,/offlineLibrary|importZip|downloadVerified\(release/);
  assert.doesNotMatch(pull,/\.\.\.catalogConfig\(\),repositoryUrl:FIXED_LIBRARY_REPOSITORY/);
