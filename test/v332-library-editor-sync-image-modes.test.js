@@ -5,12 +5,12 @@ const fs=require('node:fs');
 const path=require('node:path');
 const root=path.join(__dirname,'..');
 const read=x=>fs.readFileSync(path.join(root,x),'utf8');
-const ext=read('src/lib/runtime/extension-runtime.js'),ui=read('media/library-studio.js'),css=read('media/library-studio.css'),app=read('media/start.js');
+const ext=read('test/generated/extension-source.txt'),host=read('src/lib/runtime/extension-runtime.js'),ui=read('media/library-studio.js'),css=read('media/library-studio.css'),app=read('media/start.js');
 test('verified GitHub library install activates CodeMirror in the existing webview automatically',()=>{
- assert.doesNotMatch(ext,/const installed=selected\.offline/);
- assert.doesNotMatch(ext,/catalogVendorLibraries\.installOffline/);
- assert.match(ext,/catalogVendorLibraries\.install\(/);
- assert.match(ext,/installedVendorAssets=installed;/);
+ assert.doesNotMatch(host,/const installed=selected\.offline/);
+ assert.doesNotMatch(host,/catalogVendorLibraries\.installOffline/);
+ assert.match(host,/catalogVendorLibraries\.install\(/);
+ assert.match(host,/installedVendorAssets=installed;/);
  assert.match(ext,/dashboard\.webview\.options=\{\.\.\.dashboard\.webview\.options,localResourceRoots:\[/);
  assert.match(ext,/dashboard\.webview\.html=html\(dashboard\.webview,\{resumeLibrary:true\}\)/);
  assert.match(ext,/meta name="atgv-resume-library"/);
