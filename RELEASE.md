@@ -1,5 +1,5 @@
-# ATGV AIATECH Assist v0.0.55
+# ATGV AIATECH Assist v0.0.56
 
-- ATGV: Workspace excludes the source `.github/` directory, including workflows, custom actions, and repository templates, from every copy scope.
-- Standalone GitHub Action manifests (`action.yml` and `action.yaml`) are also excluded.
-- Repository sync preserves existing destination workflows and GitHub configuration.
+- ATGV: Workspace adds a Push Branch Only option after source review. It commits and pushes the selected files to a new destination branch without creating a pull request.
+- The existing Push & Create PR option remains available.
+- Both options exclude source `.github/` files and standalone GitHub Action manifests.
