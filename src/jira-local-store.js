@@ -12,7 +12,8 @@ function open(registry,projectId){
  const root=path.dirname(registry.fileFor(projectId)),loc=projectLocation(root);
  if(!loc||loc.projectId!==projectId)return null; // A legacy/unmanaged workspace is never modified.
  const file=path.join(memoryDirectory(loc.workspace),'project-'+projectId+'.sqlite');
- const existing=fs.existsSync(file)?fs.lstatSync(file):null;
+ let existing=null;
+ try{existing=fs.lstatSync(file);}catch(error){if(error.code!=='ENOENT')throw error;}
  if(existing&&(!existing.isFile()||existing.isSymbolicLink()))throw Error('Unsafe Jira project cache.');
  const Database=databaseSync(),db=new Database(file);
  try{
