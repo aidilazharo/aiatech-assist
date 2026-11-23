@@ -36,9 +36,10 @@ test('runtime uses chosen GitHub source main and never attributes one organizati
  assert.match(pull,/sdlcCatalog\.remoteVersion\(config,token\)/);
  assert.match(pull,/sdlcCatalog\.syncGitWorkspace\(config,token,workspace,context\.globalStorageUri\.fsPath,\{expectedSha:remote\.sha\}\)/);
  assert.match(pull,/libraryUpdateVersion\.compareInstalledRemote\(installed\.version,remote\.version\)/);
- assert.match(pull,/libraryUpdateVersion\.compareInstalledRelease\(installed,release\)/);
- assert.match(pull,/config\.repositoryUrl!==startupSetup\.SOURCE_REPOS\.aidilazharo\.library/);
+ assert.doesNotMatch(pull,/libraryUpdateVersion\.compareInstalledRelease\(installed,release\)/);
+ assert.doesNotMatch(pull,/config\.repositoryUrl!==startupSetup\.SOURCE_REPOS\.aidilazharo\.library/);
  assert.match(pull,/No downgrade was performed/);
+ assert.doesNotMatch(pull,/offlineLibrary|importZip|downloadVerified\(release/);
  assert.doesNotMatch(pull,/\.\.\.catalogConfig\(\),repositoryUrl:FIXED_LIBRARY_REPOSITORY/);
 });
 test('update check and UI distinguish selected source from a stale public mirror',()=>{
