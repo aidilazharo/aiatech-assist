@@ -11483,6 +11483,7 @@ async function refreshLiveRemoteData({reason='scheduled',force=false}={}){
  if(openingOffline){
   liveRemoteState={...liveRemoteState,projectId,phase:'offline'};
   await dashboard?.webview.postMessage({type:'liveRemoteState',value:liveRemoteState});
+  await postConnectedSyncState();
   return {skipped:'offline'};
  }
  const last=liveRemoteState.projectId===projectId?Date.parse(liveRemoteState.lastAttempt||0)||0:0;
@@ -11511,7 +11512,20 @@ async function refreshLiveRemoteData({reason='scheduled',force=false}={}){
    if(!enabled)continue;
    if(!liveRefreshStillCurrent(target))return {skipped:'project-changed'};
    try{results[name]=await read();}
-   catch(error){errors[name]=String(error.message||error).slice(0,240);report('Live '+name+' refresh ('+reason+'): '+errors[name]);}
+   catch(error){
+    errors[name]=String(error.message||error).slice(0,240);
+    report('Live '+name+' refresh ('+reason+'): '+errors[name]);
+    try{
+     const provider=name.toLowerCase(),config=target.config;
+     const origin=provider==='github'?'https://api.github.com':
+      provider==='confluence'?new URL(baseConfluence(config)).origin:baseAtlassian(config);
+     const scope=provider==='github'?String(config.get('github.owner')||'')+'/'+String(config.get('github.repo')||''):
+      provider==='confluence'?String(config.get('confluence.spaceKey')||'default'):
+       String(config.get('jira.projectKey')||'default');
+     connectedSync.checkpoint(registry,projectId,{provider,origin,scope,
+      error:'Remote refresh failed; see live provider status.'});
+    }catch(syncError){report('SQLite refresh failure receipt: '+String(syncError.message||syncError).slice(0,120));}
+   }
   }
   if(!liveRefreshStillCurrent(target))return {skipped:'project-changed'};
   liveRemoteState={projectId,phase:Object.keys(errors).length?'partial':'ready',lastAttempt:started,
