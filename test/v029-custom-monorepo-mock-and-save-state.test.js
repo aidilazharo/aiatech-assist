@@ -115,12 +115,22 @@ test('Save Stack remains green and disabled after save, re-enables blue on user 
   ${code}
   return {
    render:project=>syncArchitectStackButtons(project),
+   busy:value=>{architectActionBusy=value},
    changed:()=>{architectSaveSelectionProjectId=activeId;architectSaveSelectionChanged=true},
    saved:()=>{architectSaveSelectionChanged=false},
    project:id=>{activeId=id}
   }
  `)(id=>elements[id],()=>false);
  const saved={techStackId:'custom'};
+ const catalog={techStackId:'react',techStackPrepared:{stackId:'react',branch:'migration/react-catalog-1-1-14-07bbe5e6',remotePushed:true}};
+ instance.render(catalog);
+ assert.equal(elements.architectSaveStack.textContent,'Switch & Save Stack');
+ assert.equal(elements.architectSaveStack.disabled,false);
+ assert.equal(elements.architectResetStack.disabled,false);
+ instance.busy(true);
+ instance.render(catalog);
+ assert.equal(elements.architectResetStack.disabled,true);
+ instance.busy(false);
  instance.render(saved);
  assert.equal(elements.architectSaveStack.disabled,true);
  assert.equal(elements.architectSaveStack.classList.saved,true);

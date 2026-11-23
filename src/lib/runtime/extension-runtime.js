@@ -7178,22 +7178,59 @@ async function handleDashboardMessage(msg){
           // execution or remote push is permitted on this action.
           const projectId=activeProject.id,current=await registry.read(projectId);
           if(!current)throw Error('The selected project no longer exists.');
-          if(current.techStackPrepared?.stackId&&current.techStackPrepared.stackId!=='custom')
-            throw Error('A different technology stack has prepared Git work. Reset Tech Stack with its safety review before saving Custom Stack.');
+          const oldId=current.techStackPrepared?.stackId||current.techStackId;
+          const switching=!!(oldId&&oldId!=='custom');
           const config=effectiveConfig(activeProject);
-          await recordStackActivity(projectId,'Save Stack / repository','Checking checkout; clone or pull only if folder is missing or empty.');
-          const checkout=await architectRepository.ensureCustom(context.workspaceState,projectId,developerGit,{
+          const repoOptions={
             projectRoot:aiRoot(),githubOwner:config.get('github.owner'),
             githubRepo:config.get('github.repo'),githubBranch:config.get('github.branch'),
             catalogRepositoryUrl:catalogConfig().repositoryUrl
-          });
+          };
+          let checkout,archivePlan,stackHistory,workspaceRoot,projectFolder;
+          if(switching){
+            // Custom Stack scans the current project source. Returning to the
+            // base branch could hide the application on a migration branch.
+            const root=await architectRepository.resolve(context.workspaceState,projectId,developerGit,repoOptions);
+            const repo=await developerGit.repository(root);
+            if(!developerGit.matchesGithubRepo(repo.remote,repoOptions.githubOwner,repoOptions.githubRepo))
+              throw Error('The current checkout must match the configured GitHub project repository before switching to Custom Stack.');
+            checkout={...repo,root,mode:'existing'};
+            stackHistory=require('../../architect-stack-reset');
+            workspaceRoot=getWorkspace().uri.fsPath;
+            projectFolder=path.join(workspaceRoot,'projects',projectId);
+            archivePlan=await stackHistory.planProjectStackArchive(projectFolder,oldId,{workspaceRoot,projectId});
+            const action='Switch & Save Stack';
+            const proceed=await uiWarning('Switch from '+oldId+' to Custom Stack?\n\n'+
+              'ATGV will scan the current checkout on '+(repo.branch||'a detached HEAD')+' and preserve its branch, commits and local edits. '+
+              'The previous stack documents will be archived and its validation and approval cleared.\n\nRepository: '+root,
+              {modal:true},action);
+            if(proceed!==action){
+              await dashboard?.webview.postMessage({type:'architectStackCancelled',projectId,message:'Custom Stack switch cancelled. The saved stack and approval are unchanged.'});break;
+            }
+          }else{
+            await recordStackActivity(projectId,'Save Stack / repository','Checking checkout; clone or pull only if folder is missing or empty.');
+            checkout=await architectRepository.ensureCustom(context.workspaceState,projectId,developerGit,repoOptions);
+          }
           await recordStackActivity(projectId,'Save Stack / repository','Checkout mode: '+checkout.mode+'; directory: '+checkout.root);
-          const updated=await registry.update(projectId,{...current,
-            techStackId:'custom',techStackCompanionId:'',
-            techStackPrepared:null,techStackValidation:null,
-            techStackServerVerification:null,techStackApproval:null});
-          activeProject=updated;
           const detected=await require('../../architect-custom-stack').scan(checkout.root);
+          if(switching&&(detected.branch!==checkout.branch||detected.sha!==checkout.sha))
+            throw Error('The Git branch or revision changed during the switch. Review the checkout and try again.');
+          const latest=await registry.read(projectId);
+          if(!latest||activeProject?.id!==projectId||latest.updatedAt!==current.updatedAt)
+            throw Error('The active project or its settings changed during Save Stack. Review the stack selection and try again.');
+          const archive=switching?await stackHistory.archiveProjectStackDocuments(projectFolder,oldId,{workspaceRoot,projectId,expectedPlan:archivePlan}):null;
+          let updated;
+          try{
+            updated=await registry.update(projectId,{...latest,techStackId:'custom',techStackCompanionId:'',
+              techStackPrepared:null,techStackValidation:null,techStackServerVerification:null,techStackApproval:null,techStackCustomPreview:null});
+          }catch(error){
+            if(archive){
+              try{await stackHistory.restoreProjectStackDocuments(archive);}
+              catch(restoreError){error.message+=' Previous stack documents are in '+archive.folder+'. '+restoreError.message;}
+            }
+            throw error;
+          }
+          if(activeProject?.id===projectId)activeProject=updated;
           await recordStackActivity(projectId,'Save Stack / complete','Custom Stack saved. Git SHA '+detected.sha+'; detected '+detected.targets.length+' target(s). No application scripts executed.');
           const process=developerGit.localLogs();
           detected.running=!!(process.running&&detected.targets.some(item=>
@@ -7204,6 +7241,7 @@ async function handleDashboardMessage(msg){
               ?'Custom Stack saved. The project repository folder was created or verified empty and the configured GitHub repository cloned at '+checkout.root+'.'
               :checkout.mode==='pulled'
                ?'Custom Stack saved. Missing source files restored through a verified fast-forward of the configured GitHub repository at '+checkout.root+'.'
+               :switching?'Custom Stack saved on '+(detected.branch||'the current detached HEAD')+'. Checkout preserved and previous stack approval cleared.'
                :'Custom Stack saved. Existing verified checkout preserved at '+checkout.root+'. Use Pull Repository to update its code.';
             await dashboard?.webview.postMessage({type:'architectStackState',value:{message:status}});
             await dashboard?.webview.postMessage({type:'architectCustomScanResult',projectId,value:detected});
