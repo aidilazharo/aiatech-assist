@@ -454,51 +454,38 @@ body:not(.gate-mode) #topNotification .top-notification-actions button{
 }
 
 
-/* BA v0.0.76: all five workflow panels now share one grid and spacing scale. */
-#discoveryView.ba-automatic-view{
- --atgv-ba-section-gap:12px;
- --atgv-ba-section-inset:16px;
-}
+/* BA v0.0.76: one grid and one spacing scale for all five panels. */
+#discoveryView.ba-automatic-view{--atgv-ba-section-gap:12px}
 #discoveryView.ba-automatic-view .ba-auto-artifacts{
- display:grid;grid-template-columns:minmax(0,1fr);
- gap:var(--atgv-ba-section-gap);margin:0;padding:0;align-items:stretch
+ display:grid;grid-template-columns:minmax(0,1fr);gap:var(--atgv-ba-section-gap);margin:0
 }
 #discoveryView.ba-automatic-view .ba-auto-artifacts > .ba-auto-artifact{
- box-sizing:border-box;margin:0!important;min-width:0;width:100%;
- border-radius:var(--atgv-consistency-radius)
+ margin:0!important;min-width:0;width:100%
 }
-#discoveryView.ba-automatic-view .ba-auto-artifacts > .ba-auto-artifact > summary,
-#discoveryView.ba-automatic-view #baAutoSource > summary{
- box-sizing:border-box;min-height:48px;padding:12px var(--atgv-ba-section-inset);
- display:flex;align-items:center;gap:12px
+#discoveryView.ba-automatic-view .ba-auto-artifacts > .ba-auto-artifact > summary{
+ min-height:48px;padding:12px 16px
 }
-#discoveryView.ba-automatic-view .ba-auto-artifacts .ba-auto-body,
-#discoveryView.ba-automatic-view #baAutoSource .ba-auto-body{
- padding:var(--atgv-ba-section-inset);min-width:0
-}
+#discoveryView.ba-automatic-view .ba-auto-artifacts .ba-auto-body{padding:16px}
 #discoveryView.ba-automatic-view #baAutoHistory{margin:0!important}
 #discoveryView .ba-auto-requirements-toolbar{
- display:flex;justify-content:space-between;align-items:center;
- flex-wrap:wrap;gap:10px 12px;min-height:36px;
- border-bottom:1px solid var(--atgv-consistency-border);
- padding:0 0 12px;margin:0 0 12px;min-width:0
+ display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;
+ gap:10px;padding-bottom:12px;margin-bottom:12px;
+ border-bottom:1px solid var(--atgv-consistency-border)
 }
-#discoveryView .ba-auto-requirements-toolbar[hidden]{display:none!important}
+#discoveryView .ba-auto-requirements-toolbar[hidden],
+#discoveryView .ba-auto-requirements-actions button[hidden]{display:none!important}
 #discoveryView #baAutoResolveStatus{
- flex:1 1 250px;min-width:0;overflow-wrap:anywhere;
- font-size:12px;color:var(--atgv-consistency-muted);line-height:1.5
+ flex:1 1 240px;min-width:0;color:var(--atgv-consistency-muted);
+ font-size:12px;line-height:1.5;overflow-wrap:anywhere
 }
 #discoveryView .ba-auto-requirements-actions{
- display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end
+ display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px
 }
 #discoveryView .ba-auto-requirements-actions button{
- min-height:var(--atgv-consistency-control-height);
- padding:7px 12px;border-radius:var(--atgv-consistency-radius-sm);
- font-family:var(--vscode-font-family,inherit);font-size:12px;font-weight:600
+ min-height:36px;border-radius:var(--atgv-consistency-radius-sm);font-weight:600
 }
-#discoveryView .ba-auto-requirements-actions button[hidden]{display:none!important}
-#discoveryView .ba-auto-requirements-actions button:disabled{opacity:.65}
 @media(max-width:620px){
- #discoveryView.ba-automatic-view{--atgv-ba-section-inset:12px}
+ #discoveryView.ba-automatic-view .ba-auto-artifacts > .ba-auto-artifact > summary{padding:12px}
+ #discoveryView.ba-automatic-view .ba-auto-artifacts .ba-auto-body{padding:12px}
  #discoveryView .ba-auto-requirements-actions{justify-content:flex-start;width:100%}
 }
