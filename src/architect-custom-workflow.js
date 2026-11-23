@@ -80,6 +80,12 @@ async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgr
   const chosen=selectPreviewTarget(inspection,relative);
   if(!chosen){
    const detected=(inspection.targets||[]).filter(x=>x.runnable).map(x=>x.relative+': '+x.framework).join(', ');
+   // Older ATGV starter branches have a root-level package and do not contain
+   // TechCockpit's independently deployable frontend and backend.  Never
+   // silently replace a dirty repository or run the starter as TechCockpit.
+   const rootManifest=await fs.readFile(path.join(key,'package.json'),'utf8').then(JSON.parse,()=>null);
+   if(rootManifest?.name==='atgv-react-api-sqlite' && path.basename(key)==='tech-cockpit')
+     throw Error('This local tech-cockpit checkout is an obsolete ATGV starter, NOT the current TechCockpit monorepo. Your changes are preserved. Back up the checkout, clone GitHub main into the configured repository folder, and retry Save Stack. The current source must contain ReactTS_Frontend/package.json, ReactTS_Frontend/vite.config.ts, and NestJS_Backend/package.json.');
    throw Error('No runnable Vite frontend detected. Install & Run will not open an API-only /api/v1/health page. Detected: '+(detected||'none')+'. Verify the frontend package.json dev script and vite.config.ts.');
   }
   // Discard stale manually selected API URLs. The browser must always open

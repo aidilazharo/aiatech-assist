@@ -22,28 +22,32 @@ function fixture(){
   "function receive(message){",
   segment(ui," if(message.type==='startupProceedResult'","\n});"),
   "}",
-  "return {renderStartupConfig,receive};"
+  "return {renderStartupConfig,requestStartupProceed,receive};"
  ].join('\n'));
  const api=create(element,(command,data)=>sent.push({command,...data}),data=>opened.push(data),show=>screens.push(show));
  return {api,sent,opened,screens,element};
 }
 const verified={required:true,verified:true,prerequisitesVerified:true};
-test('verified startup skips both setup screens and resumes the only remembered project immediately',()=>{
+test('verified startup waits for a manual Next click and never auto-logs in',()=>{
  const x=fixture();x.api.renderStartupConfig(verified);x.api.renderStartupConfig(verified);
- assert.deepEqual(x.sent,[{command:'startupProceed',settings:{email:'saved'},autoResume:true}]);
- assert.deepEqual(x.screens,[]);
+ assert.deepEqual(x.sent,[],'saved verification cannot trigger startupProceed');
+ assert.deepEqual(x.screens,[true,true],'Start screen stays visible');
+ x.api.requestStartupProceed();
+ assert.deepEqual(x.sent,[{command:'startupProceed',settings:{email:'saved'}}]);
  x.api.receive({type:'startupProceedResult',success:true,projectId:'p1'});
- assert.deepEqual(x.screens,[false]);
- assert.deepEqual(x.opened,[{projectId:'p1',autoResume:true}]);
-});
-test('verified startup without a unique remembered project shows selection',()=>{
- const x=fixture();x.api.renderStartupConfig(verified);
- x.api.receive({type:'startupProceedResult',success:true,projectId:''});
- assert.deepEqual(x.opened,[]);
- assert.deepEqual(x.screens,[false]);
+ assert.deepEqual(x.screens,[true,true,false]);
+ assert.deepEqual(x.opened,[],'even a response containing projectId must not auto-open');
  assert.equal(x.element('gateQuery').focused,true);
 });
-test('missing prerequisite or credential verification reopens only the applicable setup step',()=>{
+test('manual Next enters project search without choosing a remembered project',()=>{
+ const x=fixture();x.api.renderStartupConfig(verified);
+ assert.deepEqual(x.sent,[]);
+ x.api.requestStartupProceed();
+ x.api.receive({type:'startupProceedResult',success:true,projectId:''});
+ assert.deepEqual(x.opened,[]);
+ assert.deepEqual(x.screens,[true,false]);
+});
+test('missing verification keeps setup available and manual Next shows an error',()=>{
  const x=fixture();x.api.renderStartupConfig({...verified,prerequisitesVerified:false});
  assert.deepEqual(x.sent,[{command:'startupReadiness'}]);
  assert.deepEqual(x.screens,[true]);
@@ -51,12 +55,13 @@ test('missing prerequisite or credential verification reopens only the applicabl
  assert.deepEqual(y.sent,[]);
  assert.deepEqual(y.screens,[true]);
  const z=fixture();z.api.renderStartupConfig(verified);
+ z.api.requestStartupProceed();
  z.api.receive({type:'startupProceedResult',success:false,verified:false,message:'Saved credentials changed.'});
  assert.deepEqual(z.opened,[]);
- assert.deepEqual(z.screens,[true]);
+ assert.deepEqual(z.screens,[true,true]);
  assert.equal(z.element('startupProceedInfo').textContent,'Saved credentials changed.');
 });
-test('only one registered, previously opened project can resume automatically',()=>{
+test('legacy previously-opened project helper is isolated from manual Start flow',()=>{
  const saved={'atgvAssist.activeProject':'p1','atgvAssist.recentProjects':['p1','obsolete']};
  const state={get:(key,fallback)=>saved[key]??fallback};
  const create=new Function('context','getWorkspace','vscode','startupIsComplete',segment(host,

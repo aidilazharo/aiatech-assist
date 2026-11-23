@@ -5835,15 +5835,12 @@ async function handleDashboardMessage(msg){
          const verified=await storedStartupVerification();
          verifiedFields=!!verified&&verified.signature===sha(JSON.stringify(startupSetup.validate(msg.settings)));
          if(!verifiedFields)throw Error('Test Jira, Confluence and GitHub connections with the current fields before proceeding.');
-         let projectId='';
-         if(msg.autoResume===true){
-          if(!registry||!startupPrerequisitesVerified())throw Error('Review Technology stack prerequisites before continuing.');
-          projectId=previouslyOpenedStartupProject(await registry.list())?.id||'';
-         }
+         // The Start screen is manual: never issue automatic project selection.
+         if(msg.autoResume===true)throw Error('Automatic sign-in is disabled. Click Next on the Start screen.');
          await context.globalState.update('atgvAssist.startupSetup.completed',true);
          startupSessionProceedApproved=true;
          startupSessionVerified=true;startupVerifiedSignature=verified.signature;
-         await dashboard?.webview.postMessage({type:'startupProceedResult',success:true,projectId});
+         await dashboard?.webview.postMessage({type:'startupProceedResult',success:true});
          await refreshDashboard();
         }catch(error){
          await dashboard?.webview.postMessage({type:'startupProceedResult',success:false,verified:verifiedFields,message:String(error.message||error)});

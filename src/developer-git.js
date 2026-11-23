@@ -363,8 +363,22 @@ async function createViteMockOverlay(repoRoot,cwd,port,mockDatabase=false){
    await fs.mkdir(path.dirname(excludePath),{recursive:true});
    await fs.appendFile(excludePath,(old.endsWith('\n')?'':'\n')+'# ATGV ephemeral local Mock Preview\n'+marker+'\n');
  }
+ // Identify the *current* TechCockpit multi-app layout by its manifests, not
+ // by a branch name or any untrusted in-repository instruction file.
+ let profile='';
+ if(path.basename(cwd)==='ReactTS_Frontend' && path.dirname(cwd)===repoRoot){
+   const nested=await Promise.all(['ReactTS_Frontend/package.json','NestJS_Backend/package.json'].map(async rel=>{
+     const loc=path.join(repoRoot,rel);
+     const st=await fs.lstat(loc).catch(()=>null);
+     if(!st?.isFile()||st.isSymbolicLink())return null;
+     return JSON.parse(await fs.readFile(loc,'utf8'));
+   }));
+   if(nested[0]?.scripts?.dev?.trim()==='vite'&&nested[0]?.dependencies?.react&&
+      nested[0]?.devDependencies?.vite&&nested[1]?.dependencies?.['@nestjs/core'])
+      profile='tech-cockpit';
+ }
  const file='vite.config.atgv-mock-runtime-'+crypto.randomUUID()+'.mts',location=path.join(cwd,file);
- const config=require('./stack-mock-preview').render({source:configFile,port,mockDatabase});
+ const config=require('./stack-mock-preview').render({source:configFile,port,mockDatabase,profile});
  await fs.writeFile(location,config,{flag:'wx',mode:0o600});
  return {file,location,kind:'mock'};
 }

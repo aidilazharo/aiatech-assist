@@ -16,9 +16,10 @@ test('startup and project-search screens no longer show Pause automatic opening'
  assert.match(html,/id="gateSearchPrevious"/);
  assert.doesNotMatch(html,/<button id="gateSearchPrevious"[^>]+(?:\bhidden\b|tabindex="-1")/);
 });
-test('automatic opening uses the stored setup checks and launches without a countdown',()=>{
+test('saved credentials do not auto-advance Start; Next requires explicit click',()=>{
  assert.doesNotMatch(ui,/STARTUP_SCREEN_MS|startupAutoTimer|Automatic opening paused/);
- assert.match(ui,/if\(required&&startupConnectionVerified\)\{requestStartupProceed\(true\);return;\}/);
- assert.match(ui,/launchFromGate\(\{projectId,autoResume:true\}\)/);
+ assert.doesNotMatch(ui,/requestStartupProceed\(true\)|launchFromGate\(\{projectId,autoResume:true\}\)/);
+ assert.match(ui,/\$\('startupProceed'\)\.addEventListener\('click'/);
+ assert.match(ui,/startupProceedMode='manual'/);
  assert.match(ui,/\$\('gateSearchPrevious'\)\.disabled=gateBusy;/);
 });

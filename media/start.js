@@ -9077,14 +9077,16 @@ function requestStartupReadiness(){
  renderStartupScanPlaceholders();
  send('startupReadiness');
 }
-function requestStartupProceed(autoResume=false){
+function requestStartupProceed(){
+ // Manual entry only: saved credentials must never auto-submit or auto-open a project.
+ // The Next button is the sole caller of startupProceed.
  if(startupProceedMode)return;
- startupProceedMode=autoResume?'resume':'manual';
- if(!autoResume)renderStartupPage();
- send('startupProceed',{settings:startupPayload(),autoResume});
+ startupProceedMode='manual';
+ renderStartupPage();
+ send('startupProceed',{settings:startupPayload()});
 }
 function renderStartupConfig(config){
- if(!config||startupProceedMode==='resume')return;
+ if(!config)return;
  // Keep an in-flight or opened project visible across state refreshes.
  const openingInProgress=gateBusy||!!gateError||workspaceOpened||(opening?.phase&&opening.phase!=='search');
  const required=config.required===true&&!openingInProgress;
@@ -9099,7 +9101,7 @@ function renderStartupConfig(config){
   startupFormInitialized=true;
   if(config.prerequisitesVerified){
    startupPage=1;
-   if(required&&startupConnectionVerified){requestStartupProceed(true);return;}
+   // Review saved connections on the Start screen; wait for an explicit Next click.
   }
  }else if(config.verified===true&&!startupConnectionEditSnapshot&&!startupVerifying){
   startupConnectionVerified=true;
@@ -9418,17 +9420,13 @@ window.addEventListener('message',event=>{
   renderStartupPage();
  }
  if(message.type==='startupProceedResult'&&startupProceedMode){
-  const resuming=startupProceedMode==='resume';
   startupProceedMode='';
   if(message.success){
    startupReturnToConnections=false;showStartupStep(false);
-   if(resuming&&message.projectId){
-    const projectId=message.projectId;
-    launchFromGate({projectId,autoResume:true});
-   }else $('gateQuery').focus();
+   // Never choose or open a remembered project on behalf of the user.
+   $('gateQuery').focus();
   }else{
    if(message.verified===false){startupConnectionVerified=false;startupPage=1;}
-   else if(resuming){startupPage=0;requestStartupReadiness();}
    showStartupStep(true);
    $('startupProceedInfo').textContent=message.message||'Unable to continue.';
   }
