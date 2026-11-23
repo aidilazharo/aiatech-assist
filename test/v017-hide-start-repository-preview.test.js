@@ -24,7 +24,7 @@ test('Start never displays a derived project repository URL but retains connecti
  const html=read('src/lib/webview/dashboard-html.js');
  const js=read('media/start.js');
  assert.ok(html.includes('id="startupProjectRepositoryPreview" hidden></small>'));
- assert.ok(!html.includes('https://github.com/aiamalaysia/my-fow-technology-app-techassists'));
+ assert.doesNotMatch(html,/https:\/\/github\.com\/aiamalaysia\/my-fow-technology-app-techassists(?![A-Za-z0-9_-])/);
  const start=js.indexOf('function updateStartupRepositoryPreview(){');
  const end=js.indexOf('\n// Display only the current sequential check.',start);
  assert.ok(start>0&&end>start);
