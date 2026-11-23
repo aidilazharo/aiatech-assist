@@ -65,12 +65,13 @@ test('release mirror uses its Actions token only for the GitHub API',async()=>{
   return {ok:true,status:200,headers:{get:()=>null},arrayBuffer:async()=>Buffer.from('ok')};
  };
  for(const url of ['https://api.github.com/repos/aiamalaysia/extension/releases',
-  'https://github.com/aiamalaysia/extension/releases/download/v1/file.vsix',
-  'https://api.github.com.example.org/repos/attacker/repo'])
+  'https://github.com/aiamalaysia/extension/releases/download/v1/file.vsix'])
   await mirror.fetchBytes(url,{fetchImpl,token:'temporary-actions-token'});
+ await assert.rejects(mirror.fetchBytes('https://api.github.com.example.org/repos/attacker/repo',
+  {fetchImpl,token:'temporary-actions-token'}),/Unexpected release download URL/);
  assert.equal(calls[0].headers.Authorization,'Bearer temporary-actions-token');
  assert.equal(calls[1].headers.Authorization,undefined);
- assert.equal(calls[2].headers.Authorization,undefined);
+ assert.equal(calls.length,2);
 });
 test('mirror reports the failing API endpoint and rate limit without leaking the token',async()=>{
  const fetchImpl=async()=>({ok:false,status:403,headers:{get:name=>name==='x-ratelimit-remaining'?'0':null}});
