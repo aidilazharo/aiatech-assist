@@ -9181,7 +9181,7 @@ function renderStartupConfig(config){
  const openingInProgress=gateBusy||!!gateError||workspaceOpened||(opening?.phase&&opening.phase!=='search');
  // Always visit the first Start screen once per ATGV command, even when
  // credentials were verified in a previous VS Code session.
- const required=!startupWizardCompletedThisSession&&!openingInProgress;
+ const required=(typeof startupWizardCompletedThisSession==='undefined'||!startupWizardCompletedThisSession)&&!openingInProgress;
  if(!startupFormInitialized){
   const saved=config.saved||{},defaults=config.defaults||{};
   updateHeaderUserName(saved.email||extensionSettings.jira?.email);
@@ -9512,7 +9512,7 @@ window.addEventListener('message',event=>{
  if(message.type==='startupProceedResult'&&startupProceedMode){
   startupProceedMode='';
   if(message.success){
-   startupWizardCompletedThisSession=true;
+   if(typeof startupWizardCompletedThisSession!=='undefined')startupWizardCompletedThisSession=true;
    startupReturnToConnections=false;showStartupStep(false);
    // Never choose or open a remembered project on behalf of the user.
    $('gateQuery').focus();
