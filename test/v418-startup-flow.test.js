@@ -30,10 +30,10 @@ function fixture(){
 const verified={required:true,verified:true,prerequisitesVerified:true};
 test('verified startup waits for a manual Next click and never auto-logs in',()=>{
  const x=fixture();x.api.renderStartupConfig(verified);x.api.renderStartupConfig(verified);
- assert.deepEqual(x.sent,[],'saved verification cannot trigger startupProceed');
+ assert.deepEqual(x.sent,[{command:'startupReadiness'}],'saved verification must still scan the first screen, but cannot auto-proceed');
  assert.deepEqual(x.screens,[true,true],'Start screen stays visible');
  x.api.requestStartupProceed();
- assert.deepEqual(x.sent,[{command:'startupProceed',settings:{email:'saved'}}]);
+ assert.deepEqual(x.sent,[{command:'startupReadiness'},{command:'startupProceed',settings:{email:'saved'}}]);
  x.api.receive({type:'startupProceedResult',success:true,projectId:'p1'});
  assert.deepEqual(x.screens,[true,true,false]);
  assert.deepEqual(x.opened,[],'even a response containing projectId must not auto-open');
@@ -41,7 +41,7 @@ test('verified startup waits for a manual Next click and never auto-logs in',()=
 });
 test('manual Next enters project search without choosing a remembered project',()=>{
  const x=fixture();x.api.renderStartupConfig(verified);
- assert.deepEqual(x.sent,[]);
+ assert.deepEqual(x.sent,[{command:'startupReadiness'}],'the prerequisite screen must always scan first');
  x.api.requestStartupProceed();
  x.api.receive({type:'startupProceedResult',success:true,projectId:''});
  assert.deepEqual(x.opened,[]);
@@ -52,7 +52,7 @@ test('missing verification keeps setup available and manual Next shows an error'
  assert.deepEqual(x.sent,[{command:'startupReadiness'}]);
  assert.deepEqual(x.screens,[true]);
  const y=fixture();y.api.renderStartupConfig({...verified,verified:false});
- assert.deepEqual(y.sent,[]);
+ assert.deepEqual(y.sent,[{command:'startupReadiness'}],'verification state must not skip prerequisite scanning');
  assert.deepEqual(y.screens,[true]);
  const z=fixture();z.api.renderStartupConfig(verified);
  z.api.requestStartupProceed();

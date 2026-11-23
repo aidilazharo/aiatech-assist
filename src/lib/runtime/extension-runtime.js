@@ -1778,37 +1778,77 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
  */
 async function roleConnectionAccess(roleId){
  const project=openingFlow.phase==='open'?activeProject:null;
- const observed={};
- if(!project)return roleConnectionPolicy.evaluate(roleId,observed,'');
+ const observed={},issues=[];
+ if(!project)return {...roleConnectionPolicy.evaluate(roleId,observed,''),issues:[]};
  const config=effectiveConfig(project);
- const token=await getAtlassianToken(project).catch(()=>undefined);
- if(token&&config.get('jira.projectKey')){
+ const jiraKey=String(config.get('jira.projectKey')||'').trim();
+ const spaceKey=String(config.get('confluence.spaceKey')||'').trim();
+ const jiraUrl=String(config.get('jira.baseUrl')||'').trim();
+ const accountEmail=String(config.get('jira.email')||'').trim();
+ // Missing configuration is not evidence that Jira or Confluence denied access.
+ // Distinguish actionable setup problems from verified permission denial.
+ if(!jiraKey)issues.push('Set the Jira Project Key in Project Settings');
+ if(!spaceKey)issues.push('Set the Confluence Space Key in Project Settings');
+ if((jiraKey||spaceKey)&&(!jiraUrl||!accountEmail))
+  issues.push('Configure the Atlassian URL and email in Settings');
+ const atlReady=!!(jiraUrl&&accountEmail);
+ let token;
+ if((jiraKey||spaceKey)&&atlReady){
+  try{token=await getAtlassianToken(project);}
+  catch(error){
+   issues.push('Atlassian token unavailable; verify the account and token in Settings');
+   report('Role access Atlassian token check deferred: '+startupConnectionFailure(error));
+  }
+ }
+ const auth={token,basicEmail:accountEmail,timeoutMs:9000};
+ if(token&&atlReady&&jiraKey){
   try{
-   const projectKey=encodeURIComponent(config.get('jira.projectKey'));
-   const access=await requestJson(baseAtlassian(config)+'/rest/api/3/mypermissions?projectKey='+projectKey+'&permissions=BROWSE_PROJECTS%2CCREATE_ISSUES',
-    {token,basicEmail:config.get('jira.email'),timeoutMs:9000});
+   const projectKey=encodeURIComponent(jiraKey);
+   const access=await requestJson(baseAtlassian(config)+'/rest/api/3/mypermissions?projectKey='+projectKey+'&permissions=BROWSE_PROJECTS%2CCREATE_ISSUES',auth);
    observed.jiraRead=access?.permissions?.BROWSE_PROJECTS?.havePermission===true;
    observed.jiraWrite=observed.jiraRead&&access?.permissions?.CREATE_ISSUES?.havePermission===true;
-  }catch(error){report('Role access Jira check deferred: '+startupConnectionFailure(error));}
+   if(!observed.jiraRead)issues.push('Jira Browse Projects not verified for '+jiraKey);
+   else if(!observed.jiraWrite)issues.push('Jira Create Issues not verified for '+jiraKey);
+  }catch(error){
+   issues.push('Jira permission check unavailable: '+startupConnectionFailure(error));
+   report('Role access Jira check deferred: '+startupConnectionFailure(error));
+  }
  }
- if(token&&config.get('confluence.spaceKey')){
+ if(token&&atlReady&&spaceKey){
   try{
    const space=await getConfluenceSpace(config,token);
-   observed.confluenceRead=!!space?.id;
+   observed.confluenceRead=!!(space?.id&&String(space.key||'').toUpperCase()===spaceKey.toUpperCase());
    if(observed.confluenceRead){
-    const detail=await requestJson(baseConfluence(config)+'/api/v2/spaces/'+encodeURIComponent(space.id)+'?include-operations=true',
-     {token,basicEmail:config.get('jira.email'),timeoutMs:9000});
-    observed.confluenceWrite=canCreatePage(detail?.operations?.results);
-   }
-  }catch(error){report('Role access Confluence check deferred: '+startupConnectionFailure(error));}
+    const url=baseConfluence(config)+'/api/v2/spaces/'+encodeURIComponent(space.id);
+    let allowed;
+    // The dedicated v2 endpoint returns {operations:[...]}. Some sites
+    // expose the same information through include-operations=true.
+    try{
+     const response=await requestJson(url+'/operations',auth);
+     allowed=Array.isArray(response?.operations)?response.operations:response?.operations?.results;
+     if(!Array.isArray(allowed))throw Error('Confluence operations response is incomplete');
+    }catch(error){
+     const detail=await requestJson(url+'?include-operations=true',auth);
+     if(String(detail?.id)!==String(space.id)||String(detail?.key||'').toUpperCase()!==spaceKey.toUpperCase())
+      throw Error('Confluence space identity changed during permission verification');
+     allowed=detail?.operations?.results;
+     if(!Array.isArray(allowed))throw error;
+    }
+    observed.confluenceWrite=canCreatePage(allowed);
+    if(!observed.confluenceWrite)issues.push('Confluence Create Page not verified for '+spaceKey);
+   }else issues.push('Confluence space '+spaceKey+' was not verified');
+  }catch(error){
+   issues.push('Confluence permission check unavailable: '+startupConnectionFailure(error));
+   report('Role access Confluence check deferred: '+startupConnectionFailure(error));
+  }
  }
- const owner=String(config.get('github.owner')||''),repo=String(config.get('github.repo')||'');
- if(owner&&repo){
+ const owner=String(config.get('github.owner')||'').trim(),repo=String(config.get('github.repo')||'').trim();
+ if(!owner||!repo)issues.push('Set the GitHub project repository in Project Settings');
+ else{
   try{
    const gitToken=await getGithubToken(project);
-   // An unauthenticated public repository is not proof that the selected
-   // user/token has the required read or write permission.
-   if(gitToken){
+   if(!gitToken)issues.push('GitHub token unavailable; configure it in Settings');
+   else{
     const info=githubRepoInfo(config);
     const meta=await requestJson(info.route,{token:gitToken,timeoutMs:9000,
      headers:{Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'}});
@@ -1816,10 +1856,16 @@ async function roleConnectionAccess(roleId){
      observed.githubRead=meta.permissions?.pull===true;
      observed.githubWrite=observed.githubRead&&meta.permissions?.push===true;
     }
+    if(!observed.githubRead)issues.push('GitHub repository read permission not verified');
+    else if(roleConnectionPolicy.isDeveloperRole(roleId)&&!observed.githubWrite)
+     issues.push('Developer GitHub repository write permission not verified');
    }
-  }catch(error){report('Role access GitHub check deferred: '+startupConnectionFailure(error));}
+  }catch(error){
+   issues.push('GitHub permission check unavailable: '+startupConnectionFailure(error));
+   report('Role access GitHub check deferred: '+startupConnectionFailure(error));
+  }
  }
- return roleConnectionPolicy.evaluate(roleId,observed,project.id);
+ return {...roleConnectionPolicy.evaluate(roleId,observed,project.id),issues:issues.slice(0,6)};
 }
 
 async function dashboardState(){

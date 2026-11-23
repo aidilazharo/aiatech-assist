@@ -962,14 +962,20 @@ function renderRoleCredentialBanner(){
  const missing=access?.missing||['Jira read/write','Confluence read/write',developer?'GitHub read/write':'GitHub read'];
  const current=visibleRoles().find(role=>role.id===selectedRole);
  const label=current?visibleRoleLabel(current):selectedRole.replace(/-/g,' ');
+ const issues=Array.isArray(access?.issues)?access.issues.filter(value=>typeof value==='string'&&value.trim()):[];
+ // Missing mappings and invalid credentials are not proof of remote denial.
  $('roleCredentialMessage').textContent=access?
-  label+': update permissions in Settings — '+missing.join(', ')+'.':
+  label+': '+(issues.length?issues.slice(0,3).join(' · '):'Required permissions not verified: '+missing.join(', '))+'.':
   'Checking '+label+' connection permissions…';
  bar.classList.remove('hidden');
 }
 function requestRoleConnectionAccess(force=false){
  if(!workspaceOpened||!activeId||opening.phase!=='open')return;
- const key=activeId+'|'+selectedRole;
+ const selectedProject=projects.find(project=>project.id===activeId);
+ const key=activeId+'|'+selectedRole+'|'+JSON.stringify([
+  extensionSettings.jira,extensionSettings.confluence,extensionSettings.github,
+  selectedProject?.settings?.jira,selectedProject?.settings?.confluence,selectedProject?.settings?.github
+ ]);
  const now=Date.now();
  if(!force&&key===roleConnectionRequestedKey&&now-roleConnectionRequestedAt<60000)return;
  roleConnectionRequestedKey=key;roleConnectionRequestedAt=now;
@@ -9150,10 +9156,9 @@ function renderStartupConfig(config){
   startupConnectionVerified=config.verified===true;
   resetStartupConnectionChecks();
   startupFormInitialized=true;
-  if(config.prerequisitesVerified){
-   startupPage=1;
-   // Review saved connections on the Start screen; wait for an explicit Next click.
-  }
+  // Always show the first Technology stack prerequisites screen on ATGV: Start,
+  // even when a previous session verified this machine and saved credentials.
+  startupPage=0;
  }else if(config.verified===true&&!startupConnectionEditSnapshot&&!startupVerifying){
   startupConnectionVerified=true;
  }
