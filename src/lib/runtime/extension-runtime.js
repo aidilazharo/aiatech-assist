@@ -1325,6 +1325,28 @@ async function syncManagedDocuments(){
     catch(error){report('BR Confluence synchronization receipt pending: '+error.message);}
    }
   }
+  // Mirror only the already verified Confluence publication receipts to SQLite.
+  try{
+   const origin=new URL(baseConfluence(config)).origin;
+   const keys=new Set([...eligible,...approvedSnapshots.map(item=>item.key)]);
+   const allowed=[...keys].filter(key=>links.entries?.[key]?.pageId);
+   connectedSync.observeMany(registry,project.id,{provider:'confluence',origin,
+    resources:allowed.filter(key=>!result.conflicts.some(row=>row.file===key)).map(key=>{
+     const mapping=links.entries[key];
+     return {id:String(mapping.pageId),revision:String(mapping.version||''),
+      value:{hash:mapping.remoteHash||'',version:mapping.version},
+      metadata:{key:String(mapping.pageId),kind:'approved-document'}};
+    })});
+   for(const item of result.conflicts||[]){
+    const mapped=links.entries?.[item.file];
+    if(mapped?.pageId)connectedSync.reportConflict(registry,project.id,{
+     provider:'confluence',origin,id:String(mapped.pageId),
+     localRevision:String(mapped.version||''),remoteRevision:String(item.remoteVersion||''),
+     reason:'Confluence approved document conflicts with a remote revision. Review before publishing.'});
+   }
+   connectedSync.checkpoint(registry,project.id,{provider:'confluence',origin,
+    scope:'approved-documents',count:allowed.length,complete:result.conflicts.length===0});
+  }catch(error){report('Confluence publication SQLite ledger: '+String(error.message||error).slice(0,180));}
   report('Confluence approved documents: '+JSON.stringify(result));
   if(result.conflicts.length)await notice(`${result.conflicts.length} Confluence document conflict(s) need review.`,true);
   return result;
