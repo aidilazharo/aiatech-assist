@@ -114,7 +114,7 @@ test('Host and UI expose a distinct consent-gated custom handoff while catalog g
  assert.match(code,/Approve Development Handoff/);
  assert.match(code,/No force-push or merge to main/);
  assert.match(code,/techStackValidation:validation,techStackApproval:signoff/);
- assert.match(host,/const preview=handoff\.previewEvidence\(root,result\)/);
+ assert.match(host,/const preview=eligible\?handoff\.previewEvidence\(root,result\)/);
  assert.match(ui,/architectBegin\(custom\?'architectApproveCustomStack':'architectApproveStack'/);
  assert.match(ui,/handoff\.disabled=architectActionBusy\|\|!mockReady\|\|handedOff/);
  assert.match(ui,/m\.type==='architectCustomHandoffProgress'/);

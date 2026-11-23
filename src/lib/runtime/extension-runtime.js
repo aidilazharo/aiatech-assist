@@ -7008,14 +7008,11 @@ async function handleDashboardMessage(msg){
           const inspected=await stack.scan(root);
           if(msg.expectedSha&&msg.expectedSha!==inspected.sha)
             throw Error('Local Git revision has changed. Refresh and retry without overwriting any files.');
-          if(!inspected.clean)throw Error('Local checkout contains uncommitted changes. Commit or stash them before Install & Run.');
-          const requested=inspected.targets.find(row=>row.relative===msg.relative&&row.runnable);
-          const target=requested?.mockable?requested:
-            inspected.targets.find(row=>row.runnable&&row.mockable)||requested||
-            (!msg.relative?inspected.targets.find(row=>row.runnable):null);
-          if(!target)throw Error('No runnable application target is detected in this repository.');
-          const action='Install & Run Custom Stack';
+          // Dirty checkouts are runnable in-place, without Git reset/stash/commit.
           const workflow=require('../../architect-custom-workflow');
+          const target=workflow.selectPreviewTarget(inspected,String(msg.relative||''));
+          if(!target)throw Error('No runnable Vite frontend detected. Install & Run will not open an API-only /api/v1/health page. Check frontend package.json and vite.config.ts.');
+          const action='Install & Run Custom Stack';
           workflow.beginConsent(root);
           await recordStackActivity(projectId,'Install & Run / approval','Awaiting ATGV confirmation in VS Code. No application scripts have started.');
           await dashboard?.webview.postMessage({type:'architectCustomProgress',projectId,percent:4,phase:'approval',
@@ -7036,8 +7033,9 @@ async function handleDashboardMessage(msg){
             '\\n2–3. Create or reuse a LOCAL fix branch and commit isolated mock service/database fixtures.'+
             '\\n4. Execute dependency installation/validation (may run npm scripts).'+
             '\\n5–6. Start and verify localhost MOCK DATA services and synthetic database responses.'+
-            '\\n\\nExisting local changes are never overwritten, main is never changed and nothing is pushed to GitHub.'+
-            '\\nThe preview DOES NOT start or validate the real PostgreSQL, identity provider, or external systems. It does not constitute production readiness. Continue?',
+            '\\n\\nUncommitted files are preserved: a dirty checkout runs in-place, without Git stash, reset, branch switch or commit.'+
+            '\\nA clean checkout may create a local fix branch. No GitHub push occurs.'+
+            '\\nIf NestJS and PostgreSQL are configured, both services may run; otherwise Vite runs with clearly labelled synthetic APIs. This is not production readiness. Continue?',
             {modal:true},action);
           }finally{clearInterval(reminder);consentCancelled=workflow.endConsent(root);}
           await recordStackActivity(projectId,'Install & Run / approval',
@@ -7077,13 +7075,20 @@ async function handleDashboardMessage(msg){
             }
           });
           if(activeProject?.id===projectId){
-            // Persist mock-only readiness at the exact local fix-branch SHA.
-            // This is not a real database/server verification or test/build proof.
+            // Running a live backend or dirty working tree is useful for preview,
+            // but it is NOT clean synthetic handoff evidence or an approval.
             const handoff=require('../../architect-custom-handoff');
-            const preview=handoff.previewEvidence(root,result);
+            const eligible=result.mockPreview===true&&result.mockDatabase===true&&
+              result.inspection?.clean===true&&/^fix\/atgv-custom-stack-[a-f0-9]{10}$/.test(result.branch||'');
+            const preview=eligible?handoff.previewEvidence(root,result):{
+              status:'local-preview-only',stackId:'custom',root,branch:result.branch,
+              sha:result.inspection?.sha,relative:result.relative,
+              url:result.frontendUrl,mockOnly:result.mockPreview===true,
+              localChangesPreserved:result.localChangesPreserved===true,at:new Date().toISOString()
+            };
             const current=await registry.read(projectId);
             if(current.techStackId!=='custom')throw Error('Custom Stack selection changed during Install & Run.');
-            const keep=current.techStackApproval?.scope==='development-mock' &&
+            const keep=eligible&&current.techStackApproval?.scope==='development-mock' &&
               current.techStackApproval?.sha===preview.sha && current.techStackApproval?.remoteVerified===true &&
               current.techStackValidation?.sha===preview.sha;
             const saved=await registry.update(projectId,{...current,
@@ -7095,10 +7100,13 @@ async function handleDashboardMessage(msg){
               techStackServerVerification:null});
             activeProject=saved;
             await refreshDashboard();
-            await vscode.env.openExternal(vscode.Uri.parse(result.url)).catch(error=>report('Custom Stack mock browser: '+error.message));
+            const frontend=String(result.frontendUrl||'');
+            if(!/^http:\/\/(?:127\.0\.0\.1|localhost):[0-9]+\/$/.test(frontend))
+              throw Error('Refusing to open an API endpoint; a verified frontend URL is required.');
+            await vscode.env.openExternal(vscode.Uri.parse(frontend)).catch(error=>report('Custom Stack frontend browser: '+error.message));
             await dashboard?.webview.postMessage({type:'architectCustomRunResult',projectId,value:result});
           }
-          await recordStackActivity(projectId,'Install & Run / complete','Verified mock preview: '+result.url+'; local branch '+result.branch+'.');
+          await recordStackActivity(projectId,'Install & Run / complete','Verified frontend: '+result.frontendUrl+'; local branch '+result.branch+'.');
           architectErrorLogs.clear(projectId,'custom-stack');
         }catch(error){
           await recordStackActivity(projectId,'Install & Run / failed',error.diagnosticLogs||String(error.stack||error.message||error));

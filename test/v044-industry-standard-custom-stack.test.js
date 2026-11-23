@@ -68,7 +68,7 @@ test('Custom Install & Run prioritizes the frontend even when the old selection 
  const web={relative:'apps/web',role:'frontend',runnable:true,mockable:true,previewUrl:'http://127.0.0.1:5173/'};
  assert.equal(workflow.selectPreviewTarget({targets:[api,web]},'apps/api'),web);
  assert.equal(workflow.selectPreviewTarget({targets:[api,web]},''),web);
- assert.equal(workflow.selectPreviewTarget({targets:[api]},'apps/api'),api);
+ assert.equal(workflow.selectPreviewTarget({targets:[api]},'apps/api'),null);
 });
 test('Frontend mock preview serves both the web UI and synthetic health endpoint',()=>{
  const preview=require('../src/stack-mock-preview');

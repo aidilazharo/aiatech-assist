@@ -22,10 +22,10 @@ const steps=Object.freeze([
 // exists. A previously selected API target must not silently replace the UI.
 function selectPreviewTarget(inspection,relative){
  const targets=inspection?.targets||[];
- const requested=targets.find(x=>x.relative===relative&&x.runnable);
- if(requested?.mockable)return requested;
- return targets.find(x=>x.runnable&&x.mockable)||
-  requested||(!relative?targets.find(x=>x.runnable&&x.mockApi)||targets.find(x=>x.runnable):null);
+ const requested=targets.find(x=>x.relative===relative&&x.runnable&&x.mockable&&x.role==='frontend');
+ // Install & Run is an application preview, not a JSON health-check viewer.
+ // Never fall back to NestJS/API-only when a frontend was requested or expected.
+ return requested||targets.find(x=>x.runnable&&x.mockable&&x.role==='frontend')||null;
 }
 function cancelled(state){
  if(state.controller.signal.aborted)throw Error('Custom Stack Install & Run cancelled. Local branch and committed mock fixtures are preserved.');
@@ -73,17 +73,19 @@ async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgr
   const inspection=await stack.scan(key,{driver});
   cancelled(state);
   if(expectedSha&&inspection.sha!==expectedSha)throw Error('Git revision changed since the previous scan. Nothing was modified; retry after refreshing the repository.');
-  if(!inspection.clean)throw Error('Local checkout has uncommitted changes. Preserve or commit them before Install & Run.');
+  // Local application edits are valid development state: do not stash, reset,
+  // switch branches or commit them behind the user's back. Run in-place instead.
+  const dirty=inspection.clean!==true;
   if(driver.localLogs().running)throw Error('Stop the currently managed application before Install & Run.');
   const chosen=selectPreviewTarget(inspection,relative);
-  if(!chosen)throw Error('No runnable application was detected for the selected Custom Stack target.');
-  if(!chosen.mockable&&!chosen.mockApi)
-   throw Error('Synthetic preview requires a runnable Vite frontend with local configuration or a supported Node API (NestJS, Express, Fastify). Other standard frameworks are detected but need an explicitly configured runtime; no unsafe fallback was started.');
-  const url=stack.loopbackPreview(relative===chosen.relative&&previewUrl?previewUrl:chosen.previewUrl);
-  if(chosen.mockable&&new URL(url).pathname!=='/')
-   throw Error('The frontend preview must open at the application root, not an API health endpoint.');
-  if(chosen.mockApi&&new URL(url).pathname!=='/api/v1/health')
-   throw Error('Node API synthetic preview must use /api/v1/health.');
+  if(!chosen){
+   const detected=(inspection.targets||[]).filter(x=>x.runnable).map(x=>x.relative+': '+x.framework).join(', ');
+   throw Error('No runnable Vite frontend detected. Install & Run will not open an API-only /api/v1/health page. Detected: '+(detected||'none')+'. Verify the frontend package.json dev script and vite.config.ts.');
+  }
+  // Discard stale manually selected API URLs. The browser must always open
+  // the detected frontend root, never the NestJS health endpoint.
+  const selectedUrl=relative===chosen.relative&&previewUrl?stack.loopbackPreview(previewUrl):null;
+  const url=selectedUrl&&new URL(selectedUrl).pathname==='/'&&new URL(selectedUrl).port===new URL(chosen.previewUrl).port?selectedUrl:stack.loopbackPreview(chosen.previewUrl);
   const analysis=await repairs.analyse(key,inspection);
   if(typeof onAiReview==='function'){
    await report(17,1,'1/6 AI reviewing application architecture and blockers (advisory only)…',true);
@@ -92,9 +94,11 @@ async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgr
    await report(21,1,'1/6 Repository analysis finished. Continuing with verified local actions…');
   }
   cancelled(state);
-  await report(24,2,'2/6 Creating isolated local fix branch; main remains untouched…');
+  await report(24,2,dirty?'2/6 Preserving local edits and running in-place (no stash, reset, branch switch, or commit)…':'2/6 Preparing isolated local fix branch; main remains untouched…');
   let branch=inspection.branch;
-  if(/^fix\/atgv-custom-stack-[a-f0-9]{10}$/.test(branch)){
+  if(dirty){
+   await report(45,3,'3/6 Existing uncommitted files are preserved. No Git operations will modify this checkout.');
+  }else if(/^fix\/atgv-custom-stack-[a-f0-9]{10}$/.test(branch)){
    await assertPreviewScaffold(key);
    await report(40,3,'3/6 Reusing existing verified local mock code and commit on '+branch+'…');
   }else{
@@ -106,11 +110,14 @@ async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgr
   }
   cancelled(state);
   const after=await stack.scan(key,{driver});
-  if(after.branch!==branch||!after.clean)throw Error('Fix-branch verification failed. No service was started.');
-  await assertPreviewScaffold(key);
+  if(after.branch!==branch||!after.sha||(!dirty&&!after.clean)||
+     (dirty&&after.sha!==inspection.sha)||(!dirty&&branch===inspection.branch&&after.sha!==inspection.sha))
+   throw Error('Local branch/revision verification failed. No service was started.');
+  if(!dirty)await assertPreviewScaffold(key);
   const fullStackPair=fullStack.detectPair(after);
   const hasBackendEnv=fullStackPair ? await fullStack.hasEnvironment(key,fullStackPair.backend) : false;
-  const runMode=fullStack.modeForPair(fullStackPair,hasBackendEnv,fullStackMode);
+  let runMode=fullStack.modeForPair(fullStackPair,hasBackendEnv,fullStackMode);
+  let backendFallback=false;
   await report(56,4,runMode==='live'?'4/6 Installing frontend and backend dependencies…':'4/6 Installing and validating application dependencies…');
   const inspected=await driver.inspectScripts(key);
   const dependencyTarget=inspected.targets.find(x=>x.relative===chosen.relative&&x.kind===chosen.kind);
@@ -118,44 +125,60 @@ async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgr
   await dependencies.ensureForTarget(key,dependencyTarget,{signal:state.controller.signal,
    onProgress:async message=>{cancelled(state);await report(61,4,message);}});
   if(runMode==='live'){
-   const backendTarget=inspected.targets.find(x=>x.relative===fullStackPair.backend.relative&&x.kind===fullStackPair.backend.kind);
-   if(!backendTarget)throw Error('NestJS backend disappeared during install.');
-   await dependencies.ensureForTarget(key,backendTarget,{signal:state.controller.signal,
-    onProgress:async message=>{cancelled(state);await report(67,4,'Backend: '+message);}});
+   try{
+    const backendTarget=inspected.targets.find(x=>x.relative===fullStackPair.backend.relative&&x.kind===fullStackPair.backend.kind);
+    if(!backendTarget)throw Error('NestJS backend disappeared during install.');
+    await dependencies.ensureForTarget(key,backendTarget,{signal:state.controller.signal,
+     onProgress:async message=>{cancelled(state);await report(67,4,'Backend: '+message);}});
+   }catch(error){
+    cancelled(state);
+    if(fullStackMode!=='auto')throw error;
+    runMode='preview';backendFallback=true;
+    await report(69,4,'Real backend dependencies were unavailable. Continuing with Vite frontend and clearly marked synthetic API; no real database claim.');
+   }
   }
   cancelled(state);
-  await report(76,5,runMode==='live'?'5/6 Starting real NestJS API and Vite frontend…':chosen.mockable?'5/6 Launching Vite frontend and its isolated mock API/database fixtures…':'5/6 Launching API-only mock (no runnable Vite frontend detected)…');
+  await report(76,5,runMode==='live'?'5/6 Starting real NestJS API and Vite frontend…':'5/6 Launching Vite frontend with isolated mock API/database fixtures…');
   let result;
   if(runMode==='live'){
-   result=await fullStack.run(key,{inspection:after,pair:fullStackPair,driver,
-    onProgress:async message=>{cancelled(state);await report(82,5,message);}});
-   state.started=true;
-  }else if(chosen.mockable){
+   try{
+    result=await fullStack.run(key,{inspection:after,pair:fullStackPair,driver,
+     onProgress:async message=>{cancelled(state);await report(82,5,message);}});
+    state.started=true;
+   }catch(error){
+    cancelled(state);
+    if(fullStackMode!=='auto')throw error;
+    // Full-stack runner cleans up its own child processes after failure.
+    // Show the actual UI using isolated mock handlers instead of a dead API page.
+    runMode='preview';backendFallback=true;
+    await report(83,5,'Real NestJS/PostgreSQL health did not verify. Starting Vite with synthetic API instead; real backend is NOT running.');
+   }
+  }
+  if(runMode==='preview'){
    result=await stack.run(key,{sha:after.sha,relative:chosen.relative,previewUrl:url,mock:true,mockDatabase:true,driver,
-    onProgress:async message=>{cancelled(state);await report(82,5,message);}});
+    onProgress:async message=>{cancelled(state);await report(84,5,message);}});
    state.started=true;
-  }else{
-   await driver.runMockServices(key,{relative:chosen.relative,previewUrl:url});
-   state.started=true;
-   result={running:true,url,mockPreview:true,mockDatabase:true,relative:chosen.relative,framework:chosen.framework,sha:after.sha};
   }
   cancelled(state);
   await report(93,6,runMode==='live'?'6/6 Verifying real NestJS/PostgreSQL and Vite frontend…':'6/6 Verifying ATGV-owned localhost mock preview…');
   if(runMode==='live'){
    if(!fullStack.isActive())throw Error('Real frontend or backend exited during full-stack verification.');
-  }else if(!chosen.mockable)await verifyMock(url,driver,key,chosen.relative,state);
-  else if(!driver.localLogs().running)throw Error('Vite mock preview exited during verification.');
+  }else if(!driver.localLogs().running)throw Error('Vite mock preview exited during verification.');
   cancelled(state);
   const updated=await stack.scan(key,{driver});
   updated.analysis=await repairs.analyse(key,updated);
   if(analysis.modelReview)updated.analysis.modelReview=analysis.modelReview;
   updated.branches=await repairs.branches(key,{driver});
-  await report(100,6,runMode==='live'?'Real frontend, backend and PostgreSQL health verified.':chosen.mockable?'Frontend and mock API preview verified. All six steps complete; use Stop to terminate it.':'API-only mock verified; no runnable Vite frontend was detected.');
+  await report(100,6,runMode==='live'?'Real frontend, backend and PostgreSQL health verified.':'Frontend and mock API preview verified. All six steps complete; use Stop to terminate it.');
   const runningUrl=runMode==='live'?result.frontendUrl:url;
-  return {...result,running:true,url:runningUrl,frontendUrl:runMode==='live'?result.frontendUrl:chosen.mockable?url:null,
-   apiUrl:runMode==='live'?result.apiUrl:chosen.mockable?new URL('/api/v1/health',url).toString():url,branch,inspection:updated,mode:runMode,
-   message:runMode==='live'?result.message+' Local branch: '+branch+'.':
-    'MOCK DATA ONLY · '+(chosen.mockable?'Frontend application and simulated API':'API-only mock (no runnable Vite frontend detected)')+' running on '+branch+' at '+url+'. Synthetic database, not real PostgreSQL; external integrations unverified. No push to GitHub.' ,
+  if(new URL(runningUrl).pathname!=='/' || !runningUrl)throw Error('Frontend URL verification failed; refusing to open an API endpoint.');
+  return {...result,relative:chosen.relative,sha:updated.sha,running:true,url:runningUrl,frontendUrl:runningUrl,
+   apiUrl:runMode==='live'?result.apiUrl:new URL('/api/v1/health',url).toString(),branch,inspection:updated,mode:runMode,
+   localChangesPreserved:dirty,backendFallback,
+   message:runMode==='live'?result.message+' Local branch: '+branch+(dirty?' (uncommitted changes preserved).':'.'):
+    'MOCK DATA ONLY · Vite frontend and simulated API running on '+branch+' at '+runningUrl+'. Synthetic database, not real PostgreSQL; external integrations unverified. No GitHub push.'+
+    (backendFallback?' Real backend could not start; Vite mock preview was used instead.':'')+
+    (dirty?' Uncommitted changes preserved; development handoff remains blocked until committed.':''),
    steps:steps.slice()};
  }catch(error){
   if(state.started)await driver.stopLocal().catch(()=>{});

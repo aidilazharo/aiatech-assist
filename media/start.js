@@ -8588,7 +8588,7 @@ window.addEventListener('message',event=>{
   }
   architectCustomRunning=!!m.value?.running;
   if(m.value?.running)architectCustomRuntime={...architectCustomRuntime,projectId:activeId,checked:true,running:true,
-    previewUrl:String(m.value.url||''),mockPreview:!!m.value.mockPreview,reachable:true};
+    previewUrl:String(m.value.frontendUrl||''),mockPreview:!!m.value.mockPreview,reachable:true};
   architectCustomNotify(m.value?.message||'Custom Stack execution completed.',m.value?.running?'complete':'error');
   architectCustomSetProgress(m.value?.running?100:architectCustomProgressPercent,m.value?.running?'Local preview verified':'Run unsuccessful');
   renderArchitectCustomPanel();architectCustomRequestStatus();

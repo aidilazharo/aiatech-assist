@@ -54,7 +54,7 @@ test('Install & Run performs ordered scan, local commit, dependency check and ve
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-install-run-'));
  let sha='a'.repeat(40),branch='main',running=false;
  const actions=[],progress=[];
- const target={relative:'web',kind:'npm',framework:'React / Vite',mockable:true,runnable:true,
+ const target={relative:'web',kind:'npm',role:'frontend',framework:'React / Vite',mockable:true,runnable:true,
    previewUrl:'http://127.0.0.1:5173/'};
  const driver={
   localLogs:()=>({running}),
@@ -110,7 +110,7 @@ test('Dirty checkout and an unsupported target fail before any branch modificati
   await assert.rejects(workflow.installAndRun(root,{
    stack:{scan:async()=>({sha:'c'.repeat(40),clean:false,targets:[]})},
    driver,repairs
-  }),/uncommitted changes/);
+  }),/No runnable Vite frontend detected/);
   assert.equal(touched,false);
   assert.equal(workflow.isPending(root),false);
  }finally{await fs.rm(root,{recursive:true,force:true});}
