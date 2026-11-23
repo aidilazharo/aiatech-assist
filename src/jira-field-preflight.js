@@ -24,7 +24,7 @@ function namedEvidence(field,item,{approvedBR={},discoveryAnswers={}}){
 function availableText(field,item,details,{approvedBR={},discoveryAnswers={}}={}){
  const key=normalize(field.name);
  const section=jiraDetails.fieldSection(field.name);
- if(section)return {text:details[section],source:'Issue-specific '+(section==='acceptanceCriteria'?'acceptance criteria':'Definition of Done')};
+ if(section&&details[section])return {text:details[section],source:'Issue-specific '+(section==='acceptanceCriteria'?'acceptance criteria':'Definition of Done')};
  const exact=namedEvidence(field,item,{approvedBR,discoveryAnswers});
  if(exact)return {text:exact,source:'Named field in approved BR evidence'};
  const mappings=[
