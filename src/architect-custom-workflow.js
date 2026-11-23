@@ -17,6 +17,15 @@ const steps=Object.freeze([
  'Create and run mock services and database',
  'Verify local preview'
 ]);
+// Install & Run is a visual application preview when a runnable Vite frontend
+// exists. A previously selected API target must not silently replace the UI.
+function selectPreviewTarget(inspection,relative){
+ const targets=inspection?.targets||[];
+ const requested=targets.find(x=>x.relative===relative&&x.runnable);
+ if(requested?.mockable)return requested;
+ return targets.find(x=>x.runnable&&x.mockable)||
+  requested||(!relative?targets.find(x=>x.runnable&&x.mockApi)||targets.find(x=>x.runnable):null);
+}
 function cancelled(state){
  if(state.controller.signal.aborted)throw Error('Custom Stack Install & Run cancelled. Local branch and committed mock fixtures are preserved.');
 }
@@ -65,11 +74,13 @@ async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgr
   if(expectedSha&&inspection.sha!==expectedSha)throw Error('Git revision changed since the previous scan. Nothing was modified; retry after refreshing the repository.');
   if(!inspection.clean)throw Error('Local checkout has uncommitted changes. Preserve or commit them before Install & Run.');
   if(driver.localLogs().running)throw Error('Stop the currently managed application before Install & Run.');
-  const chosen=inspection.targets.find(x=>x.relative===relative&&x.runnable)||(!relative?inspection.targets.find(x=>x.runnable&&x.mockable)||inspection.targets.find(x=>x.runnable&&x.mockApi)||inspection.targets.find(x=>x.runnable):null);
+  const chosen=selectPreviewTarget(inspection,relative);
   if(!chosen)throw Error('No runnable application was detected for the selected Custom Stack target.');
   if(!chosen.mockable&&!chosen.mockApi)
    throw Error('Synthetic preview requires a runnable Vite frontend with local configuration or a supported Node API (NestJS, Express, Fastify). Other standard frameworks are detected but need an explicitly configured runtime; no unsafe fallback was started.');
   const url=stack.loopbackPreview(relative===chosen.relative&&previewUrl?previewUrl:chosen.previewUrl);
+  if(chosen.mockable&&new URL(url).pathname!=='/')
+   throw Error('The frontend preview must open at the application root, not an API health endpoint.');
   if(chosen.mockApi&&new URL(url).pathname!=='/api/v1/health')
    throw Error('Node API synthetic preview must use /api/v1/health.');
   const analysis=await repairs.analyse(key,inspection);
@@ -103,7 +114,7 @@ async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgr
   await dependencies.ensureForTarget(key,dependencyTarget,{signal:state.controller.signal,
    onProgress:async message=>{cancelled(state);await report(61,4,message);}});
   cancelled(state);
-  await report(76,5,'5/6 Launching isolated mock services with synthetic database fixtures…');
+  await report(76,5,chosen.mockable?'5/6 Launching Vite frontend and its isolated mock API/database fixtures…':'5/6 Launching API-only mock (no runnable Vite frontend detected)…');
   let result;
   if(chosen.mockable){
    result=await stack.run(key,{sha:after.sha,relative:chosen.relative,previewUrl:url,mock:true,mockDatabase:true,driver,
@@ -123,9 +134,10 @@ async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgr
   updated.analysis=await repairs.analyse(key,updated);
   if(analysis.modelReview)updated.analysis.modelReview=analysis.modelReview;
   updated.branches=await repairs.branches(key,{driver});
-  await report(100,6,'Mock preview verified. All six steps complete; use Stop to terminate it.');
-  return {...result,running:true,url,branch,inspection:updated,
-   message:'MOCK DATA ONLY · Local preview running on '+branch+' at '+url+'. Synthetic database, not real PostgreSQL; external integrations unverified. No push to GitHub.',
+  await report(100,6,chosen.mockable?'Frontend and mock API preview verified. All six steps complete; use Stop to terminate it.':'API-only mock verified; no runnable Vite frontend was detected.');
+  return {...result,running:true,url,frontendUrl:chosen.mockable?url:null,
+   apiUrl:chosen.mockable?new URL('/api/v1/health',url).toString():url,branch,inspection:updated,
+   message:'MOCK DATA ONLY · '+(chosen.mockable?'Frontend application and simulated API':'API-only mock (no runnable Vite frontend detected)')+' running on '+branch+' at '+url+'. Synthetic database, not real PostgreSQL; external integrations unverified. No push to GitHub.',
    steps:steps.slice()};
  }catch(error){
   if(state.started)await driver.stopLocal().catch(()=>{});
@@ -151,4 +163,4 @@ function cancel(root){
  return false;
 }
 function isPending(root){return running.has(path.resolve(root));}
-module.exports={installAndRun,beginConsent,endConsent,cancel,isPending,steps};
+module.exports={installAndRun,selectPreviewTarget,beginConsent,endConsent,cancel,isPending,steps};
