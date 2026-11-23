@@ -177,7 +177,7 @@
   const eligible=findings.filter(row=>requirements().some(br=>br.id===row.id&&br.status==='draft'&&!br.approvedContent));
   bar.hidden=!findings.length&&!aiResolve.running&&!aiResolve.message;
   action.disabled=!eligible.length||aiResolve.running||busy()||dirty()||!!baBusyTask||discoveryImportBusy||!baCanEdit('ba-discovery');
-  action.title=eligible.length?'Repair '+eligible.length+' editable, source-backed draft'+(eligible.length===1?'':'s')+' with AI, then rerun quality validation. Jira stays unchanged.':'No eligible editable draft findings; approved revisions and unsupported decisions require human review.';
+  action.title=eligible.length?'Use AI to repair '+eligible.length+' draft(s) using source evidence. Jira unchanged.':'No eligible editable draft; human review may be required.';
   stop.hidden=!aiResolve.running;stop.disabled=aiResolve.stopping;
   get('baAutoResolveStatus').textContent=aiResolve.message||(findings.length?findings.length+' requirement'+(findings.length===1?'':'s')+' need a source-backed correction.':'');
  }
