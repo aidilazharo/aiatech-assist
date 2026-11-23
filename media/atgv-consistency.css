@@ -102,6 +102,10 @@
   border-radius:var(--atgv-consistency-radius-sm);
   border:1px solid transparent;
 }
+#discoveryView .atgv-section-table-toolbar .ba-auto-title-icon > svg{
+  display:block;width:18px;height:18px;min-width:18px;min-height:18px;
+  pointer-events:none;
+}
 #discoveryView .atgv-section-table-toolbar .ba-auto-title-icon[aria-pressed="true"]{
   border-color:var(--atgv-consistency-focus);
   background:var(--vscode-list-activeSelectionBackground,#1d3853);
