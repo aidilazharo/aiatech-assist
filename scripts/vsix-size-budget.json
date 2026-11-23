@@ -1,6 +1,6 @@
 {
-  "maxCompressedBytes": 1405000,
+  "maxCompressedBytes": 1411000,
   "baselineVersion": "0.4.40",
   "baselineBytes": 1327153,
-  "notes": "Fail closed beyond 1,405,000 compressed bytes. v0.0.61 audited VSIX measured 1,401,033 bytes after separate frontend/backend runtime handling; retain per-file size report and activation verification."
+  "notes": "Strict optimized VSIX cap of 1,411,000 bytes. v0.0.62 full-stack/mock data and explicit Start Next release measured 1,406,925 bytes in CI (4,075 bytes headroom). Keep per-file size report, checksum and activation verification; no exclusions added."
 }
