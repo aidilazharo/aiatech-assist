@@ -20,7 +20,7 @@ test('pinned remote stack, design guidance and role skills are retrieved without
   assert.equal(current.framework,'React 19');assert.ok(current.templateRepository.includes('github'));
   const draft=design.prompt('mockup',{entries:[{id:'BR-1',revision:1}]},await catalog.designGuidance(workspace));
   assert.match(draft,/AIA|Qi/i);
-  const edited=path.join(workspace,'.atgv','templates','tech-stacks','react.json');
+  const edited=path.join(workspace,'.atgv','library','templates','tech-stacks','react.json');
   await fs.mkdir(path.dirname(edited),{recursive:true});await fs.writeFile(edited,JSON.stringify({...current,notes:'untrusted override'}));
   assert.equal((await loadStack('react',workspace)).notes,current.notes,'workspace defaults may not change pinned verified catalog');
   assert.deepEqual((await catalog.activeManifest(workspace)).techStacks,['spring-boot','nestjs','dotnet','react','angular']);

@@ -190,7 +190,7 @@ async function openTaskDocument(registry, projectId, roleId, taskId, vscode, ext
     if (task.template) {
         let content;
         try {
-            const resolved = await safePath(path.join(registry.workspace, '.atgv'), path.join('templates', task.template));
+            const resolved = await safePath(path.join(registry.workspace, '.atgv', 'library'), path.join('templates', task.template));
             content = await fs.readFile(resolved, 'utf8');
         }
         catch (e) {

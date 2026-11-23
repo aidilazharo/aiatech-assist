@@ -18,10 +18,10 @@ test('ATGV: Start initializes an empty workspace but does not invent a project',
   try{
     const registry=new ProjectRegistry(root);
     assert.deepEqual(await initializeWorkspaceFolders(root,registry),{initialized:true,projects:0});
-    assert.equal(await exists(path.join(root,'.atgv','templates','tech-stacks','nestjs.json')),false,'stack templates are remote-only');
+    assert.equal(await exists(path.join(root,'.atgv','library','templates','tech-stacks','nestjs.json')),false,'stack templates are remote-only');
     assert.equal(await exists(path.join(root,'.atgv','skills','business-analyst','SKILL.md')),false,'role skills are remote-only');
     assert.deepEqual(await fs.readdir(path.join(root,'projects')),[]);
-    const custom=path.join(root,'.atgv','templates','business-requirement.md');
+    const custom=path.join(root,'.atgv','library','templates','business-requirement.md');
     await fs.writeFile(custom,'Enterprise custom template');
     await initializeWorkspaceFolders(root,registry);
     assert.equal(await fs.readFile(custom,'utf8'),'Enterprise custom template');
@@ -108,7 +108,7 @@ test('install notification reloads on approval then opens ATGV: Start after relo
     await until(()=>Boolean(panel));
     assert.equal(panel.title,'ATGV: Start');
     assert.equal(state.has('atgvAssist.pendingStartAfterReload'),false);
-    assert.equal(await exists(path.join(root,'.atgv','templates','tech-stacks','react.json')),false,'Start must not initialize files before connection test');
+    assert.equal(await exists(path.join(root,'.atgv','library','templates','tech-stacks','react.json')),false,'Start must not initialize files before connection test');
     assert.equal(await exists(path.join(root,'projects')),false,'Start must not create the projects folder');
     assert.deepEqual([...registered.keys()].sort(),['atgvAssist.ai','atgvAssist.refreshUnifiedArtifacts','atgvAssist.reportIssue','atgvAssist.reset','atgvAssist.restart','atgvAssist.start','atgvAssist.workspace']);
   }finally{

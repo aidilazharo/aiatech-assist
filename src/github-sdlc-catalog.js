@@ -350,41 +350,74 @@ async function cached(config, storeRoot) {
 // The active catalog is a normal Git checkout at a stable location. The Git
 // revision belongs in metadata, never in a directory name. Git pull updates
 // tracked assets, including removals, without creating another revision folder.
-const WORKSPACE_GIT_CATALOG = 'library';
+const WORKSPACE_GIT_CATALOG = path.join('library', 'repository');
 const gitCatalogUpdates = new Map();
 function gitCatalogFolder(workspace) { return path.join(workspace, '.atgv', WORKSPACE_GIT_CATALOG); }
 function gitCatalogState(workspace) { return path.join(workspace, '.atgv', 'library-state.json'); }
 // Upgrade the legacy stable checkout without resetting, deleting or recloning it.
 // Keep existing VS Code configuration keys and the original Git history intact.
+// The library root contains ATGV-managed shared content; the GitHub checkout
+// lives in repository/ so user templates never dirty its verified Git history.
 async function migrateLegacyLibraryCheckout(workspace) {
     if (!workspace) return;
-    const base=path.join(workspace,'.atgv');
-    const legacy=path.join(base,'sdlc-catalog'),current=gitCatalogFolder(workspace);
+    const base=path.join(workspace,'.atgv'),root=path.join(base,'library');
+    const checkout=path.join(root,'repository'),legacy=path.join(base,'sdlc-catalog');
     const legacyState=path.join(base,'sdlc-catalog-state.json'),currentState=gitCatalogState(workspace);
     const entry=async file=>fs.lstat(file).catch(error=>error.code==='ENOENT'?null:Promise.reject(error));
-    let old=await entry(legacy),now=await entry(current);
-    if (old&&(!old.isDirectory()||old.isSymbolicLink())) throw Error('Unsafe legacy library checkout. No files were changed.');
-    if (now&&(!now.isDirectory()||now.isSymbolicLink())) throw Error('Unsafe library checkout. No files were changed.');
-    if (old&&!now) {
-        try { await fs.rename(legacy,current); }
-        catch(error) {
-            if (error.code!=='ENOENT' || !await entry(current)) throw Error('Could not migrate the legacy library checkout safely: '+error.message,{cause:error});
+    const directory=(st,where)=>{if(st&&(!st.isDirectory()||st.isSymbolicLink()))throw Error('Unsafe '+where+' directory. No files were overwritten.');};
+    const parent=await entry(base);if(!parent)return;
+    directory(parent,'ATGV workspace');
+    let rootStat=await entry(root),checkoutStat=await entry(checkout),oldStat=await entry(legacy);
+    directory(rootStat,'library');directory(checkoutStat,'library repository');directory(oldStat,'legacy library');
+    if(rootStat){
+        // Previous releases used .atgv/library itself as a Git checkout.
+        // Relocate the entire directory (including .git and untracked files)
+        // before creating the new library root. Never reset or discard edits.
+        const gitMarker=await entry(path.join(root,'.git'));
+        if(gitMarker){
+            if(gitMarker.isSymbolicLink()||(!gitMarker.isDirectory()&&!gitMarker.isFile()))
+                throw Error('Unsafe existing library Git metadata. No files were moved.');
+            if(checkoutStat)throw Error('Conflicting library repository folder; inspect both folders before migration.');
+            const stage=path.join(base,'.library-relocate-'+crypto.randomUUID());
+            await fs.rename(root,stage);
+            let created=false;
+            try{
+                await fs.mkdir(root);created=true;
+                await fs.rename(stage,checkout);
+            }catch(error){
+                const problems=[];
+                if(created)try{await fs.rmdir(root);}catch(e){problems.push(e.message);}
+                try{await fs.rename(stage,root);}catch(e){problems.push('Preserved original at '+stage+': '+e.message);}
+                throw Error('Library directory migration failed: '+error.message+(problems.length?'; '+problems.join('; '):'; original location restored'),{cause:error});
+            }
         }
     }
-    old=await entry(legacy);now=await entry(current);
-    const oldMetadata=await entry(legacyState),newMetadata=await entry(currentState);
-    if (oldMetadata&&(!oldMetadata.isFile()||oldMetadata.isSymbolicLink())) throw Error('Unsafe legacy library metadata. No files were overwritten.');
-    if (newMetadata&&(!newMetadata.isFile()||newMetadata.isSymbolicLink())) throw Error('Unsafe library metadata. No files were overwritten.');
-    // A conflicting current checkout always wins; preserve the legacy source
-    // for manual review rather than merging unrelated Git histories.
-    if (now&&!old&&oldMetadata&&!newMetadata) {
-        try { await fs.rename(legacyState,currentState); }
-        catch(error) {
-            if(error.code!=='ENOENT'||!await entry(currentState)) throw Error('Could not migrate library state safely: '+error.message,{cause:error});
+    await fs.mkdir(root,{recursive:true});
+    rootStat=await entry(root);directory(rootStat,'library');
+    checkoutStat=await entry(checkout);directory(checkoutStat,'library repository');
+    if(oldStat&&!checkoutStat){
+        try{await fs.rename(legacy,checkout);}
+        catch(error){if(error.code!=='ENOENT'||!await entry(checkout))throw Error('Could not move legacy library Git checkout: '+error.message,{cause:error});}
+    }
+    // Existing shared folders are moved in place only if no destination exists.
+    // A collision preserves both folders for review rather than mixing content.
+    for(const name of ['sdlc','templates']){
+        const from=path.join(base,name),to=path.join(root,name);
+        const former=await entry(from),existing=await entry(to);
+        directory(former,'legacy '+name);directory(existing,'library '+name);
+        if(former&&!existing){
+            try{await fs.rename(from,to);}
+            catch(error){if(error.code!=='ENOENT'||!await entry(to))throw Error('Could not migrate '+name+': '+error.message,{cause:error});}
         }
+    }
+    const oldMetadata=await entry(legacyState),newMetadata=await entry(currentState);
+    if(oldMetadata&&(!oldMetadata.isFile()||oldMetadata.isSymbolicLink()))throw Error('Unsafe legacy library metadata. No files were overwritten.');
+    if(newMetadata&&(!newMetadata.isFile()||newMetadata.isSymbolicLink()))throw Error('Unsafe library metadata. No files were overwritten.');
+    if(await entry(checkout)&&oldMetadata&&!newMetadata){
+        try{await fs.rename(legacyState,currentState);}
+        catch(error){if(error.code!=='ENOENT'||!await entry(currentState))throw Error('Could not migrate library state safely: '+error.message,{cause:error});}
     }
 }
-
 async function withCatalogGitCredentials(token, perform) {
     if (!token) return perform({ ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'Never' });
     // Token is never embedded in the Git remote, command arguments, or helper.
