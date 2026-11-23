@@ -36,7 +36,7 @@ function preview(projects,connections,hasCatalog,root){
     'ATGV RESET — DELETE ALL LOCAL WORK',
     `Managed project directory: ${path.join(root,'projects')}`,
     'Permanently delete local source changes, unpushed commits, worktrees, local Git branches, BR drafts, generated documents, tests, project execution state and caches.',
-    'Remove existing local project repositories and the downloaded SDLC Catalog; download fresh copies from configured remote GitHub sources.',
+    'Remove existing local project repositories and the downloaded Library; download fresh copies from configured remote GitHub sources.',
     'KEEP extension-wide settings, Jira/Confluence/GitHub connection details, API tokens and VS Code preferences.',
     'KEEP project identities and remote connection mappings needed to recreate local projects.',
     'DO NOT delete or modify any remote Jira issue, Confluence page, GitHub repository, branch or pull request.',
@@ -48,7 +48,7 @@ function preview(projects,connections,hasCatalog,root){
     const git=connections.find(item=>item.id===project.id);
     lines.push(`PROJECT ${project.name} [${project.id}]: ${git?.repo ? `${git.owner}/${git.repo}${git.branch?' @ '+git.branch:''}`:'no configured project repository'}`);
   }
-  lines.push(`SDLC Catalog: ${hasCatalog?'re-download from configured main':'not configured'}`);
+  lines.push(`Library: ${hasCatalog?'re-download from configured main':'not configured'}`);
   const out=lines.join('\n');
   if(out.length>9500)throw Error('Too many projects for a safe Reset confirmation.');
   return out;
@@ -236,6 +236,7 @@ async function replaceLocalWorkspace({workspace,registry,stage,stagedWorkspace,s
  for(const target of [
   path.join(storageRoot,'projects',workspaceHash),
   path.join(storageRoot,'atlassian-ownership'),
+  path.join(storageRoot,'library'),
   path.join(storageRoot,'sdlc-catalog'),
   stage
  ]){

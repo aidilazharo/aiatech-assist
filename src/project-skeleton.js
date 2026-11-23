@@ -9,12 +9,13 @@ const {loadStack}=require('./tech-stacks');
 async function workspaceFor(root){
     let cursor=path.resolve(root);
     for(let i=0;i<12;i++){
-        const stable=path.join(cursor,'.atgv','sdlc-catalog-state.json');
+        const stable=path.join(cursor,'.atgv','library-state.json');
+        const legacy=path.join(cursor,'.atgv','sdlc-catalog-state.json');
         const file=path.join(cursor,'.atgv','catalog-assets','active.json');
-        if(await fs.stat(stable).then(s=>s.isFile(),()=>false) || await fs.stat(file).then(s=>s.isFile(),()=>false))return cursor;
+        if(await fs.stat(stable).then(s=>s.isFile(),()=>false) || await fs.stat(legacy).then(s=>s.isFile(),()=>false) || await fs.stat(file).then(s=>s.isFile(),()=>false))return cursor;
         const parent=path.dirname(cursor);if(parent===cursor)break;cursor=parent;
     }
-    throw Error('No activated GitHub SDLC Catalog found for this repository. Open the ATGV workspace and use Check Updates → Pull Catalog before Save Stack.');
+    throw Error('No activated GitHub Library found for this repository. Open the ATGV workspace and use Check Updates → Pull Library before Save Stack.');
 }
 async function stackSelection(ids,workspace){
     const manifest=await catalog.activeManifest(workspace);
