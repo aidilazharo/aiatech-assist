@@ -1667,13 +1667,15 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
    throw Error('Release binary download probe did not return authenticated asset bytes (HTTP '+response.status+').');
   await response.body?.cancel().catch(()=>{});
  };
- const validatedGithub=async(url,{requiredWrite=false,checkRelease=true}={})=>{
+ const validatedGithub=async(url,{requireRead=false,checkRelease=true}={})=>{
   if(!github)throw Error('GitHub PAT is required for repository verification.');
   const meta=await requestJson(url,{token:github,headers:gitHeaders});
   const identity=url.replace('https://api.github.com/repos/','').toLowerCase();
   if(String(meta?.full_name||'').toLowerCase()!==identity)throw Error('Unexpected GitHub repository identity.');
-  if(requiredWrite&&(meta.permissions?.push!==true||meta.permissions?.pull===false))
-   throw Error('GitHub PAT does not verify read/write access (Contents: read/write and Pull requests: read/write required).');
+  // Read access is mandatory for source repos; write is optional.
+  if(requireRead&&meta.permissions?.pull===false)
+   throw Error('GitHub repository read permission denied. Grant Contents: read-only to the selected repository.');
+  const sourceAccess={read:true,write:meta.permissions?.push===true};
   if(checkRelease){
    const releases=await requestJson(url+'/releases?per_page=1',{token:github,headers:gitHeaders});
    if(!Array.isArray(releases))throw Error('GitHub release listing was not accessible.');
@@ -1685,7 +1687,7 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
    }
    return {releases:releases.length,asset:!!asset};
   }
-  return {};
+  return sourceAccess;
  };
  const specifications=[
   {id:'jira',label:'Jira API',url:jiraApi,required:true,check:async()=>{
@@ -1706,10 +1708,10 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
    const org=await requestJson(organizationApi,{token:github,headers:gitHeaders});
    if(String(org?.login||'').toLowerCase()!==data.owner.toLowerCase())throw Error('Unexpected GitHub owner response');
   }},
-  {id:'extension',label:'Extension · read/write/releases',url:repoApi(data.extension),required:true,
-   check:()=>validatedGithub(repoApi(data.extension),{requiredWrite:true,checkRelease:false})},
-  {id:'library',label:'Library · read/write/releases',url:repoApi(data.library),required:true,check:async()=>{
-   const capabilities=await validatedGithub(repoApi(data.library),{requiredWrite:true,checkRelease:false});
+  {id:'extension',label:'Extension · read required / write optional',url:repoApi(data.extension),required:true,
+   check:()=>validatedGithub(repoApi(data.extension),{requireRead:true,checkRelease:false})},
+  {id:'library',label:'Library · read required / write optional',url:repoApi(data.library),required:true,check:async()=>{
+   const capabilities=await validatedGithub(repoApi(data.library),{requireRead:true,checkRelease:false});
    library=await sdlcCatalog.remoteInfo(libraryConf,github);
    if(!library?.sha)throw Error('Library main branch cannot be verified.');
    return capabilities;
@@ -1730,12 +1732,13 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
   try{
    const info=await spec.check();
    value={id:spec.id,label:spec.label,url:spec.url,required:spec.required,state:'ok',
-    message:info?.asset?'Read/write and authenticated release download verified.':info?.releases===0?
+    message:info?.read===true?(info.write?'Repository read verified; write access also available.':'Repository read verified. Write access is optional and not granted.'):
+     info?.asset?'Authenticated release download verified.':info?.releases===0?
      'Repository access verified. No published release assets to download yet.':'Reachable and verified.'};
   }catch(error){
    const sourceDenied=(spec.id==='extension'||spec.id==='library')&&/\bHTTP\s+403\b/i.test(String(error?.message||error));
    value={id:spec.id,label:spec.label,url:spec.url,required:spec.required,state:'error',
-    message:sourceDenied?'GitHub source HTTP 403. Authorize this repository in the organization PAT (Contents: read/write, Pull requests: read/write); obtain organization approval or SSO authorization if required.':startupConnectionFailure(error)};
+    message:sourceDenied?'GitHub repository HTTP 403. Grant read access to this repository (Contents: read-only); organization approval or SSO authorization may be required. Write access is optional.':startupConnectionFailure(error)};
   }
   checks.push(value);
   await onProgress(value);
@@ -1759,7 +1762,7 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
   signature:persistedSignature,tokenDigest:sha(atlassian+'\\0'+github)
  }));
  return {success:true,checks,librarySha:library.sha?.slice(0,12)||'',
-  message:'Jira and Confluence authenticated; GitHub account, extension and Library verified. Project repository: '+data.projectRepoUrl+'.'};
+  message:'Jira and Confluence authenticated; GitHub extension and Library read access verified. Write permission is optional. Project repository: '+data.projectRepoUrl+'.'};
 }
 async function dashboardState(){
   const projects=registry?await registry.list():[];
