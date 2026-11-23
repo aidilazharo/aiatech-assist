@@ -25,7 +25,7 @@ async function fixture(t){
  for(const [rel,body] of Object.entries(assets))await fs.writeFile(path.join(data,...rel.split('/')),body);
  await fs.writeFile(path.join(dir,'state.json'),JSON.stringify({
   schema:1,source:'zip',archiveHash:'b'.repeat(64),
-  repository:'aidilazharo/tech-stacks-skills',
+  repository:'aiamalaysia/my-fow-technology-app-techassists-enterprise-skills',
   assets:Object.fromEntries(Object.entries(assets).map(([k,v])=>[k,hash(v)]))
  }));
  await fs.writeFile(path.join(workspace,'keep.txt'),'user project stays');
