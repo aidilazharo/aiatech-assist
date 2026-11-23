@@ -30,7 +30,7 @@ function pageFixture(){
   "const startupFieldMap={jiraUrl:'startupJiraUrl',email:'startupEmail',githubUrl:'startupGithubUrl',projectRepository:'startupProjectRepository'};",
   "let startupSetupRequired=true,startupPage=1,startupVerifying=false,startupInstallingModule='',startupConnectionVerified=false,startupConnectionEditSnapshot=null,startupScanComplete=true,startupFormInitialized=false,startupReturnToConnections=false,startupPrereqRequested=true,startupOpenStackId='',startupCopilotModalOpen=false;",
   "let startupConnectionCheckSequence=0,startupConnectionCheckPending=false,startupConnectionHealthError=false;const startupConnectionCheckResults=new Map();",
-  "const STARTUP_CONNECTION_CHECK_LABELS=[['jira','Jira API'],['confluence','Confluence API'],['github','GitHub account'],['organization','GitHub organization'],['extension','Extension · read/write/releases'],['library','Library · read/write/releases'],['extension-releases','Extension releases · optional'],['library-releases','Library releases · optional']];function updateStartupIssueSummary(){}",
+  "const STARTUP_CONNECTION_CHECK_LABELS=[['jira','Jira API'],['confluence','Confluence API'],['github','GitHub account'],['organization','GitHub organization'],['extension','Extension · read required / write optional'],['library','Library · read required / write optional'],['extension-releases','Extension releases · optional'],['library-releases','Library releases · optional']];function updateStartupIssueSummary(){}",
   "let startupProceedMode='',startupStackData=null,gateBusy=false,gateError='',workspaceOpened=false,opening={phase:'search'};",
   segment('function startupRing(', 'function updateStartupStackProgress('),
   segment('function startupPayload(){','function renderStartupPermissionRows('),
@@ -147,6 +147,8 @@ function hostFixture(failures={}){
   projectConfig:(_p,settings)=>({get:key=>key==='github.apiUrl'?'https://api.github.com':settings[key.split('.')[0]]?.[key.split('.')[1]]||''}),
   validateUrl:s=>s,globalSecretKey:k=>k,readToken:async k=>k==='atlassian'?'saved-atl':'saved-git',
   storeToken:async()=>writes.push('token'),
+  startupSavedConnectionFields:()=>setup.DEFAULTS,
+  STARTUP_VERIFIED_SECRET:'atgv-test-startup-verified',
   testJiraConnection:async()=>{events.push('jira');if(failures.jira)throw failures.jira;return {displayName:'Tester'};},
   requestJson:async url=>{
    const id=url.includes('/api/v2/spaces')?'confluence':url.endsWith('/user')?'github':url.includes('/users/')?'organization':url.includes('/releases?')?'releases':url.includes('/repos/')?'library':'jira-probe';
@@ -158,7 +160,7 @@ function hostFixture(failures={}){
    if(id==='library'){
     const match=url.match(/\/repos\/([^/]+)\/([^/]+)$/);
     if(!match)throw Error('Unexpected GitHub repository resource '+url);
-    return {full_name:match[1]+'/'+match[2],permissions:{pull:true,push:true}};
+    return {full_name:match[1]+'/'+match[2],permissions:{pull:!failures.readDenied,push:!failures.readonly}};
    }
    return {};
   },
@@ -190,4 +192,39 @@ test('Read-only connection test uses saved credentials without storing settings 
  assert.ok(result.checks.every(check=>check.state==='ok'));
  assert.deepEqual(h.writes,[]);assert.equal(h.context.startupSessionVerified,true);
  assert.equal(h.context.startupVerifiedSignature,'old');
+});
+
+
+test('GitHub read-only PAT is sufficient to save all required connections',async()=>{
+ const h=hostFixture({readonly:true});
+ const result=await h.run();
+ assert.equal(result.success,true,result.message);
+ assert.ok(h.writes.includes('setting'),'a read-only PAT must not block saving settings');
+ for(const key of ['extension','library']){
+  const row=result.checks.find(check=>check.id===key);
+  assert.equal(row.state,'ok');
+  assert.match(row.message,/read verified/i);
+  assert.match(row.message,/write access is optional/i);
+ }
+ assert.equal(h.events.filter(event=>event==='releases').length,2,'only the two optional release mirror checks should request releases');
+});
+test('Repository read denial remains a blocking error',async()=>{
+ const h=hostFixture({readDenied:true});
+ const result=await h.run();
+ assert.equal(result.success,false);
+ for(const key of ['extension','library']){
+  const row=result.checks.find(check=>check.id===key);
+  assert.equal(row.state,'error');
+  assert.match(row.message,/read|permission/i);
+ }
+ assert.deepEqual(h.writes,[]);
+});
+test('Optional release checks can fail without blocking read-only source access',async()=>{
+ const h=hostFixture({readonly:true,releases:new Error('HTTP 403 release download not allowed')});
+ const result=await h.run();
+ assert.equal(result.success,true,result.message);
+ assert.equal(result.checks.find(check=>check.id==='extension-releases').state,'error');
+ assert.equal(result.checks.find(check=>check.id==='library-releases').state,'error');
+ assert.equal(result.checks.find(check=>check.id==='extension').state,'ok');
+ assert.equal(result.checks.find(check=>check.id==='library').state,'ok');
 });

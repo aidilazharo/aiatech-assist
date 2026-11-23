@@ -8577,7 +8577,15 @@ window.addEventListener('message',event=>{
  if(m.type==='architectCustomRunResult'){
   architectCustomBusy=false;architectCustomOperation='';architectCustomLastError='';architectCustomAiActive=false;
   architectCustomStage=m.value?.running?7:architectCustomStage;
-  if(m.value?.inspection)architectCustomInfo={...m.value.inspection,projectId:activeId,previewCustomized:false};
+  if(m.value?.inspection){
+   architectCustomInfo={...m.value.inspection,projectId:activeId,previewCustomized:false};
+   // Install & Run may promote an older API-only selection to the actual web app.
+   // Keep the selected target and Preview URL synchronized with the running UI.
+   if(m.value?.frontendUrl){
+    $('architectCustomTarget').value=m.value.relative;
+    $('architectCustomPreviewUrl').value=m.value.frontendUrl;
+   }
+  }
   architectCustomRunning=!!m.value?.running;
   if(m.value?.running)architectCustomRuntime={...architectCustomRuntime,projectId:activeId,checked:true,running:true,
     previewUrl:String(m.value.url||''),mockPreview:!!m.value.mockPreview,reachable:true};
@@ -8810,7 +8818,7 @@ let startupConnectionCheckSequence=0,startupConnectionCheckPending=false,startup
 const startupConnectionCheckResults=new Map();
 const STARTUP_CONNECTION_CHECK_LABELS=[
  ['jira','Jira API'],['confluence','Confluence API'],['github','GitHub account'],['organization','GitHub organization'],
- ['extension','Extension · read/write/releases'],['library','Library · read/write/releases'],
+ ['extension','Extension · read required / write optional'],['library','Library · read required / write optional'],
  ['extension-releases','Extension releases · optional'],['library-releases','Library releases · optional']
 ];
 let startupVerifying=false,startupScanComplete=false,startupPage=0,startupInstallingModule='';
