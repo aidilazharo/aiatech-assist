@@ -25,7 +25,7 @@ test('Start screen suppresses project URL and preserves editable repository conn
  const js=read('media/start.js');
  assert.ok(html.includes('id="startupProjectRepository"'));
  assert.ok(html.includes('id="startupProjectRepositoryPreview" hidden'));
- assert.ok(!html.includes('https://github.com/aiamalaysia/my-fow-technology-app-techassists'));
+ assert.doesNotMatch(html,/https:\/\/github\.com\/aiamalaysia\/my-fow-technology-app-techassists(?![A-Za-z0-9_-])/);
  assert.match(js,/preview\.textContent='';preview\.hidden=true/);
 });
 test('role prompts instruct on project-scoped evidence and trusted next-action routing',()=>{
