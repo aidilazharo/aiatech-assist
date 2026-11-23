@@ -102,6 +102,11 @@ test('setup host requires Jira and Confluence but treats GitHub source access as
   globalSecretKey:k=>'secret-'+k,
   readToken:async()=>undefined,
   storeToken:async (key,identity,token)=>{events.push('stored:'+key);secrets.set(key,{identity,token});},
+  persistConnectionSettings:async ({extension,library,setupComplete})=>{
+   if(extension!==undefined){state.set('atgvAssist.extensionSettings',extension);testContext.extensionSettings=extension;events.push('saved:atgvAssist.extensionSettings');}
+   if(library!==undefined){state.set('atgvAssist.sdlcCatalog',library);events.push('saved:atgvAssist.sdlcCatalog');}
+   if(setupComplete!==undefined)state.set('atgvAssist.startupSetup.completed',setupComplete);
+  },
   testJiraConnection:async()=>{events.push('jira');return {displayName:'Tester'};},
   requestJson:async(url)=>{
    if(url.includes('/api/v2/spaces')){events.push('confluence');return {results:[]};}

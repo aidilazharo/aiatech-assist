@@ -71,7 +71,7 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
     assert.match(panel.webview.html,/Project Settings/);
     assert.match(panel.webview.html,/Test JIRA Connection/);
     assert.match(panel.webview.html,/Test GitHub Connection/);
-    assert.match(panel.webview.html,/SDLC Catalog \(Main\)/);
+    assert.match(panel.webview.html,/GitHub Library/);
     assert.match(panel.webview.html,/id="catalogRepoUrl"/);
     assert.match(panel.webview.html,/id=\"saveGithub\"[^>]+disabled/);
     assert.match(panel.webview.html,/default-src 'none'/);

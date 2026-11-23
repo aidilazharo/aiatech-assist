@@ -106,6 +106,7 @@ const {resolveAiTarget,sendAiText,selectLatest,modelIdentity,rankModel,modelVend
 const {checkCodex,installCodex}=require('../../ai-provider-runtime');
 const aiMemory=require('../../../service/ai/memory');
 const workspaceMemory=require('../../workspace-memory');
+const sharedConnectionSettings=require('../../workspace-connection-settings');
 const aiOrchestrator=require('../../../service/ai/orchestrator');
 const aiServiceConfig=require('../../../service/ai/config');
 const {SharedMemory}=require('../../../service/ai/shared');
@@ -905,6 +906,17 @@ const report=text=>{
  }
 };
 const getWorkspace=()=>workspaceOverridePath?{uri:vscode.Uri.file(workspaceOverridePath)}:vscode.workspace.workspaceFolders?.[0];
+async function persistConnectionSettings({extension,library,setupComplete}={}){
+ const changes={};
+ const names=sharedConnectionSettings.KEYS;
+ if(extension!==undefined)changes[names.extension]=normalizeExtensionSettings(extension);
+ if(library!==undefined)changes[names.library]=sdlcCatalog.normalizeConfig(library);
+ if(setupComplete!==undefined)changes[names.onboarding]=setupComplete===true;
+ if(!Object.keys(changes).length)return;
+ await sharedConnectionSettings.save(getWorkspace()?.uri.fsPath,changes,context.globalState);
+ if(extension!==undefined)extensionSettings=changes[names.extension];
+}
+
 function current(){
   if(!activeProject||!store)throw new Error('No active ATGV project. Run "ATGV: Start" and create or select a project.');
   return {project:activeProject,store,config:effectiveConfig(activeProject)};
@@ -1058,8 +1070,21 @@ async function initialize(){
   if(actualFolder){const located=await workspaceForFolder(actualFolder.uri.fsPath);if(located.source==='project-folder')workspaceOverridePath=located.root;}
   const ws=getWorkspace();registry=ws?new ProjectRegistry(ws.uri.fsPath):undefined;
   if(registry){
-                                                                                       
     await registry.list();
+    // SQLite is authoritative once the workspace has an ATGV marker.
+    // Migrate legacy globalState settings and retain a compatibility mirror.
+    const keys=sharedConnectionSettings.KEYS;
+    const legacy={
+      [keys.extension]:context.globalState.get(keys.extension,{}),
+      [keys.library]:context.globalState.get(keys.library,sdlcCatalog.DEFAULT_CONFIG),
+      [keys.onboarding]:context.globalState.get(keys.onboarding,false)
+    };
+    const saved=sharedConnectionSettings.hydrate(ws.uri.fsPath,legacy);
+    if(saved.sqlite){
+      extensionSettings=normalizeExtensionSettings(saved[keys.extension]||{});
+      for(const key of Object.values(keys))if(saved[key]!==undefined&&JSON.stringify(saved[key])!==JSON.stringify(legacy[key]))
+        await context.globalState.update(key,saved[key]);
+    }
   }
   tree?.refresh();await refreshDashboard();
 }
@@ -1762,12 +1787,12 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
   'Jira and Confluence verified. GitHub permission checks completed; write permission is optional.';
  if(!save)return {success:true,checks,message:connectionMessage};
  // Do not store raw tokens in extension settings or send them to the webview.
- await context.globalState.update('atgvAssist.extensionSettings',settings);
+ await persistConnectionSettings({extension:settings,library:libraryConf});
  if(enteredAtlassian)await storeToken(globalSecretKey('atlassian'),atlIdentity,atlassian);
  if(enteredGithub)await storeToken(globalSecretKey('github'),gitIdentity,github);
  await context.secrets.store('atgvAssist.sdlcCatalogToken',github||'');
- await context.globalState.update('atgvAssist.sdlcCatalog',libraryConf);
- extensionSettings=settings;pendingTests={jira:null,github:null};
+ 
+ pendingTests={jira:null,github:null};
  catalogRemote=null;catalogLastCheck='';catalogLastError='';scheduleCatalogChecks();
  startupSessionVerified=true;startupVerifiedSignature=sha(JSON.stringify(data));
  // Re-read the canonical saved configuration so restarts can recognize it even
@@ -1888,8 +1913,10 @@ async function dashboardState(){
   const recentProjects=Array.isArray(recentIds)?recentIds.filter(id=>projects.some(p=>p.id===id)).slice(0,5):[];
   const projectReadiness={};
   await Promise.all(projects.map(async p=>{try{
-    const stat=await fs.lstat(path.join(path.dirname(registry.fileFor(p.id)),'sdlc','roles','business-analyst.yaml'));
-    projectReadiness[p.id]=stat.isFile()&&!stat.isSymbolicLink();
+    // Role definitions are inherited from Library; only the project state
+    // directory must exist for a completed, lightweight project scaffold.
+    const stat=await fs.lstat(path.join(path.dirname(registry.fileFor(p.id)),'sdlc','roles'));
+    projectReadiness[p.id]=stat.isDirectory()&&!stat.isSymbolicLink();
   }catch{projectReadiness[p.id]=false;}}));
 
   let jiraTokenSaved=false,githubTokenSaved=false;
@@ -5959,7 +5986,7 @@ async function handleDashboardMessage(msg){
          // Manual access is always available. This does not grant remote
          // permissions or falsely record a successful connection check.
          if(msg.autoResume===true)throw Error('Automatic sign-in is disabled. Click Next on the Start screen.');
-         await context.globalState.update('atgvAssist.startupSetup.completed',true);
+         await persistConnectionSettings({setupComplete:true});
          startupSessionProceedApproved=true;
          startupSessionVerified=!!verified;startupVerifiedSignature=verified?.signature||'';
          await dashboard?.webview.postMessage({type:'startupProceedResult',success:true});
@@ -8768,10 +8795,10 @@ async function handleDashboardMessage(msg){
         const {next,fields}=jiraCandidate(msg),verified=pendingTests.jira;
         if(!verified||!fieldsEqual(verified.fields,fields))
           throw new Error('Test Jira Connection successfully with the current settings before saving.');
-        await context.globalState.update('atgvAssist.extensionSettings',next);
-        await context.globalState.update('atgvAssist.startupSetup.completed',false);
+        await persistConnectionSettings({extension:next,setupComplete:false});
+        
         if(verified.token)await storeToken(globalSecretKey('atlassian'),verified.identity,verified.token);
-        extensionSettings=next;pendingTests.jira=null;
+        pendingTests.jira=null;
         if(openingFlow.candidate&&openingFlow.phase!=='open')openingFlow.select(openingFlow.candidate);
         discoveredSpaces=[];discoveredJiraProjects=[];
         await refreshDashboard();await dashboard?.webview.postMessage({type:'settingsSaved',section:'jira'});
@@ -8782,11 +8809,11 @@ async function handleDashboardMessage(msg){
         const {next,fields}=githubCandidate(msg),verified=pendingTests.github;
         if(!verified||!fieldsEqual(verified.fields,fields))
           throw new Error('Test GitHub Connection with the current settings before saving.');
-        await context.globalState.update('atgvAssist.extensionSettings',next);
-        await context.globalState.update('atgvAssist.startupSetup.completed',false);
+        await persistConnectionSettings({extension:next,setupComplete:false});
+        
         if(verified.disabled)await context.secrets.delete(globalSecretKey('github'));
         else if(verified.token)await storeToken(globalSecretKey('github'),verified.identity,verified.token);
-        extensionSettings=next;pendingTests.github=null;
+        pendingTests.github=null;
         if(openingFlow.candidate&&openingFlow.phase!=='open')openingFlow.select(openingFlow.candidate);
         let cloneStatus='';
         if(!verified.disabled&&activeProject&&fields.owner&&fields.repo){
@@ -9132,8 +9159,8 @@ async function handleDashboardMessage(msg){
         if(config.authentication==='token'&&!String(msg.token||'').trim()&&!await context.secrets.get('atgvAssist.sdlcCatalogToken'))throw Error('Enter a read-only GitHub token.');
         if(config.authentication==='token'&&String(msg.token||'').trim())await context.secrets.store('atgvAssist.sdlcCatalogToken',String(msg.token).trim());
         if(config.authentication==='public')await context.secrets.delete('atgvAssist.sdlcCatalogToken');
-        await context.globalState.update('atgvAssist.sdlcCatalog',config);
-        await context.globalState.update('atgvAssist.startupSetup.completed',false);
+        await persistConnectionSettings({library:config,setupComplete:false});
+        
         catalogRemote=null;catalogLastCheck='';catalogLastError='';scheduleCatalogChecks();
         await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});
         await publishUpdateStatus();
@@ -9209,7 +9236,7 @@ async function handleDashboardMessage(msg){
           const active=await sdlcCatalog.activeRoot(workspace);
           if(active.version!==remote.version||active.sha!==remote.sha)
             throw Error('Pulled Library does not match the verified main commit. Review local changes.');
-          await context.globalState.update('atgvAssist.sdlcCatalog',config);
+          await persistConnectionSettings({library:config});
           await prepareVendorAssets({syncIfMissing:false});
           const message='Verified GitHub Library v'+active.version+' from '+config.repositoryUrl+' main ('+active.sha.slice(0,12)+'). '+(pulled.action||'Pulled')+'.';
           await dashboard?.webview.postMessage({type:'catalogAction',action:'pull',success:true,message});

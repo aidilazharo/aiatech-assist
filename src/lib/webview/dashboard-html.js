@@ -26,7 +26,7 @@ function html(webview,{resumeLibrary=false}={}){
     subtask:"<path d=\"M5 5v7h4m-3-3 3 3-3 3M12 8h7v8h-7zM14 12l1 1 2-2\"/>"
   };
   const baHeaderIcon=(name,variant='')=>`<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${variant}>${baHeaderIcons[name]}</svg>`;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.70';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.71';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const uiConsistencyCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-consistency.css'));
@@ -185,7 +185,7 @@ function html(webview,{resumeLibrary=false}={}){
        </details>
        <p id="startupInstallFeedback" class="atgv-startup-install-feedback muted" role="status" aria-live="polite"></p>
       </div>
-      <form id="startupConnectionForm" class="atgv-startup-card hidden"><h3>Atlassian &amp; GitHub connections</h3><div class="form-grid atgv-startup-connection-grid">
+      <form id="startupConnectionForm" class="atgv-startup-card hidden"><h3>Atlassian &amp; GitHub connections</h3><p class="atgv-connection-caption muted">Saved connections are reused in Settings. API tokens remain encrypted.</p><div class="form-grid atgv-startup-connection-grid">
        <div class="field"><label for="startupJiraUrl">Atlassian URL</label><input type="url" id="startupJiraUrl" placeholder="https://aiamy-jira-azure.atlassian.net" required></div>
        <div class="field"><label for="startupEmail">Atlassian email</label><input type="email" id="startupEmail" placeholder="user.name@aia.com" required></div>
        <div class="field"><label for="startupAtlassianToken">Atlassian API token</label><input type="password" id="startupAtlassianToken" autocomplete="new-password" placeholder="Enter token or retain securely saved token"></div>
@@ -193,11 +193,11 @@ function html(webview,{resumeLibrary=false}={}){
        <div class="field"><label for="startupProjectRepository">Project Repository</label><input type="text" id="startupProjectRepository" placeholder="my-fow-technology-app-techassists" required><small class="muted" id="startupProjectRepositoryPreview" hidden></small></div>
        <div class="field"><label for="startupGithubToken">GitHub personal access token</label><input type="password" id="startupGithubToken" autocomplete="new-password" placeholder="Enter PAT or retain securely saved token"><button type="button" id="startupEditConnections" class="secondary hidden" aria-label="Edit Atlassian and GitHub connections">Edit</button></div>
       </div>
-      <div class="atgv-startup-actions"><button type="submit" id="startupTestConnections">Test &amp; Save Connections</button><button type="button" id="startupTestSavedConnections" class="secondary hidden">Test Connections</button><span id="startupConnectionMessage" role="status" aria-live="polite">Check your connection permissions. You may continue without credentials; connected actions remain restricted.</span></div>
+      <div class="atgv-startup-actions"><button type="submit" id="startupTestConnections">Test &amp; Save Connections</button><button type="button" id="startupTestSavedConnections" class="secondary hidden">Test Connections</button><span id="startupConnectionMessage" role="status" aria-live="polite">Enter your accounts, then test the connections.</span></div>
       <div id="startupConnectionProgress" class="atgv-connection-progress" aria-label="Sequential connection checks" role="group" aria-live="polite"></div>
       <details id="startupConnectionLogPanel" class="atgv-connection-log-panel">
-        <summary>Connection Logs <span id="startupConnectionLogCount" class="muted">Open to view saved checks and errors</span></summary>
-        <div class="atgv-connection-log-toolbar"><p class="muted">Local diagnostic history for Jira, Confluence, GitHub, and the catalog API. Tokens, account emails, request headers and response bodies are never logged.</p>
+        <summary>Connection Logs <span id="startupConnectionLogCount" class="muted"></span></summary>
+        <div class="atgv-connection-log-toolbar"><p class="muted">Local connection checks; credentials are not included.</p>
           <div class="stack"><button id="startupConnectionLogRefresh" type="button" class="secondary">Refresh Log</button><button id="startupConnectionLogDownload" type="button" class="secondary">Download Logs (.txt)</button></div></div>
         <div id="startupConnectionLogList" class="atgv-connection-log-list" role="log" aria-label="Connection check history" aria-live="polite"><p class="muted">Open to load saved connection events.</p></div>
         <p id="startupConnectionLogMessage" class="muted" role="status" aria-live="polite"></p>
@@ -249,14 +249,14 @@ function html(webview,{resumeLibrary=false}={}){
     <details id="overviewGanttDetails" class="overview-timeline overview-gantt-compact"><summary id="overviewGanttHeading" class="overview-gantt-heading"><span>Project Gantt Chart</span><span class="muted">Expand schedule</span></summary><div class="overview-gantt-body"><div id="ganttChart" class="gantt-chart" aria-label="Project Gantt chart"></div><div id="ganttFallback" class="muted"></div></div></details>
    </main>
   <main id="settingsView" class="hidden narrow unified-settings-view"><div class="view-heading"><button id="settingsBack" class="secondary">← Back to Workspace</button><button id="settingsGuideHelp" type="button" class="guide-icon-button" aria-label="Open Settings guide" title="Settings Guide" aria-haspopup="dialog" aria-controls="guideMenu"><svg class="guide-help-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.65 9a2.5 2.5 0 0 1 4.7 1.2c0 1.8-2.35 2-2.35 3.7"/><path d="M12 17.3h.01"/></svg></button></div><h1>Settings</h1><div class="settings-page-tabs" role="tablist" aria-label="Settings scope"><button id="settingsExtensionTab" type="button" role="tab" aria-selected="true" aria-controls="settingsView" class="settings-page-tab is-active">Extension Settings</button><button id="extensionToProjectSettings" type="button" role="tab" aria-selected="false" aria-controls="projectView" class="settings-page-tab" disabled>Project Settings</button></div>
-    <div class="settings-group-label">Shared Connections · All Projects</div>
+    <div class="settings-group-label">Connections · Shared by Start and Settings</div><p class="muted atgv-settings-intro">Saved connection settings use the workspace SQLite store. Credentials remain encrypted.</p>
     <details class="ext-settings-accordion" id="settingsJiraGroup" data-requirement="required"><summary><span>1. Jira Account Connection</span><span class="ext-settings-badge" id="settingsJiraGroupState" data-state="required">Required</span></summary><div class="ext-settings-content">    <section><form id="extensionForm"><div class="form-grid">
      ${field('jiraBaseUrl','Jira Base URL','https://aiamy-jira-azure.atlassian.net','required type="url"')}
      ${field('jiraEmail','Jira Email','user.name@aia.com','required type="email"')}
      ${field('jiraProjectKey','Jira Project Key','e.g. TC','maxlength="40" pattern="[A-Za-z][A-Za-z0-9_-]{0,39}" autocapitalize="characters" title="Jira project key, such as TC"')}
      <div class="field full">${field('jiraToken','Jira API Token','API token (leave blank to retain saved token)','type="password"')}</div>
-    </div><p class="muted jira-project-key-help">Optional default only. Each project selects its own Jira Project Key in Project Settings. Existing mappings remain unchanged.</p><div class="actions stack"><button type="button" id="testAtlassian">Test JIRA Connection</button><button type="submit" id="saveAtlassian" class="secondary hidden" disabled>Save Jira Settings</button><span id="jiraCredentialState" class="muted"></span></div><p id="jiraTestStatus" class="test-status muted" role="status" aria-live="polite"></p></form>
-    <div class="guide-token-links"><button id="guideJiraTokenLink" type="button" class="guide-token-link">Get Jira API token ↗</button></div><p class="guide-token-hint">The saved Atlassian token is used for Jira and Confluence.</p></section></div></details>
+    </div><p class="muted jira-project-key-help">Optional default; project mappings are managed in Project Settings.</p><div class="actions stack"><button type="button" id="testAtlassian">Test JIRA Connection</button><button type="submit" id="saveAtlassian" class="secondary hidden" disabled>Save Jira Settings</button><span id="jiraCredentialState" class="muted"></span></div><p id="jiraTestStatus" class="test-status muted" role="status" aria-live="polite"></p></form>
+    <div class="guide-token-links"><button id="guideJiraTokenLink" type="button" class="guide-token-link">Get Jira API token ↗</button></div><p class="guide-token-hint">One Atlassian token is used for Jira and Confluence.</p></section></div></details>
     
     <details class="ext-settings-accordion" id="settingsGithubGroup" data-requirement="required"><summary><span>2. GitHub Account &amp; Defaults</span><span class="ext-settings-badge" id="settingsGithubGroupState" data-state="optional">Optional</span></summary><div class="ext-settings-content"><section><form id="githubForm">
       <div class="github-settings-toolbar" role="group" aria-label="GitHub account and repository connection">
@@ -269,9 +269,9 @@ function html(webview,{resumeLibrary=false}={}){
       </div>
       <div class="github-settings-feedback"><span id="githubCredentialState" class="muted"></span><p id="githubTestStatus" class="test-status muted" role="status" aria-live="polite"></p></div>
       <div class="guide-token-links"><button id="guideGithubTokenLink" type="button" class="guide-token-link">Get GitHub personal access token ↗</button></div>
-    </form><p id="settingsLocalRepoPath" class="muted" role="status">Local repository: not cloned into this project.</p></section></div></details>
-    <details class="ext-settings-accordion" id="settingsCatalogGroup" data-requirement="optional"><summary><span id="catalogHeading">3. SDLC Catalog (Main)</span><span class="ext-settings-badge" id="settingsCatalogGroupState" data-state="optional">Optional</span></summary><div class="ext-settings-content"><section id="sdlcCatalogSection" aria-labelledby="catalogHeading">
-      <p class="muted">The SDLC Library repository is fixed to the verified ATGV source. Authentication settings remain configurable.</p>
+    </form><p id="settingsLocalRepoPath" class="muted hidden" role="status"></p></section></div></details>
+    <details class="ext-settings-accordion" id="settingsCatalogGroup" data-requirement="optional"><summary><span id="catalogHeading">3. GitHub Library</span><span class="ext-settings-badge" id="settingsCatalogGroupState" data-state="optional">Optional</span></summary><div class="ext-settings-content"><section id="sdlcCatalogSection" aria-labelledby="catalogHeading">
+      <p class="muted">The Library tracks the approved GitHub main branch.</p>
       <form id="catalogForm"><div class="form-grid">
         <div class="field full"><label for="catalogRepoUrl">Fixed SDLC Library Repository</label><input id="catalogRepoUrl" type="url" value="https://github.com/aidilazharo/tech-stacks-skills" readonly maxlength="600" autocomplete="off" required></div>
         <input id="catalogRef" type="hidden" value="main">
@@ -287,10 +287,10 @@ function html(webview,{resumeLibrary=false}={}){
       <div id="catalogContents" class="catalog-counts" aria-label="Installed SDLC Catalog contents"><span>Role skills: —</span><span>Tech stacks: —</span><span>Workflows: —</span><span>Templates: —</span></div>
       <p id="catalogUpdates" class="muted" role="status"></p>
     </form></section></div></details>
-<details class="ext-settings-accordion" id="settingsCoordinationGroup" data-requirement="required"><summary><span>4. Coordination Provider</span><span class="ext-settings-badge" id="settingsCoordinationGroupState" data-state="required">Required</span></summary><div class="ext-settings-content">    <section><div class="coordination-provider"><label for="coordinationProvider">Document ownership and approvals</label><select id="coordinationProvider" aria-label="Coordination Provider"><option value="jira-confluence">Jira + Confluence (recommended)</option><option value="service">ATGV Coordination Service</option><option value="local">Local only (no shared ownership)</option></select></div><p class="muted" id="coordinationHint">Jira verifies your identity; Confluence stores versioned ownership and approvals in the selected project space.</p><p class="muted">Requires permission to create and edit pages in the project's Confluence space. No separate server.</p><p class="muted">Free-plan compatibility: normal Confluence pages are supported; private page creation may be restricted. Jira Free may allow direct edits to In Progress and Done issues. ATGV approval controls protect ATGV-mediated updates; enable Jira external-change monitoring to detect out-of-band edits.</p></section></div></details>
+<details class="ext-settings-accordion" id="settingsCoordinationGroup" data-requirement="required"><summary><span>4. Coordination Provider</span><span class="ext-settings-badge" id="settingsCoordinationGroupState" data-state="required">Required</span></summary><div class="ext-settings-content">    <section><div class="coordination-provider"><label for="coordinationProvider">Document ownership and approvals</label><select id="coordinationProvider" aria-label="Coordination Provider"><option value="jira-confluence">Jira + Confluence (recommended)</option><option value="service">ATGV Coordination Service</option><option value="local">Local only (no shared ownership)</option></select></div><p class="muted" id="coordinationHint">Jira verifies your identity; Confluence stores versioned ownership and approvals in the selected project space.</p><p class="muted">Confluence requires page edit permission. Jira Free may allow direct edits to In Progress and Done issues. ATGV protects ATGV-mediated updates; monitor external changes.</p></section></div></details>
     <div class="settings-group-label">AI &amp; Shared Services</div>
     <details class="ext-settings-accordion" id="settingsAiGroup" data-requirement="required"><summary><span>5. AI Providers</span><span class="ext-settings-badge" id="settingsAiGroupState" data-state="required">Required</span></summary><div class="ext-settings-content"><section id="aiProvidersSection">
-      <p class="muted">Choose one provider for ATGV generation. Copilot uses approved VS Code models, Codex can be installed into extension storage after permission, and API providers use credentials kept in VS Code SecretStorage. No provider switch or external transfer is automatic.</p>
+      <p class="muted">Select the AI provider for ATGV. Saved API keys are encrypted in the workspace SQLite vault.</p>
       <div class="form-grid">
         <div class="field"><label for="aiProviderChoice">Provider</label><select id="aiProviderChoice"><option value="auto">VS Code Models (Auto / Copilot)</option><option value="codex">OpenAI Codex Agent</option><option value="copilot-sdk">Microsoft Copilot SDK</option><option value="openai">OpenAI API</option><option value="anthropic">Claude API</option><option value="azure-openai">Azure OpenAI</option><option value="ollama">Ollama (Local)</option><option value="openai-compatible">OpenAI-compatible endpoint</option><option value="none">Disabled (retrieval only)</option></select></div>
         <div class="field"><label for="aiProviderModel">Model / deployment</label><input id="aiProviderModel" maxlength="180" placeholder="Enter approved model ID"></div>
@@ -300,29 +300,29 @@ function html(webview,{resumeLibrary=false}={}){
       </div>
       <div class="stack actions"><button id="aiProviderSave" type="button">Save Provider</button><button id="aiProviderTest" class="secondary" type="button">Test AI Connection</button><button id="aiCodexInstall" class="secondary" type="button">Install Codex Automatically</button><button id="aiCopilotSdkInstall" class="secondary" type="button">Set up Copilot SDK</button><button id="aiProviderRefresh" class="secondary" type="button">Detect Providers</button></div>
       <p id="aiProviderState" role="status" class="muted">Select a provider to configure.</p>
-      <p class="muted">Codex installation downloads an official runtime into extension storage after your approval; it does not install system-wide. An approved network, npm availability, and separate Codex sign-in or API credentials may still be required.</p>
+      <p class="muted">Codex setup requires approval and an authenticated provider.</p>
     </section></div></details>
 
-    <details class="ext-settings-accordion" id="settingsRagGroup" data-requirement="optional"><summary><span>6. Knowledge &amp; RAG Configuration</span><span class="ext-settings-badge" id="settingsRagGroupState" data-state="optional">Optional</span></summary><div class="ext-settings-content"><section><p class="muted">Project Knowledge search remains in the workspace. Configure retrieval limits and approved model endpoints here; indexed content requires explicit permission before being sent to AI services.</p><div class="stack"><button id="knowledgeRagSettings" class="secondary" type="button">Open Retrieval Settings</button><button id="knowledgeApiKey" class="secondary" type="button">Manage AI API Key</button></div></section></div></details>
+    <details class="ext-settings-accordion" id="settingsRagGroup" data-requirement="optional"><summary><span>6. Knowledge Retrieval</span><span class="ext-settings-badge" id="settingsRagGroupState" data-state="optional">Optional</span></summary><div class="ext-settings-content"><section><p class="muted">Manage project knowledge retrieval and approved model access.</p><div class="stack"><button id="knowledgeRagSettings" class="secondary" type="button">Open Retrieval Settings</button><button id="knowledgeApiKey" class="secondary" type="button" hidden aria-hidden="true" tabindex="-1">Manage AI API Key</button></div></section></div></details>
     
     
     
     <div class="settings-group-label">Local Data &amp; Recovery</div>
     <details class="ext-settings-accordion" id="settingsLocalBackupGroup" data-requirement="optional"><summary><span>7. Backup &amp; Restore Local Content</span><span class="ext-settings-badge" data-state="optional">Optional</span></summary><div class="ext-settings-content"><section>
-      <p class="muted">Back up all local ATGV projects, Git working trees (including unpushed commits), BR documents, .atgv workspace files and project cache into one portable .atgvbackup file. Restore replaces current local work with the selected snapshot after checksum verification and explicit confirmation.</p>
-      <p class="muted">Saved extension settings, API keys in VS Code secure storage and remote Jira, Confluence and GitHub records are not changed. Project files inside backups may contain .env secrets; protect backup files and do not share them publicly. Restore requires the original workspace location.</p>
+      <p class="muted">Backup local projects, documents, Git working trees and workspace data. Restore requires confirmation and checksum verification.</p>
+      <p class="muted">Backups include SQLite settings and encrypted credential records, but not the SecretStorage decryption key. Keep backups private; restored credentials require the original key and workspace.</p>
       <div class="stack actions"><button type="button" id="backupLocalContent">Backup Local Content</button><button type="button" id="restoreLocalContent" class="secondary">Restore Local Content</button></div>
       <p id="localBackupStatus" class="muted" role="status" aria-live="polite">No backup or restore running.</p>
     </section></div></details>
-    <details class="ext-settings-accordion" id="settingsSoftwareUpdateGroup" data-requirement="required"><summary><span>8. Extension &amp; SDLC Library Updates</span><span class="ext-settings-badge" data-state="required">Required</span></summary><div class="ext-settings-content"><section>
+    <details class="ext-settings-accordion" id="settingsSoftwareUpdateGroup" data-requirement="required"><summary><span>8. Updates</span><span class="ext-settings-badge" data-state="required">Required</span></summary><div class="ext-settings-content"><section>
       <div class="software-update-toolbar" role="group" aria-label="Software update actions">
         <button type="button" id="checkSoftwareUpdates" class="secondary">Check Updates</button>
-        <button type="button" id="pullLibraryFiles" class="secondary">Pull Library Files</button>
+        <button type="button" id="pullLibraryFiles" class="secondary" hidden aria-hidden="true" tabindex="-1">Pull Library Files</button>
         <button type="button" id="installExtensionRelease" class="secondary" disabled>Install Verified VSIX</button>
         <button type="button" id="viewExtensionRelease" class="secondary" disabled>View GitHub Release</button>
       </div>
       <p id="softwareExtensionStatus" class="test-status muted" role="status" aria-live="polite">Extension: not checked.</p>
-      <p id="softwareLibraryStatus" class="test-status muted" role="status" aria-live="polite">Library: check the SDLC Catalog section for its installed version.</p>
+      <p id="softwareLibraryStatus" class="test-status muted" role="status" aria-live="polite">Library: not checked.</p>
       <div id="softwareLibraryPullProgress" class="atgv-catalog-pull-progress hidden" role="status" aria-live="polite" aria-atomic="true">
         <div class="atgv-library-update-heading"><strong id="softwareLibraryPullTitle">Preparing library pull…</strong><span id="softwareLibraryPullPercent">0%</span></div>
         <div id="softwareLibraryPullBar" class="atgv-library-update-track" role="progressbar" aria-label="SDLC Library pull stages completed" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="softwareLibraryPullIndicator" class="atgv-library-update-indicator"></span></div>

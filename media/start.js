@@ -8815,7 +8815,7 @@ window.addEventListener('message',event=>{
  if(msg.type==='notice'&&msg.error&&assignedJiraLoading){assignedJiraLoading=false;assignedJiraLoaded=false;if($('devAssignedJiraStatus'))$('devAssignedJiraStatus').textContent='Unable to load assigned Jira tasks: '+String(msg.message||'Check Jira connection in Settings.');}
  if(msg.type==='developerLocalState'){
   const info=msg.value||{},repo=info.repo||{};
-  if($('settingsLocalRepoPath'))$('settingsLocalRepoPath').textContent='Local repository: '+(repo.root||'not selected');
+  if($('settingsLocalRepoPath')){const el=$('settingsLocalRepoPath');el.textContent=repo.root?'Local project repository: '+repo.root:'';el.classList.toggle('hidden',!repo.root);}
   if($('devRepoStatus'))$('devRepoStatus').textContent=[repo.root||'Not connected',repo.branch?'Branch: '+repo.branch:'No branch',repo.clean?'Clean':'Uncommitted changes',repo.remote||'No origin remote'].join(' · ');
   devSetStep('devStepCodeStatus',repo.root?(repo.branch?'Repository · '+repo.branch:'Repository selected · branch required'):'Choose repository and branch');
   const root=$('devTarget');if(!root)return;
