@@ -209,3 +209,51 @@ body:not(.gate-mode) #appHeader.app-header{order:0}
 @media(prefers-reduced-motion:reduce){
  :where(button,input,summary,[role="tab"]){scroll-behavior:auto}
 }
+
+
+/* v0.0.68: one stable notification slot. The 5-second message overlays the
+   credentials reminder and never changes the workspace's vertical position.
+   Both bars have a bottom border only. */
+body:not(.gate-mode) #roleCredentialBanner.atgv-role-credential-banner{
+  border:0!important;
+  border-bottom:3px solid var(--atgv-consistency-danger)!important;
+  z-index:25!important;
+}
+body:not(.gate-mode) #topNotification.top-notification{
+  box-sizing:border-box;
+  position:fixed!important;
+  inset-inline:0!important;
+  top:var(--atgv-header-fixed-height,76px);
+  width:100%!important;
+  height:var(--atgv-notice-row-height,52px)!important;
+  min-height:var(--atgv-notice-row-height,52px)!important;
+  max-height:var(--atgv-notice-row-height,52px)!important;
+  flex:none!important;
+  order:1;
+  z-index:90!important;
+  margin:0!important;
+  padding-block:0!important;
+  padding-inline:16px!important;
+  align-items:center;
+  background:var(--vscode-editorWidget-background,var(--vscode-editor-background));
+  border:0!important;
+  border-bottom:3px solid var(--atgv-notice-line,#ff3647)!important;
+  box-shadow:none!important;
+}
+body:not(.gate-mode) #topNotification.top-notification.error{
+  --atgv-notice-line:var(--atgv-consistency-danger);
+}
+body:not(.gate-mode) #topNotification.top-notification.warning,
+body:not(.gate-mode) #topNotification.top-notification.info{
+  --atgv-notice-line:var(--vscode-editorWarning-foreground,#e7ad46);
+}
+body:not(.gate-mode) #topNotification.top-notification.success{
+  --atgv-notice-line:var(--atgv-consistency-ready);
+}
+body:not(.gate-mode) #topNotification.top-notification.hidden{
+  display:none!important;
+}
+body:not(.gate-mode) #topNotification .top-notification-actions button{
+  min-height:29px;
+  padding:5px 12px;
+}

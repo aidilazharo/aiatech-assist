@@ -4,8 +4,8 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const js=fs.readFileSync(path.join(__dirname,'../media/start.js'),'utf8');
-test('process-question notifications do not use a dismiss timer',()=>{
- assert.match(js,/if\(!item\.consentRequestId&&!item\.persistent\)topNoticeTimer=setTimeout\(closeTopNotification/);
+test('all temporary process notifications, including questions, dismiss after five seconds',()=>{
+ assert.match(js,/topNoticeTimer=setTimeout\(closeTopNotification,5000\)/);
  assert.match(js,/const requiresAnswer=\/\\\?\\s\*\$\/\.test\(content\)/);
  assert.match(js,/item=\{message:content,error,success,persistent:!!\(persistent\|\|requiresAnswer\)/);
 });

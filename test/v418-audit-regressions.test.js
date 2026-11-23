@@ -6,8 +6,6 @@ const importer=require('../src/discovery-import');
 const docx=require('../src/docx-extractor');
 const preflight=require('../src/ba-document-preflight');
 const store=require('../src/source-store');
-const library=require('../src/offline-sdlc-library');
-const versions=require('../src/library-update-version');
 const extUpdates=require('../src/lib/updates/github-release-updater');
 const libUpdates=require('../src/lib/updates/library-release-updater');
 const permissions=require('../src/lib/startup-permissions');
@@ -34,7 +32,6 @@ function wordFixture(){return zip({
  'word/footer1.xml':`<w:ftr xmlns:w="${w}"><w:p><w:r><w:t>Footer rule</w:t></w:r></w:p></w:ftr>`,
  'word/footnotes.xml':`<w:footnotes xmlns:w="${w}"><w:footnote w:id="3"><w:p><w:r><w:t>Referenced footnote</w:t></w:r></w:p></w:footnote><w:footnote w:id="4"><w:p><w:r><w:t>Unused footnote</w:t></w:r></w:p></w:footnote></w:footnotes>`
 });}
-function catalogFiles(text){const p='tech-stacks-skills-source/';return {[p+'catalog.json']:JSON.stringify({schema:1,version:'1.1.16',roles:['software-developer'],techStacks:['react']}),[p+'VERSION']:'1.1.16\n',[p+'roles/software-developer/SKILL.md']:text,[p+'tech-stacks/react/stack.json']:JSON.stringify({schema:1,id:'react'}),[p+'tech-stacks/react/scaffold/package.json']:'{}\n'};}
 test('DOCX extraction includes referenced parts and insertions but excludes deleted, hidden and orphaned text',()=>{
  const text=importer.extractDocx(wordFixture());
  for(const wanted of ['Current limit RM50','Manager approval','Header requirement','Footer rule','Referenced footnote'])assert.match(text,new RegExp(wanted));
@@ -64,41 +61,6 @@ test('cross-section review keeps sections and rejects unverifiable conflict evid
  assert.equal(preflight.parseCrossSection(JSON.stringify(conflict),parts).conflicts.length,1);
  conflict.conflicts[0].second.quote='invented';assert.throws(()=>preflight.parseCrossSection(JSON.stringify(conflict),parts),/valid conflict evidence/);
  assert.throws(()=>preflight.parseCrossSection('{bad',parts),/invalid JSON/);
-});
-test('trusted equal-version release builds replace the old verified archive without downgrading',async t=>{
- const workspace=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-release-v418-'));t.after(()=>fs.rm(workspace,{recursive:true,force:true}));
- const file=path.join(workspace,'source.zip'),repositoryUrl='https://github.com/aidilazharo/tech-stacks-skills';
- const opts={workspace,repositoryUrl};
- await fs.writeFile(file,zip(catalogFiles('Build eight')));
- await library.importZip({...opts,file,verifiedRelease:{repository:'aidilazharo/tech-stacks-skills',tag:'v1.1.16-source-build.8'}});
- await fs.writeFile(file,zip(catalogFiles('Build nine')));
- const next=await library.importZip({...opts,file,verifiedRelease:{repository:'aidilazharo/tech-stacks-skills',tag:'v1.1.16-source-build.9'}});
- assert.equal(next.releaseTag,'v1.1.16-source-build.9');assert.match(await fs.readFile(path.join(next.root,'roles/software-developer/SKILL.md'),'utf8'),/Build nine/);
- assert.equal(versions.compareInstalledRelease({version:'1.1.16',releaseTag:'v1.1.16-source-build.8'},{version:'1.1.16',tag:'v1.1.16-source-build.9'}).available,true);
- await fs.writeFile(file,zip(catalogFiles('Build eight')));
- const old=await library.importZip({...opts,file,verifiedRelease:{repository:'aidilazharo/tech-stacks-skills',tag:'v1.1.16-source-build.8'}});
- assert.equal(old.releaseTag,'v1.1.16-source-build.9');
-});
-test('an explicitly verified release becomes active ahead of an equal-version Git checkout',async t=>{
- const workspace=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-release-git-v418-'));t.after(()=>fs.rm(workspace,{recursive:true,force:true}));
- const file=path.join(workspace,'source.zip'),repositoryUrl='https://github.com/aidilazharo/tech-stacks-skills';
- await fs.writeFile(file,zip(catalogFiles('Released build')));
- const catalog=require('../src/github-sdlc-catalog'),original=catalog.gitInstalled;
- try{
-  catalog.gitInstalled=async()=>({version:'1.1.16',sha:'a'.repeat(40),checkout:path.join(workspace,'git'),repository:'aidilazharo/tech-stacks-skills'});
-  const selected=await library.importZip({workspace,file,repositoryUrl,verifiedRelease:{repository:'aidilazharo/tech-stacks-skills',tag:'v1.1.16-source-build.9'}});
-  assert.equal(selected.offline,true);assert.equal((await catalog.activeRoot(workspace)).releaseTag,'v1.1.16-source-build.9');
- }finally{catalog.gitInstalled=original;}
-});
-test('the public distribution repository can supply a verified archive for the canonical Library',async t=>{
- const workspace=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-public-library-'));t.after(()=>fs.rm(workspace,{recursive:true,force:true}));
- const file=path.join(workspace,'source.zip'),repositoryUrl='https://github.com/aidilazharo/tech-stacks-skills';
- await fs.writeFile(file,zip(catalogFiles('Public Library release')));
- const selected=await library.importZip({workspace,file,repositoryUrl,verifiedRelease:{repository:'aidilazharo/library',tag:'v1.1.16-source-build.9'}});
- assert.equal(selected.repository,'aidilazharo/tech-stacks-skills');
- assert.equal(selected.releaseRepository,'aidilazharo/library');
- assert.equal((await library.imported(workspace,repositoryUrl)).releaseTag,'v1.1.16-source-build.9');
- await assert.rejects(library.importZip({workspace,file,repositoryUrl,verifiedRelease:{repository:'untrusted/library',tag:'v1.1.16-source-build.10'}}),/Invalid verified Library release identity/);
 });
 function release(repo,tag,files){return {tag_name:tag,draft:false,html_url:`https://github.com/${repo}/releases/tag/${tag}`,assets:files.map((name,i)=>({name,size:100,url:`https://api.github.com/repos/${repo}/releases/assets/${i+1}`}))};}
 test('extension and library lookups compare a stable release with newer prereleases',async()=>{

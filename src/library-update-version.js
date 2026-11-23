@@ -1,5 +1,5 @@
 'use strict';
-const {compareVersions}=require('./offline-sdlc-library');
+const {compareVersions}=require('./library-semver');
 function validVersion(value){
  const v=String(value||'').trim();
  if(!/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9][a-zA-Z0-9.-]*)?$/.test(v))return '';
@@ -38,12 +38,8 @@ function displayLibraryUpdate(installedVersion,remoteVersion){
 function verifyActivatedPull(expected,selected){
  const remote=validVersion(expected?.version),active=validVersion(selected?.version);
  if(!remote||!active)throw Error('Library pull finished without a verified active semantic version. Check the configured repository and local workspace.');
- if(selected.offline){
-  if(compareVersions(active,remote)<=0)throw Error('Library v'+remote+' was fetched but offline v'+active+' remains active. Re-select the verified Git catalog before reporting success.');
-  return {version:active,offline:true};
- }
  if(!/^[a-f0-9]{40}$/.test(String(expected.sha||''))||selected.sha!==expected.sha||active!==remote)
   throw Error('Library pull verification failed: GitHub main v'+remote+' differs from active v'+active+'. Refresh the catalog checkout, then retry Pull Library.');
- return {version:active,offline:false};
+ return {version:active,source:'git'};
 }
 module.exports={validVersion,compareInstalledRemote,compareInstalledRelease,displayLibraryUpdate,verifyActivatedPull};

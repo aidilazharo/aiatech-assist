@@ -24,14 +24,13 @@ test('v415: webview initializes without references to removed elements',()=>{
  assert.doesNotMatch(css,/startupLibraryZipStatus|atgv-startup-library-upload-row/);
  assert.doesNotMatch(ui,/if\(message\.type==='offlineLibraryZipResult'\)/);
 });
-test('v415: Library source and optional offline ZIP import remain in trusted host',()=>{
+test('Start retains trusted Git SDLC Catalog but removes offline ZIP import actions',()=>{
  const setup=require('../src/lib/startup-setup');
  const host=read('src/lib/runtime/extension-runtime.js');
  assert.equal(setup.FIXED_LIBRARY_REPOSITORY,'https://github.com/aidilazharo/tech-stacks-skills');
- assert.match(host,/case 'importLibraryZip':/);
- assert.match(host,/offlineLibrary\.importZip/);
+ assert.doesNotMatch(host,/case 'importLibraryZip':|offlineLibrary\.importZip/);
+ assert.match(host,/sdlcCatalog\.syncGitWorkspace/);
  assert.match(host,/releaseRepositoryUrl:startupSetup\.RELEASES\.extension/);
- assert.match(host,/libraryReleaseUrl:startupSetup\.RELEASES\.library/);
  assert.match(require('../package.json').version,/^\d+\.\d+\.\d+$/);
 });
 test('v415: rendered Start HTML does not inject the removed Library block',()=>{

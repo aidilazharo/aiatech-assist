@@ -13,8 +13,6 @@ const MANIFEST='shared/libraries/webview/manifest.json';
 const MAX_ASSETS=40, MAX_TOTAL=4*1024*1024;
 const HASH=/^[a-f0-9]{64}$/;
 const SHA=/^[a-f0-9]{40}$/;
-const ARCHIVE_HASH=/^[a-f0-9]{64}$/;
-const ZIP_CACHE=/^zip-[a-f0-9]{64}$/;
 const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
 const files=lock.assets;
 function validName(name){
@@ -68,16 +66,15 @@ function cacheBase(storageRoot){if(!storageRoot||!path.isAbsolute(storageRoot))t
 async function cached({storageRoot}){
  try{
   const base=cacheBase(storageRoot),active=JSON.parse(await fs.readFile(path.join(base,'current.json'),'utf8'));
-  if((!SHA.test(active.commit)&&!ZIP_CACHE.test(active.commit))||active.version!==lock.version)return null;
-  if(ZIP_CACHE.test(active.commit)!==(active.source==='offline-zip'))return null;
+  if(!SHA.test(active.commit)||active.version!==lock.version||active.source!=='git')return null;
   const dir=path.join(base,active.commit);
   const st=await fs.lstat(dir);if(!st.isDirectory()||st.isSymbolicLink())return null;
   return {...await verifyFiles(dir),commit:active.commit,source:active.source||'git',fromCache:true};
  }catch{return null;}
 }
-async function installVerified({catalogRoot,storageRoot,commit,offline=false}){
- if(offline?!ZIP_CACHE.test(String(commit||'')):!SHA.test(String(commit||'')))
-  throw Error('A verified Git commit or checked offline Library ZIP hash is required for webview assets.');
+async function installVerified({catalogRoot,storageRoot,commit}){
+ if(!SHA.test(String(commit||'')))
+  throw Error('A verified Git commit is required for webview assets.');
  const manifestPath=path.join(catalogRoot,...MANIFEST.split('/'));
  let manifest;
  try{manifest=JSON.parse(await fs.readFile(manifestPath,'utf8'));}
@@ -101,9 +98,6 @@ async function installVerified({catalogRoot,storageRoot,commit,offline=false}){
    for(const item of files){
     const from=await noSymlinkFile(source,item.path);let raw=await fs.readFile(from);
     if(raw.length!==item.bytes||hash(raw)!==item.sha256){
-     // Offline ZIP files have no immutable Git object. Accept only exact
-     // extension-pinned size/hash, never arbitrary downloaded JavaScript.
-     if(offline)throw Error('Offline ZIP webview asset does not match the trusted extension lock: '+item.path);
      // Git may materialize CRLF files; recover only from an immutable pinned blob.
      raw=await verifiedGitBlob({catalogRoot,commit,relative:item.path,expected:item});
     }
@@ -115,7 +109,7 @@ async function installVerified({catalogRoot,storageRoot,commit,offline=false}){
   }finally{await fs.rm(stage,{force:true,recursive:true}).catch(()=>{});}
  }
  const current=path.join(base,'current.json'),tmp=path.join(base,'.current-'+crypto.randomUUID());
- await fs.writeFile(tmp,JSON.stringify({commit,version:lock.version,source:offline?'offline-zip':'git'})+'\n',{flag:'wx'});
+ await fs.writeFile(tmp,JSON.stringify({commit,version:lock.version,source:'git'})+'\n',{flag:'wx'});
  try{await fs.rename(tmp,current);}catch(e){
   if(!['EPERM','EEXIST','EACCES'].includes(e.code))throw e;
   // Windows can reject replacement of an existing current.json. Rename its
@@ -127,16 +121,10 @@ async function installVerified({catalogRoot,storageRoot,commit,offline=false}){
   try{await fs.rename(tmp,current);if(st)await fs.rm(backup,{force:true});}
   catch(error){if(st)await fs.rename(backup,current).catch(()=>{});throw error;}
  }finally{await fs.rm(tmp,{force:true}).catch(()=>{});}
- return {dir,version:lock.version,commit,source:offline?'offline-zip':'git',fromCache:false};
+ return {dir,version:lock.version,commit,source:'git',fromCache:false};
 }
 async function install(args){
  if(!SHA.test(String(args?.commit||'')))throw Error('A verified 40-character GitHub commit is required for webview library download.');
  return installVerified(args);
 }
-async function installOffline({catalogRoot,storageRoot,archiveHash}){
- if(!ARCHIVE_HASH.test(String(archiveHash||'')))throw Error('A verified offline Library ZIP SHA-256 is required to activate webview assets.');
- // The ZIP importer verified every extracted file and retained the archive SHA.
- // Only the exact known CodeMirror/Quill/Gantt/SortableJS assets pinned in this VSIX may run.
- return installVerified({catalogRoot,storageRoot,commit:'zip-'+archiveHash,offline:true});
-}
-module.exports={MANIFEST,files,verifyManifest,verifyFiles,verifiedGitBlob,install,installOffline,cached};
+module.exports={MANIFEST,files,verifyManifest,verifyFiles,verifiedGitBlob,install,cached};

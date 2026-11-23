@@ -47,5 +47,6 @@ test('settings and runtime expose dual update checks, safe prompts and verified 
  assert.match(runtime,/downloadVerified/);
  assert.match(runtime,/context\.globalState\.update\(key,promptId\)/);
   assert.match(runtime,/libraryReleaseUpdater\.latest/);
-  assert.match(runtime,/libraryReleaseUpdater\.downloadVerified/);
+  assert.doesNotMatch(runtime,/libraryReleaseUpdater\.downloadVerified/);
+  assert.match(runtime,/sdlcCatalog\.syncGitWorkspace/);
 });

@@ -411,6 +411,15 @@ function showTopNotification(item){
  topNoticeCurrent=item;
  syncMyWorkHeaderWaveHost();
  const target=$('topNotification');target.classList.remove('hidden','error','success','info');
+ // Overlay the persistent credential row without adding another shell row.
+ // Use its rendered height so all notices match at every VS Code zoom level.
+ const header=$('appHeader'),credential=$('roleCredentialBanner');
+ const headerBottom=header?.getBoundingClientRect?.()?.bottom;
+ const credentialHeight=!credential?.classList?.contains?.('hidden')?credential?.getBoundingClientRect?.()?.height:0;
+ if(target?.style){
+  if(Number.isFinite(headerBottom))target.style.top=Math.round(headerBottom)+'px';
+  target.style.setProperty?.('--atgv-notice-row-height',Math.max(48,Math.round(credentialHeight||52))+'px');
+ }
  target.classList.add(item.error?'error':item.success?'success':'info');
  const severity=item.error?'error':item.success?'success':'warning';
  target.classList.remove('error','success','info','warning');target.classList.add(severity);
@@ -423,8 +432,9 @@ function showTopNotification(item){
  // Never replace/hide the app header: doing so makes the permanent
  // credential reminder jump up and down whenever notifications rotate.
  clearTimeout(topNoticeTimer);
- // Process questions and actionable BA instructions stay visible until explicitly dismissed or acted upon.
- if(!item.consentRequestId&&!item.persistent)topNoticeTimer=setTimeout(closeTopNotification,item.error?20000:11000);
+ // All transient notification types (including actionable notices) expire after
+ // five seconds; the existing route buttons and dismiss remain functional.
+ topNoticeTimer=setTimeout(closeTopNotification,5000);
 }
 function closeTopNotification(){
  if(topNoticeCurrent?.consentRequestId){send('aiSendConsentResponse',{requestId:topNoticeCurrent.consentRequestId,accepted:false});pendingAiConsentId=null;}
@@ -942,17 +952,18 @@ function renderCatalog(state,{forceFields=false}={}){
  $('catalogTokenField').classList.toggle('hidden',read('catalogAuth')!=='token');
  $('catalogToken').placeholder=state.credentialSaved?'Token saved securely; leave blank to retain':'Read-only token with Contents: Read';
  const installed=state.installed;settingsCatalogInstalled=installed||null;updateExtensionSettingBadges();
- $('catalogInstalled').textContent=installed?(installed.offline?
-  `Offline SDLC Library ZIP v${installed.version} · ${installed.filename||'validated archive'} · Preserved until an equal or newer verified GitHub version`:
-  `Installed SDLC Catalogue v${installed.version} · Git SHA ${installed.sha.slice(0,12)} · ${installed.repository} · ${new Date(installed.installedAt).toLocaleString()}`):'No downloaded catalogue yet.';
+ $('catalogInstalled').textContent=installed?
+  `Installed SDLC Catalogue v${installed.version} · Git SHA ${String(installed.sha||'').slice(0,12)} · ${installed.repository||'GitHub'}`:'No downloaded catalogue yet.';
  const counts=$('catalogContents');counts.replaceChildren();
  for(const [label,value] of [['Role skills',installed?.roleCount],['Tech stacks',installed?.stackCount],['Workflows',installed?.workflows],['Templates',installed?.templates]]){
   const span=document.createElement('span');span.textContent=`${label}: ${value??'—'}`;counts.append(span);
  }
  const remote=state.remote;
- $('catalogUpdates').textContent=installed?.offline?
-  (remote?.version?`Installed ZIP v${installed.version} · GitHub main v${remote.version}. ${state.updateAvailable?'Newer version available.':'No newer version available.'}`:'Offline ZIP active. GitHub version has not been verified yet.'):
-  remote?.version?(!installed?`Library v${remote.version} available on GitHub main. Open an ATGV workspace, then Pull Catalog to install.`:state.updateAvailable?`Library v${remote.version} available (installed v${installed.version}). Pull Catalog to download; project files will not be overwritten.`:`Library v${installed.version} is up to date.`):(state.lastCheck?`Last check: ${new Date(state.lastCheck).toLocaleString()}`:'No verified remote version yet.');
+ $('catalogUpdates').textContent=remote?.version?
+  (!installed?`Library v${remote.version} available on GitHub main. Open an ATGV workspace, then Pull Catalog to install.`:
+   state.updateAvailable?`Library v${remote.version} available (installed v${installed.version}). Pull Catalog to download; project files will not be overwritten.`:
+   `Library v${installed.version} is up to date.`):
+  (state.lastCheck?`Last check: ${new Date(state.lastCheck).toLocaleString()}`:'No verified remote version yet.');
  if(state.error)$('catalogStatus').textContent=state.error;
  for(const id of ['catalogSave','catalogTest','catalogPull','catalogCheck'])$(id).disabled=!!state.busy||catalogBusyUI;
  $('pullLibraryFiles').disabled=!!state.busy||catalogBusyUI||softwareLibraryPulling;
@@ -8264,7 +8275,10 @@ function renderArchitectCatalogStatus(){
  $('architectCheckStackUpdates').disabled=architectCatalogBusy||!!catalogState?.busy||!configured;
  $('architectPullStackUpdates').disabled=architectCatalogBusy||!!catalogState?.busy||!configured||!newer;
  if(!configured){$('architectCatalogStatus').textContent='Configure the SDLC Catalog in Extension Settings first.';return;}
- $('architectCatalogStatus').textContent=installed?.offline&&remote?.version?'Using newer ZIP v'+installed.version+' · GitHub main v'+remote.version+'.':remote?(newer?'Update available · '+remote.sha.slice(0,12)+' · review and pull the versioned catalog.':`Catalog up to date · ${installed?.version||'current'} · ${remote.sha.slice(0,12)}`):installed?`Installed ${installed.version} · Check Updates to compare with GitHub main.`:'No catalog installed · Check Updates to discover the latest version.';
+ $('architectCatalogStatus').textContent=remote?
+  (newer?'Update available · '+remote.sha.slice(0,12)+' · review and pull the versioned catalog.':
+  `Catalog up to date · ${installed?.version||'current'} · ${remote.sha.slice(0,12)}`):
+  installed?`Installed ${installed.version} · Check Updates to compare with GitHub main.`:'No catalog installed · Check Updates to discover the latest version.';
 }
 
 $('architectCheckStackUpdates').addEventListener('click',()=>{architectCatalogBusy=true;$('architectCatalogStatus').textContent='Checking the SDLC Catalog main branch…';renderArchitectCatalogStatus();send('architectCheckStackUpdates');});

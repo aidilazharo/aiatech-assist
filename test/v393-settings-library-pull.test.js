@@ -76,7 +76,7 @@ test('Settings and Catalog controls share real host catalog progress events',()=
  assert.ok(start>0&&end>start);
  const command=host.slice(start,end);
  assert.match(command,/type:'catalogPullProgress'/);
- assert.match(command,/libraryReleaseUpdater\.downloadVerified/);
- assert.match(command,/offlineLibrary\.importZip/);
+ assert.match(command,/sdlcCatalog\.remoteVersion/);
+ assert.doesNotMatch(command,/offlineLibrary\.importZip|importZip/);
  assert.match(command,/progress\('completed',100/);
 });
