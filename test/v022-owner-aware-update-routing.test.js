@@ -17,8 +17,8 @@ test('both GitHub organizations resolve exactly to their sources and the same re
   assert.equal(routes.owner,owner);
   assert.equal(routes.extensionSource,`https://github.com/${owner}/${extension}`);
   assert.equal(routes.librarySource,`https://github.com/${owner}/${library}`);
-  assert.equal(routes.extensionReleases,'https://github.com/aidilazharo/extension');
-  assert.equal(routes.libraryReleases,'https://github.com/aidilazharo/library');
+  assert.equal(routes.extensionReleases,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc');
+  assert.equal(routes.libraryReleases,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills');
   assert.equal(routing.asRepository(routes.extensionSource),owner+'/'+extension);
   assert.equal(routing.asRepository(routes.librarySource),owner+'/'+library);
   assert.equal(startup.validate({jiraUrl:'https://example.atlassian.net',email:'user@example.com',githubUrl:'github.com/'+owner}).libraryRepoUrl,routes.librarySource);

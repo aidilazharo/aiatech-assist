@@ -28,8 +28,8 @@ test('both supported organization mappings point to exact required and optional 
  const b=setup.validate({...setup.DEFAULTS,githubUrl:'https://github.com/aiamalaysia'});
  assert.equal(b.extensionRepoUrl,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc');
  assert.equal(b.libraryRepoUrl,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills');
- assert.equal(b.extensionReleasesUrl,'https://github.com/aidilazharo/extension');
- assert.equal(b.libraryReleasesUrl,'https://github.com/aidilazharo/library');
+ assert.equal(b.extensionReleasesUrl,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc');
+ assert.equal(b.libraryReleasesUrl,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills');
  assert.equal(b.projectRepoUrl,'https://github.com/aiamalaysia/my-fow-technology-app-techassists');
 });
 test('unsafe organization/project URLs cannot redirect PAT checks to unknown hosts',()=>{

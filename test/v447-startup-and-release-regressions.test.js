@@ -11,13 +11,13 @@ const host=read('src/lib/runtime/extension-runtime.js');
 const extension=require('../src/lib/updates/github-release-updater');
 const library=require('../src/lib/updates/library-release-updater');
 
-test('release discovery queries public mirror repositories only',()=>{
- assert.deepEqual(extension.RELEASE_REPOSITORIES,['aidilazharo/extension']);
- assert.deepEqual(library.RELEASE_REPOSITORIES,['aidilazharo/library']);
+test('release discovery queries AIA Malaysia repositories only',()=>{
+ assert.deepEqual(extension.RELEASE_REPOSITORIES,['aiamalaysia/my-fow-technology-app-techassists-dev-sdlc']);
+ assert.deepEqual(library.RELEASE_REPOSITORIES,['aiamalaysia/my-fow-technology-app-techassists-enterprise-skills']);
  assert.ok(!extension.RELEASE_REPOSITORIES.includes('aidilazharo/aiatech-assist'));
  assert.ok(!library.RELEASE_REPOSITORIES.includes('aidilazharo/tech-stacks-skills'));
- assert.equal(extension.PINNED_RELEASE_URL,'https://github.com/aidilazharo/aiatech-assist/releases/latest');
- assert.equal(library.LATEST_URL,'https://github.com/aidilazharo/tech-stacks-skills/releases/latest');
+ assert.equal(extension.PINNED_RELEASE_URL,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc/releases/latest');
+ assert.equal(library.LATEST_URL,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills/releases/latest');
 });
 test('startup runs prerequisites when setup needs them and hides optional Copilot SDK',()=>{
  assert.match(host,/type:'startupSavedFields'/);
