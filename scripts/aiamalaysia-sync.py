@@ -354,7 +354,10 @@ def publish():
         if not existing:
             gh("dest", "release", "create", tag, "--repo", DEST_REPO, "--target", merged,
                "--title", f"ATGV v{version}", "--notes", notes, "--draft")
-        detail = api("dest", f"repos/{DEST_REPO}/releases/tags/{tag}") if not existing else existing
+        detail = existing or next((item for item in api("dest", f"repos/{DEST_REPO}/releases?per_page=100")
+                                   if item.get("tag_name") == tag), None)
+        if not detail or find_marker(detail.get("body")) != (commit, tag) or detail.get("target_commitish") != merged:
+            raise RuntimeError("Draft release identity could not be verified")
         uploaded = {a["name"]: a for a in detail.get("assets", [])}
         if set(uploaded) - set(names):
             raise RuntimeError("Unexpected destination release assets")
@@ -370,7 +373,22 @@ def publish():
             else:
                 raise RuntimeError("Published destination release is incomplete; no overwrite")
         if detail.get("draft"):
+            final_draft = api("dest", f"repos/{DEST_REPO}/releases/{detail['id']}")
+            final_assets = {a["name"]: a for a in final_draft.get("assets", [])}
+            if set(final_assets) != set(names) or not final_draft.get("draft"):
+                raise RuntimeError("Draft asset set changed before publication")
+            with tempfile.TemporaryDirectory() as check:
+                download("dest", DEST_REPO, tag, Path(check), final_assets)
+                if any(digest(Path(check) / name) != digest(folder / name) for name in names):
+                    raise RuntimeError("Uploaded release asset verification failed")
+            git(DEST, "fetch", "--no-tags", "origin", "main")
+            latest_main = dest_head()
+            ancestor(DEST, merged, latest_main)
+            verify_projection(projection(tree(SOURCE, commit)), tree(DEST, latest_main))
             gh("dest", "release", "edit", tag, "--repo", DEST_REPO, "--draft=false", "--latest")
+        final = api("dest", f"repos/{DEST_REPO}/releases/tags/{tag}")
+        if final.get("draft") or final.get("target_commitish") != merged or find_marker(final.get("body")) != (commit, tag):
+            raise RuntimeError("Published release identity could not be verified")
         summary(f"Verified destination release: https://github.com/{DEST_REPO}/releases/tag/{tag}")
 
 
