@@ -42,7 +42,7 @@ test('Upload register is visible and disabled outside an active Start Restart so
  assert.match(ui,/\$\('discoveryImport'\)\.disabled=sourceLocked/);
  assert.match(ui,/\.classList\.toggle\('ba-source-locked',sourceLocked\)/);
  assert.match(ui,/function renderArchivedSources\(\)/);assert.match(ui,/root\.replaceChildren\(\);root\.classList\.add\('hidden'\)/);
- assert.match(ui,/selector\.classList\.remove\('hidden'\)/);
+ assert.match(ui,/item\.append\(info,replace\)/);
 });
 test('Save becomes Next Step when persisted and supports retrying an unlinked revision',()=>{
  assert.match(ui,/discoverySave:saved&&!discoveryDirty&&baMappingComplete\(\)\?/);

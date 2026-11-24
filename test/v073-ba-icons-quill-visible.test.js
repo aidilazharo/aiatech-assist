@@ -24,7 +24,7 @@ test('document actions and publish refresh controls are icons with accessible la
  for(const id of ['baPreflightDownload','baWorkingBrDownload','baAutoArtifactSave','baAutoStop','baAutoRefresh','baAutoPublish'])
   assert.match(html,new RegExp('id="'+id+'"[^>]*aria-label="[^"]+"[^>]*>\\$\\{baHeaderIcon\\('));
  for(const action of ['replace','remove'])assert.match(host,new RegExp(action+"\\.append\\(sourceActionIcon\\('"));
- assert.match(host,/sourceActionIcon\('replace'\)/);
+ assert.match(host,/sourceActionIcon\('upload'\)/);
  assert.match(host,/sourceActionIcon\('delete'\)/);
  assert.match(host,/requestBRDeletion\(\{target:'active-source',digest:doc\.digest/);
  assert.match(ui,/if\(!primary\.disabled&&target&&!target\.disabled\)target\.click\(\)/);

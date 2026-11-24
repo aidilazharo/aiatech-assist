@@ -28,9 +28,10 @@ test('BA review has one progress track with action buttons in a bottom row',()=>
  assert.ok(!html.includes('id="aiReviewProgress"'));
  assert.ok(css.includes('#discoveryView .ba-review-footer .ba-review-options button:disabled'));
 });
-test('document checkbox selection is retained through mapping and saved per project',()=>{
+test('single source selection is automatic and saved per project',()=>{
  const ui=file('media/start.js'),host=file('test/generated/extension-source.txt');
- assert.ok(ui.includes("send('baSourceSelection',{digests:[...sourceSelectedDigests]})"));
+ assert.ok(ui.includes("send('baSourceSelection',{digests:validSelection})"));
+ assert.ok(ui.includes("const validSelection=files.length===1?[files[0].digest]:[];"));
  assert.ok(ui.includes("sourceSelectedDigests=new Set(Array.isArray(msg.baSelectedSources)?msg.baSelectedSources:[])"));
  assert.ok(!ui.includes("if(m.type==='discoveryImportDone'){sourceSelectedDigests.clear()"));
  assert.ok(!ui.includes("if(m.type==='discoverySourceRemoved'){sourceSelectedDigests.clear()"));

@@ -31,7 +31,7 @@ test('Business Documents file cards separate selection, long filenames and indep
   /min-height:36px/);
  assert.match(js,/item\.append\(info,replace\)/);
  assert.match(js,/replace\.setAttribute\('aria-label','Replace & Reprocess'\)/);
- assert.match(js,/replace\.append\(sourceActionIcon\('replace'\)\)/);
+ assert.match(js,/replace\.append\(sourceActionIcon\('upload'\)\)/);
  assert.match(js,/remove\.setAttribute\('aria-label','Delete source document'\)/);
  assert.match(js,/remove\.append\(sourceActionIcon\('delete'\)\)/);
  assert.match(css,/@media\(max-width:850px\)\{/);

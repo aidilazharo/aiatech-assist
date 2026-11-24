@@ -30,7 +30,7 @@ function html(webview,{resumeLibrary=false}={}){
     subtask:"<path d=\"M5 5v7h4m-3-3 3 3-3 3M12 8h7v8h-7zM14 12l1 1 2-2\"/>"
   };
   const baHeaderIcon=(name,variant='')=>`<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${variant}>${baHeaderIcons[name]}</svg>`;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.85';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.86';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const uiConsistencyCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-consistency.css'));
@@ -611,6 +611,7 @@ function html(webview,{resumeLibrary=false}={}){
         <label for="baJiraBrFilter">Business Requirement <select id="baJiraBrFilter"><option value="">All BRs / project</option></select></label>
         <label for="baJiraTypeFilter">Issue type <select id="baJiraTypeFilter"><option value="">All types</option></select></label>
         <label for="baJiraStatusFilter">Status <select id="baJiraStatusFilter"><option value="">All statuses</option></select></label>
+        <label for="baJiraRoleFilter">Role <select id="baJiraRoleFilter"><option value="">All roles</option></select></label>
         <div class="ba-jira-view-switch" role="group" aria-label="Jira display mode"><button type="button" class="secondary" id="baJiraListView" aria-pressed="true">List</button><button type="button" class="secondary" id="baJiraTreeView" aria-pressed="false">Hierarchy</button></div>
       </div>
       <p id="baJiraInventoryStatus" class="muted" role="status" aria-live="polite">Open Business Analyst My Work to load Jira project items.</p>
@@ -643,6 +644,8 @@ function html(webview,{resumeLibrary=false}={}){
         <div id="pmJiraTableView" aria-label="Searchable Jira DataTable">
           <div class="pm-filters"><label>Search <input id="pmJiraFilter" type="search" placeholder="Issue key, summary or owner" autocomplete="off"></label>
         <label>Type <select id="pmTypeFilter"><option value="">All types</option><option value="br">BR</option><option value="epic">Epic</option><option value="story">User Stories</option><option value="task">Task</option><option value="subtask">Subtask</option><option value="other">Other types</option></select></label>
+        <label>Business Requirement <select id="pmBrFilter"><option value="">All BRs</option></select></label>
+        <label>Role <select id="pmRoleFilter"><option value="">All roles</option></select></label>
         <label>Assignee <select id="pmAssigneeFilter"><option value="">All assignees</option></select></label>
         <label>Status <select id="pmStatusFilter"><option value="">All statuses</option></select></label>
         <label>Priority <select id="pmPriorityFilter"><option value="">All priorities</option></select></label>

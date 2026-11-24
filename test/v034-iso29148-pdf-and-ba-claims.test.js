@@ -61,7 +61,7 @@ test('BA source UI removes redundant archive button, defaults preflight collapse
  assert.doesNotMatch(sourceUi,/archive.textContent='Remove Source'/);
  assert.match(sourceUi,/remove\.setAttribute\('aria-label','Delete source document'\)/);
  assert.match(sourceUi,/requestBRDeletion\(\{target:'active-source'/);
- assert.match(sourceUi,/actions.append\(replace,remove\)/);
+ assert.match(sourceUi,/actions.append\(remove\)/);
  assert.match(html,/<details id="baSourcePreflight"/);
  assert.match(ui,/panel.open=false;panel.dataset.lastPhase=phase/);
  assert.match(css,/summary\.ba-source-preflight-toggle/);

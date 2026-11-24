@@ -1575,7 +1575,8 @@ function renderBAJiraHierarchy(rows){
   const type=document.createElement('span');type.className='ba-jira-tree-type';type.textContent=item.type||'Issue';
   const title=document.createElement('span');title.className='ba-jira-tree-summary';title.textContent=item.summary||'Untitled';
   const status=document.createElement('span');status.className='ba-jira-tree-status';status.textContent=item.status||'Unknown';
-  line.append(button,type,title,status);node.append(line);
+  const role=document.createElement('span');role.className='ba-jira-tree-role';role.textContent=ATGVBAJiraEpics.roleName(item);
+  line.append(button,type,title,status,role);node.append(line);
   if(kids.length){const inner=document.createElement('div');inner.className='ba-jira-tree-children';for(const child of kids)appendItem(child,inner,depth+1);node.append(inner);}
   container.append(node);
  }
@@ -1599,6 +1600,7 @@ function syncBARequirementModal(){
  const card=[...source.children].find(matches);
  if(!card){content.textContent='This requirement is no longer available in the current project. Refresh Jira items and try again.';return;}
  const scrollTop=content.scrollTop;if(card.parentElement!==content)content.replaceChildren(card);card.open=true;content.scrollTop=scrollTop;
+ const summary=card.querySelector(':scope > .ba-completed-br-heading');if(summary){summary.classList.add('ba-modal-card-heading');summary.onclick=event=>{if(!event.target.closest('button,a,input,select'))event.preventDefault();};}
  if(target.openAnswers){
   const tab=card.querySelector('.ba-completed-tabs [data-tab="answers"]');
   if(tab){for(let parent=tab.parentElement;parent&&parent!==card;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;tab.click();}
@@ -1622,6 +1624,8 @@ function closeBARequirementModal(restore=true){
  const target=baRequirementModalTarget;if(!target)return;baRequirementModalTarget=null;
  if(typeof resetBATransferPanel==='function')resetBATransferPanel();
  const content=$('baRequirementModalContent'),card=content.firstElementChild;
+ if(card){const heading=card.querySelector(':scope > .ba-completed-br-heading');if(heading){heading.classList.remove('ba-modal-card-heading');heading.onclick=null;}}
+ hideBRActionTooltip();
  if(card&&target.projectId===activeId)$(target.kind==='local'?'baCompletedList':'baJiraBackedEpics').append(card);
  content.replaceChildren();$('baRequirementModal').classList.add('hidden');$('baRequirementModal').setAttribute('aria-hidden','true');
  if(typeof renderWorkspaceBreadcrumbs==='function')renderWorkspaceBreadcrumbs();
@@ -1632,7 +1636,7 @@ function renderBAJiraInventory(){
  const section=$('baJiraInventorySection'),statusNode=$('baJiraInventoryStatus'),root=$('baJiraInventoryTable');
  if(!section||!statusNode||!root)return;
  const key=projectConnectionsSnapshot.jira?.key||'';
- root.classList.add('ba-jira-project-table');
+ root.classList.add('ba-jira-project-table','atgv-jira-common-table');
  $('baJiraInventoryTitle').textContent='All Jira Project Items'+(key?' · '+key:'');
  $('baJiraInventoryRefresh').disabled=!activeId||!key||jiraInventoryRunning;
  const hasDeleted=!!(brState?.deletedRequirements||[]).some(t=>t.remoteRecordsPreserved===true&&Array.isArray(t.jiraIssues)&&t.jiraIssues.some(i=>i.key));
@@ -1647,15 +1651,17 @@ function renderBAJiraInventory(){
  const inScope=jiraInventoryProject===activeId&&jiraInventoryKey===key;
  const groups=activeId?ATGVCompletedBRHistory.group(completedBARecords()):[];
  const combined=ATGVBAJiraEpics.combine(inScope?jiraInventoryItems:[],groups,key);
+ for(const item of combined.rows)item.roleName=ATGVBAJiraEpics.roleName(item);
  renderBAJiraBackedEpics(combined.unlinked);brPicker.replaceChildren();
  const allBr=document.createElement('option');allBr.value='';allBr.textContent='All BRs / project';brPicker.append(allBr);
  for(const ref of combined.refs){const option=document.createElement('option');option.value=ref.scopeId;option.textContent=ref.kind==='jira'?ref.label+' · Jira-only ('+ref.rootKey+')':ref.title;brPicker.append(option);}
  brPicker.value=combined.refs.some(ref=>ref.scopeId===oldBr)?oldBr:'';
  updateBAJiraFilterOptions($('baJiraTypeFilter'),combined.rows.map(item=>item.type),'All types');
  updateBAJiraFilterOptions($('baJiraStatusFilter'),combined.rows.map(item=>item.status),'All statuses');
- const type=$('baJiraTypeFilter').value,issueStatus=$('baJiraStatusFilter').value;
+ updateBAJiraFilterOptions($('baJiraRoleFilter'),combined.rows.map(item=>item.roleName),'All roles');
+ const type=$('baJiraTypeFilter').value,issueStatus=$('baJiraStatusFilter').value,roleFilter=$('baJiraRoleFilter').value;
  const scoped=brPicker.value?combined.rows.filter(item=>item._brRefs.some(ref=>ref.scopeId===brPicker.value)):combined.rows;
- const rows=prioritizeJiraCreators(scoped.filter(item=>(!type||item.type===type)&&(!issueStatus||item.status===issueStatus)),jiraInventoryViewerId)
+ const rows=prioritizeJiraCreators(scoped.filter(item=>(!type||item.type===type)&&(!issueStatus||item.status===issueStatus)&&(!roleFilter||item.roleName===roleFilter)),jiraInventoryViewerId)
   .sort((a,b)=>Number(b._brRoots.length>0)-Number(a._brRoots.length>0));
  // BR owner is the Epic's live Jira Reporter, not the immutable Creator.
  // Populate a real sort value so the new DataTable column sorts correctly.
@@ -1688,7 +1694,7 @@ function renderBAJiraInventory(){
  };
  baJiraTableInstance=ATGVDataTables.mount(root,rows,[
   {key:'brLabel',label:'Business Requirement',render:brCell},{key:'key',label:'Jira key',render:keyLink},{key:'type',label:'Type'},
-  {key:'summary',label:'Summary'},{key:'status',label:'Status',render:item=>{
+  {key:'summary',label:'Summary'},{key:'roleName',label:'Role'},{key:'assignee',label:'Assignee',render:item=>item.assignee||'Unassigned'},{key:'priority',label:'Priority',render:item=>item.priority||'—'},{key:'status',label:'Status',render:item=>{
     const el=document.createElement('span');el.textContent=item.status||'Unknown';
     if(String(item.type||'').toLowerCase()==='epic'){
       const children=jiraInventoryItems.filter(child=>child.parentKey===item.key);
@@ -1697,6 +1703,7 @@ function renderBAJiraInventory(){
     }
     return el;
    }},
+  {key:'dueDate',label:'Due Date',render:item=>item.dueDate||'—'},{key:'updated',label:'Updated',render:item=>jiraCompactDate(item.updated)},
   {key:'brOwner',label:'BR owner',render:item=>{
     const roots=(item._brRefs||[]).map(ref=>ref.rootKey).filter(Boolean);
     const epic=String(item.type||'').toLowerCase()==='epic'&&roots.includes(item.key)?item:
@@ -1732,6 +1739,7 @@ function pmJiraIssueType(type){
  if(['subtask','sub task','sub-task'].includes(t))return 'subtask';
  return 'other';
 }
+function jiraCompactDate(value){const raw=String(value||'');const date=new Date(raw.replace(/([+-]\d{2})(\d{2})$/,'$1:$2'));return Number.isNaN(date.getTime())?(raw||'—'):new Intl.DateTimeFormat(undefined,{day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'}).format(date);}
 function pmToday(){const now=new Date();return [now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-');}
 function pmText(tag,text,className=''){const node=document.createElement(tag);node.textContent=String(text??'');if(className)node.className=className;return node;}
 function pmJiraLink(item){const link=document.createElement('button');link.type='button';link.className='jira-issue-inline-link';link.textContent=item.key;link.addEventListener('click',()=>openJiraIssueModal(item.key));return link;}
@@ -1761,7 +1769,9 @@ function renderPMDashboard(){
  const root=$('pmDailyCockpit');if(!root||selectedRole!=='project-manager'||view!=='work')return;
  const key=projectConnectionsSnapshot.jira?.key||'';
  const scoped=jiraInventoryProject===activeId&&jiraInventoryKey===key;
- const items=scoped?jiraInventoryItems:[];
+ const items=scoped?ATGVBAJiraEpics.projectRows(jiraInventoryItems,ATGVCompletedBRHistory.group(completedBARecords()),key):[];
+ const epicOwners=new Map(items.filter(item=>String(item.type||'').toLowerCase()==='epic').map(item=>[item.key,item.reporter||'']));
+ for(const item of items){const roots=(item._brRefs||[]).map(ref=>ref.rootKey).filter(Boolean);item.brOwner=roots.map(k=>epicOwners.get(k)).filter(Boolean).join(', ');}
  const today=pmToday(),summary=ATGVPMDelivery.analyze(items,today);
  const statusNode=$('pmDataStatus');$('pmRefreshJira').disabled=!activeId||!key||jiraInventoryRunning;
   syncPMJiraView();
@@ -1862,22 +1872,26 @@ function renderPMDashboard(){
  pmOptionList('pmAssigneeFilter',items.map(x=>x.assignee||'Unassigned'),'All assignees');
  pmOptionList('pmStatusFilter',items.map(x=>x.status),'All statuses');
  pmOptionList('pmPriorityFilter',items.map(x=>x.priority),'All priorities');
+ pmOptionList('pmRoleFilter',items.map(x=>x.roleName),'All roles');
+ pmOptionList('pmBrFilter',items.flatMap(x=>(x._brRefs||[]).map(ref=>ref.label)),'All BRs');
  const typeFilter=$('pmTypeFilter').value,assignee=$('pmAssigneeFilter').value,status=$('pmStatusFilter').value,priority=$('pmPriorityFilter').value,due=$('pmDueFilter').value,term=$('pmJiraFilter').value.trim().toLowerCase();
- const matches=summary.items.filter(item=>(!typeFilter||pmJiraIssueType(item.type)===typeFilter)&&(!assignee||(item.assignee||'Unassigned')===assignee)&&(!status||item.status===status)&&(!priority||item.priority===priority)&&
+ const roleFilter=$('pmRoleFilter').value,brFilter=$('pmBrFilter').value;
+ const matches=summary.items.filter(item=>(!roleFilter||item.roleName===roleFilter)&&(!brFilter||item._brRefs.some(ref=>ref.label===brFilter))&&(!typeFilter||pmJiraIssueType(item.type)===typeFilter)&&(!assignee||(item.assignee||'Unassigned')===assignee)&&(!status||item.status===status)&&(!priority||item.priority===priority)&&
  (!due||(due==='overdue'&&item.pmState.overdue)||(due==='soon'&&item.pmState.dueSoon)||(due==='none'&&!item.dueDate))&&
- (!term||[item.key,item.summary,item.assignee,item.status,item.priority].some(v=>String(v||'').toLowerCase().includes(term))));
+ (!term||[item.key,item.summary,item.assignee,item.status,item.priority,item.roleName,item.brLabel].some(v=>String(v||'').toLowerCase().includes(term))));
  // Default: explicit blocker first, overdue second, due-soon third, then Jira's created-descending order.
  const rank=x=>x.pmState.blocked?0:x.pmState.overdue?1:x.pmState.dueSoon?2:3;
  matches.sort((a,b)=>rank(a)-rank(b)||(b.created||'').localeCompare(a.created||''));
- const grid=$('pmJiraTable');
+ const grid=$('pmJiraTable');grid.classList.add('atgv-jira-common-table');
  if(typeof ATGVDataTables==='undefined'){grid.textContent='Jira DataTables are unavailable.';return;}
  if(pmJiraTableInstance){pmJiraTableInstance.setRows(matches);return;}
  pmJiraTableInstance=ATGVDataTables.mount(grid,matches,[
-  {key:'key',label:'Jira Key',render:pmJiraLink},{key:'summary',label:'Summary'},
-  {key:'type',label:'Type'},{key:'assignee',label:'Assignee',render:item=>item.assignee||'Unassigned'},
-  {key:'priority',label:'Priority'},{key:'status',label:'Status'},
+  {key:'brLabel',label:'Business Requirement',render:item=>item.brLabel||'—'},{key:'key',label:'Jira key',render:pmJiraLink},{key:'type',label:'Type'},
+  {key:'summary',label:'Summary'},{key:'roleName',label:'Role'},{key:'assignee',label:'Assignee',render:item=>item.assignee||'Unassigned'},
+  {key:'priority',label:'Priority',render:item=>item.priority||'—'},{key:'status',label:'Status'},
   {key:'dueDate',label:'Due Date',render:item=>item.dueDate||'—'},
-  {key:'updated',label:'Updated'}
+  {key:'updated',label:'Updated',render:item=>jiraCompactDate(item.updated)},
+  {key:'brOwner',label:'BR owner',render:item=>item.brOwner||'—'},{key:'creator',label:'Created by',render:item=>item.creator||'Unavailable'},{key:'created',label:'Created',render:item=>jiraCompactDate(item.created)}
  ],{label:'Project Manager Jira work items',pageSize:5,sortKey:'',onRowClick:item=>openJiraIssueModal(item.key)});
 }
 function ensurePMJiraInventory(force=false){
@@ -1888,7 +1902,7 @@ function ensurePMJiraInventory(force=false){
 }
 $('pmRefreshJira').addEventListener('click',searchJiraInventory);
 $('pmApproveEstimates').addEventListener('click',()=>send('pmApproveEffortBaseline',{projectId:activeId,overrides:pmEffortEdits}));
-for(const id of ['pmJiraFilter','pmTypeFilter','pmAssigneeFilter','pmStatusFilter','pmPriorityFilter','pmDueFilter'])$(id).addEventListener(id==='pmJiraFilter'?'input':'change',renderPMDashboard);
+for(const id of ['pmJiraFilter','pmTypeFilter','pmAssigneeFilter','pmStatusFilter','pmPriorityFilter','pmDueFilter','pmRoleFilter','pmBrFilter'])$(id).addEventListener(id==='pmJiraFilter'?'input':'change',renderPMDashboard);
 $('pmOpenDocuments').addEventListener('click',()=>navigate('documents'));
 $('pmOpenApprovals').addEventListener('click',()=>navigate('operations'));
 $('pmOpenGantt').addEventListener('click',()=>{navigate('overview');$('overviewGanttDetails').open=true;send('loadPlanning');});
@@ -2041,6 +2055,7 @@ $('baJiraBrFilter').addEventListener('change',renderBAJiraInventory);
 $('baJiraListView').addEventListener('click',()=>{baJiraView='list';renderBAJiraInventory();});
 $('baJiraTreeView').addEventListener('click',()=>{baJiraView='tree';renderBAJiraInventory();});
 $('baJiraTypeFilter').addEventListener('change',renderBAJiraInventory);
+$('baJiraRoleFilter').addEventListener('change',renderBAJiraInventory);
 $('baJiraStatusFilter').addEventListener('change',renderBAJiraInventory);
 window.addEventListener('message',event=>{
  const msg=event.data||{};
@@ -3887,7 +3902,11 @@ function jiraIssueLinkedBr(item){
  return id&&approved(id)?id:'';
 }
 function renderRoleJiraIssues(items,incomplete=false){
- const rows=Array.isArray(items)?items:[],root=$('roleJiraTable');
+ const raw=Array.isArray(items)?items:[],root=$('roleJiraTable');
+ const projectKey=projectConnectionsSnapshot.jira?.key||'';
+ const refs=new Map(ATGVBAJiraEpics.projectRows(raw,ATGVCompletedBRHistory.group(completedBARecords()),projectKey).map(item=>[item.key,item]));
+ const rows=raw.map(item=>({...item,roleName:ATGVBAJiraEpics.roleName(item),brLabel:item.brId||refs.get(item.key)?.brLabel||''}));
+ root.classList.add('atgv-jira-role-table');
  roleJiraItems=rows;roleJiraIncomplete=incomplete;
  if(selectedRole==='software-developer')showDeveloperAssignedTickets(rows);
  if(selectedRole==='ux-designer')renderUxTickets(rows);
@@ -3897,7 +3916,8 @@ function renderRoleJiraIssues(items,incomplete=false){
  ATGVDataTables.mount(root,rows,[
   {key:'key',label:'Jira ID',render:item=>{const btn=document.createElement('button');btn.type='button';btn.className='jira-issue-inline-link';btn.textContent=item.key;btn.title='View Jira '+item.key+' details';btn.addEventListener('click',()=>openJiraIssueModal(item.key));return btn;}},
   {key:'issueType',label:'Type'},
-  {key:'brId',label:'BR',render:item=>item.brId?(item.brId+(item.brStatus==='Updated'?' · Updated':'')):'—'},
+  {key:'brLabel',label:'Business Requirement',render:item=>item.brLabel?(item.brLabel+(item.brStatus==='Updated'?' · Updated':'')):'—'},
+  {key:'roleName',label:'Role'},
   {key:'descendantCount',label:'Child Issues',render:item=>item.brRoot?String(item.descendantCount||0):'—'},
   {key:'summary',label:'Summary',render:item=>{const btn=document.createElement('button');btn.type='button';btn.className='jira-issue-summary-link';btn.textContent=item.summary;btn.addEventListener('click',()=>openJiraIssueModal(item.key));return btn;}},
   {key:'status',label:'Status'},
@@ -6739,6 +6759,33 @@ function baIconAction(node,icon,tooltip){
  node.setAttribute('aria-label',tooltip);
  return node;
 }
+
+ // Render a single viewport-level tooltip, outside scroll/overflow stacking contexts.
+ let brTooltipNode=null,brTooltipTarget=null;
+ function hideBRActionTooltip(){if(brTooltipTarget)brTooltipTarget.removeAttribute('aria-describedby');brTooltipTarget=null;brTooltipNode?.remove();brTooltipNode=null;}
+ function showBRActionTooltip(target){
+  if(!target?.isConnected||target.hidden)return;
+  const label=target.getAttribute('title')||target.dataset.tooltip||target.getAttribute('aria-label');
+  if(!label)return;
+  hideBRActionTooltip();
+  target.dataset.tooltip=label;target.removeAttribute('title');
+  const node=document.createElement('div');node.id='atgvBRActionTooltip';node.className='atgv-br-portal-tooltip';node.setAttribute('role','tooltip');node.textContent=label;
+  document.body.append(node);brTooltipNode=node;brTooltipTarget=target;target.setAttribute('aria-describedby',node.id);
+  const anchor=target.getBoundingClientRect(),rect=node.getBoundingClientRect(),margin=8;
+  node.style.left=Math.max(margin,Math.min(window.innerWidth-rect.width-margin,anchor.right-rect.width))+'px';
+  const above=anchor.top-rect.height-margin,below=anchor.bottom+margin;
+  node.style.top=Math.max(margin,Math.min(window.innerHeight-rect.height-margin,above>=margin?above:below))+'px';
+ }
+ const brTooltipButton=node=>node instanceof Element?node.closest('.ba-br-icon-action'):null;
+ document.addEventListener('pointerover',event=>{const target=brTooltipButton(event.target);if(target&&target!==brTooltipTarget)showBRActionTooltip(target);},true);
+ document.addEventListener('pointerout',event=>{if(brTooltipTarget&&brTooltipButton(event.target)===brTooltipTarget&&!brTooltipTarget.contains(event.relatedTarget))hideBRActionTooltip();},true);
+ document.addEventListener('focusin',event=>{const target=brTooltipButton(event.target);if(target)showBRActionTooltip(target);else hideBRActionTooltip();});
+ document.addEventListener('focusout',hideBRActionTooltip);
+ document.addEventListener('pointerdown',hideBRActionTooltip,true);
+ document.addEventListener('scroll',hideBRActionTooltip,true);
+ window.addEventListener('resize',hideBRActionTooltip);
+ document.addEventListener('keydown',event=>{if(event.key==='Escape')hideBRActionTooltip();},true);
+
 let brActiveFilter='all',brFilterProjectId=null;
 function activeBusinessRequirements(){return (brState?.brs||[]).filter(br=>br.status!=='retired'&&!br.archivedFromRestart);}
 function brImpactType(br){return brState?.impact?.find(x=>x.id===br.id)?.change||(br.needsRefresh?'modified':br.status==='approved'?'unchanged':'new');}

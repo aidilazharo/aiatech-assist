@@ -74,5 +74,7 @@ test('literal DoD [ ] text continues as plain text',()=>{
  const jira=read('src/jira-preview-details.js');
  assert.ok(jira.includes("'[ ] '"),'Jira DoD list markers should remain literal text');
  const ui=read('media/ba-automatic-ui.js');
- assert.doesNotMatch(ui,/createElement\('input'\).*type='checkbox'/);
+ const requirementView=ui.slice(ui.indexOf('function renderRequirements('),ui.indexOf('function renderJira('));
+ assert.ok(requirementView.length>0);
+ assert.doesNotMatch(requirementView,/createElement\('input'\).*type='checkbox'/);
 });

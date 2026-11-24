@@ -102,5 +102,13 @@
   }
   return {rows:[...localOnly,...rows],refs,unlinked};
  }
- return {brFromSummary,unlinkedEpics,combine};
+ const roles=Object.freeze({"business-analyst":"Business Analyst","solution-architect":"Solution Architect","ux-designer":"UI/UX Designer","software-developer":"Developer","project-manager":"Project Manager","qa-engineer":"QA Engineer","uat-tester":"UAT Tester","product-owner":"Product Owner","scrum-master":"Scrum Master","security-engineer":"Security Engineer","data-engineer":"Data Engineer / DBA","technical-writer":"Technical Writer","operations-support":"Operations / Support","release-manager":"Release / DevOps","technical-lead":"Technical Lead","business-owner":"Business Owner / Approver","ai-ml-engineer":"AI / ML Engineer","compliance-officer":"Compliance / Risk Officer"});
+ function roleName(item){
+  const ids=[...new Set((Array.isArray(item?.labels)?item.labels:[]).filter(label=>typeof label==='string'&&label.startsWith('atgv-role-')).map(label=>label.slice(10)))];
+  if(!ids.length)return 'Not specified';
+  if(ids.length!==1||!Object.hasOwn(roles,ids[0]))return 'Needs role review';
+  return roles[ids[0]];
+ }
+ function projectRows(items,groups,projectKey){return combine(items,groups,projectKey).rows.filter(row=>row._isJiraIssue!==false).map(row=>({...row,roleName:roleName(row)}));}
+ return {brFromSummary,unlinkedEpics,combine,roleName,projectRows};
 });

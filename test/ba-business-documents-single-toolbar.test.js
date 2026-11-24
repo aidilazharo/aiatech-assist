@@ -64,7 +64,7 @@ test('document and Jira views use icon buttons with accessible tooltip labels',(
   assert.match(tag,/title="[^"]+"/);
   assert.match(icon,/\$\{baHeaderIcon\(/);
  }
- assert.match(ba,/primary\.setAttribute\('aria-label',label\)/);
+ assert.match(ba,/primary\.setAttribute\('aria-label',label\|\|'Document actions'\)/);
  assert.match(ba,/mark\.toggleAttribute\('hidden',mark\.dataset\.baPrimaryIcon!==icon\)/);
  assert.match(css,/\.ba-auto-title-icon:focus-visible::after\{[^}]*content:attr\(title\)/);
  const start=html.indexOf('<summary class="ba-auto-jira-heading">');

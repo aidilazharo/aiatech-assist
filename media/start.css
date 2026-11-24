@@ -3263,3 +3263,32 @@ body:not(.gate-mode) .app-layout{
 #discoveryView .ba-jira-field-selection-table input{width:auto;min-width:0}
 #discoveryView #baAutoJiraFieldsSave{margin-top:10px}
 #discoveryView .ba-auto-panel-actions #baAutoOverflowActions[data-kind="original"] #baAutoFileActions .source-document-actions button:first-child{display:inline-flex!important}
+
+/* v0.0.86 — common Jira inventory columns, compact readable cells. */
+#workView .atgv-jira-common-table .atgv-datatable-table{min-width:1850px;table-layout:fixed;width:100%}
+#workView .atgv-jira-common-table .atgv-datatable-table th:nth-child(1){width:8%}
+#workView .atgv-jira-common-table .atgv-datatable-table th:nth-child(2){width:5%}
+#workView .atgv-jira-common-table .atgv-datatable-table th:nth-child(3){width:6%}
+#workView .atgv-jira-common-table .atgv-datatable-table th:nth-child(4){width:22%}
+#workView .atgv-jira-common-table .atgv-datatable-table th:nth-child(5){width:8%}
+#workView .atgv-jira-common-table .atgv-datatable-table th:nth-child(6){width:8%}
+#workView .atgv-jira-common-table .atgv-datatable-table th:nth-child(7){width:5%}
+#workView .atgv-jira-common-table .atgv-datatable-table th:nth-child(8){width:6%}
+#workView .atgv-jira-common-table .atgv-datatable-table th:nth-child(9){width:6%}
+#workView .atgv-jira-common-table .atgv-datatable-table th:nth-child(10){width:7%}
+#workView .atgv-jira-common-table .atgv-datatable-table th:nth-child(11){width:7%}
+#workView .atgv-jira-common-table .atgv-datatable-table th:nth-child(12){width:6%}
+#workView .atgv-jira-common-table .atgv-datatable-table th:nth-child(13){width:6%}
+#workView .atgv-jira-common-table .atgv-datatable-table td{white-space:normal;word-break:normal;overflow-wrap:normal;vertical-align:top}
+#workView .atgv-jira-common-table .atgv-datatable-table td:is(:nth-child(1),:nth-child(4),:nth-child(5),:nth-child(6),:nth-child(11),:nth-child(12)){overflow-wrap:anywhere;white-space:normal}
+#workView .atgv-jira-common-table .atgv-datatable-table td:is(:nth-child(2),:nth-child(3),:nth-child(7),:nth-child(9)){white-space:nowrap}
+#workView .atgv-jira-common-table .atgv-datatable-scroll{overflow-x:auto;max-width:100%}
+#workView .atgv-jira-role-table .atgv-datatable-table{min-width:1250px}
+#workView .ba-jira-inventory-filters{grid-template-columns:repeat(auto-fit,minmax(145px,1fr))}
+#workView .ba-jira-tree-role{color:var(--vscode-descriptionForeground);font-size:11px}
+#workView #baRequirementModalContent .ba-modal-card-heading > .ba-completed-br-title{display:none}
+#workView #baRequirementModalContent .ba-modal-card-heading{cursor:default;justify-content:flex-end}
+#workView #baRequirementModalContent .ba-modal-card-heading > .ba-completed-br-meta{margin-inline-end:auto}
+#workView #baRequirementModal .ba-br-icon-action[data-tooltip]:is(:hover,:focus-visible)::after,
+#workView .ba-completed-br-heading .ba-br-icon-action[data-tooltip]:is(:hover,:focus-visible)::after{content:none;display:none}
+.atgv-br-portal-tooltip{position:fixed;z-index:2147483647;box-sizing:border-box;max-width:min(320px,calc(100vw - 16px));width:max-content;padding:7px 10px;border:1px solid var(--vscode-panel-border,#586171);border-radius:5px;background:var(--vscode-menu-background,#242932);color:var(--vscode-menu-foreground,#f5f7fa);box-shadow:0 5px 16px rgba(0,0,0,.4);font-size:12px;line-height:1.4;white-space:normal;overflow-wrap:anywhere;pointer-events:none}
