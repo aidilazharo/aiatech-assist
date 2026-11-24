@@ -52,6 +52,7 @@ test('GitHub latest release lookup includes prereleases, filters unsafe files, a
  assert.equal(release.tag,'v1.2.3-build.8');
  assert.deepEqual(release.assets.map(a=>a.name),['source.vsix','source.zip']);
  assert.equal(release.assets[0].digest,digest);
+ assert.equal(release.skippedAssetCount,2);
  assert.throws(()=>api.safeReleaseComponent('../etc/passwd'),/Unsafe/);
 });
 
