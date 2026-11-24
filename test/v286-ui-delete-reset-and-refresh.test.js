@@ -52,10 +52,10 @@ test('v286 refuses feature recovery without verified recorded bootstrap checkout
  assert.equal(git(folder,'branch','--show-current'),'feature/unrelated');
 }));
 test('v286 Jira inventory has stable column widths and compact human-readable time',()=>{
- assert.match(ui,/root\.classList\.add\('ba-jira-project-table'\)/);
- assert.match(css,/ba-jira-project-table \.atgv-datatable-table\{table-layout:fixed;min-width:1040px\}/);
- assert.match(css,/nth-child\(2\)\{width:10%\}/);
- assert.match(css,/nth-child\(3\)\{width:35%\}/);
+ assert.match(ui,/root\.classList\.add\('ba-jira-project-table','atgv-jira-common-table'\)/);
+ assert.match(css,/atgv-jira-common-table \.atgv-datatable-table\{min-width:1850px;table-layout:fixed/);
+ assert.match(css,/atgv-jira-common-table \.atgv-datatable-table th:nth-child\(2\)\{width:5%\}/);
+ assert.match(css,/atgv-jira-common-table \.atgv-datatable-table th:nth-child\(4\)\{width:22%\}/);
  assert.match(ui,/new Intl\.DateTimeFormat\(undefined,\{day:'numeric',month:'short'/);
 });
 test('v286 deletion shows animated progress and refreshes all role caches only on completed deletion',()=>{

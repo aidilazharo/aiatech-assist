@@ -48,7 +48,7 @@ test('combined table keeps BR links and filters without redundant row-action but
    classList:{add(){},toggle(){}},append(...nodes){this.children.push(...nodes);},replaceChildren(){this.children=[];},
    get options(){return this.children;},setAttribute(){},addEventListener(type,fn){handlers[type]=fn;},click(){if(!this.disabled)handlers.click?.({stopPropagation(){}});}};
  }
- const ids=['baJiraInventorySection','baJiraInventoryStatus','baJiraInventoryTable','baJiraInventoryTitle','baJiraInventoryRefresh','baReviewDeletedJira','baJiraBrFilter','baJiraTypeFilter','baJiraStatusFilter','baJiraListView','baJiraTreeView','baJiraHierarchy'];
+ const ids=['baJiraInventorySection','baJiraInventoryStatus','baJiraInventoryTable','baJiraInventoryTitle','baJiraInventoryRefresh','baReviewDeletedJira','baJiraBrFilter','baJiraTypeFilter','baJiraStatusFilter','baJiraRoleFilter','baJiraListView','baJiraTreeView','baJiraHierarchy'];
  const nodes=Object.fromEntries(ids.map(id=>[id,element()]));
  const data=[{key:'TC-1',type:'Epic',summary:'BR-001: Example',status:'To Do'},{key:'TC-2',type:'Story',parentKey:'TC-1',summary:'Story'},
   {key:'TC-9',type:'Epic',summary:'BR-003: Jira only',status:'To Do'}];
@@ -63,6 +63,7 @@ test('combined table keeps BR links and filters without redundant row-action but
  const make=new Function('document','$','ATGVBAJiraEpics','ATGVCompletedBRHistory','ATGVDataTables','data','groups','openBARequirementModal','openBRJiraInventory','openJiraIssueModal',prelude+ui.slice(from,to)+';return renderBAJiraInventory;');
  const render=make({createElement:element},id=>nodes[id],model,{group:x=>x},tables,data,groups,(ref,answers)=>opened.push([ref.scopeId,!!answers]),id=>filters.push(id),id=>jira.push(id));
  render();assert.equal(capture.rows.length,4);assert.equal(capture.rows.filter(row=>row.key==='TC-1').length,1);
+ assert.ok(capture.columns.some(column=>column.key==='roleName'));assert.ok(capture.columns.some(column=>column.key==='assignee'));
  const brColumn=capture.columns.find(column=>column.key==='brLabel');assert.ok(brColumn);
  const all=node=>[node,...node.children.flatMap(all)],linked=brColumn.render(capture.rows.find(row=>row.key==='TC-1'));
  assert.ok(all(linked).some(node=>node.textContent==='BR-001'));
@@ -85,12 +86,12 @@ test('BR details modal opens saved answers and clears stale content after a proj
  function element(){return {children:[],dataset:{},attributes:{},scrollTop:0,parentElement:null,textContent:'',open:false,classList:{add(){},remove(){}},
   append(node){if(node.parentElement)node.parentElement.children=node.parentElement.children.filter(item=>item!==node);node.parentElement=this;this.children.push(node);},
   replaceChildren(...children){this.children.forEach(node=>node.parentElement=null);this.children=[];children.forEach(node=>this.append(node));},
-  get firstElementChild(){return this.children[0]||null;},setAttribute(key,value){this.attributes[key]=value;},focus(){document.activeElement=this;},querySelector(){return this.answerTab||null;}};}
+  get firstElementChild(){return this.children[0]||null;},setAttribute(key,value){this.attributes[key]=value;},focus(){document.activeElement=this;},querySelector(selector){return selector.includes('data-tab')?this.answerTab||null:selector.includes('ba-completed-br-heading')?this.heading||null:null;}};}
  const ids=['baRequirementModal','baRequirementModalTitle','baRequirementModalContent','baRequirementModalClose','baCompletedList','baJiraBackedEpics','baJiraBrFilter'];
  const nodes=Object.fromEntries(ids.map(id=>[id,element()]));let answerClicks=0;
- const prelude=["let baRequirementModalTarget=null,baRequirementPriorFocus=null,activeId='P';",
-  "function renderBACompletedRecords(){const card=make();card.dataset.requirementTarget='BR-001';card.answerTab={parentElement:card,click:()=>answers()};$('baCompletedList').replaceChildren(card);syncBARequirementModal();}",
-  "function renderBAJiraBackedEpics(){const card=make();card.dataset.jiraKey='TC-9';$('baJiraBackedEpics').replaceChildren(card);syncBARequirementModal();}"
+ const prelude=["let baRequirementModalTarget=null,baRequirementPriorFocus=null,activeId='P';function hideBRActionTooltip(){}",
+  "function renderBACompletedRecords(){const card=make();card.heading=make();card.dataset.requirementTarget='BR-001';card.answerTab={parentElement:card,click:()=>answers()};$('baCompletedList').replaceChildren(card);syncBARequirementModal();}",
+  "function renderBAJiraBackedEpics(){const card=make();card.heading=make();card.dataset.jiraKey='TC-9';$('baJiraBackedEpics').replaceChildren(card);syncBARequirementModal();}"
  ].join('\n');
  const create=new Function('document','$','make','answers',prelude+ui.slice(from,to)+';return {open:openBARequirementModal,close:closeBARequirementModal,sync:syncBARequirementModal,refresh:renderBACompletedRecords,setProject:x=>activeId=x};');
  const modal=create(document,id=>nodes[id],element,()=>answerClicks++);
