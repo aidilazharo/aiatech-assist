@@ -79,6 +79,9 @@ jobs:
         if: steps.source.outputs.ready == 'true'
         run: node scripts/verify-copilot-sdk.js
 
+      - name: Test AIA Malaysia distribution automation
+        run: python3 -m unittest discover -s scripts -p 'test_aiamalaysia_sync.py'
+
       - name: Run regression suite
         if: steps.source.outputs.ready == 'true'
         run: npm test
