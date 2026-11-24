@@ -1,12 +1,11 @@
-# ATGV AIATECH Assist v0.0.81
+# ATGV AIATECH Assist v0.0.82
 
-## Development-hosted AIA Malaysia distribution
-- Synchronize the exact verified development main revision to a versioned destination branch and create a PR.
-- Copy tracked source objects without changing destination .git, .github, action manifests or destination-only files.
-- Require reviewed destination PR merge and byte-identical source projection before publishing releases from development CI.
-- Verify all six source artifacts and both checksums, publish a draft before promoting to latest, and prevent overwrites and downgrades.
-- Keep all GitHub Actions in the development repository. Use approved AIAMALAYSIA_PAT credentials and manual dry-run controls.
+## Business Requirements troubleshooting and completed history
+- Add the full BR troubleshooting log download immediately left of Publish to Jira, including during preparation and publication.
+- Reuse the project-scoped sanitized log exporter and record automatic workflow phase/stage, Jira preview counts and completed history counts.
+- Display actual completed requirement cards in the automatic BA history section; derive the Completed badge from the same record index.
+- Provide an explicit empty state before publication or when completed history is absent; never claim a draft is published.
+- Preserve immutable completed snapshots and existing permissions, approvals and Jira mappings.
 
 ## Verification
-- Local Git overlay and checksum tests, regression suite, Windows reset and VSIX build checks.
-- Live destination synchronization requires an approved secret and repository permissions; it is not implied by passing source CI.
+- Regression tests, Windows startup/reset and VSIX packaging are required before publication.

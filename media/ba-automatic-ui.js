@@ -16,7 +16,7 @@
  get('baAutoSourceEntry').append(sourcePanel);
  get('baAutoDiscoveryForm').append(get('discoveryForm'));
  get('baAutoHistoryContent').append(get('baStartPanel'));
- get('baAutoFeedback').append(get('baInlineStatus'),get('brDeletionProgress'),get('baMilestoneError'));
+ get('baAutoFeedback').append(get('baInlineStatus'),get('brDeletionProgress'),get('baMilestoneError'),get('baProcessLogStatus'));
 
  let state=null,requestedProject='',artifactProject='',jiraView='list',jiraTab='all',tableKey='',brKey='',kind='iso',sourceDigest='',artifactContext=null,request=0;
  let aiResolve={running:false,message:'',stopping:false};
@@ -369,9 +369,17 @@
   const discoveryReady=!!brState?.discoveryRevision&&!!brState?.mappingCompleted&&!discoveryDirty;
   const requirementsReady=requirements().length>0&&phase!=='running'&&!brState?.baDraftQuality?.excluded?.length;
   const jiraReady=rowsForTable().length>0&&phase!=='running';
-  const completedReady=phase==='published'||(brState?.brs||[]).some(br=>
-   br.archivedFromRestart===true||['approved','published','completed'].includes(String(br.status||'').toLowerCase()))||
-   Object.values(brState?.synced||{}).some(link=>!!link?.key);
+  // Use exactly the same completed-cycle index as the history renderer.
+  // Approval and partial Jira links are not completed publication.
+  const completedGroups=ATGVCompletedBRHistory.group(completedBARecords());
+  const completedReady=completedGroups.length>0;
+  const historyList=get('baCompletedList');
+  historyList.classList.toggle('hidden',!completedReady);
+  const empty=get('baAutoHistoryEmpty');
+  empty.hidden=completedReady;
+  empty.textContent=phase==='publishing'?'Publishing Jira changes. Completed requirements appear after publication is recorded.':
+   phase==='published'?'No completed history is recorded for this project. Refresh affected artifacts or download the troubleshooting log.':
+   'No completed requirements yet. Publish approved requirements to Jira to populate this history.';
   const uploadTarget=get('baAutoOriginalFiles');
   if(sourcePanel.parentElement!==uploadTarget)uploadTarget.append(sourcePanel);
   get('baAutoSourceEntry').hidden=true;
@@ -436,6 +444,7 @@
    else step.removeAttribute('aria-current');
   }
   const refresh=get('baAutoRefresh'),stop=get('baAutoStop'),publish=get('baAutoPublish');
+  get('baAutoProcessLog').disabled=!activeId||baProcessLogPendingProject===activeId;
   refresh.disabled=!source()||busy()||unsaved||!!baBusyTask||discoveryImportBusy;
   stop.classList.toggle('hidden',phase!=='running');
   const publishLabel=phase==='publishing'?'Publishing…':state?.preview?.republish?'Republish to Jira':'Publish to Jira';
@@ -453,6 +462,7 @@
   get('baStartPanel').classList.remove('hidden');
   get('baCompletedSection').classList.remove('hidden');
   sourcePanel.classList.remove('hidden');
+  renderBACompletedRecords();
   renderReadyPanels(phase);
   renderArtifacts();renderRequirements();renderJira();
  }

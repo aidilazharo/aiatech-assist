@@ -30,7 +30,7 @@ function html(webview,{resumeLibrary=false}={}){
     subtask:"<path d=\"M5 5v7h4m-3-3 3 3-3 3M12 8h7v8h-7zM14 12l1 1 2-2\"/>"
   };
   const baHeaderIcon=(name,variant='')=>`<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${variant}>${baHeaderIcons[name]}</svg>`;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.81';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.82';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const uiConsistencyCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-consistency.css'));
@@ -506,13 +506,14 @@ function html(webview,{resumeLibrary=false}={}){
           <div id="baAutoJiraItems"></div>
         </div>
       </details>
-      <details id="baAutoHistory" class="ba-auto-artifact" data-status="not-started"><summary><strong>Completed requirements</strong><span id="baAutoHistoryBadge" class="ba-auto-badge" data-state="not-started">Not started</span></summary><div id="baAutoHistoryContent" class="ba-auto-body"></div></details>
+      <details id="baAutoHistory" class="ba-auto-artifact" data-status="not-started"><summary><strong>Completed requirements</strong><span id="baAutoHistoryBadge" class="ba-auto-badge" data-state="not-started">Not started</span></summary><div id="baAutoHistoryContent" class="ba-auto-body"><p id="baAutoHistoryEmpty" class="muted ba-auto-history-empty" role="status">No completed requirements yet. Publish approved requirements to Jira to populate this history.</p></div></details>
     </div>
     <div class="ba-auto-actions">
       <p id="baAutoStatus" role="status" aria-live="polite"></p>
       <div class="stack">
         <button type="button" id="baAutoStop" class="secondary ba-workflow-icon hidden" title="Stop preparation" aria-label="Stop preparation">${baHeaderIcon('stop')}</button>
         <button type="button" id="baAutoRefresh" class="secondary ba-workflow-icon" title="Refresh Affected Artifacts" aria-label="Refresh Affected Artifacts" disabled>${baHeaderIcon('refresh')}</button>
+        <button type="button" id="baAutoProcessLog" class="secondary ba-workflow-icon" title="Download complete Business Requirements troubleshooting log (.txt)" aria-label="Download Business Requirements troubleshooting log">${baHeaderIcon('download')}</button>
         <button type="button" id="baAutoPublish" class="ba-workflow-icon" title="Publish to Jira" aria-label="Publish to Jira" disabled>${baHeaderIcon('publish')}</button>
       </div>
     </div>

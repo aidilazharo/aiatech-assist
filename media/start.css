@@ -3239,3 +3239,10 @@ body:not(.gate-mode) .app-layout{
 .unified-settings-view .atgv-settings-intro{margin:2px 0 14px;font-size:12px;line-height:1.45}
 .unified-settings-view .guide-token-hint{margin:5px 0 0;font-size:11px}
 .unified-settings-view [hidden]{display:none!important}
+
+/* Automatic BA history uses the existing completed record cards, not the hidden modal staging layout. */
+#discoveryView #baAutoHistoryContent #baCompletedList:not(.hidden){display:flex;flex-direction:column;gap:var(--ba-panel-gap)}
+#discoveryView #baAutoHistoryContent .ba-auto-history-empty{margin:0;padding:2px 0;line-height:1.5}
+#discoveryView #baAutoHistoryContent .ba-auto-history-empty[hidden]{display:none!important}
+#discoveryView #baAutoFeedback #baProcessLogStatus{display:block;overflow-wrap:anywhere;font-size:12px}
+#discoveryView #baAutoFeedback #baProcessLogStatus:empty{display:none}
