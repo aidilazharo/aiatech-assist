@@ -7086,8 +7086,11 @@ async function handleDashboardMessage(msg){
           const cwd=typeof live.cwd==='string'?path.resolve(live.cwd):'';
           if(!live.running||!cwd||!(cwd===path.resolve(root)||cwd.startsWith(path.resolve(root)+path.sep)))
             throw Error('No ATGV-managed application is running in the selected project.');
-          const safe=require('../../architect-custom-stack').loopbackPreview(live.previewUrl);
-          if(new URL(safe).pathname.startsWith('/api/'))throw Error('Only a mock API is running, not the frontend application. Stop it, then select Install & Run to launch the detected frontend.');
+          const backend=msg.service==='backend';
+          const endpoint=backend?(live.apiUrl||(live.mockPreview?new URL('/api/v1/health',live.previewUrl).toString():'')):live.previewUrl;
+          if(!endpoint)throw Error('No backend endpoint is available for this managed application.');
+          const safe=require('../../architect-custom-stack').loopbackPreview(endpoint);
+          if(!backend&&new URL(safe).pathname.startsWith('/api/'))throw Error('Only a mock API is running, not the frontend application. Stop it, then select Install & Run to launch the detected frontend.');
           const response=await fetch(safe,{method:'GET',redirect:'manual',signal:AbortSignal.timeout(2500)});
           if(!response.ok)throw Error('Application process is running but localhost preview is not healthy (HTTP '+response.status+').');
           await vscode.env.openExternal(vscode.Uri.parse(safe));
@@ -7112,7 +7115,7 @@ async function handleDashboardMessage(msg){
           const value={checked:true,running,pid:running?info.pid:null,relative:belongs?String(info.relative||''):'',
             previewUrl:running?String(info.previewUrl||''):'',mockPreview:running&&info.mockPreview===true,
             exitCode:belongs&&Number.isInteger(info.exitCode)?info.exitCode:null,
-            signal:belongs?String(info.signal||''):'',reachable:null};
+            signal:belongs?String(info.signal||''):'',reachable:null,apiUrl:'',apiReachable:null};
           // An alive Node process is not necessarily a healthy HTTP application.
           // Probe ONLY the validated loopback URL and refuse redirects.
           if(running&&value.previewUrl){
@@ -7121,6 +7124,10 @@ async function handleDashboardMessage(msg){
               const res=await fetch(safe,{method:'GET',redirect:'manual',signal:AbortSignal.timeout(2600)});
               value.reachable=res.ok;
             }catch{value.reachable=false;}
+            try{
+              const endpoint=info.apiUrl||(info.mockPreview?new URL('/api/v1/health',value.previewUrl).toString():'');
+              if(endpoint){value.apiUrl=require('../../architect-custom-stack').loopbackPreview(endpoint);const api=await fetch(value.apiUrl,{redirect:'manual',signal:AbortSignal.timeout(2600)});value.apiReachable=api.ok;await api.body?.cancel().catch(()=>{});}
+            }catch{value.apiReachable=false;}
           }
           if(activeProject?.id===projectId)
             await dashboard?.webview.postMessage({type:'architectCustomStatusResult',projectId,value});
@@ -7312,6 +7319,11 @@ async function handleDashboardMessage(msg){
           const workflow=require('../../architect-custom-workflow');
           const target=workflow.selectPreviewTarget(inspected,String(msg.relative||''));
           if(!target)throw Error('No runnable Vite frontend detected. Install & Run will not open an API-only /api/v1/health page. Check frontend package.json and vite.config.ts.');
+          const fullStackMode=msg.fullStackMode==='preview'?'preview':'live';
+          if(fullStackMode==='live'){
+            const fullstack=require('../../architect-custom-fullstack');const pair=fullstack.detectPair(inspected);
+            fullstack.modeForPair(pair,pair?await fullstack.hasEnvironment(root,pair.backend):false,'live');
+          }
           const action='Install & Run Custom Stack';
           workflow.beginConsent(root);
           await recordStackActivity(projectId,'Install & Run / approval','Awaiting ATGV confirmation in VS Code. No application scripts have started.');
@@ -7328,14 +7340,14 @@ async function handleDashboardMessage(msg){
           },30000);
           reminder.unref?.();
           try{approved=await uiWarning(
-            'Execute the six-stage local Custom Stack workflow for '+target.framework+' ('+(target.relative||'repository root')+')?'+
+            'Execute the six-stage local Custom Stack workflow ('+(fullStackMode==='live'?'REAL frontend and backend; no mock fallback':'frontend and simulated API')+') for '+target.framework+' ('+(target.relative||'repository root')+')?'+
             '\\n\\n1. Scan manifests and application dependencies.'+
             '\\n2–3. Create or reuse a LOCAL fix branch and commit isolated mock service/database fixtures.'+
             '\\n4. Execute dependency installation/validation (may run npm scripts).'+
-            '\\n5–6. Start and verify localhost MOCK DATA services and synthetic database responses.'+
+            '\\n5–6. Start and verify both selected localhost endpoints.'+
             '\\n\\nUncommitted files are preserved: a dirty checkout runs in-place, without Git stash, reset, branch switch or commit.'+
             '\\nA clean checkout may create a local fix branch. No GitHub push occurs.'+
-            '\\nIf NestJS and PostgreSQL are configured, both services may run; otherwise Vite runs with clearly labelled synthetic APIs. This is not production readiness. Continue?',
+            '\\nReal mode requires healthy NestJS and PostgreSQL; mock mode uses synthetic APIs only. This is not production readiness. Continue?',
             {modal:true},action);
           }finally{clearInterval(reminder);consentCancelled=workflow.endConsent(root);}
           await recordStackActivity(projectId,'Install & Run / approval',
@@ -7348,7 +7360,7 @@ async function handleDashboardMessage(msg){
           const result=await workflow.installAndRun(root,{
             expectedSha:msg.expectedSha||inspected.sha,
             relative:typeof msg.relative==='string'?msg.relative:undefined,
-            previewUrl:String(msg.previewUrl||''),
+            previewUrl:String(msg.previewUrl||''),fullStackMode,
             onAiReview:async (verified,report)=>{
               const model=await activeAiTarget();
               const evidence=JSON.stringify({
@@ -7706,6 +7718,7 @@ async function handleDashboardMessage(msg){
             const info=developerGit.localLogs();
             if(!info.running)throw Error('Application process exited before readiness verification: '+String(info.logs||'').slice(-500));
             await startup.waitForHttp(previewUrl||info.previewUrl,()=>developerGit.localLogs().running,30000,info.instanceId||'');
+            if(info.apiPort)await startup.waitForHttp('http://127.0.0.1:'+info.apiPort+'/api/health',()=>developerGit.localLogs().running,30000,info.instanceId||'');
             const verified=developerGit.localLogs();
             architectErrorLogs.append(activeProject.id,'test',require('../../stack-process-diagnostics').capture({stage:'application startup and HTTP readiness',bin:verified.command||'application',cwd:verified.cwd||path.join(root,target.relative),logs:verified.logs,exitCode:verified.exitCode,signal:verified.signal}));
             const passed=verified.running===true;
@@ -7729,7 +7742,7 @@ async function handleDashboardMessage(msg){
             const reconciled=await require('../../architect-server-verification').startAfterSuccessfulTest({
               project:updated,
               verify:()=>server.verify({root,stackId:updated.techStackId}),
-              start:()=>server.start({root,stackId:updated.techStackId,prepared:updated.techStackPrepared,allowManagedHandoff:false,openBrowser:async()=>true})
+              start:()=>server.start({root,stackId:updated.techStackId,prepared:updated.techStackPrepared,allowManagedHandoff:false,openBrowser:url=>vscode.env.openExternal(vscode.Uri.parse(url))})
             });
             if(reconciled.proof){
               updated=await registry.update(updated.id,{...updated,techStackServerVerification:reconciled.proof});activeProject=updated;
@@ -7759,6 +7772,16 @@ async function handleDashboardMessage(msg){
           throw failure;
         }
         break;
+      }
+      case 'architectOpenServerEndpoint':{
+        requireOpened();const project=await registry.read(activeProject.id);
+        const conf=effectiveConfig(activeProject);
+        const root=await architectRepository.resolve(context.workspaceState,activeProject.id,developerGit,{projectRoot:aiRoot(),githubOwner:conf.get('github.owner'),githubRepo:conf.get('github.repo')});
+        const state=await require('../../architect-server').verify({root,stackId:project.techStackId});
+        const endpoint=msg.service==='backend'?state.apiUrl:state.frontendUrl;
+        if(!state.running||!state.healthy||!endpoint)throw Error('Selected local service is not verified. Run Server first.');
+        const safe=require('../../architect-custom-stack').loopbackPreview(endpoint);
+        await vscode.env.openExternal(vscode.Uri.parse(safe));break;
       }
       case 'architectServerStatus':{
         requireOpened();const projectId=activeProject.id,serial=architectServerOperationSerial;

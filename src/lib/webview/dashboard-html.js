@@ -701,12 +701,14 @@ function html(webview,{resumeLibrary=false}={}){
           <strong id="architectCustomRuntimeLabel">Application status not checked</strong>
           <span id="architectCustomRuntimeDetail">Scan Repository inspects code; it does not start the application.</span>
           <button id="architectCustomCheckStatus" class="secondary" type="button">Check Status</button>
-          <button id="architectCustomOpenPreview" class="secondary" type="button" disabled>Open Preview</button>
+          <button id="architectCustomOpenPreview" class="secondary" type="button" disabled>Open Frontend</button>
+          <button id="architectCustomOpenBackend" class="secondary" type="button" disabled>Open Backend</button>
         </div>
         <div class="atgv-custom-branch-row"><label for="architectCustomBranch">Local Git branch<select id="architectCustomBranch" aria-label="Custom Stack local Git branch"></select></label><button id="architectCustomSwitchBranch" class="secondary" type="button" disabled>Switch Branch</button><span id="architectCustomBranchStatus" class="muted" role="status"></span></div>
         <div class="architect-custom-controls">
           <label for="architectCustomTarget">Detected application<select id="architectCustomTarget" aria-label="Detected custom application"></select></label>
-          <label for="architectCustomPreviewUrl">Local preview URL<input id="architectCustomPreviewUrl" type="url" spellcheck="false" value="http://127.0.0.1:3000/" placeholder="http://127.0.0.1:3000/"></label>
+          <label for="architectCustomMode">Run mode<select id="architectCustomMode"><option value="live">Real frontend + backend</option><option value="preview">Frontend + mock API</option></select></label>
+          <label for="architectCustomPreviewUrl">Frontend URL<input id="architectCustomPreviewUrl" type="url" spellcheck="false" value="http://127.0.0.1:5173/" placeholder="http://127.0.0.1:5173/"></label>
           <button id="architectCustomScan" class="secondary hidden" type="button">Scan Repository</button>
           <button id="architectCustomPull" class="secondary hidden" type="button" disabled>Pull Repository</button>
           <button id="architectCustomRun" type="button" disabled>Install &amp; Run</button>
@@ -719,7 +721,7 @@ function html(webview,{resumeLibrary=false}={}){
           <li data-step="2">Create local branch</li>
           <li data-step="3">Update code &amp; commit</li>
           <li data-step="4">Install dependencies</li>
-          <li data-step="5">Start mock services &amp; database</li>
+          <li data-step="5">Start frontend &amp; backend</li>
           <li data-step="6">Verify preview</li>
         </ol>
         <div id="architectCustomActions" class="atgv-custom-actions hidden" role="group" aria-label="Recommended Custom Stack actions"></div>
@@ -729,7 +731,7 @@ function html(webview,{resumeLibrary=false}={}){
       <div id="architectRequiredComponents" class="architect-required-components hidden" aria-label="Required technology stack components">
         <div class="architect-requirement-heading">
           <strong id="architectRequirementsTitle">Selected stack</strong>
-          <div class="architect-server-actions"><button type="button" id="architectServerToggle" class="secondary" aria-pressed="false" disabled>Run Server</button><span id="architectServerStatus" class="architect-server-status muted" role="status" aria-live="polite">Server stopped</span><span id="architectServerAddress" class="architect-server-address muted hidden" role="status" aria-live="polite"></span></div>
+          <div class="architect-server-actions"><button type="button" id="architectServerToggle" class="secondary" aria-pressed="false" disabled>Run Server</button><span id="architectServerStatus" class="architect-server-status muted" role="status" aria-live="polite">Server stopped</span><span id="architectServerAddress" class="architect-server-address muted hidden" role="status" aria-live="polite"></span><button id="architectOpenFrontend" type="button" class="secondary" disabled>Open Frontend</button><button id="architectOpenBackend" type="button" class="secondary" disabled>Open Backend</button></div>
           <div class="architect-requirement-tools"><span id="architectRequirementsCount" class="muted" aria-live="polite">0 of 0 ready</span><button type="button" id="architectPackageToggle" class="secondary hidden" aria-expanded="false" aria-controls="architectRequirementsList">Show packages</button></div>
         </div>
         <div id="architectRequirementsList" class="architect-requirement-list" role="list"></div>
