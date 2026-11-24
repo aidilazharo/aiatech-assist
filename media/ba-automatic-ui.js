@@ -370,6 +370,20 @@
   panel.hidden=false;panel.dataset.status=status;
   if(!panel.dataset.initialized){panel.open=false;panel.dataset.initialized='true';}
  }
+ // A verified automatic Jira projection uses drafts until the user confirms
+ // publication. Prepared is not the same as formally approved or published.
+ function generatedRequirementsStatus({sourceReady,discoveryReady,excluded,requirementsReady,allApproved,phase,previewCurrent,unsaved}){
+  if(!sourceReady||!discoveryReady)return 'not-started';
+  if(excluded)return 'needs-attention';
+  if(unsaved)return 'in-progress';
+  if(!requirementsReady)return phase==='running'||phase==='publishing'?'in-progress':'not-started';
+  if(allApproved)return 'completed';
+  if(phase==='publishing'||(phase==='ready'||phase==='published')&&previewCurrent)return 'ready';
+  return 'in-progress';
+ }
+ function currentJiraPreview(){
+  return !!state?.preview&&state.projectId===activeId&&state.preview.revision===brState?.revision&&Array.isArray(state.preview.conflicts)&&state.preview.conflicts.length===0;
+ }
  function renderReadyPanels(phase){
   const sourceReady=!!source()?.digest;
   const discoveryReady=!!brState?.discoveryRevision&&!!brState?.mappingCompleted&&!discoveryDirty;
@@ -394,12 +408,13 @@
   get('baAutoDiscoveryEntry').hidden=true;
   const phaseRunning=phase==='running'||phase==='publishing';
   const excluded=!!brState?.baDraftQuality?.excluded?.length;
-  const allApproved=requirementsReady&&requirements().every(br=>['approved','published','completed'].includes(String(br.status||'').toLowerCase()));
+  const allApproved=requirementsReady&&requirements().every(br=>['approved','published','completed'].includes(String(br.status||'').toLowerCase())&&!br.needsRefresh&&!br.externalReviewRequired&&!br.roleReviewRequired&&!br.dependencyReviewRequired);
+  const previewCurrent=currentJiraPreview();
   const sourceStatus=!sourceReady?'not-started':artifactDirty()||phase==='running'&&!brState.mappingCompleted?'in-progress':brState.mappingCompleted?'ready':'in-progress';
   const discoveryStatus=!sourceReady?'not-started':discoveryDirty?'in-progress':discoveryReady?'ready':'in-progress';
-  const requirementsStatus=!sourceReady||!discoveryReady?'not-started':excluded?'needs-attention':!requirementsReady?(phaseRunning?'in-progress':'not-started'):allApproved?'completed':'in-progress';
+  const requirementsStatus=generatedRequirementsStatus({sourceReady,discoveryReady,excluded,requirementsReady,allApproved,phase,previewCurrent,unsaved:dirty()});
   const jiraStatus=state?.preview?.conflicts?.length?'needs-attention':phase==='published'?'completed':
-   phaseRunning?'in-progress':phase==='ready'&&!dirty()?'ready':jiraReady?'in-progress':'not-started';
+   phaseRunning?'in-progress':phase==='ready'&&previewCurrent&&!dirty()?'ready':jiraReady?'in-progress':'not-started';
   const historyStatus=completedReady?'completed':'not-started';
   for(const [id,status] of [
    ['baAutoSource',sourceStatus],['baAutoDiscovery',discoveryStatus],
@@ -455,10 +470,10 @@
   stop.classList.toggle('hidden',phase!=='running');
   const publishLabel=phase==='publishing'?'Publishing…':state?.preview?.republish?'Republish to Jira':'Publish to Jira';
   publish.title=publishLabel;publish.setAttribute('aria-label',publishLabel);
-  publish.disabled=phase!=='ready'||unsaved||!!baBusyTask||state?.preview?.revision!==brState.revision;
+  publish.disabled=phase!=='ready'||unsaved||!!baBusyTask||!currentJiraPreview();
   const reopen=state?.preview?.reopenRows?.length||0;
   const messages={idle:source()?'Preparing source…':'Upload a document to start.',running:'Preparing affected artifacts…',draft:'Draft. Refresh affected artifacts to continue.',
-   ready:reopen?reopen+' linked Jira item'+(reopen===1?'':'s')+' will move to To Do.':'Jira preview is ready.',
+   ready:!currentJiraPreview()?'Jira preview is out of date. Refresh affected artifacts.':reopen?reopen+' linked Jira item'+(reopen===1?'':'s')+' will move to To Do.':'Jira preview is ready.',
    publishing:'Publishing approved changes to Jira…',published:'Jira publication is up to date.'};
   const detail=unsaved?'Save your edits to refresh the affected artifacts.':state?.error||messages[phase]||'';
   if(get('baAutoStatus').textContent!==detail)get('baAutoStatus').textContent=detail;

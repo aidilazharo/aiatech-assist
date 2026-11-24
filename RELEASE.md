@@ -1,7 +1,7 @@
-# ATGV AIATECH Assist v0.0.87
+# ATGV AIATECH Assist v0.0.88
 
-- Fix My Work Users registration and profile updates: merge verified Confluence page and database rows on every operation, confirm the saved identity by page ID, preserve roles, and display added/updated confirmation.
-- Serialize registration, refresh and role visits; prevent unrelated refresh messages from replacing a pending registration, and retain the account ID on failure.
-- Preserve all v0.0.86 Jira table and tooltip fixes, v0.0.85 BR controls, v0.0.84 release publishing, and v0.0.83 full-stack previews.
+- Correct Generated Requirements status when the automatic Jira preview is verified: Ready before publication, Completed only after actual approval, In progress for unsaved or unverified changes, Needs attention for excluded drafts.
+- Bind Jira Ready and Publish availability to the active project and current BR revision with no preview conflicts. Do not modify approval, publication or history semantics.
+- Preserve v0.0.87 roster registration, v0.0.86 Jira tables and tooltips, v0.0.85 BR field selection, v0.0.84 release publishing and v0.0.83 browser preview fixes.
 
-Validation: regression, Windows startup/reset, UI theme, VSIX packaging, and live Confluence verification required.
+Validation: regression suite, Windows startup/reset, UI theme and VSIX packaging required.
