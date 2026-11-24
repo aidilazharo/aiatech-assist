@@ -128,4 +128,35 @@ async function ensureCustom(state,projectId,developerGit,options={}){
  }
  return {root:checked.root,branch:checked.branch,sha:checked.sha,mode};
 }
-module.exports={resolve,ensure,ensureCustom};
+// A catalog stack starts in its own new project-local Git folder. Never clone or replace an existing application.
+async function ensureLocal(state,projectId,developerGit,{projectRoot,stackId,generation=0}={}){
+ if(!/^[a-z][a-z0-9-]{0,48}$/.test(projectId)||!/^[a-z][a-z0-9-]{0,48}$/.test(stackId)||stackId==='custom'||!Number.isSafeInteger(generation)||generation<0||generation>9999)throw Error('Invalid local stack identity.');
+ const root=await fs.realpath(projectRoot),parent=path.join(root,'repository');
+ await fs.mkdir(parent,{recursive:true});
+ const parentReal=await fs.realpath(parent);
+ if(path.relative(root,parentReal)!=='repository'||(await fs.lstat(parent)).isSymbolicLink())throw Error('Unsafe project repository parent.');
+ const folder=path.join(parentReal,projectId+'-'+stackId+'-g'+generation);
+ await fs.mkdir(folder).catch(e=>{if(e.code!=='EEXIST')throw e;});
+ const st=await fs.lstat(folder);
+ if(!st.isDirectory()||st.isSymbolicLink())throw Error('Local stack destination is not a regular directory.');
+ const entries=await fs.readdir(folder);
+ let repo;
+ if(!entries.length)repo=await developerGit.initLocalBaseline(folder,'main');
+ else{
+  repo=await developerGit.repository(folder);
+  if(repo.remote)throw Error('Local stack folder already has a remote; select a new generation or use Custom Stack.');
+  if(repo.branch!=='main'&&!repo.branch.startsWith('bootstrap/'+stackId)&&!repo.branch.startsWith('migration/'+stackId+'-catalog-'))throw Error('Existing local stack branch is not a known ATGV branch.');
+  if(repo.branch==='main'&&(!repo.clean||entries.some(n=>!['.git','README.md','.DS_Store'].includes(n))))throw Error('Existing local baseline contains unrelated changes.');
+  if(repo.branch!=='main'){
+   const marker=JSON.parse(await fs.readFile(path.join(folder,'atgv.bootstrap.json'),'utf8'));
+   if(marker.schema!==1||marker.stacks?.length!==1||marker.stacks[0]!==stackId)throw Error('Local starter manifest does not match the selected stack.');
+  }
+ }
+ if(path.resolve(repo.root)!==path.resolve(folder)||repo.remote)throw Error('Local project repository identity verification failed.');
+ return repo.root;
+}
+async function selectLocal(state,projectId,root){
+ await state.update('atgvAssist.localRepo.'+projectId,root);
+ await state.update('atgvAssist.bootstrapRepo.'+projectId,root);
+}
+module.exports={resolve,ensure,ensureCustom,ensureLocal,selectLocal};

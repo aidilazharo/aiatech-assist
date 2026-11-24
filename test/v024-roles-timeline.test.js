@@ -23,7 +23,7 @@ test('standard SDLC catalogue has predefined roles, without a create-role UI',()
 });
 test('role settings are project scoped, preserve documents, prevent stale saves and last-role disable',()=>fixture(async({registry,ws})=>{
   const before=await getRoleSettings(registry,'demo');
-  assert.equal(before.roles.length,ROLES.length+4);assert.equal(before.enabled.length,ROLES.length);
+  assert.equal(before.roles.length,ROLES.length+4);assert.deepEqual(before.enabled,['business-analyst','project-manager','solution-architect','ux-designer','software-developer','uat-tester']);assert.deepEqual(before.order.slice(0,6),before.enabled);
   const doc=await loadDocument(registry,'demo','business-analyst','requirements');
   const enabled=before.enabled.filter(x=>x!=='business-analyst');
   const after=await saveRoleSettings(registry,'demo',enabled,before.revision);
@@ -38,11 +38,12 @@ test('role settings are project scoped, preserve documents, prevent stale saves 
 }));
 test('fresh timeline defaults to seven inclusive calendar days per role',()=>fixture(async({registry})=>{
  const tl=await readTimeline(registry,'demo');
- assert.equal(tl.tasks.length,ROLES.length);
+ assert.equal(tl.tasks.length,6);
  for(const t of tl.tasks){const days=Math.round((Date.parse(t.end+'T00:00:00Z')-Date.parse(t.start+'T00:00:00Z'))/86400000);assert.equal(days,6,t.id);}
  assert.match(tl.revision,/^[a-f0-9]{64}$/);
 }));
 test('role timeline edits immediately update chart data and reject stale revisions',()=>fixture(async({registry})=>{
+ const roles=await getRoleSettings(registry,'demo');await saveRoleSettings(registry,'demo',[...roles.enabled,'qa-engineer'],roles.revision);
  const initial=await readTimeline(registry,'demo');
  const saved=await saveRoleTimeline(registry,'demo','qa-engineer',{start:'2026-11-04',end:'2026-11-10',progress:65},initial.revision);
  assert.deepEqual(saved.tasks.find(t=>t.id==='qa-engineer'),{...initial.tasks.find(t=>t.id==='qa-engineer'),start:'2026-11-04',end:'2026-11-10',progress:65});
@@ -52,7 +53,7 @@ test('role timeline edits immediately update chart data and reject stale revisio
  await assert.rejects(saveRoleTimeline(registry,'demo','qa-engineer',{start:'2026-11-04',end:'2026-11-10',progress:101},saved.revision),/0–100/i);
 }));
 test('disabled roles cannot edit timeline but previous work is preserved',()=>fixture(async({registry})=>{
- let s=await getRoleSettings(registry,'demo');
+ let s=await getRoleSettings(registry,'demo');s=await saveRoleSettings(registry,'demo',[...s.enabled,'qa-engineer'],s.revision);
  const prev=await readTimeline(registry,'demo'),before=prev.tasks.find(t=>t.id==='qa-engineer');
  await saveRoleSettings(registry,'demo',s.enabled.filter(x=>x!=='qa-engineer'),s.revision);
  const active=await readTimeline(registry,'demo');assert.equal(active.tasks.some(t=>t.id==='qa-engineer'),false);

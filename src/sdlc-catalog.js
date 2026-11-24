@@ -106,7 +106,7 @@ async function getRoleSettings(registry, projectId) {
     const data = raw ? JSON.parse(raw) : {};
     if (data.enabled !== undefined && (!Array.isArray(data.enabled) || data.enabled.some(x => typeof x !== 'string')))
         throw Error('Invalid enabled SDLC roles.');
-    const enabled = data.enabled === undefined ? DEFAULT_ENABLED_ROLES.filter(id=>roles.some(r=>r.id===id)) : roles.filter(r => data.enabled.includes(r.id)).map(r => r.id);
+    const enabled = data.enabled === undefined ? [...DEFAULT_ENABLED_ROLES.filter(id=>roles.some(r=>r.id===id)),...roles.filter(r=>!STANDARD.some(s=>s.id===r.id)).map(r=>r.id)] : roles.filter(r => data.enabled.includes(r.id)).map(r => r.id);
     const originalOrder = Array.isArray(data.order) ? data.order.filter(id => typeof id === 'string' && roles.some(role=>role.id===id)) : [];
     const order = [...new Set([...originalOrder,...(data.order===undefined?DEFAULT_ENABLED_ROLES:[]),...roles.map(role=>role.id)])];
     const orderedRoles = [...roles].sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id));

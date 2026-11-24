@@ -10,12 +10,13 @@ const markup=fs.readFileSync(path.join(root,'test/generated/extension-source.txt
 const ui=fs.readFileSync(path.join(root,'media/start.js'),'utf8');
 const css=fs.readFileSync(path.join(root,'media/start.css'),'utf8');
 
-test('Business Analyst overview keeps three metrics and the workflow shortcut, with no redundant table',()=>{
- const start=markup.indexOf('<section id="baMyWorkDashboard"');
+test('Business Analyst overview retires the visible BR metrics and retains internal hooks and project items shortcut',()=>{
+ const start=markup.indexOf('<div id="baMyWorkDashboard"');
  const end=markup.indexOf('<section id="baJiraInventorySection"',start);
  assert.ok(start>0&&end>start);
  const html=markup.slice(start,end);
- for(const phrase of ['Business Requirements','Review requirements, approvals and action items.','id="baMyWorkOpen"','id="baMyWorkMetrics"'])assert.ok(html.includes(phrase),phrase);
+ for(const phrase of ['id="baMyWorkDashboard" hidden aria-hidden="true"','id="baMyWorkOpen" hidden>Project Items','id="baMyWorkMetrics"','id="baAutoBack"'])assert.ok(html.includes(phrase),phrase);
+ assert.doesNotMatch(html,/Review requirements, approvals and action items\./);
  assert.doesNotMatch(html,/id="baMyWorkItems"|id="baMyWorkFilter"|ba-my-work-toolbar|Business Requirements DataTable/);
  assert.match(css,/\.ba-my-work-metrics\{display:grid;grid-template-columns:repeat\(3/);
  assert.doesNotMatch(html,/Published Jira/);

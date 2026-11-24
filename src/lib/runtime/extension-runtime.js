@@ -7066,6 +7066,19 @@ async function handleDashboardMessage(msg){
           await dashboard?.webview.postMessage({type:'architectStackCancelled',projectId:activeProject.id,message:'No saved stack selection to reset.'});break;
         }
         const root=await architectRepository.resolve(context.workspaceState,activeProject.id,developerGit,{projectRoot:aiRoot(),githubOwner:effectiveConfig(activeProject).get('github.owner'),githubRepo:effectiveConfig(activeProject).get('github.repo')});
+        if(current.techStackPrepared&&!current.techStackPrepared.remotePushed&&current.techStackId!=='custom'){
+          const repo=await developerGit.repository(root);
+          if(!repo.remote){
+            const action='Preserve & Reset Local Stack';
+            const consent=await uiWarning('Clear the local technology stack selection and use a fresh repository on the next Save Stack? All previous files and commits will remain in '+root+'.',{modal:true},action);
+            if(consent!==action){await dashboard?.webview.postMessage({type:'architectStackCancelled',projectId:current.id,message:'Reset cancelled.'});break;}
+            await require('../../architect-server').stopProjectManaged({root});
+            activeProject=await registry.update(current.id,{...current,techStackId:'',techStackCompanionId:'',techStackPrepared:null,techStackValidation:null,techStackServerVerification:null,techStackApproval:null,techStackGeneration:(current.techStackGeneration||0)+1});
+            await context.workspaceState.update('atgvAssist.localRepo.'+current.id,undefined);
+            await context.workspaceState.update('atgvAssist.bootstrapRepo.'+current.id,undefined);
+            await refreshDashboard();await dashboard?.webview.postMessage({type:'architectStackState',value:{message:'Local repository preserved. Choose a stack to initialize a fresh project repository.'}});break;
+          }
+        }
         const service=require('../../architect-stack-reset');
         // Inspect before requesting consent; never run a destructive Git command on an unexpected branch.
         const plan=await service.plan({root,project:current,baseBranch:effectiveConfig(activeProject).get('github.branch')||'main',force:true,allowFeatureRecovery:true});
@@ -7600,6 +7613,40 @@ async function handleDashboardMessage(msg){
           }
           break;
         }
+        // Catalog stacks are local-first: use a separate project Git repository, not a clone of a remote application.
+        const localProject=await registry.read(activeProject.id);
+        if(!localProject)throw Error('Project not found.');
+        if(!localProject.techStackPrepared?.remotePushed||localProject.techStackPrepared.stackId!==id){
+          const projectId=localProject.id;
+          const prior=localProject.techStackPrepared;
+          const generation=(localProject.techStackGeneration||0)+(prior&&prior.stackId!==id?1:0);
+          const action='Prepare Local Stack';
+          const consent=await uiWarning('Create and initialize a dedicated local Git repository for '+id+' under this project, copy the catalog skeleton, install dependencies, run tests and start the application? Existing repositories and remote branches will be preserved. No code is pushed until you select Publish to GitHub.',{modal:true},action);
+          if(consent!==action){await dashboard?.webview.postMessage({type:'architectStackCancelled',projectId,message:'Local stack preparation cancelled.'});break;}
+          const root=await architectRepository.ensureLocal(context.workspaceState,projectId,developerGit,{projectRoot:aiRoot(),stackId:id,generation});
+          const orchestrator=require('../../architect-stack-bootstrap');
+          const progress=async message=>{architectErrorLogs.append(projectId,'save','Stage: '+message);return dashboard?.webview.postMessage({type:'architectStackProgress',projectId,message});};
+          const controller=new AbortController();architectInstallAbort=controller;let result;
+          try{result=await orchestrator.bootstrap({root,stackId:id,generation,baseBranch:'main',localOnly:true,onProgress:progress,openBrowser:async()=>true,signal:controller.signal});}
+          catch(error){if(controller.signal.aborted){await dashboard?.webview.postMessage({type:'architectStackCancelled',projectId,message:'Local installation stopped; starter files are preserved. Save Stack to resume.'});break;}throw error;}
+          finally{if(architectInstallAbort===controller)architectInstallAbort=null;}
+          let latest=await registry.read(projectId);
+          if(activeProject?.id!==projectId||latest.updatedAt!==localProject.updatedAt)throw Error('Project changed during local preparation. Files preserved in '+root+'.');
+          if(latest.techStackId!==id||latest.techStackCompanionId){
+            latest=await registry.update(projectId,{...latest,techStackId:id,techStackCompanionId:'',techStackGeneration:generation,techStackPrepared:null,techStackValidation:null,techStackServerVerification:null,techStackApproval:null,techStackCustomPreview:null});
+          }
+          let updated=await registry.update(projectId,{...latest,techStackId:id,techStackCompanionId:'',techStackGeneration:generation,techStackValidation:result.validation,techStackServerVerification:null,techStackApproval:null,techStackPrepared:{stackId:id,companionId:'',root:result.repo.root,branch:result.branch,baseBranch:'main',sha:result.repo.sha,remotePushed:false,previewUrl:result.previewUrl,at:new Date().toISOString()}});
+          await architectRepository.selectLocal(context.workspaceState,projectId,result.repo.root);
+          activeProject=updated;architectServerOperationSerial++;
+          const serverModule=require('../../architect-server');
+          const finalServer=await require('../../architect-server-verification').reconcileAfterSave({project:updated,verify:()=>serverModule.verify({root:result.repo.root,stackId:id}),start:()=>serverModule.start({root:result.repo.root,stackId:id,prepared:updated.techStackPrepared,allowManagedHandoff:false,openBrowser:url=>vscode.env.openExternal(vscode.Uri.parse(url))})});
+          if(finalServer.proof){updated=await registry.update(projectId,{...updated,techStackServerVerification:finalServer.proof});activeProject=updated;}
+          await ensureWorkspaceLibrary(getWorkspace().uri.fsPath);await scaffoldProject(getWorkspace().uri.fsPath,updated);
+          await refreshDashboard();architectErrorLogs.clear(projectId,'save');
+          await dashboard?.webview.postMessage({type:'architectServerState',projectId,value:{...(finalServer.state||{}),healthy:!!finalServer.proof}});
+          await dashboard?.webview.postMessage({type:'architectStackState',value:{message:'Local project repository initialized, installed and tested: '+result.repo.root+' · '+result.branch+' @ '+result.repo.sha.slice(0,7)+'. Select Publish to GitHub to upload and update the project URL.'}});
+          break;
+        }
         const root=await architectRepository.ensure(context.workspaceState,activeProject.id,developerGit,{projectRoot:aiRoot(),githubOwner:effectiveConfig(activeProject).get('github.owner'),githubRepo:effectiveConfig(activeProject).get('github.repo'),githubBranch:effectiveConfig(activeProject).get('github.branch'),catalogRepositoryUrl:catalogConfig().repositoryUrl});
         const current=await registry.read(activeProject.id);if(!current)throw Error('Project not found.');
         const oldId=current.techStackPrepared?.stackId||'';
@@ -7677,6 +7724,30 @@ async function handleDashboardMessage(msg){
         const serverSnapshot=finalServer.state||{running:false,healthy:false,message:'Server status unavailable'};
         await dashboard?.webview.postMessage({type:'architectServerState',projectId:updated.id,value:{...serverSnapshot,healthy:!!finalServer.proof}});
         await dashboard?.webview.postMessage({type:'architectStackState',value:{message:'Stack installed and tested: '+(finalServer.state?.url||result.previewUrl)+' · '+result.branch+' '+(result.pushed?'pushed to GitHub':'already on GitHub')+' ('+result.repo.sha.slice(0,7)+'). '+(updated.techStackServerVerification?'Application server verified; ready for Architect approval.':'Application server verification pending; use Run Server, then Approve for Developers.')}});
+        break;
+      }
+      case 'architectPublishLocalStack':{
+        requireOpened();requireOnline();
+        const projectId=activeProject.id,project=await registry.read(projectId),prepared=project.techStackPrepared;
+        if(!prepared||prepared.stackId==='custom'||prepared.remotePushed||project.techStackValidation?.sha!==prepared.sha||project.techStackValidation?.status!=='tested')throw Error('Prepare and test a local catalog stack before publishing.');
+        const config=effectiveConfig(project),owner=config.get('github.owner'),name=config.get('github.repo');
+        const value=await uiInput({prompt:'GitHub destination repository URL (create an empty repository first)',value:owner&&name?'https://github.com/'+owner+'/'+name:'',ignoreFocusOut:true});
+        if(value===undefined||!value.trim()){await dashboard?.webview.postMessage({type:'architectStackCancelled',projectId,message:'GitHub publication cancelled.'});break;}
+        const dest=repoSyncNaming.githubUrl(value.trim());
+        const candidate={...project,settings:{...project.settings,github:{...project.settings?.github,owner:dest.owner,repo:dest.repo,branch:'main',apiUrl:'https://api.github.com'}}};
+        const action='Push Local Stack';
+        const consent=await uiWarning('Push the verified local main baseline and stack branch to '+dest.name+'? Existing remote history will not be overwritten. The project repository URL is updated only after both remote revisions are verified. No PR will be created.',{modal:true},action);
+        if(consent!==action){await dashboard?.webview.postMessage({type:'architectStackCancelled',projectId,message:'GitHub publication cancelled.'});break;}
+        let token=await getGithubToken(candidate,true);
+        if(!token)token=await uiInput({prompt:'GitHub PAT with Contents write permission for '+dest.name,password:true,ignoreFocusOut:true});
+        if(!token)throw Error('GitHub authentication required.');
+        const published=await require('../../architect-stack-bootstrap').publishLocalBootstrap({root:prepared.root,owner:dest.owner,name:dest.repo,branch:prepared.branch,sha:prepared.sha,token});
+        const latest=await registry.read(projectId);
+        if(activeProject?.id!==projectId||latest.updatedAt!==project.updatedAt)throw Error('Project changed after verified push. Remote preserved; retry to update the project URL.');
+        activeProject=await registry.update(projectId,{...latest,settings:candidate.settings,techStackPrepared:{...prepared,remotePushed:true}});
+        await architectRepository.selectLocal(context.workspaceState,projectId,published.root);
+        await refreshDashboard();
+        await dashboard?.webview.postMessage({type:'architectStackState',value:{message:'Published verified local stack to '+published.url+' · '+published.branch+'. Project repository URL updated. No PR created.'}});
         break;
       }
       case 'architectTestStack':{
@@ -11420,7 +11491,7 @@ async function handleDashboardMessage(msg){
     if(msg.command.startsWith('delivery'))await dashboard?.webview.postMessage({type:'deliveryOperationError',message:e.message});
     if(String(msg.command||'').startsWith('uxDesign')||String(msg.command||'').startsWith('uxPipeline')||String(msg.command||'').startsWith('uxFramework')||msg.command==='uxPrototypeOpenBrowser'||msg.command==='uxPublishFrontend')await dashboard?.webview.postMessage({type:'uxDesignError',projectId:activeProject?.id,message:e.message});
     if(activeProject?.id&&/^architect(?:SaveStack|Custom|TestStack|RunServer|StopServer|ApproveStack)/.test(msg.command||''))await recordStackActivity(activeProject.id,'Technology Stack / error',String(e.stack||e.message||e));
-    const architectLogKinds={architectSaveStack:'save',architectResetStack:'reset',architectTestStack:'test',architectRunServer:'server',architectStopServer:'server',architectServerStatus:'server',architectApproveStack:'approval',architectApproveCustomStack:'approval',architectCheckStackUpdates:'catalog',architectPullStackUpdates:'catalog'};
+    const architectLogKinds={architectPublishLocalStack:'save',architectSaveStack:'save',architectResetStack:'reset',architectTestStack:'test',architectRunServer:'server',architectStopServer:'server',architectServerStatus:'server',architectApproveStack:'approval',architectApproveCustomStack:'approval',architectCheckStackUpdates:'catalog',architectPullStackUpdates:'catalog'};
     if(architectLogKinds[msg.command]&&activeProject?.id){
       const kind=architectLogKinds[msg.command];
       const last=developerGit.localLogs();
@@ -11431,7 +11502,7 @@ async function handleDashboardMessage(msg){
         details:e.diagnosticLogs||ownOutput||e.stack||e.message,
         version:require('../../../package.json').atgvDisplayVersion});
     }
-    if(['architectSaveStack','architectResetStack','architectTestStack','architectApproveStack','architectApproveCustomStack'].includes(msg.command))await dashboard?.webview.postMessage({type:'architectStackError',projectId:activeProject?.id,command:msg.command,logAvailable:true,logKind:architectLogKinds[msg.command],logCount:architectErrorLogs.count(activeProject?.id),failedStep:/local preview port is occupied/i.test(String(e.message||''))?'server':undefined,message:architectErrorLogs.redact(e.message)});
+    if(['architectPublishLocalStack','architectSaveStack','architectResetStack','architectTestStack','architectApproveStack','architectApproveCustomStack'].includes(msg.command))await dashboard?.webview.postMessage({type:'architectStackError',projectId:activeProject?.id,command:msg.command,logAvailable:true,logKind:architectLogKinds[msg.command],logCount:architectErrorLogs.count(activeProject?.id),failedStep:/local preview port is occupied/i.test(String(e.message||''))?'server':undefined,message:architectErrorLogs.redact(e.message)});
     if(['architectCheckStackUpdates','architectPullStackUpdates'].includes(msg.command))await dashboard?.webview.postMessage({type:'architectCatalogAction',projectId:activeProject?.id,success:false,logAvailable:true,logKind:'catalog',logCount:architectErrorLogs.count(activeProject?.id),message:architectErrorLogs.redact(e.message)});
     if(['architectRunServer','architectStopServer','architectServerStatus'].includes(msg.command))await dashboard?.webview.postMessage({type:'architectServerError',projectId:activeProject?.id,command:msg.command,logAvailable:true,logCount:architectErrorLogs.count(activeProject?.id),message:architectErrorLogs.redact(e.message)});
     if(msg.command==='deleteBREverywhere')await dashboard?.webview.postMessage({type:'brDeletionProgress',projectId:activeProject?.id,phase:'failed',message:'Deletion stopped: '+String(e.message||e).slice(0,450),deleted:0,total:0});

@@ -2575,6 +2575,7 @@ function refreshArchitectStageClasses(project){
  }
  $('architectApprovalStatus').textContent=customStack?(approved?'Developer MOCK handoff approved · '+String(project.techStackApproval.remoteBranch||'')+' · real integrations remain unverified.':mockReady?'Mock preview verified. Approve for Developers will validate real test/build checks and publish a separate reviewed handoff branch; no main merge.':'Complete Install & Run before approving a Custom Stack development handoff.'):approved?'Approved for Developers · '+new Date(project.techStackApproval.approvedAt||Date.now()).toLocaleString():serverReady?(architectLiveServerReady(project,stackId)?'Server running and verified · ready for architect approval.':'Application server was verified for this commit and is now stopped. Ready for Architect approval.'):tested?'Run Server successfully to enable approval.':saved?'Complete Test & Run, then Run Server.':'';
 }
+function customStackForPublish(stackId,prepared){return !stackId||stackId==='custom'||!!prepared?.remotePushed||prepared?.stackId!==stackId;}
 function syncArchitectStackButtons(project){
  const stackId=$('architectStackSelect').value;
  const prepared=project?.techStackPrepared;
@@ -2597,6 +2598,7 @@ function syncArchitectStackButtons(project){
  save.disabled=architectActionBusy||!activeId||!stackId||locked;
  save.textContent=locked?'Saved Stack':switching?'Switch & Save Stack':'Save Stack';
  $('architectResetStack').disabled=architectActionBusy||!activeId||!savedStackId||savedStackId==='custom';
+ const publishLocal=$('architectPublishLocalStack');if(publishLocal){publishLocal.classList.toggle('hidden',customStackForPublish(stackId,prepared));publishLocal.disabled=architectActionBusy||!saved||!tested||!!prepared?.remotePushed;}
  if(stackId==='custom'){
   save.title=locked?'Custom Stack saved. Change the stack selection to save again.':switching?'Use the current Git checkout as Custom Stack and clear the saved stack approval after confirmation.':'Save Custom Stack: clone the configured project GitHub repository into its missing or empty repository folder. Never overwrite existing files.';
   $('architectTestStack').disabled=true;
@@ -2626,7 +2628,7 @@ function syncArchitectStackButtons(project){
  // A cleanly stopped server retains this verification for the saved revision.
  // Keep the button clickable to surface a precise error if evidence is missing.
  $('architectApproveStack').disabled=architectActionBusy||!canRequestApproval||approved;
- $('architectApproveStack').title=!tested?'Complete Test & Run first.':!prepared?.remotePushed?'Push the verified stack branch using Save Stack before approval.':!serverVerified?'Run Server once to verify HTTP health for the saved and tested revision.':'Confirm approval for Developers.';
+ $('architectApproveStack').title=!tested?'Complete Test & Run first.':!prepared?.remotePushed?'Publish the verified local stack to GitHub before approval.':!serverVerified?'Run Server once to verify HTTP health for the saved and tested revision.':'Confirm approval for Developers.';
 }
 
 let roleJiraProject='',roleJiraLoading=false,roleJiraLoaded=false,roleJiraItems=[],roleJiraIncomplete=false,roleJiraRequest=0;
@@ -4227,7 +4229,7 @@ function renderRoleWork(){
     $('architectBootstrapStatus').textContent=architectLastMessage;
     const prepared=project?.techStackPrepared;
     const saved=!!(prepared&&prepared.stackId===picker.value&&prepared.stackId===project.techStackId&&prepared.companionId===(project.techStackCompanionId||''));
-    $('architectStackSummary').textContent=picker.value==='custom'?'Scan and run the configured project Git checkout. The catalog skeleton and existing project files will not be overwritten.':prepared?.stackId&&prepared.stackId!==picker.value?'Prepared stack: '+prepared.stackId+'. Switching to '+picker.value+' will require confirmation and a clean Git checkout.':saved?(prepared.remotePushed?'Branch: '+prepared.branch+' · pushed to GitHub':'Repository prepared.'):project?.techStackId?'Save to prepare the project repository.':'Select a stack and save it to begin.';
+    $('architectStackSummary').textContent=picker.value==='custom'?'Scan and run the configured project Git checkout. The catalog skeleton and existing project files will not be overwritten.':prepared?.stackId&&prepared.stackId!==picker.value?'Prepared stack: '+prepared.stackId+'. Switching to '+picker.value+' will require confirmation and a clean Git checkout.':saved?(prepared.remotePushed?'Branch: '+prepared.branch+' · pushed to GitHub':'Local repository: '+prepared.root+' · Publish to GitHub when ready.'):project?.techStackId?'Save to prepare the project repository.':'Select a stack and save it to begin.';
     const tested=saved&&project?.techStackValidation?.status==='tested'&&project.techStackValidation.stackId===project.techStackId;
     const approved=tested&&project?.techStackApproval?.status==='approved'&&project.techStackApproval.stackId===project.techStackId;
     $('architectTestStack').classList.remove('hidden');
@@ -8862,8 +8864,9 @@ $('architectSaveStack').addEventListener('click',()=>{
  if($('architectStackSelect').value==='custom'){
   architectCustomInfo=null;architectCustomRunning=false;
   architectBegin('architectSaveStack','Checking configured project repository folder and cloning GitHub code only when missing or empty…');
- }else architectBegin('architectSaveStack','Checking main, preparing the skeleton, installing, testing, launching and pushing…');
+ }else architectBegin('architectSaveStack','Preparing a dedicated local Git repository, installing, testing and launching…');
 });
+$('architectPublishLocalStack').addEventListener('click',()=>{if(!architectActionBusy)architectBegin('architectPublishLocalStack','Verifying the local stack and requesting GitHub destination…');});
 $('architectStopInstall').addEventListener('click',()=>{if(architectActionBusy&&architectPendingAction==='architectSaveStack'){$('architectStopInstall').disabled=true;send('architectStopInstall');}});
 $('architectDownloadDependencyHistory').addEventListener('click',()=>send('architectDownloadDependencyHistory'));
 $('architectTestStack').addEventListener('click',()=>architectBegin('architectTestStack','Testing, building and checking the selected stack…'));

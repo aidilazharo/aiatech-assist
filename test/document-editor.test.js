@@ -7,6 +7,7 @@ const {scaffoldProject,ensureWorkspaceLibrary}=require('../src/tech-stacks');
 const {loadDocument,saveDocument,parseDelta}=require('../src/document-editor');
 async function fixture(fn){const ws=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-editor-'));try{
   const registry=new ProjectRegistry(ws);const project=await registry.create({id:'project',name:'Project'});
+  const {getRoleSettings,saveRoleSettings}=require('../src/sdlc-catalog');const initial=await getRoleSettings(registry,'project');await saveRoleSettings(registry,'project',[...initial.enabled,'qa-engineer'],initial.revision);
   await ensureWorkspaceLibrary(ws);await scaffoldProject(ws,project);
   await fn({ws,registry,project});
 }finally{await fs.rm(ws,{recursive:true,force:true});}}

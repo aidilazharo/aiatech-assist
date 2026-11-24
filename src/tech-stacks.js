@@ -240,8 +240,10 @@ async function scaffoldProject(workspace, project) {
         await writeNew(mdPath, stackMarkdown(stack));
         }
     }
-    const { loadProjectRoles } = require('./sdlc-catalog');
-    for (const role of await loadProjectRoles({ fileFor: () => path.join(base, 'atgv.project.json') }, project.id)) {
+    const { allProjectRoles, OPTIONAL_ROLES, getRoleSettings } = require('./sdlc-catalog');
+    const roleRegistry={fileFor:()=>path.join(base,'atgv.project.json')};
+    const enabledRoles=new Set((await getRoleSettings(roleRegistry,project.id)).enabled);
+    for (const role of (await allProjectRoles(roleRegistry,project.id)).filter(r=>!OPTIONAL_ROLES.some(o=>o.id===r.id)||enabledRoles.has(r.id))) {
         for (const task of role.tasks) {
             if (!task.document)
                 continue;

@@ -135,7 +135,7 @@ async function ensureLocalBuildExcludes(root){
  await fs.mkdir(path.dirname(file),{recursive:true});
  await fs.appendFile(file,(old.endsWith('\n')?'':'\n')+'# ATGV runtime-only exclusions\nnode_modules/\ndist/\nbuild/\ncoverage/\n.angular/\n.vite/\ntarget/\nbin/\nobj/\n*.log\n');
 }
-async function preflight(root,stackId,auth,generation=0,baseBranch='main'){
+async function preflight(root,stackId,auth,generation=0,baseBranch='main',localOnly=false){
  const {validGithubBranch}=require('./projects');baseBranch=validGithubBranch(baseBranch)||baseBranch;
  gate.selection(stackId,'');
  const {activeManifest}=require('./github-sdlc-catalog');const workspace=await skeleton.workspaceFor(root);const manifest=await activeManifest(workspace);
@@ -149,10 +149,11 @@ async function preflight(root,stackId,auth,generation=0,baseBranch='main'){
     migrationMeta.stacks?.length!==1||migrationMeta.stacks[0]!==stackId||
     migrationMeta.migration.sourceBranch!==branch)throw Error('Unknown migration branch or starter manifest. No automatic changes allowed.');
  }
- if(!repo.remote)throw Error('Configure a GitHub origin in Settings before saving the stack.');
+ if(localOnly&&repo.remote)throw Error('Local-only bootstrap cannot overwrite an existing remote.');
+ if(!localOnly&&!repo.remote)throw Error('Configure a GitHub origin in Settings before saving the stack.');
  if(!repo.clean && repo.branch!==branch&&!isMigration)throw Error('Uncommitted work in the checkout. Save or stash it before creating the bootstrap branch.');
  if(repo.branch!==baseBranch&&repo.branch!==branch&&!isMigration)throw Error('Save Stack requires the base branch, bootstrap branch, or verified migration recovery branch. Currently on '+(repo.branch||'an unnamed branch')+'.');
- const heads=await git(root,auth,'ls-remote','--heads','origin');
+ const heads=localOnly?'':await git(root,auth,'ls-remote','--heads','origin');
  const baseSha=remoteHash(heads,baseBranch),publishedSha=remoteHash(heads,isMigration?repo.branch:branch);
  if(!baseSha&&heads.trim())throw Error('GitHub has other branches but no base branch. Configure and review base before bootstrapping.');
  if(repo.branch===baseBranch){
@@ -164,7 +165,7 @@ async function preflight(root,stackId,auth,generation=0,baseBranch='main'){
   if(baseSha){
    await git(root,auth,'fetch','--no-tags','origin',baseBranch);
    if(repo.sha!==baseSha)throw Error('Local base and GitHub base differ. Fetch/reconcile base before Save Stack; no branch was created.');
-  }else if(repo.sha)throw Error('Local base has commits but GitHub has no base branch. Review the repository before publishing.');
+  }else if(repo.sha&&!localOnly)throw Error('Local base has commits but GitHub has no base branch. Review the repository before publishing.');
   // A failed or interrupted Save may have already created this branch.
   // Reuse it only when its committed manifest and provenance match exactly.
   const localSha=await git(root,auth,'rev-parse','--verify','--quiet','refs/heads/'+branch).catch(()=>'');
@@ -230,15 +231,15 @@ async function publish(root,branch,baseSha,auth,baseBranch='main'){
  if(remoteHash(after,branch)!==repo.sha)throw Error('Git push returned without the expected remote branch revision. Verify GitHub manually.');
  return {repo,pushed:true};
 }
-async function bootstrap({root,stackId,generation=0,baseBranch='main',token='',openBrowser=async()=>false,onProgress=async()=>{},effects={},signal}={}){
+async function bootstrap({root,stackId,generation=0,baseBranch='main',token='',openBrowser=async()=>false,onProgress=async()=>{},effects={},signal,localOnly=false}={}){
  if(!root)throw Error('Select the configured local Git checkout.');
  gate.selection(stackId,'');
  const trace=[];
  const remember=line=>{trace.push(String(line));if(trace.length>60)trace.shift();};
  try{return await withAuthentication(token,async auth=>{
   const progress=async stage=>{if(signal?.aborted)throw Error('Stack installation stopped. Select Save Stack to resume.');remember('Stage: '+stage);await onProgress(stage);};
-  await progress('Checking GitHub base branch '+baseBranch+' and existing application files…');
-  const base=await preflight(root,stackId,auth,generation,baseBranch);
+  await progress((localOnly?'Checking local Git baseline ':'Checking GitHub base branch ')+baseBranch+' and existing application files…');
+  const base=await preflight(root,stackId,auth,generation,baseBranch,localOnly);
   await progress('Preparing '+base.branch+' and copying the '+stackId+' skeleton…');
   const prepared=await architect.save(root,[stackId]);
   await ensureLocalBuildExcludes(root);
@@ -320,8 +321,9 @@ async function bootstrap({root,stackId,generation=0,baseBranch='main',token='',o
    if(plan.needsCommit)await architect.commitGenerated(plan);
    const current=await developer.repository(root);
    if(!current.clean||!current.sha||current.branch!==base.branch)throw Error('Checkout changed during execution. No push was performed.');
-   await progress('Pushing bootstrap branch to GitHub ('+base.baseBranch+' stays unchanged)…');
-   const published=await publish(root,base.branch,base.baseSha,auth,base.baseBranch);
+   if(!localOnly)await progress('Pushing bootstrap branch to GitHub ('+base.baseBranch+' stays unchanged)…');
+   else await progress('Local stack committed and verified; remote publication is a separate action.');
+   const published=localOnly?{repo:current,pushed:false}:await publish(root,base.branch,base.baseSha,auth,base.baseBranch);
    const evidence=results.map(r=>({relative:r.relative,operation:r.operation,passed:true,head:published.repo.sha,at:r.at||new Date().toISOString()}));
    evidence.push({relative:target.relative,operation:'run',passed:true,head:published.repo.sha,at:new Date().toISOString()});
    return {...published,prepared,branch:base.branch,previewUrl:url,validation:gate.evidence({stackId,repo:published.repo,results:evidence})};
@@ -338,4 +340,35 @@ async function bootstrap({root,stackId,generation=0,baseBranch='main',token='',o
   throw error;
  }
 }
-module.exports={bootstrap,preflight,publish,describePushFailure,stackConfig,branchFor,remoteHash,waitForHttp,verifyApiIdentity,portAvailable,allocateEphemeralPort,chooseAvailablePreviewUrl,chooseAvailableRuntimePorts,ensureLocalBuildExcludes};
+// Publish a clean, validated local bootstrap to an empty GitHub repository or resume an identical upload.
+// Atomic push avoids half-published baseline/stack branches. Never overwrite remote commits.
+async function publishLocalBootstrap({root,owner,name,branch,sha,token,baseBranch='main'}){
+ const {githubUrl}=require('./repo-sync-pr');
+ const dest=githubUrl('https://github.com/'+owner+'/'+name);
+ if(!/^bootstrap\/[a-z0-9-]+$/.test(branch)&&!/^migration\/[a-z0-9-]+$/.test(branch))throw Error('Invalid local bootstrap branch.');
+ if(baseBranch!=='main'||!/^[a-f0-9]{40}$/.test(sha)||!token)throw Error('Verified SHA, main baseline and GitHub credentials are required.');
+ return withAuthentication(token,async auth=>{
+  const repo=await developer.repository(root);
+  if(!repo.clean||repo.branch!==branch||repo.sha!==sha)throw Error('Local stack changed since testing. Revalidate before pushing.');
+  if(repo.remote&&!developer.matchesGithubRepo(repo.remote,owner,name))throw Error('Origin already points to another repository.');
+  const base=await git(root,auth,'rev-parse','--verify','refs/heads/main');
+  if(await git(root,auth,'merge-base',base,sha)!==base)throw Error('Local stack does not descend from the initial main baseline.');
+  const heads=await git(root,auth,'ls-remote','--heads',dest.url);
+  const remoteBase=remoteHash(heads,'main'),remoteStack=remoteHash(heads,branch);
+  if(heads.trim()&&(!remoteBase||remoteBase!==base||remoteStack&&remoteStack!==sha))throw Error('Remote contains different history. Choose an empty GitHub repository; no branch was overwritten.');
+  const args=['push','--atomic'];
+  if(!remoteBase)args.push('--force-with-lease=refs/heads/main:');
+  if(!remoteStack)args.push('--force-with-lease=refs/heads/'+branch+':');
+  args.push(dest.url);
+  if(!remoteBase)args.push('refs/heads/main:refs/heads/main');
+  if(!remoteStack)args.push('refs/heads/'+branch+':refs/heads/'+branch);
+  if(!remoteBase||!remoteStack)await git(root,auth,...args);
+  const verified=await git(root,auth,'ls-remote','--heads',dest.url);
+  if(remoteHash(verified,'main')!==base||remoteHash(verified,branch)!==sha)throw Error('Remote revision verification failed; project URL not updated.');
+  if(!repo.remote)await developer.configureOrigin(root,owner,name);
+  await git(root,auth,'fetch','--no-tags','origin','main',branch);
+  await git(root,auth,'branch','--set-upstream-to=origin/'+branch,branch);
+  return {root:repo.root,branch,sha,url:'https://github.com/'+dest.name};
+ });
+}
+module.exports={bootstrap,preflight,publish,publishLocalBootstrap,describePushFailure,stackConfig,branchFor,remoteHash,waitForHttp,verifyApiIdentity,portAvailable,allocateEphemeralPort,chooseAvailablePreviewUrl,chooseAvailableRuntimePorts,ensureLocalBuildExcludes};

@@ -7,6 +7,7 @@ const rootOfSource=path.resolve(__dirname,'..');
 const mockVscode=(opened)=>({Uri:{file:fsPath=>({fsPath})},window:{showTextDocument:async file=>opened.push(file.fsPath)}});
 async function fixture(fn){const ws=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-role-'));try{
   const registry=new ProjectRegistry(ws);await registry.ensureRoot();await registry.create({id:'alpha',name:'Alpha'});await registry.create({id:'beta',name:'Beta'});
+  const {getRoleSettings,saveRoleSettings}=require('../src/sdlc-catalog');const initial=await getRoleSettings(registry,'alpha');await saveRoleSettings(registry,'alpha',[...initial.enabled,'qa-engineer'],initial.revision);
   await fn({ws,registry});
 }finally{await fs.rm(ws,{recursive:true,force:true});}}
 test('standard SDLC catalogue includes all built-in role deliverables',()=>{

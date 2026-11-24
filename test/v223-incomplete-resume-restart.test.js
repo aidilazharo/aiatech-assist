@@ -14,7 +14,7 @@ test('incomplete cycle shows only Resume and Delete while approved history is pr
   assert.equal((host.match(new RegExp('id="'+id+'"','g'))||[]).length,1,id);
  }
  assert.doesNotMatch(host,/id="baRestartIncomplete"|id="baOverviewNew"/);
- assert.match(host,/<section id="baUncompletedPanel" class="ba-incomplete-panel"/);
+ assert.match(host,/<section id="baUncompletedPanel" class="ba-incomplete-panel hidden"/);
  assert.match(host,/id="baCompletedSection" class="ba-completed-flat"/);
  assert.match(host,/id="baCompletedJiraHistory"/);
  assert.match(css,/#baRequirementsOverview \.ba-incomplete-panel\{display:flex/);
@@ -23,6 +23,7 @@ test('the overview renders the saved milestone and source for an unfinished cycl
  assert.match(ui,/if\(!panel\|\|view!=='baOverview'\)return/);
  assert.match(ui,/const unfinished=baHasRecoverableBR\(brState\)&&\(!baPublishedCurrent\(\)/);
  assert.match(ui,/ATGVBusinessRequirements\?\.stageSummary\(\)/);
+ assert.match(ui,/panel\.classList\.toggle\('hidden',!unfinished\)/);
  assert.match(ui,/baResumeIncomplete'\)\.classList\.toggle\('hidden',!unfinished\)/);
  assert.equal(progress.derive({}).find(item=>item.current).key,'start');
  assert.equal(progress.derive({started:true,hasSources:false}).find(item=>item.current).key,'upload');
