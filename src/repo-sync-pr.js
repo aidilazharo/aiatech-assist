@@ -284,6 +284,11 @@ async function readSourceFacts({cloned,source,chosenBranch,sha,sourceMessage,fil
   const pkg=JSON.parse(await fs.readFile(path.join(cloned,'package.json'),'utf8'));
   project={name:cleanAiField(pkg.name,80),version:cleanAiField(pkg.version,35),description:cleanAiField(pkg.description,180)};
  }catch{}
+ // The SDLC Library and other non-Node repositories publish a root VERSION file.
+ if(!project.version)try{
+  const raw=(await fs.readFile(path.join(cloned,'VERSION'),'utf8')).trim();
+  if(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(raw)&&raw.length<=35)project.version=raw;
+ }catch{}
  // Source info: safe metadata only, never PATs, raw code, README text or secrets.
  const codeOverview=await inspectSourceCode(cloned,files);
  return {sourceRepo:source.name,sourceBranch:chosenBranch,sourceSha:sha,
