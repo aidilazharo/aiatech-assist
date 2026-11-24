@@ -89,7 +89,7 @@ function getBytes(url,{maxBytes=MAX_JSON,accept='application/vnd.github+json',re
     const next=new URL(response.headers.location,u).toString();
     getBytes(next,{maxBytes,accept,redirects:redirects-1,token:new URL(next).hostname==='api.github.com'?token:''}).then(resolve,reject);return;
    }
-   if(status!==200){response.resume();reject(Error(`Public GitHub release request returned HTTP ${status}.`));return;}
+   if(status!==200){response.resume();reject(Error(`GitHub Release request returned HTTP ${status}. Verify source repository access and GitHub authentication.`));return;}
    const chunks=[];let length=0;
    response.on('data',chunk=>{length+=chunk.length;if(length>maxBytes){response.destroy(Error('GitHub update download exceeds size limit.'));return;}chunks.push(chunk);});
    response.on('error',reject);response.on('end',()=>resolve(Buffer.concat(chunks)));
