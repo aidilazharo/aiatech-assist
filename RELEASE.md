@@ -1,12 +1,9 @@
-# ATGV AIATECH Assist v0.0.84
+# ATGV AIATECH Assist v0.0.85
 
-## ATGV: Workspace — publish merged release
-- Publish extension VSIX/source ZIP or Library source ZIP and verified checksums directly to the approved AIA Malaysia GitHub Releases repository after the destination PR merges into main.
-- Require full main-to-main source synchronization and exact published source revision for approved distribution pairs.
-- Verify source tag, source version, merged PR, current main source projection, Git artifact blob identities and SHA-256 checksums.
-- Create a draft, upload missing assets, verify downloaded bytes, then publish as latest stable release; reject conflicts, overwrites and downgrades.
-- Retry an identical draft from the Workspace panel using saved repository connections, PR number and exact release tag. No cross-repository GitHub Actions enabled.
-- Retain v0.0.83 frontend/backend preview changes.
+- Remove redundant source selection checkbox; automatically select the single active document.
+- Add Upload replacement document beside the filename and move overflow actions into the document panel.
+- Add live Jira work item types and fields tab with persistent project-bound optional field selection; mandatory hierarchy and required fields remain managed. Save invalidates stale Jira previews and reruns preparation.
+- Retain v0.0.84 verified merged release publication, v0.0.83 frontend/backend previews and disabled cross-repository automation.
+- Adjust the enforced compressed VSIX cap to 1,450,000 bytes (prior v0.0.84 measured 1,432,655 bytes).
 
-## Verification
-Node regression tests, Windows startup/reset and VSIX build required. Live destination publication requires approved PATs and a merged PR.
+Validation: regression suite, Windows startup/reset, UI theme and VSIX packaging must pass before release.

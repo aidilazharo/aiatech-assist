@@ -81,7 +81,7 @@ function planFields(item, metadata, context={}){
     status='planned';
     if(detailText&&has(value))mappedSections.add(section);
    }catch(error){blocking.push(name+' ('+id+'): '+error.message);}
-  }else if(editable&&fieldValues.canGeneralize(raw)){
+  }else if(editable&&fieldValues.canGeneralize(raw)&&(required||!context.selectedFields||context.selectedFields.includes(id))){
    const mapped=availableText(raw,item,details,context);
    if(mapped){
     const full=detailText&&!fieldValues.richText(raw)?mapped.text.replace(/\s*\n+\s*/g,' · '):mapped.text;
@@ -107,6 +107,7 @@ function planFields(item, metadata, context={}){
    }
   }
 
+  if(status==='not-available'&&!required&&context.selectedFields&&!context.selectedFields.includes(id)&&!hasOld&&!hasDefault){status='not-selected';source='BA field selection';}
   if(status==='not-available'&&hasOld){
    display=valueText(raw,old);source='Existing Jira';status='preserved';
   }else if(status==='not-available'&&hasDefault){

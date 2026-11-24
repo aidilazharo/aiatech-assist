@@ -5775,7 +5775,7 @@ function sourceActionIcon(kind){
  icon.setAttribute('stroke-linecap','round');icon.setAttribute('stroke-linejoin','round');
  icon.setAttribute('aria-hidden','true');
  const shape=document.createElementNS('http://www.w3.org/2000/svg','path');
- shape.setAttribute('d',kind==='delete'?
+ shape.setAttribute('d',kind==='upload'?'M12 16V3m0 0-5 5m5-5 5 5M4 15v5h16v-5':kind==='delete'?
   'M3 6h18M8 6V4h8v2m3 0-1 14H6L5 6m4 4v7m6-7v7':
   'M8 5h10l-3-3m3 3-3 3M16 19H6l3 3m-3-3 3-3M5 8v5m14-2v5');
  icon.append(shape);return icon;
@@ -5792,17 +5792,13 @@ function renderSourceDocuments(){
   for(const file of files)if(processed.includes(file.digest))sourceSelectedDigests.add(file.digest);
  }
  refreshBAHeadingProgress();
- const validSelection=[...sourceSelectedDigests].filter(x=>files.some(f=>f.digest===x));
- if(validSelection.length!==sourceSelectedDigests.size){sourceSelectedDigests=new Set(validSelection);if(activeId)send('baSourceSelection',{digests:validSelection});}
+ const validSelection=files.length===1?[files[0].digest]:[];
+ if(validSelection.length!==sourceSelectedDigests.size||validSelection.some(x=>!sourceSelectedDigests.has(x))){sourceSelectedDigests=new Set(validSelection);if(activeId)send('baSourceSelection',{digests:validSelection});}
  $('sourceDocumentCount').textContent=`${files.length} / 1`;
  if(!files.length){const empty=document.createElement('p');empty.className='muted';empty.textContent='No active documents. Upload a Word or PDF file. Approved BRs and Jira are preserved.';root.append(empty);renderArchivedSources();renderSourceSelection();return;}
  for(const doc of files){
   const item=document.createElement('div');item.className='source-document-row';
   const info=document.createElement('div');info.className='source-document-info';
-  const selector=document.createElement('input');selector.type='checkbox';selector.className='source-select-radio';selector.setAttribute('aria-label','Select '+doc.name+' for 12-question processing');selector.checked=sourceSelectedDigests.has(doc.digest);
-  selector.disabled=!!baBusyTask||baMappingComplete()||!baCanEdit('ba-discovery');
-  selector.classList.remove('hidden'); // Locked sources remain visible for audit after mapping.
-  selector.addEventListener('change',()=>{if(selector.checked)sourceSelectedDigests.add(doc.digest);else sourceSelectedDigests.delete(doc.digest);send('baSourceSelection',{digests:[...sourceSelectedDigests]});renderSourceSelection();});
   const name=document.createElement('strong');name.textContent=doc.name;
   const exactFileVerified=/^[a-f0-9]{64}$/.test(String(doc.byteDigest||''));
   const fullMeta=['Uploaded by '+(doc.uploadedBy||'Legacy source · uploader unavailable'),doc.uploadedAt?formatDateTime(doc.uploadedAt):doc.addedAt?formatDateTime(doc.addedAt):'',Number(doc.characters||0).toLocaleString()+' characters',doc.version?'Version '+doc.version:'Version 1',!doc.storedName?'Re-upload required to process':exactFileVerified?'Original file fingerprint recorded':'Legacy source: re-upload required to verify original bytes'].filter(Boolean).join(' · ');
@@ -5813,7 +5809,7 @@ function renderSourceDocuments(){
   info.append(name,detail);
   const actions=document.createElement('div');actions.className='source-document-actions';
   const replace=document.createElement('button');replace.type='button';replace.className='secondary ba-process-btn';
-  replace.classList.add('ba-source-icon-action');replace.setAttribute('aria-label','Replace & Reprocess');replace.append(sourceActionIcon('replace'));replace.title='Safely replace this source with an updated Word/PDF (even with a different filename). Old evidence, approved BR history and existing Jira keys are retained; remapping runs automatically.';
+  replace.classList.add('ba-source-icon-action');replace.setAttribute('aria-label','Replace & Reprocess');replace.append(sourceActionIcon('upload'));replace.title='Safely replace this source with an updated Word/PDF (even with a different filename). Old evidence, approved BR history and existing Jira keys are retained; remapping runs automatically.';
   replace.disabled=!!baBusyTask||!!sourceRemoving||discoveryImportBusy||brDeletionBusy||!baCanEdit('ba-discovery')||Object.keys(brState?.pending||{}).length>0;
   replace.addEventListener('click',()=>{
     if(replace.disabled||discoveryImportBusy)return;
@@ -5825,11 +5821,12 @@ function renderSourceDocuments(){
   remove.dataset.brDeleteAction='true';
   remove.disabled=!!baBusyTask||!!sourceRemoving||brDeletionBusy||!baCanEdit('ba-discovery');
   remove.addEventListener('click',()=>{if(remove.disabled)return;requestBRDeletion({target:'active-source',digest:doc.digest,revision:brState.revision});});
-  actions.append(replace,remove);
-  // Keep document tools in a single toolbar; preserve their original click handlers.
-  if(fileToolbar&&$('discoveryView')?.classList.contains('ba-automatic-view')){
-   fileToolbar.append(actions);item.append(selector,info);
-  }else item.append(selector,info,actions);
+  actions.append(remove);
+  replace.setAttribute('aria-label','Upload replacement document');
+  item.append(info,replace);
+  // The destructive action remains in the panel menu, not next to the file name.
+  if(fileToolbar&&$('discoveryView')?.classList.contains('ba-automatic-view'))fileToolbar.append(actions);
+  else item.append(actions);
   root.append(item);
  }
  renderArchivedSources();

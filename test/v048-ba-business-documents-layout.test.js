@@ -29,7 +29,7 @@ test('Business Documents file cards separate selection, long filenames and indep
   /grid-column:3;display:flex;flex-wrap:wrap/);
  assert.match(rule('#discoveryView #baAutoOriginalFiles .source-document-actions button'),
   /min-height:36px/);
- assert.match(js,/item\.append\(selector,info,actions\)/);
+ assert.match(js,/item\.append\(info,replace\)/);
  assert.match(js,/replace\.setAttribute\('aria-label','Replace & Reprocess'\)/);
  assert.match(js,/replace\.append\(sourceActionIcon\('replace'\)\)/);
  assert.match(js,/remove\.setAttribute\('aria-label','Delete source document'\)/);

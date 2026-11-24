@@ -24,7 +24,8 @@ test('source details and document controls share one responsive title bar',()=>{
  assert.match(ui,/info\.append\(name,detail\)/);
  assert.match(ui,/detail\.textContent=\[doc\.version/);
  assert.match(css,/#discoveryView #baAutoDocumentToolbar #baAutoFileActions/);
- assert.match(ui,/fileToolbar\.append\(actions\);item\.append\(selector,info\)/);
+ assert.match(ui,/item\.append\(info,replace\)/);
+ assert.match(ui,/fileToolbar\.append\(actions\)/);
  assert.match(ui,/fileToolbar\.replaceChildren\(\)/);
 });
 
@@ -57,7 +58,7 @@ test('existing download, document save and source-delete handlers remain connect
 
 test('document and Jira views use icon buttons with accessible tooltip labels',()=>{
  const controls=[...html.matchAll(/<(?:button|summary)[^>]+class="ba-auto-title-icon"[^>]*>([^<]*)<\/(?:button|summary)>/g)];
- assert.equal(controls.length,15);
+ assert.equal(controls.length,16);
  for(const [tag,icon] of controls){
   assert.match(tag,/aria-label="[^"]+"/);
   assert.match(tag,/title="[^"]+"/);

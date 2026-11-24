@@ -4520,7 +4520,10 @@ async function prepareBRJiraPreview({automatic=false,signal,qualityBlocker=''}={
         conflicts.push(item.path+': the existing Jira assignee has no verified SDLC role; review assignment before adding '+item.roleLabel+'.');
       }
       const approvedBR=register.brs.find(br=>br.id===item.path.split('/')[0])?.approvedContent||{};
-      const fieldPlan=jiraFieldPreflight.planFields(item,metadata,{approvedBR,discoveryAnswers:register.discoveryAnswers||{},existing,template});
+      const selection=original.jiraFieldSelection;
+      if(selection&&(selection.site!==site||selection.project!==targetKey))throw Error('Saved BR Jira field selection targets a different project. Refresh and save Jira work item types and fields.');
+      const selectedFields=selection?(selection.byTypeName?.[issueTypes[item.path]]||[]):null;
+      const fieldPlan=jiraFieldPreflight.planFields(item,metadata,{approvedBR,discoveryAnswers:register.discoveryAnswers||{},existing,template,selectedFields});
       const selected=Object.keys(fieldPlan.extraFields);
       fieldPlan.existingDigest=item.action==='update'?sha(JSON.stringify(Object.fromEntries(selected.map(key=>[key,existing?.fields?.[key]??null])))):null;
       jiraPreviewFieldPlans[item.path]=fieldPlan;
@@ -9812,6 +9815,44 @@ async function handleDashboardMessage(msg){
       case 'baStopPreparation':{
         requireBAWorkspace(msg);
         if(baPreparationRun?.projectId===activeProject.id)baPreparationRun.controller.abort();
+        break;
+      }
+      case 'baJiraFieldSelectionLoad':
+      case 'baJiraFieldSelectionSave':{
+        try{
+          requireBAWorkspace(msg);await requireBAOwner('ba-discovery');
+          const projectId=activeProject.id,register=await brWorkflow.load(registry,projectId);
+          if(!register.sourceDocuments.some(s=>s.digest===msg.digest))throw Error('Select the current uploaded BR document.');
+          const target=await ensureJiraPreviewTarget(register,{automatic:true}),project=validProjectKey(target.config.get('jira.projectKey')),site=baseAtlassian(target.config);
+          const fieldValues=require('../../jira-field-values');
+          const managed=new Set(['project','issuetype','summary','description','parent','labels']);
+          const types=[];
+          for(const type of await jiraIssueTypes(target.config,target.token)){
+           if(activeProject?.id!==projectId)throw Error('Project changed while loading Jira metadata.');
+           const fields=await jiraIssueFieldMetadata(target.config,target.token,{issueTypeId:type.id});
+           types.push({id:String(type.id),name:String(type.name),fields:fields.map(field=>({id:field.id,name:field.name,type:field.schema?.type||'unknown',required:field.required,managed:managed.has(field.id),supported:fieldValues.isEditable(field)&&fieldValues.canGeneralize(field)}))});
+          }
+          const saved=register.jiraFieldSelection;
+          const configured=saved?.site===site&&saved?.project===project;
+          let selection=configured?saved.byTypeId:{};
+          if(msg.command==='baJiraFieldSelectionSave'){
+           if(baPreparationRun||jiraSyncBusy||baPublishIntent)throw Error('Finish the running BR operation before saving Jira field selection.');
+           if(!msg.selection||typeof msg.selection!=='object'||Array.isArray(msg.selection)||msg.revision!==register.revision)throw Error('BR or field selection changed. Reload and retry.');
+           selection=Object.create(null);const byTypeName=Object.create(null);
+           for(const type of types){
+            const ids=msg.selection[type.id];
+            if(!Array.isArray(ids)||ids.some(id=>typeof id!=='string'||!type.fields.some(f=>f.id===id&&f.supported&&!f.managed&&!f.required)))throw Error('Jira fields changed. Refresh available fields before saving.');
+            selection[type.id]=[...new Set(ids)];byTypeName[type.name]=selection[type.id];
+           }
+           if(activeProject?.id!==projectId||baPreparationRun||jiraSyncBusy||baPublishIntent)throw Error('Project or BR operation changed.');
+           const updated=await brWorkflow.write(registry,projectId,register.revision,next=>{next.jiraFieldSelection={site,project,byTypeId:selection,byTypeName};});
+           approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;jiraPreviewValidation=null;jiraPreviewFieldPlans={};
+           await postBAPreparation(projectId,{phase:'draft',stage:'jira',preview:null,error:''});
+           await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
+           await dashboard?.webview.postMessage({type:'baJiraFieldSelectionSaved',projectId,requestId:msg.requestId,value:{project,types,configured:true,selection}});
+           await runBRPreparation('jira');
+          }else if(activeProject?.id===projectId)await dashboard?.webview.postMessage({type:'baJiraFieldSelectionLoaded',projectId,requestId:msg.requestId,value:{project,types,configured,selection}});
+        }catch(error){await dashboard?.webview.postMessage({type:'baJiraFieldSelectionError',projectId:msg.projectId,requestId:msg.requestId,message:atgvJobSafeError(error)});}
         break;
       }
       case 'baReadArtifact':{
