@@ -60,3 +60,28 @@ test('release route changes preserve credential UI and approval protections',()=
  assert.doesNotMatch(manifest,/id="gateLatestVersions"/);
  assert.match(ui,/softwareExtensionStatus/);assert.match(ui,/softwareLibraryStatus/);
 });
+
+test('saved GitHub credential is scoped to approved release API paths and never forwarded to the asset CDN',async t=>{
+ const https=require('node:https'),{EventEmitter}=require('node:events');
+ const seen=[];
+ t.mock.method(https,'get',(url,options,callback)=>{
+  seen.push({url:String(url),authorization:options.headers.Authorization});
+  const req=new EventEmitter();req.destroy=error=>req.emit('error',error);
+  queueMicrotask(()=>{
+   const response=new EventEmitter();response.resume=()=>{};
+   response.headers={};response.statusCode=200;
+   if(String(url).endsWith('/assets/1')){
+    response.statusCode=302;response.headers.location='https://release-assets.githubusercontent.com/example';
+    callback(response);
+   }else{
+    callback(response);response.emit('data',Buffer.from('ok'));response.emit('end');
+   }
+  });
+  return req;
+ });
+ const request=ext.authorizedRequest('test-token');
+ await request('https://api.github.com/repos/'+ext.REPO+'/releases/assets/1');
+ await request('https://api.github.com/repos/'+lib.REPO+'/releases/latest');
+ await request('https://api.github.com/repos/unrelated/example/releases');
+ assert.deepEqual(seen.map(x=>x.authorization),['Bearer test-token',undefined,'Bearer test-token',undefined]);
+});

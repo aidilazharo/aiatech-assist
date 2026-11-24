@@ -9,8 +9,8 @@ const root=path.resolve(__dirname,'..');
 const read=relative=>fs.readFileSync(path.join(root,relative),'utf8');
 function release(version,build,assets=true){
  const tag=`v${version}-build.${build}`;
- return {tag_name:tag,html_url:`https://github.com/aidilazharo/aiatech-assist/releases/tag/${tag}`,draft:false,
- assets:assets?[`atgv-aiatech-assist-${version}.vsix`,'vsix.sha256'].map(name=>({name,url:`https://api.github.com/repos/aidilazharo/aiatech-assist/releases/assets/${build}${name.length}`,size:name==='vsix.sha256'?90:300})):[]};
+ return {tag_name:tag,html_url:`https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc/releases/tag/${tag}`,draft:false,
+ assets:assets?[`atgv-aiatech-assist-${version}.vsix`,'vsix.sha256'].map(name=>({name,url:`https://api.github.com/repos/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc/releases/assets/${build}${name.length}`,size:name==='vsix.sha256'?90:300})):[]};
 }
 test('release detection selects most recent newer semver, including prerelease build tags',()=>{
  const found=updater.selectRelease([release('0.3.48',7),release('0.3.49',5),release('0.3.49',6),release('0.3.50',7,false)],'0.3.48');
@@ -22,7 +22,7 @@ test('release detection selects most recent newer semver, including prerelease b
 test('rejects releases without both trusted assets and malformed release URLs',()=>{
  const item=release('0.3.49',12);item.assets[0].url='https://other.example.org/malware.vsix';
  assert.equal(updater.selectRelease([item],'0.3.48'),null);
- item.assets[0].url='https://api.github.com/repos/aidilazharo/aiatech-assist/releases/assets/12';
+ item.assets[0].url='https://api.github.com/repos/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc/releases/assets/12';
  item.html_url='https://phishing.test/upgrade';
  assert.equal(updater.selectRelease([item],'0.3.48'),null);
 });
