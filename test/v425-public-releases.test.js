@@ -15,35 +15,43 @@ function apiRequest(repositories,calls){return async(url,options)=>{
  if(repositories[repo] instanceof Error)throw repositories[repo];
  return Buffer.from(JSON.stringify(repositories[repo]||[]));
 };}
-test('public extension and Library update checks select the newest release across both repositories without credentials',async()=>{
- const calls=[];
+test('Extension and Library update checks use canonical aiMalaysia source Releases',async()=>{
+ const calls=[],extensionSource=ext.REPO,librarySource=lib.REPO;
  const repos={
-  'aiamalaysia/my-fow-technology-app-techassists-dev-sdlc':[release('aiamalaysia/my-fow-technology-app-techassists-dev-sdlc','v0.4.24-build.1',['atgv-aiatech-assist-0.4.24.vsix','vsix.sha256'])],
-  'aiamalaysia/extension':[release('aiamalaysia/extension','v0.4.25-build.2',['atgv-aiatech-assist-0.4.25.vsix','vsix.sha256'])],
-  'aiamalaysia/my-fow-technology-app-techassists-enterprise-skills':[release('aiamalaysia/my-fow-technology-app-techassists-enterprise-skills','v1.1.17-source-build.1',['tech-stacks-skills-1.1.17-source.zip','library-source.sha256'])],
-  'aiamalaysia/library':[release('aiamalaysia/library','v1.1.18-source-build.2',['tech-stacks-skills-1.1.18-source.zip','library-source.sha256'])]
+  [extensionSource]:[release(extensionSource,'v0.4.25-build.2',['atgv-aiatech-assist-0.4.25.vsix','vsix.sha256'])],
+  [librarySource]:[release(librarySource,'v1.1.18-source-build.2',['tech-stacks-skills-1.1.18-source.zip','library-source.sha256'])],
+  'aiamalaysia/extension':[release('aiamalaysia/extension','v9.0.0-build.1',['atgv-aiatech-assist-9.0.0.vsix','vsix.sha256'])],
+  'aiamalaysia/library':[release('aiamalaysia/library','v9.0.0-source-build.1',['tech-stacks-skills-9.0.0-source.zip','library-source.sha256'])]
  };
  const request=apiRequest(repos,calls);
  const extension=await ext.latestAcrossRepositories({version:'0.4.24',request});
  const library=await lib.latestAcrossRepositories({request});
- assert.equal(extension.latest.version,'0.4.25');assert.equal(extension.release.repository,'aiamalaysia/extension');
- assert.equal(library.latest.version,'1.1.18');assert.equal(library.release.repository,'aiamalaysia/library');
- assert.ok(calls.some(url=>url.includes('aiamalaysia/extension'))&&calls.some(url=>url.includes('aiamalaysia/library')));
+ assert.equal(extension.latest.version,'0.4.25');assert.equal(extension.release.repository,extensionSource);
+ assert.equal(library.latest.version,'1.1.18');assert.equal(library.release.repository,librarySource);
+ assert.ok(calls.some(url=>url.includes('/'+extensionSource+'/'))&&calls.some(url=>url.includes('/'+librarySource+'/')));
+ assert.ok(calls.every(url=>!url.includes('/aiamalaysia/extension/')&&!url.includes('/aiamalaysia/library/')));
 });
-test('only dedicated public release mirrors are queried, never their source repositories',async()=>{
- const calls=[];
- const extension=await ext.latestAcrossRepositories({version:'0.4.20',request:apiRequest({'aiamalaysia/extension':[release('aiamalaysia/extension','v0.4.25-build.2',['atgv-aiatech-assist-0.4.25.vsix','vsix.sha256'])]},calls)});
- const library=await lib.latestAcrossRepositories({request:apiRequest({'aiamalaysia/library':[release('aiamalaysia/library','v1.1.18-source-build.2',['tech-stacks-skills-1.1.18-source.zip','library-source.sha256'])]},calls)});
- assert.deepEqual(ext.RELEASE_REPOSITORIES,['aiamalaysia/extension']);
- assert.deepEqual(lib.RELEASE_REPOSITORIES,['aiamalaysia/library']);
- assert.equal(extension.release.repository,'aiamalaysia/extension');
- assert.equal(library.release.repository,'aiamalaysia/library');
- assert.ok(calls.every(url=>!url.includes('/aiatech-assist/')&&!url.includes('/tech-stacks-skills/')));
+test('only canonical source Releases are queried; distribution mirrors are never queried',async()=>{
+ const calls=[],extSource=ext.REPO,libSource=lib.REPO;
+ const extension=await ext.latestAcrossRepositories({version:'0.4.20',request:apiRequest({
+  [extSource]:[release(extSource,'v0.4.25-build.2',['atgv-aiatech-assist-0.4.25.vsix','vsix.sha256'])]
+ },calls)});
+ const library=await lib.latestAcrossRepositories({request:apiRequest({
+  [libSource]:[release(libSource,'v1.1.18-source-build.2',['tech-stacks-skills-1.1.18-source.zip','library-source.sha256'])]
+ },calls)});
+ assert.deepEqual(ext.RELEASE_REPOSITORIES,[extSource]);
+ assert.deepEqual(lib.RELEASE_REPOSITORIES,[libSource]);
+ assert.equal(extension.release.repository,extSource);
+ assert.equal(library.release.repository,libSource);
+ assert.ok(calls.every(url=>!url.includes('/aiamalaysia/extension/')&&!url.includes('/aiamalaysia/library/')));
 });
-test('a newer release without a verified package is shown but cannot silently downgrade installation',async()=>{
- const repos={'aiamalaysia/my-fow-technology-app-techassists-dev-sdlc':[release('aiamalaysia/my-fow-technology-app-techassists-dev-sdlc','v0.4.24-build.1',['atgv-aiatech-assist-0.4.24.vsix','vsix.sha256'])],
-  'aiamalaysia/extension':[release('aiamalaysia/extension','v0.4.25-build.2',[])]};
- const result=await ext.latestAcrossRepositories({version:'0.4.20',request:apiRequest(repos,[])});
+test('latest source release lacking a verified VSIX does not silently downgrade installation',async()=>{
+ const repo=ext.REPO;
+ const source={ [repo]:[
+  release(repo,'v0.4.25-build.2',[]),
+  release(repo,'v0.4.24-build.1',['atgv-aiatech-assist-0.4.24.vsix','vsix.sha256'])
+ ] };
+ const result=await ext.latestAcrossRepositories({version:'0.4.20',request:apiRequest(source,[])});
  assert.equal(result.latest.version,'0.4.25');assert.equal(result.latest.installable,false);assert.equal(result.release,null);
 });
 test('public mirror verifies the source and publishes only the requested extension artifacts',async()=>{
