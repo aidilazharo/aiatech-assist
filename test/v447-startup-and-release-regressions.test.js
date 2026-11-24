@@ -11,11 +11,11 @@ const host=read('src/lib/runtime/extension-runtime.js');
 const extension=require('../src/lib/updates/github-release-updater');
 const library=require('../src/lib/updates/library-release-updater');
 
-test('release discovery queries public mirror repositories only',()=>{
- assert.deepEqual(extension.RELEASE_REPOSITORIES,['aiamalaysia/extension']);
- assert.deepEqual(library.RELEASE_REPOSITORIES,['aiamalaysia/library']);
- assert.ok(!extension.RELEASE_REPOSITORIES.includes('aiamalaysia/my-fow-technology-app-techassists-dev-sdlc'));
- assert.ok(!library.RELEASE_REPOSITORIES.includes('aiamalaysia/my-fow-technology-app-techassists-enterprise-skills'));
+test('release discovery queries canonical source repositories only',()=>{
+ assert.deepEqual(extension.RELEASE_REPOSITORIES,['aiamalaysia/my-fow-technology-app-techassists-dev-sdlc']);
+ assert.deepEqual(library.RELEASE_REPOSITORIES,['aiamalaysia/my-fow-technology-app-techassists-enterprise-skills']);
+ assert.ok(!extension.RELEASE_REPOSITORIES.includes('aiamalaysia/extension'));
+ assert.ok(!library.RELEASE_REPOSITORIES.includes('aiamalaysia/library'));
  assert.equal(extension.PINNED_RELEASE_URL,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc/releases/latest');
  assert.equal(library.LATEST_URL,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills/releases/latest');
 });
