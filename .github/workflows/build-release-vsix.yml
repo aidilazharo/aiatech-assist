@@ -83,6 +83,10 @@ jobs:
         if: steps.source.outputs.ready == 'true'
         run: npm test
 
+      - name: Audit hard-coded extension URLs
+        if: steps.source.outputs.ready == 'true'
+        run: node scripts/audit-hardcoded-urls.js
+
       - name: Validate UI theme
         if: steps.source.outputs.ready == 'true'
         run: npm run ui:check
