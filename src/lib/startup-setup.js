@@ -1,23 +1,19 @@
 'use strict';
-// Trusted ATGV source repositories are selected by the configured GitHub owner.
-// Release mirrors are optional and must never be mistaken for a writable source.
-const FIXED_LIBRARY_REPOSITORY='https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills'; // legacy helper
+// Trusted aiMalaysia source repositories are also the canonical release hosts.
+// No distribution mirror is used for automatic software updates.
+const TRUSTED_REPOSITORIES=Object.freeze({
+ extension:'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc',
+ library:'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills'
+});
+const FIXED_LIBRARY_REPOSITORY=TRUSTED_REPOSITORIES.library;
 const DEFAULTS=Object.freeze({
  jiraUrl:'https://aiamy-jira-azure.atlassian.net',
  email:'user.name@aia.com',
  githubUrl:'github.com/aiamalaysia',
  projectRepository:'my-fow-technology-app-techassists'
 });
-const RELEASES=Object.freeze({
- extension:'https://github.com/aiamalaysia/extension',
- library:'https://github.com/aiamalaysia/library'
-});
-const SOURCE_REPOS=Object.freeze({
- aiamalaysia:Object.freeze({
-  extension:'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc',
-  library:'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills'
- })
-});
+const RELEASES=TRUSTED_REPOSITORIES;
+const SOURCE_REPOS=Object.freeze({aiamalaysia:TRUSTED_REPOSITORIES});
 function githubRepo(input){
  const url=new URL(String(input||'').trim());
  if(url.protocol!=='https:'||url.hostname!=='github.com'||url.username||url.password||url.search||url.hash)throw Error('GitHub repository must use https://github.com/owner/repository.');
@@ -58,4 +54,4 @@ function validate(input){
   libraryReleases:githubRepo(RELEASES.library),extensionReleasesUrl:RELEASES.extension,libraryReleasesUrl:RELEASES.library
  };
 }
-module.exports={DEFAULTS,FIXED_LIBRARY_REPOSITORY,SOURCE_REPOS,RELEASES,githubRepo,githubOrganization,validate};
+module.exports={DEFAULTS,TRUSTED_REPOSITORIES,FIXED_LIBRARY_REPOSITORY,SOURCE_REPOS,RELEASES,githubRepo,githubOrganization,validate};
