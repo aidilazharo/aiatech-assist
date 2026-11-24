@@ -31,7 +31,7 @@ function html(webview,{resumeLibrary=false}={}){
     subtask:"<path d=\"M5 5v7h4m-3-3 3 3-3 3M12 8h7v8h-7zM14 12l1 1 2-2\"/>"
   };
   const baHeaderIcon=(name,variant='')=>`<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${variant}>${baHeaderIcons[name]}</svg>`;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.83';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.84';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const uiConsistencyCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-consistency.css'));
@@ -248,7 +248,7 @@ function html(webview,{resumeLibrary=false}={}){
     <section id="overviewMyWorkUsers" aria-label="Shared My Work users and Jira tasks">
         <div class="overview-roster-heading"><h2>My Work Users</h2><button id="overviewUserRefresh" type="button" class="secondary">Refresh</button></div>
         <p id="overviewUserStatus" role="status" class="muted">Roles are recorded in the configured Confluence space when users enter My Work.</p>
-        <form id="overviewUserAddForm" class="overview-roster-add" aria-label="Register a verified Jira user"><label for="overviewUserAccountId">Jira account ID <input id="overviewUserAccountId" type="text" maxlength="200" autocomplete="off" placeholder="Verified Atlassian account ID" required></label><button type="submit" class="secondary">Add Verified User</button></form><div id="overviewUserRows" class="overview-roster-scroll" aria-label="My Work users and Assigned Jira Tasks DataTable"></div>
+        <div class="overview-roster-toolbar"><form id="overviewUserAddForm" class="overview-roster-add" aria-label="Register a verified Jira user"><label for="overviewUserAccountId">Jira account ID <input id="overviewUserAccountId" type="text" maxlength="200" autocomplete="off" placeholder="Verified Atlassian account ID" required></label><button type="submit" class="secondary">Add Verified User</button></form><div id="overviewUserSearchHost" class="overview-roster-search-host"></div></div><div id="overviewUserRows" class="overview-roster-scroll" aria-label="My Work users and Assigned Jira Tasks DataTable"></div>
       </section>
      <details id="overviewKnowledgePanel" class="overview-knowledge-panel"><summary id="overviewKnowledgeHeading"><strong>Project Knowledge &amp; RAG</strong><span class="muted">Project knowledge search and AI answers</span></summary><div class="overview-knowledge-head"><button type="button" id="overviewKnowledgeSync" class="secondary">Sync Knowledge</button></div><label for="overviewRagQuery">Project knowledge question or search</label><div class="overview-knowledge-input"><input type="search" id="overviewRagQuery" maxlength="500" autocomplete="off" placeholder="Ask about requirements, Jira tickets, designs or project documents"><button id="overviewKnowledgeSearch" class="secondary" type="button">Search</button><button id="overviewKnowledgeAsk" type="button">Ask RAG</button></div><p id="overviewKnowledgeStatus" class="muted" role="status" aria-live="polite">Search your indexed knowledge, or sync to refresh project sources.</p><div id="overviewRagResult" class="hidden" aria-live="polite"><h3>Answer &amp; sources</h3><div id="overviewRagAnswer" class="overview-rag-answer"></div><div id="overviewRagSources" class="overview-rag-sources"></div></div></details>
     <details id="overviewGanttDetails" class="overview-timeline overview-gantt-compact"><summary id="overviewGanttHeading" class="overview-gantt-heading"><span>Project Gantt Chart</span><span class="muted">Expand schedule</span></summary><div class="overview-gantt-body"><div id="ganttChart" class="gantt-chart" aria-label="Project Gantt chart"></div><div id="ganttFallback" class="muted"></div></div></details>
@@ -407,8 +407,8 @@ function html(webview,{resumeLibrary=false}={}){
       <h2 class="ba-single-heading">Business Requirements <span id="baAutoTitle"></span></h2>
       <div class="ba-auto-heading-actions">
         <div id="baAutoSkillSlot"></div>
-        <button id="baAutoBack" type="button" class="secondary">Project Items</button>
-        <button id="baNewRequirement" type="button" title="Create a new independent Business Requirement">+ New Business Requirement</button>
+        <button id="baAutoBack" type="button" class="secondary ba-heading-icon" title="Project Items" aria-label="Project Items">${baHeaderIcon('list')}</button>
+        <button id="baNewRequirement" type="button" class="ba-heading-icon" title="New Business Requirement" aria-label="New Business Requirement"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button>
       </div>
     </div>
     <div id="baAutoFeedback"></div>

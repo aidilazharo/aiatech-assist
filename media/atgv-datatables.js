@@ -22,7 +22,7 @@
   const bar=doc.createElement('div');bar.className='atgv-datatable-controls';
   const search=doc.createElement('input');search.type='search';search.className='atgv-datatable-search';search.placeholder='Search records';search.setAttribute('aria-label','Search '+(options.label||'records'));search.value=state.term;
   const count=doc.createElement('span');count.className='atgv-datatable-count';count.setAttribute('role','status');count.setAttribute('aria-live','polite');
-  bar.append(search,count);
+  if(options.searchHost){options.searchHost.replaceChildren(search);bar.append(count);}else bar.append(search,count);
   const overflow=doc.createElement('div');overflow.className='atgv-datatable-scroll';
   const table=doc.createElement('table');table.className='atgv-datatable-table';table.setAttribute('aria-label',options.label||'Records');
   const thead=doc.createElement('thead'),tr=doc.createElement('tr');

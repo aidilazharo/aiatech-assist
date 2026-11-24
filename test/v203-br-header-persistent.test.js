@@ -7,7 +7,7 @@ const css=fs.readFileSync(path.join(root,'media/start.css'),'utf8');
 const history=require('../media/completed-br-history');
 test('one persistent header action invokes the guarded new BR workflow and auto-upload',()=>{
  assert.equal((host.match(/id="baNewRequirement"/g)||[]).length,1);
- assert.match(host,/id="baNewRequirement"[^>]*>\+ New Business Requirement<\/button>/);
+ assert.match(host,/id="baNewRequirement"[^>]*aria-label="New Business Requirement"[^>]*><svg/);
  assert.match(ui,/\$\('baNewRequirement'\)\.addEventListener\('click',beginNewBusinessRequirement\)/);
  assert.match(ui,/send\('startOrRestartBusinessRequirements',\{revision:brState\.revision,openUploadImmediately:true\}\)/);
  assert.match(ui,/\$\('baNewRequirement'\)\.disabled=displayed!=='start'\|\|!activeId\|\|!brState/);

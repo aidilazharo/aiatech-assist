@@ -23,15 +23,20 @@
 @media(max-width:800px){#overviewMyWorkUsers table{min-width:650px}#overviewMyWorkUsers .overview-user-name-col{width:27%}#overviewMyWorkUsers .overview-user-roles-col{width:26%}#overviewMyWorkUsers .overview-user-tasks-col{width:47%}}
 
 /* DataTables replace the legacy overflowing all-users table. */
-#overviewMyWorkUsers .overview-roster-add{display:flex;align-items:end;gap:10px;flex-wrap:wrap;margin:12px 0}
-#overviewMyWorkUsers .overview-roster-add label{display:flex;flex-direction:column;gap:4px;min-width:240px;flex:1}
-#overviewMyWorkUsers .overview-roster-add input{width:100%;min-width:180px}
+#overviewMyWorkUsers .overview-roster-toolbar{display:flex;align-items:flex-end;gap:10px;margin:12px 0;flex-wrap:wrap}
+#overviewMyWorkUsers .overview-roster-add{display:flex;align-items:flex-end;gap:10px;flex:1 1 380px;min-width:0;margin:0;flex-wrap:wrap}
+#overviewMyWorkUsers .overview-roster-add label{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1 1 180px}
+#overviewMyWorkUsers .overview-roster-add input{width:100%;min-width:0;box-sizing:border-box}
+#overviewMyWorkUsers .overview-roster-add button{flex:0 0 auto;white-space:nowrap}
+#overviewMyWorkUsers .overview-roster-search-host{flex:0 1 280px;min-width:160px;margin-left:auto}
+#overviewMyWorkUsers .overview-roster-search-host .atgv-datatable-search{width:100%;max-width:none;box-sizing:border-box;margin:0}
+@media(max-width:650px){#overviewMyWorkUsers .overview-roster-search-host{flex:1 1 100%;margin-left:0;min-width:0}}
 #overviewMyWorkUsers .atgv-datatable-scroll{width:100%;overflow-x:auto}
 #overviewMyWorkUsers .atgv-datatable-table{min-width:680px;table-layout:auto;width:100%}
 #overviewMyWorkUsers .atgv-datatable-table th:nth-child(1){width:25%}
 #overviewMyWorkUsers .atgv-datatable-table th:nth-child(2){width:23%}
 #overviewMyWorkUsers .atgv-datatable-table th:nth-child(3){width:52%}
 #overviewMyWorkUsers .atgv-datatable-table td{vertical-align:top}
-#overviewMyWorkUsers .atgv-datatable-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#overviewMyWorkUsers .atgv-datatable-controls{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:wrap}
 #overviewMyWorkUsers .atgv-datatable-search{max-width:360px}
 #overviewMyWorkUsers .atgv-datatable-pager{display:flex;align-items:center;gap:12px;justify-content:flex-end}

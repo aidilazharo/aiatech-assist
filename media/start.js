@@ -6554,7 +6554,7 @@ function renderDiscoverySummary(){
   // is unfinished. The host prompts before archiving active work.
   $('baNewRequirement').classList.toggle('hidden',displayed!=='start');
   $('baNewRequirement').disabled=displayed!=='start'||!activeId||!brState;
-  $('baNewRequirement').title=restartOpen?'Open document upload for the newly started Business Requirement':'Start a new independent Business Requirement; unfinished work will be archived only after confirmation.';
+  $('baNewRequirement').title=restartOpen?'New Business Requirement — open document upload':'New Business Requirement — start an independent requirement; unfinished work is archived only after confirmation.';
   renderBAUncompleted();
   if(displayed!=='start'&&baRequirementModalTarget)closeBARequirementModal(false);
   renderBACompletedRecords();
@@ -8276,7 +8276,7 @@ function renderMyWorkRoster(rows){
   {key:'name',label:'Name',render:(item,doc)=>{const box=doc.createElement('div'),strong=doc.createElement('strong'),small=doc.createElement('small');strong.textContent=String(item.name||'Unknown');small.textContent=String(item.email||item.id||'');box.append(strong,small);return box;}},
   {key:'rolesLabel',label:'Roles'},
   {key:'tasksText',label:'Assigned Jira Tasks',render:taskCell}
- ],{pageSize:5,sortKey:'name',label:'My Work users and assigned Jira issues'});
+ ],{pageSize:5,sortKey:'name',label:'My Work users and assigned Jira issues',searchHost:$('overviewUserSearchHost')});
 }
 $('overviewUserAddForm').addEventListener('submit',event=>{
  event.preventDefault();

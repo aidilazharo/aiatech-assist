@@ -14,7 +14,7 @@ test('new API and Database design categories generate validated and editable Mar
 });
 test('progressive stages show only active panels and keep protected approval checks',()=>{
  const host=fs.readFileSync(path.join(__dirname,'..','test','generated','extension-source.txt'),'utf8'),ui=fs.readFileSync(path.join(__dirname,'..','media','start.js'),'utf8');
- assert.match(host,/id="baNewRequirement"[^>]*>\+ New Business Requirement<\/button>/);
+ assert.match(host,/id="baNewRequirement"[^>]*aria-label="New Business Requirement"[^>]*><svg/);
  assert.match(host,/id="baStartPanel"/);
  assert.match(host,/id="sourceSelectionActions"/);
  assert.match(host,/id="discoveryQuestionsPanel"/);
