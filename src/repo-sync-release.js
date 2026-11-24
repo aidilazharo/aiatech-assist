@@ -1,9 +1,11 @@
 'use strict';
 // Verified GitHub Release copying for the two aiMalaysia distribution repositories.
 const crypto=require('node:crypto');
+const startup=require('./lib/startup-setup');
+const repoName=url=>{const parsed=startup.githubRepo(url);return parsed.owner+'/'+parsed.repo;};
 const SOURCES=Object.freeze({
- extension:'aiamalaysia/my-fow-technology-app-techassists-dev-sdlc',
- library:'aiamalaysia/my-fow-technology-app-techassists-enterprise-skills'
+ extension:repoName(startup.TRUSTED_REPOSITORIES.extension),
+ library:repoName(startup.TRUSTED_REPOSITORIES.library)
 });
 const DESTINATIONS=Object.freeze({extension:'aiamalaysia/extension',library:'aiamalaysia/library'});
 const CHECKSUMS=Object.freeze({extension:'vsix.sha256',library:'library-source.sha256'});
