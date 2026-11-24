@@ -58,6 +58,7 @@ const brDeletionPreview=require('../../br-deletion-preview');
 const orphanJiraCleanup=require('../../orphaned-jira-cleanup');
 const jiraOwnerBRDeletion=require('../../jira-owner-br-deletion');
 const jiraLinkReconciliation=require('../../jira-link-reconciliation');
+const jiraMappingAudit=require('../../jira-mapping-audit');
 const startupJiraReconciliation=require('../../startup-jira-reconciliation');
 const resetEverywhere=require('../../reset-everywhere');
 const localReset=require('../reset/local-reset');
@@ -4498,9 +4499,11 @@ async function prepareBRJiraPreview({automatic=false,signal,qualityBlocker=''}={
    await progress('Verifying Jira issue identities and existing mappings…',30);
    const duplicateGate=await prePublishIdentityGuard(register,target.config,target.token,changes,inventory);
    conflicts.push(...formatIdentityConflicts(duplicateGate));
+   const mappingAudit=typeof jiraMappingAudit==='object'?await jiraMappingAudit.audit({register,projectKey:targetKey,readIssue:key=>jiraReadIssue(target.config,target.token,key),verify:(nodePath,issue)=>verifyLinkedJiraIdentity(register,target.config,nodePath,issue),signal}):{checked:0,conflicts:[]};
+   conflicts.push(...mappingAudit.conflicts);
    const checked=await jiraPreflight(register,target.config,target.token,changes,
     (count,total)=>progress('Checking Jira issues '+count+'/'+total+'…',30+Math.floor(count/total*30)),{automatic,inventory,signal});
-   checkedCount=changes.length;
+   checkedCount=changes.length+mappingAudit.checked;
    linkCandidates=checked.linkCandidates||[];
    protection=checked.assessment?.protection||[];
    conflicts.push(...checked);
@@ -4607,6 +4610,8 @@ async function syncApprovedBRs(expectedRevision,automatic=null){
   await publishProgress('preparing','Checking Jira identities and publication prerequisites…');
   const duplicateGate=await prePublishIdentityGuard(state,config,token,items);
   if(!duplicateGate.safe)throw Error('Jira publication blocked by possible duplicates: '+formatIdentityConflicts(duplicateGate).join('; '));
+  const mappingAudit=await jiraMappingAudit.audit({register:state,projectKey:validProjectKey(config.get('jira.projectKey')),readIssue:key=>jiraReadIssue(config,token,key),verify:(nodePath,issue)=>verifyLinkedJiraIdentity(state,config,nodePath,issue)});
+  if(mappingAudit.conflicts.length)throw Error('Jira publication blocked by existing identity or parent changes: '+mappingAudit.conflicts.join('; '));
   const conflicts=await jiraPreflight(state,config,token,items,undefined,{automatic:!!automatic});
   if(conflicts.length)throw Error('Jira synchronization blocked: '+conflicts.join('; '));
   if(items.some(item=>item.action!=='retire'&&!jiraPreviewFieldPlans[item.path]))throw Error('Jira issue field metadata was not verified. Generate Jira Preview again.');
