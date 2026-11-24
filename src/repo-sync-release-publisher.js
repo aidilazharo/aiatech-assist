@@ -142,7 +142,11 @@ async function publish({source,destination,sourcePat,destPat,prNumber,tag,onProg
    for(const row of rows){
     if(row.tag_name===tag){if(existing)throw Error('Duplicate release identity.');existing=row;}
     if(!row.draft){
-     let prior;try{prior=tagInfo(row.tag_name,pair.kind);}catch{continue;}
+     let prior;try{prior=tagInfo(row.tag_name,pair.kind);}catch{
+      const plain=/^v?(\d+)\.(\d+)\.(\d+)$/.exec(String(row.tag_name||''));
+      if(!plain||plain.slice(1).some(n=>!Number.isSafeInteger(Number(n))))continue;
+      prior={key:[...plain.slice(1).map(Number),0]};
+     }
      if(compare(prior.key,info.key)>0)throw Error('A newer destination release already exists. No downgrade.');
     }
    }
@@ -211,6 +215,8 @@ async function publish({source,destination,sourcePat,destPat,prNumber,tag,onProg
   const final=await dg('/releases/tags/'+encodeURIComponent(tag));assertIdentity(final);
   if(final.draft||final.prerelease||!final.published_at||await tagCommit(destination,destPat)!==merged)throw Error('Destination release is not published at the approved commit.');
   await verifyUploaded(final,false);
+  const latestStable=await dg('/releases/latest');
+  if(latestStable.id!==final.id||latestStable.tag_name!==tag||latestStable.draft||latestStable.prerelease)throw Error('The verified release is published, but is not the current latest stable release. Check concurrent publication.');
   const expectedUrl='https://github.com/'+destination.name+'/releases/tag/'+tag;
   if(final.html_url!==expectedUrl)throw Error('Unexpected destination release URL.');
   return {url:expectedUrl,tag,version,assetCount:buffers.size,merged};
