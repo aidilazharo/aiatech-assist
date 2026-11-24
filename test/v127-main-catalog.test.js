@@ -7,7 +7,7 @@ const design=require('../src/design-proposals');
 const fixture=require('./catalog-fixture');
 test('default private asset catalog is fixed to main and rejects non-main for canonical repository',()=>{
  assert.equal(catalog.DEFAULT_CONFIG.repositoryUrl,'');
- assert.equal(catalog.CANONICAL_REPO,'https://github.com/example-org/tech-stacks-skills');
+ assert.equal(catalog.CANONICAL_REPO,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills');
  assert.equal(catalog.normalizeConfig({...catalog.DEFAULT_CONFIG,ref:'other'}).ref,'main');
 });
 test('pinned remote stack, design guidance and role skills are retrieved without project overrides',async()=>{
