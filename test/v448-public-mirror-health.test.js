@@ -24,8 +24,8 @@ test('a stale public mirror is labeled behind and must not offer a downgrade',()
  assert.match(client,/public release mirror is behind/);
  assert.match(client,/No downgrade available/);
 });
-test('release discovery still uses only the dedicated public VSIX repository',()=>{
- assert.deepEqual(updater.RELEASE_REPOSITORIES,['aiamalaysia/extension']);
+test('release discovery uses only the canonical Extension source repository',()=>{
+ assert.deepEqual(updater.RELEASE_REPOSITORIES,['aiamalaysia/my-fow-technology-app-techassists-dev-sdlc']);
  const pkg=require('../package.json');
  assert.match(pkg.version,/^\d+\.\d+\.\d+$/);
  assert.equal(pkg.atgvDisplayVersion,pkg.version);
