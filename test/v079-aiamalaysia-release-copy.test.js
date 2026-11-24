@@ -50,10 +50,10 @@ function fake({existing=null,badChecksum=false,extra=false}={}){
 }
 test('aiMalaysia is the only startup/source/release owner',()=>{
  assert.deepEqual(Object.keys(startup.SOURCE_REPOS),['aiamalaysia']);
- assert.deepEqual(updater.RELEASE_REPOSITORIES,['aiamalaysia/extension']);
- assert.deepEqual(library.RELEASE_REPOSITORIES,['aiamalaysia/library']);
- assert.equal(startup.RELEASES.extension,'https://github.com/aiamalaysia/extension');
- assert.equal(startup.RELEASES.library,'https://github.com/aiamalaysia/library');
+ assert.deepEqual(updater.RELEASE_REPOSITORIES,['aiamalaysia/my-fow-technology-app-techassists-dev-sdlc']);
+ assert.deepEqual(library.RELEASE_REPOSITORIES,['aiamalaysia/my-fow-technology-app-techassists-enterprise-skills']);
+ assert.equal(startup.RELEASES.extension,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc');
+ assert.equal(startup.RELEASES.library,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills');
  assert.equal(release.SOURCES.library,'aiamalaysia/my-fow-technology-app-techassists-enterprise-skills');
  for(const file of ['src/lib/startup-setup.js','src/lib/runtime/extension-runtime.js',
   'src/lib/updates/github-release-updater.js','src/lib/updates/library-release-updater.js',
@@ -62,7 +62,7 @@ test('aiMalaysia is the only startup/source/release owner',()=>{
  }
 });
 test('Workspace offers a release-copy button without a local Git folder and uses host confirmation',()=>{
- const html=workspace.workspaceHtml({nonce:'safe-abc',version:'0.0.79',cspSource:'vscode-resource:'});
+ const html=workspace.workspaceHtml({nonce:'safe-abc',version:'0.0.80',cspSource:'vscode-resource:'});
  assert.match(html,/id="copyReleaseArtifacts"/);
  assert.match(html,/command:'copyReleaseArtifacts'/);
  assert.match(html,/id="releaseKind"/);
