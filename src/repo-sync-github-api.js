@@ -159,17 +159,22 @@ async function getLatestRelease(repo,token,request=githubRequest){
  if(!releases.length)return null;
  const latest=releases[0];
  const tag=safeReleaseComponent(latest.tag_name);
- const expected='https://github.com/'+repo.name+'/releases/tag/'+encodeURIComponent(tag);
- if(typeof latest.html_url!=='string'||latest.html_url!==expected)
+ const expectedPath='/'+repo.name+'/releases/tag/'+encodeURIComponent(tag);
+ let browser;
+ try{browser=new URL(String(latest.html_url||''));}catch{throw Error('Invalid source GitHub release URL.');}
+ if(browser.protocol!=='https:'||browser.hostname!=='github.com'||browser.username||
+  browser.password||browser.port||browser.search||browser.hash||
+  browser.pathname.toLowerCase()!==expectedPath.toLowerCase())
   throw Error('Release URL does not match the selected source repository.');
- const assets=(Array.isArray(latest.assets)?latest.assets:[]).filter(acceptedReleaseAsset).map(a=>({
+ const rawAssets=Array.isArray(latest.assets)?latest.assets:[];
+ const assets=rawAssets.filter(acceptedReleaseAsset).map(a=>({
   id:a.id,name:a.name,size:a.size,digest:/^sha256:[a-f0-9]{64}$/i.test(String(a.digest||''))?String(a.digest).toLowerCase():''
  }));
  if(new Set(assets.map(a=>a.name.toLowerCase())).size!==assets.length)throw Error('Source release has duplicate artifact names.');
  if(assets.reduce((sum,a)=>sum+a.size,0)>MAX_RELEASE_TOTAL)throw Error('Source release assets exceed 80 MB.');
- return {tag,name:String(latest.name||tag).slice(0,140),url:expected,
+ return {tag,name:String(latest.name||tag).slice(0,140),url:browser.href,
   targetCommitish:String(latest.target_commitish||'').slice(0,120),
-  publishedAt:String(latest.published_at),assets};
+  publishedAt:String(latest.published_at),assets,skippedAssetCount:rawAssets.length-assets.length};
 }
 async function downloadReleaseAsset(repo,token,asset,destination){
  assertToken(token);
