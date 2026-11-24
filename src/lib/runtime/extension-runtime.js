@@ -4653,6 +4653,7 @@ async function syncApprovedBRs(expectedRevision,automatic=null){
     }
    }else if(item.action==='update'){
     const current=await jiraReadIssue(config,token,key);
+    const originalAssignee=current.fields?.assignee?.accountId||'';
     if(!previous?.remoteDigest||remoteFingerprint(current)!==previous.remoteDigest)throw Error('Jira content conflict: '+key);
     const currentRoles=(current.fields?.labels||[]).filter(label=>typeof label==='string'&&label.startsWith('atgv-role-'));
     if(item.roleLabel&&currentRoles.length&&!currentRoles.includes(item.roleLabel))throw Error('Jira role conflict: '+key+'. Reconcile the existing role before updating.');
@@ -4660,6 +4661,8 @@ async function syncApprovedBRs(expectedRevision,automatic=null){
     const newRoleLabel=item.roleLabel&&!currentRoles.includes(item.roleLabel)?item.roleLabel:undefined;
     if(Object.keys(fieldPlan.updateCore).length||Object.keys(fieldPlan.extraFields).length||newRoleLabel)
      await jiraUpdateIssue(config,token,{key,...fieldPlan.updateCore,extraFields:fieldPlan.extraFields,fieldMetadata:actualMeta,roleLabel:newRoleLabel});
+    const confirmedOwner=await jiraReadIssue(config,token,key);
+    if((confirmedOwner.fields?.assignee?.accountId||'')!==originalAssignee)throw Error('Jira assignee changed during publication: '+key+'. Review ownership before retrying.');
    }else if(item.action==='retire'){
     const current=await jiraReadIssue(config,token,key);
     if(!previous?.remoteDigest||remoteFingerprint(current)!==previous.remoteDigest)throw Error('Jira retirement blocked: missing trusted baseline or external changes on '+key);

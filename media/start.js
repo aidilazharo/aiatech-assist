@@ -3449,8 +3449,8 @@ function developerBrStatusOf(br){
  // current developer (not a UI/UX issue assigned to the same Jira account)
  // can turn this Business Requirement into In Progress.
  if(selectedRole==='software-developer'&&roleJiraLoaded&&roleJiraProject===activeId&&
-    developerAssignedMine.some(item=>item.mine&&item.brRoot&&item.brId===String(br.id||'').toUpperCase()))return 'in-progress';
- return Number(br.approvedRevision||1)>1?'updated':'new';
+    developerAssignedMine.some(item=>item.mine&&item.brRoot&&item.brId===String(br.id||'').toUpperCase()&&/^in[ _-]*progress$/i.test(String(item.status||''))))return 'in-progress';
+ return 'new';
 }
 function selectedBrLinkedJira(){
  if(!developerBrSelected)return [];
