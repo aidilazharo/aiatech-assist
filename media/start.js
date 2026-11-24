@@ -5132,10 +5132,10 @@ function renderSoftwareUpdates(data,force=false){
   publishedParts[publishedParts.findIndex((part,index)=>part!==installedParts[index])]<installedParts[publishedParts.findIndex((part,index)=>part!==installedParts[index])];
  const checked=data.extensionLastCheck?' (checked '+new Date(data.extensionLastCheck).toLocaleString()+').':'';
  $('softwareExtensionStatus').textContent=data.extensionError?`Extension: ${data.extensionError}`:
-  publicBehind?`Installed extension v${version} · public release mirror is behind (v${latestVersion}). No downgrade available${checked}`:
-  latestVersion&&!data.extensionLatest?.installable&&!data.latest?`Public release v${latestVersion}: verified VSIX or checksum not available.`:
+  publicBehind?`Installed extension v${version} · release repository is behind (v${latestVersion}). No downgrade available${checked}`:
+  latestVersion&&!data.extensionLatest?.installable&&!data.latest?`Published release v${latestVersion}: verified VSIX or checksum not available.`:
   data.latest?`Extension v${data.latest.version} available (installed v${version}). Release: ${data.latest.tag}.`:
-  data.extensionLastCheck?`Installed extension v${version}${latestVersion?' · latest public release v'+latestVersion:' · no public release found'}${checked}`:
+  data.extensionLastCheck?`Installed extension v${version}${latestVersion?' · latest published release v'+latestVersion:' · no published release found'}${checked}`:
   `Installed extension: v${version}; not checked yet.`;
  const installedLibrary=data.libraryInstalledVersion||catalogState?.installed?.version||'';
  const sourceLibrary=data.librarySourceVersion||catalogState?.remote?.version||'';
@@ -5152,9 +5152,9 @@ function renderSoftwareUpdates(data,force=false){
  $('softwareLibraryStatus').textContent=data.libraryError?`Library: ${data.libraryError}`:
   sourceAhead?`Library source main v${sourceLibrary} is newer than active v${installedLibrary}. Pull Library Files to verify and update the selected source.`:
   mirrorBehind?`Active Library v${installedLibrary} is newer than public mirror v${mirrorLibrary}. ${sourceLibrary?'Selected source main v'+sourceLibrary+(sourceBehind?' is also older.':' is verified.'):'Check selected GitHub source main for newer commits.'} No downgrade available.`:
-  installedLibrary&&mirrorLibrary&&compareSemver(mirrorLibrary,installedLibrary)===0?`Active Library v${installedLibrary} matches the verified public release. Check selected source main for updates.`:
-  data.libraryLatest?`Library public release: v${mirrorLibrary}${data.libraryLatestAvailable?'. Pull Library Files to check source main first and install only a newer verified version.':'; verified ZIP or checksum is unavailable or the installed Library is newer.'}`:
-  `Library: no public release yet. Check selected GitHub source main for updates.`;
+  installedLibrary&&mirrorLibrary&&compareSemver(mirrorLibrary,installedLibrary)===0?`Active Library v${installedLibrary} matches the verified published release. Check selected source main for updates.`:
+  data.libraryLatest?`Library published release: v${mirrorLibrary}${data.libraryLatestAvailable?'. Pull Library Files to check source main first and install only a newer verified version.':'; verified ZIP or checksum is unavailable or the installed Library is newer.'}`:
+  `Library: no published release yet. Check selected GitHub source main for updates.`;
  $('viewExtensionRelease').disabled=!data.extensionLatest;
  $('installExtensionRelease').disabled=!data.latest;
  $('checkSoftwareUpdates').disabled=!!data.busy;
@@ -5166,15 +5166,15 @@ window.addEventListener('message',event=>{
  if(m.type==='softwareUpdateState')renderSoftwareUpdates(m.value);
 });
 $('checkSoftwareUpdates').addEventListener('click',()=>{
- $('softwareExtensionStatus').textContent='Checking public extension releases…';
- $('softwareLibraryStatus').textContent='Checking public SDLC Library releases…';
+ $('softwareExtensionStatus').textContent='Checking AIA Malaysia extension releases…';
+ $('softwareLibraryStatus').textContent='Checking AIA Malaysia SDLC Library releases…';
  send('checkSoftwareUpdates');
 });
 $('pullLibraryFiles').addEventListener('click',()=>{
  if(softwareLibraryPulling||!!catalogBusyUI||!!catalogState?.busy)return;
  renderSoftwareLibraryPullProgress({stage:'running',percent:0,
   title:'Checking selected GitHub Library source…',
-  message:'Verifying the selected organization’s Library main branch first, then checking the public release mirror as a fallback. No downgrades.'});
+  message:'Verifying the selected organization’s Library main branch first, then checking the AIA Malaysia release repository. No downgrades.'});
  send('catalogPull');
 });
 $('viewExtensionRelease').addEventListener('click',()=>send('viewExtensionRelease'));
