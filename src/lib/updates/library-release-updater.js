@@ -5,10 +5,10 @@ const crypto=require('node:crypto');
 const fs=require('node:fs/promises');
 const path=require('node:path');
 const updater=require('./github-release-updater');
-const REPO='aiamalaysia/my-fow-technology-app-techassists-enterprise-skills';
-// Only the public distribution mirror appears in release discovery.
-// The source repository remains available for the pinned catalogue and legacy verification.
-const RELEASE_REPOSITORIES=Object.freeze(['aiamalaysia/library']);
+const startup=require('../startup-setup');
+const REPO=(()=>{const r=startup.githubRepo(startup.TRUSTED_REPOSITORIES.library);return r.owner+'/'+r.repo;})();
+// The canonical aiMalaysia Library source repository is the only Release source.
+const RELEASE_REPOSITORIES=Object.freeze([REPO]);
 const LATEST_URL='https://github.com/'+REPO+'/releases/latest';
 const API_LATEST='https://api.github.com/repos/'+REPO+'/releases/latest';
 const API_LIST='https://api.github.com/repos/'+REPO+'/releases?per_page=30';
@@ -37,22 +37,23 @@ function select(releases,repository=REPO){
  candidates.sort((a,b)=>updater.compareVersion(b.version,a.version)||b.build-a.build);
  return candidates[0]||null;
 }
-async function fetchReleaseList({repository=REPO,request=updater.getBytes}={}){
+async function fetchReleaseList({repository=REPO,request=updater.getBytes,token=''}={}){
  if(!RELEASE_REPOSITORIES.includes(repository)&&repository!==REPO)throw Error('Untrusted Library release repository.');
- const fetch=async url=>JSON.parse((await request(url,{maxBytes:1024*1024})).toString('utf8'));
+ const auth=token?{token}:{};
+ const fetch=async url=>JSON.parse((await request(url,{maxBytes:1024*1024,...auth})).toString('utf8'));
  const api='https://api.github.com/repos/'+repository+'/releases';
  let stable=null;try{stable=await fetch(api+'/latest');}catch{/* Verify same-repository prereleases below. */}
  const releases=await fetch(api+'?per_page=30');
  if(!Array.isArray(releases))throw Error('Invalid Library Releases response.');
  return stable?[...releases,stable]:releases;
 }
-async function latest({repository=REPO,request=updater.getBytes}={}){
- return select(await fetchReleaseList({repository,request}),repository);
+async function latest({repository=REPO,request=updater.getBytes,token=''}={}){
+ return select(await fetchReleaseList({repository,request,token}),repository);
 }
-async function latestAcrossRepositories({request=updater.getBytes}={}){
- const results=await Promise.allSettled(RELEASE_REPOSITORIES.map(repository=>fetchReleaseList({repository,request})));
+async function latestAcrossRepositories({request=updater.getBytes,token=''}={}){
+ const results=await Promise.allSettled(RELEASE_REPOSITORIES.map(repository=>fetchReleaseList({repository,request,token})));
  const errors=results.flatMap((result,index)=>result.status==='rejected'?[RELEASE_REPOSITORIES[index]+': '+String(result.reason?.message||result.reason)]:[]);
- if(errors.length===results.length)throw Error('Cannot check public Library releases: '+errors.join('; '));
+ if(errors.length===results.length)throw Error('Cannot check aiMalaysia Library Releases: '+errors.join('; '));
  const found=[];
  results.forEach((result,index)=>{
   if(result.status!=='fulfilled')return;
@@ -69,13 +70,14 @@ async function latestAcrossRepositories({request=updater.getBytes}={}){
  const release=select([newest.row],newest.repository);
  return {release,latest:{version:newest.version,tag:newest.tag,url:newest.url,repository:newest.repository,publishedAt:newest.publishedAt,installable:!!release},errors};
 }
-async function downloadVerified(release,{directory,request=updater.getBytes}={}){
+async function downloadVerified(release,{directory,request=updater.getBytes,token=''}={}){
  if(!release||!directory||!RELEASE_REPOSITORIES.includes(release.repository)||!trustedAsset(release.archive,release.filename,release.repository)||!trustedAsset(release.checksum,'library-source.sha256',release.repository))
   throw Error('Untrusted SDLC Library release.');
  if(release.filename!=='tech-stacks-skills-'+release.version+'-source.zip')throw Error('Invalid Library archive filename.');
+ const auth=token?{token}:{};
  const [zip,checksum]=await Promise.all([
-  request(release.archive.url,{maxBytes:MAX_ZIP,accept:'application/octet-stream'}),
-  request(release.checksum.url,{maxBytes:10000,accept:'application/octet-stream'})
+  request(release.archive.url,{maxBytes:MAX_ZIP,accept:'application/octet-stream',...auth}),
+  request(release.checksum.url,{maxBytes:10000,accept:'application/octet-stream',...auth})
  ]);
  if(zip.length!==release.archive.size)throw Error('Library archive size does not match release metadata.');
  const digest=crypto.createHash('sha256').update(zip).digest('hex');
