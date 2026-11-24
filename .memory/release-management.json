@@ -40,6 +40,11 @@
       "id": "RELEASE-0005",
       "status": "accepted",
       "decision": "Development builds publish only to their authoritative development source repositories. Retire the obsolete personal-account distribution mirrors; extension and Library release discovery use the approved AIA Malaysia repositories, with existing GitHub credentials restricted to approved API paths."
+    },
+    {
+      "id": "RELEASE-0006",
+      "status": "accepted",
+      "decision": "AIA Malaysia GitHub Actions remain disabled. Development CI creates versioned source-only PRs and publishes verified artifacts directly via GitHub API only after destination PR merge and source projection verification. Preserve destination workflows, never force-push or overwrite releases."
     }
   ]
 }
