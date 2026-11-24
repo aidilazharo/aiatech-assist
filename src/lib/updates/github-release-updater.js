@@ -9,13 +9,13 @@ const fs=require('node:fs/promises');
 const path=require('node:path');
 const {URL}=require('node:url');
 
-const REPO='aiamalaysia/my-fow-technology-app-techassists-dev-sdlc';
-// Public release discovery uses only the dedicated distribution repository.
-// The source repository remains the fixed source-of-truth for signed update metadata.
-const RELEASE_REPOSITORIES=Object.freeze(['aiamalaysia/extension']);
-const DEFAULT_RELEASE_URL=`https://github.com/${REPO}/releases`;
-const API=`https://api.github.com/repos/${REPO}/releases?per_page=30`;
+const startup=require('../startup-setup');
+const REPO=(()=>{const r=startup.githubRepo(startup.TRUSTED_REPOSITORIES.extension);return r.owner+'/'+r.repo;})();
+// Use the canonical aiMalaysia source Releases. Never consult distribution mirrors.
+const RELEASE_REPOSITORIES=Object.freeze([REPO]);
 const PINNED_RELEASE_URL=`https://github.com/${REPO}/releases/latest`;
+const DEFAULT_RELEASE_URL=PINNED_RELEASE_URL;
+const API=`https://api.github.com/repos/${REPO}/releases/latest`;
 /** Accept only a GitHub repository or its Releases landing URL, never an arbitrary API endpoint. */
 function parseRepositoryUrl(input=DEFAULT_RELEASE_URL){
  if(typeof input!=='string'||input.length>300)throw Error('Enter a valid GitHub repository Releases URL.');
@@ -75,16 +75,19 @@ function validUrl(url){
  if(parsed.username||parsed.password)throw Error('Credentials in update URLs are not allowed.');
  return parsed;
 }
-function getBytes(url,{maxBytes=MAX_JSON,accept='application/vnd.github+json',redirects=3}={}){
+function getBytes(url,{maxBytes=MAX_JSON,accept='application/vnd.github+json',redirects=3,token=''}={}){
  return new Promise((resolve,reject)=>{
   let u;try{u=validUrl(url);}catch(e){reject(e);return;}
   const headers={'User-Agent':'atgv-aiatech-assist-updater','Accept':accept,'X-GitHub-Api-Version':'2022-11-28'};
+  // Read-only GitHub authentication supports private aiMalaysia Releases. Never
+  // forward the token to a release-assets or GitHub CDN redirect host.
+  if(token&&u.hostname==='api.github.com')headers.Authorization='Bearer '+token;
   const request=https.get(u,{headers,timeout:15000},response=>{
    const status=response.statusCode||0;
    if([301,302,303,307,308].includes(status)&&response.headers.location){
     response.resume();if(redirects<1){reject(Error('Too many GitHub redirects.'));return;}
     const next=new URL(response.headers.location,u).toString();
-    getBytes(next,{maxBytes,accept,redirects:redirects-1}).then(resolve,reject);return;
+    getBytes(next,{maxBytes,accept,redirects:redirects-1,token:new URL(next).hostname==='api.github.com'?token:''}).then(resolve,reject);return;
    }
    if(status!==200){response.resume();reject(Error(`Public GitHub release request returned HTTP ${status}.`));return;}
    const chunks=[];let length=0;
@@ -95,31 +98,32 @@ function getBytes(url,{maxBytes=MAX_JSON,accept='application/vnd.github+json',re
   request.on('error',reject);
  });
 }
-async function fetchReleaseList({repositoryUrl=DEFAULT_RELEASE_URL,request=getBytes}={}){
+async function fetchReleaseList({repositoryUrl=DEFAULT_RELEASE_URL,request=getBytes,token=''}={}){
  const repo=parseRepositoryUrl(repositoryUrl);
+ const auth=token?{token}:{};
  // /latest excludes prereleases. Always compare the full releases list, even
  // when a stable release exists, so a newer approved prerelease is not missed.
  let stable=null;
  if(repo.api!==repo.listApi){
   try{
-   const bytes=await request(repo.api,{maxBytes:MAX_JSON});
+   const bytes=await request(repo.api,{maxBytes:MAX_JSON,...auth});
    stable=JSON.parse(bytes.toString('utf8'));
   }catch{/* No latest stable release; verified prereleases may still exist. */}
  }
- const bytes=await request(repo.listApi,{maxBytes:MAX_JSON});
+ const bytes=await request(repo.listApi,{maxBytes:MAX_JSON,...auth});
  let data;try{data=JSON.parse(bytes.toString('utf8'));}catch{throw Error('Invalid GitHub Releases JSON.');}
  if(data&&data.message&&!Array.isArray(data))throw Error('GitHub Releases unavailable. Check connection and permissions.');
  if(!Array.isArray(data))throw Error('Invalid GitHub Releases response.');
  return {repo,releases:stable?[...data,stable]:data};
 }
-async function latestRelease({version,repositoryUrl=DEFAULT_RELEASE_URL,request=getBytes,includeCurrent=false}={}){
- const {repo,releases}=await fetchReleaseList({repositoryUrl,request});
+async function latestRelease({version,repositoryUrl=DEFAULT_RELEASE_URL,request=getBytes,includeCurrent=false,token=''}={}){
+ const {repo,releases}=await fetchReleaseList({repositoryUrl,request,token});
  return selectRelease(releases,version,repo.url,{includeCurrent});
 }
-async function latestAcrossRepositories({version,request=getBytes,includeCurrent=true}={}){
- const results=await Promise.allSettled(RELEASE_REPOSITORIES.map(repository=>fetchReleaseList({repositoryUrl:`https://github.com/${repository}/releases/latest`,request})));
+async function latestAcrossRepositories({version,request=getBytes,includeCurrent=true,token=''}={}){
+ const results=await Promise.allSettled(RELEASE_REPOSITORIES.map(repository=>fetchReleaseList({repositoryUrl:`https://github.com/${repository}/releases/latest`,request,token})));
  const errors=results.flatMap((result,index)=>result.status==='rejected'?[RELEASE_REPOSITORIES[index]+': '+String(result.reason?.message||result.reason)]:[]);
- if(errors.length===results.length)throw Error('Cannot check public extension releases: '+errors.join('; '));
+ if(errors.length===results.length)throw Error('Cannot check aiMalaysia Extension Releases: '+errors.join('; '));
  const found=[];
  for(const result of results.filter(x=>x.status==='fulfilled')){
   const {repo,releases}=result.value;
@@ -145,16 +149,17 @@ function verifyChecksum(checksumBytes,assetBytes,filename){
  if(!matching)throw Error('VSIX checksum verification failed; the upgrade was not installed.');
  return digest;
 }
-async function downloadVerified(release,{directory,request=getBytes,onProgress=async()=>{}}={}){
+async function downloadVerified(release,{directory,request=getBytes,onProgress=async()=>{},token=''}={}){
  if(!release||!directory)throw Error('Verified release and local staging directory required.');
  const filename=`atgv-aiatech-assist-${release.version}.vsix`;
  const repo=parseRepositoryUrl(release.releaseUrl||DEFAULT_RELEASE_URL);
  if(release.repository&&release.repository!==repo.repository)throw Error('Release repository does not match its source.');
  if(!validAsset(release.asset,filename,repo.repository)||!validAsset(release.checksum,'vsix.sha256',repo.repository))throw Error('Release assets are not trusted GitHub API assets.');
  await onProgress('downloading');
+ const auth=token?{token}:{};
  const [vsix,checksum]=await Promise.all([
-  request(release.asset.url,{maxBytes:MAX_ASSET,accept:'application/octet-stream'}),
-  request(release.checksum.url,{maxBytes:10000,accept:'application/octet-stream'})
+  request(release.asset.url,{maxBytes:MAX_ASSET,accept:'application/octet-stream',...auth}),
+  request(release.checksum.url,{maxBytes:10000,accept:'application/octet-stream',...auth})
  ]);
  if(vsix.length!==release.asset.size)throw Error('Downloaded VSIX size does not match the release metadata.');
  await onProgress('verifying');
