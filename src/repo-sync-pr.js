@@ -543,6 +543,13 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   }
   // Stage as git add . would, then prevent any unexpected file from being committed.
   await runner('git',['add','-A','--','.'],{cwd:destRoot});
+  // Abort if ignore rules prevented any required binary/manifest from being indexed.
+  if(releaseFiles.length){
+   const tracked=await runner('git',['ls-files','--cached','-z','--',...releaseFiles],{cwd:destRoot});
+   const indexed=new Set(tracked.split('\0').filter(Boolean));
+   if(releaseFiles.some(file=>!indexed.has(file)))
+    throw Error('Release artifacts were ignored or excluded from Git staging; no PR was published.');
+  }
   const staged=await runner('git',['diff','--cached','--name-only','-z'],{cwd:destRoot});
   const changedFiles=staged.split('\0').filter(Boolean);
   const allowed=new Set([...files,...releaseFiles]);
