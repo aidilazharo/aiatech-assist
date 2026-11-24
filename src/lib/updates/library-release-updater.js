@@ -87,7 +87,13 @@ async function downloadVerified(release,{directory,request=updater.getBytes,toke
  }))throw Error('Library source ZIP SHA-256 checksum verification failed.');
  await fs.mkdir(directory,{recursive:true});
  const file=path.join(directory,release.filename);
- await fs.writeFile(file,zip,{mode:0o600,flag:'wx'});
+ try{await fs.writeFile(file,zip,{mode:0o600,flag:'wx'});}
+ catch(error){
+  if(error.code!=='EEXIST')throw error;
+  const cached=await fs.readFile(file);
+  if(crypto.createHash('sha256').update(cached).digest('hex')!==digest)
+   throw Error('Existing staged Library ZIP differs from verified source Release.');
+ }
  return file;
 }
 module.exports={REPO,RELEASE_REPOSITORIES,LATEST_URL,API_LATEST,API_LIST,latest,latestAcrossRepositories,select,downloadVerified,trustedAsset};
