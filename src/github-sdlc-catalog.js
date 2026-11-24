@@ -10,7 +10,7 @@ const { requestJson } = require('./clients');
 const { githubIpAllowlistHint } = require('./github-ip-allowlist');
 const {compareVersions}=require('./library-semver');
 const legacyOfflineCleanup=require('./legacy-offline-library-cleanup');
-const CANONICAL_REPO = 'https://github.com/example-org/tech-stacks-skills';
+const CANONICAL_REPO = require('./lib/startup-setup').TRUSTED_REPOSITORIES.library;
 const DEFAULT_CONFIG = Object.freeze({ repositoryUrl: '', ref: 'main', authentication: 'github', autoCheck: true, });
 const MAX_FILES = 600, MAX_FILE_BYTES = 1024 * 1024, MAX_CATALOG_BYTES = 24 * 1024 * 1024;
 const API_HEADERS = { 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
