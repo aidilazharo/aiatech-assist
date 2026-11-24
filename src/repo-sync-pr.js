@@ -280,7 +280,7 @@ async function inspectSourceCode(cloned,files){
 }
 async function readSourceFacts({cloned,source,chosenBranch,sha,sourceMessage,files,destination,base,sourceCommitFiles=[]}){
  let project={};
- if(files.includes('package.json'))try{
+ try{
   const pkg=JSON.parse(await fs.readFile(path.join(cloned,'package.json'),'utf8'));
   project={name:cleanAiField(pkg.name,80),version:cleanAiField(pkg.version,35),description:cleanAiField(pkg.description,180)};
  }catch{}
@@ -395,6 +395,10 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   const sourceMessage=(await runner('git',['log','-1','--pretty=%B'],{cwd:cloned})).trim();
   if(!sourceMessage||sourceMessage.length>12000)throw Error('Repo A commit message is missing or too large.');
   files=await trackedFiles(cloned,scope);
+  // Resolve the latest published source GitHub release, including prereleases.
+  // Source and release are pinned across review and publication.
+  const release=typeof githubApi.getLatestRelease==='function'
+   ?await githubApi.getLatestRelease(source,sourcePat):null;
   const commitPaths=await runner('git',['show','--format=','--name-only','HEAD'],{cwd:cloned}).catch(()=> '');
   const eligible=new Set(files);
   const sourceCommitPaths=[...new Set(String(commitPaths||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean))];
@@ -452,11 +456,16 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
     ...proposed,sourceSha:sha,baseSha,sourceBranch:chosenBranch,sourceRepo:source.name,
     destinationRepo:destination.name,base,copyScope:scope,
     sourcePrUrl:sourcePr?.url||'',fileCount:files.length,sourceCode:facts.codeOverview,
+    codeVersion:facts.project.version||'',release,
     sourceCommitFiles,excludedSourceCommitFiles,
     notice:'Suggestions use verified source code structure and latest source commit. No Repo B files were changed.'
    }};
   }
   if(approvedReview){
+   // A changed release or source version invalidates an earlier approval.
+   if(JSON.stringify(approvedReview.release||null)!==JSON.stringify(release||null)||
+    (approvedReview.codeVersion||'')!==(facts.project.version||''))
+    throw Error('Source release or application version changed since review. Pull & Study Again.');
    if(approvedReview.sourceSha!==sha||approvedReview.base!==base||
     approvedReview.sourceBranch!==chosenBranch||
     approvedReview.sourceRepo?.toLowerCase()!==source.name.toLowerCase()||
@@ -496,11 +505,47 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
    await fs.mkdir(path.dirname(dest),{recursive:true});
    await fs.copyFile(path.join(cloned,...rel.split('/')),dest);
   }
+  // Release assets are copied with the reviewed code in the same commit.
+  const releaseFiles=[];
+  if(release?.assets?.length){
+   if(typeof githubApi.downloadReleaseAsset!=='function')
+    throw Error('Cannot include release assets: download support is unavailable.');
+   await notify('release','Downloading '+release.assets.length+' verified asset(s) from '+release.tag+'…');
+   const staging=path.join(temp,'verified-release');
+   await fs.mkdir(staging,{recursive:true});
+   const verified=[];
+   for(const asset of release.assets){
+    const local=path.join(staging,asset.name);
+    const item=await githubApi.downloadReleaseAsset(source,sourcePat,asset,local);
+    if(!item||item.name!==asset.name||item.size!==asset.size||
+       !/^sha256:[a-f0-9]{64}$/.test(String(item.digest||''))||
+       (asset.digest&&asset.digest!==item.digest))
+     throw Error('Downloaded release artifact did not match the reviewed asset: '+asset.name);
+    const relative='release-artifacts/'+release.tag+'/'+asset.name;
+    const target=await destinationFileSafe(destRoot,relative);
+    await fs.mkdir(path.dirname(target),{recursive:true});
+    await fs.copyFile(local,target);
+    releaseFiles.push(relative);verified.push(item);
+   }
+   const manifestRelative='release-artifacts/'+release.tag+'/release.json';
+   if(releaseFiles.includes(manifestRelative))throw Error('Release contains a reserved manifest filename.');
+   const manifestTarget=await destinationFileSafe(destRoot,manifestRelative);
+   await fs.mkdir(path.dirname(manifestTarget),{recursive:true});
+   await fs.writeFile(manifestTarget,JSON.stringify({
+    schema:1,sourceRepository:source.name,sourceBranch:chosenBranch,
+    sourceCommit:sha,codeVersion:facts.project.version||null,
+    releaseTag:release.tag,releaseName:release.name,releaseUrl:release.url,
+    releaseTargetCommitish:release.targetCommitish,releasePublishedAt:release.publishedAt,
+    matchesSourceCommit:release.targetCommitish===sha,
+    assets:verified
+   },null,2)+'\n','utf8');
+   releaseFiles.push(manifestRelative);
+  }
   // Stage as git add . would, then prevent any unexpected file from being committed.
   await runner('git',['add','-A','--','.'],{cwd:destRoot});
   const staged=await runner('git',['diff','--cached','--name-only','-z'],{cwd:destRoot});
   const changedFiles=staged.split('\0').filter(Boolean);
-  const allowed=new Set(files);
+  const allowed=new Set([...files,...releaseFiles]);
   if(changedFiles.some(file=>!allowed.has(file)))
    throw Error('Unexpected files staged outside the approved copy scope. No commit or push was made.');
   if(!changedFiles.length){
@@ -521,12 +566,16 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   await runner('git',['push','--force-with-lease=refs/heads/'+branch+':','--set-upstream','origin',branch],{cwd:destRoot,timeout:180000,env:destinationEnv});
   pushed=true;
   const result={branch,sourceBranch:chosenBranch,sourceSha:sha,sourceRepo:source.name,destinationRepo:destination.name,
-   base,fileCount:changedFiles.length,commitMessage,sourcePrUrl:sourcePr?.url||'',excludedSourceCommitFiles};
+   base,fileCount:changedFiles.length,codeVersion:facts.project.version||'',releaseTag:release?.tag||'',
+   releaseAssetCount:release?.assets?.length||0,releaseArtifactPaths:releaseFiles,commitMessage,
+   sourcePrUrl:sourcePr?.url||'',excludedSourceCommitFiles};
   if(branchOnly)return result;
   const details=prDetails({source,destination,sha,scope,base,branch,count:changedFiles.length,changedFiles,sourceBranch:chosenBranch,sourceMessage,sourceCommitFiles});
   let body=details.body;
   if(approvedReview){
    body=String(approvedReview.prDescription).trim();
+   if(release?.assets?.length&&body.split(/\r?\n/).filter(Boolean).length<10)
+    body+='\n- Release artifacts: '+release.tag+' ('+release.assets.length+' assets, with SHA-256 manifest)';
    await notify('pr','Using the approved PR title and description…');
   }else if(sourcePr){
    body=formatPrDetails(sourcePr.body,readableTitle(sourceMessage,sourceCommitFiles));
