@@ -8322,12 +8322,15 @@ function renderMyWorkRoster(rows){
   {key:'tasksText',label:'Assigned Jira Tasks',render:taskCell}
  ],{pageSize:5,sortKey:'name',label:'My Work users and assigned Jira issues'});
 }
+let rosterAddRequest=0,rosterAddProject='';
+function setRosterAddBusy(value){const form=$('overviewUserAddForm');for(const control of form.querySelectorAll('input,button'))control.disabled=value;$('overviewUserRefresh').disabled=value;form.setAttribute('aria-busy',String(value));}
 $('overviewUserAddForm').addEventListener('submit',event=>{
  event.preventDefault();
  const id=String($('overviewUserAccountId').value||'').trim();
- if(!id)return;
- $('overviewUserStatus').textContent='Verifying Jira account before registration…';
- send('myWorkRosterAddUser',{projectId:activeId,accountId:id});
+ if(!id||!activeId||rosterAddProject===activeId)return;
+ rosterAddProject=activeId;setRosterAddBusy(true);
+ $('overviewUserStatus').textContent='Verifying Jira account and saving to Confluence…';
+ send('myWorkRosterAddUser',{projectId:activeId,accountId:id,requestId:++rosterAddRequest});
 });
 $('overviewUserRefresh').addEventListener('click',()=>{
  $('overviewUserStatus').textContent='Loading verified My Work users from Confluence…';
@@ -8335,13 +8338,17 @@ $('overviewUserRefresh').addEventListener('click',()=>{
 });
 window.addEventListener('message',event=>{
  const m=event.data||{};
+ if(rosterAddProject&&rosterAddProject!==activeId){rosterAddProject='';setRosterAddBusy(false);}
  if(!activeId||m.projectId!==activeId)return;
  if(m.type==='myWorkRoster'){
+  if(rosterAddProject===activeId&&m.requestId!==rosterAddRequest)return;
   renderMyWorkRoster(m.rows);
-  if(m.reason==='added-user')$('overviewUserAccountId').value='';
-  $('overviewUserStatus').textContent=(m.rows?.length||0)+' users · assigned Jira tasks refreshed'+(m.assignmentWarning?' · '+m.assignmentWarning:'')+(m.registryWarning?' · '+m.registryWarning:'')+(m.databaseId?' · Database v2 #'+m.databaseId:'')+' · Confluence space '+(m.spaceKey||'')+(m.updatedAt?' · '+new Date(m.updatedAt).toLocaleString():'');
+  if(m.reason==='added-user'&&m.requestId===rosterAddRequest){rosterAddProject='';setRosterAddBusy(false);$('overviewUserAccountId').value='';}
+  $('overviewUserStatus').textContent=(m.reason==='added-user'?(m.registrationAction==='updated'?'Updated ':'Added ')+(m.registeredName||m.registeredAccountId)+' · ':'')+(m.rows?.length||0)+' users · assigned Jira tasks refreshed'+(m.assignmentWarning?' · '+m.assignmentWarning:'')+(m.registryWarning?' · '+m.registryWarning:'')+(m.databaseId?' · Database v2 #'+m.databaseId:'')+' · Confluence space '+(m.spaceKey||'')+(m.updatedAt?' · '+new Date(m.updatedAt).toLocaleString():'');
  }else if(m.type==='myWorkRosterError'){
-  $('overviewUserStatus').textContent='Confluence roster unavailable: '+(m.message||'Check space configuration and permissions.');
+  if(rosterAddProject===activeId&&m.requestId!==rosterAddRequest)return;
+  if(rosterAddProject===activeId){rosterAddProject='';setRosterAddBusy(false);}
+  $('overviewUserStatus').textContent='My Work user operation failed: '+(m.message||'Check space configuration and permissions.');
  }
 });
 

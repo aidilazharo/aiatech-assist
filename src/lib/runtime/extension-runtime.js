@@ -2015,12 +2015,13 @@ async function publishBlueprintState(){
   await dashboard.webview.postMessage({type:'blueprintState',register:blueprints,assessment:deliveryBlueprint.assess(brs,designs,blueprints)});
 }
 let presenceQueue=Promise.resolve();
+function enqueueRosterOperation(operation){const pending=presenceQueue.catch(()=>{}).then(operation);presenceQueue=pending.catch(()=>{});return pending;}
 function queueMyWorkPresence(roleId){
  const projectId=activeProject?.id;
  if(!projectId)return;
  // Serialize versioned Confluence edits across role switches. Never overwrite a
  // concurrent writer; the presence adapter re-fetches after version conflicts.
- presenceQueue=presenceQueue.catch(()=>{}).then(async()=>{
+ enqueueRosterOperation(async()=>{
   if(activeProject?.id!==projectId)return;
   const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
   const key=validProjectKey(config.get('jira.projectKey'));
@@ -8857,34 +8858,28 @@ async function handleDashboardMessage(msg){
          }
          break;
        }
-       case 'myWorkRosterAddUser':{
-         try{
-           requireOpened();requireOnline();
-           if(msg.projectId!==activeProject.id)throw Error('Project changed. Reopen the roster.');
-           const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
-           const projectKey=validProjectKey(config.get('jira.projectKey'));
-           const result=await myWorkPresence.addUser(config,token,{projectKey,accountId:msg.accountId});
-           await dashboard?.webview.postMessage({type:'myWorkRoster',projectId:activeProject.id,...result});
-         }catch(error){
-           await dashboard?.webview.postMessage({type:'myWorkRosterError',projectId:activeProject?.id,message:String(error.message||error).slice(0,280)});
-         }
-         break;
-       }
+       case 'myWorkRosterAddUser':
        case 'myWorkRosterRefresh':{
+         const projectId=msg.projectId,adding=msg.command==='myWorkRosterAddUser';
          try{
            requireOpened();requireOnline();
-           if(msg.projectId&&msg.projectId!==activeProject.id)throw Error('Project changed.');
+           if(projectId!==activeProject.id)throw Error('Project changed. Reopen the roster.');
            const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
            const key=validProjectKey(config.get('jira.projectKey'));
-           const used=context.workspaceState.get('atgvAssist.usedRoles.'+activeProject.id,[])||[];
+           const used=context.workspaceState.get('atgvAssist.usedRoles.'+projectId,[])||[];
            const registeredRole=String(msg.roleId||'');
-           // Refresh can reconcile the user's actual selected role, not just
-           // read stale Confluence HTML. Never infer a role from an email/name.
-           const snapshot=registeredRole&&used.includes(registeredRole)&&myWorkPresence.ROLES[registeredRole]
-             ?await myWorkPresence.visit(config,token,{projectKey:key,roleId:registeredRole})
-             :await myWorkPresence.snapshot(config,token,key);
-           await dashboard?.webview.postMessage({type:'myWorkRoster',projectId:activeProject.id,...snapshot});
-         }catch(error){await dashboard?.webview.postMessage({type:'myWorkRosterError',projectId:activeProject?.id,message:String(error.message||error).slice(0,280)});}
+           await enqueueRosterOperation(async()=>{
+            if(activeProject?.id!==projectId)throw Error('Project changed before roster operation.');
+            const result=adding
+             ?await myWorkPresence.addUser(config,token,{projectKey:key,accountId:msg.accountId})
+             :registeredRole&&used.includes(registeredRole)&&myWorkPresence.ROLES[registeredRole]
+              ?await myWorkPresence.visit(config,token,{projectKey:key,roleId:registeredRole})
+              :await myWorkPresence.snapshot(config,token,key);
+            if(activeProject?.id===projectId)await dashboard?.webview.postMessage({type:'myWorkRoster',projectId,...result,requestId:msg.requestId});
+           });
+         }catch(error){
+           if(activeProject?.id===projectId)await dashboard?.webview.postMessage({type:'myWorkRosterError',projectId,requestId:msg.requestId,message:String(error.message||error).slice(0,280)});
+         }
          break;
        }
        case 'pmJiraTransition':{
