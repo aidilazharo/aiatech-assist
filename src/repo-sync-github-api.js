@@ -150,7 +150,7 @@ function acceptedReleaseAsset(asset){
  return Number.isSafeInteger(asset.size)&&asset.size>0&&asset.size<=MAX_RELEASE_ASSET;
 }
 async function getLatestRelease(repo,token,request=githubRequest){
- const res=await request(repo,token,'GET','/releases?per_page=25');
+ const res=await request(repo,token,'GET','/releases?per_page=10');
  if(res.status===404)throw Error('Source GitHub Releases cannot be read (HTTP 404).');
  if(res.status!==200)throw Error('Source GitHub Releases lookup failed (HTTP '+res.status+').');
  if(!Array.isArray(res.body))throw Error('Source GitHub release response is invalid.');
