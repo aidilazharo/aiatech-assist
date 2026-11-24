@@ -3644,11 +3644,11 @@ async function generateBusinessRequirements(options={}){
  const currentDrafts=(register.brs||[]).filter(br=>br.status==='draft'&&!staleDrafts.includes(br));
  const resolutionIds=options.autoResolve===true?new Set(Array.isArray(options.targetBrIds)?options.targetBrIds:[]):null;
  const resolutionDrafts=resolutionIds?[...resolutionIds].map(id=>currentDrafts.find(br=>br.id===id)):[];
- if(resolutionIds&&(!resolutionIds.size||resolutionDrafts.some(br=>!br||br.approvedContent)))
-  throw Error('AI repair is permitted only for currently editable, unapproved BR drafts. Approved revisions require controlled human review.');
- if(resolutionIds&&staleDrafts.length)throw Error('Discovery or source evidence has changed. Regenerate outdated drafts before AI repair.');
+ if(resolutionIds&&(!resolutionIds.size||resolutionDrafts.some(br=>!br)))
+  throw Error('AI repair requires current draft revisions. Regenerate outdated affected drafts before AI repair.');
+ if(resolutionIds)for(const br of resolutionDrafts)await requireBAOwner('ba-br-'+br.id);
  if(!automatic&&currentDrafts.length&&!options.selective&&!options.regenerate)throw Error('Review or approve the current Business Requirements drafts, or choose Regenerate Proposal to improve them.');
- if(options.regenerate&&(!(resolutionIds?resolutionDrafts:currentDrafts).length||(resolutionIds?resolutionDrafts:currentDrafts).some(br=>br.approvedContent)))throw Error('Regeneration requires editable, unapproved drafts. Start a controlled revision for approved requirements.');
+ if(options.regenerate&&(!(resolutionIds?resolutionDrafts:currentDrafts).length||!resolutionIds&&currentDrafts.some(br=>br.approvedContent)))throw Error('Regeneration requires editable, unapproved drafts. Start a controlled revision for approved requirements.');
  if(!automatic&&!resolutionIds&&staleDrafts.length){
   const action='Regenerate Outdated Drafts';
   const decision=await uiWarning(`${staleDrafts.length} outdated draft(s) will be replaced by newly generated content. Previous drafts, including manual edits, will be kept in revision history. Continue?`,{modal:true},action);
@@ -3807,7 +3807,7 @@ async function generateBusinessRequirements(options={}){
  const currentSaved=await discovery.load(registry,projectId);if(currentSaved.revision!==saved.revision)throw Error('Discovery changed while generating BRs. Retry.');
  const actor=automatic?ownership.actor:await verifiedBAActor();
  const saveDrafts=requirements=>brWorkflow.generated(registry,projectId,register.revision,{
-  discoveryRevision:saved.revision,requirements,riskAccepted,targetBrIds:focused,automatic,actor
+  discoveryRevision:saved.revision,requirements,riskAccepted,targetBrIds:focused,automatic,actor,repairDraft:options.autoResolve===true
  });
  let updated;
  try{updated=await saveDrafts(proposed);}
@@ -4126,8 +4126,11 @@ async function resolveBAAttention(msg){
   if(before.reviewRevision!==before.discoveryRevision||!before.reviewRevision)throw Error('Complete current Discovery and AI Review first.');
   const findings=currentAttentionFindings(before);
   if(!findings.length)throw Error('No current quality findings. Refresh Generated Requirements.');
-  const selected=findings.filter(row=>before.brs.some(br=>br.id===row.id&&br.status==='draft'&&!br.approvedContent));
-  if(!selected.length)throw Error('Findings require an editable, unapproved draft or a human business decision.');
+  const ownership=await listOwnership();
+  if(!ownership.me||ownership.cached||ownership.scope==='local')throw Error('AI repair requires live verified ownership. Reconnect to Jira and Confluence.');
+  const owned=new Set(ownership.documents.filter(row=>row.ownerId===ownership.me).map(row=>row.documentId));
+  const selected=findings.filter(row=>owned.has('ba-br-'+row.id)&&before.brs.some(br=>br.id===row.id&&br.status==='draft'));
+  if(!selected.length)throw Error('No affected draft is owned by you. Request transfer or ask the owner to resolve it.');
   for(const item of selected)await requireBAOwner('ba-br-'+item.id);
   run={projectId,controller:new AbortController()};baAttentionRun=run;
   const signal=run.controller.signal,originalIds=selected.map(row=>row.id);
@@ -4148,7 +4151,7 @@ async function resolveBAAttention(msg){
    const checked=await brWorkflow.load(registry,projectId);
    const remaining=currentAttentionFindings(checked).filter(row=>originalIds.includes(row.id));
    if(!remaining.length||impact.length>0&&impact.every(row=>row.change==='unchanged'))break;
-   targets=remaining.filter(row=>checked.brs.some(br=>br.id===row.id&&br.status==='draft'&&!br.approvedContent)).map(row=>row.id);
+   targets=remaining.filter(row=>checked.brs.some(br=>br.id===row.id&&br.status==='draft')).map(row=>row.id);
    if(!targets.length)break;
   }
   const final=await brWorkflow.load(registry,projectId);
@@ -4163,6 +4166,7 @@ async function resolveBAAttention(msg){
  }catch(error){
   const cancelled=error?.name==='AbortError'||run?.controller.signal.aborted;
   const message=cancelled?'AI repair stopped; saved drafts preserved, Jira unchanged.':'AI repair failed: '+String(error?.message||error).slice(0,1000);
+  await recordBAProcess({stage:'requirements',action:'resolve-with-ai',status:cancelled?'cancelled':'failed',details:message});
   await report('baAutoResolveResult',message,{failed:!cancelled,cancelled});
   if(!cancelled)await notice(message);
  }finally{if(baAttentionRun===run)baAttentionRun=null;}

@@ -5783,6 +5783,7 @@ function sourceActionIcon(kind){
 function renderSourceDocuments(){
  const root=$('sourceDocuments');root.replaceChildren();
  const fileToolbar=$('baAutoFileActions');if(fileToolbar)fileToolbar.replaceChildren();
+ const deleteToolbar=$('baAutoDeleteAction');if(deleteToolbar)deleteToolbar.replaceChildren();
  renderSourcePreflight();
  const files=brState?.sourceDocuments||[];
  // Older interrupted mappings could persist a source selection without a
@@ -5828,6 +5829,7 @@ function renderSourceDocuments(){
   actions.append(replace,remove);
   // Keep document tools in a single toolbar; preserve their original click handlers.
   if(fileToolbar&&$('discoveryView')?.classList.contains('ba-automatic-view')){
+   if(deleteToolbar){remove.classList.add('ba-auto-title-icon');deleteToolbar.append(remove);}
    fileToolbar.append(actions);item.append(selector,info);
   }else item.append(selector,info,actions);
   root.append(item);

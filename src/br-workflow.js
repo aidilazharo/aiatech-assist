@@ -1058,7 +1058,7 @@ function reviewGate(next,{allowRiskAcknowledgement=false,actor='Business Analyst
  event(next,'ai-review-risks-acknowledged',{discoveryRevision:next.discoveryRevision,actor:String(actor||'Business Analyst').slice(0,120),critical:critical.length,count:findings.length,sourceFingerprint:String(next.importDigest||'')});
 }
 
-async function generated(registry,id,revision,{discoveryRevision,requirements,riskAccepted=false,automatic=false,targetBrIds=null,actor='Business Analyst'}){
+async function generated(registry,id,revision,{discoveryRevision,requirements,riskAccepted=false,automatic=false,targetBrIds=null,actor='Business Analyst',repairDraft=false}){
  const proposals=validateProposal(requirements);
  const snapshot=await load(registry,id);
  const selected=(snapshot.sourceDocuments||[]).filter(x=>(snapshot.processedSources||[]).includes(x.digest));
@@ -1070,6 +1070,7 @@ async function generated(registry,id,revision,{discoveryRevision,requirements,ri
   const selective=targetBrIds!==null;
   const selected=selective?new Set(targetBrIds):null;
   if(selective&&(!Array.isArray(targetBrIds)||!targetBrIds.length||targetBrIds.some(x=>!next.brs.some(b=>b.id===x))))throw Error('Invalid selective regeneration target.');
+  if(repairDraft&&(!automatic||!selective||[...selected].some(id=>!next.brs.some(br=>br.id===id&&br.status==='draft'&&!br.archivedFromRestart))))throw Error('AI repair requires current draft revisions.');
   for(const [proposalIndex,proposal] of proposals.entries()){
    const verified=evidence[proposalIndex]||[];
    const questionRefs=changeEngine.QUESTION_KEYS.filter(key=>{const answer=next.discoveryAnswers?.[key]||'';return answer&&overlap(answer,[proposal.title,proposal.objective,proposal.scope,proposal.acceptanceCriteria].join(' '))>=.2;});
@@ -1098,17 +1099,17 @@ async function generated(registry,id,revision,{discoveryRevision,requirements,ri
    if(existing){
     used.add(existing.id);
     const candidate=automatic?{...proposal,...existing.baManualFields}:proposal;
-    const stable={...stableProposal(candidate,existing),id:existing.id},previous=existing.approvedContent||existing;
+    const stable={...stableProposal(candidate,existing),id:existing.id},previous=repairDraft?existing:existing.approvedContent||existing;
     const unchanged=normalizedContent(previous)===normalizedContent(stable);
     if(unchanged){
      // An identical regenerated draft is not a modification. Preserve its
      // saved state and history while refreshing verified source references.
-     if(existing.approvedContent){
+     if(existing.approvedContent&&!repairDraft){
       Object.assign(existing,stable,{evidence:verified,questionRefs,status:'approved',needsRefresh:false,staleReason:'',draftSavedAt:existing.draftSavedAt||null,source:{name:next.importName,digest:next.importDigest,discoveryRevision}});
      }else{
       Object.assign(existing,stable,{evidence:verified,questionRefs,status:'draft',source:{name:next.importName,digest:next.importDigest,discoveryRevision}});
      }
-     impact.push({id:existing.id,title:stable.title,change:'unchanged',approved:!!existing.approvedContent});
+     impact.push({id:existing.id,title:stable.title,change:'unchanged',approved:!repairDraft&&!!existing.approvedContent});
     }else{
      if(existing.status==='draft'){
       existing.previousDrafts=(existing.previousDrafts||[]).concat({at:new Date().toISOString(),discoveryRevision:existing.source?.discoveryRevision||'',draftSavedAt:existing.draftSavedAt||null,content:structuredClone(contentOf(existing))}).slice(-20);

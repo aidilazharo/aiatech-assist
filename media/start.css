@@ -3246,3 +3246,9 @@ body:not(.gate-mode) .app-layout{
 #discoveryView #baAutoHistoryContent .ba-auto-history-empty[hidden]{display:none!important}
 #discoveryView #baAutoFeedback #baProcessLogStatus{display:block;overflow-wrap:anywhere;font-size:12px}
 #discoveryView #baAutoFeedback #baProcessLogStatus:empty{display:none}
+
+/* Keep source deletion beside the other document icons. */
+#discoveryView #baAutoDeleteAction{display:flex;align-items:center;flex:0 0 auto;min-width:0}
+#discoveryView #baAutoDeleteAction:empty{display:none}
+#discoveryView #baAutoDeleteAction button{color:var(--vscode-errorForeground,#ff8c8c);border-color:var(--vscode-inputValidation-errorBorder,#a54b56)}
+#discoveryView #baAutoDeleteAction button svg{width:17px;height:17px;pointer-events:none}

@@ -444,6 +444,7 @@ function html(webview,{resumeLibrary=false}={}){
                     <div id="baAutoFileActions" class="ba-auto-file-actions" aria-label="Uploaded source actions"></div>
                   </div>
                 </details>
+                <div id="baAutoDeleteAction" class="ba-auto-delete-action"></div>
               </div>
             </div>
           </div>
