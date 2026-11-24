@@ -1,7 +1,5 @@
 'use strict';
-// Trusted ATGV source repositories are selected by the configured GitHub owner.
-// Release mirrors are optional and must never be mistaken for a writable source.
-const FIXED_LIBRARY_REPOSITORY='https://github.com/aidilazharo/tech-stacks-skills'; // legacy helper
+// Installed ATGV uses the approved AIA Malaysia distribution repositories.
 const DEFAULTS=Object.freeze({
  jiraUrl:'https://aiamy-jira-azure.atlassian.net',
  email:'user.name@aia.com',
@@ -12,16 +10,9 @@ const RELEASES=Object.freeze({
  extension:'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc',
  library:'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills'
 });
-const SOURCE_REPOS=Object.freeze({
- aidilazharo:Object.freeze({
-  extension:'https://github.com/aidilazharo/aiatech-assist',
-  library:FIXED_LIBRARY_REPOSITORY
- }),
- aiamalaysia:Object.freeze({
-  extension:'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc',
-  library:'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills'
- })
-});
+const FIXED_LIBRARY_REPOSITORY=RELEASES.library;
+// Preserve existing account onboarding compatibility, but never route software to the legacy owner.
+const SOURCE_REPOS=Object.freeze({aidilazharo:RELEASES,aiamalaysia:RELEASES});
 function githubRepo(input){
  const url=new URL(String(input||'').trim());
  if(url.protocol!=='https:'||url.hostname!=='github.com'||url.username||url.password||url.search||url.hash)throw Error('GitHub repository must use https://github.com/owner/repository.');

@@ -1,6 +1,7 @@
 'use strict';
 const vscode=require('vscode');
 const path=require('node:path');
+const {FIXED_LIBRARY_REPOSITORY}=require('../startup-setup');
 function createDashboardHtml(getContext,getVendorAssets){
 function html(webview,{resumeLibrary=false}={}){
   const context=getContext();
@@ -277,7 +278,7 @@ function html(webview,{resumeLibrary=false}={}){
     <details class="ext-settings-accordion" id="settingsCatalogGroup" data-requirement="optional"><summary><span id="catalogHeading">3. GitHub Library</span><span class="ext-settings-badge" id="settingsCatalogGroupState" data-state="optional">Optional</span></summary><div class="ext-settings-content"><section id="sdlcCatalogSection" aria-labelledby="catalogHeading">
       <p class="muted">The Library tracks the approved GitHub main branch.</p>
       <form id="catalogForm"><div class="form-grid">
-        <div class="field full"><label for="catalogRepoUrl">Fixed SDLC Library Repository</label><input id="catalogRepoUrl" type="url" value="https://github.com/aidilazharo/tech-stacks-skills" readonly maxlength="600" autocomplete="off" required></div>
+        <div class="field full"><label for="catalogRepoUrl">Fixed SDLC Library Repository</label><input id="catalogRepoUrl" type="url" value="${FIXED_LIBRARY_REPOSITORY}" readonly maxlength="600" autocomplete="off" required></div>
         <input id="catalogRef" type="hidden" value="main">
         <div class="field"><label for="catalogAuth">Authentication</label><select id="catalogAuth"><option value="github">VS Code GitHub sign-in</option><option value="token">Read-only token</option><option value="public">Public repository (no token)</option></select></div>
         <div class="field" id="catalogTokenField"><label for="catalogToken">Fine-grained GitHub token (Contents: Read)</label><input id="catalogToken" type="password" autocomplete="new-password" placeholder="Leave blank to retain secure saved token"></div>

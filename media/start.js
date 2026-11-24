@@ -893,7 +893,7 @@ function readProjectForm(){
   settings.github.branch='main';
   return {id:read('id'),name:read('name'),techStackId:selectedTechStackId,schedule:{startDate:read('projectStartDate'),endDate:read('projectEndDate')},settings};
 }
-function catalogFormConfig(){return {repositoryUrl:'https://github.com/aidilazharo/tech-stacks-skills',ref:'main',authentication:read('catalogAuth'),autoCheck:$('catalogAutoCheck').checked,offlineCache:true};}
+function catalogFormConfig(){return {repositoryUrl:read('catalogRepoUrl'),ref:'main',authentication:read('catalogAuth'),autoCheck:$('catalogAutoCheck').checked,offlineCache:true};}
 // Show the actual configured Jira email, never a guessed full name.
 function updateHeaderUserName(email){
  const address=String(email||'').trim().toLowerCase();

@@ -27,7 +27,7 @@ test('v415: webview initializes without references to removed elements',()=>{
 test('Start retains trusted Git SDLC Catalog but removes offline ZIP import actions',()=>{
  const setup=require('../src/lib/startup-setup');
  const host=read('src/lib/runtime/extension-runtime.js');
- assert.equal(setup.FIXED_LIBRARY_REPOSITORY,'https://github.com/aidilazharo/tech-stacks-skills');
+ assert.equal(setup.FIXED_LIBRARY_REPOSITORY,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills');
  assert.doesNotMatch(host,/case 'importLibraryZip':|offlineLibrary\.importZip/);
  assert.match(host,/sdlcCatalog\.syncGitWorkspace/);
  assert.match(host,/releaseRepositoryUrl:startupSetup\.RELEASES\.extension/);
