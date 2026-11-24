@@ -370,9 +370,8 @@ function startupLibraryRepository(){
  const owner=String(extensionSettings?.github?.owner||'').toLowerCase();
  if(!owner)return startupSetup.FIXED_LIBRARY_REPOSITORY;
  const source=startupSetup.SOURCE_REPOS[owner];
- // Existing project settings may use a custom GitHub repository owner. Keep
- // their Library pinned to the legacy trusted source; only the Start
- // account onboarding may change between the two verified source mappings.
+ // Untrusted project owners cannot redirect the Library away from the
+ // canonical aiMalaysia source repository.
  return source?.library||startupSetup.FIXED_LIBRARY_REPOSITORY;
 }
 function catalogConfig(){
@@ -546,7 +545,7 @@ function scheduleCatalogChecks(){
 // Fixed trusted update repositories; never use a saved URL for code updates.
 const extensionSourceRepository=require('../../../package.json').repository.url;
 const libraryReleaseUpdater=require('../updates/library-release-updater');
-const FIXED_LIBRARY_REPOSITORY='https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills';
+const FIXED_LIBRARY_REPOSITORY=startupSetup.FIXED_LIBRARY_REPOSITORY;
 let softwareUpdateTimer=null,softwareStartupTimer=null,softwareCheckBusy=false;
 let extensionRelease=null,extensionLatest=null,libraryRelease=null,extensionUpdateChecked='',extensionUpdateError='',libraryUpdateError='';
 let libraryLatest=null,libraryReleaseAvailable=false;
@@ -613,8 +612,9 @@ async function performVerifiedExtensionInstall(operation){
   };
   await postExtensionInstallProgress(operation,'downloading',...phases.downloading);
   const folder=path.join(context.globalStorageUri.fsPath,'updates');
+  const token=await githubIssueAccessToken({interactive:true});
   const vsix=await releaseUpdater.downloadVerified(operation.release,{
-   directory:folder,
+   directory:folder,token,
    onProgress:async stage=>{
     if(phases[stage])await postExtensionInstallProgress(operation,stage,...phases[stage]);
    }
@@ -678,7 +678,8 @@ async function promptExtensionRelease(release,{force=false}={}){
 async function checkExtensionRelease({prompt=false,interactive=false,forcePrompt=false}={}){
  try{
   const installed=require('../../../package.json').version;
-  const checked=await releaseUpdater.latestAcrossRepositories({version:installed,includeCurrent:true});
+  const token=await githubIssueAccessToken({interactive:false});
+  const checked=await releaseUpdater.latestAcrossRepositories({version:installed,includeCurrent:true,token});
   const result=checked.release;extensionReleaseWarnings=checked.errors;
   extensionLatest=checked.latest;extensionRelease=result&&releaseUpdater.compareVersion(result.version,installed)>0?result:null;extensionUpdateError='';extensionUpdateChecked=new Date().toISOString();
   if(prompt&&extensionRelease)await promptExtensionRelease(extensionRelease,{force:forcePrompt});
@@ -758,11 +759,14 @@ async function promptLibraryRelease(release,{force=false}={}){
 async function checkLibraryRelease({prompt=false,interactive=false,forcePrompt=false}={}){
  try{
   if(catalogBusy){libraryRelease=null;libraryUpdateError='Library update check is waiting for another catalog operation.';return null;}
-  const checked=await libraryReleaseUpdater.latestAcrossRepositories();
+  let token='';
+  try{token=await catalogToken(catalogConfig(),{interactive:false});}
+  catch{token=await githubIssueAccessToken({interactive:false});}
+  const checked=await libraryReleaseUpdater.latestAcrossRepositories({token});
   libraryRelease=checked.release;libraryLatest=checked.latest;libraryReleaseWarnings=checked.errors;
-  if(!libraryLatest)throw Error('No public Library release was found.');
-  // A distribution mirror is not a main-branch source. Never replace the
-  // verified catalogue commit/version with a mirror's older release tag.
+  if(!libraryLatest)throw Error('No aiMalaysia Library source Release was found.');
+  // Source Release archives and verified main-branch catalog synchronization
+  // use the same authoritative repository.
   catalogLastCheck=new Date().toISOString();catalogLastError='';libraryUpdateError='';
   const installedCatalog=(await catalogUiState()).installed||{};
   libraryReleaseAvailable=!!libraryRelease&&libraryUpdateVersion.compareInstalledRelease(installedCatalog,libraryRelease).available;
@@ -779,7 +783,7 @@ async function checkSoftwareUpdates({prompt=false,interactive=false,force=false,
  const config=updatePreferences();const errors=[];
  try{
   // An explicit Check Updates must also inspect the owner-selected main branch.
-  // Public release mirrors can legitimately lag and must not replace source metadata.
+  // Source Releases and the pinned main-branch catalog are checked independently.
   if(force&&!catalogBusy)await catalogCheck({interactive:false});
   await Promise.all([
    (force||config.autoCheckExtension)?checkExtensionRelease({interactive}).catch(e=>errors.push('Extension: '+e.message)):Promise.resolve(),
@@ -9389,6 +9393,15 @@ async function handleDashboardMessage(msg){
             await dashboard?.webview.postMessage({type:'catalogAction',action:'pull',success:true,message});
             await progress('completed',100,'SDLC Library up to date',message);
             activeLibraryUpdatePullRequestId=null;return;
+          }
+          // Download the latest source Release ZIP when it matches the verified
+          // main manifest. The Git commit remains the activation authority.
+          if(libraryRelease?.repository===libraryReleaseUpdater.REPO&&libraryRelease.version===remote.version){
+            await progress('running',40,'Downloading Library Release archive','Verifying the aiMalaysia source Release ZIP and SHA-256 checksum.');
+            const releaseFile=await libraryReleaseUpdater.downloadVerified(libraryRelease,{
+              directory:path.join(context.globalStorageUri.fsPath,'updates','library'),token
+            });
+            await progress('running',52,'Library Release downloaded','Verified source archive: '+path.basename(releaseFile));
           }
           await progress('running',55,'Pulling verified Library main','Cloning or fast-forwarding the selected source after verifying its commit and manifest.');
           const pulled=await sdlcCatalog.syncGitWorkspace(config,token,workspace,context.globalStorageUri.fsPath,{expectedSha:remote.sha});
