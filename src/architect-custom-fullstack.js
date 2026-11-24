@@ -14,6 +14,7 @@ const API_URL = 'http://127.0.0.1:3000/api/v1/health';
 const WEB_URL = 'http://127.0.0.1:5173/';
 let active = null;
 let last = null;
+let stopping = false;
 
 function detectPair(inspection) {
  const targets = inspection?.targets || [];
@@ -82,10 +83,11 @@ async function terminate(entry,{exec=execFileAsync}={}) {
  }
 }
 async function stop() {
- if(!active)return {stopped:false};
+ if(!active||stopping)return {stopped:false};
+ stopping=true;
  const previous=active;
  await Promise.allSettled([...previous.services].reverse().map(x=>terminate(x)));
- active=null;
+ active=null;stopping=false;
  return {stopped:true,logs:log().logs};
 }
 async function awaitHealthy(url,check,{session,fetchImpl=fetch,timeoutMs=60000}={}) {
@@ -124,17 +126,18 @@ async function run(root,{inspection,pair=detectPair(inspection),driver,onProgres
    await new Promise((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject);});
   };
   await onProgress('Starting real NestJS backend; awaiting PostgreSQL readiness…');
-  await launch('backend',backendCwd,['run','start:dev']);
+  await launch('backend',backendCwd,['run',pair.backend.scripts?.includes('start:dev')?'start:dev':pair.backend.runScript||'start:dev']);
   await awaitHealthy(API_URL,async res=>{const body=await res.json().catch(()=>null);assertRealHealth(res,body);return true;},
    {session:instance,fetchImpl});
   await onProgress('Real backend and PostgreSQL verified. Starting React/Vite frontend…');
-  await launch('frontend',frontendCwd,['run','dev','--','--host','127.0.0.1','--port','5173','--strictPort']);
+  await launch('frontend',frontendCwd,['run',pair.frontend.runScript||'dev','--','--host','127.0.0.1','--port','5173','--strictPort']);
   await awaitHealthy(WEB_URL,async res=>{
    const html=await res.text().catch(()=>'');
    return res.ok && /text\/html/i.test(res.headers.get('content-type')||'') &&
-    /<div\s+id=["']root["']/.test(html) && /\/src\/main\.tsx/.test(html);
+    /<html(?:\s|>)/i.test(html) && /(?:\/@vite\/client|<script\b[^>]*\btype=["']module["']|\/src\/main\.[jt]sx?)/i.test(html);
   },{session:instance,fetchImpl});
   if(!isActive())throw Error('Full-stack process exited during readiness verification.');
+  for(const service of instance.services)service.child.once('exit',()=>{if(active===instance)stop().catch(()=>{});});
   return {running:true,url:WEB_URL,frontendUrl:WEB_URL,apiUrl:API_URL,
    framework:'React / Vite + NestJS / PostgreSQL',mode:'live',mockPreview:false,mockDatabase:false,
    services:log().processes,message:'LIVE FULL STACK · Vite frontend, real NestJS API and PostgreSQL verified on localhost. Okta and other integrations not verified. No GitHub push.'};

@@ -1,11 +1,12 @@
-# ATGV AIATECH Assist v0.0.82
+# ATGV AIATECH Assist v0.0.83
 
-## Business Requirements troubleshooting and completed history
-- Add the full BR troubleshooting log download immediately left of Publish to Jira, including during preparation and publication.
-- Reuse the project-scoped sanitized log exporter and record automatic workflow phase/stage, Jira preview counts and completed history counts.
-- Display actual completed requirement cards in the automatic BA history section; derive the Completed badge from the same record index.
-- Provide an explicit empty state before publication or when completed history is absent; never claim a draft is published.
-- Preserve immutable completed snapshots and existing permissions, approvals and Jira mappings.
+## Frontend and backend local preview
+- Add separate Open Frontend and Open Backend controls in standard and Custom Stack views.
+- Verify the direct catalog API health endpoint as well as frontend readiness before server approval.
+- Custom Stack defaults to explicit real Vite + NestJS/PostgreSQL mode; mock API preview is a separate user choice, never a silent downgrade.
+- Check configuration before modifying a checkout; expose independent backend reachability and use the detected run scripts.
+- Stop both managed live services if either exits; preserve checkout and approval safeguards.
+- Test & Run opens the verified frontend in the browser; backend is available via its dedicated control.
 
 ## Verification
-- Regression tests, Windows startup/reset and VSIX packaging are required before publication.
+GitHub regression, Windows startup/reset and VSIX packaging required before publishing. Real project services require approved local configuration.

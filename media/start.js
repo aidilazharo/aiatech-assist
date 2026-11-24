@@ -8379,6 +8379,10 @@ function updateArchitectServerControls(saved){
  address.textContent=url?'Preview address: '+url:'';
  address.title=url?'Current verified local application address: '+url:'';
  address.classList.toggle('hidden',!url);
+ const frontend=$('architectOpenFrontend'),backend=$('architectOpenBackend');
+ if(frontend)frontend.disabled=!(running&&architectServerSnapshot.healthy&&url);
+ if(backend){backend.disabled=!(running&&architectServerSnapshot.healthy&&architectServerSnapshot.apiUrl);backend.title=architectServerSnapshot.apiUrl||'Backend not separately available';}
+ if(url&&architectServerSnapshot.apiUrl)address.textContent='Frontend: '+url+' · Backend: '+architectServerSnapshot.apiUrl;
 }
 function architectServerAction(command){
  if(architectServerBusy||!activeId)return;
@@ -8388,6 +8392,8 @@ function architectServerAction(command){
  updateArchitectServerControls(true);
  send(command);
 }
+$('architectOpenFrontend').addEventListener('click',()=>send('architectOpenServerEndpoint',{service:'frontend'}));
+$('architectOpenBackend').addEventListener('click',()=>send('architectOpenServerEndpoint',{service:'backend'}));
 $('architectServerToggle').addEventListener('click',()=>architectServerAction(architectServerSnapshotProjectId===activeId&&architectServerSnapshot.running?'architectStopServer':'architectRunServer'));
 function architectBegin(action,message){
  if(architectActionBusy)return false;
@@ -8451,6 +8457,9 @@ function architectCustomDrawRuntime(){
  root.dataset.state=state;label.textContent=title;detail.textContent=description;
  $('architectCustomCheckStatus').disabled=architectCustomStatusPending;
  $('architectCustomOpenPreview').disabled=!(runtime?.running&&runtime.reachable===true&&runtime.previewUrl);
+ const backend=$('architectCustomOpenBackend');
+ if(backend){backend.disabled=!(runtime?.running&&runtime.apiReachable===true&&runtime.apiUrl);backend.textContent=runtime?.mockPreview?'Open Mock API':'Open Backend';backend.title=runtime?.apiUrl||'Backend not available';}
+ if(runtime?.running&&runtime.apiUrl)detail.textContent+=' · '+(runtime.mockPreview?'Mock API: ':'Backend: ')+runtime.apiUrl+(runtime.apiReachable===false?' (unreachable)':'');
 }
 function architectCustomSetProgress(percent,label){
  if(Number.isFinite(Number(percent)))architectCustomProgressPercent=Math.min(100,Math.max(0,Math.round(Number(percent))));
@@ -8483,7 +8492,8 @@ function renderArchitectCustomPanel(){
   option.disabled=!target.runnable;select.append(option);
  }
  const selected=(current?.targets||[]).find(t=>t.relative===previous&&t.runnable)||(current?.targets||[]).find(t=>t.runnable);
- if(selected){select.value=selected.relative;const preview=$('architectCustomPreviewUrl');if(!preview.value||!current?.previewCustomized)preview.value=selected.previewUrl;}
+ if(selected){select.value=selected.relative;const preview=$('architectCustomPreviewUrl');if(architectCustomRuntime.running&&architectCustomRuntime.previewUrl)preview.value=architectCustomRuntime.previewUrl;else if(!preview.value||!current?.previewCustomized)preview.value=selected.previewUrl;}
+ const mode=$('architectCustomMode');if(mode)mode.disabled=architectCustomBusy||architectCustomRunning;
  select.disabled=architectCustomBusy||!current?.ready;
  $('architectCustomScan').disabled=architectCustomBusy||architectActionBusy||!activeId||
   projects.find(p=>p.id===activeId)?.techStackId!=='custom';
@@ -8556,6 +8566,9 @@ $('architectCustomCheckStatus').addEventListener('click',()=>{
 $('architectCustomOpenPreview').addEventListener('click',()=>{
  if(!activeId||!architectCustomRuntime?.running||architectCustomRuntime.reachable!==true)return;
  send('architectCustomOpenPreview',{projectId:activeId});
+});
+$('architectCustomOpenBackend').addEventListener('click',()=>{
+ if(activeId&&architectCustomRuntime?.running&&architectCustomRuntime.apiReachable===true)send('architectCustomOpenPreview',{projectId:activeId,service:'backend'});
 });
 setInterval(()=>{
  if($('architectStackSelect')?.value==='custom'&&activeId&&!architectCustomBusy&&
@@ -8647,7 +8660,7 @@ $('architectCustomRun').addEventListener('click',()=>{
  architectCustomNotify('Checking the configured Git checkout and application target. ATGV will request explicit confirmation before running scripts; download the diagnostic log to troubleshoot.');
  renderArchitectCustomPanel();
  send('architectCustomInstallRun',{projectId:activeId,expectedSha:current?.sha||'',
-  relative:selected?.relative,previewUrl:selected?$('architectCustomPreviewUrl').value.trim():''});
+  relative:selected?.relative,previewUrl:selected?$('architectCustomPreviewUrl').value.trim():'',fullStackMode:$('architectCustomMode').value});
 });
 $('architectCustomMockRun').addEventListener('click',()=>{
  if(!activeId||architectCustomBusy||!architectCustomInfo?.ready)return;
@@ -8741,7 +8754,7 @@ window.addEventListener('message',event=>{
   }
   architectCustomRunning=!!m.value?.running;
   if(m.value?.running)architectCustomRuntime={...architectCustomRuntime,projectId:activeId,checked:true,running:true,
-    previewUrl:String(m.value.frontendUrl||''),mockPreview:!!m.value.mockPreview,reachable:true};
+    previewUrl:String(m.value.frontendUrl||''),apiUrl:String(m.value.apiUrl||''),apiReachable:!!m.value.apiUrl,mockPreview:!!m.value.mockPreview,reachable:true};
   architectCustomNotify(m.value?.message||'Custom Stack execution completed.',m.value?.running?'complete':'error');
   architectCustomSetProgress(m.value?.running?100:architectCustomProgressPercent,m.value?.running?'Local preview verified':'Run unsuccessful');
   renderArchitectCustomPanel();architectCustomRequestStatus();

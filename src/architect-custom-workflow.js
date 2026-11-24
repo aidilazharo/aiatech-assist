@@ -88,6 +88,11 @@ async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgr
      throw Error('This local tech-cockpit checkout is an obsolete ATGV starter, NOT the current TechCockpit monorepo. Your changes are preserved. Back up the checkout, clone GitHub main into the configured repository folder, and retry Save Stack. The current source must contain ReactTS_Frontend/package.json, ReactTS_Frontend/vite.config.ts, and NestJS_Backend/package.json.');
    throw Error('No runnable Vite frontend detected. Install & Run will not open an API-only /api/v1/health page. Detected: '+(detected||'none')+'. Verify the frontend package.json dev script and vite.config.ts.');
   }
+  // Explicit live mode must fail before creating preview fixtures or changing Git.
+  if(fullStackMode==='live'){
+   const requestedPair=fullStack.detectPair(inspection);
+   fullStack.modeForPair(requestedPair,requestedPair?await fullStack.hasEnvironment(key,requestedPair.backend):false,'live');
+  }
   // Discard stale manually selected API URLs. The browser must always open
   // the detected frontend root, never the NestJS health endpoint.
   const selectedUrl=relative===chosen.relative&&previewUrl?stack.loopbackPreview(previewUrl):null;

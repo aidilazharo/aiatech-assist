@@ -10,6 +10,8 @@ const previewRoots=new Map();
 const previewUrls=new Map();
 const previewRevisions=new Map();
 const identity=(root,stackId)=>path.resolve(root)+'|'+stackId;
+function backendUrl(entry){const port=Number(entry?.apiPort);return Number.isInteger(port)&&port>0&&port<=65535?'http://127.0.0.1:'+port+'/api/health':'';}
+async function verifyBackend(entry,driver,effects,timeout){const url=backendUrl(entry);if(url)await (effects.waitForHttp||bootstrap.waitForHttp)(url,()=>driver.localLogs().running,timeout,entry.instanceId||'');return url;}
 async function targetFor(root,stackId,driver=developer){
  const config=driver.catalogStackConfig?await driver.catalogStackConfig(stackId):await bootstrap.stackConfig(root,stackId);
  const url=config.previewUrl;
@@ -35,7 +37,7 @@ async function status({root,stackId,driver=developer}={}){
    path.resolve(source)===path.resolve(pin.root)&&
    target.inspection.repo.sha===pin.sha;
  const branch=pinned?pin.branch:(target.inspection.repo.branch||'');
- return {running,otherRunning:!running,url:actualUrl,apiPort:running?entry.apiPort:null,sha:(running&&entry.head)||target.inspection.repo.sha||'',branch,relative:target.target.relative,message:running?'App server running · '+actualUrl+(entry.apiPort?' · API port '+entry.apiPort:''):'Another ATGV-managed app server is running. Run Server can switch to this stack.'};
+ return {running,otherRunning:!running,url:actualUrl,frontendUrl:running?actualUrl:'',apiUrl:running?backendUrl(entry):'',apiPort:running?entry.apiPort:null,sha:(running&&entry.head)||target.inspection.repo.sha||'',branch,relative:target.target.relative,message:running?'App server running · '+actualUrl+(entry.apiPort?' · API port '+entry.apiPort:''):'Another ATGV-managed app server is running. Run Server can switch to this stack.'};
 }
 async function start({root,stackId,prepared,driver=developer,openBrowser=async()=>true,allowManagedHandoff=false,effects={}}={}){
  if(!prepared||prepared.stackId!==stackId||path.resolve(prepared.root||'')!==path.resolve(root||''))throw Error('Save the selected technology stack in this project repository first.');
@@ -98,6 +100,7 @@ async function start({root,stackId,prepared,driver=developer,openBrowser=async()
    await driver.runLocal(launchRoot,{relative:target.relative,env:{},previewUrl:url,apiPort:chosen.apiPort});started=true;
   }else url=prior.previewUrl||previewUrls.get(identity(root,stackId))||url;
   await (effects.waitForHttp||bootstrap.waitForHttp)(url,()=>driver.localLogs().running,60000,driver.localLogs().instanceId||'');
+  await verifyBackend(driver.localLogs(),driver,effects,60000);
   if(await openBrowser(url)===false)throw Error('The app started but VS Code could not open an external browser.');
   if(isolated){
    previewRoots.set(identity(root,stackId),launchRoot);
@@ -120,6 +123,7 @@ async function verify({root,stackId,driver=developer,effects={}}={}){
  if(!state.running||!state.url)return {...state,healthy:false};
  try{
   await (effects.waitForHttp||bootstrap.waitForHttp)(state.url,()=>driver.localLogs().running,3500,driver.localLogs().instanceId||'');
+  await verifyBackend(driver.localLogs(),driver,effects,3500);
   // A second read prevents racing a server exit, checkout change or another
   // process acquiring the port while the HTTP probe was in flight.
   const checked=await status({root,stackId,driver});
