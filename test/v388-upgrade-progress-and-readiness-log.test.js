@@ -107,7 +107,7 @@ test('Host sends actual download, checksum, staging and install completion stage
  const api=setup(fakeDashboard,fakeVscode,path,fakeUpdater,x=>reports.push(x),async()=>{restarter++;},{globalStorageUri:{fsPath:'/tmp'}},new Map(),()=>({promptForUpdates:true}),{randomUUID:()=> 'upgrade-id'},()=>({version:'0.3.87'}),async()=> 'secret-PAT');
  const operation={requestId:'upgrade-id',release:{version:'0.3.88',url:'https://github.com/Acme/aia'},running:false};
  const action=api.performVerifiedExtensionInstall(operation);
- for(let i=0;i<12&&!posted.some(v=>v.stage==='installing');i++)await Promise.resolve();
+ for(let i=0;i<40&&!posted.some(v=>v.stage==='installing');i++)await Promise.resolve();
  assert.ok(posted.some(v=>v.stage==='installing'),'installer must report live progress while unresolved');
  assert.equal(posted.some(v=>v.stage==='completed'),false,'do not close while VS Code installation is pending');
  completeInstall();await action;
@@ -123,7 +123,7 @@ test('Verified installer failures are reported to the open dialog without claimi
  const setup=new Function('dashboard','vscode','path','releaseUpdater','report','restart','context','pendingExtensionUpgradeOffers','updatePreferences','crypto','require','githubIssueAccessToken',host.slice(begin,end)+'\nreturn {performVerifiedExtensionInstall};');
  const api=setup({webview:{postMessage:async x=>{posted.push(x);return true;}}},
   {Uri:{file:x=>x},commands:{executeCommand:async()=>{throw Error('Install failed');}},window:{showErrorMessage:async()=>null},env:{openExternal:async()=>{}}},
-  path,{authorizedRequest:()=>async()=>{},downloadVerified:async()=>'/tmp/verified.vsix'},()=>{},async()=>{},context,new Map(),()=>({}),{randomUUID:()=> 'a'},()=>({version:'0.3.87'}));
+  path,{authorizedRequest:()=>async()=>{},downloadVerified:async()=>'/tmp/verified.vsix'},()=>{},async()=>{},context,new Map(),()=>({}),{randomUUID:()=> 'a'},()=>({version:'0.3.87'}),async()=> 'secret-PAT');
  const op={requestId:'upgrade-id',release:{url:'https://github.com/Acme/aia'},token:'token',running:false};
  await api.performVerifiedExtensionInstall(op);
  assert.equal(op.running,false);
