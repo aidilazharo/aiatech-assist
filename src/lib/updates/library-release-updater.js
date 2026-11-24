@@ -5,10 +5,9 @@ const crypto=require('node:crypto');
 const fs=require('node:fs/promises');
 const path=require('node:path');
 const updater=require('./github-release-updater');
-const REPO='aidilazharo/tech-stacks-skills';
-// Only the public distribution mirror appears in release discovery.
-// The source repository remains available for the pinned catalogue and legacy verification.
-const RELEASE_REPOSITORIES=Object.freeze(['aidilazharo/library']);
+const REPO='aiamalaysia/my-fow-technology-app-techassists-enterprise-skills';
+// Release discovery is pinned to the AIA Malaysia Library source.
+const RELEASE_REPOSITORIES=Object.freeze([REPO]);
 const LATEST_URL='https://github.com/'+REPO+'/releases/latest';
 const API_LATEST='https://api.github.com/repos/'+REPO+'/releases/latest';
 const API_LIST='https://api.github.com/repos/'+REPO+'/releases?per_page=30';
@@ -52,7 +51,7 @@ async function latest({repository=REPO,request=updater.getBytes}={}){
 async function latestAcrossRepositories({request=updater.getBytes}={}){
  const results=await Promise.allSettled(RELEASE_REPOSITORIES.map(repository=>fetchReleaseList({repository,request})));
  const errors=results.flatMap((result,index)=>result.status==='rejected'?[RELEASE_REPOSITORIES[index]+': '+String(result.reason?.message||result.reason)]:[]);
- if(errors.length===results.length)throw Error('Cannot check public Library releases: '+errors.join('; '));
+ if(errors.length===results.length)throw Error('Cannot check AIA Library releases: '+errors.join('; '));
  const found=[];
  results.forEach((result,index)=>{
   if(result.status!=='fulfilled')return;

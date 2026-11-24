@@ -9,10 +9,9 @@ const fs=require('node:fs/promises');
 const path=require('node:path');
 const {URL}=require('node:url');
 
-const REPO='aidilazharo/aiatech-assist';
-// Public release discovery uses only the dedicated distribution repository.
-// The source repository remains the fixed source-of-truth for signed update metadata.
-const RELEASE_REPOSITORIES=Object.freeze(['aidilazharo/extension']);
+const REPO='aiamalaysia/my-fow-technology-app-techassists-dev-sdlc';
+// Release discovery is pinned to the AIA Malaysia distribution source.
+const RELEASE_REPOSITORIES=Object.freeze([REPO]);
 const DEFAULT_RELEASE_URL=`https://github.com/${REPO}/releases`;
 const API=`https://api.github.com/repos/${REPO}/releases?per_page=30`;
 const PINNED_RELEASE_URL=`https://github.com/${REPO}/releases/latest`;
@@ -75,18 +74,21 @@ function validUrl(url){
  if(parsed.username||parsed.password)throw Error('Credentials in update URLs are not allowed.');
  return parsed;
 }
-function getBytes(url,{maxBytes=MAX_JSON,accept='application/vnd.github+json',redirects=3}={}){
+function getBytes(url,{maxBytes=MAX_JSON,accept='application/vnd.github+json',redirects=3,token=''}={}){
  return new Promise((resolve,reject)=>{
   let u;try{u=validUrl(url);}catch(e){reject(e);return;}
   const headers={'User-Agent':'atgv-aiatech-assist-updater','Accept':accept,'X-GitHub-Api-Version':'2022-11-28'};
+  // Send existing credentials only to approved GitHub repository release APIs.
+  const allowed=[REPO,'aiamalaysia/my-fow-technology-app-techassists-enterprise-skills'];
+  if(token&&u.hostname==='api.github.com'&&allowed.some(repo=>u.pathname==='/repos/'+repo+'/releases'||u.pathname.startsWith('/repos/'+repo+'/releases/')))headers.Authorization='Bearer '+token;
   const request=https.get(u,{headers,timeout:15000},response=>{
    const status=response.statusCode||0;
    if([301,302,303,307,308].includes(status)&&response.headers.location){
     response.resume();if(redirects<1){reject(Error('Too many GitHub redirects.'));return;}
     const next=new URL(response.headers.location,u).toString();
-    getBytes(next,{maxBytes,accept,redirects:redirects-1}).then(resolve,reject);return;
+    getBytes(next,{maxBytes,accept,redirects:redirects-1,token}).then(resolve,reject);return;
    }
-   if(status!==200){response.resume();reject(Error(`Public GitHub release request returned HTTP ${status}.`));return;}
+   if(status!==200){response.resume();reject(Error(`GitHub release request returned HTTP ${status}.`));return;}
    const chunks=[];let length=0;
    response.on('data',chunk=>{length+=chunk.length;if(length>maxBytes){response.destroy(Error('GitHub update download exceeds size limit.'));return;}chunks.push(chunk);});
    response.on('error',reject);response.on('end',()=>resolve(Buffer.concat(chunks)));
@@ -119,7 +121,7 @@ async function latestRelease({version,repositoryUrl=DEFAULT_RELEASE_URL,request=
 async function latestAcrossRepositories({version,request=getBytes,includeCurrent=true}={}){
  const results=await Promise.allSettled(RELEASE_REPOSITORIES.map(repository=>fetchReleaseList({repositoryUrl:`https://github.com/${repository}/releases/latest`,request})));
  const errors=results.flatMap((result,index)=>result.status==='rejected'?[RELEASE_REPOSITORIES[index]+': '+String(result.reason?.message||result.reason)]:[]);
- if(errors.length===results.length)throw Error('Cannot check public extension releases: '+errors.join('; '));
+ if(errors.length===results.length)throw Error('Cannot check AIA extension releases: '+errors.join('; '));
  const found=[];
  for(const result of results.filter(x=>x.status==='fulfilled')){
   const {repo,releases}=result.value;
@@ -165,4 +167,5 @@ async function downloadVerified(release,{directory,request=getBytes,onProgress=a
  await fs.writeFile(target+'.part',vsix,{mode:0o600});await fs.rename(target+'.part',target);
  return target;
 }
-module.exports={REPO,RELEASE_REPOSITORIES,API,DEFAULT_RELEASE_URL,PINNED_RELEASE_URL,parseRepositoryUrl,releaseUrlForRepository,parseVersion,compareVersion,selectRelease,verifyChecksum,latestRelease,latestAcrossRepositories,downloadVerified,getBytes};
+function authorizedRequest(token){return (url,options={})=>getBytes(url,{...options,token});}
+module.exports={authorizedRequest,REPO,RELEASE_REPOSITORIES,API,DEFAULT_RELEASE_URL,PINNED_RELEASE_URL,parseRepositoryUrl,releaseUrlForRepository,parseVersion,compareVersion,selectRelease,verifyChecksum,latestRelease,latestAcrossRepositories,downloadVerified,getBytes};

@@ -9,8 +9,8 @@ const DEFAULTS=Object.freeze({
  projectRepository:'my-fow-technology-app-techassists'
 });
 const RELEASES=Object.freeze({
- extension:'https://github.com/aidilazharo/extension',
- library:'https://github.com/aidilazharo/library'
+ extension:'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc',
+ library:'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills'
 });
 const SOURCE_REPOS=Object.freeze({
  aidilazharo:Object.freeze({

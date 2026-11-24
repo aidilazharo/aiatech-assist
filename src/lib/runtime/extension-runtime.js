@@ -615,6 +615,7 @@ async function performVerifiedExtensionInstall(operation){
   const folder=path.join(context.globalStorageUri.fsPath,'updates');
   const vsix=await releaseUpdater.downloadVerified(operation.release,{
    directory:folder,
+   request:releaseUpdater.authorizedRequest(await githubIssueAccessToken()),
    onProgress:async stage=>{
     if(phases[stage])await postExtensionInstallProgress(operation,stage,...phases[stage]);
    }
@@ -678,7 +679,7 @@ async function promptExtensionRelease(release,{force=false}={}){
 async function checkExtensionRelease({prompt=false,interactive=false,forcePrompt=false}={}){
  try{
   const installed=require('../../../package.json').version;
-  const checked=await releaseUpdater.latestAcrossRepositories({version:installed,includeCurrent:true});
+  const checked=await releaseUpdater.latestAcrossRepositories({version:installed,includeCurrent:true,request:releaseUpdater.authorizedRequest(await githubIssueAccessToken())});
   const result=checked.release;extensionReleaseWarnings=checked.errors;
   extensionLatest=checked.latest;extensionRelease=result&&releaseUpdater.compareVersion(result.version,installed)>0?result:null;extensionUpdateError='';extensionUpdateChecked=new Date().toISOString();
   if(prompt&&extensionRelease)await promptExtensionRelease(extensionRelease,{force:forcePrompt});
@@ -758,9 +759,9 @@ async function promptLibraryRelease(release,{force=false}={}){
 async function checkLibraryRelease({prompt=false,interactive=false,forcePrompt=false}={}){
  try{
   if(catalogBusy){libraryRelease=null;libraryUpdateError='Library update check is waiting for another catalog operation.';return null;}
-  const checked=await libraryReleaseUpdater.latestAcrossRepositories();
+  const checked=await libraryReleaseUpdater.latestAcrossRepositories({request:releaseUpdater.authorizedRequest(await githubIssueAccessToken())});
   libraryRelease=checked.release;libraryLatest=checked.latest;libraryReleaseWarnings=checked.errors;
-  if(!libraryLatest)throw Error('No public Library release was found.');
+  if(!libraryLatest)throw Error('No AIA Malaysia Library release was found.');
   // A distribution mirror is not a main-branch source. Never replace the
   // verified catalogue commit/version with a mirror's older release tag.
   catalogLastCheck=new Date().toISOString();catalogLastError='';libraryUpdateError='';
@@ -779,7 +780,7 @@ async function checkSoftwareUpdates({prompt=false,interactive=false,force=false,
  const config=updatePreferences();const errors=[];
  try{
   // An explicit Check Updates must also inspect the owner-selected main branch.
-  // Public release mirrors can legitimately lag and must not replace source metadata.
+  // Published releases can legitimately lag and must not replace source metadata.
   if(force&&!catalogBusy)await catalogCheck({interactive:false});
   await Promise.all([
    (force||config.autoCheckExtension)?checkExtensionRelease({interactive}).catch(e=>errors.push('Extension: '+e.message)):Promise.resolve(),

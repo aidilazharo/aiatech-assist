@@ -35,6 +35,11 @@
       "id": "RELEASE-0004",
       "status": "accepted",
       "decision": "Every accepted source update requires its own next sequential ATGV version, reviewed branch and pull request; automatically squash-merge eligible PRs only after the complete required CI suite succeeds, GitHub branch protections permit merge, and the exact PR head SHA is verified. Never bypass failures or fabricate a release. On main-branch success publish the verified VSIX, checksum and source archive, with exactly one RELEASE.md."
+    },
+    {
+      "id": "RELEASE-0005",
+      "status": "accepted",
+      "decision": "Development builds publish only to their authoritative development source repositories. Retire the obsolete personal-account distribution mirrors; extension and Library release discovery use the approved AIA Malaysia repositories, with existing GitHub credentials restricted to approved API paths."
     }
   ]
 }
