@@ -10,6 +10,7 @@ const OPTIONAL_ROLES = Object.freeze([
     { id: 'compliance-officer', label: 'Compliance / Risk Officer', short: 'RISK', stage: 'Compliance Review', description: 'Review regulatory and enterprise risk controls.', tasks: [{ id: 'control', label: 'Risk controls', document: 'governance/risk-controls.md' }, { id: 'decision', label: 'Compliance decision', document: 'governance/compliance-approval.md' }] }
 ]);
 const STANDARD = [...ROLES, ...OPTIONAL_ROLES];
+const DEFAULT_ENABLED_ROLES = Object.freeze(['business-analyst','project-manager','solution-architect','ux-designer','software-developer','uat-tester']);
 const BASE_DEPENDENCIES = {
     'product-owner': ['business-analyst'], 'solution-architect': ['business-analyst'], 'ux-designer': ['business-analyst'],
     'security-engineer': ['business-analyst'], 'data-engineer': ['business-analyst'], 'technical-writer': ['business-analyst'],
@@ -105,9 +106,9 @@ async function getRoleSettings(registry, projectId) {
     const data = raw ? JSON.parse(raw) : {};
     if (data.enabled !== undefined && (!Array.isArray(data.enabled) || data.enabled.some(x => typeof x !== 'string')))
         throw Error('Invalid enabled SDLC roles.');
-    const enabled = data.enabled === undefined ? roles.filter(r => !OPTIONAL_ROLES.some(x => x.id === r.id)).map(r => r.id) : roles.filter(r => data.enabled.includes(r.id)).map(r => r.id);
+    const enabled = data.enabled === undefined ? DEFAULT_ENABLED_ROLES.filter(id=>roles.some(r=>r.id===id)) : roles.filter(r => data.enabled.includes(r.id)).map(r => r.id);
     const originalOrder = Array.isArray(data.order) ? data.order.filter(id => typeof id === 'string' && roles.some(role=>role.id===id)) : [];
-    const order = [...new Set([...originalOrder,...roles.map(role=>role.id)])];
+    const order = [...new Set([...originalOrder,...(data.order===undefined?DEFAULT_ENABLED_ROLES:[]),...roles.map(role=>role.id)])];
     const orderedRoles = [...roles].sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id));
     const dependencies = {};
     for (const role of roles) {

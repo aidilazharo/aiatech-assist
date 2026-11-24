@@ -26,9 +26,9 @@ test('checksum binds the exact artifact filename and bytes',()=>{
  assert.doesNotThrow(()=>publisher.verifyChecksum(bytes,Buffer.from(hash+'  file.vsix\n'),'file.vsix'));
  assert.throws(()=>publisher.verifyChecksum(bytes,Buffer.from(hash+'  other.vsix\n'),'file.vsix'),/verification failed/);
 });
-test('Workspace exposes the resumable publication action',()=>{
+test('Workspace exposes automatic release queue status',()=>{
  const source=fs.readFileSync(require.resolve('../src/repo-sync-workspace'),'utf8');
- assert.match(source,/id="publishMergedRelease"/);assert.match(source,/releasePublisher\.publish/);
+ assert.match(source,/id="checkReleaseSync"/);assert.match(source,/releaseQueue\.enqueue/);assert.doesNotMatch(source,/id="releasePrNumber"/);
 });
 
 test('publishes and resumes a verified merged release with no workflow or branch writes',async()=>{

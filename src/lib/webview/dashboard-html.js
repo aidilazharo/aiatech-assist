@@ -31,7 +31,7 @@ function html(webview,{resumeLibrary=false}={}){
     subtask:"<path d=\"M5 5v7h4m-3-3 3 3-3 3M12 8h7v8h-7zM14 12l1 1 2-2\"/>"
   };
   const baHeaderIcon=(name,variant='')=>`<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${variant}>${baHeaderIcons[name]}</svg>`;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.92';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.93';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const uiConsistencyCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-consistency.css'));
@@ -398,16 +398,13 @@ function html(webview,{resumeLibrary=false}={}){
     <div class="page-kicker">SDLC DELIVERY / ROLE WORKSPACE</div>
     <div class="view-heading work-head"><h1 id="workTitle">Business Analyst</h1><span id="workStage" class="pill hidden" aria-hidden="true">Discover & Define</span><div id="workSkill" class="atgv-work-skill" aria-label="SDLC Catalog role variant"><span id="workSkillRole" class="atgv-work-skill-role">BA</span><select id="workSkillSelect" class="atgv-work-skill-select" aria-label="BA catalog role variant" disabled><option value="">Not loaded</option></select></div></div>
 
-    <section id="baMyWorkDashboard" class="ba-my-work-dashboard hidden" aria-label="Business Analyst requirements overview">
-      <div class="ba-my-work-head"><div><h2>Business Requirements</h2><p class="muted">Review requirements, approvals and action items. Open a requirement to continue the approved process.</p></div><button type="button" id="baMyWorkOpen">Open Business Requirements</button></div>
-      <div id="baMyWorkMetrics" class="ba-my-work-metrics" aria-label="Business Requirements counts"></div>
-    </section>
+    <div id="baMyWorkDashboard" hidden aria-hidden="true"><button type="button" id="baMyWorkOpen" hidden>Project Items</button><div id="baMyWorkMetrics"></div></div>
   <section id="discoveryView" class="hidden work-container ba-embedded-requirements ba-automatic-view">
     <div class="ba-auto-heading">
       <h2 class="ba-single-heading">Business Requirements <span id="baAutoTitle"></span></h2>
       <div class="ba-auto-heading-actions">
         <div id="baAutoSkillSlot"></div>
-        <button id="baAutoBack" type="button" class="secondary ba-heading-icon" title="Project Items" aria-label="Project Items">${baHeaderIcon('list')}</button>
+        <button id="baAutoBack" type="button" class="secondary" title="Project Items" aria-label="Project Items">Project Items</button>
         <button id="baNewRequirement" type="button" class="ba-heading-icon" title="New Business Requirement" aria-label="New Business Requirement"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button>
       </div>
     </div>
@@ -592,7 +589,7 @@ function html(webview,{resumeLibrary=false}={}){
     <div id="brUnsavedModal" class="modal-overlay hidden" aria-hidden="true"><div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="brUnsavedHeading"><h2 id="brUnsavedHeading">Unsaved Business Requirements changes</h2><p>Save your edits before closing?</p><div class="stack actions"><button type="button" id="brUnsavedSave">Save Draft</button><button type="button" id="brUnsavedDiscard" class="secondary">Discard Changes</button><button type="button" id="brUnsavedCancel" class="secondary">Keep Editing</button></div></div></div>
   </section>
     <section id="baRequirementsOverview" class="hidden" aria-label="Business Requirements overview">
-    <section id="baUncompletedPanel" class="ba-incomplete-panel" aria-label="Uncompleted Business Requirement" aria-live="polite">
+    <section id="baUncompletedPanel" class="ba-incomplete-panel hidden" aria-label="Uncompleted Business Requirement" aria-live="polite">
       <div class="ba-incomplete-copy">
         <span class="ba-incomplete-kicker">BUSINESS REQUIREMENT IN PROGRESS</span>
         <h2 id="baIncompleteTitle">Uncompleted Business Requirement</h2>

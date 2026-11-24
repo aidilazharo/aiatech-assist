@@ -42,6 +42,7 @@ function isAllowedPath(relative){
  const segments=String(relative||'').replace(/\\/g,'/').split('/');
  if(segments.some(s=>!s||s==='.'||s==='..'||BLOCKED_DIRS.has(s.toLowerCase())))return false;
  const lower=segments.map(s=>s.toLowerCase()),name=lower[lower.length-1];
+ if(lower[0]==='release-artifacts')return false;
  if(BLOCKED_FILES.has(name)||name.startsWith('.env.')||/\.(?:pem|key|p12|pfx|jks|keystore)$/i.test(name))return false;
  return true;
 }
@@ -295,6 +296,34 @@ async function readSourceFacts({cloned,source,chosenBranch,sha,sourceMessage,fil
   sourceCommitMessage:sourceMessage.slice(0,700),sourceCommitFiles:sourceCommitFiles.slice(0,30),project,codeOverview,
   destinationRepo:destination.name,baseBranch:base,files:files.slice(0,80),fileCount:files.length};
 }
+// Delete only prior files explicitly owned by a tracked, valid ATGV release manifest.
+async function pruneManagedReleaseArtifacts({root,tracked,sourceName,keepTag,runner}){
+ const removed=[],known=new Set(tracked);
+ const manifests=tracked.filter(f=>/^release-artifacts\/[A-Za-z0-9][A-Za-z0-9._-]*\/release\.json$/.test(f));
+ for(const file of manifests){
+  const tag=file.split('/')[1];
+  githubApiDefault.safeReleaseComponent(tag);
+  if(tag===keepTag)continue;
+  const filename=await destinationFileSafe(root,file);
+  const stat=await fs.stat(filename);
+  if(stat.size>131072)throw Error('Managed release manifest exceeds size limit: '+file);
+  let manifest;
+  try{manifest=JSON.parse(await fs.readFile(filename,'utf8'));}catch{throw Error('Invalid prior release manifest: '+file);}
+  if(manifest.schema!==1||manifest.sourceRepository!==sourceName||manifest.releaseTag!==tag||!Array.isArray(manifest.assets))continue;
+  const paths=new Set([file]);
+  for(const asset of manifest.assets){
+   const name=githubApiDefault.safeReleaseComponent(asset.name);
+   const rel='release-artifacts/'+tag+'/'+name;
+   if(known.has(rel))paths.add(rel);
+  }
+  for(const rel of paths){
+   await destinationFileSafe(root,rel);
+   await runner('git',['rm','--',rel],{cwd:root});
+   removed.push(rel);
+  }
+ }
+ return removed;
+}
 async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.',sourceBranch='',sourcePrNumber='',baseBranch='',sourcePat,destPat,workspaceRoot='',onProgress=()=>{},runner=run,githubApi=githubApiDefault,describePr=async()=>'',planSync=async()=>null,previewOnly=false,approvedReview=null,branchOnly=false}){
  if(branchOnly&&!approvedReview)throw Error('Review the source before pushing a branch.');
  const source=githubUrl(sourceUrl),scope=scopeName(copyScope);
@@ -400,13 +429,14 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   const sourceMessage=(await runner('git',['log','-1','--pretty=%B'],{cwd:cloned})).trim();
   if(!sourceMessage||sourceMessage.length>12000)throw Error('Repo A commit message is missing or too large.');
   files=await trackedFiles(cloned,scope);
-  // Resolve the latest published source GitHub release, including prereleases.
+  // Resolve the latest published source GitHub release, excluding prereleases.
   // Source and release are pinned across review and publication.
   const release=typeof githubApi.getLatestRelease==='function'
    ?await githubApi.getLatestRelease(source,sourcePat):null;
   // The official distribution pairs require an exact published main release.
   const official={ 'aidilazharo/aiatech-assist':'aiamalaysia/my-fow-technology-app-techassists-dev-sdlc','aidilazharo/tech-stacks-skills':'aiamalaysia/my-fow-technology-app-techassists-enterprise-skills' };
-  if(official[source.name.toLowerCase()]===destination.name.toLowerCase()&&(!release||release.targetCommitish!==sha||!release.assets?.length||release.skippedAssetCount||chosenBranch!=='main'||base!=='main'||scope!=='.'))
+  const distribution=official[source.name.toLowerCase()]===destination.name.toLowerCase();
+  if(distribution&&(!release||release.targetCommitish!==sha||!release.assets?.length||release.skippedAssetCount||chosenBranch!=='main'||base!=='main'||scope!=='.'))
    throw Error('ATGV distribution requires full main-to-main sync and a complete published release for the exact source commit. Wait for the source release build or select the correct repositories.');
   const commitPaths=await runner('git',['show','--format=','--name-only','HEAD'],{cwd:cloned}).catch(()=> '');
   const eligible=new Set(files);
@@ -425,6 +455,16 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   branch=chosenBranch===base||!cleanedSourceBranch||cleanedSourceBranch===base||cleanedSourceBranch.endsWith('/')
    ?fallbackBranch:baseName(cleanedSourceBranch);
   const facts=await readSourceFacts({cloned,source,chosenBranch,sha,sourceMessage,files,destination,base,sourceCommitFiles});
+  let requiredAssets=[];
+  if(distribution){
+   const publisher=require('./repo-sync-release-publisher');
+   const kind=publisher.pairFor(source,destination).kind;
+   const info=publisher.tagInfo(release.tag,kind);
+   if(info.version!==facts.project.version)throw Error('Latest stable release version does not match source code. Await the matching release.');
+   requiredAssets=publisher.required(kind,info.version);
+   const names=new Set(release.assets.map(a=>a.name));
+   for(const [asset,checksum] of requiredAssets)if(!names.has(asset)||!names.has(checksum))throw Error('Missing required stable release artifact or checksum: '+asset);
+  }
   if(!sourcePr||previewOnly){
    await notify('ai','Studying verified source-code structure and commit history for the proposed branch, commit and PR details…');
    try{aiPlan=aiSyncPlan(await planSync(facts),source,sourceMessage,sha);}
@@ -515,7 +555,7 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
    await fs.copyFile(path.join(cloned,...rel.split('/')),dest);
   }
   // Release assets are copied with the reviewed code in the same commit.
-  const releaseFiles=[];
+  const releaseFiles=[],removedReleaseFiles=[];
   if(release?.assets?.length){
    if(typeof githubApi.downloadReleaseAsset!=='function')
     throw Error('Cannot include release assets: download support is unavailable.');
@@ -536,6 +576,10 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
     await fs.copyFile(local,target);
     releaseFiles.push(relative);verified.push(item);
    }
+   if(distribution){
+    const {verifyChecksum}=require('./repo-sync-release-publisher');
+    for(const [asset,checksum] of requiredAssets)verifyChecksum(await fs.readFile(path.join(staging,asset)),await fs.readFile(path.join(staging,checksum)),asset);
+   }
    const manifestRelative='release-artifacts/'+release.tag+'/release.json';
    if(releaseFiles.includes(manifestRelative))throw Error('Release contains a reserved manifest filename.');
    const manifestTarget=await destinationFileSafe(destRoot,manifestRelative);
@@ -549,6 +593,10 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
     assets:verified
    },null,2)+'\n','utf8');
    releaseFiles.push(manifestRelative);
+   if(distribution){
+    const tracked=await runner('git',['ls-files','-z','--','release-artifacts'],{cwd:destRoot});
+    removedReleaseFiles.push(...await pruneManagedReleaseArtifacts({root:destRoot,tracked:tracked.split('\0').filter(Boolean),sourceName:source.name,keepTag:release.tag,runner}));
+   }
   }
   // Stage as git add . would, then prevent any unexpected file from being committed.
   await runner('git',['add','-A','--','.'],{cwd:destRoot});
@@ -561,7 +609,7 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   }
   const staged=await runner('git',['diff','--cached','--name-only','-z'],{cwd:destRoot});
   const changedFiles=staged.split('\0').filter(Boolean);
-  const allowed=new Set([...files,...releaseFiles]);
+  const allowed=new Set([...files,...releaseFiles,...removedReleaseFiles]);
   if(changedFiles.some(file=>!allowed.has(file)))
    throw Error('Unexpected files staged outside the approved copy scope. No commit or push was made.');
   if(!changedFiles.length){
@@ -583,7 +631,7 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   pushed=true;
   const result={branch,sourceBranch:chosenBranch,sourceSha:sha,sourceRepo:source.name,destinationRepo:destination.name,
    base,fileCount:changedFiles.length,codeVersion:facts.project.version||'',releaseTag:release?.tag||'',
-   releaseAssetCount:release?.assets?.length||0,releaseArtifactPaths:releaseFiles,commitMessage,
+   releaseAssetCount:release?.assets?.length||0,releaseArtifactPaths:releaseFiles,removedReleaseFiles,commitMessage,
    sourcePrUrl:sourcePr?.url||'',excludedSourceCommitFiles};
   if(branchOnly)return result;
   const details=prDetails({source,destination,sha,scope,base,branch,count:changedFiles.length,changedFiles,sourceBranch:chosenBranch,sourceMessage,sourceCommitFiles});
@@ -616,4 +664,4 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   throw Error(e.message+suffix);
  }finally{await fs.rm(temp,{recursive:true,force:true}).catch(()=>{});}
 }
-module.exports={githubUrl,baseName,scopeName,isAllowedPath,commitSubject,genericMessage,meaningfulSubject,readableTitle,branchType,branchName,stripCommitHashSuffix,formatSubject,formatCommitMessage,formatPrDetails,validateReviewPresentation,prDetails,patEnvironment,aiSyncPlan,readSourceFacts,inspectSourceCode,sync};
+module.exports={githubUrl,baseName,scopeName,isAllowedPath,commitSubject,genericMessage,meaningfulSubject,readableTitle,branchType,branchName,stripCommitHashSuffix,formatSubject,formatCommitMessage,formatPrDetails,validateReviewPresentation,prDetails,patEnvironment,aiSyncPlan,readSourceFacts,inspectSourceCode,sync,pruneManagedReleaseArtifacts};

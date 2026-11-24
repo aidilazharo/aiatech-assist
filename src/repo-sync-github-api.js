@@ -150,11 +150,13 @@ function acceptedReleaseAsset(asset){
  return Number.isSafeInteger(asset.size)&&asset.size>0&&asset.size<=MAX_RELEASE_ASSET;
 }
 async function getLatestRelease(repo,token,request=githubRequest){
- const res=await request(repo,token,'GET','/releases?per_page=10');
+ const official=['aidilazharo/aiatech-assist','aidilazharo/tech-stacks-skills'].includes(repo.name.toLowerCase());
+ const res=await request(repo,token,'GET',official?'/releases/latest':'/releases?per_page=10');
+ if(official&&res.status===404)return null;
  if(res.status===404)throw Error('Source GitHub Releases cannot be read (HTTP 404).');
  if(res.status!==200)throw Error('Source GitHub Releases lookup failed (HTTP '+res.status+').');
- if(!Array.isArray(res.body))throw Error('Source GitHub release response is invalid.');
- const releases=res.body.filter(r=>r&&!r.draft&&r.published_at&&r.tag_name);
+ if(!official&&!Array.isArray(res.body))throw Error('Source GitHub release response is invalid.');
+ const releases=(official?[res.body]:res.body).filter(r=>r&&!r.draft&&!r.prerelease&&r.published_at&&r.tag_name);
  releases.sort((a,b)=>String(b.published_at).localeCompare(String(a.published_at)));
  if(!releases.length)return null;
  const latest=releases[0];
@@ -167,7 +169,19 @@ async function getLatestRelease(repo,token,request=githubRequest){
   browser.pathname.toLowerCase()!==expectedPath.toLowerCase())
   throw Error('Release URL does not match the selected source repository.');
  const rawAssets=Array.isArray(latest.assets)?latest.assets:[];
- const assets=rawAssets.filter(acceptedReleaseAsset).map(a=>({
+ if(official){
+  const revision=await request(repo,token,'GET','/git/ref/tags/'+encodeURIComponent(tag));
+  let obj=revision.body?.object;
+  if(revision.status!==200)throw Error('Cannot verify the source release tag.');
+  for(let depth=0;depth<5&&obj?.type==='tag';depth++){
+   if(!/^[a-f0-9]{40}$/.test(obj.sha))throw Error('Invalid release tag revision.');
+   const target=await request(repo,token,'GET','/git/tags/'+obj.sha);
+   if(target.status!==200)throw Error('Cannot resolve annotated release tag.');
+   obj=target.body?.object;
+  }
+  if(obj?.type!=='commit'||!/^[a-f0-9]{40}$/.test(obj.sha)||latest.target_commitish!==obj.sha)throw Error('Source release tag does not identify its exact build commit.');
+ }
+ const assets=rawAssets.filter(a=>acceptedReleaseAsset(a)&&(!official||a.state==='uploaded')).map(a=>({
   id:a.id,name:a.name,size:a.size,digest:/^sha256:[a-f0-9]{64}$/i.test(String(a.digest||''))?String(a.digest).toLowerCase():''
  }));
  if(new Set(assets.map(a=>a.name.toLowerCase())).size!==assets.length)throw Error('Source release has duplicate artifact names.');

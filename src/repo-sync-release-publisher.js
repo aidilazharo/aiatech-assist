@@ -103,7 +103,7 @@ async function publish({source,destination,sourcePat,destPat,prNumber,tag,onProg
  if(manifest.schema!==1||manifest.sourceRepository!==source.name||manifest.sourceBranch!=='main'||manifest.releaseTag!==tag||manifest.codeVersion!==info.version||manifest.matchesSourceCommit!==true||manifest.sourceCommit!==manifest.releaseTargetCommitish||!Array.isArray(manifest.assets))throw Error('Merged PR does not contain a matching source release manifest. Re-sync the exact published main revision.');
  const sourceCommit=sha(manifest.sourceCommit);
  const release=await sg('/releases/tags/'+encodeURIComponent(tag));
- if(release.draft||!release.published_at||release.tag_name!==tag||release.target_commitish!==sourceCommit||await tagCommit(source,sourcePat)!==sourceCommit)throw Error('Source release does not identify the exact copied commit.');
+ if(release.draft||release.prerelease||!release.published_at||release.tag_name!==tag||release.target_commitish!==sourceCommit||await tagCommit(source,sourcePat)!==sourceCommit)throw Error('Source release does not identify the exact copied commit.');
  const sourceCompare=await sg('/compare/'+sourceCommit+'...main');
  if(!['ahead','identical'].includes(sourceCompare.status))throw Error('Source release commit is not in main history.');
  const versionFile=pair.kind==='extension'?'package.json':'VERSION';
@@ -222,4 +222,4 @@ async function publish({source,destination,sourcePat,destPat,prNumber,tag,onProg
   return {url:expectedUrl,tag,version,assetCount:buffers.size,merged};
  }finally{await fs.rm(temp,{recursive:true,force:true});}
 }
-module.exports={publish,pairFor,tagInfo,verifyChecksum,verifyProjection};
+module.exports={publish,pairFor,tagInfo,required,verifyChecksum,verifyProjection};

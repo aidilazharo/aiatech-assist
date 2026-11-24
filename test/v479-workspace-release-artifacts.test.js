@@ -45,12 +45,12 @@ test('Source version falls back to VERSION for SDLC Library without package.json
  assert.equal(facts.project.version,'0.0.7');
 });
 
-test('GitHub latest release lookup includes prereleases, filters unsafe files, and pins checksums',async()=>{
+test('GitHub latest release lookup excludes prereleases, filters unsafe files, and pins checksums',async()=>{
  const repo={owner:'Acme',repo:'source',name:'Acme/source'};
  const sha='a'.repeat(40),digest='sha256:'+'b'.repeat(64);
  const request=async(r,token,method,suffix)=>{assert.equal(suffix,'/releases?per_page=10');
   return {status:200,body:[{
-   tag_name:'v1.2.3-build.8',name:'Source v1.2.3',draft:false,prerelease:true,
+   tag_name:'v1.2.3-build.8',name:'Source v1.2.3',draft:false,prerelease:false,
    target_commitish:sha,published_at:'2026-11-24T03:00:00Z',
    html_url:'https://github.com/Acme/source/releases/tag/v1.2.3-build.8',
    assets:[
@@ -59,7 +59,7 @@ test('GitHub latest release lookup includes prereleases, filters unsafe files, a
     {id:3,name:'../../escape.vsix',size:5,digest},
     {id:4,name:'evil.exe',size:10,digest}
    ]
-  }]};
+  },{tag_name:'v1.2.3-build.9',draft:false,prerelease:true,published_at:'2026-11-25T03:00:00Z'}]};
  };
  const release=await api.getLatestRelease(repo,'ghp_'+'x'.repeat(40),request);
  assert.equal(release.tag,'v1.2.3-build.8');

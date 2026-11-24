@@ -11975,6 +11975,7 @@ function activate(ctx){
     await recordStartupDiagnostic({stage:'extension-cache-cleanup',status:'error',detail:error.message});
    }
    await initialize();
+   ctx.subscriptions.push(repoSyncWorkspace.startReleaseSync({preferences:context.globalState,secrets:context.secrets,onLog:report}));
   })().catch(e=>{captureLocalIssue('initialization',e);report('Initialization error: '+e.message);uiError('ATGV projects could not load: '+e.message);});
                                                                                            
   const refreshUnifiedArtifacts=async()=>{

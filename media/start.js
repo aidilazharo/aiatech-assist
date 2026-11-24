@@ -1632,6 +1632,22 @@ function closeBARequirementModal(restore=true){
  const previous=baRequirementPriorFocus;baRequirementPriorFocus=null;
  if(restore){if(previous?.isConnected)previous.focus();else $('baJiraBrFilter').focus();}
 }
+function renderBRLink(item){
+ const cell=document.createElement('div');cell.className='ba-jira-br-cell';
+ const refs=Array.isArray(item._brRefs)?item._brRefs:[];
+ if(!refs.length){cell.textContent=item.brLabel||'—';return cell;}
+ for(const ref of refs){
+  const button=document.createElement('button');button.type='button';button.className='jira-issue-inline-link';button.textContent=ref.label||ref.id||'BR';button.title='View Business Requirement details';
+  button.addEventListener('click',event=>{
+   event.stopPropagation();
+   if(selectedRole==='business-analyst')openBARequirementModal(ref);
+   else if(ref.rootKey)openJiraIssueModal(ref.rootKey);
+  });
+  if(selectedRole!=='business-analyst'&&!ref.rootKey)button.disabled=true;
+  cell.append(button);
+ }
+ return cell;
+}
 function renderBAJiraInventory(){
  const section=$('baJiraInventorySection'),statusNode=$('baJiraInventoryStatus'),root=$('baJiraInventoryTable');
  if(!section||!statusNode||!root)return;
@@ -1886,7 +1902,7 @@ function renderPMDashboard(){
  if(typeof ATGVDataTables==='undefined'){grid.textContent='Jira DataTables are unavailable.';return;}
  if(pmJiraTableInstance){pmJiraTableInstance.setRows(matches);return;}
  pmJiraTableInstance=ATGVDataTables.mount(grid,matches,[
-  {key:'brLabel',label:'Business Requirement',render:item=>item.brLabel||'—'},{key:'key',label:'Jira key',render:pmJiraLink},{key:'type',label:'Type'},
+  {key:'brLabel',label:'Business Requirement',render:renderBRLink},{key:'key',label:'Jira key',render:pmJiraLink},{key:'type',label:'Type'},
   {key:'summary',label:'Summary'},{key:'roleName',label:'Role'},{key:'assignee',label:'Assignee',render:item=>item.assignee||'Unassigned'},
   {key:'priority',label:'Priority',render:item=>item.priority||'—'},{key:'status',label:'Status'},
   {key:'dueDate',label:'Due Date',render:item=>item.dueDate||'—'},
@@ -3905,7 +3921,7 @@ function renderRoleJiraIssues(items,incomplete=false){
  const raw=Array.isArray(items)?items:[],root=$('roleJiraTable');
  const projectKey=projectConnectionsSnapshot.jira?.key||'';
  const refs=new Map(ATGVBAJiraEpics.projectRows(raw,ATGVCompletedBRHistory.group(completedBARecords()),projectKey).map(item=>[item.key,item]));
- const rows=raw.map(item=>({...item,roleName:ATGVBAJiraEpics.roleName(item),brLabel:item.brId||refs.get(item.key)?.brLabel||''}));
+ const rows=raw.map(item=>({...item,roleName:ATGVBAJiraEpics.roleName(item),brLabel:item.brId||refs.get(item.key)?.brLabel||'',_brRefs:refs.get(item.key)?._brRefs||[]}));
  root.classList.add('atgv-jira-role-table');
  roleJiraItems=rows;roleJiraIncomplete=incomplete;
  if(selectedRole==='software-developer')showDeveloperAssignedTickets(rows);
@@ -3916,7 +3932,7 @@ function renderRoleJiraIssues(items,incomplete=false){
  ATGVDataTables.mount(root,rows,[
   {key:'key',label:'Jira ID',render:item=>{const btn=document.createElement('button');btn.type='button';btn.className='jira-issue-inline-link';btn.textContent=item.key;btn.title='View Jira '+item.key+' details';btn.addEventListener('click',()=>openJiraIssueModal(item.key));return btn;}},
   {key:'issueType',label:'Type'},
-  {key:'brLabel',label:'Business Requirement',render:item=>item.brLabel?(item.brLabel+(item.brStatus==='Updated'?' · Updated':'')):'—'},
+  {key:'brLabel',label:'Business Requirement',render:renderBRLink},
   {key:'roleName',label:'Role'},
   {key:'descendantCount',label:'Child Issues',render:item=>item.brRoot?String(item.descendantCount||0):'—'},
   {key:'summary',label:'Summary',render:item=>{const btn=document.createElement('button');btn.type='button';btn.className='jira-issue-summary-link';btn.textContent=item.summary;btn.addEventListener('click',()=>openJiraIssueModal(item.key));return btn;}},
@@ -6424,7 +6440,8 @@ function renderBAUncompleted(){
  const first=active[0];
  const sources=(brState?.sourceDocuments||[]).map(item=>item.name).filter(Boolean);
  const busy=!!baBusyTask||discoveryImportBusy||brEditorSaving||progress?.running;
- $('baIncompleteTitle').textContent=!unfinished?'Business Requirements':active.length>1?`${active.length} Business Requirements in progress`:first?`${first.id} · ${first.title}`:'Business Requirement in progress';
+ panel.classList.toggle('hidden',!unfinished);
+ $('baIncompleteTitle').textContent=!unfinished?'':active.length>1?`${active.length} Business Requirements in progress`:first?`${first.id} · ${first.title}`:'Business Requirement in progress';
  $('baIncompleteMeta').textContent=unfinished?(progress?.label||'Prepare Source'):'';
  $('baIncompleteMeta').hidden=!unfinished;
  $('baIncompleteSource').textContent=sources.join(', ');

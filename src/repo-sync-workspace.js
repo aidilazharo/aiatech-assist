@@ -6,6 +6,15 @@ const path=require('node:path');
 const repoSync=require('./repo-sync-pr');
 const repoCredentials=require('./repo-sync-credentials');
 const releasePublisher=require('./repo-sync-release-publisher');
+const {createQueue}=require('./repo-sync-release-queue');
+let releaseQueue=null,releaseQueueTimer=null,releasePanelPost=null;
+function startReleaseSync({preferences,secrets,onLog=()=>{}}){
+ if(releaseQueueTimer)clearInterval(releaseQueueTimer);
+ releaseQueue=createQueue({preferences,secrets,onLog,onChange:items=>{void releasePanelPost?.({type:'releaseQueueStatus',items});}});
+ const tick=()=>releaseQueue.tick().catch(error=>onLog('Workspace release queue: '+String(error?.message||error).slice(0,160)));
+ void tick();releaseQueueTimer=setInterval(tick,60*60*1000);releaseQueueTimer.unref?.();
+ return {dispose(){clearInterval(releaseQueueTimer);releaseQueueTimer=null;releaseQueue=null;}};
+}
 const SAVED_URL_KEYS=Object.freeze({Source:'atgvAssist.repoSync.lastSourceUrl',Destination:'atgvAssist.repoSync.lastDestinationUrl'});
 const SAVED_LIST_KEYS=Object.freeze({Source:'atgvAssist.repoSync.savedSourceUrls',Destination:'atgvAssist.repoSync.savedDestinationUrls'});
 const MAX_SAVED_REPOS=30;
@@ -100,7 +109,7 @@ ol{line-height:1.85;padding-left:20px}
 <label for="reviewDescription">PR description (for pull requests)</label><textarea id="reviewDescription" rows="4" maxlength="4000"></textarea>
 <div class="actions"><button id="publishReviewed" type="button">Push & Create PR</button><button id="pushBranchOnly" type="button" class="secondary">Push Branch Only</button><button id="redoReview" type="button" class="secondary">Pull & Study Again</button></div>
 </section>
-<section class="card full"><h2>5. Publish Merged Release</h2><p class="muted">After the destination PR is merged into main, verify the source release and publish its assets directly through GitHub Releases. GitHub Actions remain disabled. Use the same Source and Destination connections.</p><label for="releasePrNumber">Destination PR number</label><input id="releasePrNumber" type="number" min="1" max="1000000000" step="1"><label for="releaseTag">Exact source release tag</label><input id="releaseTag" maxlength="180" placeholder="v0.0.84-build.123 or v0.0.8-source-build.38"><div class="actions"><button id="publishMergedRelease" type="button">Publish Merged Release</button><button id="openPublishedRelease" type="button" class="secondary" hidden disabled>Open Published Release</button></div></section></div></form>
+<section class="card full"><h2>5. Release Synchronization</h2><p class="muted">The latest matching stable release is copied into release-artifacts/ with source code in the same PR. ATGV removes previous managed artifacts and publishes the verified release after the destination PR merges into main. Destination GitHub Actions remain disabled.</p><div id="releaseQueueStatus" class="status" role="status" aria-live="polite">No queued release.</div><div class="actions"><button id="checkReleaseSync" type="button" class="secondary">Check Release Status</button></div></section></div></form>
 
 </main>
 <script nonce="__NONCE__">
@@ -127,8 +136,7 @@ function buttons(){
   get(kind==='Source'?'forgetSource':'forgetDestination').disabled=busy||!select.value;
  }
  get('openPr').disabled=busy||!createdPr;get('openPr').hidden=!createdPr;
- get('publishMergedRelease').disabled=busy||!get('releasePrNumber').value||!get('releaseTag').value.trim();
- get('openPublishedRelease').hidden=!publishedRelease;get('openPublishedRelease').disabled=busy||!publishedRelease;
+ get('checkReleaseSync').disabled=busy;
  get('repoSyncForm').setAttribute('aria-busy',String(busy));
 }
 function consumeUrl(id){
@@ -215,13 +223,7 @@ get('publishReviewed').addEventListener('click',()=>publishReviewed(false));
 get('pushBranchOnly').addEventListener('click',()=>publishReviewed(true));
 get('redoReview').addEventListener('click',()=>get('repoSyncForm').requestSubmit());
 get('openPr').addEventListener('click',()=>{if(createdPr)vscode.postMessage({command:'openCreatedPr'});});
-for(const id of ['releasePrNumber','releaseTag'])get(id).addEventListener('input',buttons);
-get('publishMergedRelease').addEventListener('click',()=>{
- if(busy||!get('releasePrNumber').reportValidity()||!get('releasePrNumber').value||!get('releaseTag').value.trim())return;
- busy=true;publishedRelease='';buttons();show('Verifying the merged PR and approved release…');
- vscode.postMessage({command:'publishMergedRelease',sourceUrl:consumeUrl('sourceUrl'),destinationUrl:consumeUrl('destinationRepo'),prNumber:Number(get('releasePrNumber').value),tag:get('releaseTag').value.trim()});
-});
-get('openPublishedRelease').addEventListener('click',()=>{if(publishedRelease)vscode.postMessage({command:'openPublishedRelease'});});
+get('checkReleaseSync').addEventListener('click',()=>vscode.postMessage({command:'checkReleaseSync'}));
 window.addEventListener('message',e=>{
  const data=e.data||{};
  if(data.type==='repoSyncSavedList')showSavedRepos(data.kind,data.entries);
@@ -289,8 +291,8 @@ window.addEventListener('message',e=>{
  if(data.type==='repoSyncForgetResult'){
   busy=false;buttons();show(data.message||'Saved connection action finished.',data.success?'success':'ready');
  }
- if(data.type==='releasePublishResult'){busy=false;publishedRelease=data.success?String(data.url||''):'';buttons();show(data.message||'Release publication finished.',data.success?'success':'error');}
- if(data.type==='repoSyncResult'){busy=false;createdPr=data.success?String(data.prUrl||''):'';if(data.success&&createdPr&&data.releaseTag){get('releasePrNumber').value=createdPr.split('/').pop();get('releaseTag').value=data.releaseTag;}if(data.success){reviewReady=false;get('reviewPanel').hidden=true;}buttons();show(data.message||'Sync finished.',data.success?'success':'error');}
+ if(data.type==='releaseQueueStatus'){const items=Array.isArray(data.items)?data.items:[];get('releaseQueueStatus').textContent=items.length?items.slice(-10).map(x=>x.destination+' #'+x.prNumber+' · '+x.tag+' · '+x.status+(x.detail?' — '+x.detail:'')+(x.url?' — '+x.url:'')).join('\\n'):'No queued release.';}
+ if(data.type==='repoSyncResult'){busy=false;createdPr=data.success?String(data.prUrl||''):'';if(data.success){reviewReady=false;get('reviewPanel').hidden=true;}buttons();show(data.message||'Sync finished.',data.success?'success':'error');}
 });
 buttons();
 vscode.postMessage({command:'getRepoSyncSaved'});
@@ -405,11 +407,12 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
   for(const token of tokens)if(token)message=message.split(token).join('[REDACTED]');
   return message.slice(0,550);
  };
- current.onDidDispose(()=>{if(panel===current)panel=null;});
+ releasePanelPost=post;
+ current.onDidDispose(()=>{if(panel===current){panel=null;releasePanelPost=null;}});
  current.webview.onDidReceiveMessage(async message=>{
   if(!message||typeof message.command!=='string')return;
   if(message.command==='getRepoSyncSaved'){
-   try{await restoreRepos();await restoreSelectedFolder();}
+   try{await restoreRepos();await restoreSelectedFolder();await post({type:'releaseQueueStatus',items:releaseQueue?.rows()||[]});}
    catch(error){onLog('Repo Sync saved connection and folder restore: '+sanitize(error));}
    return;
   }
@@ -447,23 +450,12 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
    return;
   }
   if(message.command==='openCreatedPr'){if(createdPr)await vscode.env.openExternal(vscode.Uri.parse(createdPr));return;}
-  if(message.command==='openPublishedRelease'){if(publishedRelease)await vscode.env.openExternal(vscode.Uri.parse(publishedRelease));return;}
-  if(message.command==='publishMergedRelease'){
-   if(busy){await post({type:'releasePublishResult',success:false,message:'A repository operation is already running.'});return;}
-   busy=true;publishedRelease='';let source=null,destination=null,sourcePat='',destPat='';
+  if(message.command==='checkReleaseSync'){
    try{
-    source=repoCredentials.parseCredentialUrl(message.sourceUrl);destination=repoCredentials.parseCredentialUrl(message.destinationUrl);
-    const pair=releasePublisher.pairFor(source,destination);releasePublisher.tagInfo(message.tag,pair.kind);
-    if(!Number.isSafeInteger(message.prNumber)||message.prNumber<1||message.prNumber>1000000000)throw Error('Enter the merged destination PR number.');
-    const action='Publish Verified Release';
-    const consent=await vscode.window.showWarningMessage('Publish '+message.tag+' from '+source.name+' to '+destination.name+' after verifying merged PR #'+message.prNumber+'? This creates a GitHub release and uploads verified assets. No GitHub Actions, main commit or PR merge will be performed.',{modal:true},action);
-    if(consent!==action)throw Error('Release publication cancelled. No changes made.');
-    sourcePat=(await verifiedPat('Source',source)).token;destPat=(await verifiedPat('Destination',destination)).token;
-    await rememberRepo('Source',source);await rememberRepo('Destination',destination);
-    const result=await releasePublisher.publish({source,destination,sourcePat,destPat,prNumber:message.prNumber,tag:message.tag,onProgress:message=>post({type:'repoSyncProgress',stage:'release-publish',message})});
-    publishedRelease=result.url;await post({type:'releasePublishResult',success:true,url:result.url,message:'Published '+result.tag+' · '+result.assetCount+' verified assets · '+result.url});
-   }catch(error){const reason=sanitize(error,[sourcePat,destPat,source?.token,destination?.token]);onLog('Release publication: '+reason);await post({type:'releasePublishResult',success:false,message:reason});}
-   finally{busy=false;}
+    if(!releaseQueue)throw Error('Automatic release service is unavailable.');
+    await releaseQueue.tick();
+    await post({type:'releaseQueueStatus',items:releaseQueue.rows()});
+   }catch(error){await post({type:'releaseQueueStatus',items:[{destination:'Release service',prNumber:'',tag:'',status:'retry',detail:sanitize(error)}]});}
    return;
   }
   if(message.command==='testRepoConnection'){
@@ -509,13 +501,14 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
     commitMessage:message.commitMessage,prTitle:message.prTitle,
     prDescription:message.prDescription}:null;
    if(reviewed)repoSync.validateReviewPresentation(reviewed,reviewed.sourceSha,{branchOnly});
+   let distribution=false;try{releasePublisher.pairFor(source,destination);distribution=true;}catch{}
    const confirmAction=branchOnly?'Push Branch Only':isPublish?'Publish Reviewed PR':'Create Sync PR';
    const response=isPrepare?'Prepare Source Review':await vscode.window.showWarningMessage(
     'Source: '+source.name+' ('+(sourcePrNumber?'PR #'+sourcePrNumber:sourceBranch||'GitHub default branch (auto)')+')\nDestination: '+destination.name+' in '+selectedFolder+
     '\nScope: '+scope+'\nDestination base: '+(base||'GitHub default branch')+
     (branchOnly?'\n\nCommit and push the reviewed changes to '+reviewed.branch+' without creating a pull request?':
      isPublish?'\n\nPublish the reviewed branch, commit message, PR title and description?':'\n\nVerify both PATs, clone to temp and create the PR?'),
-    {modal:true},confirmAction);
+    {modal:true,detail:distribution&&!branchOnly?'Includes the latest matching stable release in the same PR and authorizes automatic verified release publication after merge.':''},confirmAction);
    if(response!==(isPrepare?'Prepare Source Review':confirmAction)){
     await post({type:'repoSyncResult',success:false,message:'Cancelled. No files were changed.'});return;
    }
@@ -556,6 +549,15 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
    }
    pendingReview=null;
    createdPr=outcome.prUrl||'';
+   let releaseNotice='';
+   if(distribution&&!branchOnly&&createdPr&&outcome.releaseTag){
+    try{
+     if(!releaseQueue)throw Error('Release queue is unavailable.');
+     const prNumber=Number(new URL(createdPr).pathname.split('/').pop());
+     await releaseQueue.enqueue({source,destination,prNumber,tag:outcome.releaseTag});
+     releaseNotice='\nRelease queued for automatic publication after merge.';
+    }catch(error){releaseNotice='\nPR was created, but automatic release queue failed: '+sanitize(error,[sourcePat,destPat]);}
+   }
    const summary=outcome.unchanged?outcome.message:
     (branchOnly?'Branch pushed: '+outcome.branch:'PR created: '+outcome.prUrl)+'\nSource: '+outcome.sourceRepo+' / '+outcome.sourceBranch+' @ '+outcome.sourceSha+
     '\nDestination: '+outcome.destinationRepo+'/'+outcome.base+
@@ -564,7 +566,7 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
     '\\nLatest published release: '+(outcome.releaseTag||'None published')+
     '\\nRelease assets included: '+String(outcome.releaseAssetCount||0)+
     '\\nRelease artifact paths: '+(outcome.releaseArtifactPaths||[]).join(', ');
-   await post({type:'repoSyncResult',success:true,prUrl:createdPr,releaseTag:outcome.releaseTag||'',message:enrichedSummary+(createdPr&&outcome.releaseTag?'\nAfter the destination PR is merged, use Publish Merged Release.':'')});
+   await post({type:'repoSyncResult',success:true,prUrl:createdPr,releaseTag:outcome.releaseTag||'',message:enrichedSummary+releaseNotice});
    onLog('Repo Sync: '+summary);
   }catch(error){
    workflowFailure=error;
@@ -580,4 +582,4 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
  current.webview.html=workspaceHtml({nonce:crypto.randomBytes(18).toString('base64'),version,cspSource:current.webview.cspSource});
  return current;
 }
-module.exports={open,workspaceHtml};
+module.exports={open,workspaceHtml,startReleaseSync};
