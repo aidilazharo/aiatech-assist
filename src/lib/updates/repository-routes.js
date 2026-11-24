@@ -1,6 +1,5 @@
 'use strict';
-// Select trusted source and release repositories from the configured GitHub owner.
-// A distribution mirror is never substituted for the owner's authoritative source.
+// Resolve recognized account owners to the same approved production repositories.
 const startup=require('../startup-setup');
 function forOwner(value){
  const owner=String(value||'').trim().toLowerCase().replace(/^https:\/\/(?:www\.)?github\.com\//,'').replace(/^github\.com\//,'').replace(/\/$/,'');

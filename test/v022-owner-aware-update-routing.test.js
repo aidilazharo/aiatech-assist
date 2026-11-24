@@ -8,19 +8,17 @@ const startup=require('../src/lib/startup-setup');
 const root=path.resolve(__dirname,'..');
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');
 test('both GitHub organizations resolve exactly to their sources and the same release distribution repositories',()=>{
- const expected=[
-  ['aidilazharo','aiatech-assist','tech-stacks-skills'],
-  ['aiamalaysia','my-fow-technology-app-techassists-dev-sdlc','my-fow-technology-app-techassists-enterprise-skills']
- ];
- for(const [owner,extension,library] of expected){
+ const expected=['aidilazharo','aiamalaysia'];
+ const extension='my-fow-technology-app-techassists-dev-sdlc',library='my-fow-technology-app-techassists-enterprise-skills';
+ for(const owner of expected){
   const routes=routing.forOwner('github.com/'+owner);
   assert.equal(routes.owner,owner);
-  assert.equal(routes.extensionSource,`https://github.com/${owner}/${extension}`);
-  assert.equal(routes.librarySource,`https://github.com/${owner}/${library}`);
+  assert.equal(routes.extensionSource,`https://github.com/aiamalaysia/${extension}`);
+  assert.equal(routes.librarySource,`https://github.com/aiamalaysia/${library}`);
   assert.equal(routes.extensionReleases,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc');
   assert.equal(routes.libraryReleases,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills');
-  assert.equal(routing.asRepository(routes.extensionSource),owner+'/'+extension);
-  assert.equal(routing.asRepository(routes.librarySource),owner+'/'+library);
+  assert.equal(routing.asRepository(routes.extensionSource),'aiamalaysia/'+extension);
+  assert.equal(routing.asRepository(routes.librarySource),'aiamalaysia/'+library);
   assert.equal(startup.validate({jiraUrl:'https://example.atlassian.net',email:'user@example.com',githubUrl:'github.com/'+owner}).libraryRepoUrl,routes.librarySource);
  }
  for(const value of ['otherowner','github.com/otherowner','github.com/aiamalaysia/sneaky','https://evil.test/aiamalaysia','','../aidilazharo'])

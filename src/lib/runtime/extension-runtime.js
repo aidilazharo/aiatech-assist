@@ -368,13 +368,7 @@ async function prepareVendorAssets({syncIfMissing=false}={}){
 }
 const uxCatalogAutoRefreshAt = new Map(); // Avoid repeated background Git pulls per workspace.
 function startupLibraryRepository(){
- const owner=String(extensionSettings?.github?.owner||'').toLowerCase();
- if(!owner)return startupSetup.FIXED_LIBRARY_REPOSITORY;
- const source=startupSetup.SOURCE_REPOS[owner];
- // Existing project settings may use a custom GitHub repository owner. Keep
- // their Library pinned to the legacy trusted source; only the Start
- // account onboarding may change between the two verified source mappings.
- return source?.library||startupSetup.FIXED_LIBRARY_REPOSITORY;
+ return startupSetup.FIXED_LIBRARY_REPOSITORY;
 }
 function catalogConfig(){
  const saved=context.globalState.get('atgvAssist.sdlcCatalog',sdlcCatalog.DEFAULT_CONFIG);
@@ -545,9 +539,8 @@ function scheduleCatalogChecks(){
 }
 
 // Fixed trusted update repositories; never use a saved URL for code updates.
-const extensionSourceRepository=require('../../../package.json').repository.url;
+const extensionSourceRepository=startupSetup.RELEASES.extension;
 const libraryReleaseUpdater=require('../updates/library-release-updater');
-const FIXED_LIBRARY_REPOSITORY='https://github.com/aidilazharo/tech-stacks-skills';
 let softwareUpdateTimer=null,softwareStartupTimer=null,softwareCheckBusy=false;
 let extensionRelease=null,extensionLatest=null,libraryRelease=null,extensionUpdateChecked='',extensionUpdateError='',libraryUpdateError='';
 let libraryLatest=null,libraryReleaseAvailable=false;

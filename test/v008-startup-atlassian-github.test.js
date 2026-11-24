@@ -23,8 +23,8 @@ test('Atlassian onboarding derives Confluence /wiki from one editable site URL',
 });
 test('both supported organization mappings point to exact required and optional repos',()=>{
  const a=setup.validate({...setup.DEFAULTS,githubUrl:'github.com/aidilazharo'});
- assert.equal(a.extensionRepoUrl,'https://github.com/aidilazharo/aiatech-assist');
- assert.equal(a.libraryRepoUrl,'https://github.com/aidilazharo/tech-stacks-skills');
+ assert.equal(a.extensionRepoUrl,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc');
+ assert.equal(a.libraryRepoUrl,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills');
  const b=setup.validate({...setup.DEFAULTS,githubUrl:'https://github.com/aiamalaysia'});
  assert.equal(b.extensionRepoUrl,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc');
  assert.equal(b.libraryRepoUrl,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills');
