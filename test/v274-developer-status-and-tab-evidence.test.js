@@ -70,15 +70,16 @@ test('DDL scanner handles nested SQL type parentheses without splitting in the m
  assert.equal(parsed.tables.length,1);
  assert.deepEqual(parsed.tables[0].columns,['id INTEGER','title VARCHAR(255)','amount DECIMAL(10, 2)']);
 });
-test('only developer-role issue assignment can change BR New to In Progress',()=>{
+test('only developer-role issue in actual In Progress status can change BR New to In Progress',()=>{
  const snippet=slice('function jiraIssueLinkedBr(item){','function renderRoleJiraIssues(items,incomplete=false){')+'\n'+slice('function developerBrStatusOf(br){','function renderDeveloperBrAssignment(){');
  const context={selectedRole:'software-developer',roleJiraLoaded:true,roleJiraProject:'p',activeId:'p',
   brState:{brs:[{id:'BR-007',status:'approved',approvedRevision:1,needsRefresh:false}]},
   roleJiraItems:[],developerAssignedMine:[]};
  const status=()=>vm.runInNewContext(snippet+'\ndeveloperBrStatusOf(brState.brs[0]);',context);
  assert.equal(status(),'new');
- context.developerAssignedMine=[{mine:true,brRoot:true,brId:'BR-007',summary:'BR-007: Manage people'}];
- assert.equal(status(),'in-progress');
+ context.developerAssignedMine=[{mine:true,brRoot:true,brId:'BR-007',summary:'BR-007: Manage people',status:'To Do'}];
+ assert.equal(status(),'new');
+ context.developerAssignedMine[0].status='In Progress';assert.equal(status(),'in-progress');
  context.selectedRole='ux-designer';assert.equal(status(),'new');
  context.selectedRole='software-developer';context.roleJiraLoaded=false;assert.equal(status(),'new');
  context.roleJiraLoaded=true;context.developerAssignedMine=[{mine:false,brRoot:true,brId:'BR-007',summary:'BR-007: Manage people'}];assert.equal(status(),'new');
@@ -88,7 +89,8 @@ test('only developer-role issue assignment can change BR New to In Progress',()=
  context.brState.synced={};assert.equal(status(),'new');
  context.developerAssignedMine=[{mine:true,brRoot:true,brId:'BR-008',summary:'BR-008: Other'}];assert.equal(status(),'new');
  context.developerAssignedMine=[{mine:true,brRoot:true,brId:'BR-007',summary:'BR-007: Manage people'}];
- context.brState.brs[0].approvedRevision=2;assert.equal(status(),'in-progress');
+ context.brState.brs[0].approvedRevision=2;assert.equal(status(),'new');
+ context.developerAssignedMine[0].status='In Progress';assert.equal(status(),'in-progress');
  context.brState.brs[0].status='cancelled';assert.equal(status(),'cancelled');
 });
 test('selection-free view retains BR selector, progress, count and disabled Start while hiding tabs',()=>{

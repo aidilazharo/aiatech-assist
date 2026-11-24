@@ -1,11 +1,13 @@
 'use strict';
 const test=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const path=require('node:path');
+const {FIXED_LIBRARY_REPOSITORY}=require('../src/lib/startup-setup');
 const root=path.resolve(__dirname,'..');
 const source=fs.readFileSync(path.join(root,'test/generated/extension-source.txt'),'utf8');
 const css=fs.readFileSync(path.join(root,'media/start.css'),'utf8');
 const script=fs.readFileSync(path.join(root,'media/start.js'),'utf8');
 const a=source.indexOf('function html(webview,{resumeLibrary=false}={}){'),b=source.indexOf('\nasync function dashboardState()',a);
-const func=new Function('vscode','context',source.slice(a,b)+'\nreturn html')({Uri:{joinPath:(_,...parts)=>parts.join('/')}},{extensionUri:{}});
+const buildHtml=new Function('vscode','context','FIXED_LIBRARY_REPOSITORY',source.slice(a,b)+'\nreturn html');
+const func=buildHtml({Uri:{joinPath:(_,...parts)=>parts.join('/')}},{extensionUri:{}},FIXED_LIBRARY_REPOSITORY);
 const html=func({asWebviewUri:u=>u,cspSource:'vscode-resource:'});
 test('fixed header, scrollable navigation and independently scrollable content are included',()=>{
   for(const id of ['contentPane','navSettings','sidebarSwitchProject','headerModel','landingView','workView','documentsView','knowledgeView','settingsView','projectView'])assert.match(html,new RegExp('id="'+id+'"'));

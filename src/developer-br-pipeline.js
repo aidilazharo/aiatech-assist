@@ -1,6 +1,6 @@
 'use strict';
-// BR-driven developer automation. Never runs untrusted commands, pushes, commits,
-// modifies the original checkout or makes a claim of test success without evidence.
+// BR-driven developer automation. Never pushes or modifies the original checkout.
+// Verified source-only commits are local to isolated BR worktrees.
 const fs=require('node:fs/promises');
 const path=require('node:path');
 const crypto=require('node:crypto');
@@ -17,7 +17,7 @@ const safeSegment=/^[a-zA-Z0-9_.@+-]+$/;
 function approvedBr(register,id){
  if(!BR_ID.test(String(id||'')))throw Error('Select a valid Business Requirement.');
  const br=(register?.brs||[]).find(x=>x.id===id);
- if(!br||br.status!=='approved'||br.needsRefresh||!br.approvedContent||!br.approvedRevision)throw Error('Only the current approved Business Requirement revision can be developed.');
+ if(!br||br.status!=='approved'||br.needsRefresh||br.externalReviewRequired||br.roleReviewRequired||br.dependencyReviewRequired||!br.approvedContent||!br.approvedRevision)throw Error('Only the current approved Business Requirement revision can be developed.');
  return br;
 }
 function safeRelative(input){
@@ -101,18 +101,21 @@ async function runGit(root,...args){
  const {stdout}=await gitExec('git',['-C',root,...args],{timeout:45000,maxBuffer:1024*1024,windowsHide:true,env:{...process.env,GIT_TERMINAL_PROMPT:'0',GCM_INTERACTIVE:'Never'}});
  return String(stdout||'').trim();
 }
-async function createWorktree({root,approvedSha,baseDirectory,brId}){
+async function createWorktree({root,approvedSha,baseSha=approvedSha,baseDirectory,brId}){
  if(!/^[0-9a-f]{40}$/.test(String(approvedSha||'')))throw Error('Approved stack SHA is missing or invalid.');
  if(!BR_ID.test(brId))throw Error('Invalid Business Requirement ID.');
  const repo=await developerGit.repository(root);
  if(!repo.clean)throw Error('The main project checkout has uncommitted changes. Review them before generating an isolated worktree.');
  await runGit(repo.root,'cat-file','-e',approvedSha+'^{commit}');
+ if(!/^[0-9a-f]{40}$/.test(String(baseSha||'')))throw Error('Invalid development baseline commit.');
+ await runGit(repo.root,'cat-file','-e',baseSha+'^{commit}');
+ await runGit(repo.root,'merge-base','--is-ancestor',approvedSha,baseSha).catch(()=>{throw Error('Previous application does not descend from the approved stack. Review migration before development.');});
  await fs.mkdir(baseDirectory,{recursive:true,mode:0o700});
  const worktree=await fs.mkdtemp(path.join(baseDirectory,'br-'+brId.toLowerCase()+'-'));
  const branch='feature/'+brId.toLowerCase()+'-ai-'+crypto.randomBytes(4).toString('hex');
- try{await runGit(repo.root,'worktree','add','--quiet','-b',branch,'--',worktree,approvedSha);}
+ try{await runGit(repo.root,'worktree','add','--quiet','-b',branch,'--',worktree,baseSha);}
  catch(e){await fs.rm(worktree,{recursive:true,force:true});throw e;}
- return {root:repo.root,worktree,branch,baseSha:approvedSha};
+ return {root:repo.root,worktree,branch,baseSha};
 }
 async function writeGenerated(worktree,files){
  const base=await fs.realpath(worktree);const written=[];

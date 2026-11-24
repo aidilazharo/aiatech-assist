@@ -742,6 +742,23 @@ async function loadRecord(base,projectId,brId){
   return row;
  }catch(error){if(error.code==='ENOENT')return null;throw error;}
 }
+async function lastCompletedRecord(base,projectId,brId,beforeRevision){
+ const latest=await loadRecord(base,projectId,brId);
+ const folder=path.join(path.dirname(recordPath(base,projectId,brId)),'runs');
+ const names=await fs.readdir(folder).catch(e=>e.code==='ENOENT'?[]:Promise.reject(e));
+ const prefix=String(brId).replace(/[^a-zA-Z0-9_-]/g,'_')+'-';
+ const candidates=names.filter(name=>name.startsWith(prefix)&&name.endsWith('.json'));
+ if(candidates.length>2000)throw Error('Archive reviewed development history before continuing.');
+ const rows=latest?[latest]:[];
+ for(const name of candidates){
+  const file=path.join(folder,name),stat=await fs.lstat(file);
+  if(!stat.isFile()||stat.isSymbolicLink()||stat.size>20*1024*1024)throw Error('Unsafe development history record.');
+  const row=JSON.parse(await fs.readFile(file,'utf8'));
+  if(row.projectId===projectId&&row.brId===brId)rows.push(row);
+ }
+ return rows.filter(row=>row.status==='complete'&&Number(row.revision)<Number(beforeRevision))
+  .sort((a,b)=>Number(b.revision)-Number(a.revision)||String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')))[0]||null;
+}
 async function captureCheckpoint(worktree,files){
  const root=await fs.realpath(worktree),hashes={};
  const unique=[...new Set((files||[]).filter(Boolean).map(x=>pipeline.safeRelative(x)))];
@@ -795,4 +812,4 @@ async function saveRecord(base,record){
  }
  return output;
 }
-module.exports={inspectGeneratedRedTests:harnessGuard.inspectGeneratedRedTests,archiveInvalidRedContract,reviewRedTestContract:contractGuard.reviewRedTestContract,approvedRoutesFromBr:contractGuard.approvedRoutesFromBr,httpContractEvidence,mergeIssueLedger,summarizeIssueLedger,unrelatedPersonFixturePaths,emojiManifestPaths,recordPath,loadRecord,captureCheckpoint,verifyCheckpoint,safeRepairEvent,appendRepairEvent,diagnoseGreenFailure,createGreenRepairSession,unsupportedMockApiContractPaths,unsupportedDeleteStatusPaths,reactMountContractViolations,unsafeBrowserBootstrapTestPaths,reactDomMountFailure,frontendFailureDetails,publicExports,publicContractViolations,extractGreenFailureDetails,rejectedGreenCandidate,summarizeGreenFailure,invalidKeyboardTestEvidence,invalidLockedTestHarnessEvidence,invalidWaitForImportPaths,GREEN_IMPLEMENTATION_ATTEMPTS,GREEN_RECOVERY_ATTEMPTS,GREEN_MAX_ATTEMPTS,greenRecoveryPrompt,fragileMarkupTestPaths,isTestPath,testCommandGlobs,globRegex,repairableFixedNodeTestCommand,repairFixedFileTestCommands,discoverTestConfiguration,allowedDiscoveredPaths,discoveryInstructions,collidingTestPaths,guardManifest,planningPrompt,parsePlan,criterionText,proveDiscoveredPassingTests,testsOnlyPrompt,greenPrompt,refactorPrompt,runTests,verifyBaseline,verifyRed,redInfrastructureFailure,redTestsUnexpectedlyPassed,redPassRetryFeedback,snapshotBeforeChanges,assertLockedTests,restoreChanges,newRecord,saveRecord};
+module.exports={inspectGeneratedRedTests:harnessGuard.inspectGeneratedRedTests,archiveInvalidRedContract,reviewRedTestContract:contractGuard.reviewRedTestContract,approvedRoutesFromBr:contractGuard.approvedRoutesFromBr,httpContractEvidence,mergeIssueLedger,summarizeIssueLedger,unrelatedPersonFixturePaths,emojiManifestPaths,recordPath,loadRecord,lastCompletedRecord,captureCheckpoint,verifyCheckpoint,safeRepairEvent,appendRepairEvent,diagnoseGreenFailure,createGreenRepairSession,unsupportedMockApiContractPaths,unsupportedDeleteStatusPaths,reactMountContractViolations,unsafeBrowserBootstrapTestPaths,reactDomMountFailure,frontendFailureDetails,publicExports,publicContractViolations,extractGreenFailureDetails,rejectedGreenCandidate,summarizeGreenFailure,invalidKeyboardTestEvidence,invalidLockedTestHarnessEvidence,invalidWaitForImportPaths,GREEN_IMPLEMENTATION_ATTEMPTS,GREEN_RECOVERY_ATTEMPTS,GREEN_MAX_ATTEMPTS,greenRecoveryPrompt,fragileMarkupTestPaths,isTestPath,testCommandGlobs,globRegex,repairableFixedNodeTestCommand,repairFixedFileTestCommands,discoverTestConfiguration,allowedDiscoveredPaths,discoveryInstructions,collidingTestPaths,guardManifest,planningPrompt,parsePlan,criterionText,proveDiscoveredPassingTests,testsOnlyPrompt,greenPrompt,refactorPrompt,runTests,verifyBaseline,verifyRed,redInfrastructureFailure,redTestsUnexpectedlyPassed,redPassRetryFeedback,snapshotBeforeChanges,assertLockedTests,restoreChanges,newRecord,saveRecord};

@@ -85,7 +85,9 @@ class ConfluenceUserDatabase{
   if(cleaned.conflicts.length)throw Error(cleaned.conflicts.join('; '));
   for(let attempt=0;attempt<3;attempt++){
    const current=await this.read({create:true});
-   const merged=normalizeRows([...current.rows,...cleaned.rows]);
+   const incomingById=new Map(cleaned.rows.filter(row=>row.id).map(row=>[row.id,row]));
+   const prior=current.rows.map(row=>{const incoming=incomingById.get(row.id);return incoming?{...row,name:incoming.name||row.name,email:incoming.email||row.email}:row;});
+   const merged=normalizeRows([...prior,...cleaned.rows]);
    if(merged.conflicts.length)throw Error(merged.conflicts.join('; '));
    if(current.property&&JSON.stringify(merged.rows)===JSON.stringify(current.rows))
     return {databaseId:String(current.db.id),rows:current.rows,changed:false};

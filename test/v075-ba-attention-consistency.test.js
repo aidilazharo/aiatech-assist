@@ -41,7 +41,7 @@ test('Regeneration uses current quality findings and reports unchanged content p
  assert.match(runtime,/Regeneration completed: 0 Business Requirements changed/);
  assert.match(runtime,/finding\?\.field/);
  assert.match(workflow,/const unchanged=normalizedContent\(previous\)===normalizedContent\(stable\)/);
- assert.match(workflow,/change:'unchanged',approved:!!existing\.approvedContent/);
+ assert.match(workflow,/change:'unchanged',approved:!repairDraft&&!!existing\.approvedContent/);
 });
 
 test('Shared form styling stays consistent while literal DoD markers remain unchanged',()=>{

@@ -31,7 +31,7 @@ function html(webview,{resumeLibrary=false}={}){
     subtask:"<path d=\"M5 5v7h4m-3-3 3 3-3 3M12 8h7v8h-7zM14 12l1 1 2-2\"/>"
   };
   const baHeaderIcon=(name,variant='')=>`<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${variant}>${baHeaderIcons[name]}</svg>`;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.84';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.91';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const uiConsistencyCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-consistency.css'));
@@ -434,21 +434,22 @@ function html(webview,{resumeLibrary=false}={}){
                 <button id="baAutoTabSource" class="ba-auto-title-icon" type="button" role="tab" data-ba-document="source" aria-controls="baAutoDocumentPanel" aria-selected="false" aria-pressed="false" tabindex="-1" aria-label="Editable source" title="Editable source">${baHeaderIcon('edit')}</button>
                 <button id="baAutoTabOriginal" class="ba-auto-title-icon" type="button" role="tab" data-ba-document="original" aria-controls="baAutoDocumentPanel" aria-selected="false" aria-pressed="false" tabindex="-1" aria-label="Original uploaded document" title="Original uploaded document">${baHeaderIcon('original')}</button>
                 <button id="baAutoTabPreflight" class="ba-auto-title-icon" type="button" role="tab" data-ba-document="preflight" aria-controls="baAutoIsoPreflight" aria-selected="false" aria-pressed="false" tabindex="-1" aria-label="Pre-flight" title="Pre-flight">${baHeaderIcon('preflight')}</button>
+                <button id="baAutoTabJiraFields" class="ba-auto-title-icon" type="button" role="tab" data-ba-document="jira-fields" aria-controls="baAutoJiraFieldsPanel" aria-selected="false" aria-pressed="false" tabindex="-1" aria-label="Jira work item types and fields" title="Jira work item types and fields">${baHeaderIcon('all')}</button>
               </div>
               <div class="ba-auto-document-actions">
                 <button id="baAutoPrimaryAction" class="ba-auto-title-icon" type="button" aria-label="Download ISO BRD" title="Download ISO BRD" disabled>${baHeaderIcon('download',' data-ba-primary-icon="download"')}${baHeaderIcon('save',' data-ba-primary-icon="save" hidden')}${baHeaderIcon('replace',' data-ba-primary-icon="replace" hidden')}</button>
-                <details id="baAutoOverflowMenu" class="ba-auto-overflow-menu">
-                  <summary class="ba-auto-title-icon" aria-label="More document actions" title="More document actions">${baHeaderIcon('more')}</summary>
-                  <div id="baAutoOverflowActions" class="ba-auto-overflow-actions" data-kind="iso" role="group" aria-label="Additional document actions">
+                <div id="baAutoOverflowActions" class="ba-auto-overflow-actions" data-kind="iso" role="group" aria-label="Document actions">
                     <div id="baAutoIsoPreflightActions" class="ba-auto-iso-preflight-actions"><button id="baPreflightDownload" type="button" class="secondary ba-overflow-icon hidden" title="Download Pre-flight Analyst report (.txt)" aria-label="Download Pre-flight Analyst text report" disabled>${baHeaderIcon('download')}</button><button id="baWorkingBrDownload" type="button" class="secondary ba-overflow-icon hidden" title="Download ISO 29148 Business Requirements (PDF)" aria-label="Download ISO 29148 Business Requirements" disabled>${baHeaderIcon('download')}</button><button id="baPreflightRetry" type="button" class="secondary ba-overflow-icon hidden" title="Retry document AI preflight and 12-question mapping" aria-label="Retry Mapping">${baHeaderIcon('refresh')}</button><button id="baPreflightSkip" type="button" class="secondary ba-overflow-icon hidden" title="Skip AI preflight and use source evidence only" aria-label="Skip AI Preflight · Source-Only" disabled>${baHeaderIcon('publish')}</button></div>
                     <button type="button" id="baAutoArtifactSave" class="secondary ba-overflow-icon" title="Save Document" aria-label="Save Document" disabled>${baHeaderIcon('save')}</button>
                     <div id="baAutoFileActions" class="ba-auto-file-actions" aria-label="Uploaded source actions"></div>
                   </div>
-                </details>
+
               </div>
             </div>
           </div>
           <div id="baAutoSourceEditor" hidden>
+
+            <div id="baAutoJiraFieldsPanel" role="tabpanel" aria-labelledby="baAutoTabJiraFields" hidden><div class="ba-jira-fields-heading"><strong>Jira work item types and fields</strong><button id="baAutoJiraFieldsRefresh" type="button" class="secondary">Refresh Jira fields</button></div><p class="muted">Select optional fields to populate from BR evidence for each available Jira work item type. Required fields and hierarchy remain managed by ATGV. This does not create new work item types.</p><p id="baAutoJiraFieldsStatus" role="status"></p><div id="baAutoJiraFieldsList"></div><button id="baAutoJiraFieldsSave" type="button" disabled>Save field selection</button></div>
             <div id="baAutoIsoPreflight" class="ba-auto-iso-preflight" role="tabpanel" aria-labelledby="baAutoTabPreflight" hidden>
               <details id="baSourcePreflight" class="ba-source-preflight hidden" aria-label="AI source document preflight"><summary class="ba-source-preflight-toggle"><span class="ba-source-preflight-spinner" aria-hidden="true"></span><strong id="baSourcePreflightTitle">AI document preflight</strong><span class="ba-source-preflight-chevron" aria-hidden="true">▾</span></summary><div class="ba-source-preflight-body"><p id="baSourcePreflightMessage" class="muted"></p><small id="baSourcePreflightCounts"></small><ul id="baSourcePreflightFindings"></ul></div></details>
               <p id="baAutoPreflightPlaceholder" class="muted" hidden>Pre-flight findings will appear after document analysis.</p>
@@ -609,6 +610,7 @@ function html(webview,{resumeLibrary=false}={}){
         <label for="baJiraBrFilter">Business Requirement <select id="baJiraBrFilter"><option value="">All BRs / project</option></select></label>
         <label for="baJiraTypeFilter">Issue type <select id="baJiraTypeFilter"><option value="">All types</option></select></label>
         <label for="baJiraStatusFilter">Status <select id="baJiraStatusFilter"><option value="">All statuses</option></select></label>
+        <label for="baJiraRoleFilter">Role <select id="baJiraRoleFilter"><option value="">All roles</option></select></label>
         <div class="ba-jira-view-switch" role="group" aria-label="Jira display mode"><button type="button" class="secondary" id="baJiraListView" aria-pressed="true">List</button><button type="button" class="secondary" id="baJiraTreeView" aria-pressed="false">Hierarchy</button></div>
       </div>
       <p id="baJiraInventoryStatus" class="muted" role="status" aria-live="polite">Open Business Analyst My Work to load Jira project items.</p>
@@ -641,6 +643,8 @@ function html(webview,{resumeLibrary=false}={}){
         <div id="pmJiraTableView" aria-label="Searchable Jira DataTable">
           <div class="pm-filters"><label>Search <input id="pmJiraFilter" type="search" placeholder="Issue key, summary or owner" autocomplete="off"></label>
         <label>Type <select id="pmTypeFilter"><option value="">All types</option><option value="br">BR</option><option value="epic">Epic</option><option value="story">User Stories</option><option value="task">Task</option><option value="subtask">Subtask</option><option value="other">Other types</option></select></label>
+        <label>Business Requirement <select id="pmBrFilter"><option value="">All BRs</option></select></label>
+        <label>Role <select id="pmRoleFilter"><option value="">All roles</option></select></label>
         <label>Assignee <select id="pmAssigneeFilter"><option value="">All assignees</option></select></label>
         <label>Status <select id="pmStatusFilter"><option value="">All statuses</option></select></label>
         <label>Priority <select id="pmPriorityFilter"><option value="">All priorities</option></select></label>

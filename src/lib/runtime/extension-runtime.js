@@ -58,6 +58,7 @@ const brDeletionPreview=require('../../br-deletion-preview');
 const orphanJiraCleanup=require('../../orphaned-jira-cleanup');
 const jiraOwnerBRDeletion=require('../../jira-owner-br-deletion');
 const jiraLinkReconciliation=require('../../jira-link-reconciliation');
+const jiraMappingAudit=require('../../jira-mapping-audit');
 const startupJiraReconciliation=require('../../startup-jira-reconciliation');
 const resetEverywhere=require('../../reset-everywhere');
 const localReset=require('../reset/local-reset');
@@ -2008,12 +2009,13 @@ async function publishBlueprintState(){
   await dashboard.webview.postMessage({type:'blueprintState',register:blueprints,assessment:deliveryBlueprint.assess(brs,designs,blueprints)});
 }
 let presenceQueue=Promise.resolve();
+function enqueueRosterOperation(operation){const pending=presenceQueue.catch(()=>{}).then(operation);presenceQueue=pending.catch(()=>{});return pending;}
 function queueMyWorkPresence(roleId){
  const projectId=activeProject?.id;
  if(!projectId)return;
  // Serialize versioned Confluence edits across role switches. Never overwrite a
  // concurrent writer; the presence adapter re-fetches after version conflicts.
- presenceQueue=presenceQueue.catch(()=>{}).then(async()=>{
+ enqueueRosterOperation(async()=>{
   if(activeProject?.id!==projectId)return;
   const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
   const key=validProjectKey(config.get('jira.projectKey'));
@@ -3637,11 +3639,11 @@ async function generateBusinessRequirements(options={}){
  const currentDrafts=(register.brs||[]).filter(br=>br.status==='draft'&&!staleDrafts.includes(br));
  const resolutionIds=options.autoResolve===true?new Set(Array.isArray(options.targetBrIds)?options.targetBrIds:[]):null;
  const resolutionDrafts=resolutionIds?[...resolutionIds].map(id=>currentDrafts.find(br=>br.id===id)):[];
- if(resolutionIds&&(!resolutionIds.size||resolutionDrafts.some(br=>!br||br.approvedContent)))
-  throw Error('AI repair is permitted only for currently editable, unapproved BR drafts. Approved revisions require controlled human review.');
- if(resolutionIds&&staleDrafts.length)throw Error('Discovery or source evidence has changed. Regenerate outdated drafts before AI repair.');
+ if(resolutionIds&&(!resolutionIds.size||resolutionDrafts.some(br=>!br)))
+  throw Error('AI repair requires current draft revisions. Regenerate outdated affected drafts before AI repair.');
+ if(resolutionIds)for(const br of resolutionDrafts)await requireBAOwner('ba-br-'+br.id);
  if(!automatic&&currentDrafts.length&&!options.selective&&!options.regenerate)throw Error('Review or approve the current Business Requirements drafts, or choose Regenerate Proposal to improve them.');
- if(options.regenerate&&(!(resolutionIds?resolutionDrafts:currentDrafts).length||(resolutionIds?resolutionDrafts:currentDrafts).some(br=>br.approvedContent)))throw Error('Regeneration requires editable, unapproved drafts. Start a controlled revision for approved requirements.');
+ if(options.regenerate&&(!(resolutionIds?resolutionDrafts:currentDrafts).length||!resolutionIds&&currentDrafts.some(br=>br.approvedContent)))throw Error('Regeneration requires editable, unapproved drafts. Start a controlled revision for approved requirements.');
  if(!automatic&&!resolutionIds&&staleDrafts.length){
   const action='Regenerate Outdated Drafts';
   const decision=await uiWarning(`${staleDrafts.length} outdated draft(s) will be replaced by newly generated content. Previous drafts, including manual edits, will be kept in revision history. Continue?`,{modal:true},action);
@@ -3799,9 +3801,16 @@ async function generateBusinessRequirements(options={}){
  check();
  const currentSaved=await discovery.load(registry,projectId);if(currentSaved.revision!==saved.revision)throw Error('Discovery changed while generating BRs. Retry.');
  const actor=automatic?ownership.actor:await verifiedBAActor();
- const saveDrafts=requirements=>brWorkflow.generated(registry,projectId,register.revision,{
-  discoveryRevision:saved.revision,requirements,riskAccepted,targetBrIds:focused,automatic,actor
- });
+ const saveDrafts=async requirements=>{
+  if(resolutionIds){
+   if(activeProject?.id!==projectId)throw Error('Project changed during AI repair.');
+   const currentOwners=await listOwnership();
+   if(!currentOwners.me||currentOwners.cached||currentOwners.scope==='local'||currentOwners.me!==actor||[...resolutionIds].some(id=>!currentOwners.documents.some(row=>row.documentId==='ba-br-'+id&&row.ownerId===actor)))throw Error('Verified BR ownership changed during AI repair.');
+  }
+  return brWorkflow.generated(registry,projectId,register.revision,{
+   discoveryRevision:saved.revision,requirements,riskAccepted,targetBrIds:focused,automatic,actor,repairDraft:options.autoResolve===true
+  });
+ };
  let updated;
  try{updated=await saveDrafts(proposed);}
  catch(error){
@@ -3917,6 +3926,7 @@ function jiraScopedMarker(reg,config,nodePath){
 }
 function verifyLinkedJiraIdentity(reg,config,nodePath,issue){
  const tracked=reg.synced?.[nodePath];if(!tracked?.key||issue?.key!==tracked.key)throw Error('JIRA issue mapping changed: '+nodePath);
+ if(tracked.issueId&&String(issue?.id||'')!==String(tracked.issueId))throw Error('JIRA numeric issue identity changed: '+tracked.key+'. Reconcile before publishing.');
  const fields=issue.fields||{};
  if(fields.project?.key!==validProjectKey(config.get('jira.projectKey'))||!Array.isArray(fields.labels)||!fields.labels.includes(jiraScopedMarker(reg,config,nodePath)))throw Error('JIRA issue marker or project changed: '+tracked.key);
  if(tracked.issueType&&String(fields.issuetype?.name||'').toLowerCase()!==String(tracked.issueType).toLowerCase())throw Error('JIRA issue type changed: '+tracked.key);
@@ -3926,6 +3936,7 @@ function verifyLinkedJiraIdentity(reg,config,nodePath,issue){
  const parent=mapped?.parent??(nodePath.split('/').length===4?nodePath.split('/').slice(0,2).join('/'):nodePath.includes('/')?nodePath.slice(0,nodePath.lastIndexOf('/')):null);
  const expected=parent?reg.synced?.[parent]?.key:null;
  if((fields.parent?.key||null)!==(expected||null))throw Error('JIRA parent relationship changed: '+tracked.key);
+ if(tracked.parentIssueId&&String(fields.parent?.id||'')!==String(tracked.parentIssueId))throw Error('JIRA parent numeric ID changed: '+tracked.key+'. Reconcile before publishing.');
 }
 async function jiraProtectionAssessment(reg,config,token,items,{approvedPlan=items}={}){
  const cache=new Map();
@@ -4119,8 +4130,11 @@ async function resolveBAAttention(msg){
   if(before.reviewRevision!==before.discoveryRevision||!before.reviewRevision)throw Error('Complete current Discovery and AI Review first.');
   const findings=currentAttentionFindings(before);
   if(!findings.length)throw Error('No current quality findings. Refresh Generated Requirements.');
-  const selected=findings.filter(row=>before.brs.some(br=>br.id===row.id&&br.status==='draft'&&!br.approvedContent));
-  if(!selected.length)throw Error('Findings require an editable, unapproved draft or a human business decision.');
+  const ownership=await listOwnership();
+  if(!ownership.me||ownership.cached||ownership.scope==='local')throw Error('AI repair requires live verified ownership. Reconnect to Jira and Confluence.');
+  const owned=new Set(ownership.documents.filter(row=>row.ownerId===ownership.me).map(row=>row.documentId));
+  const selected=findings.filter(row=>owned.has('ba-br-'+row.id)&&before.brs.some(br=>br.id===row.id&&br.status==='draft'));
+  if(!selected.length)throw Error('No affected draft is owned by you. Request transfer or ask the owner to resolve it.');
   for(const item of selected)await requireBAOwner('ba-br-'+item.id);
   run={projectId,controller:new AbortController()};baAttentionRun=run;
   const signal=run.controller.signal,originalIds=selected.map(row=>row.id);
@@ -4141,7 +4155,7 @@ async function resolveBAAttention(msg){
    const checked=await brWorkflow.load(registry,projectId);
    const remaining=currentAttentionFindings(checked).filter(row=>originalIds.includes(row.id));
    if(!remaining.length||impact.length>0&&impact.every(row=>row.change==='unchanged'))break;
-   targets=remaining.filter(row=>checked.brs.some(br=>br.id===row.id&&br.status==='draft'&&!br.approvedContent)).map(row=>row.id);
+   targets=remaining.filter(row=>checked.brs.some(br=>br.id===row.id&&br.status==='draft')).map(row=>row.id);
    if(!targets.length)break;
   }
   const final=await brWorkflow.load(registry,projectId);
@@ -4156,6 +4170,7 @@ async function resolveBAAttention(msg){
  }catch(error){
   const cancelled=error?.name==='AbortError'||run?.controller.signal.aborted;
   const message=cancelled?'AI repair stopped; saved drafts preserved, Jira unchanged.':'AI repair failed: '+String(error?.message||error).slice(0,1000);
+  await recordBAProcess({stage:'requirements',action:'resolve-with-ai',status:cancelled?'cancelled':'failed',details:message});
   await report('baAutoResolveResult',message,{failed:!cancelled,cancelled});
   if(!cancelled)await notice(message);
  }finally{if(baAttentionRun===run)baAttentionRun=null;}
@@ -4477,9 +4492,11 @@ async function prepareBRJiraPreview({automatic=false,signal,qualityBlocker=''}={
    await progress('Verifying Jira issue identities and existing mappings…',30);
    const duplicateGate=await prePublishIdentityGuard(register,target.config,target.token,changes,inventory);
    conflicts.push(...formatIdentityConflicts(duplicateGate));
+   const mappingAudit=typeof jiraMappingAudit==='object'?await jiraMappingAudit.audit({register,projectKey:targetKey,readIssue:key=>jiraReadIssue(target.config,target.token,key),verify:(nodePath,issue)=>verifyLinkedJiraIdentity(register,target.config,nodePath,issue),signal}):{checked:0,conflicts:[]};
+   conflicts.push(...mappingAudit.conflicts);
    const checked=await jiraPreflight(register,target.config,target.token,changes,
     (count,total)=>progress('Checking Jira issues '+count+'/'+total+'…',30+Math.floor(count/total*30)),{automatic,inventory,signal});
-   checkedCount=changes.length;
+   checkedCount=changes.length+mappingAudit.checked;
    linkCandidates=checked.linkCandidates||[];
    protection=checked.assessment?.protection||[];
    conflicts.push(...checked);
@@ -4513,7 +4530,10 @@ async function prepareBRJiraPreview({automatic=false,signal,qualityBlocker=''}={
         conflicts.push(item.path+': the existing Jira assignee has no verified SDLC role; review assignment before adding '+item.roleLabel+'.');
       }
       const approvedBR=register.brs.find(br=>br.id===item.path.split('/')[0])?.approvedContent||{};
-      const fieldPlan=jiraFieldPreflight.planFields(item,metadata,{approvedBR,discoveryAnswers:register.discoveryAnswers||{},existing,template});
+      const selection=original.jiraFieldSelection;
+      if(selection&&(selection.site!==site||selection.project!==targetKey))throw Error('Saved BR Jira field selection targets a different project. Refresh and save Jira work item types and fields.');
+      const selectedFields=selection?(selection.byTypeName?.[issueTypes[item.path]]||[]):null;
+      const fieldPlan=jiraFieldPreflight.planFields(item,metadata,{approvedBR,discoveryAnswers:register.discoveryAnswers||{},existing,template,selectedFields});
       const selected=Object.keys(fieldPlan.extraFields);
       fieldPlan.existingDigest=item.action==='update'?sha(JSON.stringify(Object.fromEntries(selected.map(key=>[key,existing?.fields?.[key]??null])))):null;
       jiraPreviewFieldPlans[item.path]=fieldPlan;
@@ -4583,6 +4603,8 @@ async function syncApprovedBRs(expectedRevision,automatic=null){
   await publishProgress('preparing','Checking Jira identities and publication prerequisites…');
   const duplicateGate=await prePublishIdentityGuard(state,config,token,items);
   if(!duplicateGate.safe)throw Error('Jira publication blocked by possible duplicates: '+formatIdentityConflicts(duplicateGate).join('; '));
+  const mappingAudit=await jiraMappingAudit.audit({register:state,projectKey:validProjectKey(config.get('jira.projectKey')),readIssue:key=>jiraReadIssue(config,token,key),verify:(nodePath,issue)=>verifyLinkedJiraIdentity(state,config,nodePath,issue)});
+  if(mappingAudit.conflicts.length)throw Error('Jira publication blocked by existing identity or parent changes: '+mappingAudit.conflicts.join('; '));
   const conflicts=await jiraPreflight(state,config,token,items,undefined,{automatic:!!automatic});
   if(conflicts.length)throw Error('Jira synchronization blocked: '+conflicts.join('; '));
   if(items.some(item=>item.action!=='retire'&&!jiraPreviewFieldPlans[item.path]))throw Error('Jira issue field metadata was not verified. Generate Jira Preview again.');
@@ -4643,6 +4665,8 @@ async function syncApprovedBRs(expectedRevision,automatic=null){
     }
    }else if(item.action==='update'){
     const current=await jiraReadIssue(config,token,key);
+    verifyLinkedJiraIdentity(state,config,item.path,current);
+    const originalAssignee=current.fields?.assignee?.accountId||'';
     if(!previous?.remoteDigest||remoteFingerprint(current)!==previous.remoteDigest)throw Error('Jira content conflict: '+key);
     const currentRoles=(current.fields?.labels||[]).filter(label=>typeof label==='string'&&label.startsWith('atgv-role-'));
     if(item.roleLabel&&currentRoles.length&&!currentRoles.includes(item.roleLabel))throw Error('Jira role conflict: '+key+'. Reconcile the existing role before updating.');
@@ -4650,8 +4674,11 @@ async function syncApprovedBRs(expectedRevision,automatic=null){
     const newRoleLabel=item.roleLabel&&!currentRoles.includes(item.roleLabel)?item.roleLabel:undefined;
     if(Object.keys(fieldPlan.updateCore).length||Object.keys(fieldPlan.extraFields).length||newRoleLabel)
      await jiraUpdateIssue(config,token,{key,...fieldPlan.updateCore,extraFields:fieldPlan.extraFields,fieldMetadata:actualMeta,roleLabel:newRoleLabel});
+    const confirmedOwner=await jiraReadIssue(config,token,key);
+    if((confirmedOwner.fields?.assignee?.accountId||'')!==originalAssignee)throw Error('Jira assignee changed during publication: '+key+'. Review ownership before retrying.');
    }else if(item.action==='retire'){
     const current=await jiraReadIssue(config,token,key);
+    verifyLinkedJiraIdentity(state,config,item.path,current);
     if(!previous?.remoteDigest||remoteFingerprint(current)!==previous.remoteDigest)throw Error('Jira retirement blocked: missing trusted baseline or external changes on '+key);
     await jiraRetireIssue(config,token,{key});
    }
@@ -4661,7 +4688,7 @@ async function syncApprovedBRs(expectedRevision,automatic=null){
     const field=actualMeta.find(entry=>entry.id===id);
     if(!jiraFieldValues.sameValue(field,fieldPlan.extraFields[id],remote?.fields?.[id]))throw Error('Jira did not confirm '+field.name+' for '+key+'. Refresh Jira before retrying.');
    }
-   state=await brWorkflow.recorded(registry,activeProject.id,state.revision,{path:item.path,action:item.action,key,hash:item.hash,kind:item.kind,issueType:remote?.fields?.issuetype?.name||previous?.issueType||plannedIssueType(item),title:item.title,remoteDigest:remote?remoteFingerprint(remote):null,marker:jiraScopedMarker(state,config,item.path)});
+   state=await brWorkflow.recorded(registry,activeProject.id,state.revision,{path:item.path,action:item.action,key,hash:item.hash,kind:item.kind,issueType:remote?.fields?.issuetype?.name||previous?.issueType||plannedIssueType(item),title:item.title,remoteDigest:remote?remoteFingerprint(remote):null,marker:jiraScopedMarker(state,config,item.path),issueId:remote?.id,parentIssueId:remote?.fields?.parent?.id});
    // Only report a completed operation AFTER its confirmed Jira state is persisted locally.
    confirmed++;
    await publishProgress('publishing',`Confirmed ${confirmed} of ${total}: ${item.kind} · ${key}`,{currentPath:item.path,currentKey:key,currentAction:item.action});
@@ -4973,6 +5000,9 @@ async function runDeveloperBrAutomation(brId,{restartFresh=false}={}){
  const selectedRecoveryModel=String(target.label||target.name||target.modelId||'Unknown AI model').slice(0,180);
  const recoveryBase=context.globalStorageUri.fsPath;
  const storedTdd=await developerTdd.loadRecord(recoveryBase,projectId,brId);
+ const revisionBaseline=require('../../developer-revision-baseline');
+ const priorCompleted=await developerTdd.lastCompletedRecord(recoveryBase,projectId,brId,br.approvedRevision);
+ const nextBaseSha=revisionBaseline.choose(priorCompleted,approval.sha);
  let failedCriterionIndex=(storedTdd?.criteria||[]).findIndex(row=>row.status==='regenerating-red'||row.status==='needs-attention');
  const hasFailedRecord=failedCriterionIndex>=0;
  const resumeRequested=!restartFresh&&hasFailedRecord&&storedTdd?.checkpoint&&storedTdd.approvalSha===approval.sha&&storedTdd.revision===br.approvedRevision;
@@ -5005,7 +5035,7 @@ async function runDeveloperBrAutomation(brId,{restartFresh=false}={}){
    await developerTdd.verifyCheckpoint(storedTdd.worktree,storedTdd.checkpoint);
    const currentBranch=await developerBR.runGit(storedTdd.worktree,'branch','--show-current');
    const currentSha=await developerBR.runGit(storedTdd.worktree,'rev-parse','HEAD');
-   if(currentBranch!==storedTdd.branch||currentSha!==approval.sha)throw Error('TDD recovery Git branch or approved stack commit changed. Inspect the saved worktree before retrying.');
+   if(currentBranch!==storedTdd.branch||currentSha!==(storedTdd.baseSha||approval.sha))throw Error('TDD recovery Git branch or approved stack commit changed. Inspect the saved worktree before retrying.');
    resuming=true;
    record=storedTdd;
    record.version=2;record.status='recovering';record.retryCount=(Number(record.retryCount)||0)+1;
@@ -5019,10 +5049,10 @@ async function runDeveloperBrAutomation(brId,{restartFresh=false}={}){
    const resumingCriterion=record.criteria[failedCriterionIndex];
    await progress('repair',`Resuming ${resumingCriterion.id} from the verified checkpoint (${record.retryCount} retry). Prior repair errors and passing criteria are retained.`,{branch:run.branch,worktree:run.worktree,cycleIndex:failedCriterionIndex+1,cycleTotal:record.criteria.length,criterionId:resumingCriterion.id,jiraKey:approvedJiraKeys.includes(resumingCriterion.jiraKey)?resumingCriterion.jiraKey:'',epicJiraKey});
   }else{
-   const workspace=await developerBR.createWorktree({root:repoRoot,approvedSha:approval.sha,baseDirectory:path.join(context.globalStorageUri.fsPath,'developer-br-worktrees',projectId),brId});
+   const workspace=await developerBR.createWorktree({root:repoRoot,approvedSha:approval.sha,baseSha:nextBaseSha,baseDirectory:path.join(context.globalStorageUri.fsPath,'developer-br-worktrees',projectId),brId});
    run.worktree=workspace.worktree;run.branch=workspace.branch;
    record=developerTdd.newRecord({projectId,brId,revision:br.approvedRevision,branch:run.branch,worktree:run.worktree});
-   record.approvalSha=approval.sha;record.model=selectedRecoveryModel;
+   record.approvalSha=approval.sha;record.baseSha=workspace.baseSha;record.previousCompletedRevision=priorCompleted?.revision||0;record.model=selectedRecoveryModel;
    record.modelHistory=[...(Array.isArray(storedTdd?.modelHistory)?storedTdd.modelHistory:[]),{at:new Date().toISOString(),runId:record.runId,model:selectedRecoveryModel,reason:restartFresh||startFreshFromStaleRecord?'new development from Start Development':'first development'}].slice(-50);
    // Prior failures remain inspectable even if a changed BR or stack requires a fresh tree.
    record.previousRunId=storedTdd?.runId||'';
@@ -5048,6 +5078,7 @@ async function runDeveloperBrAutomation(brId,{restartFresh=false}={}){
   const approvedDesignHandoff=await require('../../developer-design-handoff').loadForBr(registry,projectId,brId,br.approvedRevision,{
    root:aiRoot(),brRegister:register,approvedHash:require('../../design-proposals').approvedInputs(register).hash
   });
+  require('../../developer-design-handoff').requireMappedDesign(register,brId,approvedDesignHandoff);
   await progress(resuming?'repair':'plan','Building the unified project artifacts for BA, SA, UI/UX and Developer before development planning…');
   let evidenceBundle;
   if(resuming&&record.contextPath){
@@ -5732,7 +5763,7 @@ async function runDeveloperBrAutomation(brId,{restartFresh=false}={}){
    await progress('local','Runtime repair passed fresh unit tests and build. Restarting the generated server for real HTTP verification…',{evidence:run.evidence,files:run.files});check();
    await launchGeneratedBrServer(run,project,progress,check);
   }
-  if(run.status==='verified'){record.status='complete';await capture();await save('complete');}
+  if(run.status==='verified'){await capture();record.completedCommit=await revisionBaseline.saveCompleted(record,{worktree:run.worktree,storageRoot:path.join(recoveryBase,'developer-br-worktrees',projectId)});record.status='complete';await save('complete');}
  }catch(error){
   const attention=!abort.signal.aborted&&error?.code==='TDD_REPAIR_BLOCKED';
   run.status=abort.signal.aborted?'stopped':attention?'needs-attention':'failed';developerBrLast={...run,abort:null};
@@ -8847,34 +8878,28 @@ async function handleDashboardMessage(msg){
          }
          break;
        }
-       case 'myWorkRosterAddUser':{
-         try{
-           requireOpened();requireOnline();
-           if(msg.projectId!==activeProject.id)throw Error('Project changed. Reopen the roster.');
-           const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
-           const projectKey=validProjectKey(config.get('jira.projectKey'));
-           const result=await myWorkPresence.addUser(config,token,{projectKey,accountId:msg.accountId});
-           await dashboard?.webview.postMessage({type:'myWorkRoster',projectId:activeProject.id,...result});
-         }catch(error){
-           await dashboard?.webview.postMessage({type:'myWorkRosterError',projectId:activeProject?.id,message:String(error.message||error).slice(0,280)});
-         }
-         break;
-       }
+       case 'myWorkRosterAddUser':
        case 'myWorkRosterRefresh':{
+         const projectId=msg.projectId,adding=msg.command==='myWorkRosterAddUser';
          try{
            requireOpened();requireOnline();
-           if(msg.projectId&&msg.projectId!==activeProject.id)throw Error('Project changed.');
+           if(projectId!==activeProject.id)throw Error('Project changed. Reopen the roster.');
            const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
            const key=validProjectKey(config.get('jira.projectKey'));
-           const used=context.workspaceState.get('atgvAssist.usedRoles.'+activeProject.id,[])||[];
+           const used=context.workspaceState.get('atgvAssist.usedRoles.'+projectId,[])||[];
            const registeredRole=String(msg.roleId||'');
-           // Refresh can reconcile the user's actual selected role, not just
-           // read stale Confluence HTML. Never infer a role from an email/name.
-           const snapshot=registeredRole&&used.includes(registeredRole)&&myWorkPresence.ROLES[registeredRole]
-             ?await myWorkPresence.visit(config,token,{projectKey:key,roleId:registeredRole})
-             :await myWorkPresence.snapshot(config,token,key);
-           await dashboard?.webview.postMessage({type:'myWorkRoster',projectId:activeProject.id,...snapshot});
-         }catch(error){await dashboard?.webview.postMessage({type:'myWorkRosterError',projectId:activeProject?.id,message:String(error.message||error).slice(0,280)});}
+           await enqueueRosterOperation(async()=>{
+            if(activeProject?.id!==projectId)throw Error('Project changed before roster operation.');
+            const result=adding
+             ?await myWorkPresence.addUser(config,token,{projectKey:key,accountId:msg.accountId})
+             :registeredRole&&used.includes(registeredRole)&&myWorkPresence.ROLES[registeredRole]
+              ?await myWorkPresence.visit(config,token,{projectKey:key,roleId:registeredRole})
+              :await myWorkPresence.snapshot(config,token,key);
+            if(activeProject?.id===projectId)await dashboard?.webview.postMessage({type:'myWorkRoster',projectId,...result,requestId:msg.requestId});
+           });
+         }catch(error){
+           if(activeProject?.id===projectId)await dashboard?.webview.postMessage({type:'myWorkRosterError',projectId,requestId:msg.requestId,message:String(error.message||error).slice(0,280)});
+         }
          break;
        }
        case 'pmJiraTransition':{
@@ -9805,6 +9830,44 @@ async function handleDashboardMessage(msg){
       case 'baStopPreparation':{
         requireBAWorkspace(msg);
         if(baPreparationRun?.projectId===activeProject.id)baPreparationRun.controller.abort();
+        break;
+      }
+      case 'baJiraFieldSelectionLoad':
+      case 'baJiraFieldSelectionSave':{
+        try{
+          requireBAWorkspace(msg);await requireBAOwner('ba-discovery');
+          const projectId=activeProject.id,register=await brWorkflow.load(registry,projectId);
+          if(!register.sourceDocuments.some(s=>s.digest===msg.digest))throw Error('Select the current uploaded BR document.');
+          const target=await ensureJiraPreviewTarget(register,{automatic:true}),project=validProjectKey(target.config.get('jira.projectKey')),site=baseAtlassian(target.config);
+          const fieldValues=require('../../jira-field-values');
+          const managed=new Set(['project','issuetype','summary','description','parent','labels']);
+          const types=[];
+          for(const type of await jiraIssueTypes(target.config,target.token)){
+           if(activeProject?.id!==projectId)throw Error('Project changed while loading Jira metadata.');
+           const fields=await jiraIssueFieldMetadata(target.config,target.token,{issueTypeId:type.id});
+           types.push({id:String(type.id),name:String(type.name),fields:fields.map(field=>({id:field.id,name:field.name,type:field.schema?.type||'unknown',required:field.required,managed:managed.has(field.id),supported:fieldValues.isEditable(field)&&fieldValues.canGeneralize(field)}))});
+          }
+          const saved=register.jiraFieldSelection;
+          const configured=saved?.site===site&&saved?.project===project;
+          let selection=configured?saved.byTypeId:{};
+          if(msg.command==='baJiraFieldSelectionSave'){
+           if(baPreparationRun||jiraSyncBusy||baPublishIntent)throw Error('Finish the running BR operation before saving Jira field selection.');
+           if(!msg.selection||typeof msg.selection!=='object'||Array.isArray(msg.selection)||msg.revision!==register.revision)throw Error('BR or field selection changed. Reload and retry.');
+           selection=Object.create(null);const byTypeName=Object.create(null);
+           for(const type of types){
+            const ids=msg.selection[type.id];
+            if(!Array.isArray(ids)||ids.some(id=>typeof id!=='string'||!type.fields.some(f=>f.id===id&&f.supported&&!f.managed&&!f.required)))throw Error('Jira fields changed. Refresh available fields before saving.');
+            selection[type.id]=[...new Set(ids)];byTypeName[type.name]=selection[type.id];
+           }
+           if(activeProject?.id!==projectId||baPreparationRun||jiraSyncBusy||baPublishIntent)throw Error('Project or BR operation changed.');
+           const updated=await brWorkflow.write(registry,projectId,register.revision,next=>{next.jiraFieldSelection={site,project,byTypeId:selection,byTypeName};});
+           approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;jiraPreviewValidation=null;jiraPreviewFieldPlans={};
+           await postBAPreparation(projectId,{phase:'draft',stage:'jira',preview:null,error:''});
+           await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
+           await dashboard?.webview.postMessage({type:'baJiraFieldSelectionSaved',projectId,requestId:msg.requestId,value:{project,types,configured:true,selection}});
+           await runBRPreparation('jira');
+          }else if(activeProject?.id===projectId)await dashboard?.webview.postMessage({type:'baJiraFieldSelectionLoaded',projectId,requestId:msg.requestId,value:{project,types,configured,selection}});
+        }catch(error){await dashboard?.webview.postMessage({type:'baJiraFieldSelectionError',projectId:msg.projectId,requestId:msg.requestId,message:atgvJobSafeError(error)});}
         break;
       }
       case 'baReadArtifact':{

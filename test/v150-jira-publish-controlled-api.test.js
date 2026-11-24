@@ -5,6 +5,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const crypto=require('node:crypto');
 const jiraFieldValues=require('../src/jira-field-values');
+const jiraMappingAudit=require('../src/jira-mapping-audit');
 const source=fs.readFileSync(path.join(__dirname,'../test/generated/extension-source.txt'),'utf8');
 const code=source.slice(source.indexOf('async function syncApprovedBRs('),source.indexOf('\nlet aiChangeResolutionRuntime=null;'));
 const sha=s=>crypto.createHash('sha256').update(s).digest('hex');
@@ -20,7 +21,9 @@ function setup({failCreate=false,approval='Publish Jira'}={}){
   jiraSyncBusy:false,jiraPreviewQuality:{assess:()=>({eligible:true,errors:[]})},jiraPreviewFieldPlans,jiraFieldValues,approvedJiraPreviewRevision:1,approvedJiraPreviewBinding:sha(binding),activeProject:{id:'test-project'},registry:{},
   requireOnline(){}, effectiveConfig(){return config;},getAtlassianToken:async()=> 'unused-token',
   verifiedBAActor:async()=> 'mock-actor',sha,baseAtlassian:()=> 'https://mock.atlassian.test',
-  prePublishIdentityGuard:async()=>({safe:true}),jiraPreflight:async()=>[],jiraIssueTypes:async()=>[{id:'10001',name:'Epic',subtask:false}],
+  prePublishIdentityGuard:async()=>({safe:true}),jiraMappingAudit,validProjectKey:key=>key,
+  verifyLinkedJiraIdentity:()=>{throw Error('Unexpected mapped issue in fresh publication');},
+  jiraPreflight:async()=>[],jiraIssueTypes:async()=>[{id:'10001',name:'Epic',subtask:false}],
   jiraIssueFieldMetadata:async()=>metadata,
   jiraReadIssueAllFields:async()=>({fields:{}}),jiraProtectionAssessment:async()=>({blocked:[]}),jiraScopedMarker:()=> 'atgv-'+'a'.repeat(24),
   jiraFindIssueByMarker:async()=>null,

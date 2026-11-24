@@ -24,7 +24,8 @@ test('source details and document controls share one responsive title bar',()=>{
  assert.match(ui,/info\.append\(name,detail\)/);
  assert.match(ui,/detail\.textContent=\[doc\.version/);
  assert.match(css,/#discoveryView #baAutoDocumentToolbar #baAutoFileActions/);
- assert.match(ui,/fileToolbar\.append\(actions\);item\.append\(selector,info\)/);
+ assert.match(ui,/item\.append\(info,replace\)/);
+ assert.match(ui,/fileToolbar\.append\(actions\)/);
  assert.match(ui,/fileToolbar\.replaceChildren\(\)/);
 });
 
@@ -43,7 +44,7 @@ test('four tabs select one visible content panel without losing unsaved edits',(
  assert.match(ba,/get\('baAutoArtifactSave'\)\.hidden=kind!=='source'/);
  assert.match(ba,/get\('baAutoFormattedDocument'\)/);
  assert.match(html,/id="baAutoPrimaryAction"/);
- assert.match(html,/id="baAutoOverflowMenu"/);
+ assert.doesNotMatch(html,/id="baAutoOverflowMenu"/);
  assert.match(css,/#discoveryView #baAutoDocumentPanel\[hidden\]/);
 });
 
@@ -63,7 +64,7 @@ test('document and Jira views use icon buttons with accessible tooltip labels',(
   assert.match(tag,/title="[^"]+"/);
   assert.match(icon,/\$\{baHeaderIcon\(/);
  }
- assert.match(ba,/primary\.setAttribute\('aria-label',label\)/);
+ assert.match(ba,/primary\.setAttribute\('aria-label',label\|\|'Document actions'\)/);
  assert.match(ba,/mark\.toggleAttribute\('hidden',mark\.dataset\.baPrimaryIcon!==icon\)/);
  assert.match(css,/\.ba-auto-title-icon:focus-visible::after\{[^}]*content:attr\(title\)/);
  const start=html.indexOf('<summary class="ba-auto-jira-heading">');
@@ -75,4 +76,13 @@ test('document and Jira views use icon buttons with accessible tooltip labels',(
  assert.match(panel,/id="baAutoJiraView"/);
  assert.match(panel,/id="baAutoJiraTabs"/);
  assert.match(ba,/event\.preventDefault\(\);\s+get\('baAutoJira'\)\.open=true/);
+});
+
+test('delete is a direct document toolbar action and the primary hides on tabs without actions',()=>{
+ const toolbar=html.slice(html.indexOf('id="baAutoDocumentToolbar"'),html.indexOf('id="baAutoSourceEditor"'));
+ assert.match(toolbar,/id="baAutoFileActions"/);
+ assert.doesNotMatch(toolbar,/<details/);
+ assert.match(ui,/actions\.append\(remove\)/);
+ assert.match(ba,/primary\.hidden=kind==='jira-fields'\|\|kind==='original'/);
+ assert.match(css,/#baAutoPrimaryAction\[hidden\]\{display:none!important\}/);
 });

@@ -4,12 +4,15 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const vm=require('node:vm');
+const {FIXED_LIBRARY_REPOSITORY}=require('../src/lib/startup-setup');
 const root=path.resolve(__dirname,'..');
 const source=fs.readFileSync(path.join(root,'test/generated/extension-source.txt'),'utf8');
 const ui=fs.readFileSync(path.join(root,'media/start.js'),'utf8');
 const css=fs.readFileSync(path.join(root,'media/start.css'),'utf8');
 const a=source.indexOf('function html(webview,{resumeLibrary=false}={}){'),b=source.indexOf('\nasync function dashboardState()',a);
-const html=new Function('vscode','context',source.slice(a,b)+'\nreturn html')({Uri:{joinPath:(_,...parts)=>parts.join('/')}},{extensionUri:{}})({asWebviewUri:u=>u,cspSource:'vscode-resource:'});
+const buildHtml=new Function('vscode','context','FIXED_LIBRARY_REPOSITORY',source.slice(a,b)+'\nreturn html');
+const render=buildHtml({Uri:{joinPath:(_,...parts)=>parts.join('/')}},{extensionUri:{}},FIXED_LIBRARY_REPOSITORY);
+const html=render({asWebviewUri:u=>u,cspSource:'vscode-resource:'});
 test('header has a severity-aware dividing line, version under logo title and a separate accessible notification banner',()=>{
  assert.match(html,/<header class="app-header" id="appHeader" role="banner">/);
  assert.match(html,new RegExp('class="brand-versions">Extension v'+require('../package.json').atgvDisplayVersion.replace(/\./g,'\\.')));

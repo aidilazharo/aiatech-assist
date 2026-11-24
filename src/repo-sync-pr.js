@@ -404,6 +404,10 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   // Source and release are pinned across review and publication.
   const release=typeof githubApi.getLatestRelease==='function'
    ?await githubApi.getLatestRelease(source,sourcePat):null;
+  // The official distribution pairs require an exact published main release.
+  const official={ 'aidilazharo/aiatech-assist':'aiamalaysia/my-fow-technology-app-techassists-dev-sdlc','aidilazharo/tech-stacks-skills':'aiamalaysia/my-fow-technology-app-techassists-enterprise-skills' };
+  if(official[source.name.toLowerCase()]===destination.name.toLowerCase()&&(!release||release.targetCommitish!==sha||!release.assets?.length||release.skippedAssetCount||chosenBranch!=='main'||base!=='main'||scope!=='.'))
+   throw Error('ATGV distribution requires full main-to-main sync and a complete published release for the exact source commit. Wait for the source release build or select the correct repositories.');
   const commitPaths=await runner('git',['show','--format=','--name-only','HEAD'],{cwd:cloned}).catch(()=> '');
   const eligible=new Set(files);
   const sourceCommitPaths=[...new Set(String(commitPaths||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean))];

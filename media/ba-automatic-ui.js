@@ -7,9 +7,9 @@
  const header=get('workSkill').parentElement;
  const stages=['source','requirements','jira','publish'];
  const stageNames=['Prepare Source','Develop Requirements','Prepare Jira Preview','Publish to Jira'];
- const kindNames={iso:'Structured ISO BRD',source:'Editable source',original:'Original source text',preflight:'Pre-flight Analyst'};
+ const kindNames={iso:'Structured ISO BRD',source:'Editable source',original:'Original source text',preflight:'Pre-flight Analyst','jira-fields':'Jira work item types and fields'};
  const viewer=get('baAutoFormattedDocument');
- const primary=get('baAutoPrimaryAction'),overflow=get('baAutoOverflowMenu');
+ const primary=get('baAutoPrimaryAction');
  const sourcePanel=root.querySelector('.source-documents-panel');
  const skill=get('workSkill');
  // The five workflow panels stay visible and collapsed until opened by the user.
@@ -20,6 +20,7 @@
 
  let state=null,requestedProject='',artifactProject='',jiraView='list',jiraTab='all',tableKey='',brKey='',kind='iso',sourceDigest='',artifactContext=null,request=0;
  let aiResolve={running:false,message:'',stopping:false};
+ let jiraFieldView=null,jiraFieldDirty=false,jiraFieldLoading=false,jiraFieldRequest=0;
  const collapsed=new Set();
  const input=get('baAutoArtifactText'),quillMount=get('baAutoQuillEditor');
  let artifactQuill=null,quillKey='',quillHadFinalLine=false;
@@ -33,7 +34,7 @@
   return {label:stageNames[stages.indexOf(stage)],running:phase==='running'||phase==='publishing'};
  }
  const artifactDirty=()=>!!artifactContext&&kind==='source'&&input.value!==artifactContext.text;
- const dirty=()=>artifactDirty()||discoveryDirty||brEditorDirty;
+ const dirty=()=>artifactDirty()||discoveryDirty||brEditorDirty||jiraFieldDirty;
  const invoke=(command,fields={})=>send(command,{projectId:activeId,roleId:selectedRole,...fields});
  const requirements=()=>brState?.brs?.filter(br=>!br.archivedFromRestart&&!['retired','retire-proposed'].includes(br.status))||[];
  const source=()=>brState?.sourceDocuments?.[0];
@@ -68,14 +69,16 @@
   if(kind==='iso')return get('baWorkingBrDownload');
   if(kind==='source')return get('baAutoArtifactSave');
   if(kind==='preflight')return get('baPreflightDownload');
-  return get('baAutoFileActions').querySelector('.source-document-actions .ba-process-btn');
+  if(kind==='jira-fields')return null;
+  return get('sourceDocuments').querySelector('.ba-process-btn');
  }
  function syncDocumentActions(){
   const label={iso:'Download ISO 29148 BRD as PDF',source:'Save source changes',original:'Replace & Reprocess',preflight:'Download pre-flight analysis'}[kind];
   const icon={iso:'download',source:'save',original:'replace',preflight:'download'}[kind];
   const action=primaryTarget();
-  primary.title=label;
-  primary.setAttribute('aria-label',label);
+  primary.hidden=kind==='jira-fields'||kind==='original';
+  primary.title=label||'Document actions';
+  primary.setAttribute('aria-label',label||'Document actions');
   for(const mark of primary.querySelectorAll('[data-ba-primary-icon]'))
    mark.toggleAttribute('hidden',mark.dataset.baPrimaryIcon!==icon);
   primary.disabled=!action||action.disabled||action.classList.contains('hidden')||busy()&&kind!=='source';
@@ -126,7 +129,7 @@
   }
  }
  function requestArtifact(){
-  if(!active()||!sourceDigest||kind==='preflight'||artifactDirty())return;
+  if(!active()||!sourceDigest||kind==='preflight'||kind==='jira-fields'||artifactDirty())return;
   get('baAutoArtifactLabel').textContent=kindNames[kind];
   get('baAutoArtifactStatus').textContent='Loading document…';
   if(kind==='iso')viewer.textContent='Loading structured Business Requirements…';
@@ -147,7 +150,8 @@
   // Every tab has exactly one visible panel; preflight no longer overlaps the BRD text editor.
   const preflight=kind==='preflight';
   get('baAutoIsoPreflight').hidden=!preflight;
-  get('baAutoDocumentPanel').hidden=preflight;
+  get('baAutoDocumentPanel').hidden=preflight||kind==='jira-fields';
+  get('baAutoJiraFieldsPanel').hidden=kind!=='jira-fields';
   get('baAutoArtifactSave').hidden=kind!=='source';
   viewer.hidden=kind!=='iso';
   const showQuill=syncQuill();
@@ -161,8 +165,10 @@
    tab.setAttribute('aria-selected',String(selected));
    tab.setAttribute('aria-pressed',String(selected));
    tab.tabIndex=selected?0:-1;
-   if(selected&&!preflight)documentPanel.setAttribute('aria-labelledby',tab.id);
+   if(selected&&!preflight&&kind!=='jira-fields')documentPanel.setAttribute('aria-labelledby',tab.id);
   }
+  if(changed){jiraFieldView=null;jiraFieldDirty=false;jiraFieldLoading=false;jiraFieldRequest++;get('baAutoJiraFieldsList').replaceChildren();get('baAutoJiraFieldsStatus').textContent='';}
+  if(kind==='jira-fields'){if(!jiraFieldView&&!jiraFieldLoading)loadJiraFields();updateJiraFieldButtons();}
   if(currentSource&&get('baAutoSource').open&&changed&&!preflight)requestArtifact();
   if(artifactContext){
    input.readOnly=kind!=='source'||busy()||!baCanEdit('ba-discovery');
@@ -174,12 +180,13 @@
  function renderAttentionActions(findings){
   const bar=get('baAutoRequirementsToolbar');
   const action=get('baAutoResolveAttention'),stop=get('baAutoResolveStop');
-  const eligible=findings.filter(row=>requirements().some(br=>br.id===row.id&&br.status==='draft'&&!br.approvedContent));
+  const eligible=findings.filter(row=>requirements().some(br=>br.id===row.id&&br.status==='draft'&&baCanEdit('ba-br-'+br.id)));
   bar.hidden=!findings.length&&!aiResolve.running&&!aiResolve.message;
-  action.disabled=!eligible.length||aiResolve.running||busy()||dirty()||!!baBusyTask||discoveryImportBusy||!baCanEdit('ba-discovery');
-  action.title=eligible.length?'Use AI to repair '+eligible.length+' draft(s) using source evidence. Jira unchanged.':'No eligible editable draft; human review may be required.';
+  const blocker=aiResolve.running?'AI repair is running.':busy()||baBusyTask||discoveryImportBusy?'Finish the current BR operation first.':dirty()?'Save your edits before AI repair.':!baCanEdit('ba-discovery')||baOwnerState?.cached||baOwnerState?.scope==='local'?'Connect to Jira and Confluence to verify ownership.':!eligible.length?'No affected draft is owned by you. Request transfer or ask its owner to resolve it.':'';
+  action.disabled=!!blocker;
+  action.title=blocker||'Use AI to repair '+eligible.length+' owned draft(s). Previous approvals and Jira unchanged.';
   stop.hidden=!aiResolve.running;stop.disabled=aiResolve.stopping;
-  get('baAutoResolveStatus').textContent=aiResolve.message||(findings.length?findings.length+' requirement'+(findings.length===1?'':'s')+' need a source-backed correction.':'');
+  get('baAutoResolveStatus').textContent=aiResolve.running?aiResolve.message:[findings.length?findings.length+' requirement(s) need a source-backed correction; '+eligible.length+' owned by you.':'',blocker,aiResolve.message].filter(Boolean).join(' ');
  }
  function renderRequirements(){
   const brs=requirements();
@@ -368,6 +375,20 @@
   if(!panel.dataset.initialized){panel.open=false;panel.dataset.initialized='true';}
   else if(['ready','completed'].includes(status)&&!['ready','completed'].includes(previous)&&!dirty())panel.open=false;
  }
+ // A verified automatic Jira projection uses drafts until the user confirms
+ // publication. Prepared is not the same as formally approved or published.
+ function generatedRequirementsStatus({sourceReady,discoveryReady,excluded,requirementsReady,allApproved,phase,previewCurrent,unsaved}){
+  if(!sourceReady||!discoveryReady)return 'not-started';
+  if(excluded)return 'needs-attention';
+  if(unsaved)return 'in-progress';
+  if(!requirementsReady)return phase==='running'||phase==='publishing'?'in-progress':'not-started';
+  if(allApproved)return 'completed';
+  if(phase==='publishing'||(phase==='ready'||phase==='published')&&previewCurrent)return 'ready';
+  return 'in-progress';
+ }
+ function currentJiraPreview(){
+  return !!state?.preview&&state.projectId===activeId&&state.preview.revision===brState?.revision&&Array.isArray(state.preview.conflicts)&&state.preview.conflicts.length===0;
+ }
  function renderReadyPanels(phase){
   const sourceReady=!!source()?.digest;
   const discoveryReady=!!brState?.discoveryRevision&&!!brState?.mappingCompleted&&!discoveryDirty;
@@ -392,12 +413,13 @@
   get('baAutoDiscoveryEntry').hidden=true;
   const phaseRunning=phase==='running'||phase==='publishing';
   const excluded=!!brState?.baDraftQuality?.excluded?.length;
-  const allApproved=requirementsReady&&requirements().every(br=>['approved','published','completed'].includes(String(br.status||'').toLowerCase()));
+  const allApproved=requirementsReady&&requirements().every(br=>['approved','published','completed'].includes(String(br.status||'').toLowerCase())&&!br.needsRefresh&&!br.externalReviewRequired&&!br.roleReviewRequired&&!br.dependencyReviewRequired);
+  const previewCurrent=currentJiraPreview();
   const sourceStatus=!sourceReady?'not-started':artifactDirty()||phase==='running'&&!brState.mappingCompleted?'in-progress':brState.mappingCompleted?'ready':'in-progress';
   const discoveryStatus=!sourceReady?'not-started':discoveryDirty?'in-progress':discoveryReady?'ready':'in-progress';
-  const requirementsStatus=!sourceReady||!discoveryReady?'not-started':excluded?'needs-attention':!requirementsReady?(phaseRunning?'in-progress':'not-started'):allApproved?'completed':'in-progress';
+  const requirementsStatus=generatedRequirementsStatus({sourceReady,discoveryReady,excluded,requirementsReady,allApproved,phase,previewCurrent,unsaved:dirty()});
   const jiraStatus=state?.preview?.conflicts?.length?'needs-attention':phase==='published'?'completed':
-   phaseRunning?'in-progress':phase==='ready'&&!dirty()?'ready':jiraReady?'in-progress':'not-started';
+   phaseRunning?'in-progress':phase==='ready'&&previewCurrent&&!dirty()?'ready':jiraReady?'in-progress':'not-started';
   const historyStatus=completedReady?'completed':'not-started';
   for(const [id,status] of [
    ['baAutoSource',sourceStatus],['baAutoDiscovery',discoveryStatus],
@@ -454,10 +476,10 @@
   stop.classList.toggle('hidden',phase!=='running');
   const publishLabel=phase==='publishing'?'Publishing…':state?.preview?.republish?'Republish to Jira':'Publish to Jira';
   publish.title=publishLabel;publish.setAttribute('aria-label',publishLabel);
-  publish.disabled=phase!=='ready'||unsaved||!!baBusyTask||state?.preview?.revision!==brState.revision;
+  publish.disabled=phase!=='ready'||unsaved||!!baBusyTask||!currentJiraPreview();
   const reopen=state?.preview?.reopenRows?.length||0;
   const messages={idle:source()?'Preparing source…':'Upload a document to start.',running:'Preparing affected artifacts…',draft:'Draft. Refresh affected artifacts to continue.',
-   ready:reopen?reopen+' linked Jira item'+(reopen===1?'':'s')+' will move to To Do.':'Jira preview is ready.',
+   ready:!currentJiraPreview()?'Jira preview is out of date. Refresh affected artifacts.':reopen?reopen+' linked Jira item'+(reopen===1?'':'s')+' will move to To Do.':'Jira preview is ready.',
    publishing:'Publishing approved changes to Jira…',published:'Jira publication is up to date.'};
   const detail=unsaved?'Save your edits to refresh the affected artifacts.':state?.error||messages[phase]||'';
   if(get('baAutoStatus').textContent!==detail)get('baAutoStatus').textContent=detail;
@@ -472,14 +494,57 @@
   renderArtifacts();renderRequirements();renderJira();
  }
 
+
+ function updateJiraFieldButtons(){
+  const disabled=busy()||!!baBusyTask||!baCanEdit('ba-discovery')||jiraFieldLoading;
+  get('baAutoJiraFieldsRefresh').disabled=jiraFieldLoading||jiraFieldDirty;
+  get('baAutoJiraFieldsSave').disabled=disabled||!jiraFieldView||!jiraFieldDirty;
+  for(const box of get('baAutoJiraFieldsList').querySelectorAll('input'))box.disabled=disabled||box.dataset.locked==='true';
+ }
+ function loadJiraFields(){
+  if(!active()||!sourceDigest||jiraFieldLoading)return;
+  jiraFieldLoading=true;get('baAutoJiraFieldsStatus').textContent='Loading available Jira work item types and fields…';
+  updateJiraFieldButtons();invoke('baJiraFieldSelectionLoad',{digest:sourceDigest,requestId:++jiraFieldRequest});
+ }
+ function drawJiraFields(value){
+  jiraFieldView=value;const root=get('baAutoJiraFieldsList');root.replaceChildren();
+  const saved=value.selection||{};
+  for(const type of value.types){
+   const section=document.createElement('details');section.className='ba-jira-fields-type';
+   const summary=document.createElement('summary');summary.textContent=type.name+' · '+type.fields.length+' fields';section.append(summary);
+   const table=document.createElement('table');table.className='ba-jira-field-selection-table';
+   const header=table.createTHead().insertRow();
+   for(const label of ['Populate','Field','Type','Requirement']){const th=document.createElement('th');th.textContent=label;header.append(th);}
+   const body=table.createTBody();
+   for(const field of type.fields){
+    const row=body.insertRow(),cell=row.insertCell(),box=document.createElement('input');box.type='checkbox';box.dataset.type=type.id;box.dataset.field=field.id;box.dataset.locked=String(field.required||field.managed||!field.supported);
+    box.checked=field.required||field.managed||(field.supported&&(!value.configured||(saved[type.id]||[]).includes(field.id)));
+    box.setAttribute('aria-label','Populate '+type.name+' / '+field.name);
+    box.addEventListener('change',()=>{jiraFieldDirty=true;updateJiraFieldButtons();});cell.append(box);
+    for(const text of [field.name,field.type,field.managed?'ATGV managed':field.required?'Required':field.supported?'Optional':'Not auto-populated'])row.insertCell().textContent=text;
+   }
+   section.append(table);root.append(section);
+  }
+  get('baAutoJiraFieldsStatus').textContent='Jira project '+value.project+' · '+value.types.length+' available work item types';
+  updateJiraFieldButtons();
+ }
+ get('baAutoJiraFieldsRefresh').addEventListener('click',()=>{jiraFieldView=null;loadJiraFields();});
+ get('baAutoJiraFieldsSave').addEventListener('click',()=>{
+  if(!jiraFieldView||!jiraFieldDirty||jiraFieldLoading)return;
+  const selections=Object.fromEntries(jiraFieldView.types.map(t=>[t.id,[]]));
+  for(const box of get('baAutoJiraFieldsList').querySelectorAll('input'))if(box.checked&&box.dataset.locked!=='true')selections[box.dataset.type].push(box.dataset.field);
+  jiraFieldLoading=true;updateJiraFieldButtons();
+  invoke('baJiraFieldSelectionSave',{digest:sourceDigest,revision:brState.revision,selection:selections,requestId:++jiraFieldRequest});
+ });
+
  get('baAutoDocumentTabs').addEventListener('click',event=>{
   const selected=event.target.closest('[data-ba-document]');
   if(!selected||selected.dataset.baDocument===kind)return;
+  if(jiraFieldDirty){get('baAutoJiraFieldsStatus').textContent='Save your field selection before switching tabs.';return;}
   if(artifactDirty()){get('baAutoArtifactStatus').textContent='Save your edits before switching documents.';return;}
   kind=selected.dataset.baDocument;
   renderArtifacts();
   if(kind==='preflight'&&!get('baSourcePreflight').classList.contains('hidden'))get('baSourcePreflight').open=true;
-  overflow.open=false;
   requestArtifact();
  });
  get('baAutoDocumentTabs').addEventListener('keydown',event=>{
@@ -496,13 +561,9 @@
   const target=primaryTarget();
   if(!primary.disabled&&target&&!target.disabled)target.click();
  });
- overflow.addEventListener('keydown',event=>{
-  if(event.key==='Escape'){overflow.open=false;overflow.querySelector('summary')?.focus();event.stopPropagation();}
- });
- document.addEventListener('click',event=>{if(overflow.open&&!overflow.contains(event.target))overflow.open=false;});
- get('baAutoDocumentToolbar').addEventListener('click',event=>{
-  if(!artifactDirty())return;
-  const destructive=event.target.closest('.source-document-actions button');
+ get('baAutoSource').addEventListener('click',event=>{
+  if(!artifactDirty()&&!jiraFieldDirty)return;
+  const destructive=event.target.closest('.source-document-actions button,.source-document-row .ba-process-btn,[data-br-delete-action="true"]');
   if(!destructive)return;
   event.preventDefault();event.stopImmediatePropagation();
   get('baAutoArtifactStatus').textContent='Save your source edits before replacing or deleting the document.';
@@ -563,6 +624,13 @@
  });
  window.addEventListener('message',({data:m})=>{
   if(!m)return;
+  if(m.projectId===activeId&&m.requestId===jiraFieldRequest&&['baJiraFieldSelectionLoaded','baJiraFieldSelectionSaved','baJiraFieldSelectionError'].includes(m.type)){
+   jiraFieldLoading=false;
+   if(m.type==='baJiraFieldSelectionLoaded'){jiraFieldDirty=false;drawJiraFields(m.value);}
+   else if(m.type==='baJiraFieldSelectionSaved'){jiraFieldDirty=false;drawJiraFields(m.value);get('baAutoJiraFieldsStatus').textContent='Saved. Jira preview will use the selected fields.';}
+   else{get('baAutoJiraFieldsStatus').textContent=m.message;updateJiraFieldButtons();}
+   return;
+  }
   if(m.projectId===activeId&&m.type==='baAutoResolveProgress'){
    aiResolve.running=true;aiResolve.stopping=false;
    aiResolve.message=String(m.message||'AI is repairing source-backed quality findings…');

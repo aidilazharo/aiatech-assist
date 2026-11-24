@@ -201,9 +201,8 @@ async function downloadReleaseAsset(repo,token,asset,destination){
      read(next,redirects+1).then(resolve,reject);return;
     }
     if(status!==200){response.resume();reject(Error('Release asset '+asset.name+' failed (HTTP '+status+').'));return;}
-    if(String(response.headers['content-type']||'').includes('application/json')){
-     response.resume();reject(Error('GitHub returned metadata instead of release asset '+asset.name+'.'));return;
-    }
+    // JSON reports are legitimate release assets. Metadata responses will fail
+    // the reviewed byte length and SHA-256 checks below.
     let size=0;const chunks=[];
     response.on('data',chunk=>{
      size+=chunk.length;

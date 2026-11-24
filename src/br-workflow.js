@@ -1058,7 +1058,7 @@ function reviewGate(next,{allowRiskAcknowledgement=false,actor='Business Analyst
  event(next,'ai-review-risks-acknowledged',{discoveryRevision:next.discoveryRevision,actor:String(actor||'Business Analyst').slice(0,120),critical:critical.length,count:findings.length,sourceFingerprint:String(next.importDigest||'')});
 }
 
-async function generated(registry,id,revision,{discoveryRevision,requirements,riskAccepted=false,automatic=false,targetBrIds=null,actor='Business Analyst'}){
+async function generated(registry,id,revision,{discoveryRevision,requirements,riskAccepted=false,automatic=false,targetBrIds=null,actor='Business Analyst',repairDraft=false}){
  const proposals=validateProposal(requirements);
  const snapshot=await load(registry,id);
  const selected=(snapshot.sourceDocuments||[]).filter(x=>(snapshot.processedSources||[]).includes(x.digest));
@@ -1070,6 +1070,7 @@ async function generated(registry,id,revision,{discoveryRevision,requirements,ri
   const selective=targetBrIds!==null;
   const selected=selective?new Set(targetBrIds):null;
   if(selective&&(!Array.isArray(targetBrIds)||!targetBrIds.length||targetBrIds.some(x=>!next.brs.some(b=>b.id===x))))throw Error('Invalid selective regeneration target.');
+  if(repairDraft&&(!automatic||!selective||[...selected].some(id=>!next.brs.some(br=>br.id===id&&br.status==='draft'&&!br.archivedFromRestart))))throw Error('AI repair requires current draft revisions.');
   for(const [proposalIndex,proposal] of proposals.entries()){
    const verified=evidence[proposalIndex]||[];
    const questionRefs=changeEngine.QUESTION_KEYS.filter(key=>{const answer=next.discoveryAnswers?.[key]||'';return answer&&overlap(answer,[proposal.title,proposal.objective,proposal.scope,proposal.acceptanceCriteria].join(' '))>=.2;});
@@ -1098,17 +1099,17 @@ async function generated(registry,id,revision,{discoveryRevision,requirements,ri
    if(existing){
     used.add(existing.id);
     const candidate=automatic?{...proposal,...existing.baManualFields}:proposal;
-    const stable={...stableProposal(candidate,existing),id:existing.id},previous=existing.approvedContent||existing;
+    const stable={...stableProposal(candidate,existing),id:existing.id},previous=repairDraft?existing:existing.approvedContent||existing;
     const unchanged=normalizedContent(previous)===normalizedContent(stable);
     if(unchanged){
      // An identical regenerated draft is not a modification. Preserve its
      // saved state and history while refreshing verified source references.
-     if(existing.approvedContent){
+     if(existing.approvedContent&&!repairDraft){
       Object.assign(existing,stable,{evidence:verified,questionRefs,status:'approved',needsRefresh:false,staleReason:'',draftSavedAt:existing.draftSavedAt||null,source:{name:next.importName,digest:next.importDigest,discoveryRevision}});
      }else{
       Object.assign(existing,stable,{evidence:verified,questionRefs,status:'draft',source:{name:next.importName,digest:next.importDigest,discoveryRevision}});
      }
-     impact.push({id:existing.id,title:stable.title,change:'unchanged',approved:!!existing.approvedContent});
+     impact.push({id:existing.id,title:stable.title,change:'unchanged',approved:!repairDraft&&!!existing.approvedContent});
     }else{
      if(existing.status==='draft'){
       existing.previousDrafts=(existing.previousDrafts||[]).concat({at:new Date().toISOString(),discoveryRevision:existing.source?.discoveryRevision||'',draftSavedAt:existing.draftSavedAt||null,content:structuredClone(contentOf(existing))}).slice(-20);
@@ -1675,7 +1676,7 @@ async function markAttempt(registry,id,revision,{path:nodePath}){
   event(next,'jira-create-attempted',{path:nodePath});
  });
 }
-async function recorded(registry,id,revision,{path:nodePath,action,key,hash,kind,title,issueType,remoteDigest,marker}){
+async function recorded(registry,id,revision,{path:nodePath,action,key,hash,kind,title,issueType,remoteDigest,marker,issueId,parentIssueId}){
  return write(registry,id,revision,next=>{
   const item=plan(next).find(x=>x.path===nodePath&&x.action===action);
   if(!item||(action!=='retire'&&item.hash!==hash))throw Error('Approved requirements changed since preview.');
@@ -1683,7 +1684,15 @@ async function recorded(registry,id,revision,{path:nodePath,action,key,hash,kind
   if(action==='retire'){delete next.synced[nodePath];delete next.pending[nodePath];event(next,'jira-retired',{path:nodePath,key});return;}
   if(!/^[A-Z][A-Z0-9_]{1,20}-\d{1,12}$/.test(String(key)))throw Error('Invalid Jira key.');
   if(marker!==undefined&&!/^atgv-[a-f0-9]{24}$/.test(marker))throw Error('Invalid Jira operation marker.');
-  next.synced[nodePath]={key,hash,kind:kind||item.kind,issueType:issueType||kind||item.kind,title:title||item.title,remoteDigest:remoteDigest||null,...jiraTaskRole(item),...(marker?{marker}:{})};
+  const existing=next.synced[nodePath];
+  const numeric=value=>value===undefined||value===null||value===''?'':String(value);
+  const liveId=numeric(issueId),liveParentId=numeric(parentIssueId);
+  if(liveId&&!/^\d+$/.test(liveId)||liveParentId&&!/^\d+$/.test(liveParentId))throw Error('Jira returned an invalid numeric identity. No mapping changed.');
+  if(existing?.issueId&&liveId&&String(existing.issueId)!==liveId)throw Error('Jira numeric issue identity changed for '+key+'. No mapping changed.');
+  if(existing?.parentIssueId&&liveParentId&&String(existing.parentIssueId)!==liveParentId)throw Error('Jira parent numeric identity changed for '+key+'. No mapping changed.');
+  if(Object.entries(next.synced||{}).some(([path,entry])=>path!==nodePath&&(entry?.key===key||liveId&&String(entry?.issueId||'')===liveId)))
+   throw Error('The Jira issue identity is already mapped to another BR path. No mapping changed.');
+  next.synced[nodePath]={key,hash,kind:kind||item.kind,issueType:issueType||kind||item.kind,title:title||item.title,remoteDigest:remoteDigest||null,...jiraTaskRole(item),...(marker?{marker}:{}),...(liveId||existing?.issueId?{issueId:liveId||existing.issueId}:{}),...(liveParentId||existing?.parentIssueId?{parentIssueId:liveParentId||existing.parentIssueId}:{})};
   const root=nodePath.split('/')[0];
   if(next.brs.some(x=>x.id===root))next.brs.find(x=>x.id===root).externalReviewRequired=(next.inboundJira||[]).some(x=>(x.path===root||x.path.startsWith(root+'/'))&&x.status==='pending');
   delete next.pending[nodePath];event(next,'jira-synced',{path:nodePath,key,action});
