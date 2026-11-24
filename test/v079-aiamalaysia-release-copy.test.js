@@ -105,3 +105,9 @@ test('release copy refuses to mutate an existing Release with foreign provenance
  await assert.rejects(release.copy({kind:'extension',sourceToken:'read',destinationToken:'write',io}),/another origin/);
  assert.equal(calls.some(c=>c.method==='POST'||c.method==='PATCH'),false);
 });
+
+test('Library settings form never falls back to a retired GitHub repository',()=>{
+ const ui=fs.readFileSync(path.join(root,'media/start.js'),'utf8');
+ assert.doesNotMatch(ui,/https:\/\/github\.com\/aidilazharo\//i);
+ assert.match(ui,/repositoryUrl:'https:\/\/github\.com\/aiamalaysia\/my-fow-technology-app-techassists-enterprise-skills'/);
+});
