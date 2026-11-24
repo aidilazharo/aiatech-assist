@@ -51,28 +51,29 @@ test('PR title, commit and branch describe the source change rather than the bra
 });
 test('ATGV Workspace handles separate panel, local folder selection, review and open PR',async()=>{
  const messages=[];let handler,disposed,revealed=0,opened='',created=0;
+ const chosen=fs.mkdtempSync(path.join(os.tmpdir(),'atgv-selected-destination-'));
  const memory=new Map();const secrets={get:async key=>memory.get(key),store:async(key,val)=>memory.set(key,val)};
  const panel={reveal:()=>revealed++,onDidDispose:fn=>{disposed=fn;},webview:{cspSource:'vscode-resource:',html:'',onDidReceiveMessage:fn=>{handler=fn;},postMessage:async data=>messages.push(data)}};
  const fake={
   ViewColumn:{One:1},Uri:{parse:value=>value},
   env:{openExternal:async url=>{opened=url;}},
   window:{createWebviewPanel:(kind,title)=>{assert.equal(kind,'atgvAssist.workspace');assert.equal(title,'ATGV: Workspace');created++;return panel;},
-   showOpenDialog:async()=>[{fsPath:'/chosen/repo-b'}],showWarningMessage:async()=> 'Create Sync PR',showInputBox:async()=> 'ghp_'+'x'.repeat(40)}
+   showOpenDialog:async()=>[{fsPath:chosen}],showWarningMessage:async()=> 'Create Sync PR',showInputBox:async()=> 'ghp_'+'x'.repeat(40)}
  };
  const original=sync.sync;
  try{
-  sync.sync=async args=>{assert.equal(args.destinationFolder,'/chosen/repo-b');assert.equal(args.copyScope,'src');assert.equal(args.sourceBranch,'');assert.ok(args.sourcePat.startsWith('ghp_'));assert.ok(args.destPat.startsWith('ghp_'));return {prUrl:'https://github.com/Acme/repo-b/pull/12',sourceRepo:'Acme/repo-a',sourceSha:'b'.repeat(40),destinationRepo:'Acme/repo-b',base:'main',branch:'sync/test',fileCount:1};};
+  sync.sync=async args=>{assert.equal(args.destinationFolder,chosen);assert.equal(args.copyScope,'src');assert.equal(args.sourceBranch,'');assert.ok(args.sourcePat.startsWith('ghp_'));assert.ok(args.destPat.startsWith('ghp_'));return {prUrl:'https://github.com/Acme/repo-b/pull/12',sourceRepo:'Acme/repo-a',sourceSha:'b'.repeat(40),destinationRepo:'Acme/repo-b',base:'main',branch:'sync/test',fileCount:1};};
   const first=workspace.open(fake,{version:pkg.version,secrets,workspaceRoot:'/another/atgv',testConnection:async(repo,pat,kind)=>({repo:repo.name,permission:kind==='Source'?'pull':'push'})});
   assert.equal(first,panel);
   assert.equal(workspace.open(fake),panel);
   assert.equal(revealed,1);assert.equal(created,1);
   await handler({command:'selectRepoB'});
-  assert.ok(messages.some(m=>m.type==='repoBSelected'&&m.folder==='/chosen/repo-b'));
+  assert.ok(messages.some(m=>m.type==='repoBSelected'&&m.folder===chosen));
   await handler({command:'createSyncPr',sourceUrl:'https://github.com/Acme/repo-a',destinationUrl:'https://github.com/Acme/repo-b',copyScope:'src'});
   assert.ok(messages.some(m=>m.type==='repoSyncResult'&&m.success&&m.prUrl.endsWith('/12')));
   await handler({command:'openCreatedPr'});
   assert.equal(opened,'https://github.com/Acme/repo-b/pull/12');
- }finally{sync.sync=original;disposed?.();}
+ }finally{sync.sync=original;disposed?.();fs.rmSync(chosen,{recursive:true,force:true});}
 });
 test('sync excludes source GitHub configuration and preserves destination workflows',async t=>{
  try{git(['--version'],process.cwd());}catch{t.skip('Git is unavailable');return;}
