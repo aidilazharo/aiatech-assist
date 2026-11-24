@@ -255,6 +255,7 @@ window.addEventListener('message',e=>{
    '\\nLatest published release: '+String(review.release?.tag||'None published')+
    '\\nRelease assets to include: '+String(review.release?.assets?.length||0)+
    (review.release?.assets?.length?' ('+review.release.assets.slice(0,8).map(a=>a.name).join(', ')+')':'')+
+   (review.release?.skippedAssetCount?'\\nSkipped oversized or unsupported assets: '+review.release.skippedAssetCount:'')+
    (review.release?.targetCommitish&&review.release.targetCommitish!==review.sourceSha
     ?'\\nNote: latest release targets a different commit; both revisions will be recorded.':'');
   buttons();show('Source study completed. Review or edit the four suggestions, then approve the full operation. Destination is unchanged.','success');
