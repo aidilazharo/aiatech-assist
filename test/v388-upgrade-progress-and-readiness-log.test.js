@@ -107,7 +107,7 @@ test('Host sends actual download, checksum, staging and install completion stage
  const api=setup(fakeDashboard,fakeVscode,path,fakeUpdater,x=>reports.push(x),async()=>{restarter++;},{globalStorageUri:{fsPath:'/tmp'}},new Map(),()=>({promptForUpdates:true}),{randomUUID:()=> 'upgrade-id'},()=>({version:'0.3.87'}),async()=> 'secret-PAT');
  const operation={requestId:'upgrade-id',release:{version:'0.3.88',url:'https://github.com/Acme/aia'},running:false};
  const action=api.performVerifiedExtensionInstall(operation);
- for(let i=0;i<12&&!posted.some(v=>v.stage==='installing');i++)await Promise.resolve();
+ for(let i=0;i<30&&!posted.some(v=>v.stage==='installing');i++)await new Promise(resolve=>setImmediate(resolve));
  assert.ok(posted.some(v=>v.stage==='installing'),'installer must report live progress while unresolved');
  assert.equal(posted.some(v=>v.stage==='completed'),false,'do not close while VS Code installation is pending');
  completeInstall();await action;
