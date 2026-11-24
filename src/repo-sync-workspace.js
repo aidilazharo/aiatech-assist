@@ -1,11 +1,14 @@
 'use strict';
 // Independent ATGV: Workspace webview for Source main -> Destination pull request.
 const crypto=require('node:crypto');
+const fs=require('node:fs/promises');
+const path=require('node:path');
 const repoSync=require('./repo-sync-pr');
 const repoCredentials=require('./repo-sync-credentials');
 const SAVED_URL_KEYS=Object.freeze({Source:'atgvAssist.repoSync.lastSourceUrl',Destination:'atgvAssist.repoSync.lastDestinationUrl'});
 const SAVED_LIST_KEYS=Object.freeze({Source:'atgvAssist.repoSync.savedSourceUrls',Destination:'atgvAssist.repoSync.savedDestinationUrls'});
 const MAX_SAVED_REPOS=30;
+const SAVED_FOLDER_KEY='atgvAssist.repoSync.lastDestinationFolder';
 function safeStoredRepo(input){
  if(typeof input!=='string')return null;
  try{
@@ -76,7 +79,8 @@ ol{line-height:1.85;padding-left:20px}
 <div class="connection-action"><button id="forgetDestination" type="button" class="secondary" disabled>Forget selected</button></div>
 <label for="destinationRepo">Destination GitHub URL with PAT</label><input id="destinationRepo" type="password" required placeholder="https://USERNAME:TOKEN@github.com/OWNER/repo-b" autocomplete="off" spellcheck="false">
 <div class="connection-action"><button id="testDestination" type="button" class="secondary">Test Connection</button><span id="destinationConnection" class="connection-status" role="status" aria-live="polite">Not tested</span></div>
-<label>Local Destination Git root or empty folder (outside ATGV workspace)</label><div class="folder"><button id="selectRepoB" type="button" class="secondary">Choose Destination folder</button><strong id="destinationLabel">No folder selected</strong></div>
+<label>Local Destination Git root or empty folder (outside ATGV workspace)</label>
+<p class="muted">The selected folder is remembered across VS Code restarts. If the folder moves, choose it again.</p><div class="folder"><button id="selectRepoB" type="button" class="secondary">Choose Destination folder</button><strong id="destinationLabel">No folder selected</strong></div>
 <label for="baseBranch">Destination base branch</label><input id="baseBranch" type="text" maxlength="110" placeholder="GitHub default branch (auto)">
 
 </section>
@@ -225,6 +229,10 @@ window.addEventListener('message',e=>{
   node.dataset.state='ready';
  }
  if(data.type==='repoBSelected'){folder=String(data.folder||'');get('destinationLabel').textContent=folder||'No folder selected';buttons();}
+ if(data.type==='repoSyncFolderUnavailable'){
+  folder='';get('destinationLabel').textContent='Saved folder unavailable · choose again';
+  buttons();show(data.message||'Previously selected folder is unavailable. Choose another folder.','error');
+ }
  if(data.type==='repoSyncProgress')show(data.message||'Synchronising…');
  if(data.type==='sourceReviewReady'){
   busy=false;reviewReady=true;createdPr='';get('reviewPanel').hidden=false;
@@ -242,6 +250,14 @@ window.addEventListener('message',e=>{
    '\\nExcluded from copy: .github/ and GitHub Action manifests.'+
    '\\nExcluded commit paths: '+(review.excludedSourceCommitFiles||[]).slice(0,8).join(', ')+
    '\\nDestination base: '+String(review.base||'');
+  get('sourceAnalysis').textContent +=
+   '\\nCopied code version: '+String(review.codeVersion||'Not declared')+
+   '\\nLatest published release: '+String(review.release?.tag||'None published')+
+   '\\nRelease assets to include: '+String(review.release?.assets?.length||0)+
+   (review.release?.assets?.length?' ('+review.release.assets.slice(0,8).map(a=>a.name).join(', ')+')':'')+
+   (review.release?.skippedAssetCount?'\\nSkipped oversized or unsupported assets: '+review.release.skippedAssetCount:'')+
+   (review.release?.targetCommitish&&review.release.targetCommitish!==review.sourceSha
+    ?'\\nNote: latest release targets a different commit; both revisions will be recorded.':'');
   buttons();show('Source study completed. Review or edit the four suggestions, then approve the full operation. Destination is unchanged.','success');
  }
  if(data.type==='repoConnectionResult'){
@@ -274,6 +290,32 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
  const current=vscode.window.createWebviewPanel('atgvAssist.workspace','ATGV: Workspace',vscode.ViewColumn.One,{enableScripts:true,retainContextWhenHidden:true});
  panel=current;
  let selectedFolder='',busy=false,createdPr='',pendingReview=null;
+ async function eligibleFolder(candidate){
+  if(typeof candidate!=='string'||!path.isAbsolute(candidate))return '';
+  const stat=await fs.lstat(candidate).catch(error=>error.code==='ENOENT'?null:Promise.reject(error));
+  if(!stat?.isDirectory()||stat.isSymbolicLink())return '';
+  const resolved=await fs.realpath(candidate);
+  if(workspaceRoot){
+   const workspace=await fs.realpath(workspaceRoot).catch(()=>null);
+   if(workspace&&(resolved===workspace||resolved.startsWith(workspace+path.sep)||
+     workspace.startsWith(resolved+path.sep)))return '';
+  }
+  return resolved;
+ }
+ async function restoreSelectedFolder(){
+  const stored=preferences?.get?.(SAVED_FOLDER_KEY,'');
+  if(!stored)return;
+  const resolved=await eligibleFolder(stored);
+  if(!resolved){
+   await post({type:'repoSyncFolderUnavailable',message:'Saved Destination folder is missing, invalid or overlaps ATGV. Choose a new folder.'});
+   return;
+  }
+  selectedFolder=resolved;
+  await post({type:'repoBSelected',folder:selectedFolder});
+ }
+ async function rememberSelectedFolder(folder){
+  if(preferences?.update)await preferences.update(SAVED_FOLDER_KEY,folder);
+ }
  const patKey=(kind,repo)=>'atgvAssist.repoSync.'+kind+'.'+crypto.createHash('sha256').update(repo.name.toLowerCase()).digest('hex');
  function knownRepos(kind){
   const previous=preferences?.get?.(SAVED_URL_KEYS[kind],'');
@@ -355,7 +397,8 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
  current.webview.onDidReceiveMessage(async message=>{
   if(!message||typeof message.command!=='string')return;
   if(message.command==='getRepoSyncSaved'){
-   try{await restoreRepos();}catch(error){onLog('Repo Sync saved URL restore: '+sanitize(error));}
+   try{await restoreRepos();await restoreSelectedFolder();}
+   catch(error){onLog('Repo Sync saved connection and folder restore: '+sanitize(error));}
    return;
   }
   if(message.command==='forgetRepoConnection'){
@@ -381,7 +424,13 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
    if(busy)return;
    try{
     const picked=await vscode.window.showOpenDialog({canSelectFolders:true,canSelectFiles:false,canSelectMany:false,openLabel:'Select Destination Git root',title:'ATGV Workspace: Choose Destination Git root or an empty folder'});
-    if(picked?.[0]){selectedFolder=picked[0].fsPath;pendingReview=null;await post({type:'repoBSelected',folder:selectedFolder});}
+    if(picked?.[0]){
+     const resolved=await eligibleFolder(picked[0].fsPath);
+     if(!resolved)throw Error('Choose an existing real folder outside ATGV workspace; symbolic links are not supported.');
+     selectedFolder=resolved;pendingReview=null;
+     await rememberSelectedFolder(selectedFolder);
+     await post({type:'repoBSelected',folder:selectedFolder});
+    }
    }catch(error){await post({type:'repoSyncResult',success:false,message:sanitize(error)});}
    return;
   }
@@ -480,7 +529,11 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
     (branchOnly?'Branch pushed: '+outcome.branch:'PR created: '+outcome.prUrl)+'\nSource: '+outcome.sourceRepo+' / '+outcome.sourceBranch+' @ '+outcome.sourceSha+
     '\nDestination: '+outcome.destinationRepo+'/'+outcome.base+
     '\nBranch: '+outcome.branch+'\nFiles selected: '+outcome.fileCount;
-   await post({type:'repoSyncResult',success:true,prUrl:createdPr,message:summary});
+   const enrichedSummary=summary+'\\nCopied code version: '+(outcome.codeVersion||'Not declared')+
+    '\\nLatest published release: '+(outcome.releaseTag||'None published')+
+    '\\nRelease assets included: '+String(outcome.releaseAssetCount||0)+
+    '\\nRelease artifact paths: '+(outcome.releaseArtifactPaths||[]).join(', ');
+   await post({type:'repoSyncResult',success:true,prUrl:createdPr,message:enrichedSummary});
    onLog('Repo Sync: '+summary);
   }catch(error){
    workflowFailure=error;

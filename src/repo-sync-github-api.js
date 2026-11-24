@@ -131,4 +131,98 @@ async function getSourcePrForCommit(repo,token,{sha,branch},request=githubReques
  exact.sort((a,b)=>String(b.updated_at||'').localeCompare(String(a.updated_at||'')));
  return exact.length?verifiedSourcePr(exact[0],repo):null;
 }
-module.exports={githubRequest,getRepository,getSourceRepository,getSourcePullRequest,getSourcePrForCommit,findOpenPr,createPr,safePrUrl};
+
+// Release assets are binary, so they must not pass through the JSON-only API client.
+// Get immutable release/asset IDs before reviewing, then verify IDs and digests on publish.
+const fs=require('node:fs/promises');
+const crypto=require('node:crypto');
+const MAX_RELEASE_ASSET=20*1024*1024;
+const MAX_RELEASE_TOTAL=80*1024*1024;
+function safeReleaseComponent(name){
+ const value=String(name||'');
+ if(!/^[A-Za-z0-9][A-Za-z0-9._-]{0,179}$/.test(value)||value.includes('..'))throw Error('Unsafe GitHub Release filename or tag.');
+ return value;
+}
+function acceptedReleaseAsset(asset){
+ if(!asset||!Number.isSafeInteger(asset.id)||asset.id<1)return false;
+ if(!/\.(?:vsix|zip|sha256|json|md)$/i.test(String(asset.name||'')))return false;
+ try{safeReleaseComponent(asset.name);}catch{return false;}
+ return Number.isSafeInteger(asset.size)&&asset.size>0&&asset.size<=MAX_RELEASE_ASSET;
+}
+async function getLatestRelease(repo,token,request=githubRequest){
+ const res=await request(repo,token,'GET','/releases?per_page=10');
+ if(res.status===404)throw Error('Source GitHub Releases cannot be read (HTTP 404).');
+ if(res.status!==200)throw Error('Source GitHub Releases lookup failed (HTTP '+res.status+').');
+ if(!Array.isArray(res.body))throw Error('Source GitHub release response is invalid.');
+ const releases=res.body.filter(r=>r&&!r.draft&&r.published_at&&r.tag_name);
+ releases.sort((a,b)=>String(b.published_at).localeCompare(String(a.published_at)));
+ if(!releases.length)return null;
+ const latest=releases[0];
+ const tag=safeReleaseComponent(latest.tag_name);
+ const expectedPath='/'+repo.name+'/releases/tag/'+encodeURIComponent(tag);
+ let browser;
+ try{browser=new URL(String(latest.html_url||''));}catch{throw Error('Invalid source GitHub release URL.');}
+ if(browser.protocol!=='https:'||browser.hostname!=='github.com'||browser.username||
+  browser.password||browser.port||browser.search||browser.hash||
+  browser.pathname.toLowerCase()!==expectedPath.toLowerCase())
+  throw Error('Release URL does not match the selected source repository.');
+ const rawAssets=Array.isArray(latest.assets)?latest.assets:[];
+ const assets=rawAssets.filter(acceptedReleaseAsset).map(a=>({
+  id:a.id,name:a.name,size:a.size,digest:/^sha256:[a-f0-9]{64}$/i.test(String(a.digest||''))?String(a.digest).toLowerCase():''
+ }));
+ if(new Set(assets.map(a=>a.name.toLowerCase())).size!==assets.length)throw Error('Source release has duplicate artifact names.');
+ if(assets.reduce((sum,a)=>sum+a.size,0)>MAX_RELEASE_TOTAL)throw Error('Source release assets exceed 80 MB.');
+ return {tag,name:String(latest.name||tag).slice(0,140),url:browser.href,
+  targetCommitish:String(latest.target_commitish||'').slice(0,120),
+  publishedAt:String(latest.published_at),assets,skippedAssetCount:rawAssets.length-assets.length};
+}
+async function downloadReleaseAsset(repo,token,asset,destination){
+ assertToken(token);
+ if(!acceptedReleaseAsset(asset))throw Error('Selected release asset is invalid or exceeds 20 MB.');
+ // Redirects may lead to GitHub's download CDN. Never forward the PAT to the CDN.
+ const endpoint='https://api.github.com'+routeFor(repo,'/releases/assets/'+asset.id);
+ async function read(url,redirects=0){
+  if(redirects>3)throw Error('Too many release-asset redirects.');
+  const parsed=new URL(url);
+  const api=parsed.hostname==='api.github.com';
+  if(parsed.protocol!=='https:'||parsed.username||parsed.password||parsed.port||
+   !(api||['release-assets.githubusercontent.com','objects.githubusercontent.com','github.com'].includes(parsed.hostname)))
+   throw Error('Unexpected GitHub asset download host.');
+  return new Promise((resolve,reject)=>{
+   const req=https.get(url,{headers:{
+    'Accept':'application/octet-stream','User-Agent':'ATGV-AIATECH-Assist',
+    ...(api?{'Authorization':'Bearer '+token,'X-GitHub-Api-Version':'2022-11-28'}:{})
+   }},response=>{
+    const status=response.statusCode||0;
+    if([301,302,303,307,308].includes(status)){
+     const location=response.headers.location;response.resume();
+     if(!location){reject(Error('Release asset redirect missing Location.'));return;}
+     let next;try{next=new URL(location,url).href;}catch{reject(Error('Malformed release asset redirect.'));return;}
+     read(next,redirects+1).then(resolve,reject);return;
+    }
+    if(status!==200){response.resume();reject(Error('Release asset '+asset.name+' failed (HTTP '+status+').'));return;}
+    if(String(response.headers['content-type']||'').includes('application/json')){
+     response.resume();reject(Error('GitHub returned metadata instead of release asset '+asset.name+'.'));return;
+    }
+    let size=0;const chunks=[];
+    response.on('data',chunk=>{
+     size+=chunk.length;
+     if(size>MAX_RELEASE_ASSET||size>asset.size){req.destroy(Error('Release asset exceeded verified size.'));return;}
+     chunks.push(chunk);
+    });
+    response.on('end',()=>resolve(Buffer.concat(chunks,size)));
+    response.on('error',reject);
+   });
+   req.setTimeout(45000,()=>req.destroy(Error('Release artifact download timed out.')));
+   req.on('error',reject);
+  });
+ }
+ const bytes=await read(endpoint);
+ if(bytes.length!==asset.size)throw Error('Release asset size mismatch: '+asset.name);
+ const digest='sha256:'+crypto.createHash('sha256').update(bytes).digest('hex');
+ if(asset.digest&&asset.digest!==digest)throw Error('Release asset SHA-256 mismatch: '+asset.name);
+ await fs.writeFile(destination,bytes,{flag:'wx'});
+ return {name:asset.name,size:bytes.length,digest,verified:!!asset.digest};
+}
+
+module.exports={githubRequest,getRepository,getSourceRepository,getSourcePullRequest,getSourcePrForCommit,findOpenPr,createPr,safePrUrl,getLatestRelease,downloadReleaseAsset,safeReleaseComponent};

@@ -1,4 +1,20 @@
-# ATGV AIATECH Assist v0.0.78
+# ATGV AIATECH Assist v0.0.79
+
+## ATGV: Workspace source and release sync
+- Persist the selected Destination Git folder in VS Code globalState and validate it on reopen.
+- Display the copied source code version, pinned source SHA, latest published GitHub release and selected release artifacts during review.
+- Download and SHA-256 verify GitHub release binaries and copy them into `release-artifacts/<tag>/` in the destination PR branch alongside code.
+- Include a `release.json` manifest with source commit, release target revision, version, asset sizes and checksums.
+- Revalidate release metadata before publishing and reject missing, ignored, or inconsistent artifacts before PR creation.
+- Preserve existing Source/Destination PAT separation, protected-path filtering and PR review approvals.
+
+## Verification
+- Node regression suite, VSIX packaging, version metadata checks and GitHub Actions build validations.
+- Release binaries and GitHub PR publishing still require live GitHub connectivity in the user's VS Code runtime.
+
+---
+
+## Previous release: v0.0.78
 
 ## SQLite synchronization (Jira · Confluence · GitHub)
 - Extends v0.0.77's project SQLite sync ledger and Knowledge & RAG status panel.
