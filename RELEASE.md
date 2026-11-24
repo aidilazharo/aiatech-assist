@@ -1,16 +1,19 @@
-# ATGV AIATECH Assist v0.0.79
+# ATGV AIATECH Assist v0.0.80
 
-## aiMalaysia-only GitHub routing
-- Remove legacy GitHub owner and release mirror URLs from runtime routing.
-- Source repositories: aiMalaysia Extension and Enterprise Skills.
-- Release destinations: aiMalaysia/extension and aiMalaysia/library.
-- Reject legacy owner selection during startup and prevent fallback to the removed source.
+## Canonical aiMalaysia source Releases
+- Download Extension VSIX updates from https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc/releases/latest.
+- Check Library source ZIP releases at https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills/releases/latest.
+- Query the same source repository's full Releases list to include newer verified prereleases when GitHub /latest excludes them.
+- Remove automatic update routing through the separate extension and library distribution mirrors.
+- Preserve optional GitHub authentication for private source Release metadata and verified asset downloads; drop tokens on CDN redirects.
+- For Library updates, stage and SHA-256-verify matching source Release ZIPs, then activate the verified main-branch commit as before.
+- Reuse an unchanged already-verified Library source ZIP safely during retries.
 
-## ATGV: Workspace GitHub Release artifacts
-- Add explicit Extension/Library Release copy action with an optional exact version tag.
-- Download and verify the release archive/VSIX and its SHA-256 file before uploading.
-- Copy additional safe Release assets (source ZIP, checksum files, build reports), with bounded downloads and integrity/collision checks.
-- Preserve release notes, enforce source identity, prevent conflicting overwrites and report progress/errors.
+## ATGV: Workspace Release artifact copying
+- Retain the explicit optional Copy Release Artifacts workflow for publishing verified assets to separate distribution repositories, not for automatic updates.
+- Support direct source-to-distribution copying with source identity checks, checksums and conflict-safe publishing.
 
-## Verification
-- Static and mock-driven checks are required; live aiMalaysia GitHub destinations must be reachable before publication.
+## Validation and deployment
+- Regression coverage for canonical Release routing, prereleases, checksum verification, owner isolation and workspace copy.
+- Live aiMalaysia repository access requires an authorized GitHub token; 404 access failures must not be concealed.
+- Version 0.0.80 is pending validation and publication.
