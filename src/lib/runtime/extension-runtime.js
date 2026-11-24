@@ -195,7 +195,7 @@ async function exportBAProcessLog(projectId){
   const digests=new Set((register.sourceDocuments||[]).map(source=>source.digest));
   if(pending.some(name=>/^[a-f0-9]{64}\.json$/.test(name)&&digests.has(name.slice(0,64))))checkpoint={present:true};
  }catch(error){if(error.code!=='ENOENT')report('BA checkpoint listing unavailable: '+String(error.code||error.message).slice(0,100));}
- const content=baProcessDiagnostics.exportText({projectId,events,register,checkpoint});
+ const content=baProcessDiagnostics.exportText({projectId,events,register,checkpoint,preparation:baPreparationSessions.get(projectId)});
  const target=await vscode.window.showSaveDialog({
   title:'Save Complete Business Requirements Troubleshooting Log',
   defaultUri:vscode.Uri.file(path.join(require('node:os').homedir(),'ATGV-BR-Process-'+projectId+'-'+new Date().toISOString().slice(0,10)+'.txt')),
@@ -4061,7 +4061,14 @@ function reopenServices(state,config,token){
 async function postBAPreparation(projectId,properties={}){
  const state={...baPreparationSessions.get(projectId),...properties,projectId};
  baPreparationSessions.set(projectId,state);
- if(activeProject?.id===projectId)await dashboard?.webview.postMessage({type:'baPreparation',state});
+ if(activeProject?.id===projectId){
+  if(typeof recordBAProcess==='function'&&(properties.phase||properties.stage)){
+   const phase=String(state.phase||'idle');
+   await recordBAProcess({stage:state.stage||'source',action:'automatic-preparation',status:phase,
+    details:state.error?String(state.error).slice(0,350):state.preview?'Jira plan: '+Number(state.preview.changes?.length||0)+' changes, '+Number(state.preview.conflicts?.length||0)+' conflicts, '+Number(state.preview.reopenRows?.length||0)+' status resets.':''});
+  }
+  await dashboard?.webview.postMessage({type:'baPreparation',state});
+ }
  return state;
 }
 

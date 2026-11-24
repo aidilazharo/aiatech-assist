@@ -68,7 +68,7 @@ function registryEvents(register){
   return fields||'(event without metadata)';
  });
 }
-function exportText({projectId,events=[],register={},checkpoint=null}={}){
+function exportText({projectId,events=[],register={},checkpoint=null,preparation=null}={}){
  if(!PROJECT.test(String(projectId||'')))throw Error('Invalid BA project for export.');
  const lines=['ATGV AIATECH ASSIST · BUSINESS REQUIREMENTS PROCESS TROUBLESHOOTING LOG',
   'Project: '+projectId,'Generated: '+new Date().toISOString(),
@@ -80,6 +80,13 @@ function exportText({projectId,events=[],register={},checkpoint=null}={}){
   'Active document count: '+Number(register?.sourceDocuments?.length||0),
   'BR draft/approved/retired counts: '+['draft','approved','retired'].map(k=>k+'='+Number((register?.brs||[]).filter(x=>x.status===k).length)).join(' · '),
   'Jira linked issue count: '+Object.keys(register?.synced||{}).length,
+  'Completed cycles: '+Number(register?.completedCycles?.length||0),
+  'Completed index entries: '+Number(register?.completedIndex?.length||0),
+  'Jira pending changes: '+(Number.isFinite(register?.jiraPendingChanges)?register.jiraPendingChanges:'Unknown'),
+  'Automatic phase: '+trim(preparation?.phase||'Not recorded',50),
+  'Automatic stage: '+trim(preparation?.stage||'Not recorded',50),
+  'Jira preview conflicts: '+Number(preparation?.preview?.conflicts?.length||0),
+  'Last preparation error: '+trim(preparation?.error||'None',420),
   'Discovery revision: '+(register?.discoveryRevision?'Recorded':'Not recorded'),
   'AI review revision: '+(register?.reviewRevision?'Recorded':'Not recorded'),
   'Mapping checkpoint: '+(checkpoint?'Available':'None'),
