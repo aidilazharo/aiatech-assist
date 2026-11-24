@@ -180,12 +180,13 @@
  function renderAttentionActions(findings){
   const bar=get('baAutoRequirementsToolbar');
   const action=get('baAutoResolveAttention'),stop=get('baAutoResolveStop');
-  const eligible=findings.filter(row=>requirements().some(br=>br.id===row.id&&br.status==='draft'&&!br.approvedContent));
+  const eligible=findings.filter(row=>requirements().some(br=>br.id===row.id&&br.status==='draft'&&baCanEdit('ba-br-'+br.id)));
   bar.hidden=!findings.length&&!aiResolve.running&&!aiResolve.message;
-  action.disabled=!eligible.length||aiResolve.running||busy()||dirty()||!!baBusyTask||discoveryImportBusy||!baCanEdit('ba-discovery');
-  action.title=eligible.length?'Use AI to repair '+eligible.length+' draft(s) using source evidence. Jira unchanged.':'No eligible editable draft; human review may be required.';
+  const blocker=aiResolve.running?'AI repair is running.':busy()||baBusyTask||discoveryImportBusy?'Finish the current BR operation first.':dirty()?'Save your edits before AI repair.':!baCanEdit('ba-discovery')||baOwnerState?.cached||baOwnerState?.scope==='local'?'Connect to Jira and Confluence to verify ownership.':!eligible.length?'No affected draft is owned by you. Request transfer or ask its owner to resolve it.':'';
+  action.disabled=!!blocker;
+  action.title=blocker||'Use AI to repair '+eligible.length+' owned draft(s). Previous approvals and Jira unchanged.';
   stop.hidden=!aiResolve.running;stop.disabled=aiResolve.stopping;
-  get('baAutoResolveStatus').textContent=aiResolve.message||(findings.length?findings.length+' requirement'+(findings.length===1?'':'s')+' need a source-backed correction.':'');
+  get('baAutoResolveStatus').textContent=aiResolve.running?aiResolve.message:[findings.length?findings.length+' requirement(s) need a source-backed correction; '+eligible.length+' owned by you.':'',blocker,aiResolve.message].filter(Boolean).join(' ');
  }
  function renderRequirements(){
   const brs=requirements();
@@ -557,7 +558,7 @@
  });
  get('baAutoSource').addEventListener('click',event=>{
   if(!artifactDirty()&&!jiraFieldDirty)return;
-  const destructive=event.target.closest('.source-document-actions button,.source-document-row .ba-process-btn');
+  const destructive=event.target.closest('.source-document-actions button,.source-document-row .ba-process-btn,[data-br-delete-action="true"]');
   if(!destructive)return;
   event.preventDefault();event.stopImmediatePropagation();
   get('baAutoArtifactStatus').textContent='Save your source edits before replacing or deleting the document.';
