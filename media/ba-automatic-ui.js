@@ -366,10 +366,14 @@
 
  // Keep all five panels visible and initially collapsed. Do not forcibly
  // collapse a panel a user has explicitly expanded during a refresh.
+ function resetWorkflowPanels(){
+  for(const id of ['baAutoSource','baAutoDiscovery','baAutoRequirements','baAutoJira','baAutoHistory'])get(id).open=false;
+ }
  function setReadyPanel(id,status){
-  const panel=get(id);
+  const panel=get(id),previous=panel.dataset.status;
   panel.hidden=false;panel.dataset.status=status;
   if(!panel.dataset.initialized){panel.open=false;panel.dataset.initialized='true';}
+  else if(['ready','completed'].includes(status)&&!['ready','completed'].includes(previous)&&!dirty())panel.open=false;
  }
  // A verified automatic Jira projection uses drafts until the user confirms
  // publication. Prepared is not the same as formally approved or published.
@@ -440,6 +444,7 @@
   if(!active()||!activeId||!brState)return;
   if(!source()&&sourceDigest)state=null;
   if(requestedProject!==activeId){
+   if(!dirty())resetWorkflowPanels();
    requestedProject=activeId;state=null;collapsed.clear();brKey='';tableKey='';aiResolve={running:false,message:'',stopping:false};
    invoke('baPreparationState');
   }
@@ -614,7 +619,7 @@
  });
 
  window.addEventListener('atgv:viewchange',()=>{
-  if(!active())requestedProject='';
+  if(!active()){requestedProject='';if(!dirty())resetWorkflowPanels();}
   render();
  });
  window.addEventListener('message',({data:m})=>{
