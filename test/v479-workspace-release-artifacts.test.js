@@ -32,6 +32,19 @@ test('Workspace remembers selected folder between panels and rejects a missing f
  dispose();
 });
 
+test('Source version falls back to VERSION for SDLC Library without package.json',async t=>{
+ const folder=fs.mkdtempSync(path.join(os.tmpdir(),'atgv-library-version-'));
+ t.after(()=>fs.rmSync(folder,{recursive:true,force:true}));
+ fs.writeFileSync(path.join(folder,'VERSION'),'0.0.7\n');
+ fs.writeFileSync(path.join(folder,'catalog.json'),'{}\n');
+ const facts=await sync.readSourceFacts({
+  cloned:folder,source:{name:'Acme/library'},chosenBranch:'main',
+  sha:'a'.repeat(40),sourceMessage:'fix: library contents',
+  files:['VERSION','catalog.json'],destination:{name:'Acme/target'},base:'main'
+ });
+ assert.equal(facts.project.version,'0.0.7');
+});
+
 test('GitHub latest release lookup includes prereleases, filters unsafe files, and pins checksums',async()=>{
  const repo={owner:'Acme',repo:'source',name:'Acme/source'};
  const sha='a'.repeat(40),digest='sha256:'+'b'.repeat(64);
