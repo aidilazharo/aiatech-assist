@@ -173,7 +173,7 @@ jobs:
         run: node --test test/v398-reset-workspace-alias.test.js test/v398-startup-layout.test.js
 
   release:
-    name: Publish GitHub prerelease
+    name: Publish GitHub release
     needs: [build, windows-reset]
     if: needs.build.outputs.source_ready == 'true' && github.event_name != 'pull_request'
     runs-on: ${{ vars.ATGV_LINUX_RUNNER || 'ubuntu-latest' }}
@@ -207,9 +207,9 @@ jobs:
               --target "$SOURCE_SHA" \
               --title "ATGV v${VERSION} (build ${BUILD_NUMBER})" \
               --notes "Automated main-branch VSIX build. Source commit: ${SOURCE_SHA}. Regression suite and package verification passed." \
-              --prerelease \
-              --latest=false
+              --latest
           else
             gh release upload "$tag" "dist/${FILE}" "dist/vsix.sha256" "dist/vsix-size-report.json" "dist/vsix-size-report.md" "dist/${SOURCE_FILE}" "dist/source.sha256" --clobber
+            gh release edit "$tag" --draft=false --prerelease=false
           fi
-          echo "GitHub prerelease: $tag" >> "$GITHUB_STEP_SUMMARY"
+          echo "GitHub release: $tag" >> "$GITHUB_STEP_SUMMARY"
