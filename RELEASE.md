@@ -1,8 +1,9 @@
-# ATGV AIATECH Assist v0.0.89
+# ATGV AIATECH Assist v0.0.90 — Consolidation candidate
 
-- Place the existing verified Delete source action directly in the Business Documents toolbar on every tab; remove the floating overflow menu.
-- Hide the contextual primary button entirely on Original and Jira Fields tabs; retain download/save and mapping recovery actions without duplicate buttons.
-- Preserve deletion permissions, unsaved edit protection, verification and confirmation.
-- Retain previous v0.0.88 generated requirements readiness and all earlier changes.
+- Retain v0.0.89 baseline including Business Documents toolbar, Jira inventory fields and My Work registration.
+- Integrate revision-aware Developer source continuity, approved UX gates, Jira reopening and assignee verification.
+- Integrate owned-draft AI repair with live ownership revalidation before saving.
+- Persist numeric Jira identity and parent IDs on publication; block identity reuse and changed parents.
+- Align regressions with actual Jira In Progress status and preservation of draft approval state.
 
-Validation: regression suite, UI theme, Windows startup/reset and VSIX packaging required.
+Validation pending: full CI, Windows tests and VSIX packaging. Automatic publication queue and full lifecycle acceptance remain subsequent work. Do not treat this candidate as a published release.

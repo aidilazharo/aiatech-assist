@@ -3932,6 +3932,7 @@ function jiraScopedMarker(reg,config,nodePath){
 }
 function verifyLinkedJiraIdentity(reg,config,nodePath,issue){
  const tracked=reg.synced?.[nodePath];if(!tracked?.key||issue?.key!==tracked.key)throw Error('JIRA issue mapping changed: '+nodePath);
+ if(tracked.issueId&&String(issue?.id||'')!==String(tracked.issueId))throw Error('JIRA numeric issue identity changed: '+tracked.key+'. Reconcile before publishing.');
  const fields=issue.fields||{};
  if(fields.project?.key!==validProjectKey(config.get('jira.projectKey'))||!Array.isArray(fields.labels)||!fields.labels.includes(jiraScopedMarker(reg,config,nodePath)))throw Error('JIRA issue marker or project changed: '+tracked.key);
  if(tracked.issueType&&String(fields.issuetype?.name||'').toLowerCase()!==String(tracked.issueType).toLowerCase())throw Error('JIRA issue type changed: '+tracked.key);
@@ -3941,6 +3942,7 @@ function verifyLinkedJiraIdentity(reg,config,nodePath,issue){
  const parent=mapped?.parent??(nodePath.split('/').length===4?nodePath.split('/').slice(0,2).join('/'):nodePath.includes('/')?nodePath.slice(0,nodePath.lastIndexOf('/')):null);
  const expected=parent?reg.synced?.[parent]?.key:null;
  if((fields.parent?.key||null)!==(expected||null))throw Error('JIRA parent relationship changed: '+tracked.key);
+ if(tracked.parentIssueId&&String(fields.parent?.id||'')!==String(tracked.parentIssueId))throw Error('JIRA parent numeric ID changed: '+tracked.key+'. Reconcile before publishing.');
 }
 async function jiraProtectionAssessment(reg,config,token,items,{approvedPlan=items}={}){
  const cache=new Map();
@@ -4665,6 +4667,7 @@ async function syncApprovedBRs(expectedRevision,automatic=null){
     }
    }else if(item.action==='update'){
     const current=await jiraReadIssue(config,token,key);
+    verifyLinkedJiraIdentity(state,config,item.path,current);
     const originalAssignee=current.fields?.assignee?.accountId||'';
     if(!previous?.remoteDigest||remoteFingerprint(current)!==previous.remoteDigest)throw Error('Jira content conflict: '+key);
     const currentRoles=(current.fields?.labels||[]).filter(label=>typeof label==='string'&&label.startsWith('atgv-role-'));
@@ -4677,6 +4680,7 @@ async function syncApprovedBRs(expectedRevision,automatic=null){
     if((confirmedOwner.fields?.assignee?.accountId||'')!==originalAssignee)throw Error('Jira assignee changed during publication: '+key+'. Review ownership before retrying.');
    }else if(item.action==='retire'){
     const current=await jiraReadIssue(config,token,key);
+    verifyLinkedJiraIdentity(state,config,item.path,current);
     if(!previous?.remoteDigest||remoteFingerprint(current)!==previous.remoteDigest)throw Error('Jira retirement blocked: missing trusted baseline or external changes on '+key);
     await jiraRetireIssue(config,token,{key});
    }
@@ -4686,7 +4690,7 @@ async function syncApprovedBRs(expectedRevision,automatic=null){
     const field=actualMeta.find(entry=>entry.id===id);
     if(!jiraFieldValues.sameValue(field,fieldPlan.extraFields[id],remote?.fields?.[id]))throw Error('Jira did not confirm '+field.name+' for '+key+'. Refresh Jira before retrying.');
    }
-   state=await brWorkflow.recorded(registry,activeProject.id,state.revision,{path:item.path,action:item.action,key,hash:item.hash,kind:item.kind,issueType:remote?.fields?.issuetype?.name||previous?.issueType||plannedIssueType(item),title:item.title,remoteDigest:remote?remoteFingerprint(remote):null,marker:jiraScopedMarker(state,config,item.path)});
+   state=await brWorkflow.recorded(registry,activeProject.id,state.revision,{path:item.path,action:item.action,key,hash:item.hash,kind:item.kind,issueType:remote?.fields?.issuetype?.name||previous?.issueType||plannedIssueType(item),title:item.title,remoteDigest:remote?remoteFingerprint(remote):null,marker:jiraScopedMarker(state,config,item.path),issueId:remote?.id,parentIssueId:remote?.fields?.parent?.id});
    // Only report a completed operation AFTER its confirmed Jira state is persisted locally.
    confirmed++;
    await publishProgress('publishing',`Confirmed ${confirmed} of ${total}: ${item.kind} · ${key}`,{currentPath:item.path,currentKey:key,currentAction:item.action});

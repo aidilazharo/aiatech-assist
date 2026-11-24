@@ -1676,7 +1676,7 @@ async function markAttempt(registry,id,revision,{path:nodePath}){
   event(next,'jira-create-attempted',{path:nodePath});
  });
 }
-async function recorded(registry,id,revision,{path:nodePath,action,key,hash,kind,title,issueType,remoteDigest,marker}){
+async function recorded(registry,id,revision,{path:nodePath,action,key,hash,kind,title,issueType,remoteDigest,marker,issueId,parentIssueId}){
  return write(registry,id,revision,next=>{
   const item=plan(next).find(x=>x.path===nodePath&&x.action===action);
   if(!item||(action!=='retire'&&item.hash!==hash))throw Error('Approved requirements changed since preview.');
@@ -1684,7 +1684,15 @@ async function recorded(registry,id,revision,{path:nodePath,action,key,hash,kind
   if(action==='retire'){delete next.synced[nodePath];delete next.pending[nodePath];event(next,'jira-retired',{path:nodePath,key});return;}
   if(!/^[A-Z][A-Z0-9_]{1,20}-\d{1,12}$/.test(String(key)))throw Error('Invalid Jira key.');
   if(marker!==undefined&&!/^atgv-[a-f0-9]{24}$/.test(marker))throw Error('Invalid Jira operation marker.');
-  next.synced[nodePath]={key,hash,kind:kind||item.kind,issueType:issueType||kind||item.kind,title:title||item.title,remoteDigest:remoteDigest||null,...jiraTaskRole(item),...(marker?{marker}:{})};
+  const existing=next.synced[nodePath];
+  const numeric=value=>value===undefined||value===null||value===''?'':String(value);
+  const liveId=numeric(issueId),liveParentId=numeric(parentIssueId);
+  if(liveId&&!/^\d+$/.test(liveId)||liveParentId&&!/^\d+$/.test(liveParentId))throw Error('Jira returned an invalid numeric identity. No mapping changed.');
+  if(existing?.issueId&&liveId&&String(existing.issueId)!==liveId)throw Error('Jira numeric issue identity changed for '+key+'. No mapping changed.');
+  if(existing?.parentIssueId&&liveParentId&&String(existing.parentIssueId)!==liveParentId)throw Error('Jira parent numeric identity changed for '+key+'. No mapping changed.');
+  if(Object.entries(next.synced||{}).some(([path,entry])=>path!==nodePath&&(entry?.key===key||liveId&&String(entry?.issueId||'')===liveId)))
+   throw Error('The Jira issue identity is already mapped to another BR path. No mapping changed.');
+  next.synced[nodePath]={key,hash,kind:kind||item.kind,issueType:issueType||kind||item.kind,title:title||item.title,remoteDigest:remoteDigest||null,...jiraTaskRole(item),...(marker?{marker}:{}),...(liveId||existing?.issueId?{issueId:liveId||existing.issueId}:{}),...(liveParentId||existing?.parentIssueId?{parentIssueId:liveParentId||existing.parentIssueId}:{})};
   const root=nodePath.split('/')[0];
   if(next.brs.some(x=>x.id===root))next.brs.find(x=>x.id===root).externalReviewRequired=(next.inboundJira||[]).some(x=>(x.path===root||x.path.startsWith(root+'/'))&&x.status==='pending');
   delete next.pending[nodePath];event(next,'jira-synced',{path:nodePath,key,action});
