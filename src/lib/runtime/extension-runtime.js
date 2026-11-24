@@ -4983,6 +4983,9 @@ async function runDeveloperBrAutomation(brId,{restartFresh=false}={}){
  const selectedRecoveryModel=String(target.label||target.name||target.modelId||'Unknown AI model').slice(0,180);
  const recoveryBase=context.globalStorageUri.fsPath;
  const storedTdd=await developerTdd.loadRecord(recoveryBase,projectId,brId);
+ const revisionBaseline=require('../../developer-revision-baseline');
+ const priorCompleted=await developerTdd.lastCompletedRecord(recoveryBase,projectId,brId,br.approvedRevision);
+ const nextBaseSha=revisionBaseline.choose(priorCompleted,approval.sha);
  let failedCriterionIndex=(storedTdd?.criteria||[]).findIndex(row=>row.status==='regenerating-red'||row.status==='needs-attention');
  const hasFailedRecord=failedCriterionIndex>=0;
  const resumeRequested=!restartFresh&&hasFailedRecord&&storedTdd?.checkpoint&&storedTdd.approvalSha===approval.sha&&storedTdd.revision===br.approvedRevision;
@@ -5015,7 +5018,7 @@ async function runDeveloperBrAutomation(brId,{restartFresh=false}={}){
    await developerTdd.verifyCheckpoint(storedTdd.worktree,storedTdd.checkpoint);
    const currentBranch=await developerBR.runGit(storedTdd.worktree,'branch','--show-current');
    const currentSha=await developerBR.runGit(storedTdd.worktree,'rev-parse','HEAD');
-   if(currentBranch!==storedTdd.branch||currentSha!==approval.sha)throw Error('TDD recovery Git branch or approved stack commit changed. Inspect the saved worktree before retrying.');
+   if(currentBranch!==storedTdd.branch||currentSha!==(storedTdd.baseSha||approval.sha))throw Error('TDD recovery Git branch or approved stack commit changed. Inspect the saved worktree before retrying.');
    resuming=true;
    record=storedTdd;
    record.version=2;record.status='recovering';record.retryCount=(Number(record.retryCount)||0)+1;
@@ -5029,10 +5032,10 @@ async function runDeveloperBrAutomation(brId,{restartFresh=false}={}){
    const resumingCriterion=record.criteria[failedCriterionIndex];
    await progress('repair',`Resuming ${resumingCriterion.id} from the verified checkpoint (${record.retryCount} retry). Prior repair errors and passing criteria are retained.`,{branch:run.branch,worktree:run.worktree,cycleIndex:failedCriterionIndex+1,cycleTotal:record.criteria.length,criterionId:resumingCriterion.id,jiraKey:approvedJiraKeys.includes(resumingCriterion.jiraKey)?resumingCriterion.jiraKey:'',epicJiraKey});
   }else{
-   const workspace=await developerBR.createWorktree({root:repoRoot,approvedSha:approval.sha,baseDirectory:path.join(context.globalStorageUri.fsPath,'developer-br-worktrees',projectId),brId});
+   const workspace=await developerBR.createWorktree({root:repoRoot,approvedSha:approval.sha,baseSha:nextBaseSha,baseDirectory:path.join(context.globalStorageUri.fsPath,'developer-br-worktrees',projectId),brId});
    run.worktree=workspace.worktree;run.branch=workspace.branch;
    record=developerTdd.newRecord({projectId,brId,revision:br.approvedRevision,branch:run.branch,worktree:run.worktree});
-   record.approvalSha=approval.sha;record.model=selectedRecoveryModel;
+   record.approvalSha=approval.sha;record.baseSha=workspace.baseSha;record.previousCompletedRevision=priorCompleted?.revision||0;record.model=selectedRecoveryModel;
    record.modelHistory=[...(Array.isArray(storedTdd?.modelHistory)?storedTdd.modelHistory:[]),{at:new Date().toISOString(),runId:record.runId,model:selectedRecoveryModel,reason:restartFresh||startFreshFromStaleRecord?'new development from Start Development':'first development'}].slice(-50);
    // Prior failures remain inspectable even if a changed BR or stack requires a fresh tree.
    record.previousRunId=storedTdd?.runId||'';
@@ -5058,6 +5061,7 @@ async function runDeveloperBrAutomation(brId,{restartFresh=false}={}){
   const approvedDesignHandoff=await require('../../developer-design-handoff').loadForBr(registry,projectId,brId,br.approvedRevision,{
    root:aiRoot(),brRegister:register,approvedHash:require('../../design-proposals').approvedInputs(register).hash
   });
+  require('../../developer-design-handoff').requireMappedDesign(register,brId,approvedDesignHandoff);
   await progress(resuming?'repair':'plan','Building the unified project artifacts for BA, SA, UI/UX and Developer before development planning…');
   let evidenceBundle;
   if(resuming&&record.contextPath){
@@ -5742,7 +5746,7 @@ async function runDeveloperBrAutomation(brId,{restartFresh=false}={}){
    await progress('local','Runtime repair passed fresh unit tests and build. Restarting the generated server for real HTTP verification…',{evidence:run.evidence,files:run.files});check();
    await launchGeneratedBrServer(run,project,progress,check);
   }
-  if(run.status==='verified'){record.status='complete';await capture();await save('complete');}
+  if(run.status==='verified'){await capture();record.completedCommit=await revisionBaseline.saveCompleted(record,{worktree:run.worktree,storageRoot:path.join(recoveryBase,'developer-br-worktrees',projectId)});record.status='complete';await save('complete');}
  }catch(error){
   const attention=!abort.signal.aborted&&error?.code==='TDD_REPAIR_BLOCKED';
   run.status=abort.signal.aborted?'stopped':attention?'needs-attention':'failed';developerBrLast={...run,abort:null};
