@@ -9,7 +9,7 @@
  const stageNames=['Prepare Source','Develop Requirements','Prepare Jira Preview','Publish to Jira'];
  const kindNames={iso:'Structured ISO BRD',source:'Editable source',original:'Original source text',preflight:'Pre-flight Analyst','jira-fields':'Jira work item types and fields'};
  const viewer=get('baAutoFormattedDocument');
- const primary=get('baAutoPrimaryAction'),overflow=get('baAutoOverflowMenu');
+ const primary=get('baAutoPrimaryAction');
  const sourcePanel=root.querySelector('.source-documents-panel');
  const skill=get('workSkill');
  // The five workflow panels stay visible and collapsed until opened by the user.
@@ -539,7 +539,6 @@
   kind=selected.dataset.baDocument;
   renderArtifacts();
   if(kind==='preflight'&&!get('baSourcePreflight').classList.contains('hidden'))get('baSourcePreflight').open=true;
-  overflow.open=false;
   requestArtifact();
  });
  get('baAutoDocumentTabs').addEventListener('keydown',event=>{
@@ -556,10 +555,6 @@
   const target=primaryTarget();
   if(!primary.disabled&&target&&!target.disabled)target.click();
  });
- overflow.addEventListener('keydown',event=>{
-  if(event.key==='Escape'){overflow.open=false;overflow.querySelector('summary')?.focus();event.stopPropagation();}
- });
- document.addEventListener('click',event=>{if(overflow.open&&!overflow.contains(event.target))overflow.open=false;});
  get('baAutoSource').addEventListener('click',event=>{
   if(!artifactDirty()&&!jiraFieldDirty)return;
   const destructive=event.target.closest('.source-document-actions button,.source-document-row .ba-process-btn');

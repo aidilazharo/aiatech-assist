@@ -1,7 +1,8 @@
-# ATGV AIATECH Assist v0.0.88
+# ATGV AIATECH Assist v0.0.89
 
-- Correct Generated Requirements status when the automatic Jira preview is verified: Ready before publication, Completed only after actual approval, In progress for unsaved or unverified changes, Needs attention for excluded drafts.
-- Bind Jira Ready and Publish availability to the active project and current BR revision with no preview conflicts. Do not modify approval, publication or history semantics.
-- Preserve v0.0.87 roster registration, v0.0.86 Jira tables and tooltips, v0.0.85 BR field selection, v0.0.84 release publishing and v0.0.83 browser preview fixes.
+- Place the existing verified Delete source action directly in the Business Documents toolbar on every tab; remove the floating overflow menu.
+- Hide the contextual primary button entirely on Original and Jira Fields tabs; retain download/save and mapping recovery actions without duplicate buttons.
+- Preserve deletion permissions, unsaved edit protection, verification and confirmation.
+- Retain previous v0.0.88 generated requirements readiness and all earlier changes.
 
-Validation: regression suite, Windows startup/reset, UI theme and VSIX packaging required.
+Validation: regression suite, UI theme, Windows startup/reset and VSIX packaging required.

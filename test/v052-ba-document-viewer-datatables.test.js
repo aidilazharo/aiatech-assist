@@ -49,7 +49,7 @@ test('renderer renders blank state and preserves code text safely',()=>{
  assert.match(container.textContent,/<not-html>/);
 });
 test('only one document panel is visible per selected tab',()=>{
- for(const id of ['baAutoDocumentTabs','baAutoFormattedDocument','baAutoPrimaryAction','baAutoOverflowMenu','baAutoArtifactText'])assert.match(html,new RegExp('id="'+id+'"'));
+ for(const id of ['baAutoDocumentTabs','baAutoFormattedDocument','baAutoPrimaryAction','baAutoFileActions','baAutoArtifactText'])assert.match(html,new RegExp('id="'+id+'"'));
  assert.match(ba,/viewer\.hidden=kind!=='iso'/);
  assert.match(ba,/input\.hidden=kind==='iso'\|\|preflight\|\|showQuill/);
  assert.match(ba,/const showQuill=syncQuill\(\)/);

@@ -5844,7 +5844,7 @@ function renderSourceDocuments(){
   actions.append(remove);
   replace.setAttribute('aria-label','Upload replacement document');
   item.append(info,replace);
-  // The destructive action remains in the panel menu, not next to the file name.
+  // Delete shares the main toolbar, with the existing verified deletion handler.
   if(fileToolbar&&$('discoveryView')?.classList.contains('ba-automatic-view'))fileToolbar.append(actions);
   else item.append(actions);
   root.append(item);

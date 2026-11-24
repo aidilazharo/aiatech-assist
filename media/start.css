@@ -3019,49 +3019,16 @@ body:not(.gate-mode) #sdlcWorkspaceShell.atgv-sdlc-workspace-shell{
  pointer-events:none;border-radius:5px;background:var(--vscode-menu-background,#303843);
  color:var(--vscode-menu-foreground,#fff);font-size:11px;line-height:1.4
 }
-#discoveryView #baAutoOverflowMenu{position:relative;flex:0 0 auto;min-width:0}
-#discoveryView #baAutoOverflowMenu>summary{
- cursor:pointer;box-sizing:border-box;display:flex;align-items:center;
- justify-content:center;list-style:none;width:36px;height:36px;
- padding:0;border:1px solid var(--vscode-panel-border,#555d67);
- border-radius:5px;background:var(--vscode-button-secondaryBackground,#333b47);
- color:var(--vscode-button-secondaryForeground,#eee);font-size:21px;line-height:1
-}
-#discoveryView #baAutoOverflowMenu>summary::-webkit-details-marker{display:none}
-#discoveryView #baAutoOverflowMenu>summary:focus-visible{
- outline:2px solid var(--vscode-focusBorder,#4b97e4);outline-offset:2px
-}
-#discoveryView #baAutoOverflowMenu:not([open]) .ba-auto-overflow-actions{display:none!important}
-#discoveryView #baAutoOverflowActions{
- box-sizing:border-box;position:absolute;z-index:80;top:calc(100% + 7px);right:0;
- display:flex;flex-direction:column;gap:4px;width:min(310px,80vw);
- max-width:calc(100vw - 40px);max-height:300px;
- overflow:auto;padding:8px;
- border:1px solid var(--vscode-panel-border,#53606b);border-radius:8px;
- background:var(--vscode-menu-background,var(--vscode-editorWidget-background,#282d35));
- box-shadow:0 8px 24px rgba(0,0,0,.36)
-}
+/* Direct document actions: no floating menu or duplicate contextual buttons. */
+#discoveryView #baAutoDocumentToolbar #baAutoPrimaryAction[hidden]{display:none!important}
+#discoveryView #baAutoDocumentToolbar #baAutoOverflowActions{display:flex;align-items:center;gap:5px;flex:0 0 auto;min-width:0}
 #discoveryView #baAutoDocumentToolbar #baAutoOverflowActions #baAutoIsoPreflightActions,
 #discoveryView #baAutoDocumentToolbar #baAutoOverflowActions #baAutoFileActions,
-#discoveryView #baAutoDocumentToolbar #baAutoOverflowActions #baAutoFileActions .source-document-actions{
- display:flex!important;flex-direction:column;gap:4px;width:100%;min-width:0
-}
-#discoveryView #baAutoDocumentToolbar #baAutoOverflowActions button{
- box-sizing:border-box;display:block;width:100%;max-width:100%;
- min-height:34px;margin:0;padding:8px 10px;
- line-height:1.4;font-size:12px;text-align:left;
- white-space:normal;overflow-wrap:anywhere
-}
+#discoveryView #baAutoDocumentToolbar #baAutoOverflowActions #baAutoFileActions .source-document-actions{display:contents!important}
+#discoveryView #baAutoDocumentToolbar #baAutoOverflowActions :is(#baPreflightDownload,#baWorkingBrDownload,#baAutoArtifactSave),
 #discoveryView #baAutoDocumentToolbar #baAutoOverflowActions button.hidden,
 #discoveryView #baAutoDocumentToolbar #baAutoOverflowActions button[hidden]{display:none!important}
-#discoveryView #baAutoOverflowActions[data-kind="iso"] #baWorkingBrDownload,
-#discoveryView #baAutoOverflowActions[data-kind="preflight"] #baPreflightDownload,
-#discoveryView #baAutoOverflowActions[data-kind="source"] #baAutoArtifactSave,
-#discoveryView #baAutoOverflowActions[data-kind="original"] #baAutoFileActions .source-document-actions button:first-child{display:none!important}
-#discoveryView #baAutoOverflowActions #baAutoFileActions .br-danger{
- color:var(--vscode-errorForeground,#ff8c8c)!important;
- border-color:var(--vscode-errorForeground,#c45d5d)!important
-}
+#discoveryView #baAutoDocumentToolbar #baAutoFileActions .br-danger{color:var(--vscode-errorForeground,#ff8c8c)!important;border-color:var(--vscode-errorForeground,#c45d5d)!important}
 #discoveryView #baAutoDocumentPanel #baAutoArtifactLabel[hidden],
 #discoveryView #baAutoDocumentPanel #baAutoArtifactText[hidden],
 #discoveryView #baAutoDocumentPanel #baAutoFormattedDocument[hidden] {display:none!important}
@@ -3252,9 +3219,6 @@ body:not(.gate-mode) .app-layout{
 #discoveryView #baAutoOriginalFiles .source-document-info{flex:0 1 auto;min-width:0;grid-column:auto}
 #discoveryView #baAutoOriginalFiles .source-document-row>.ba-process-btn{flex:0 0 auto;width:36px;height:36px;padding:8px}
 #discoveryView #baAutoOriginalFiles .source-document-row>.ba-process-btn svg{width:18px;height:18px}
-#discoveryView .ba-auto-panel-actions{display:flex;justify-content:flex-end;padding:6px 0}
-#discoveryView .ba-auto-panel-actions #baAutoOverflowActions{min-width:0;width:max-content;max-width:100%;display:flex;flex-direction:row;gap:5px;padding:6px}
-#discoveryView .ba-auto-panel-actions #baAutoFileActions .source-document-actions{display:flex;gap:4px}
 #discoveryView #baAutoJiraFieldsPanel[hidden]{display:none!important}
 #discoveryView .ba-jira-fields-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
 #discoveryView .ba-jira-fields-type{margin:8px 0;border:1px solid var(--vscode-panel-border);border-radius:5px;padding:8px}
@@ -3262,7 +3226,6 @@ body:not(.gate-mode) .app-layout{
 #discoveryView .ba-jira-field-selection-table :is(td,th){text-align:left;padding:7px;border-bottom:1px solid var(--vscode-panel-border);overflow-wrap:anywhere}
 #discoveryView .ba-jira-field-selection-table input{width:auto;min-width:0}
 #discoveryView #baAutoJiraFieldsSave{margin-top:10px}
-#discoveryView .ba-auto-panel-actions #baAutoOverflowActions[data-kind="original"] #baAutoFileActions .source-document-actions button:first-child{display:inline-flex!important}
 
 /* v0.0.86 — common Jira inventory columns, compact readable cells. */
 #workView .atgv-jira-common-table .atgv-datatable-table{min-width:1850px;table-layout:fixed;width:100%}
@@ -3292,3 +3255,5 @@ body:not(.gate-mode) .app-layout{
 #workView #baRequirementModal .ba-br-icon-action[data-tooltip]:is(:hover,:focus-visible)::after,
 #workView .ba-completed-br-heading .ba-br-icon-action[data-tooltip]:is(:hover,:focus-visible)::after{content:none;display:none}
 .atgv-br-portal-tooltip{position:fixed;z-index:2147483647;box-sizing:border-box;max-width:min(320px,calc(100vw - 16px));width:max-content;padding:7px 10px;border:1px solid var(--vscode-panel-border,#586171);border-radius:5px;background:var(--vscode-menu-background,#242932);color:var(--vscode-menu-foreground,#f5f7fa);box-shadow:0 5px 16px rgba(0,0,0,.4);font-size:12px;line-height:1.4;white-space:normal;overflow-wrap:anywhere;pointer-events:none}
+
+#discoveryView #baAutoDocumentToolbar #baAutoFileActions .ba-source-icon-action{width:34px!important;min-width:34px!important;max-width:34px!important;height:34px!important;min-height:34px!important;flex:0 0 34px!important;margin:0;padding:0!important}

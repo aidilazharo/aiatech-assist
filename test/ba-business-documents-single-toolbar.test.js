@@ -44,7 +44,7 @@ test('four tabs select one visible content panel without losing unsaved edits',(
  assert.match(ba,/get\('baAutoArtifactSave'\)\.hidden=kind!=='source'/);
  assert.match(ba,/get\('baAutoFormattedDocument'\)/);
  assert.match(html,/id="baAutoPrimaryAction"/);
- assert.match(html,/id="baAutoOverflowMenu"/);
+ assert.doesNotMatch(html,/id="baAutoOverflowMenu"/);
  assert.match(css,/#discoveryView #baAutoDocumentPanel\[hidden\]/);
 });
 
@@ -58,7 +58,7 @@ test('existing download, document save and source-delete handlers remain connect
 
 test('document and Jira views use icon buttons with accessible tooltip labels',()=>{
  const controls=[...html.matchAll(/<(?:button|summary)[^>]+class="ba-auto-title-icon"[^>]*>([^<]*)<\/(?:button|summary)>/g)];
- assert.equal(controls.length,16);
+ assert.equal(controls.length,15);
  for(const [tag,icon] of controls){
   assert.match(tag,/aria-label="[^"]+"/);
   assert.match(tag,/title="[^"]+"/);
@@ -76,4 +76,13 @@ test('document and Jira views use icon buttons with accessible tooltip labels',(
  assert.match(panel,/id="baAutoJiraView"/);
  assert.match(panel,/id="baAutoJiraTabs"/);
  assert.match(ba,/event\.preventDefault\(\);\s+get\('baAutoJira'\)\.open=true/);
+});
+
+test('delete is a direct document toolbar action and the primary hides on tabs without actions',()=>{
+ const toolbar=html.slice(html.indexOf('id="baAutoDocumentToolbar"'),html.indexOf('id="baAutoSourceEditor"'));
+ assert.match(toolbar,/id="baAutoFileActions"/);
+ assert.doesNotMatch(toolbar,/<details/);
+ assert.match(ui,/actions\.append\(remove\)/);
+ assert.match(ba,/primary\.hidden=kind==='jira-fields'\|\|kind==='original'/);
+ assert.match(css,/#baAutoPrimaryAction\[hidden\]\{display:none!important\}/);
 });
