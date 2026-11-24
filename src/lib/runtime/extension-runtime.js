@@ -761,7 +761,8 @@ async function checkLibraryRelease({prompt=false,interactive=false,forcePrompt=f
   if(catalogBusy){libraryRelease=null;libraryUpdateError='Library update check is waiting for another catalog operation.';return null;}
   let token='';
   try{token=await catalogToken(catalogConfig(),{interactive:false});}
-  catch{token=await githubIssueAccessToken({interactive:false});}
+  catch{/* Try the shared GitHub connection when no Library token is available. */}
+  if(!token)token=await githubIssueAccessToken({interactive:false});
   const checked=await libraryReleaseUpdater.latestAcrossRepositories({token});
   libraryRelease=checked.release;libraryLatest=checked.latest;libraryReleaseWarnings=checked.errors;
   if(!libraryLatest)throw Error('No aiMalaysia Library source Release was found.');
