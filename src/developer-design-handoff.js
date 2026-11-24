@@ -82,4 +82,14 @@ async function loadForBr(registry,projectId,brId,revision,options={}){
  const combined=[...normal,...ticket];
  return combined.length?combined:null;
 }
-module.exports={forBr,linkedJiraKeys,ticketDesignsForBr,loadForBr};
+function requireMappedDesign(register,brId,handoff){
+ const linked=[...Object.entries(register?.synced||{}),...Object.entries(register?.roleTaskMappings||{})];
+ const required=linked.some(([node,row])=>node.startsWith(brId+'/')&&(
+  /\/ROLE-(?:UX|UIUX|UX-DESIGNER|UI-UX-DESIGNER)(?:\/|$)/i.test(node)||
+  /^(?:ux-designer|uiux|ui-ux-designer|atgv-role-ux-designer)$/i.test(String(row?.roleId||row?.roleLabel||''))||
+  /^(?:UI\/UX Design|UX Design|User Flow|Wireframe|Interactive Prototype|Developer Handoff)\b/i.test(String(row?.title||''))
+ ));
+ if(required&&!handoff?.some(item=>Array.isArray(item.screens)&&item.screens.length))throw Error('Current approved UI/UX design is required for this BR. Ask the Designer to approve the current revision.');
+ return true;
+}
+module.exports={forBr,linkedJiraKeys,ticketDesignsForBr,loadForBr,requireMappedDesign};
