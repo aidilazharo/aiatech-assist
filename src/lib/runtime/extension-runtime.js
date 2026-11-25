@@ -2120,7 +2120,7 @@ async function confirmedRosterVisit(config,token,projectId,projectKey,roleId='',
  if(!token)throw Error('Connect Jira and Confluence before registering.');
  const assertActive=()=>{if(activeProject?.id!==projectId)throw Error('Project changed before user registration.');};
  assertActive();
- return myWorkPresence.visit(config,token,{projectKey,roleId,assertActive,...(overviewClicked?{confirmRegistration:async identity=>{
+ return myWorkPresence.visit(config,token,{projectKey,roleId,installedVersion:require('../../../package.json').version,assertActive,...(overviewClicked?{confirmRegistration:async identity=>{
   assertActive();
   const choice=await vscode.window.showInformationMessage('Please update your account',{modal:true,detail:'Full Name: '+identity.name+'\nEmail: '+(identity.email||'Not available from Jira')},'Confirm');
   assertActive();
