@@ -28,16 +28,18 @@ function requireServerVerification(project) {
   return project.techStackServerVerification;
 }
 function approval(project,repo,actor,at=new Date().toISOString()) {
-  const proof=project?.techStackValidation;
+  const prepared=project?.techStackPrepared;
   const stackId=project?.techStackId;
   const companionId=project?.techStackCompanionId||'';
   selection(stackId,companionId);
-  if (!proof || proof.status!=='tested' || proof.stackId!==stackId || proof.companionId!==companionId) throw Error('Test & Run Stack must pass before the Solution Architect can approve it.');
-  if(!repo?.clean||repo.root!==proof.root||repo.sha!==proof.sha)throw Error('The tested repository changed. Re-run stack tests and smoke check before approval.');
-  requireServerVerification(project);
-  if (!actor || !String(actor).trim()) throw Error('The architect identity is required for approval.');
-  evidence({stackId,companionId,repo,results:proof.results});
-  return {status:'approved',stackId,companionId,root:repo.root,sha:repo.sha,approvedAt:at,approvedBy:String(actor).trim()};
+  if(!prepared?.root||!prepared.sha||!prepared.branch||prepared.stackId!==stackId||(prepared.companionId||'')!==companionId)
+    throw Error('Save the current technology stack before approval.');
+  if(!repo?.clean||repo.root!==prepared.root||repo.sha!==prepared.sha)
+    throw Error('The saved repository changed. Save the current revision before approval.');
+  if(!actor||!String(actor).trim())throw Error('The architect identity is required for approval.');
+  const proof=project.techStackValidation;
+  const tested=proof?.status==='tested'&&proof.stackId===stackId&&proof.sha===prepared.sha&&proof.root===prepared.root&&(proof.companionId||'')===companionId;
+  return {status:'approved',stackId,companionId,root:repo.root,sha:repo.sha,approvedAt:at,approvedBy:String(actor).trim(),testStatus:tested?'tested':'unverified',serverStatus:serverVerified(project)?'verified':'unverified'};
 }
 function developerAllowed(project) {
   if(project?.techStackId==='custom')return require('./architect-custom-handoff').developerAllowed(project);
@@ -45,7 +47,7 @@ function developerAllowed(project) {
   return !!(a?.status==='approved'&&a.stackId&&a.stackId===project?.techStackId&&(a.companionId||'')===(project?.techStackCompanionId||'')&&a.sha&&a.approvedBy);
 }
 function requireDeveloperApproval(project) {
-  if(!developerAllowed(project))throw Error('Solution Architect must Test & Run Stack and approve the selected technology stack before developers can use it.');
+  if(!developerAllowed(project))throw Error('Solution Architect must approve the saved technology stack before developers can use it.');
   return project.techStackApproval;
 }
 module.exports={selection,evidence,serverVerified,requireServerVerification,approval,developerAllowed,requireDeveloperApproval};

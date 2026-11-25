@@ -94,15 +94,24 @@ async function validate(root,{project,driver=developer,scanner=custom,deps=depen
   results,targets:candidates.map(x=>({relative:x.relative,kind:x.kind,framework:x.framework})),
   synthetic:true,liveBackendVerified:false,realDatabaseVerified:false};
 }
+async function prepareHandoff(root,{project,driver=developer,scanner=custom,http=fetch,onProgress=async()=>{}}={}){
+ if(!matches(project)||root!==project.techStackPrepared.root)throw Error('Save and verify the Custom Stack synthetic preview first.');
+ const inspection=await scanner.scan(root,{driver});
+ await verifyRuntime(project,inspection,{driver,http});
+ const targets=inspection.targets.filter(t=>t.runnable&&t.role!=='workspace');
+ if(!targets.length)throw Error('No runnable Custom Stack application targets found.');
+ await onProgress('Verified clean Git revision and synthetic preview; test/build checks were not requested.');
+ return {status:'preview-verified',scope:'development-mock',stackId:'custom',root:inspection.root,branch:inspection.branch,sha:inspection.sha,at:new Date().toISOString(),previewRelative:project.techStackCustomPreview.relative,previewUrl:project.techStackCustomPreview.url,results:[],targets:targets.map(x=>({relative:x.relative,kind:x.kind,framework:x.framework})),synthetic:true,liveBackendVerified:false,realDatabaseVerified:false};
+}
 function approval(project,validation,actor,remote,at=new Date().toISOString()){
  if(!matches(project))throw Error('Custom Stack preview evidence does not match the saved revision.');
  const prep=project.techStackPrepared;
- if(validation?.status!=='tested'||validation.scope!=='development-mock'||validation.stackId!=='custom'||
+ if(!['tested','preview-verified'].includes(validation?.status)||validation.scope!=='development-mock'||validation.stackId!=='custom'||
    validation.root!==prep.root||validation.sha!==prep.sha||validation.branch!==prep.branch||
    validation.previewUrl!==project.techStackCustomPreview.url||!Array.isArray(validation.targets)||!validation.targets.length||
-   !Array.isArray(validation.results)||validation.results.length!==validation.targets.length*2)
+   !Array.isArray(validation.results)||(validation.status==='tested'?validation.results.length!==validation.targets.length*2:validation.results.length!==0))
   throw Error('The full Custom Stack test/build handoff evidence is required for this exact revision.');
- for(const target of validation.targets){
+ for(const target of validation.status==='tested'?validation.targets:[]){
   for(const op of ['test','build']){
    if(!validation.results.some(row=>row.relative===target.relative&&row.operation===op&&
       row.head===prep.sha&&row.passed===true))
@@ -115,15 +124,15 @@ function approval(project,validation,actor,remote,at=new Date().toISOString()){
  return {status:'approved',stackId:'custom',scope:'development-mock',synthetic:true,
   root:prep.root,branch:prep.branch,sha:prep.sha,remoteBranch:remote.branch,
   remoteSha:remote.sha,remoteVerified:true,approvedAt:at,approvedBy:String(actor).trim(),
-  targetCount:validation.targets.length,validationAt:validation.at,
+  targetCount:validation.targets.length,validationAt:validation.at,testStatus:validation.status==='tested'?'tested':'unverified',
   limitations:['Synthetic mock preview only','Real database and external identity/integrations unverified','Not production deployment approval']};
 }
 function developerAllowed(project){
  const p=project?.techStackPrepared,v=project?.techStackValidation,a=project?.techStackApproval;
- return matches(project)&&p.remotePushed===true&&v?.status==='tested'&&v.scope==='development-mock'&&
+ return matches(project)&&p.remotePushed===true&&['tested','preview-verified'].includes(v?.status)&&v.scope==='development-mock'&&
   v.stackId==='custom'&&v.sha===p.sha&&v.branch===p.branch&&v.root===p.root&&
   a?.status==='approved'&&a.scope==='development-mock'&&a.synthetic===true&&a.stackId==='custom'&&
   a.sha===p.sha&&a.branch===p.branch&&a.root===p.root&&a.remoteVerified===true&&
   a.remoteSha===p.sha&&Boolean(a.remoteBranch&&a.approvedBy);
 }
-module.exports={matches,previewEvidence,verifyRuntime,validate,approval,developerAllowed};
+module.exports={matches,previewEvidence,verifyRuntime,validate,prepareHandoff,approval,developerAllowed};

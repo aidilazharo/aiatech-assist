@@ -1,6 +1,6 @@
-# ATGV AIATECH Assist v0.1.10
+# ATGV AIATECH Assist v0.1.11
 
-- Correct the dashboard fallback and README version metadata to match the extension manifest, resolving the five reported v0.1.9 release metadata assertions.
-- Validate all existing version metadata before the version setter writes any files, preventing partial updates when the source is already inconsistent.
-- Retain v0.1.9 Jira hierarchy validation and large mapping audit fixes.
-- Verified manifest, README, dashboard fallback and release header consistency by source inspection; full Node regression and VSIX packaging not run.
+- Remove Technology Stack Test & Run button and workflow step. Approve catalog stacks from the saved, published Git revision without requiring test/build or HTTP verification evidence; report verification status separately.
+- Preserve existing Save Stack automatic preparation and Run Server functionality. Custom Stack keeps its separate synthetic-preview safety check and no longer runs mandatory additional test/build checks during approval.
+- Preserve exact Git revision, remote publication, explicit Architect confirmation and development-only scope; no production readiness claim.
+- Full npm regression suite and live VS Code/Jira validation not run; no VSIX generated.

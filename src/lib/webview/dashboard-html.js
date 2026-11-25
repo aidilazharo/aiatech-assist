@@ -31,7 +31,7 @@ function html(webview,{resumeLibrary=false}={}){
     subtask:"<path d=\"M5 5v7h4m-3-3 3 3-3 3M12 8h7v8h-7zM14 12l1 1 2-2\"/>"
   };
   const baHeaderIcon=(name,variant='')=>`<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${variant}>${baHeaderIcons[name]}</svg>`;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.1.10';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.1.11';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const uiConsistencyCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-consistency.css'));
@@ -692,8 +692,7 @@ function html(webview,{resumeLibrary=false}={}){
         <div class="architect-gated-stages architect-stepper" role="list" aria-label="Technology stack workflow">
           <span role="listitem" id="architectSaveStage" data-number="1">Save Stack</span>
           <span role="listitem" id="architectDependenciesStage" data-number="2">Dependencies</span>
-          <span role="listitem" id="architectTestStage" data-number="3">Test &amp; Run</span>
-          <span role="listitem" id="architectApproveStage" data-number="4">Approve</span>
+          <span role="listitem" id="architectApproveStage" data-number="3">Approve</span>
         </div>
         <div id="architectStackProgress" class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Technology stack requirements progress"><div id="architectStackProgressFill" class="progress-fill" style="width:0%"></div></div>
         <div class="architect-progress-description"><p id="architectStackProgressText" class="muted">Choose a stack to begin · 0%</p><p id="architectStackSummary" class="muted"></p></div>
@@ -742,7 +741,7 @@ function html(webview,{resumeLibrary=false}={}){
         </div>
         <div id="architectRequirementsList" class="architect-requirement-list" role="list"></div>
       </div>
-      <div class="architect-simple-actions"><button type="button" id="architectTestStack" class="secondary" disabled>Test &amp; Run</button><button type="button" id="architectApproveStack" disabled>Approve for Developers</button><p id="architectApprovalStatus" class="muted" role="status" aria-live="polite"></p></div>
+      <div class="architect-simple-actions"><button type="button" id="architectApproveStack" disabled>Approve for Developers</button><p id="architectApprovalStatus" class="muted" role="status" aria-live="polite"></p></div>
       <p id="architectBootstrapStatus" class="muted" role="status" aria-live="polite"></p>
     </section></div>
     <section id="developerTaskDashboard" class="developer-task-dashboard hidden" aria-label="Developer tasks and implementation delivery">

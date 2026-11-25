@@ -7854,7 +7854,7 @@ async function handleDashboardMessage(msg){
       case 'architectPublishLocalStack':{
         requireOpened();requireOnline();
         const projectId=activeProject.id,project=await registry.read(projectId),prepared=project.techStackPrepared;
-        if(!prepared||prepared.stackId==='custom'||prepared.remotePushed||project.techStackValidation?.sha!==prepared.sha||project.techStackValidation?.status!=='tested')throw Error('Prepare and test a local catalog stack before publishing.');
+        if(!prepared||prepared.stackId==='custom'||prepared.remotePushed)throw Error('Save a local catalog stack before publishing.');
         const config=effectiveConfig(project),owner=config.get('github.owner'),name=config.get('github.repo');
         const value=await uiInput({prompt:'GitHub destination repository URL (create an empty repository first)',value:owner&&name?'https://github.com/'+owner+'/'+name:'',ignoreFocusOut:true});
         if(value===undefined||!value.trim()){await dashboard?.webview.postMessage({type:'architectStackCancelled',projectId,message:'GitHub publication cancelled.'});break;}
@@ -8089,20 +8089,7 @@ async function handleDashboardMessage(msg){
           githubRepo:effectiveConfig(activeProject).get('github.repo')});
         if(root!==project.techStackPrepared.root)throw Error('The configured project repository differs from the verified mock preview.');
         architectErrorLogs.begin(projectId,'approval');
-        const confirm='Validate Custom Stack Handoff';
-        const ready=await uiWarning(
-          'Validate Custom Stack at Git revision '+project.techStackPrepared.sha.slice(0,12)+'?\n\n'+
-          'ATGV will run the declared test and build scripts for EVERY runnable application, installing missing dependencies if needed. '+
-          'These scripts can execute repository code. Keep the repository clean and review the scripts before confirming.\n\n'+
-          'The local ATGV-owned synthetic preview must remain running. Tests/build must all pass. '+
-          'This check does NOT verify live PostgreSQL, real SAML/identity services, external APIs or production deployment.\n\n'+
-          'After successful checks, a separate Architect confirmation will be required before publishing a SHA-pinned GitHub handoff branch. main will not be modified.',
-          {modal:true},confirm);
-        if(confirm!==ready){
-          await dashboard?.webview.postMessage({type:'architectStackCancelled',projectId,message:'Custom Stack handoff validation cancelled; no approval or GitHub push.'});
-          break;
-        }
-        const validation=await handoff.validate(root,{project,onProgress:async message=>{
+        const validation=await handoff.prepareHandoff(root,{project,onProgress:async message=>{
           const text=String(message||'').slice(-1300);
           architectErrorLogs.append(projectId,'approval',text);
           await recordStackActivity(projectId,'Custom Stack development handoff',text);
@@ -8114,14 +8101,14 @@ async function handleDashboardMessage(msg){
         const approve='Approve Development Handoff';
         const decision=await uiWarning(
           'Approve Custom Stack for DEVELOPER MOCK DEVELOPMENT only?\n\n'+
-          'Verified '+validation.targets.length+' runnable application(s), '+validation.results.length+' successful test/build checks, '+validation.sha.slice(0,12)+
+          'Verified '+validation.targets.length+' runnable application(s); test/build checks not required. Git revision '+validation.sha.slice(0,12)+
           ' on branch '+validation.branch+'.\n\n'+
           'The local synthetic preview is healthy. Real PostgreSQL, external authentication and integrations remain UNVERIFIED; this is NOT production approval.\n\n'+
           'ATGV will publish the exact verified SHA to a dedicated GitHub tech-stack/custom-vN handoff branch (or a safe SHA-pinned alias). '+
           'No force-push or merge to main will occur.',
           {modal:true},approve);
         if(decision!==approve){
-          await dashboard?.webview.postMessage({type:'architectStackCancelled',projectId,message:'Custom Stack handoff approval cancelled after test/build checks. No branch published.'});
+          await dashboard?.webview.postMessage({type:'architectStackCancelled',projectId,message:'Custom Stack handoff approval cancelled. No branch published.'});
           break;
         }
         const published=await require('../../git-handoff-coordinator').publishApprovedStack({
@@ -8137,7 +8124,7 @@ async function handleDashboardMessage(msg){
         activeProject=updated;
         architectErrorLogs.clear(projectId,'approval');
         await recordStackActivity(projectId,'Custom Stack approved for Developer mock work',
-          'Validated '+validation.results.length+' test/build checks at '+validation.sha.slice(0,12)+
+          'Verified synthetic preview at '+validation.sha.slice(0,12)+'; test/build not required'+
           '. Remote handoff '+published.branch+'. Production/database/identity integrations remain unverified.');
         await refreshDashboard();
         await dashboard?.webview.postMessage({type:'architectStackState',
@@ -8149,28 +8136,20 @@ async function handleDashboardMessage(msg){
         requireOpened();architectErrorLogs.begin(activeProject.id,'approval');const gate=require('../../architect-stack-approval');const project=await registry.read(activeProject.id);
         const root=await architectRepository.resolve(context.workspaceState,activeProject.id,developerGit,{projectRoot:aiRoot(),githubOwner:effectiveConfig(activeProject).get('github.owner'),githubRepo:effectiveConfig(activeProject).get('github.repo')});
         if(!project.techStackPrepared||project.techStackPrepared.root!==root||project.techStackPrepared.stackId!==project.techStackId)throw Error('Save the current stack before approval.');
-        const serverState=await require('../../architect-server').verify({root,stackId:project.techStackId});
-        // A previously verified HTTP smoke check remains valid for its exact
-        // tested Git SHA after Stop Server. Reject live mismatches/unhealthy apps.
-        const {proof:healthyProof,source:verificationSource}=require('../../architect-server-verification').approvalEvidence(project,serverState);
-        const verifiedProject={...project,techStackServerVerification:healthyProof};
-        gate.requireServerVerification(verifiedProject);
-        if(!gate.serverVerified(project)){
-          activeProject=await registry.update(activeProject.id,verifiedProject);
-        }
+        if(project.techStackPrepared.remotePushed!==true)throw Error('Publish the saved stack to GitHub before approval.');
         // Verify the approved branch commit in an isolated worktree; a Developer
         // feature branch may be checked out (and dirty) in the shared repository.
         const pinned=await require('../../architect-preview-worktree').prepare({root,branch:project.techStackPrepared.branch,sha:project.techStackPrepared.sha});
         const repo={root,sha:pinned.sha,clean:true};
         const actor=await changeContributorActor();
-        const proof=gate.approval(verifiedProject,repo,actor);
+        const proof=gate.approval(project,repo,actor);
         const action='Approve Stack';
-        const confirmation=await uiWarning(`Approve ${proof.stackId}${proof.companionId?' + '+proof.companionId:''} for Developers?\n\nTests, build and HTTP smoke check passed for Git revision ${proof.sha}. Server verification: ${verificationSource==='saved'?'previously verified; application now stopped':'currently running and healthy'}. Approval will publish the exact approved SHA to a GitHub tech-stack branch (no force-push). It does NOT approve a GitHub merge.`,{modal:true},action);
+        const confirmation=await uiWarning(`Approve ${proof.stackId}${proof.companionId?' + '+proof.companionId:''} for Developers?\n\nSaved Git revision ${proof.sha}. Test evidence: ${proof.testStatus}. Server evidence: ${proof.serverStatus}. These checks are not approval prerequisites. Approval is for development, not production. Approval will publish the exact approved SHA to a GitHub tech-stack branch (no force-push). It does NOT approve a GitHub merge.`,{modal:true},action);
         if(confirmation!==action)break;
         const published=await require('../../git-handoff-coordinator').publishApprovedStack({root,stackId:proof.stackId,generation:Number(project.techStackGeneration||1),sha:proof.sha});
         if(published.renamed)architectErrorLogs.append(activeProject.id,'approval','Existing remote '+published.previousBranch+' was preserved. Verified SHA-pinned approval branch: '+published.branch);
         const remoteProof={...proof,remoteBranch:published.branch,remoteSha:published.sha,remoteVerified:true};
-        const updated=await registry.update(activeProject.id,{...verifiedProject,techStackApproval:remoteProof});activeProject=updated;
+        const updated=await registry.update(activeProject.id,{...project,techStackApproval:remoteProof});activeProject=updated;
         architectErrorLogs.clear(updated.id,'approval');
         await dashboard?.webview.postMessage({type:'architectStackState',value:{message:'Approved '+proof.stackId+' · GitHub '+published.branch+' @ '+published.sha.slice(0,12)}});
         await refreshDashboard();break;
