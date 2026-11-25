@@ -8386,6 +8386,7 @@ function renderMyWorkRoster(rows){
  const root=$('overviewUserRows');if(!root)return;
  const entries=(Array.isArray(rows)?rows:[]).map(user=>({
   ...user,rolesLabel:(Array.isArray(user.roles)?user.roles:[]).join(', ')||'—',
+  atgvVersionLabel:user.atgvVersion?'v'+user.atgvVersion:'Unknown',
   tasksText:String(user.tasks||'No assigned task')
  }));
  if(typeof ATGVDataTables==='undefined'){root.textContent='DataTable module not available. Reload ATGV.';return;}
@@ -8406,6 +8407,7 @@ function renderMyWorkRoster(rows){
  ATGVDataTables.mount(root,entries,[
   {key:'name',label:'Name',render:(item,doc)=>{const box=doc.createElement('div'),strong=doc.createElement('strong'),small=doc.createElement('small');strong.textContent=String(item.name||'Unknown');small.textContent=String(item.email||item.id||'');box.append(strong,small);return box;}},
   {key:'rolesLabel',label:'Roles'},
+  {key:'atgvVersionLabel',label:'ATGV Version',render:(item,doc)=>{const el=doc.createElement('span');el.textContent=item.atgvVersionLabel;el.title=item.atgvVersionReportedAt?'Last version change reported: '+new Date(item.atgvVersionReportedAt).toLocaleString():'No version reported';return el;}},
   {key:'tasksText',label:'Assigned Jira Tasks',render:taskCell}
  ],{pageSize:5,sortKey:'name',label:'My Work users and assigned Jira issues',searchHost:$('overviewUserSearchHost')});
 }
@@ -8431,7 +8433,7 @@ window.addEventListener('message',event=>{
   if(rosterAddProject===activeId&&m.requestId!==rosterAddRequest)return;
   renderMyWorkRoster(m.rows);
   if((m.reason==='added-user'||m.addCancelled)&&m.requestId===rosterAddRequest){rosterAddProject='';setRosterAddBusy(false);if(m.reason==='added-user'&&m.syncComplete)$('overviewUserAccountId').value='';}
-  $('overviewUserStatus').textContent=(m.registrationPending?'Open Overview to confirm registration · ':m.registrationCancelled?'Registration cancelled · ':m.addCancelled?'User selection cancelled · ':m.syncComplete===false?'Confluence page saved; database sync incomplete · ':m.registrationConfirmed?'Registered '+(m.registeredName||'')+' · ':m.reason==='added-user'?(m.registrationAction==='updated'?'Updated ':'Added ')+(m.registeredName||m.registeredAccountId)+' · ':'')+(m.rows?.length||0)+' users · assigned Jira tasks refreshed'+(m.assignmentWarning?' · '+m.assignmentWarning:'')+(m.registryWarning?' · '+m.registryWarning:'')+(m.databaseId?' · Database v2 #'+m.databaseId:'')+' · Confluence space '+(m.spaceKey||'')+(m.updatedAt?' · '+new Date(m.updatedAt).toLocaleString():'');
+  $('overviewUserStatus').textContent=(m.registrationPending?'Open Overview to confirm registration · ':m.registrationCancelled?'Registration cancelled · ':m.addCancelled?'User selection cancelled · ':m.syncComplete===false?'Confluence page saved; database sync incomplete · ':m.registrationConfirmed?'Registered '+(m.registeredName||'')+' · ':m.reason==='added-user'?(m.registrationAction==='updated'?'Updated ':'Added ')+(m.registeredName||m.registeredAccountId)+' · ':'')+(m.rows?.length||0)+' users · assigned Jira tasks refreshed'+(m.assignmentWarning?' · '+m.assignmentWarning:'')+(m.registryWarning?' · '+m.registryWarning:'')+(m.versionWarning?' · '+m.versionWarning:'')+(m.databaseId?' · Database v2 #'+m.databaseId:'')+' · Confluence space '+(m.spaceKey||'')+(m.updatedAt?' · '+new Date(m.updatedAt).toLocaleString():'');
  }else if(m.type==='myWorkRosterError'){
   if(rosterAddProject===activeId&&m.requestId!==rosterAddRequest)return;
   if(rosterAddProject===activeId){rosterAddProject='';setRosterAddBusy(false);}
