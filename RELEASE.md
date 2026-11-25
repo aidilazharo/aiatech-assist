@@ -1,8 +1,8 @@
-# ATGV AIATECH Assist v0.1.24
+# ATGV AIATECH Assist v0.1.25
 
 ## Changes
-- Verify the selected project repository separately from the approved extension and library distribution repositories.
-- Defer AIA distribution probes during personal-account project setup without changing the approved distribution mapping or replacing its saved catalog token.
-- Verify repository contents using the branch listing, supporting empty repositories and non-main default branches without mutating remote content.
-- Prioritize project connection failures, include the failing GitHub API endpoint, and show a project-specific connection summary. Jira and Confluence remain the only required startup checks.
-- Add regression coverage for project switching, empty and non-main repositories, and advisory HTTP 404 diagnostics.
+- Normalize CRLF line endings in the migrated source-test index generator before matching runtime and dashboard boundaries.
+- Diagnose missing runtime and renderer markers separately instead of suppressing regression tests.
+- Enforce LF checkout for text sources and CRLF for Windows batch scripts; retain source-only memory exclusion.
+- Add regression tests against the actual runtime and dashboard for LF, CRLF and mixed line endings and invalid boundaries.
+- Synchronize the dashboard fallback version with the package manifest.

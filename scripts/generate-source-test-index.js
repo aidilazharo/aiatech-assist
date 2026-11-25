@@ -1,13 +1,15 @@
 'use strict';
 const fs=require('node:fs');
 const path=require('node:path');
-const root=path.resolve(__dirname,'..');
-const runtime=fs.readFileSync(path.join(root,'src/lib/runtime/extension-runtime.js'),'utf8');
-const renderer=fs.readFileSync(path.join(root,'src/lib/webview/dashboard-html.js'),'utf8');
+function reconstructSource(runtime,renderer){
+// Git for Windows may check out either LF or CRLF. Normalize both inputs before
+// matching source boundaries and writing the generated compatibility index.
+runtime=runtime.replace(/\r\n/g,'\n');
+renderer=renderer.replace(/\r\n/g,'\n');
 const marker="const {createDashboardHtml}=require('../webview/dashboard-html');\nconst html=createDashboardHtml(()=>context,()=>installedVendorAssets);\n";
 const begin=renderer.indexOf('function html(webview,{resumeLibrary=false}={}){');
 const end=renderer.indexOf('\nreturn html;\n}',begin);
-if(!runtime.includes(marker)||begin<0||end<0)throw Error('Unable to reconstruct the migrated extension source tests.');
+if(!runtime.includes(marker)||begin<0||end<0)throw Error('Unable to reconstruct the migrated extension source tests. Missing: '+[!runtime.includes(marker)&&'runtime import marker',begin<0&&'renderer function start',end<0&&'renderer function end'].filter(Boolean).join(', '));
 const html=renderer.slice(begin,end)
  .replace("  const context=getContext();\n  const installedVendorAssets=getVendorAssets();\n",'')
  .replace("require('../../../package.json')", "require('../package.json')");
@@ -18,7 +20,17 @@ source=source.replace(/\brequire\((['"])(\.\.\/\.\.\/\.\.\/[^'"\r\n]+|\.\.\/\.\.
  const old=dependency.startsWith('../../../')?'../'+dependency.slice(9):'./'+dependency.slice(6);
  return 'require('+q+old+q+')';
 });
-const out=path.join(root,'test/generated/extension-source.txt');
-fs.mkdirSync(path.dirname(out),{recursive:true});
-fs.writeFileSync(out,source);
-console.log('Generated legacy source-test index from live runtime and webview modules.');
+return source;
+}
+function main(){
+ const root=path.resolve(__dirname,'..');
+ const runtime=fs.readFileSync(path.join(root,'src/lib/runtime/extension-runtime.js'),'utf8');
+ const renderer=fs.readFileSync(path.join(root,'src/lib/webview/dashboard-html.js'),'utf8');
+ const source=reconstructSource(runtime,renderer);
+ const out=path.join(root,'test/generated/extension-source.txt');
+ fs.mkdirSync(path.dirname(out),{recursive:true});
+ fs.writeFileSync(out,source);
+ console.log('Generated legacy source-test index from live runtime and webview modules.');
+}
+if(require.main===module)main();
+module.exports={reconstructSource};

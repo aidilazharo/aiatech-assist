@@ -1,1 +1,5 @@
 .memory export-ignore
+# Keep text-source checks deterministic across Git checkouts.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
