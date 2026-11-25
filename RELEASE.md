@@ -1,6 +1,6 @@
-# ATGV AIATECH Assist v0.1.13
+# ATGV AIATECH Assist v0.1.14
 
-- Enable Custom Stack Approve for Developers after successful local mock Install & Run on an ordinary Git branch, including dirty main.
-- Persist local-preview-only evidence rather than silently discarding it. Publish only the committed baseline SHA after explicit confirmation; local edits remain untouched and excluded. Exact baseline runtime and test/build are marked unverified.
-- Retain clean fix-branch verified preview path, SHA and remote checks, and development-only scope. No auto-commit, stash, reset, force-push, or merge into project main.
-- Add dirty-main baseline approval regression coverage. Full regression suite and live VS Code verification not run; no VSIX generated.
+- Expose the Jira My Work inventory in all SDLC roles; recognize verified published BR Epics and descendants as Approved & Published independently of local draft state or assignment. Keep unverified Jira-only records read-only and preserve assignment/ownership and approved source requirements for execution.
+- Pull shared Confluence BR content during role inventory refresh for all roles; retain existing assigned Developer recovery.
+- Keep Approved and Publish available when completed BR history exists; verify existing Jira Epics instead of creating duplicates, or refresh pending changes for explicit confirmation. Keep ownership, unsaved-edit, concurrent-operation and real Jira conflict protections.
+- Add role visibility and completed-button regression coverage; synchronize version metadata. Full regression and live Jira validation not run; no VSIX generated.

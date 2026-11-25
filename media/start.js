@@ -1641,7 +1641,7 @@ function renderBRLink(item){
   const button=document.createElement('button');button.type='button';button.className='jira-issue-inline-link';button.textContent=ref.label||ref.id||'BR';button.title='View Business Requirement details';
   button.addEventListener('click',event=>{
    event.stopPropagation();
-   if(selectedRole==='business-analyst')openBARequirementModal(ref);
+   if(selectedRole==='business-analyst'&&ref.kind==='local')openBARequirementModal(ref);
    else if(ref.rootKey)openJiraIssueModal(ref.rootKey);
   });
   if(selectedRole!=='business-analyst'&&!ref.rootKey)button.disabled=true;
@@ -2102,7 +2102,7 @@ window.addEventListener('message',event=>{
   renderJiraInventory();renderBAJiraInventory();renderPMDashboard();
   // Jira inventory is shared by BA, PM and Overview: refresh for every role.
   if(activeId&&projectConnectionsSnapshot.jira?.key)searchJiraInventory();
-  if(view==='work'&&['software-developer','ux-designer'].includes(selectedRole))loadRoleJiraIssues(true);
+  if(view==='work'&&selectedRole)loadRoleJiraIssues(true);
   if(view==='work'&&selectedRole==='software-developer')loadAssignedJiraTasks(true);
   if(view==='work')renderRoleWork();
   return;
@@ -3955,7 +3955,7 @@ function renderRoleJiraIssues(items,incomplete=false){
  const raw=Array.isArray(items)?items:[],root=$('roleJiraTable');
  const projectKey=projectConnectionsSnapshot.jira?.key||'';
  const refs=new Map(ATGVBAJiraEpics.projectRows(raw,ATGVCompletedBRHistory.group(completedBARecords()),projectKey).map(item=>[item.key,item]));
- const rows=raw.map(item=>({...item,roleName:ATGVBAJiraEpics.roleName(item),brLabel:item.brId||refs.get(item.key)?.brLabel||'',_brRefs:refs.get(item.key)?._brRefs||[]}));
+ const rows=raw.map(item=>({...item,roleName:ATGVBAJiraEpics.roleName(item),brLabel:item.brId||refs.get(item.key)?.brLabel||'',_brRefs:item.publishedApproval&&item.publishedRootKey?[{kind:'jira',id:item.brId,label:item.brId,scopeId:'jira:'+item.publishedRootKey,rootKey:item.publishedRootKey,title:item.brId}]:refs.get(item.key)?._brRefs||[]}));
  root.classList.add('atgv-jira-role-table');
  roleJiraItems=rows;roleJiraIncomplete=incomplete;
  if(selectedRole==='software-developer')showDeveloperAssignedTickets(rows);
@@ -3967,6 +3967,7 @@ function renderRoleJiraIssues(items,incomplete=false){
   {key:'key',label:'Jira ID',render:item=>{const btn=document.createElement('button');btn.type='button';btn.className='jira-issue-inline-link';btn.textContent=item.key;btn.title='View Jira '+item.key+' details';btn.addEventListener('click',()=>openJiraIssueModal(item.key));return btn;}},
   {key:'issueType',label:'Type'},
   {key:'brLabel',label:'Business Requirement',render:renderBRLink},
+  {key:'brStatus',label:'BR Approval',render:item=>item.publishedApproval?'Approved & Published':item.brStatus||'—'},
   {key:'roleName',label:'Role'},
   {key:'descendantCount',label:'Child Issues',render:item=>item.brRoot?String(item.descendantCount||0):'—'},
   {key:'summary',label:'Summary',render:item=>{const btn=document.createElement('button');btn.type='button';btn.className='jira-issue-summary-link';btn.textContent=item.summary;btn.addEventListener('click',()=>openJiraIssueModal(item.key));return btn;}},
@@ -4157,7 +4158,7 @@ $('baAutoBack').addEventListener('click',()=>navigate('ba-overview'));
 function applyFocusedRoleLayout(roleId){
  const work=$('workView');
  const focused=roleId!=='business-analyst'&&roleId!=='software-developer';
- const jiraRole=roleId==='software-developer'||roleId==='ux-designer';
+ const jiraRole=!!roleId;
  $('roleJiraWork').classList.toggle('hidden',!jiraRole);
  $('developerTaskDashboard').classList.toggle('hidden',roleId!=='software-developer');
  $('uxDesignWorkspace').classList.toggle('hidden',roleId!=='ux-designer');
@@ -8960,7 +8961,7 @@ window.addEventListener('message',event=>{
  }
  if(msg.type==='roleJiraIssueDetails'&&msg.key===jiraModalKey&&msg.requestId===jiraModalRequest){renderJiraIssueModal(msg.value);}
  if(msg.type==='roleJiraIssueDetailsError'&&msg.key===jiraModalKey&&msg.requestId===jiraModalRequest){$('jiraIssueModalReload').disabled=false;$('jiraIssueModalBody').textContent='Unable to load Jira ticket: '+(msg.message||'Retry or check Jira permissions.');$('jiraIssueModalSubtitle').textContent='Request failed';}
- if(msg.type==='roleJiraIssues'&&msg.projectId===activeId&&msg.requestId===roleJiraRequest){roleJiraLoading=false;roleJiraLoaded=true;if(msg.register&&selectedRole==='software-developer'){brState=msg.register;developerBrSyncWarnings=msg.brSyncWarnings||[];}renderRoleJiraIssues(msg.items,msg.incomplete);if(roleJiraRefreshAfterSave){roleJiraRefreshAfterSave=false;loadRoleJiraIssues(true);}}
+ if(msg.type==='roleJiraIssues'&&msg.projectId===activeId&&msg.requestId===roleJiraRequest){roleJiraLoading=false;roleJiraLoaded=true;if(msg.register){brState=msg.register;developerBrSyncWarnings=msg.brSyncWarnings||[];}renderRoleJiraIssues(msg.items,msg.incomplete);if(roleJiraRefreshAfterSave){roleJiraRefreshAfterSave=false;loadRoleJiraIssues(true);}}
  if(msg.type==='developerTaskDetail'&&msg.projectId===activeId)renderDeveloperTaskDetail(msg.value);
  if(msg.type==='developerArtifactLoaded'&&msg.projectId===activeId)renderDeveloperArtifact(msg.value);
  if(msg.type==='developerDeliveryCancelled'&&msg.projectId===activeId){developerDeliveryBusy=false;$('developerDeliveryVerify').disabled=false;$('developerDeliveryRunChecks').disabled=false;$('developerDeliveryComplete').disabled=true;developerDeliveryProof=null;if(developerStageEvidence.key===developerSelectedTicket){developerStageEvidence.verified=false;renderDeveloperWorkflowSteps();}$('developerDeliveryStatus').textContent='Cancelled. No remote changes were made by this action.';}

@@ -17,6 +17,18 @@ test('assigned Developer task exposes its approved BR even if another user owns 
  assert.deepEqual(eligible(register,inventory.enrich(rows,register,'another')),[]);
  assert.deepEqual(eligible({brs:[{...br,needsRefresh:true}]},items),[]);
 });
+test('published Jira approval is visible to every role without inventing assignments',()=>{
+ const live=[{key:'TC-1',id:'101',type:'Epic',summary:'BR-001: Example',labels:['m1']},{key:'TC-3',type:'Task',parentKey:'TC-1',assigneeId:'dev'},
+ {key:'TC-9',type:'Epic',summary:'BR-009: Not ATGV'},{key:'OTHER-1',type:'Epic',summary:'BR-002: Other',labels:['m1']}];
+ const options={projectKey:'TC',verifyMarker:(id,row)=>id==='BR-001'&&row.labels?.includes('m1')};
+ for(const actor of ['dev','designer','qa','pm','']){
+  const result=inventory.enrich(live,{brs:[],synced:{}},actor,options);
+  assert.equal(result[0].publishedApproval,true);assert.equal(result[1].brStatus,'Approved & Published');
+  assert.equal(result[1].brId,'BR-001');assert.equal(result[1].taskRole,'');assert.equal(result[0].brRoot,false);
+  assert.equal(result[2].publishedApproval,false);assert.equal(result[3].publishedApproval,false);
+ }
+ assert.equal(inventory.enrich(live,{brs:[],deletedRequirements:[{id:'BR-001'}]},'dev',options)[0].publishedApproval,false);
+});
 test('shared recovery is restricted to missing approved BRs mapped to assigned Developer tasks',()=>{
  assert.deepEqual(recovery.assignedCandidates(register,{brs:[]},rows,'dev'),[{brId:'BR-001',jiraKey:'TC-1'}]);
  assert.deepEqual(recovery.assignedCandidates(register,{brs:[br]},rows,'dev'),[]);

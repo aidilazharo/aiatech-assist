@@ -35,6 +35,10 @@ test('Approved and Publish is available with open BR findings on a verified Jira
  assert.equal(canPublish('ready',false),true);
  assert.equal(canPublish('ready',true),false);
  assert.equal(canPublish('publishing',false),false);
+ assert.equal(canPublish('published',false,true),true);
+ assert.equal(canPublish('idle',false,true),true);
+ assert.equal(canPublish('published',true,true),false);
+ assert.equal(canPublish('publishing',false,true),false);
  state.preview.conflicts.push('Jira Create Issues permission is required.');
  assert.equal(canPublish('ready',false),false);
 });

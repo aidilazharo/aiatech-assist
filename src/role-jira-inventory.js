@@ -2,7 +2,43 @@
 const ownership = require('./br-ownership');
 // Shared parent rows are navigation only. Role-task ownership is separate.
 const {ROLES}=require('./my-work-role-prompts');
-function enrich(issues,register,accountId){
+// Published Jira approval is a read-access fact, not an assignment or
+// permission to edit an unpublished local revision.
+function publishedRoots(issues,register,{projectKey='',verifyMarker=()=>false}={}){
+ const prefix=String(projectKey||'').toUpperCase();
+ if(!/^[A-Z][A-Z0-9_]{0,19}$/.test(prefix))return [];
+ const live=new Map((issues||[]).filter(x=>typeof x.key==='string'&&x.key.startsWith(prefix+'-')&&/^[A-Z][A-Z0-9_]*-[1-9][0-9]*$/.test(x.key)).map(x=>[x.key,x]));
+ const known=new Map(),deleted=new Set((register?.deletedRequirements||[]).map(x=>x.id));
+ for(const [id,row] of Object.entries(register?.synced||{})){
+  if(!/^BR-[0-9]{1,8}$/.test(id)||!row?.key||deleted.has(id))continue;
+  const epic=live.get(row.key);
+  if(!epic||String(epic.type).toLowerCase()!=='epic'||(row.issueId&&String(row.issueId)!==String(epic.id)))continue;
+  if(row.marker?!epic.labels?.includes(row.marker):!verifyMarker(id,epic))continue;
+  known.set(epic.key,{id,key:epic.key,source:'mapping'});
+ }
+ for(const epic of live.values()){
+  if(known.has(epic.key)||String(epic.type).toLowerCase()!=='epic')continue;
+  const id=/^\s*(BR-[0-9]{1,8})(?:[:·.\-–—]|\s|$)/i.exec(epic.summary||'')?.[1]?.toUpperCase();
+  if(!id||deleted.has(id)||register?.synced?.[id]?.key||!verifyMarker(id,epic))continue;
+  known.set(epic.key,{id,key:epic.key,source:'jira'});
+ }
+ const children=new Map();
+ for(const row of live.values())if(row.parentKey&&live.has(row.parentKey)&&row.parentKey!==row.key){
+  if(!children.has(row.parentKey))children.set(row.parentKey,[]);
+  children.get(row.parentKey).push(row.key);
+ }
+ const result=[];
+ for(const root of known.values()){
+  const keys=new Set([root.key]),queue=[root.key];
+  for(let n=0;n<queue.length;n++)for(const key of children.get(queue[n])||[]){
+   if(keys.has(key)||String(live.get(key)?.type).toLowerCase()==='epic')continue;
+   keys.add(key);queue.push(key);
+  }
+  result.push({...root,keys:[...keys]});
+ }
+ return result;
+}
+function enrich(issues,register,accountId,options={}){
  const mapped=new Map(), roots=new Map(), brStatuses=new Map(), taskRoles=new Map();
  const byKey=new Map((issues||[]).map(issue=>[issue.key,issue]));
  for(const br of register?.brs||[]){
@@ -25,14 +61,22 @@ function enrich(issues,register,accountId){
   roots.set(scope.rootKey,{brId:br.id,descendantCount:scope.entries.length-1,roleScopes});
   for(const entry of scope.entries)mapped.set(entry.key,br.id);
  }
+ const published=new Map(),ambiguous=new Set();
+ for(const root of publishedRoots(issues,register,options)){
+  for(const key of root.keys){
+   if(published.has(key)&&published.get(key).key!==root.key)ambiguous.add(key);
+   else published.set(key,root);
+  }
+ }
  return (issues||[]).map(issue=>{
   const root=roots.get(issue.key);
-  const brId=mapped.get(issue.key)||mapped.get(issue.parentKey)||'';
+  const publishedBR=ambiguous.has(issue.key)?null:published.get(issue.key);
+  const brId=mapped.get(issue.key)||mapped.get(issue.parentKey)||publishedBR?.id||'';
   const assigneeId=String(issue.assigneeId||'');
-  return {...issue,issueType:issue.type||'Unknown',brId,brStatus:brStatuses.get(brId)||'',brRoot:!!root,
+  return {...issue,issueType:issue.type||'Unknown',brId,brStatus:publishedBR?'Approved & Published':brStatuses.get(brId)||'',publishedApproval:!!publishedBR,publishedRootKey:publishedBR?.key||'',brRoot:!!root,
    descendantCount:root?.descendantCount||0,roleScopes:root?.roleScopes||{},taskRole:taskRoles.get(issue.key)||'',
    mine:!!assigneeId&&assigneeId===accountId,unassigned:!assigneeId,
    scopeSummary:root?`${root.descendantCount+1} linked Jira issues in entire BR`:''};
  });
 }
-module.exports={enrich};
+module.exports={enrich,publishedRoots};

@@ -411,8 +411,8 @@
  function currentJiraPreview(){
   return !!state?.preview&&state.projectId===activeId&&state.preview.revision===brState?.revision&&Array.isArray(state.preview.conflicts)&&state.preview.conflicts.length===0;
  }
- function canPublishPrepared(phase,unsaved){
-  return phase==='ready'&&currentJiraPreview()&&!unsaved&&!busy()&&!baBusyTask;
+ function canPublishPrepared(phase,unsaved,completed=false){
+  return (phase==='ready'&&currentJiraPreview()||completed)&&!['running','publishing'].includes(phase)&&!unsaved&&!busy()&&!baBusyTask;
  }
  function renderReadyPanels(phase){
   const sourceReady=!!source()?.digest;
@@ -503,7 +503,9 @@
   stop.classList.toggle('hidden',phase!=='running');
   const publishLabel=phase==='publishing'?'Publishing…':'Approved and Publish';publish.textContent=publishLabel;
   publish.title=publishLabel;publish.setAttribute('aria-label',publishLabel);
-  publish.disabled=sharedReadOnly()||!canPublishPrepared(phase,unsaved);if(foreignOwners().length)publish.title=readOnlyMessage();
+  const completed=ATGVCompletedBRHistory.group(completedBARecords()).length>0;
+  publish.disabled=sharedReadOnly()||!canPublishPrepared(phase,unsaved,completed);
+  if(completed&&!currentJiraPreview()&&!publish.disabled)publish.title='Check published requirements and refresh the Jira preview if needed.';if(foreignOwners().length)publish.title=readOnlyMessage();
   const reopen=state?.preview?.reopenRows?.length||0;
   const skipped=(state?.preview?.reopenSkipped||state?.reopenSkipped||[]).length;
   const statusWarning=skipped?' '+skipped+' Jira status reset(s) unavailable; publishing can continue.':'';
@@ -654,7 +656,7 @@
  get('baAutoPublish').addEventListener('click',()=>{
   if(sharedReadOnly()||get('baAutoPublish').disabled)return;
    get('baAutoPublish').disabled=true;
-  invoke('baPublishPrepared',{revision:state?.preview?.revision});
+  invoke('baPublishPrepared',{revision:state?.preview?.revision,registerRevision:brState?.revision});
  });
 
  window.addEventListener('atgv:viewchange',()=>{

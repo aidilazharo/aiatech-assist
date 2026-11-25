@@ -4414,11 +4414,45 @@ async function publishPreparedBRs(msg){
  requireBAWorkspace(msg);
  if(baPreparationRun||baAttentionRun||jiraSyncBusy)throw Error('A Business Requirements operation is already running.');
  const projectId=activeProject.id;
- const session=baPreparationSessions.get(projectId),preview=session?.preview;
+ let session=baPreparationSessions.get(projectId),preview=session?.preview;
  const register=await brWorkflow.load(registry,projectId);
- if(!preview||session.phase!=='ready'||preview.conflicts.length||preview.revision!==register.revision||msg.revision!==preview.revision||
-    Date.now()-preview.verifiedAt>300000||preview.fieldPlansHash!==sha(JSON.stringify(jiraPreviewFieldPlans)))
-  throw Error('The Jira preview changed or expired. Refresh affected artifacts before publishing.');
+ const validPreview=()=>preview&&session.phase==='ready'&&!preview.conflicts.length&&preview.revision===register.revision&&
+   msg.revision===preview.revision&&Date.now()-preview.verifiedAt<=300000&&preview.fieldPlansHash===sha(JSON.stringify(jiraPreviewFieldPlans));
+ if(!validPreview()){
+  // Completed history keeps the action available even after a restart. A
+  // click checks Jira or refreshes a preview, never blindly republishes.
+  const completed=(register.completedCycles||[]).flatMap(cycle=>cycle.requirements||[]).filter(br=>br.jiraKey);
+  const active=(register.brs||[]).filter(br=>!br.archivedFromRestart&&br.status!=='retired');
+  const current=active.filter(br=>br.approvedContent&&register.synced?.[br.id]?.key).map(br=>({id:br.id,jiraKey:register.synced[br.id].key}));
+  if(msg.registerRevision!==register.revision||!completed.length&&!current.length)
+   throw Error('The Jira preview changed or expired. Refresh affected artifacts before publishing.');
+  await requireBAOwner('ba-discovery');
+  await requireBAWritableCycle(register);
+  const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
+  const projectKey=validProjectKey(config.get('jira.projectKey'));
+  const candidates=new Map([...completed,...current].map(br=>[br.jiraKey,br]));
+  let confirmed=0;
+  for(const br of candidates.values()){
+   if(activeProject?.id!==projectId)throw Error('Project changed during Jira verification.');
+   if(!br.jiraKey.startsWith(projectKey+'-'))continue;
+   const issue=await jiraReadIssue(config,token,br.jiraKey);
+   if(issue?.fields?.project?.key!==projectKey||String(issue.fields?.issuetype?.name||'').toLowerCase()!=='epic')continue;
+   const mapping=register.synced?.[br.id];
+   if(mapping?.key===br.jiraKey&&mapping.issueId&&String(mapping.issueId)!==String(issue.id))continue;
+   if(!(issue.fields.labels||[]).some(label=>label===jiraScopedMarker(register,config,br.id)||label===jiraMarker(config,br.id)))continue;
+   confirmed++;
+  }
+  if(!confirmed)throw Error('No completed BR Epic could be verified in the connected Jira project.');
+  if(!active.length||active.every(br=>br.status==='approved'&&!br.needsRefresh&&!br.externalReviewRequired&&!br.roleReviewRequired&&!br.dependencyReviewRequired)&&!brWorkflow.plan(register).length&&!register.baPendingReopen){
+   await postBAPreparation(projectId,{phase:'published',stage:'publish',preview:null,error:''});
+   await notice('Approved and Published: '+confirmed+' existing Jira BR Epic(s) verified. No duplicate issues created.');
+   return;
+  }
+  const refreshed=await prepareBRJiraPreview({automatic:true});
+  await postBAPreparation(projectId,{phase:refreshed.conflicts.length?'draft':'ready',stage:'jira',preview:refreshed,sourceNotes:refreshed.sourceNotes,reopenSkipped:refreshed.reopenSkipped||[],error:refreshed.conflicts[0]||''});
+  await notice(refreshed.conflicts.length?'Jira preview refreshed; review the remaining publication conflicts.':'Jira preview refreshed. Review the changes and click Approved and Publish to confirm.');
+  return;
+ }
  const config=effectiveConfig(activeProject);
  if(baseAtlassian(config)!==preview.site||validProjectKey(config.get('jira.projectKey'))!==preview.jiraProject)
   throw Error('The Jira destination changed. Refresh the preview.');
@@ -7005,7 +7039,7 @@ async function handleDashboardMessage(msg){
         if(activeProject?.id!==projectId||result.cancelled)return;
         const inventory=require('../../role-jira-inventory');
         const warnings=[];
-        if(msg.roleId==='software-developer'&&all.some(issue=>issue.assigneeId===self.accountId&&/^(task|subtask|sub-task|sub task)$/i.test(issue.type))){
+        if(all.some(issue=>String(issue.type).toLowerCase()==='epic')){
          if(!config.get('confluence.spaceKey'))warnings.push('Configure Confluence to retrieve shared approved BRs.');
          else if(sourceVaultBusy)warnings.push('Shared BR synchronization is running. Refresh Jira tasks again after it finishes.');
          else{
@@ -7017,7 +7051,7 @@ async function handleDashboardMessage(msg){
            register=await brWorkflow.load(registry,projectId);
            if(activeProject?.id!==projectId)break;
            const known=new Set(inventory.enrich(all,register,self.accountId).filter(item=>item.mine&&item.taskRole==='software-developer').map(item=>item.key));
-           if(all.some(issue=>issue.assigneeId===self.accountId&&/^(task|subtask|sub-task|sub task)$/i.test(issue.type)&&!known.has(issue.key))){
+           if(msg.roleId==='software-developer'&&all.some(issue=>issue.assigneeId===self.accountId&&/^(task|subtask|sub-task|sub task)$/i.test(issue.type)&&!known.has(issue.key))){
             const recovered=await confluenceBRRecovery.recoverAssigned({registry,projectId,config,token,issues:all,accountId:self.accountId,
              verify:(remote,p,live)=>verifyLinkedJiraIdentity(remote,config,p,live),shouldContinue:()=>activeProject?.id===projectId});
             warnings.push(...recovered.warnings);
@@ -7030,9 +7064,9 @@ async function handleDashboardMessage(msg){
         register=await brWorkflow.load(registry,projectId);
         try{jiraLocalStore.saveMappings(registry,projectId,{site:jiraSite,register});}
         catch(error){report('Jira SQLite mapping index unavailable: '+String(error.message||error));}
-        const items=inventory.enrich(all,register,self.accountId);
+        const items=inventory.enrich(all,register,self.accountId,{projectKey,verifyMarker:(id,issue)=>issue.labels?.includes(jiraScopedMarker(register,config,id))||issue.labels?.includes(jiraMarker(config,id))});
         await dashboard?.webview.postMessage({type:'roleJiraIssues',projectId,items,incomplete:!!result.truncated,requestId,
-         ...(msg.roleId==='software-developer'?{register,brSyncWarnings:warnings.slice(0,5)}:{})});break;
+         register,brSyncWarnings:warnings.slice(0,5)});break;
       }
       case 'roleJiraAssign':
       case 'roleJiraUnassign':{
