@@ -18,18 +18,22 @@ if (require.main === module) {
         const v=parseVersion(process.argv[2]||nextVersion(manifest.version));
         requireIncrement(manifest.version,v.semver);
         const priorDisplayVersion=manifest.atgvDisplayVersion;
-        manifest.version = v.semver;
-        manifest.atgvDisplayVersion = v.display;
-        fs.writeFileSync(file, JSON.stringify(manifest, null, 2) + '\n');
+        if(priorDisplayVersion!==manifest.version)throw Error('Manifest display version does not match package version.');
         const root=path.join(__dirname,'..');
         const readme=path.join(root,'README.md');
         const release=path.join(root,'RELEASE.md');
         const previous=fs.readFileSync(readme,'utf8');
-        fs.writeFileSync(readme,previous.replace(/^\*\*Version: [^*]+\*\*/m,'**Version: '+v.semver+'**'));
+        const readmeVersion=previous.match(/^\*\*Version: ([^*]+)\*\*/m);
+        if(!readmeVersion||readmeVersion[1]!==manifest.version)throw Error('README version did not match previous manifest.');
         const dashboard=path.join(root,'src','lib','webview','dashboard-html.js');
         const source=fs.readFileSync(dashboard,'utf8');
-        const previousLiteral="atgvDisplayVersion :'"+String(priorDisplayVersion||'')+"'";
+        const previousLiteral="atgvDisplayVersion :'"+priorDisplayVersion+"'";
         if(!source.includes(previousLiteral))throw Error('Dashboard source version did not match previous manifest.');
+        // Validate every version source before changing any file.
+        manifest.version = v.semver;
+        manifest.atgvDisplayVersion = v.display;
+        fs.writeFileSync(file, JSON.stringify(manifest, null, 2) + '\n');
+        fs.writeFileSync(readme,previous.replace(/^\*\*Version: [^*]+\*\*/m,'**Version: '+v.semver+'**'));
         fs.writeFileSync(dashboard,source.replace(previousLiteral,"atgvDisplayVersion :'"+v.semver+"'"));
         fs.writeFileSync(release,'# ATGV AIATECH Assist v'+v.semver+'\n\n## Changes\n\n- Describe verified changes in this release.\n\n## Validation\n\n- Record Node regressions, Windows checks, VSIX verification and release provenance.\n');
 

@@ -1,6 +1,6 @@
-# ATGV AIATECH Assist v0.1.9
+# ATGV AIATECH Assist v0.1.10
 
-- Fix BR Jira parent validation for previously published legacy and current hierarchy mappings, including role subtasks, using corroborated parent identity and issue type.
-- Keep strict project, issue marker, numeric issue and parent identity checks; report expected and actual parents for genuine conflicts. No automatic reparenting, deletion or duplicate creation.
-- Audit up to 1,000 active Jira links in existing five-item batches, including 297-item projects.
-- Add regression coverage for historical mappings, actual reparenting, identity conflicts and large audits. Existing non-blocking workflow status warnings remain unchanged. Full regression and live Jira validation not run; no VSIX generated.
+- Correct the dashboard fallback and README version metadata to match the extension manifest, resolving the five reported v0.1.9 release metadata assertions.
+- Validate all existing version metadata before the version setter writes any files, preventing partial updates when the source is already inconsistent.
+- Retain v0.1.9 Jira hierarchy validation and large mapping audit fixes.
+- Verified manifest, README, dashboard fallback and release header consistency by source inspection; full Node regression and VSIX packaging not run.
