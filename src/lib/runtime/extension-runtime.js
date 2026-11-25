@@ -7718,7 +7718,12 @@ async function handleDashboardMessage(msg){
             const fullstack=require('../../architect-custom-fullstack');const pair=fullstack.detectPair(inspected);
             fullstack.modeForPair(pair,pair?await fullstack.hasEnvironment(root,pair.backend):false,'live');
           }
-          const action='Install & Run Custom Stack';
+          if(developerGit.localLogs()?.running)throw Error('Stop the currently managed application before Install & Run.');
+          const initialCommit=require('../../architect-initial-commit');
+          const identity={owner:conf.get('github.owner'),name:conf.get('github.repo')};
+          const initialReview=inspected.sha?null:await initialCommit.plan(root,identity);
+          if(activeProject?.id!==projectId)throw Error('Project changed before Install & Run.');
+          const action=initialReview?'Commit Reviewed Files & Run':'Install & Run Custom Stack';
           workflow.beginConsent(root);
           await recordStackActivity(projectId,'Install & Run / approval','Awaiting ATGV confirmation in VS Code. No application scripts have started.');
           await dashboard?.webview.postMessage({type:'architectCustomProgress',projectId,percent:4,phase:'approval',
@@ -7733,13 +7738,19 @@ async function handleDashboardMessage(msg){
             ).catch(()=>{});
           },30000);
           reminder.unref?.();
-          try{approved=await uiWarning(
+          try{
+            if(initialReview){
+              const document=await vscode.workspace.openTextDocument({language:'plaintext',content:initialCommit.reviewText(initialReview)});
+              await vscode.window.showTextDocument(document,{preview:true,preserveFocus:true});
+            }
+            approved=await uiWarning(
+            (initialReview?'Create the first LOCAL Git commit with '+initialReview.files.length+' reviewed files? '+initialReview.excluded.length+' untracked files excluded. Review the opened file list and inspect the source for secrets before confirming. No remote push.\n\n':'')+
             'Execute the six-stage local Custom Stack workflow ('+(fullStackMode==='live'?'REAL frontend and backend; no mock fallback':'frontend and simulated API')+') for '+target.framework+' ('+(target.relative||'repository root')+')?'+
             '\\n\\n1. Scan manifests and application dependencies.'+
             '\\n2–3. Create or reuse a LOCAL fix branch and commit isolated mock service/database fixtures.'+
             '\\n4. Execute dependency installation/validation (may run npm scripts).'+
             '\\n5–6. Start and verify both selected localhost endpoints.'+
-            '\\n\\nUncommitted files are preserved: a dirty checkout runs in-place, without Git stash, reset, branch switch or commit.'+
+            '\\n\\nExisting Git history and uncommitted files are preserved. Except for the explicitly reviewed first commit, a dirty checkout runs in-place without Git stash, reset, branch switch or commit.'+
             '\\nA clean checkout may create a local fix branch. No GitHub push occurs.'+
             '\\nReal mode requires healthy NestJS and PostgreSQL; mock mode uses synthetic APIs only. This is not production readiness. Continue?',
             {modal:true},action);
@@ -7750,9 +7761,21 @@ async function handleDashboardMessage(msg){
             await dashboard?.webview.postMessage({type:'architectCustomError',projectId,
               message:'Install & Run cancelled before changing files.'});break;
           }
+          if(activeProject?.id!==projectId||(await registry.read(projectId)).techStackId!=='custom')throw Error('Project or stack changed before Install & Run.');
           architectErrorLogs.begin(projectId,'custom-stack');
+          let executionSha=inspected.sha;
+          if(initialReview){
+            await recordStackActivity(projectId,'Install & Run / initial commit','Creating the approved first local commit; excluded files are preserved. No remote push.');
+            const committed=await initialCommit.commit(root,initialReview,identity);
+            executionSha=committed.sha;
+            await recordStackActivity(projectId,'Install & Run / initial commit','Verified local baseline '+executionSha+' on '+committed.branch+'.');
+            if(activeProject?.id!==projectId)throw Error('Project changed after local commit; execution stopped.');
+            const updated=await stack.scan(root);
+            updated.branches=await require('../../architect-custom-repair').branches(root);
+            await dashboard?.webview.postMessage({type:'architectCustomScanned',projectId,value:updated});
+          }
           const result=await workflow.installAndRun(root,{
-            expectedSha:msg.expectedSha||inspected.sha,
+            expectedSha:executionSha,
             relative:typeof msg.relative==='string'?msg.relative:undefined,
             previewUrl:String(msg.previewUrl||''),fullStackMode,
             onAiReview:async (verified,report)=>{

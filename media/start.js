@@ -8586,7 +8586,7 @@ function architectCustomDrawRuntime(){
   state='stopped';title='APPLICATION NOT RUNNING';
   description=Number.isInteger(runtime.exitCode)?'ATGV process exited with code '+runtime.exitCode+'. Check logs before restarting.':
    (architectCustomInfo?.projectId===activeId?
-    'Scan complete, but NO server was started. Select Install & Run to prepare the mock preview.':
+    (!architectCustomInfo.sha?'Scan complete. Select Install & Run to review the initial local Git commit and start the application.':'Scan complete, but NO server was started. Select Install & Run to prepare the mock preview.'):
     'Scan Repository identifies applications; it does not install or start them.');
  }else if(runtime?.message){
   state='unknown';description=runtime.message;
@@ -8642,9 +8642,9 @@ function renderArchitectCustomPanel(){
  singleRun.textContent=stopMode?'Stop':'Install & Run';
  singleRun.classList.toggle('atgv-custom-stop-mode',stopMode);
  singleRun.setAttribute('aria-pressed',String(stopMode));
- singleRun.disabled=!activeId||architectActionBusy||(!stopMode&&!!current&&!current.sha)||
+ singleRun.disabled=!activeId||architectActionBusy||(!stopMode&&(!current?.ready||!selected?.runnable))||
   projects.find(p=>p.id===activeId)?.techStackId!=='custom';
- singleRun.title=current&&!current.sha?'Review and commit project files before Install & Run.':singleRun.textContent; 
+ singleRun.title=!stopMode&&current&&!current.sha?'Review and confirm the initial local Git commit, then Install & Run.':singleRun.textContent; 
  const stages=$('architectCustomSteps');
  if(stages)for(const item of stages.querySelectorAll('[data-step]')){
   const number=Number(item.dataset.step);

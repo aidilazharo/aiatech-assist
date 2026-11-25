@@ -1,5 +1,12 @@
-# ATGV AIATECH Assist v0.1.30
+# ATGV AIATECH Assist v0.1.31
 
-- Automatically discover repository folders during Custom Stack Save and Scan. Select a folder when several are found; initialize non-Git folders without overwriting source.
-- Display the latest five local Git branches by commit date. Preserve Git history and initial-commit safeguards.
-- JavaScript syntax checks completed; regression and packaging pending.
+## Changes
+
+- Enable Custom Stack Install & Run after a runnable application is scanned, even if its Git repository has no initial commit.
+- Review the exact eligible source-file list and obtain explicit confirmation before creating the first local Git commit. Exclude ignored files, sensitive paths, likely embedded secrets, binaries and dependencies. Preserve all excluded working files and pre-existing Git staging/history. No GitHub push occurs from the project workflow.
+- Verify the new SHA and continue the existing six-stage workflow. Dirty working trees remain runnable in-place. The optional AI advisory does not gate execution.
+
+## Validation
+
+- JavaScript syntax checks performed; new initial-commit regression tests added. Full regression, Windows runtime and VSIX packaging not yet verified.
+- npm access-policy errors remain separate; no policy bypass or package substitutions in this release.
