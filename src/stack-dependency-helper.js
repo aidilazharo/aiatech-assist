@@ -13,6 +13,7 @@ const {npmCommand,mavenCommand}=require('./platform-process');
 const recovery=require('./dependency-recovery');
 const policyRecovery=require('./npm-policy-recovery');
 const windowsBundle=require('./windows-dependency-bundle');
+const libraryOffline=require('./library-offline-dependencies');
 const execute=promisify(execFile);
 const LIMIT=8*1024*1024;
 function commandFor(name,args){return name==='npm'?npmCommand(args):name==='mvn'?mavenCommand(args):{bin:name,args};}
@@ -292,6 +293,25 @@ async function ensureForTarget(root,target,{runner=execute,onDiagnostic=async()=
  if(!target||!['npm','dotnet','maven'].includes(target.kind))throw Error('Unsupported project dependency manager.');
  const cwd=await directory(root,target.relative||'');
  const options={cwd,runner,onDiagnostic,signal,historyFile};
+ const pack=await libraryOffline.locate(root,cwd);
+ if(pack){
+  if(pack.kind!==target.kind)throw Error('Offline Library package does not match application type.');
+  const env=libraryOffline.env(pack);
+  await onProgress('Using offline Library dependencies for '+pack.id+'…');
+  if(target.kind==='npm'){
+   const runtimeNode=await libraryOffline.restoreNpm(pack,cwd,{runner,signal});
+   const missing=await missingNpmPackages(cwd);
+   if(missing.length||await nativePlatformMismatch(cwd))throw Error('Offline Library modules incomplete or incompatible; import a verified package.');
+   await run({stage:'Offline Library npm validation',bin:'npm',args:['ls','--all','--json','--offline'],...options,env});
+   const runtime=await verifyPlatformPackages(cwd,{runner,onDiagnostic,runtimeNode});
+   return {kind:'npm',cwd,installed:false,verified:true,runtime,offline:true};
+  }
+  if(target.kind==='dotnet'){
+   await run({stage:'Offline NuGet restore',bin:'dotnet',args:['restore','Api.csproj','--source',env.NUGET_PACKAGES,'-p:NuGetAudit=false'],...options,env});
+   await run({stage:'Offline NuGet test restore',bin:'dotnet',args:['restore','tests/Atgv.Tests/Atgv.Tests.csproj','--source',env.NUGET_PACKAGES,'-p:NuGetAudit=false'],...options,env});
+  }else await run({stage:'Offline Maven resolution',bin:'mvn',args:['-o','-B','-ntp','test-compile'],...options,env});
+  return {kind:target.kind,cwd,installed:true,verified:true,offline:true};
+ }
  if(target.kind==='npm'){
   if(!['auto','fresh'].includes(installMode))throw Error('Unsupported npm dependency installation mode.');
   const bundled=await windowsBundle.prepare(root,cwd,{runner,onProgress,signal});
