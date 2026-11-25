@@ -67,6 +67,7 @@ async function restore(cwd,dir,entry,app,policy,{runner,onProgress,signal}){
  await onProgress('Restoring verified Windows dependencies for '+app+' (no npm install)…');
  const stage=await fs.mkdtemp(path.join(cwd,'.atgv-deps-'));
  const archive=path.join(stage,'bundle.zip');
+ let preserveStage=false;
  try{
   const digest=crypto.createHash('sha256'),output=await fs.open(archive,'wx');
   try{
@@ -89,9 +90,12 @@ async function restore(cwd,dir,entry,app,policy,{runner,onProgress,signal}){
   await fs.writeFile(path.join(source,'.atgv-bundle.json'),JSON.stringify({archiveSha256:entry.archiveSha256,nodeMajor:policy.nodeMajor}));
   const backup=path.join(stage,'previous');
   if(previous)await fs.rename(nm,backup);
-  try{await fs.rename(source,nm);}catch(error){if(previous)await fs.rename(backup,nm);throw error;}
+  try{await fs.rename(source,nm);}catch(error){
+   if(previous){try{await fs.rename(backup,nm);}catch{preserveStage=true;throw Error('Could not restore original node_modules. Preserved backup at '+backup);}}
+   throw error;
+  }
   return {node,restored:true};
- }finally{await fs.rm(stage,{recursive:true,force:true});}
+ }finally{if(!preserveStage)await fs.rm(stage,{recursive:true,force:true});}
 }
 async function prepare(root,cwd,{runner=execute,onProgress=async()=>{},signal,platform=process.platform,arch=process.arch}={}){
  if(platform!=='win32'||arch!=='x64')return null;
