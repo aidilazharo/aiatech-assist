@@ -48,6 +48,7 @@ function validate(input){
  return {
   jiraUrl:site.origin,confluenceUrl:site.origin+'/wiki',email,githubUrl:org.url,owner:org.owner,
   projectRepository,projectRepoUrl:org.url+'/'+projectRepository,
+  project:{owner:org.owner,repo:projectRepository},
   extensionRepoUrl:selected.extension,libraryRepoUrl:selected.library,
   extension,library,extensionReleases:githubRepo(RELEASES.extension),
   libraryReleases:githubRepo(RELEASES.library),extensionReleasesUrl:RELEASES.extension,libraryReleasesUrl:RELEASES.library

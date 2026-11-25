@@ -1767,6 +1767,10 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
  const gitHeaders={Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'};
  const libraryConf=sdlcCatalog.normalizeConfig({repositoryUrl:data.libraryRepoUrl,ref:'main',authentication:'token',autoCheck:true});
  let library,offlineFallback=null,githubAccountVerified=false;
+ // Distribution is pinned to the approved AIA owner, independently of project setup.
+ const checkDistribution=data.owner.toLowerCase()===data.extension.owner.toLowerCase();
+ let attemptedEndpoint='';
+ const githubProbe=async(url)=>{attemptedEndpoint=url;return requestJson(url,{token:github,headers:gitHeaders});};
  const jiraApi=data.jiraUrl+'/rest/api/3/myself';
  const confluenceApi=data.confluenceUrl+'/api/v2/spaces';
  const accountApi='https://api.github.com/user';
@@ -1799,29 +1803,42 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
  };
  const validatedGithub=async(url,{requireRead=false,checkRelease=true}={})=>{
   if(!github)throw Error('GitHub PAT is required for repository verification.');
-  const meta=await requestJson(url,{token:github,headers:gitHeaders});
+  const meta=await githubProbe(url);
   const identity=url.replace('https://api.github.com/repos/','').toLowerCase();
   if(String(meta?.full_name||'').toLowerCase()!==identity)throw Error('Unexpected GitHub repository identity.');
   // Read access is mandatory for source repos; write is optional.
   if(requireRead&&meta.permissions?.pull===false)
    throw Error('GitHub repository read permission denied. Grant Contents: read-only to the selected repository.');
   if(requireRead){
-   const branch=await requestJson(url+'/branches/main',{token:github,headers:gitHeaders});
+   const branch=await githubProbe(url+'/branches/main');
    if(branch?.name!=='main')throw Error('GitHub main branch content access could not be verified.');
   }
   const sourceAccess={read:true,write:meta.permissions?.push===true&&!meta.archived&&!meta.disabled};
   if(checkRelease){
-   const releases=await requestJson(url+'/releases?per_page=1',{token:github,headers:gitHeaders});
+   const releases=await githubProbe(url+'/releases?per_page=1');
    if(!Array.isArray(releases))throw Error('GitHub release listing was not accessible.');
    const release=releases[0],asset=release?.assets?.find(item=>Number.isSafeInteger(item.id)&&item.id>0);
    if(asset){
-    const detail=await requestJson(url+'/releases/assets/'+asset.id,{token:github,headers:gitHeaders});
+    const detail=await githubProbe(url+'/releases/assets/'+asset.id);
     if(!detail||Number(detail.id)!==asset.id)throw Error('GitHub release asset access was not verified.');
     await verifyReleaseAssetDownload(url,asset.id);
    }
    return {releases:releases.length,asset:!!asset};
   }
   return sourceAccess;
+ };
+ const projectApi=repoApi(data.project);
+ const verifyProjectRepository=async()=>{
+  if(!github)throw Error('GitHub PAT is required for repository verification.');
+  if(!githubAccountVerified)throw Error('GitHub account token is not verified.');
+  const meta=await githubProbe(projectApi);
+  if(String(meta?.full_name||'').toLowerCase()!==(data.owner+'/'+data.projectRepository).toLowerCase())throw Error('Unexpected GitHub repository identity.');
+  if(meta.permissions?.pull===false)throw Error('GitHub repository read permission denied.');
+  // Listing branches verifies Contents access without assuming main exists.
+  // An empty array is valid for a newly created repository.
+  const branches=await githubProbe(projectApi+'/branches?per_page=1');
+  if(!Array.isArray(branches))throw Error('GitHub repository content access could not be verified.');
+  return {read:true,write:meta.permissions?.push===true&&!meta.archived&&!meta.disabled,empty:branches.length===0};
  };
  const specifications=[
   {id:'jira',label:'Jira API',url:jiraApi,required:true,check:async()=>{
@@ -1843,9 +1860,11 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
    const org=await requestJson(organizationApi,{token:github,headers:gitHeaders});
    if(String(org?.login||'').toLowerCase()!==data.owner.toLowerCase())throw Error('Unexpected GitHub owner response');
   }},
-  {id:'extension',label:'Extension · read/write optional',url:repoApi(data.extension),required:false,
+  {id:'project',label:'Project repository · '+data.projectRepository,url:projectApi,required:false,check:verifyProjectRepository},
+  ...(checkDistribution?[
+  {id:'extension',label:'Extension distribution · optional',url:repoApi(data.extension),required:false,
    check:()=>validatedGithub(repoApi(data.extension),{requireRead:true,checkRelease:false})},
-  {id:'library',label:'Library · read/write optional',url:repoApi(data.library),required:false,check:async()=>{
+  {id:'library',label:'Library distribution · optional',url:repoApi(data.library),required:false,check:async()=>{
    const capabilities=await validatedGithub(repoApi(data.library),{requireRead:true,checkRelease:false});
    library=await sdlcCatalog.remoteInfo(libraryConf,github);
    if(!library?.sha)throw Error('Library main branch cannot be verified.');
@@ -1855,25 +1874,28 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
    check:()=>validatedGithub(repoApi(data.extensionReleases))},
   {id:'library-releases',label:'Library releases · optional',url:repoApi(data.libraryReleases),required:false,
    check:()=>validatedGithub(repoApi(data.libraryReleases))}
+  ]:[])
  ];
  // Deliberately serial: the UI receives one blue progress row at a time.
  // All required checks are read-only. Optional mirror failures do not block
  // saving, and tokens/headers never enter the returned check messages.
  const checks=[];
  for(const spec of specifications){
+  attemptedEndpoint=spec.url;
   await onProgress({id:spec.id,label:spec.label,url:spec.url,state:'pending',
    required:spec.required,message:'Checking '+spec.label+'…'});
   let value;
   try{
    const info=await spec.check();
    value={id:spec.id,label:spec.label,url:spec.url,required:spec.required,state:'ok',
-    message:info?.read===true?(info.write?'Repository read verified; write access also available.':'Repository read verified. Write access is optional and not granted.'):
+    message:info?.read===true?((info.empty?'Empty repository; initialization is supported. ':'')+(info.write?'Repository read verified; write access reported (not a push test).':'Repository read verified. Write access is optional and not granted.')):
      info?.asset?'Authenticated release download verified.':info?.releases===0?
      'Repository access verified. No published release assets to download yet.':'Reachable and verified.'};
   }catch(error){
    const sourceDenied=!error?.githubDiagnostic&&(spec.id==='extension'||spec.id==='library')&&/\bHTTP\s+403\b/i.test(String(error?.message||error));
-   value={id:spec.id,label:spec.label,url:spec.url,required:spec.required,state:'error',
-    message:sourceDenied?'GitHub repository HTTP 403. Read/write checks are optional for Start; continue with Next. Grant repository read access to enable GitHub operations.':startupConnectionFailure(error)};
+   const endpoint=attemptedEndpoint;
+   value={id:spec.id,label:spec.label,url:endpoint,required:spec.required,state:'error',
+    message:(sourceDenied?'GitHub repository HTTP 403. Read/write checks are optional for Start; continue with Next. Grant repository read access to enable GitHub operations.':startupConnectionFailure(error))+(spec.id==='project'||spec.id==='extension'||spec.id==='library'||spec.id.endsWith('-releases')?' Endpoint: '+endpoint:'')};
   }
   checks.push(value);
   await onProgress(value);
@@ -1881,9 +1903,12 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
  if(checks.some(check=>check.required&&check.state==='error'))
   return {success:false,checks,message:'Required Jira or Confluence checks failed. No changes were saved.'};
  const githubWarnings=checks.filter(check=>!check.required&&check.state==='error');
- const connectionMessage=githubWarnings.length?
+ const projectCheck=checks.find(check=>check.id==='project');
+ const projectMessage=projectCheck?.state==='ok'?' Project repository verified: '+data.projectRepoUrl+'. '+projectCheck.message:' Project repository needs attention: '+data.projectRepoUrl+'.';
+ const distributionMessage=checkDistribution?'':' AIA distribution checks deferred; independent of personal project access.';
+ const connectionMessage=(githubWarnings.length?
   'Jira and Confluence verified. GitHub checks need attention (optional); you can continue with Next. GitHub actions requiring permissions may be unavailable.':
-  'Jira and Confluence verified. GitHub permission checks completed; write permission is optional.';
+  'Jira and Confluence verified. GitHub permission checks completed; write permission is optional.')+projectMessage+distributionMessage;
  if(!save)return {success:true,checks,message:connectionMessage};
  // Do not store raw tokens in extension settings or send them to the webview.
  await persistConnectionSettings({extension:settings,library:libraryConf});
@@ -1891,8 +1916,9 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
  // GitHub remains optional, but an unsuccessful authentication must never replace a saved credential.
  if(enteredGithub&&githubAccountVerified)await storeToken(globalSecretKey('github'),gitIdentity,github);
  const persistedGithub=githubAccountVerified?github:await readToken(globalSecretKey('github'),gitIdentity).catch(()=>undefined);
- if(githubAccountVerified)await context.secrets.store('atgvAssist.sdlcCatalogToken',github);
- else if(!persistedGithub&&!enteredGithub)await context.secrets.store('atgvAssist.sdlcCatalogToken','');
+ // Do not replace independently saved distribution credentials during personal project switching.
+ if(checkDistribution&&githubAccountVerified)await context.secrets.store('atgvAssist.sdlcCatalogToken',github);
+ else if(checkDistribution&&!persistedGithub&&!enteredGithub)await context.secrets.store('atgvAssist.sdlcCatalogToken','');
  
  pendingTests={jira:null,github:null};
  catalogRemote=null;catalogLastCheck='';catalogLastError='';scheduleCatalogChecks();
@@ -1904,7 +1930,7 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
   signature:persistedSignature,tokenDigest:sha(atlassian+'\\0'+(persistedGithub||''))
  }));
  return {success:true,checks,librarySha:library?.sha?.slice(0,12)||'',
-  message:connectionMessage+' Project repository: '+data.projectRepoUrl+'.'};
+  message:connectionMessage};
 }
 
 /**

@@ -30,7 +30,7 @@ function pageFixture(){
   "const startupFieldMap={jiraUrl:'startupJiraUrl',email:'startupEmail',githubUrl:'startupGithubUrl',projectRepository:'startupProjectRepository'};",
   "let startupSetupRequired=true,startupPage=1,startupVerifying=false,startupInstallingModule='',startupConnectionVerified=false,startupConnectionEditSnapshot=null,startupScanComplete=true,startupFormInitialized=false,startupReturnToConnections=false,startupPrereqRequested=true,startupOpenStackId='',startupCopilotModalOpen=false;",
   "let startupConnectionCheckSequence=0,startupConnectionCheckPending=false,startupConnectionHealthError=false;const startupConnectionCheckResults=new Map();",
-  "const STARTUP_CONNECTION_CHECK_LABELS=[['jira','Jira API'],['confluence','Confluence API'],['github','GitHub account'],['organization','GitHub organization'],['extension','Extension · read required / write optional'],['library','Library · read required / write optional'],['extension-releases','Extension releases · optional'],['library-releases','Library releases · optional']];function updateStartupIssueSummary(){}",
+  "const STARTUP_CONNECTION_CHECK_LABELS=[['jira','Jira API'],['confluence','Confluence API'],['github','GitHub account'],['organization','GitHub organization'],['project','Project repository · optional'],['extension','Extension · read required / write optional'],['library','Library · read required / write optional'],['extension-releases','Extension releases · optional'],['library-releases','Library releases · optional']];function updateStartupIssueSummary(){}",
   "let startupProceedMode='',startupStackData=null,gateBusy=false,gateError='',workspaceOpened=false,opening={phase:'search'};",
   segment('function startupRing(', 'function updateStartupStackProgress('),
   segment('function startupPayload(){','function renderStartupPermissionRows('),
@@ -139,7 +139,7 @@ test('checks display sequentially and each successful check disappears immediate
 });
 
 function hostFixture(failures={}){
- const events=[],writes=[],progress=[];
+ const events=[],writes=[],progress=[],urls=[];
  const normalized=require('../src/projects').normalizeExtensionSettings;
  const context={
   startupSessionVerified:true,startupVerifiedSignature:'old',startupSetup:setup,extensionSettings:{},
@@ -152,14 +152,17 @@ function hostFixture(failures={}){
   STARTUP_VERIFIED_SECRET:'atgv-test-startup-verified',
   testJiraConnection:async()=>{events.push('jira');if(failures.jira)throw failures.jira;return {displayName:'Tester'};},
   requestJson:async url=>{
+   urls.push(url);
+   if(failures.projectUrl&&url===failures.projectUrl)throw Error('HTTP 404 inaccessible');
    const id=url.includes('/api/v2/spaces')?'confluence':url.endsWith('/user')?'github':url.includes('/users/')?'organization':url.includes('/releases?')?'releases':url.includes('/repos/')?'library':'jira-probe';
    events.push(id);if(failures[id])throw failures[id];
    if(id==='confluence')return {results:[]};
    if(id==='github')return {login:'tester'};
-   if(id==='organization')return {login:'aiamalaysia'};
+   if(id==='organization')return {login:url.split('/').pop()};
    if(id==='releases')return [];
    if(id==='library'){
     if(url.endsWith('/branches/main'))return {name:'main'};
+    if(url.endsWith('/branches?per_page=1'))return failures.empty?[]:[{name:'develop'}];
     const match=url.match(/\/repos\/([^/]+)\/([^/]+)$/);
     if(!match)throw Error('Unexpected GitHub repository resource '+url);
     return {full_name:match[1]+'/'+match[2],permissions:{pull:!failures.readDenied,push:!failures.readonly}};
@@ -173,13 +176,13 @@ function hostFixture(failures={}){
  };
  const a=runtime.indexOf('function startupConnectionFailure('),b=runtime.indexOf('\nasync function dashboardState()',a);
  assert.ok(a>0&&b>a);vm.createContext(context);vm.runInContext(runtime.slice(a,b),context);
- return {context,events,writes,progress,run:(options={})=>context.testAndSaveStartupConnections({settings:setup.DEFAULTS,atlassianToken:'test-atl',githubToken:'test-git'},{...options,onProgress:item=>progress.push(item)})};
+ return {context,events,writes,progress,urls,run:(options={})=>context.testAndSaveStartupConnections({settings:setup.DEFAULTS,atlassianToken:'test-atl',githubToken:'test-git'},{...options,onProgress:item=>progress.push(item)})};
 }
 test('All service checks complete after multiple failures, with meaningful safe diagnostics and no writes',async()=>{
  const network=Object.assign(new Error('fetch failed'),{cause:{code:'ENOTFOUND'}});
  const h=hostFixture({jira:new Error('HTTP 401 bad token test-atl'),confluence:new Error('HTTP 404 no access'),github:network});
  const result=await h.run();
- assert.equal(result.success,false);assert.equal(result.checks.length,8);assert.equal(h.progress.length,16);
+ assert.equal(result.success,false);assert.equal(result.checks.length,9);assert.equal(h.progress.length,18);
  for(const id of ['jira','confluence','github','organization','library'])assert.ok(h.events.includes(id),id);
  assert.match(result.checks.find(x=>x.id==='jira').message,/HTTP 401/);
  assert.match(result.checks.find(x=>x.id==='confluence').message,/HTTP 404/);
@@ -190,7 +193,7 @@ test('All service checks complete after multiple failures, with meaningful safe 
 test('Read-only connection test uses saved credentials without storing settings or tokens',async()=>{
  const h=hostFixture();
  const result=await h.context.testAndSaveStartupConnections({settings:setup.DEFAULTS},{save:false,onProgress:item=>h.progress.push(item)});
- assert.equal(result.success,true);assert.equal(result.checks.length,8);
+ assert.equal(result.success,true);assert.equal(result.checks.length,9);
  assert.ok(result.checks.every(check=>check.state==='ok'));
  assert.deepEqual(h.writes,[]);assert.equal(h.context.startupSessionVerified,true);
  assert.equal(h.context.startupVerifiedSignature,'old');
@@ -257,4 +260,37 @@ test('Optional release checks can fail without blocking read-only source access'
  assert.equal(result.checks.find(check=>check.id==='library-releases').state,'error');
  assert.equal(result.checks.find(check=>check.id==='extension').state,'ok');
  assert.equal(result.checks.find(check=>check.id==='library').state,'ok');
+});
+
+test('personal project switching checks the selected repo, not AIA distribution, and supports non-main and empty repos',async()=>{
+ const h=hostFixture({empty:true});
+ const settings={...setup.DEFAULTS,githubUrl:'github.com/aidilazharo',projectRepository:'tech-cockpit'};
+ const first=await h.context.testAndSaveStartupConnections({settings},{save:false});
+ assert.equal(first.checks.find(row=>row.id==='project').state,'ok');
+ assert.match(first.message,/Empty repository/);
+ const second=await h.context.testAndSaveStartupConnections({settings:{...settings,projectRepository:'tech-cockpit-new'}},{save:false});
+ assert.equal(second.checks.find(row=>row.id==='project').state,'ok');
+ assert.match(second.message,/tech-cockpit-new/);
+ assert.ok(h.urls.includes('https://api.github.com/repos/aidilazharo/tech-cockpit/branches?per_page=1'));
+ assert.ok(h.urls.includes('https://api.github.com/repos/aidilazharo/tech-cockpit-new/branches?per_page=1'));
+ assert.ok(!h.urls.some(url=>url.includes('/repos/aiamalaysia/')));
+ assert.deepEqual(h.writes,[]);
+});
+test('project branch endpoint failure is advisory and identifies the exact endpoint',async()=>{
+ const endpoint='https://api.github.com/repos/aidilazharo/tech-cockpit-new/branches?per_page=1';
+ const h=hostFixture({projectUrl:endpoint});
+ const settings={...setup.DEFAULTS,githubUrl:'github.com/aidilazharo',projectRepository:'tech-cockpit-new'};
+ const result=await h.context.testAndSaveStartupConnections({settings},{save:false});
+ const row=result.checks.find(check=>check.id==='project');
+ assert.equal(result.success,true);
+ assert.equal(row.state,'error');assert.equal(row.url,endpoint);
+ assert.match(row.message,/HTTP 404/);assert.ok(row.message.includes(endpoint));
+ assert.equal(result.checks.some(check=>check.id==='extension'),false);
+});
+test('personal project with a non-main branch verifies without requiring main',async()=>{
+ const h=hostFixture();
+ const settings={...setup.DEFAULTS,githubUrl:'github.com/aidilazharo',projectRepository:'tech-cockpit-new'};
+ const result=await h.context.testAndSaveStartupConnections({settings},{save:false});
+ assert.equal(result.checks.find(row=>row.id==='project').state,'ok');
+ assert.ok(!h.urls.some(url=>url.endsWith('/branches/main')));
 });
