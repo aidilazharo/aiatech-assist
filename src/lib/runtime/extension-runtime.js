@@ -2115,6 +2115,23 @@ async function publishBlueprintState(){
 }
 let presenceQueue=Promise.resolve();
 function enqueueRosterOperation(operation){const pending=presenceQueue.catch(()=>{}).then(operation);presenceQueue=pending.catch(()=>{});return pending;}
+// Confirmation is handled by the extension host, not by untrusted webview payloads.
+const declinedRosterRegistrations=new Set();
+async function confirmedRosterVisit(config,token,projectId,projectKey,roleId='',retry=false){
+ if(!token)throw Error('Connect Jira and Confluence before registering.');
+ const assertActive=()=>{if(activeProject?.id!==projectId)throw Error('Project changed before user registration.');};
+ assertActive();
+ return myWorkPresence.visit(config,token,{projectKey,roleId,assertActive,confirmRegistration:async identity=>{
+  assertActive();
+  const key=JSON.stringify([projectId,identity.projectKey,identity.spaceKey,identity.id]);
+  if(!retry&&declinedRosterRegistrations.has(key))return false;
+  const choice=await vscode.window.showInformationMessage('Register your ATGV user account?',{modal:true,detail:'Name: '+identity.name+'\nEmail: '+(identity.email||'Not available from Jira')+'\nProject: '+identity.projectKey+'\nConfluence space: '+identity.spaceKey+'\n\nConfirm to save your verified Jira identity in the shared ATGV user register.'},'Confirm');
+  assertActive();
+  if(choice!=='Confirm'){declinedRosterRegistrations.add(key);return false;}
+  declinedRosterRegistrations.delete(key);
+  return true;
+ }});
+}
 function queueMyWorkPresence(roleId){
  const projectId=activeProject?.id;
  if(!projectId)return;
@@ -2124,7 +2141,7 @@ function queueMyWorkPresence(roleId){
   if(activeProject?.id!==projectId)return;
   const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
   const key=validProjectKey(config.get('jira.projectKey'));
-  const result=await myWorkPresence.visit(config,token,{projectKey:key,roleId});
+  const result=await confirmedRosterVisit(config,token,projectId,key,roleId);
   if(activeProject?.id===projectId)
    await dashboard?.webview.postMessage({type:'myWorkRoster',projectId,...result});
  }).catch(async error=>{
@@ -7055,11 +7072,11 @@ async function handleDashboardMessage(msg){
           const [issue,baseRegister,found,self]=await Promise.all([
             jiraReadIssue(config,token,key),
             brWorkflow.load(registry,projectId),
-            myWorkPresence.locate(config,token,projectKey),
+            myWorkPresence.readRoster(config,token,projectKey),
             requestJson(base+'/rest/api/3/myself',auth)
           ]);
           if(issue?.fields?.project?.key!==projectKey||!self?.accountId)throw Error('Jira issue or connected account belongs to a different project.');
-          let roster=myWorkPresence.extractRows(found.page?.body?.storage?.value||'');
+          let roster=found.rows;
           let pm=roster.find(row=>row.id===self.accountId&&row.roles?.includes('Project Manager'));
           if(!pm){
             const used=context.workspaceState.get('atgvAssist.usedRoles.'+projectId,[])||[];
@@ -7067,7 +7084,7 @@ async function handleDashboardMessage(msg){
               // Reconcile previously verified PM role and Jira account ID against
               // the shared register before rejecting this request. Jira permission
               // was checked above and remains authoritative.
-              const updated=await myWorkPresence.visit(config,token,{projectKey,roleId:'project-manager'});
+              const updated=await enqueueRosterOperation(()=>confirmedRosterVisit(config,token,projectId,projectKey,'project-manager'));
               roster=updated.rows;
               pm=roster.find(row=>row.id===self.accountId&&row.roles?.includes('Project Manager'));
             }
@@ -9222,12 +9239,12 @@ async function handleDashboardMessage(msg){
             requestJson(base+'/rest/api/3/mypermissions?projectKey='+encodeURIComponent(projectKey)+
               '&permissions=BROWSE_PROJECTS%2CMODIFY_REPORTER',auth),
             requestJson(base+'/rest/api/3/myself',auth),
-            myWorkPresence.locate(config,token,projectKey),
+            myWorkPresence.readRoster(config,token,projectKey),
             brWorkflow.load(registry,projectId)
           ]);
           if(!baBRTransfer.canModifyReporter(permissions))
             throw Error('Jira Browse Projects and Modify Reporter permissions are required to transfer a BR.');
-          const rows=myWorkPresence.extractRows(found.page?.body?.storage?.value||'');
+          const rows=found.rows;
           const actorId=String(me?.accountId||'');
           const actor=rows.find(row=>row.id===actorId);
           if(!actor?.roles?.some(role=>String(role||'').trim().toLowerCase()==='business analyst'))
@@ -9401,11 +9418,24 @@ async function handleDashboardMessage(msg){
            const registeredRole=String(msg.roleId||'');
            await enqueueRosterOperation(async()=>{
             if(activeProject?.id!==projectId)throw Error('Project changed before roster operation.');
-            const result=adding
-             ?await myWorkPresence.addUser(config,token,{projectKey:key,accountId:msg.accountId})
-             :registeredRole&&used.includes(registeredRole)&&myWorkPresence.ROLES[registeredRole]
-              ?await myWorkPresence.visit(config,token,{projectKey:key,roleId:registeredRole})
-              :await myWorkPresence.snapshot(config,token,key);
+            let result;
+            if(adding){
+             let accountId=String(msg.accountId||'');
+             if(msg.query){
+              const candidates=await myWorkPresence.searchUsers(config,token,{projectKey:key,query:msg.query});
+              if(!candidates.length)throw Error('No active assignable Jira users found. Check name, email and Jira permissions.');
+              const chosen=await vscode.window.showQuickPick(candidates.map(user=>({label:user.name,description:user.email||'Email hidden by Jira',detail:user.id,accountId:user.id})),{placeHolder:'Select the verified Jira user to register',ignoreFocusOut:true});
+              if(!chosen){result={...await myWorkPresence.snapshot(config,token,key),addCancelled:true};}
+              else accountId=chosen.accountId;
+             }
+             if(!result){
+              if(activeProject?.id!==projectId)throw Error('Project changed before adding user.');
+              result=await myWorkPresence.addUser(config,token,{projectKey:key,accountId});
+             }
+            }else{
+             const roleId=registeredRole&&used.includes(registeredRole)&&myWorkPresence.ROLES[registeredRole]?registeredRole:'';
+             result=await confirmedRosterVisit(config,token,projectId,key,roleId,msg.retryRegistration===true);
+            }
             if(activeProject?.id===projectId)await dashboard?.webview.postMessage({type:'myWorkRoster',projectId,...result,requestId:msg.requestId});
            });
          }catch(error){
