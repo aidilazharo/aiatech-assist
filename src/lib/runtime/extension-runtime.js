@@ -5102,6 +5102,34 @@ async function committedRoleRepository(projectId,role){
  const root=await architectRepository.resolve(context.workspaceState,projectId,developerGit,{projectRoot:aiRoot(),githubOwner:owner,githubRepo:name});
  return roleRepository.capture(root,{owner,name,role,driver:developerGit});
 }
+async function developerDesignSource(projectId,root,repositoryReference,register,brId,handoff,target,signal){
+ const policy=require('../../design-source-policy');
+ const linked=require('../../developer-design-handoff').linkedJiraKeys(register,brId);
+ for(const row of handoff||[])if(row.kind==='ux-ticket'&&row.sourceTicketKey)linked.add(row.sourceTicketKey);
+ const references=[];
+ for(const key of [...linked].sort()){
+  if(signal?.aborted||activeProject?.id!==projectId)throw Error('Design evidence collection stopped or project changed.');
+  const reference=await uxDesignReferences.readBundle(root,key,{includePreview:true});
+  if(!reference.exists)continue;
+  policy.requireReference(reference);
+  const visual=await uxDesignReferences.visualContext(vscode,target,reference,{signal,verified:target.kind==='vscode'&&verifiedVisionModels.get(modelIdentity(target.model))?.status==='verified'});
+  references.push({key,sha256:reference.sha256,evidence:visual+'\n'+uxDesignReferences.promptContext(reference)});
+ }
+ for(const row of handoff||[])if(row.kind==='ux-ticket'){
+  const current=references.find(ref=>ref.key===row.sourceTicketKey);
+  if(!current||!row.designReferenceHash||current.sha256!==row.designReferenceHash)throw Error('Approved UI/UX reference is missing or changed for '+row.sourceTicketKey+'. Ask the Designer to regenerate and approve the current uploaded reference.');
+ }
+ const guide=policy.guide(roleRepository.guidance(repositoryReference),JSON.stringify(references));
+ const fingerprint=crypto.createHash('sha256').update(JSON.stringify({repository:repositoryReference.sha,references:references.map(ref=>[ref.key,ref.sha256])})).digest('hex');
+ return {references,guide,fingerprint};
+}
+async function assertDeveloperDesignSource(projectId,root,source,repositoryReference){
+ await requireSameRoleRepository(projectId,'software-developer',repositoryReference);
+ for(const ref of source.references){
+  const current=await uxDesignReferences.readBundle(root,ref.key);
+  if(!current.exists||current.sha256!==ref.sha256)throw Error('Uploaded design reference changed during development: '+ref.key);
+ }
+}
 async function requireSameRoleRepository(projectId,role,source){
  const latest=await committedRoleRepository(projectId,role);
  if(latest.repository!==source.repository||latest.sha!==source.sha||latest.branch!==source.branch)throw Error('Project repository revision changed during generation. Refresh and regenerate using the current source.');
@@ -5153,13 +5181,16 @@ async function runDeveloperDraftPreview(brId){
   const source=await developerBR.snapshotSource(run.worktree,45);
   const handoff=await require('../../developer-design-handoff').loadForBr(registry,projectId,brId,br.approvedRevision,{root:aiRoot(),brRegister:register,approvedHash:require('../../design-proposals').approvedInputs(register).hash});
   const design=draft.requireApprovedHandoff(handoff);
-  let designSystemGuide='';
-  if(design.framework==='repository')designSystemGuide=roleRepository.guidance(repositoryReference);
+  const designSource=await developerDesignSource(projectId,aiRoot(),repositoryReference,register,brId,handoff,target,abort.signal);
+  if(!designSource.references.length)throw Error('Upload a design reference linked to this BR before generating a UI preview.');
+  let designSystemGuide=designSource.guide;
+  if(design.framework==='repository')designSystemGuide=designSource.guide;
   else if(design.framework){
+   // Supplemental catalogue documentation is not a design authority.
    const catalog=require('../../github-sdlc-catalog');
    const workspaceRoot=getWorkspace()?.uri.fsPath;
    const [guide,components]=await Promise.all([catalog.designReference(workspaceRoot,design.framework),catalog.designComponentsReference(workspaceRoot,design.framework)]);
-   designSystemGuide=String(guide||'').slice(0,10000)+'\n'+String(components||'').slice(0,9000);
+   designSystemGuide=designSource.guide+'\nSupplemental component documentation only:\n'+String(guide||'').slice(0,10000)+'\n'+String(components||'').slice(0,9000);
    if(!designSystemGuide.trim())throw Error('Preview Draft cannot load approved '+design.framework+' components from the SDLC catalog. Sync the catalog before previewing; generic styling is not a substitute.');
   }
   await progress('plan',`Preview Draft: loaded ${design.count} approved UI/UX handoff(s), ${design.screens} screen(s) and ${design.framework||'the approved design system'}. No tests or builds will run.`,{designHandoff:design.revisions,designFramework:design.framework,previewOnly:true});
@@ -5168,8 +5199,10 @@ async function runDeveloperDraftPreview(brId){
    check();
    const currentSource=attempt?await developerBR.snapshotSource(run.worktree,45):source;
    await progress('code',`Generating runnable draft from the approved UI/UX design (${attempt+1}/3), without running tests.`,{worktree:run.worktree,branch:run.branch,designHandoff:design.revisions,designFramework:design.framework});
-   const raw=await aiAnswer(target,draft.draftPrompt({brId,revision:br.approvedRevision,brText:brWorkflow.asMarkdown(br),stackId:project.techStackId,source:currentSource,approvedDesignHandoff:handoff,designSystemGuide,retryLog:designFailure}),850000,{json:true,signal:abort.signal});check();
+   const raw=await aiAnswer(target,draft.draftPrompt({brId,revision:br.approvedRevision,brText:brWorkflow.asMarkdown(br),stackId:project.techStackId,source:currentSource,approvedDesignHandoff:handoff,designSystemGuide,retryLog:designFailure})+'\n'+designSource.guide,850000,{json:true,signal:abort.signal});check();
    const manifest=developerTdd.guardManifest(raw,{kind:'code'});
+   await assertDeveloperDesignSource(projectId,aiRoot(),designSource,repositoryReference);
+   require('../../design-source-policy').guardVisualFiles(manifest.files,designSource);
    const before=await developerTdd.snapshotBeforeChanges(run.worktree,manifest.files);
    const violations=developerTdd.publicContractViolations(manifest.files,before);
    if(violations.length){designFailure='Public API/export contracts must be preserved: '+violations.join('; ');await progress('code',`Draft UI rejected: ${designFailure.slice(0,330)}; retrying without tests.`);continue;}
@@ -5313,6 +5346,9 @@ async function runDeveloperBrAutomation(brId,{restartFresh=false}={}){
    root:aiRoot(),brRegister:register,approvedHash:require('../../design-proposals').approvedInputs(register).hash
   });
   require('../../developer-design-handoff').requireMappedDesign(register,brId,approvedDesignHandoff);
+  const designSource=await developerDesignSource(projectId,aiRoot(),repositoryReference,register,brId,approvedDesignHandoff,target,abort.signal);
+  if(resuming&&record.designSourceFingerprint!==designSource.fingerprint)throw Error('Design evidence differs from the saved run. Start a fresh development run with the current references.');
+  record.designSourceFingerprint=designSource.fingerprint;
   await progress(resuming?'repair':'plan','Building the unified project artifacts for BA, SA, UI/UX and Developer before development planning…');
   let evidenceBundle;
   if(resuming&&record.contextPath){
@@ -5403,26 +5439,26 @@ async function runDeveloperBrAutomation(brId,{restartFresh=false}={}){
   const discovery=await developerTdd.discoverTestConfiguration(run.worktree,repoRoot,{onProgress:message=>progress(resuming?'repair':'plan',message)});
   record.testDiscovery=developerTdd.discoveryInstructions(discovery);
   await progress('plan','Plan Development: discovered approved test commands, installed dependencies and supported RED test paths.',{testDiscovery:record.testDiscovery});
-  let finalDesignGuide='';
+  let finalDesignGuide=designSource.guide;
   if(approvedDesignHandoff?.some(item=>item.kind==='ux-ticket')){
    const workspaceRoot=getWorkspace()?.uri.fsPath;
    const designFrameworks=[...new Set(approvedDesignHandoff.filter(item=>item.kind==='ux-ticket').map(item=>item.designFramework).filter(Boolean))];
    if(designFrameworks.length>1)throw Error('The approved UI/UX tickets use conflicting design frameworks. Obtain a consistent approved design before implementation.');
    const framework=designFrameworks[0];
-   if(framework==='repository')finalDesignGuide=roleRepository.guidance(repositoryReference);
+   if(framework==='repository')finalDesignGuide=designSource.guide;
    else if(framework){
     const catalog=require('../../github-sdlc-catalog');
     const [guide,components]=await Promise.all([
      catalog.designReference(workspaceRoot,framework),catalog.designComponentsReference(workspaceRoot,framework)
     ]);
-    finalDesignGuide=String(guide).slice(0,8500)+'\n'+String(components).slice(0,7500);
+    finalDesignGuide=designSource.guide+'\nSupplemental component documentation only:\n'+String(guide).slice(0,8500)+'\n'+String(components).slice(0,7500);
    }
   }
   if(approvedDesignHandoff){
    record.approvedDesignHandoff={kinds:approvedDesignHandoff.map(d=>d.kind),revisions:approvedDesignHandoff.map(d=>d.number)};
    await progress('plan','Plan Development: loaded approved UI/UX design requirements for this BR.',{designHandoff:record.approvedDesignHandoff});
   }
-  const developerRoleGuide=await roleSkillPrompt('software-developer');
+  const developerRoleGuide=(await roleSkillPrompt('software-developer'))+'\n'+designSource.guide;
   const roleSkillDigest=crypto.createHash('sha256').update(developerRoleGuide).digest('hex');
   // A resumed TDD run never silently switches the AI instructions or catalog
   // commit that informed its original RED tests and GREEN implementation.
@@ -5735,6 +5771,8 @@ async function runDeveloperBrAutomation(brId,{restartFresh=false}={}){
      const raw=await aiAnswer(target,repairPrompt+developerRoleGuide+(catalogHarness.phases[recovering?'repair':'green']||'')+scopeReminder,850000,{json:true,signal:abort.signal});check();
      try{
       const candidate=developerTdd.guardManifest(raw,{kind:'code'});
+      await assertDeveloperDesignSource(projectId,aiRoot(),designSource,repositoryReference);
+      require('../../design-source-policy').guardVisualFiles(candidate.files,designSource);
       const emojiFiles=developerTdd.emojiManifestPaths(candidate.files);
       if(emojiFiles.length)throw Error('Generated source contains emoji in '+emojiFiles.join(', ')+'. Use plain UI labels and BR-grounded person-name data instead.');
       const unrelatedGreenFixtures=developerTdd.unrelatedPersonFixturePaths(candidate.files,brText);
@@ -5897,6 +5935,8 @@ async function runDeveloperBrAutomation(brId,{restartFresh=false}={}){
    const refSource=await developerBR.snapshotSource(run.worktree,35);
    const refRaw=await aiAnswer(target,developerTdd.refactorPrompt({brText,source:refSource,criterion,approvedDesignHandoff})+developerRoleGuide+(catalogHarness.phases.refactor||''),500000,{json:true,signal:abort.signal});check();
    const ref=developerTdd.guardManifest(refRaw,{kind:'refactor',allowEmpty:true});
+   await assertDeveloperDesignSource(projectId,aiRoot(),designSource,repositoryReference);
+   require('../../design-source-policy').guardVisualFiles(ref.files,designSource);
    if(ref.files.length){
     const before=await developerTdd.snapshotBeforeChanges(run.worktree,ref.files);
     try{
@@ -5927,8 +5967,10 @@ async function runDeveloperBrAutomation(brId,{restartFresh=false}={}){
     const codeSource=await developerBR.snapshotSource(run.worktree,38);
     const prompt=finalUi.implementationPrompt({brText,brId,revision:br.approvedRevision,source:codeSource,
      approvedDesignHandoff,designSystemGuide:finalDesignGuide,retryLog:feedback});
-    const response=await aiAnswer(target,prompt,850000,{json:true,signal:abort.signal});check();
+    const response=await aiAnswer(target,prompt+'\n'+designSource.guide,850000,{json:true,signal:abort.signal});check();
     const manifest=developerTdd.guardManifest(response,{kind:'code',allowEmpty:true});
+    await assertDeveloperDesignSource(projectId,aiRoot(),designSource,repositoryReference);
+    require('../../design-source-policy').guardVisualFiles(manifest.files,designSource);
     const before=await developerTdd.snapshotBeforeChanges(run.worktree,manifest.files);
     const contracts=developerTdd.publicContractViolations(manifest.files,before);
     if(contracts.length){
@@ -5983,7 +6025,9 @@ async function runDeveloperBrAutomation(brId,{restartFresh=false}={}){
    if(live.running&&developerBRServer.insideWorktree(run.worktree,live.cwd))await developerGit.stopLocal();
    const repairSource=await developerBR.snapshotSource(run.worktree);
    const repairPrompt=developerTdd.greenPrompt({brText,brId,revision:br.approvedRevision,stackId:project.techStackId,source:repairSource,redEvidence:run.evidence.filter(x=>x.redVerified),repairLog:'REAL SERVER STARTUP FAILURE. Keep the API listener active and preserve locked tests.\n'+diagnostic});
-   const repair=developerTdd.guardManifest(await aiAnswer(target,repairPrompt,850000,{json:true,signal:abort.signal}),{kind:'code'});check();
+   const repair=developerTdd.guardManifest(await aiAnswer(target,repairPrompt+'\n'+designSource.guide,850000,{json:true,signal:abort.signal}),{kind:'code'});check();
+   await assertDeveloperDesignSource(projectId,aiRoot(),designSource,repositoryReference);
+   require('../../design-source-policy').guardVisualFiles(repair.files,designSource);
    run.files=[...new Set([...run.files,...await developerBR.writeGenerated(run.worktree,repair.files)])];
    await developerTdd.assertLockedTests(lockedTests);
    run.checksPassed=false;
@@ -6786,7 +6830,7 @@ async function handleDashboardMessage(msg){
           if(prior.exists&&prior.status!=='rejected')throw Error('Preview or reject the current generated design before regenerating.');
           if(prior.revision!==String(msg.expectedRevision||''))throw Error('UI/UX generation status changed. Reload before regenerating.');
           const approved=designProposals.approvedInputs(await currentPublishedRoleRegister(projectId));
-          const reference=await uxDesignReferences.readBundle(root,key,{includePreview:true});
+          const reference=require('../../design-source-policy').requireReference(await uxDesignReferences.readBundle(root,key,{includePreview:true}));
           const repositoryReference=await committedRoleRepository(projectId,'ux-designer');
           const target=await activeAiTarget();
           const designFramework=context.workspaceState.get(uxFrameworkKey(projectId,key),'aia-qi');
@@ -6794,17 +6838,13 @@ async function handleDashboardMessage(msg){
           const availableFrameworks=await sdlcCatalog.designFrameworks(workspace);
           const selectedFramework=availableFrameworks.find(item=>item.id===designFramework);
           if(!selectedFramework||designFramework!==String(msg.framework||''))throw Error('Selected framework is not active or has changed. Pull Library, reload the ticket and retry.');
-          const [baseGuide,componentsGuide]=await Promise.all([
-            sdlcCatalog.designReference(workspace,designFramework),
-            sdlcCatalog.designComponentsReference(workspace,designFramework)
-          ]);
           // All Jira designs build on a shared, approved project prototype.
           // Existing screens are context, never overwritten without review.
           const sharedManifest=await require('../../project-ux-prototype').reconcileExisting(root);
           const existingProjectScreens=require('../../project-ux-prototype').combined(sharedManifest).screens.map(screen=>({name:screen.name,jiraKey:screen.jiraKey,storyKey:screen.storyKey}));
           const projectScreenGuide='Existing approved project screens (do not overwrite other tickets; align navigation and avoid duplicate screen names): '+JSON.stringify(existingProjectScreens).slice(0,7000)+'\nCurrent task must add only screens supported by its Jira Story and approved BR.';
           const uxRoleGuide=await roleSkillPrompt('ux-designer');
-          const guide=repositoryReference.hasDesign?projectScreenGuide+'\n'+uxRoleGuide+'\nExisting repository design system takes precedence over the library kit. Use uploaded reference for requested changes.':baseGuide+'\n'+projectScreenGuide+'\n'+componentsGuide+uxRoleGuide+'\nSelected UI/UX framework: '+selectedFramework.label+' ('+designFramework+', kit '+selectedFramework.kitVersion+'). Use only the approved version-pinned GitHub catalog design system. Do not mix in any other design-system classes, tokens or runtime assets.'+(designFramework==='aia-qi'?' This is an independent Qi-inspired kit, not official AIA Qi.':'');
+          const guide=projectScreenGuide+'\n'+uxRoleGuide+'\n'+require('../../design-source-policy').RULE;
           const repositoryGuide=roleRepository.guidance(repositoryReference);
           checkStop();
           const ticket={key,summary:issue.fields?.summary,description:textFromAdf(issue.fields?.description)};
@@ -6822,7 +6862,7 @@ async function handleDashboardMessage(msg){
           const visualNotes=await uxDesignReferences.visualContext(vscode,target,reference,{signal:run.controller.signal,verified:target.kind==='vscode'&&verifiedVisionModels.get(modelIdentity(target.model))?.status==='verified'});
           const referenceNotes=visualNotes+'\n'+uxDesignReferences.promptContext(reference);
           const progress=async(stage,message)=>{checkStop();await dashboard?.webview.postMessage({type:'uxPipelineWorking',projectId,key,stage,message,canStop:true});};
-          await progress(1,reference.exists?'Design reference loaded.':'No design reference; optional stage skipped.');
+          await progress(1,'User-uploaded design reference and committed project repository loaded.');
           await progress(2,'Generating user flow diagram…');
           const flowRaw=await aiAnswer(target,uxDesignPipeline.flowPrompt(ticket,approved,guide,referenceNotes,repositoryGuide),30000,{json:true,signal:run.controller.signal});
           checkStop();let flow;
@@ -6886,6 +6926,10 @@ async function handleDashboardMessage(msg){
         require('../../br-ownership').requireTask(roleRegister,issue,'ux-designer');
         if(record.sourceBRHash!==designProposals.approvedInputs(roleRegister).hash)throw Error('Published Business Requirements changed since design approval. Review and regenerate the design before publishing.');
         await dashboard?.webview.postMessage({type:'uxFrontendPublishProgress',projectId,key,message:'Generating frontend source from the approved UI/UX design…'});
+        const reference=require('../../design-source-policy').requireReference(await uxDesignReferences.readBundle(aiRoot(),key));
+        if(reference.sha256!==record.designReferenceHash)throw Error('Design reference changed. Regenerate and approve before publishing.');
+        if(!record.repositorySource?.sha)throw Error('Repository-grounded design required before publishing.');
+        await requireSameRoleRepository(projectId,'ux-designer',record.repositorySource);
         const output=require('../../ux-frontend-code').generate(record,record.sourceStoryKey);
         const root=await architectRepository.resolve(context.workspaceState,projectId,developerGit,{projectRoot:aiRoot(),githubOwner:config.get('github.owner'),githubRepo:config.get('github.repo')});
         const repo=await developerGit.repository(root);
@@ -6926,7 +6970,7 @@ async function handleDashboardMessage(msg){
           const approved=designProposals.approvedInputs(roleRegister);
           if(!current.repositorySource?.sha)throw Error('This design predates repository grounding. Disapprove and regenerate before approval.');
           await requireSameRoleRepository(activeProject.id,'ux-designer',current.repositorySource);
-          const reference=await uxDesignReferences.readBundle(aiRoot(),key);
+          const reference=require('../../design-source-policy').requireReference(await uxDesignReferences.readBundle(aiRoot(),key));
           const [wire,mock]=await Promise.all([uxTicketDesigns.read(aiRoot(),key,'wireframe'),uxTicketDesigns.read(aiRoot(),key,'mockup')]);
           if(current.sourceBRHash!==approved.hash||current.designReferenceHash!==String(reference.sha256||'')||current.wireframeRevision!==wire.revision||current.mockupRevision!==mock.revision)throw Error('The approved requirements, design reference, or draft changed since generation. Disapprove and regenerate UI/UX.');
           if(current.jiraUpdated!==String(issue.fields?.updated||''))throw Error('Jira issue changed since generation. Review it and regenerate UI/UX before approving.');
@@ -6968,12 +7012,12 @@ async function handleDashboardMessage(msg){
         if(String(issue.fields?.status?.statusCategory?.key||'').toLowerCase()==='done')throw Error('This Jira ticket is already Done. Reopen it in Jira before starting new design work.');
         const registered=await currentPublishedRoleRegister(activeProject.id),approved=designProposals.approvedInputs(registered);
         const prior=await uxTicketDesigns.read(aiRoot(),key,kind);
-        const reference=await uxDesignReferences.readBundle(aiRoot(),key,{includePreview:true});
+        const reference=require('../../design-source-policy').requireReference(await uxDesignReferences.readBundle(aiRoot(),key,{includePreview:true}));
         const repositoryProjectId=activeProject.id,repositoryReference=await committedRoleRepository(repositoryProjectId,'ux-designer');
         const target=await activeAiTarget();
         await dashboard?.webview.postMessage({type:'uxDesignWorking',projectId:activeProject.id,key,kind,message:'Generating '+uxTicketDesigns.KINDS[kind]+' with the selected AI service…'});
         const visualNotes=await uxDesignReferences.visualContext(vscode,target,reference,{verified:target.kind==='vscode'&&verifiedVisionModels.get(modelIdentity(target.model))?.status==='verified'});
-        const prompt=uxTicketDesigns.prompt(kind,{key,summary:issue.fields?.summary,description:textFromAdf(issue.fields?.description)},approved,repositoryReference.hasDesign?'Follow existing repository UI conventions.':await sdlcCatalog.designReference(getWorkspace()?.uri.fsPath),visualNotes+'\n'+uxDesignReferences.promptContext(reference),roleRepository.guidance(repositoryReference));
+        const prompt=uxTicketDesigns.prompt(kind,{key,summary:issue.fields?.summary,description:textFromAdf(issue.fields?.description)},approved,require('../../design-source-policy').RULE,visualNotes+'\n'+uxDesignReferences.promptContext(reference),roleRepository.guidance(repositoryReference));
         const raw=await aiAnswer(target,prompt,35000,{json:true});
         let proposed;try{proposed=JSON.parse(String(raw).replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim());}catch{throw Error('AI returned invalid JSON. No design was saved.');}
         const latestBR=designProposals.approvedInputs(await currentPublishedRoleRegister(activeProject.id));
