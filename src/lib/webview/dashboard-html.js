@@ -31,7 +31,7 @@ function html(webview,{resumeLibrary=false}={}){
     subtask:"<path d=\"M5 5v7h4m-3-3 3 3-3 3M12 8h7v8h-7zM14 12l1 1 2-2\"/>"
   };
   const baHeaderIcon=(name,variant='')=>`<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${variant}>${baHeaderIcons[name]}</svg>`;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.94';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.95';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const uiConsistencyCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-consistency.css'));
@@ -401,10 +401,10 @@ function html(webview,{resumeLibrary=false}={}){
     <div id="baMyWorkDashboard" hidden aria-hidden="true"><button type="button" id="baMyWorkOpen" hidden>Project Items</button><div id="baMyWorkMetrics"></div></div>
   <section id="discoveryView" class="hidden work-container ba-embedded-requirements ba-automatic-view">
     <div class="ba-auto-heading">
-      <h2 class="ba-single-heading">Business Requirements <span id="baAutoTitle"></span></h2>
+      <div><h2 class="ba-single-heading">Business Requirements <span id="baAutoTitle"></span></h2><div id="baAutoOwnership" class="muted" role="status" hidden></div></div>
       <div class="ba-auto-heading-actions">
         <div id="baAutoSkillSlot"></div>
-        <button id="baAutoBack" type="button" class="secondary" title="Project Items" aria-label="Project Items">Project Items</button>
+        <button id="baAutoBack" type="button" class="secondary ba-heading-icon" title="Project Items" aria-label="Project Items"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1"/></svg></button>
         <button id="baNewRequirement" type="button" class="ba-heading-icon" title="New Business Requirement" aria-label="New Business Requirement"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button>
       </div>
     </div>
@@ -414,7 +414,7 @@ function html(webview,{resumeLibrary=false}={}){
         <li data-ba-auto-stage="source"><span>1</span><div><strong>Prepare Source</strong><small>Source and ISO BRD</small></div></li>
         <li data-ba-auto-stage="requirements"><span>2</span><div><strong>Develop Requirements</strong><small>Discovery and individual BRs</small></div></li>
         <li data-ba-auto-stage="jira"><span>3</span><div><strong>Prepare Jira Preview</strong><small>Hierarchy and fields</small></div></li>
-        <li data-ba-auto-stage="publish"><span>4</span><div><strong>Publish to Jira</strong><small>Manual confirmation</small></div></li>
+        <li data-ba-auto-stage="publish"><span>4</span><div><strong>Approved and Publish</strong><small>Manual confirmation</small></div></li>
       </ol>
     </section>
     <div id="baAutoSourceEntry" class="ba-auto-source-entry" aria-label="Upload and prepare source documents"></div>
@@ -513,7 +513,7 @@ function html(webview,{resumeLibrary=false}={}){
         <button type="button" id="baAutoStop" class="secondary ba-workflow-icon hidden" title="Stop preparation" aria-label="Stop preparation">${baHeaderIcon('stop')}</button>
         <button type="button" id="baAutoRefresh" class="secondary ba-workflow-icon" title="Refresh Affected Artifacts" aria-label="Refresh Affected Artifacts" disabled>${baHeaderIcon('refresh')}</button>
         <button type="button" id="baAutoProcessLog" class="secondary ba-workflow-icon" title="Download complete Business Requirements troubleshooting log (.txt)" aria-label="Download Business Requirements troubleshooting log">${baHeaderIcon('download')}</button>
-        <button type="button" id="baAutoPublish" class="ba-workflow-icon" title="Publish to Jira" aria-label="Publish to Jira" disabled>${baHeaderIcon('publish')}</button>
+        <button type="button" id="baAutoPublish" title="Approved and Publish" aria-label="Approved and Publish" disabled>Approved and Publish</button>
       </div>
     </div>
 

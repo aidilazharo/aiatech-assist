@@ -1456,6 +1456,16 @@ async function listOwnership(){
   }
   return {scope:'local',documents:await backend.db.list(activeProject.id),me:await localMemberId()};
 }
+// Shared generation and source edits must not mutate another BA's work.
+async function requireBAWritableCycle(register){
+ const snapshot=await listOwnership();
+ const owners=new Map((snapshot.documents||[]).map(record=>[record.documentId,record]));
+ for(const br of register.brs||[]){
+  if(br.archivedFromRestart||br.status==='retired')continue;
+  const owner=owners.get('ba-br-'+br.id);
+  if(owner?.ownerId&&owner.ownerId!==snapshot.me)throw Error('Read-Only: '+br.id+' is owned by '+(owner.ownerName||owner.ownerId)+'. Request ownership transfer first.');
+ }
+}
 async function requireBAOwner(documentId){
   if(!/^ba-(discovery|br-BR-[0-9]+)$/.test(documentId))throw Error('Invalid BA ownership document.');
   if(documentId==='ba-discovery'){
@@ -3624,6 +3634,7 @@ async function generateBusinessRequirements(options={}){
  const check=()=>{options.signal?.throwIfAborted();if(activeProject?.id!==projectId)throw Error('Project changed during BR generation.');};
  check();
  const saved=await discovery.load(registry,activeProject.id),register=await brWorkflow.load(registry,activeProject.id);
+ await requireBAWritableCycle(register);
  if(!register.sourceDocuments.length)throw Error('No active source documents. Upload or restore evidence before generating new BR drafts. Existing BRs and Jira are preserved.');
  if(!register.importEpoch||register.reviewRevision!==saved.revision||register.discoveryRevision!==saved.revision)
   throw Error('Import Word/PDF, save Discovery, and review it with an AI model before generating BR drafts.');
@@ -4241,6 +4252,7 @@ async function runBRPreparation(from){
  try{
   await requireBAOwner('ba-discovery');
   const initial=await current();
+  await requireBAWritableCycle(initial);
   if(!initial.sourceDocuments?.length)throw Error('Upload a source document to prepare Business Requirements.');
   const required=brPreparationStage(initial);
   const first=baAutomatic.stages.includes(from)&&baAutomatic.stages.indexOf(from)<baAutomatic.stages.indexOf(required)?from:required;
@@ -4337,6 +4349,7 @@ async function baSaveArtifact(msg){
  await requireBAOwner('ba-discovery');
  const projectId=activeProject.id;
  const register=await brWorkflow.load(registry,projectId);
+ await requireBAWritableCycle(register);
  if(register.revision!==msg.revision||!register.sourceDocuments.some(source=>source.digest===msg.digest))throw Error('The artifact changed. Reload before saving.');
  if(!['source','iso'].includes(msg.kind)||typeof msg.text!=='string'||!msg.text.trim())throw Error('Enter source or ISO BRD text before saving.');
  if(msg.kind==='source')baBrTextPipeline.split(msg.text);
@@ -4361,12 +4374,13 @@ async function publishPreparedBRs(msg){
  if(baseAtlassian(config)!==preview.site||validProjectKey(config.get('jira.projectKey'))!==preview.jiraProject)
   throw Error('The Jira destination changed. Refresh the preview.');
  await requireBAOwner('ba-discovery');
+ await requireBAWritableCycle(register);
  const scope=new Set([...preview.changes.map(item=>item.path.split('/')[0]),...preview.reopenRoots]);
  for(const id of scope)await requireBAOwner('ba-br-'+id);
  const actor=await verifiedBAActor();
  const reopenLines=preview.reopenRows.map(row=>row.key+'  '+row.from+' → '+row.to);
  const retired=preview.changes.filter(item=>item.action==='retire').map(item=>item.key);
- const action=preview.republish?'Republish to Jira':'Publish to Jira';
+ const action='Approved and Publish';
  const decision=await uiWarning(action+' for '+scope.size+' Business Requirement(s)?\n\n'+preview.changes.length+
   ' Jira issue change(s) and '+reopenLines.length+' status reset(s).',
   {modal:true,detail:[reopenLines.length?'Move to To Do:\n'+reopenLines.join('\n'):'',retired.length?'Mark obsolete:\n'+retired.join('\n'):''].filter(Boolean).join('\n\n').slice(0,14000)},action);
@@ -4378,6 +4392,8 @@ async function publishPreparedBRs(msg){
   throw Error('Jira status or transitions changed after preview. Refresh affected artifacts and review the current reset list.');
  if(activeProject?.id!==projectId||(await brWorkflow.load(registry,projectId)).revision!==preview.revision)
   throw Error('The Business Requirements revision changed. Refresh the preview.');
+ await requireBAWritableCycle(register);
+ for(const id of scope)await requireBAOwner('ba-br-'+id);
  const saved=await brWorkflow.approvePreparedJira(registry,projectId,preview.revision,{actor,expectedPlan:preview.planHash,
   publication:{roots:preview.reopenRoots,rows:preview.reopenRows}});
  approvedJiraPreviewRevision=saved.revision;
@@ -9922,6 +9938,7 @@ async function handleDashboardMessage(msg){
           const configured=saved?.site===site&&saved?.project===project;
           let selection=configured?saved.byTypeId:{};
           if(msg.command==='baJiraFieldSelectionSave'){
+           await requireBAWritableCycle(register);
            if(baPreparationRun||jiraSyncBusy||baPublishIntent)throw Error('Finish the running BR operation before saving Jira field selection.');
            if(!msg.selection||typeof msg.selection!=='object'||Array.isArray(msg.selection)||msg.revision!==register.revision)throw Error('BR or field selection changed. Reload and retry.');
            selection=Object.create(null);const byTypeName=Object.create(null);
@@ -9956,6 +9973,7 @@ async function handleDashboardMessage(msg){
         if(baPreparationRun||jiraSyncBusy)throw Error('Finish the running Business Requirements operation before editing.');
         await requireBAOwner('ba-discovery');
         if(!msg.answers||typeof msg.answers!=='object'||Array.isArray(msg.answers))throw Error('Invalid Discovery artifact.');
+        await requireBAWritableCycle(await brWorkflow.load(registry,activeProject.id));
         await saveAutomaticDiscovery(activeProject.id,msg.answers,{edited:true,expectedRevision:msg.revision});
         await runBRPreparation('requirements');
         break;
@@ -9982,6 +10000,7 @@ async function handleDashboardMessage(msg){
       case 'saveDiscovery':{
         if(msg.autosave===true)throw Error('Automatic Discovery saving is disabled. Click Save 12 Questions to save manually.');
         requireOpened();await requireBAOwner('ba-discovery');
+        await requireBAWritableCycle(await brWorkflow.load(registry,activeProject.id));
         const beforeDiscovery=await discovery.load(registry,activeProject.id);
         // Manual Save is the sole write path. An earlier save may already have
         // written discovery-12.json but failed to link its revision to the BR

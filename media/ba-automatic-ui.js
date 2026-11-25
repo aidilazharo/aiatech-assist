@@ -6,7 +6,7 @@
  if(!root?.classList.contains('ba-automatic-view'))return;
  const header=get('workSkill').parentElement;
  const stages=['source','requirements','jira','publish'];
- const stageNames=['Prepare Source','Develop Requirements','Prepare Jira Preview','Publish to Jira'];
+ const stageNames=['Prepare Source','Develop Requirements','Prepare Jira Preview','Approved and Publish'];
  const kindNames={iso:'Structured ISO BRD',source:'Editable source',original:'Original source text',preflight:'Pre-flight Analyst','jira-fields':'Jira work item types and fields'};
  const viewer=get('baAutoFormattedDocument');
  const primary=get('baAutoPrimaryAction');
@@ -38,6 +38,9 @@
  const invoke=(command,fields={})=>send(command,{projectId:activeId,roleId:selectedRole,...fields});
  const requirements=()=>brState?.brs?.filter(br=>!br.archivedFromRestart&&!['retired','retire-proposed'].includes(br.status))||[];
  const source=()=>brState?.sourceDocuments?.[0];
+ const foreignOwners=()=>baForeignBROwners();
+ const sharedReadOnly=()=>foreignOwners().length>0||!baOwnerState?.me;
+ const readOnlyMessage=()=>{const owners=foreignOwners();return owners.length?'Read-Only · Owner: '+[...new Set(owners.map(owner=>owner.ownerName||owner.ownerId))].join(', '):'Checking ownership…';};
 
  const statusLabels={'not-started':'Not started','in-progress':'In progress',
    ready:'Ready','needs-attention':'Needs attention',completed:'Completed'};
@@ -197,7 +200,7 @@
   const impact=(brState?.impact||[]).filter(row=>activeIds.has(row.id));
   get('baAutoBRCount').textContent=brs.length?brs.length+' individual BR'+(brs.length===1?'':'s')+(findings.length?' · '+findings.length+' need attention':''):'';
   renderAttentionActions(findings);
-  const key=JSON.stringify([brState?.revision,busy(),findings,impact,brs.map(br=>baCanEdit('ba-br-'+br.id))]);
+  const key=JSON.stringify([brState?.revision,busy(),findings,impact,brs.map(br=>[baCanEdit('ba-br-'+br.id),baOwner('ba-br-'+br.id)])]);
   if(brKey===key)return;
   brKey=key;
   const expanded=new Set([...body.querySelectorAll('details[open]')].map(node=>node.dataset.br));
@@ -234,7 +237,11 @@
    const item=document.createElement('details');
    item.dataset.br=br.id;item.className='ba-auto-requirement'+(problem?' has-attention':'');item.open=expanded.has(br.id);
    const summary=document.createElement('summary');
-   const title=document.createElement('strong');title.textContent=br.id+' · '+br.title;summary.append(title);
+   const heading=document.createElement('div');
+   const title=document.createElement('strong');title.textContent=br.id+' · '+br.title;heading.append(title);
+   const owner=baOwner('ba-br-'+br.id);
+   if(owner.ownerId&&owner.ownerId!==baOwnerState?.me){const label=document.createElement('small');label.className='muted';label.style.display='block';label.textContent='Read-Only · Owner: '+(owner.ownerName||owner.ownerId);heading.append(label);}
+   summary.append(heading);
    if(problem){const mark=document.createElement('span');mark.className='ba-auto-requirement-status';mark.textContent='Needs attention';summary.append(mark);}
    item.append(summary);
    if(problem){
@@ -252,8 +259,8 @@
    }
    const actions=document.createElement('div');actions.className='ba-auto-requirement-actions';
    const writable=baCanEdit('ba-br-'+br.id);
-   const edit=button(writable?'Edit '+br.id:'View '+br.id,()=>openBREditor(br.id,{artifact:true}));
-   edit.disabled=busy();actions.append(edit);item.append(actions);body.append(item);
+   const edit=button('Edit '+br.id,()=>openBREditor(br.id,{artifact:true}));
+   edit.disabled=busy()||!writable;actions.append(edit);if(!writable){const preview=button('View '+br.id,()=>openBREditor(br.id,{artifact:true}));preview.disabled=busy();actions.append(preview);}item.append(actions);body.append(item);
   }
  }
 
@@ -311,7 +318,7 @@
   const notes=state?.preview?.sourceNotes||state?.sourceNotes||[];
   get('baAutoSourceNotes').hidden=!notes.length;
   get('baAutoSourceNotesList').replaceChildren(...notes.map(message=>{const row=document.createElement('li');row.textContent=message;return row;}));
-  const key=JSON.stringify([state?.preview?.revision,brState?.revision,state?.phase,jiraView,jiraTab,[...collapsed],rows.map(row=>row.role)]);
+  const key=JSON.stringify([state?.preview?.revision,brState?.revision,state?.phase,jiraView,jiraTab,[...collapsed],rows.map(row=>[row.role,baCanEdit('ba-br-'+row.br)]),sharedReadOnly()]);
   if(tableKey===key)return;
   tableKey=key;
   const hierarchy=jiraView==='hierarchy',byId=new Map(rows.map(row=>[row.id,row]));
@@ -352,7 +359,7 @@
    {key:'status',label:'Change',sortable:!hierarchy},
    {key:'action',label:'Action',sortable:false,render:row=>{
     const canPreview=row.entry&&row.entry.action!=='retire';
-    const canEdit=canPreview&&!!state?.preview?.fieldPlans?.[row.path]?.schema&&!state?.preview?.projectionIssues?.length;
+    const canEdit=canPreview&&!sharedReadOnly()&&baCanEdit('ba-br-'+row.br)&&!!state?.preview?.fieldPlans?.[row.path]?.schema&&!state?.preview?.projectionIssues?.length;
     const action=button(canEdit?'Edit Jira item':row.category==='br'?'Open BR':canPreview?'View Jira draft':row.key?'Open Jira item':'View',()=>{
      if(row.category==='br')openBREditor(row.br,{artifact:true});
      else if(canPreview)renderJiraIssueDetails(row.entry,!canEdit,{automatic:true});
@@ -471,12 +478,14 @@
    else step.removeAttribute('aria-current');
   }
   const refresh=get('baAutoRefresh'),stop=get('baAutoStop'),publish=get('baAutoPublish');
+   const ownership=get('baAutoOwnership');ownership.hidden=!foreignOwners().length;ownership.textContent=ownership.hidden?'':readOnlyMessage();
   get('baAutoProcessLog').disabled=!activeId||baProcessLogPendingProject===activeId;
-  refresh.disabled=!source()||busy()||unsaved||!!baBusyTask||discoveryImportBusy;
+  refresh.disabled=sharedReadOnly()||!source()||busy()||unsaved||!!baBusyTask||discoveryImportBusy;
+   refresh.title=foreignOwners().length?readOnlyMessage():'Refresh Affected Artifacts';
   stop.classList.toggle('hidden',phase!=='running');
-  const publishLabel=phase==='publishing'?'Publishing…':state?.preview?.republish?'Republish to Jira':'Publish to Jira';
+  const publishLabel=phase==='publishing'?'Publishing…':'Approved and Publish';publish.textContent=publishLabel;
   publish.title=publishLabel;publish.setAttribute('aria-label',publishLabel);
-  publish.disabled=phase!=='ready'||unsaved||!!baBusyTask||!currentJiraPreview();
+  publish.disabled=sharedReadOnly()||phase!=='ready'||unsaved||!!baBusyTask||!currentJiraPreview();if(foreignOwners().length)publish.title=readOnlyMessage();
   const reopen=state?.preview?.reopenRows?.length||0;
   const messages={idle:source()?'Preparing source…':'Upload a document to start.',running:'Preparing affected artifacts…',draft:'Draft. Refresh affected artifacts to continue.',
    ready:!currentJiraPreview()?'Jira preview is out of date. Refresh affected artifacts.':reopen?reopen+' linked Jira item'+(reopen===1?'':'s')+' will move to To Do.':'Jira preview is ready.',
@@ -611,10 +620,11 @@
   invoke('baStopAttentionResolve');
   render();
  });
- get('baAutoRefresh').addEventListener('click',()=>invoke('baRefreshArtifacts'));
+ get('baAutoRefresh').addEventListener('click',()=>{if(!sharedReadOnly()&&!get('baAutoRefresh').disabled)invoke('baRefreshArtifacts');});
  get('baAutoStop').addEventListener('click',()=>invoke('baStopPreparation'));
  get('baAutoPublish').addEventListener('click',()=>{
-  get('baAutoPublish').disabled=true;
+  if(sharedReadOnly()||get('baAutoPublish').disabled)return;
+   get('baAutoPublish').disabled=true;
   invoke('baPublishPrepared',{revision:state?.preview?.revision});
  });
 

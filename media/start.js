@@ -5484,7 +5484,8 @@ function refreshDiscoveryGroupCounts(){
   }
 }
 function baOwner(documentId){return baOwnerState?.documents?.find(x=>x.documentId===documentId)||{ownerId:null,revision:0,pending:null};}
-function baCanEdit(documentId){if(documentId==='ba-discovery')return !!activeId&&selectedRole==='business-analyst'&&!!baOwnerState?.me;return !!baOwnerState?.me&&baOwner(documentId).ownerId===baOwnerState.me;}
+function baForeignBROwners(){return (brState?.brs||[]).filter(br=>!br.archivedFromRestart&&br.status!=='retired').map(br=>baOwner('ba-br-'+br.id)).filter(owner=>owner.ownerId&&owner.ownerId!==baOwnerState?.me);}
+ function baCanEdit(documentId){if(documentId==='ba-discovery')return !!activeId&&selectedRole==='business-analyst'&&!!baOwnerState?.me&&!baForeignBROwners().length;return !!baOwnerState?.me&&baOwner(documentId).ownerId===baOwnerState.me;}
 function baOwnershipLabel(documentId){
  const record=baOwner(documentId);
   return ATGVOwnershipPresentation.display(record,baOwnerState?.me,{loaded:!!baOwnerState,cached:!!baOwnerState?.cached}).text;
@@ -7253,6 +7254,9 @@ function updateBREditorActions(){
  const br=brState?.brs?.find(x=>x.id===brEditing);
  const draft=br?.status==='draft',approved=br?.status==='approved';
  const editingArtifact=$('brEditModal').dataset.baArtifact==='true';
+ const currentOwner=br?baOwner('ba-br-'+br.id):null;
+ const foreignOwner=!!currentOwner?.ownerId&&currentOwner.ownerId!==baOwnerState?.me;
+ if(foreignOwner){brReadOnly=true;brQuill?.enable(false);$('brSuggestedPlacement').readOnly=true;}
  const canEdit=!!br&&(draft||editingArtifact&&approved)&&!brReadOnly&&!baBusyTask&&!brEditorSaving;
  const independent=!!roleSettings?.enabled?.includes('business-owner');
  const isBusinessOwner=$('sidebarRole')?.value==='business-owner';
@@ -7265,7 +7269,7 @@ function updateBREditorActions(){
  $('brEditSave').disabled=!canEdit||(editingArtifact?!brEditorDirty:!!br?.draftSavedAt&&!brEditorDirty);
  $('brEditApprove').classList.toggle('hidden',(!draft&&!approved)||editorMilestone==='save');
  $('brEditApprove').textContent=approved?'✓ Approved':independent?'Final Approve Business Requirements':'Approve Business Requirements';
- $('brEditApprove').disabled=!canApprove;
+ $('brEditApprove').disabled=!canApprove||foreignOwner;
  $('brEditApprove').title=blockers.length?blockers.map(x=>x.message).join(' '):'Approve this reviewed Business Requirements draft as an immutable revision.';
  $('brEditRevision').classList.toggle('hidden',!approved);
  $('brEditRevision').disabled=!approved||!!baBusyTask||!baCanEdit('ba-br-'+br.id)||br.needsRefresh||br.externalReviewRequired||br.roleReviewRequired||br.dependencyReviewRequired||!baReviewCurrent();
@@ -7323,6 +7327,7 @@ function updateBREditorActions(){
  const approvalNotice=blockers.length?'Approval blocked: '+blockers.map(x=>x.message).join(' '):null;
  $('brEditStatus').textContent=approved?'Approved · Read-only':brEditorSaving?'Saving draft…':brReadOnly?'Draft · Read-only':approvalNotice||(brEditorDirty?'Unsaved changes · Approve will save automatically':br?.draftSavedAt?'Draft saved · Ready for approval':'AI-generated draft · Review content; Approve will save automatically');
  if(editingArtifact)$('brEditStatus').textContent=brEditorSaving?'Saving draft…':brReadOnly?'View requirement':brEditorDirty?'Unsaved changes':'Save changes to refresh the Jira preview.';
+ if(foreignOwner){$('brEditStatus').textContent='Read-Only · Owner: '+(currentOwner.ownerName||currentOwner.ownerId);$('brEditEndorse').disabled=true;}
  window.ATGVBusinessRequirements?.render();
 }
 function openBREditor(id,{artifact=false}={}){
@@ -7720,7 +7725,7 @@ window.addEventListener('message',event=>{
   }
   if(m.type==='knowledgeSyncProgress'){$('knowledgeSyncStatus').textContent=m.message||'Syncing…';$('overviewKnowledgeStatus').textContent=m.message||'Syncing…';return;}
   if(m.type==='knowledgeSyncResult'){$('knowledgeSync').disabled=false;$('overviewKnowledgeSync').disabled=false;renderKnowledgeState(m.summary||{});$('knowledgeSyncStatus').textContent=m.message+(m.errors?.length?' · '+m.errors.map(e=>e.source+': '+e.message).join(' · '):'');$('overviewKnowledgeStatus').textContent=$('knowledgeSyncStatus').textContent;return;}
-  if(m.type==='baOwners'){if(m.projectId===activeId){baOwnerState=m;renderBAOwner();renderBRs();}return;}
+  if(m.type==='baOwners'){if(m.projectId===activeId){baOwnerState=m;renderBAOwner();renderBRs();if(brEditing)updateBREditorActions();}return;}
  if(m.type==='baAutoClaimResult'&&m.projectId===activeId){
   if(m.failed?.length)status('Some unassigned BR drafts could not be auto-assigned: '+m.failed.slice(0,3).join('; '),true);
   return;

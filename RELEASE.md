@@ -1,14 +1,12 @@
-# ATGV AIATECH Assist v0.0.94
+# ATGV AIATECH Assist v0.0.95
 
 ## Changes
 
-- Automatically copy the latest matching stable extension and library release assets into the same destination PR as source changes; verify checksums and remove prior manifest-owned artifacts.
-- Publish the destination release automatically after the destination PR merges, using the persisted release queue while VS Code runs.
-- Remove redundant Business Requirements overview and hide empty in-progress cards; add Project Items navigation and linked BR details in Jira DataTables.
-- Default to Business Analyst, Project Manager, Solution Architect, UI/UX Designer, Developer and UAT Tester; retain other roles and saved selections in Settings.
-- Initialize a dedicated local Git repository for new catalog-stack selections; publish explicitly to GitHub and update the project URL after remote verification. Preserve prior local repositories.
-- Update regression fixtures to reflect the six-role default while preserving role document and symlink safety coverage.
+- Rename the final BA action to Approved and Publish, preserving manual confirmation.
+- Replace Project Items text with an accessible icon.
+- Display Read-Only and owner name for another BA's active requirements; disable shared refresh and publication and editing of foreign-owned requirements and Jira drafts.
+- Check shared BR ownership in the extension host before generation, source/discovery edits and approval/publication; recheck after confirmation.
 
 ## Validation
 
-Main-branch build and regression checks are required before publishing a VSIX.
+- Full regression and VSIX packaging required before release.
