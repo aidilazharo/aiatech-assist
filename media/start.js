@@ -8723,6 +8723,10 @@ $('architectCustomTarget').addEventListener('change',()=>{
 $('architectCustomPreviewUrl').addEventListener('input',()=>{
  if(architectCustomInfo?.projectId===activeId)architectCustomInfo.previewCustomized=true;
 });
+$('architectScanProjectFolders').addEventListener('click',()=>{
+ if(!activeId||architectCustomBusy||architectActionBusy)return;
+ send('architectScanProjectFolders',{projectId:activeId});
+});
 $('architectCustomScan').addEventListener('click',()=>{
  if(!activeId||architectCustomBusy||architectActionBusy)return;
  architectCustomBusy=true;architectCustomScanPending=true;architectCustomOperation='SCANNING REPOSITORY';architectCustomLastError='';
