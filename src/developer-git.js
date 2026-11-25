@@ -338,7 +338,7 @@ async function inspectScripts(root) {
     }
     return {repo,targets:items};
 }
-function approvedCommand(target, operation) {
+function approvedCommand(target, operation, offlinePack=null) {
     if (!['test', 'build', 'run'].includes(operation))
         throw Error('Unsupported local operation.');
     if (target.kind === 'npm') {
@@ -350,9 +350,9 @@ function approvedCommand(target, operation) {
         return npmCommand(['run', script]);
     }
     if (target.kind === 'dotnet')
-        return { bin: 'dotnet', args: operation === 'test' ? ['test'] : [operation === 'run' ? 'run' : 'build'] };
+        return { bin: 'dotnet', args: offlinePack ? (operation==='test'?['test','tests/Atgv.Tests/Atgv.Tests.csproj','--no-restore']:[operation==='run'?'run':'build','--no-restore']) : operation === 'test' ? ['test'] : [operation === 'run' ? 'run' : 'build'] };
     if (target.kind === 'maven')
-        return mavenCommand(operation === 'test' ? ['test'] : operation === 'build' ? ['package'] : ['spring-boot:run']);
+        return mavenCommand([...(offlinePack?['-o']:[]),...(operation === 'test' ? ['test'] : operation === 'build' ? ['package'] : ['spring-boot:run'])]);
     throw Error('Unsupported project runtime.');
 }
 async function executeLocal(root, { relative = '', operation = 'test', onDiagnostic = async()=>{} } = {}) {
@@ -361,9 +361,11 @@ async function executeLocal(root, { relative = '', operation = 'test', onDiagnos
         throw Error('No matching application was found in the repository.');
     if (operation === 'run')
         throw Error('Use the tracked application process for Run Locally.');
-    const cmd = approvedCommand(target, operation), cwd = path.join(info.repo.root, target.relative);
+    const cwd = path.join(info.repo.root, target.relative);
+    const libraryOffline=require('./library-offline-dependencies'),offlinePack=await libraryOffline.locate(info.repo.root,cwd);
+    const cmd = approvedCommand(target, operation,offlinePack);
     const at = new Date().toISOString(), head = info.repo.sha;
-    const offline = target.kind==='npm'?await require('./windows-dependency-bundle').offlineEnv(info.repo.root,cwd):{};
+    const offline = {...libraryOffline.env(offlinePack),...(target.kind==='npm'?await require('./windows-dependency-bundle').offlineEnv(info.repo.root,cwd):{})};
     try {
         const { stdout, stderr } = await run(cmd.bin, cmd.args, { cwd, timeout: 120000, maxBuffer: 4 * 1024 * 1024, windowsHide: true, shell: false,env:{...process.env,...offline} });
         const details=diagnostic.capture({stage:operation,bin:cmd.bin,args:cmd.args,cwd,stdout,stderr,exitCode:0});
@@ -476,6 +478,7 @@ async function runLocal(root, { relative = '', env = {}, previewUrl = '', apiPor
     if (!target)
         throw Error('Select a detected application.');
     const cwd=path.join(info.repo.root,target.relative);
+    const libraryOffline=require('./library-offline-dependencies'),offlinePack=await libraryOffline.locate(info.repo.root,cwd);
     let cmd;
     let runtimeProxy=null;
     const port=previewUrl?Number(new URL(previewUrl).port):null;
@@ -490,11 +493,11 @@ async function runLocal(root, { relative = '', env = {}, previewUrl = '', apiPor
     }else runtimeProxy=await createRuntimeProxyOverlay(info.repo.root,cwd,selectedApiPort,viteSource);
     try{
         cmd=mockPreview?npmCommand(['exec','--offline','--','vite','--host','127.0.0.1','--port',String(port),'--strictPort','--config',runtimeProxy.file]):
-          await previewCommand(approvedCommand(target,'run'),target,cwd,previewUrl,runtimeProxy);
+          await previewCommand(approvedCommand(target,'run',offlinePack),target,cwd,previewUrl,runtimeProxy);
     }
     catch(error){if(runtimeProxy)await fs.rm(runtimeProxy.location,{force:true}).catch(()=>{});throw error;}
     const instanceId=apiSource.includes('ATGV_INSTANCE_ID')?crypto.randomUUID():'';
-    const offline=target.kind==='npm'?await require('./windows-dependency-bundle').offlineEnv(info.repo.root,cwd):{};
+    const offline={...libraryOffline.env(offlinePack),...(target.kind==='npm'?await require('./windows-dependency-bundle').offlineEnv(info.repo.root,cwd):{})};
     const runtimeEnv={
      ...(port?{PORT:String(port),PREVIEW_PORT:String(port),ATGV_PREVIEW_PORT:String(port),ASPNETCORE_URLS:'http://127.0.0.1:'+port,SERVER_PORT:String(port)}:{}),
      ...(selectedApiPort!==null?{API_PORT:String(selectedApiPort),ATGV_API_PORT:String(selectedApiPort),VITE_ATGV_API_PORT:String(selectedApiPort)}:{}),
