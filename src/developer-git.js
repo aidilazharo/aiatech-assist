@@ -60,7 +60,7 @@ async function repository(root) {
     const status = await git(real, 'status', '--porcelain');
     const branch = await git(real, 'symbolic-ref', '--quiet', '--short', 'HEAD').catch(() => '');
     const remote = await git(real, 'remote', 'get-url', 'origin').catch(() => '');
-    const sha = await git(real, 'rev-parse', 'HEAD').catch(() => '');
+    const sha = await git(real, 'rev-parse', '--verify', 'HEAD').catch(() => '');
     return { root: real, branch, remote, sha, clean: !status, changed: status.split('\n').filter(Boolean).slice(0, 40) };
 }
 async function findLocalStoryBranch(root,key) {
@@ -213,6 +213,44 @@ async function publishBootstrap(root, base = 'main', {token='',owner='',name=''}
     await remoteGit(root,['push','--set-upstream',origin,repo.branch],token);
     return { ...repo, base, baseSha: localBase, published: true };
 }
+// Initialize Git metadata only. Never stage, commit, delete or publish existing files.
+async function initializeProjectGit(root,base='main'){
+    const selected=require('./projects').validGithubBranch(base);
+    if(!selected)throw Error('Invalid initial Git branch.');
+    const stat=await fs.lstat(root);
+    if(!stat.isDirectory()||stat.isSymbolicLink())throw Error('Choose a regular project directory.');
+    const real=await fs.realpath(root);
+    const metadata=await fs.lstat(path.join(real,'.git')).catch(error=>error.code==='ENOENT'?null:Promise.reject(error));
+    if(metadata){
+        if(metadata.isSymbolicLink())throw Error('Git metadata cannot be a symlink.');
+        return repository(real);
+    }
+    const ancestor=await git(real,'rev-parse','--show-toplevel').catch(()=>null);
+    if(ancestor)throw Error('Project directory belongs to another Git repository; select its root.');
+    await git(real,'init','-b',selected);
+    return repository(real);
+}
+// Empty initialized checkouts may adopt a verified remote branch without
+// resetting or overwriting any local files. A populated checkout is not eligible.
+async function hydrateUnbornCheckout(root,owner,name,branch='main',{token=''}={}){
+    const repo=await repository(root);
+    if(repo.sha||!repo.clean||!repo.branch||!matchesGithubRepo(repo.remote,owner,name))
+        throw Error('Only a clean unborn checkout with the configured origin can be hydrated.');
+    const entries=await fs.readdir(repo.root);
+    if(entries.some(entry=>entry!=='.git'))throw Error('Existing files must be preserved; automatic checkout blocked.');
+    const selected=require('./projects').validGithubBranch(branch||repo.branch);
+    if(!selected)throw Error('Invalid configured Git branch.');
+    const refs=await remoteGit(repo.root,['ls-remote','--refs','origin'],token);
+    if(!refs.trim())return repo;
+    const expected=refs.split('\n').find(line=>line.endsWith('\trefs/heads/'+selected))?.split(/\s+/)[0];
+    if(!/^[a-f0-9]{40,64}$/.test(expected||''))throw Error('Configured remote branch is missing; review repository settings.');
+    await remoteGit(repo.root,['fetch','--no-tags','origin','refs/heads/'+selected],token);
+    if(await git(repo.root,'rev-parse','--verify','FETCH_HEAD')!==expected)throw Error('Remote branch changed during fetch; retry.');
+    const latest=await repository(repo.root);
+    if(latest.sha||!latest.clean||(await fs.readdir(repo.root)).some(entry=>entry!=='.git'))throw Error('Local files changed during fetch; checkout blocked.');
+    await git(repo.root,'switch','-c',selected,'FETCH_HEAD');
+    return repository(repo.root);
+}
 async function cloneConfigured(parent, owner, name, branch = '', {allowExistingEmpty=false,token=''} = {}) {
     if (!/^[a-zA-Z0-9-]{1,39}$/.test(owner) || !/^[-.a-zA-Z0-9_]{1,100}$/.test(name) || name === '.' || name === '..')
         throw Error('Invalid GitHub repository identity.');
@@ -226,9 +264,22 @@ async function cloneConfigured(parent, owner, name, branch = '', {allowExistingE
     const address = `https://github.com/${owner}/${name}.git`;
     const { validGithubBranch } = require('./projects');
     const selected=validGithubBranch(branch);
-    try{await run('git', ['clone', ...(selected?['--branch',selected]:[]), '--', address, dest], { cwd: root, timeout: 120000, maxBuffer: 1024 * 1024, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'Never', ...gitCredentialEnvironment(token) } });}
+    // --branch fails against a repository with no refs. Probe only to
+    // distinguish a verified empty remote from a missing configured branch.
+    let cloneBranch=selected;
+    if(selected){
+        const refs=await remoteGit(root,['ls-remote','--refs',address],token);
+        if(!refs.trim())cloneBranch='';
+    }
+    try{await run('git', ['clone', ...(cloneBranch?['--branch',cloneBranch]:[]), '--', address, dest], { cwd: root, timeout: 120000, maxBuffer: 1024 * 1024, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'Never', ...gitCredentialEnvironment(token) } });}
     catch(error){throw Error(gitFailure(error));}
-    return repository(dest);
+    const cloned=await repository(dest);
+    if(selected&&!cloneBranch){
+        if(cloned.sha)throw Error('Remote acquired commits during clone; review the checked-out branch.');
+        await git(dest,'symbolic-ref','HEAD','refs/heads/'+selected);
+        return repository(dest);
+    }
+    return cloned;
 }
 async function pushStory(root, key,{token='',owner='',name=''}={}) {
     const repo = await repository(root), prefix = 'feature/' + jiraKey(key).toLowerCase();
@@ -604,4 +655,4 @@ async function artifactSnapshot(root, key, base='main') {
         source:'Git files from '+found.basis+' on '+repo.branch};
 }
 
-module.exports = { probeRemote, readinessFlags, checkReadiness, readArtifactFiles, artifactSnapshot, createRuntimeProxyOverlay, findLocalStoryBranch, jiraKey, branchName, repository, findStoryBranch, matchesGithubRepo, createBranch, resumeBranch, initLocalBaseline, commitBootstrap, configureOrigin, publishBootstrap, cloneConfigured, pushStory, inspectScripts, executeLocal, previewCommand, runLocal, runMockServices, stopLocal, localLogs };
+module.exports = { initializeProjectGit, hydrateUnbornCheckout, probeRemote, readinessFlags, checkReadiness, readArtifactFiles, artifactSnapshot, createRuntimeProxyOverlay, findLocalStoryBranch, jiraKey, branchName, repository, findStoryBranch, matchesGithubRepo, createBranch, resumeBranch, initLocalBaseline, commitBootstrap, configureOrigin, publishBootstrap, cloneConfigured, pushStory, inspectScripts, executeLocal, previewCommand, runLocal, runMockServices, stopLocal, localLogs };

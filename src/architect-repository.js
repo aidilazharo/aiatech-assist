@@ -95,16 +95,29 @@ async function ensureCustom(state,projectId,developerGit,options={}){
    // Never clone over or reset a populated folder. When only .git is present,
    // a verified fast-forward may restore missing tracked working-tree files.
    checked=await developerGit.repository(dest).catch(()=>null);
-   if(!checked)throw Error('Repository folder has existing files but is not a valid Git checkout. Preserve those files and select another folder manually.');
+   if(!checked){
+    if(!options.initializeExisting)throw Error('Repository folder has existing files but is not a valid Git checkout. Preserve those files and select another folder manually.');
+    checked=await developerGit.initializeProjectGit(dest,options.githubBranch||'main');
+    mode='initialized';
+   }
+   if(!checked.remote&&options.initializeExisting){
+    checked=await developerGit.configureOrigin(dest,owner,repoName);
+    mode='initialized';
+   }
    if(!developerGit.matchesGithubRepo(checked.remote,owner,repoName))
     throw Error('Repository folder has an unexpected GitHub origin. Existing files were preserved.');
    if(entries.length===1&&entries[0]==='.git'){
+    if(!checked.sha&&checked.clean&&typeof developerGit.hydrateUnbornCheckout==='function'){
+     checked=await developerGit.hydrateUnbornCheckout(dest,owner,repoName,options.githubBranch||checked.branch||'main',{token:options.token||''});
+     mode=checked.sha?'pulled':'initialized';
+    }else{
     if(!checked.clean||!/^[a-f0-9]{40}$/i.test(String(checked.sha||'')))
      throw Error('Git checkout has no verified clean HEAD; no automatic pull attempted.');
     const safePull=options.pull||require('./architect-custom-pull').pull;
     const result=await safePull(dest,{expectedSha:checked.sha,owner,name:repoName,driver:developerGit});
     checked=await developerGit.repository(dest);
     mode=result.updated?'pulled':'existing';
+    }
    }
   }else mode='cloned';
  }else{
@@ -114,7 +127,7 @@ async function ensureCustom(state,projectId,developerGit,options={}){
  if(mode==='cloned'){
   // cloneConfigured accepts an existing EMPTY destination only for this flow.
   const clone=await developerGit.cloneConfigured(parentReal,owner,repoName,
-   options.githubBranch||'',{allowExistingEmpty:true});
+   options.githubBranch||'',{allowExistingEmpty:true,...(options.token?{token:options.token}:{})});
   checked=await developerGit.repository(clone.root);
  }
  const relative=path.relative(root,checked.root);
@@ -141,7 +154,7 @@ async function ensureLocal(state,projectId,developerGit,{projectRoot,stackId,gen
  if(!st.isDirectory()||st.isSymbolicLink())throw Error('Local stack destination is not a regular directory.');
  const entries=await fs.readdir(folder);
  let repo;
- if(!entries.length)repo=await developerGit.initLocalBaseline(folder,'main');
+ if(!entries.length||(entries.every(n=>['.git','.DS_Store'].includes(n))&&entries.includes('.git')&&!(await developerGit.repository(folder)).sha))repo=await developerGit.initLocalBaseline(folder,'main');
  else{
   repo=await developerGit.repository(folder);
   if(repo.remote)throw Error('Local stack folder already has a remote; select a new generation or use Custom Stack.');

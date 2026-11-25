@@ -7849,7 +7849,9 @@ async function handleDashboardMessage(msg){
             }
           }else{
             await recordStackActivity(projectId,'Save Stack / repository','Checking checkout; clone or pull only if folder is missing or empty.');
-            checkout=await architectRepository.ensureCustom(context.workspaceState,projectId,developerGit,repoOptions);
+            // Save is an explicit user action. Initialize Git metadata for a
+            // project-local source folder without staging or committing its files.
+            checkout=await architectRepository.ensureCustom(context.workspaceState,projectId,developerGit,{...repoOptions,initializeExisting:true,token:await getGithubToken(activeProject)});
           }
           await recordStackActivity(projectId,'Save Stack / repository','Checkout mode: '+checkout.mode+'; directory: '+checkout.root);
           const detected=await require('../../architect-custom-stack').scan(checkout.root);
@@ -7877,10 +7879,11 @@ async function handleDashboardMessage(msg){
             path.resolve(checkout.root,item.relative)===path.resolve(process.cwd||'')));
           await refreshDashboard();
           if(activeProject?.id===projectId){
-            const status=checkout.mode==='cloned'
+            const status=!detected.sha?'Git initialized; existing files preserved. Review and commit project source before Install & Run or approval. For an empty project, select a catalog technology stack.':checkout.mode==='cloned'
               ?'Custom Stack saved. The project repository folder was created or verified empty and the configured GitHub repository cloned at '+checkout.root+'.'
               :checkout.mode==='pulled'
                ?'Custom Stack saved. Missing source files restored through a verified fast-forward of the configured GitHub repository at '+checkout.root+'.'
+               :checkout.mode==='initialized'?'Custom Stack saved. Git repository initialized or origin configured; existing files and commits preserved.'
                :switching?'Custom Stack saved on '+(detected.branch||'the current detached HEAD')+'. Checkout preserved and previous stack approval cleared.'
                :'Custom Stack saved. Existing verified checkout preserved at '+checkout.root+'. Use Pull Repository to update its code.';
             await dashboard?.webview.postMessage({type:'architectStackState',value:{message:status}});
