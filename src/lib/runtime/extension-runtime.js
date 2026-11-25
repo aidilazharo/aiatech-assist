@@ -2122,7 +2122,7 @@ async function confirmedRosterVisit(config,token,projectId,projectKey,roleId='',
  assertActive();
  return myWorkPresence.visit(config,token,{projectKey,roleId,assertActive,...(overviewClicked?{confirmRegistration:async identity=>{
   assertActive();
-  const choice=await vscode.window.showInformationMessage('Register your ATGV user account?',{modal:true,detail:'Full Name: '+identity.name+'\nEmail: '+(identity.email||'Not available from Jira')},'Confirm');
+  const choice=await vscode.window.showInformationMessage('Please update your account',{modal:true,detail:'Full Name: '+identity.name+'\nEmail: '+(identity.email||'Not available from Jira')},'Confirm');
   assertActive();
   return choice==='Confirm';
  }}:{})});
