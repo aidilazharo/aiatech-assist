@@ -121,7 +121,12 @@ test('Consolidated UI keeps only one visible Install & Run execution control',as
  const host=await fs.readFile(path.join(__dirname,'../src/lib/runtime/extension-runtime.js'),'utf8');
  assert.match(html,/id="architectCustomSteps"/);
  assert.match(html,/id="architectCustomAiWave"/);
- for(const id of ['architectCustomScan','architectCustomPull','architectCustomMockRun','architectCustomStop'])
+ // Scan is discovery-only; keep it visible while execution stays consolidated.
+ assert.match(html,/id="architectCustomScan" class="secondary" type="button">Scan Repository<\/button>/);
+ assert.equal((html.match(/id="architectCustomRun"/g)||[]).length,1);
+ assert.match(html,/id="architectCustomRun" type="button" disabled>Install &amp; Run<\/button>/);
+ assert.match(ui,/send\('architectCustomScan',\{projectId:activeId,scanId:\+\+architectCustomScanSequence\}\)/);
+ for(const id of ['architectCustomPull','architectCustomMockRun','architectCustomStop'])
   assert.match(html,new RegExp('id="'+id+'" class="secondary hidden"'));
  assert.match(ui,/singleRun\.textContent=stopMode\?'Stop':'Install & Run'/);
  assert.match(ui,/send\('architectCustomInstallRun'/);
