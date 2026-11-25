@@ -1,11 +1,14 @@
-# ATGV AIATECH Assist v0.1.22
+# ATGV AIATECH Assist v0.1.23
 
-- Build a read-only, role-facing approved BR snapshot from verified published Jira Epics and live descendants, independently of local BA drafts or Confluence recovery. Preserve exact published descriptions and explicit acceptance criteria/definition of done, including named custom fields.
-- Store semantic revisions and history in project SQLite; unchanged assignment/status changes do not create a content revision. Fresh complete verification is required before execution; unverified roots fail closed.
-- Refresh on project open, role switch, complete Jira inventory refresh, periodic source synchronization and before Developer/UX work. Keep BA draft and publication register unchanged.
-- Retain explicit role mappings/labels and legacy verified development mappings, never infer an assignee from a roster or shared parent. Developer and UX use role-specific views and display recovery warnings.
-- Existing architectural execution approval and task ownership gates retained. Full regression, live company testing and VSIX packaging pending.
+## Changes
+- Connect UI/UX, Developer and UAT to the configured project Git checkout and record the committed source SHA. Existing UI tokens, components and navigation take priority over catalog starter styling; uploaded references guide requested changes.
+- Analyze uploaded image references through supported or verified VS Code image-input models. Other providers require written notes for every image; no invented image observations.
+- Repository-aware UI mockups and local simulated prototypes reuse safely detected literal color tokens and ticket-specific component specifications. Developer handoff identifies the existing repository design system and avoids imposing a different library theme.
+- Developer selects the newest compatible committed baseline without abandoning prior verified development or the architect-approved ancestry. Divergent history fails closed. Nested frontend roots are recognized.
+- UAT Tester can generate reviewable new executable test-file drafts using the assigned Jira task, approved BR and committed repository test/API conventions. Test drafts are recorded under project documents with source and BR provenance; no execution or pass result is claimed.
+- Initialize empty or populated project Git folders safely; preserve existing files and Git history, require a reviewed initial commit before running existing Custom Stack source.
+- Remove ten obsolete or duplicate regression cases from v0.1.22, retaining active checks.
 
-- Follow-up: persist the verified Epic marker and stable published approval timestamp; use the same live published snapshot for UI/UX review and frontend publication; group Designer Jira choices by BR; refresh the snapshot immediately after BR publication and query only the latest cached revision per Epic.
-
-- Correct six outdated regression assertions/VM fixtures identified by the v0.1.20 build. Tests explicitly verify the separate published role register, correct selected role, nonzero task count, and ability to stop an active development run even when current ownership is stale. The runtime checks are unchanged and no tests are skipped.
+## Validation
+- Changed JavaScript source syntax parsed using the GitHub-retrieved files.
+- Added repository initialization and role source regression test files. Full Node regression suite, live Jira/GitHub integration, image-model requests and VSIX build/activation remain unverified: the local build environment cannot resolve github.com.
