@@ -298,7 +298,7 @@ async function ensureForTarget(root,target,{runner=execute,onDiagnostic=async()=
   if(bundled){
    const missing=await missingNpmPackages(cwd);
    if(missing.length||await nativePlatformMismatch(cwd))throw Error('Bundled Windows dependencies are incomplete or incompatible. Restore the published bundle; npm installation is disabled.');
-   await run({stage:'Bundled npm dependency validation (read-only)',bin:'npm',args:['ls','--all','--json'],...options});
+   await run({stage:'Bundled npm dependency validation (read-only)',bin:'npm',args:['ls','--all','--json','--offline'],...options,env:await windowsBundle.offlineEnv(root,cwd)});
    const runtime=await verifyPlatformPackages(cwd,{runner,onDiagnostic,runtimeNode:bundled.node});
    await onProgress('Verified bundled Windows dependencies; npm install and npm ci skipped.');
    return {kind:'npm',cwd,installed:false,restored:bundled.restored,verified:true,runtime};
