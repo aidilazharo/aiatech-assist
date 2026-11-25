@@ -1,0 +1,15 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const refs=require('../src/project-role-repository');
+const baseline=require('../src/developer-revision-baseline');
+const sha='a'.repeat(40),next='b'.repeat(40);
+function fixture(overrides={}){
+ const driver={repository:async()=>({root:'/repo',remote:'https://github.com/acme/app.git',sha,branch:'main',clean:false,...overrides}),matchesGithubRepo:(r,o,n)=>r==='https://github.com/'+o+'/'+n+'.git'};
+ const sources={'frontend/package.json':'{"dependencies":{"react":"19"}}','frontend/src/theme.css':':root {--brand: red}','frontend/src/App.tsx':'export function App(){return <main/>}','backend/src/api.ts':'export const route="/api/v1/health"','frontend/tests/app.test.ts':'test("renders",()=>expect(true).toBe(true))','.env':'SECRET','frontend/credentials.json':'secret','backend/src/config.ts':'password = "do-not-expose"'};
+ const calls=[];const git=async(root,...args)=>{calls.push(args);return args[0]==='ls-tree'?Object.entries(sources).map(([n,c])=>'100644 blob '+sha+' '+c.length+'\t'+n).join('\n'):sources[args[1].split(':').slice(1).join(':')];};
+ return {driver,git,calls};
+}
+test('UX reads pinned committed design and excludes sensitive source',async()=>{const f=fixture();const x=await refs.capture('/repo',{owner:'acme',name:'app',role:'ux-designer',...f});assert.equal(x.sha,sha);assert.equal(x.hasDesign,true);assert.ok(x.previews.some(p=>p.path.endsWith('theme.css')));assert.ok(!x.previews.some(p=>/credentials|\.env|config\.ts/.test(p.path)));assert.ok(f.calls.filter(a=>a[0]==='show').every(a=>a[1].startsWith(sha+':')));assert.match(refs.guidance(x),/binding baseline/);});
+test('repository roles reject wrong origin and unborn repository',async()=>{await assert.rejects(refs.capture('/repo',{owner:'other',name:'app',role:'ux-designer',...fixture()}),/Connect the configured/);await assert.rejects(refs.capture('/repo',{owner:'acme',name:'app',role:'uat-tester',...fixture({sha:''})}),/commit the project/);});
+test('UAT accepts only new test drafts and preserves exact source identity',async()=>{const x=await refs.capture('/repo',{owner:'acme',name:'app',role:'uat-tester',...fixture()});const draft=refs.validateUat(JSON.stringify({files:[{path:'frontend/tests/uat.test.ts',content:'test("acceptance",()=>expect(true).toBe(true))'}]}),x);assert.equal(draft.status,'draft-not-executed');assert.equal(draft.source.sha,sha);assert.throws(()=>refs.validateUat(JSON.stringify({files:[{path:'frontend/tests/app.test.ts',content:'test("existing",()=>expect(true).toBe(true))'}]}),x),/only new/);});
+test('development selects a newer compatible commit and rejects divergent history',async()=>{const git=async(root,...args)=>{if(args[2]===sha&&args[3]===next)return '';if(args[2]===args[3])return '';throw Error('not ancestor');};assert.equal(await baseline.chooseCurrent('/repo',null,sha,next,{git}),next);await assert.rejects(baseline.chooseCurrent('/repo',null,sha,'c'.repeat(40),{git}),/diverged/);});

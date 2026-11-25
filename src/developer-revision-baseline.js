@@ -9,6 +9,14 @@ function choose(previous,approvedSha){
  if(!/^[a-f0-9]{40}$/.test(String(previous.completedCommit||'')))throw Error('Previous completed application has no verified source commit. Recover its source before regenerating.');
  return previous.completedCommit;
 }
+async function chooseCurrent(root,previous,approvedSha,currentSha,{git=pipeline.runGit}={}){
+ const prior=choose(previous,approvedSha);
+ if(!/^[a-f0-9]{40}$/i.test(String(currentSha||'')))throw Error('Project repository requires a valid current commit.');
+ const ancestor=async(a,b)=>{try{await git(root,'merge-base','--is-ancestor',a,b);return true;}catch{return false;}};
+ if(await ancestor(prior,currentSha)&&await ancestor(approvedSha,currentSha))return currentSha;
+ if(await ancestor(currentSha,prior))return prior;
+ throw Error('Current project source and approved development baseline have diverged. Reconcile the repository and ask the Solution Architect to review before development.');
+}
 async function saveCompleted(record,{worktree,storageRoot}){
  const expected=path.resolve(storageRoot)+path.sep;
  if(!path.resolve(worktree).startsWith(expected)||path.resolve(record.worktree)!==path.resolve(worktree))throw Error('Completion worktree is outside protected development storage.');
@@ -30,4 +38,4 @@ async function saveCompleted(record,{worktree,storageRoot}){
  await pipeline.runGit(worktree,'merge-base','--is-ancestor',record.approvalSha,sha);
  return sha;
 }
-module.exports={choose,saveCompleted};
+module.exports={choose,chooseCurrent,saveCompleted};

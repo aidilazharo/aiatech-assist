@@ -182,6 +182,7 @@ const crypto=require('node:crypto');
 const projectSkeleton=require('../../project-skeleton');
 const developerGit=require('../../developer-git');
 const architectRepository=require('../../architect-repository');
+const roleRepository=require('../../project-role-repository');
 const architectErrorLogs=require('../../architect-error-logs');
 const architectStackActivity=require('../../architect-stack-activity');
 const developerCopilot=require('../../developer-copilot');
@@ -5068,6 +5069,32 @@ async function launchUntestedDraftServer(run,project,progress,check){
  developerBrLast={...run,abort:null};
  await progress('complete',`UNTESTED PREVIEW ONLY — ${proof.url}. No acceptance criteria, tests, builds or API contract have been verified. Use normal Start Development before delivery.`,{previewOnly:true,files:run.files,evidence:[],architecture:await developerBRArchitecture.inspect(run.worktree,run.files),worktree:run.worktree,branch:run.branch,previewUrl:proof.url,serverLogs:proof.serverLogs,summary:run.summary||'Local draft only; tests not run.',canRetry:false});
 }
+async function committedRoleRepository(projectId,role){
+ if(activeProject?.id!==projectId)throw Error('Active project changed; repository reference blocked.');
+ const config=effectiveConfig(activeProject),owner=config.get('github.owner'),name=config.get('github.repo');
+ if(!owner||!name)throw Error('Configure the project GitHub repository in Settings first.');
+ const root=await architectRepository.resolve(context.workspaceState,projectId,developerGit,{projectRoot:aiRoot(),githubOwner:owner,githubRepo:name});
+ return roleRepository.capture(root,{owner,name,role,driver:developerGit});
+}
+async function requireSameRoleRepository(projectId,role,source){
+ const latest=await committedRoleRepository(projectId,role);
+ if(latest.repository!==source.repository||latest.sha!==source.sha||latest.branch!==source.branch)throw Error('Project repository revision changed during generation. Refresh and regenerate using the current source.');
+ return latest;
+}
+async function assignedUatScope(projectId,scope){
+ const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
+ if(!token)throw Error('Connect Jira before UAT work.');
+ const auth={token,basicEmail:String(config.get('jira.email')||'').trim()};
+ const self=await requestJson(`${baseAtlassian(config)}/rest/api/3/myself`,auth);
+ const register=await currentPublishedRoleRegister(projectId);
+ const ownership=require('../../br-ownership');
+ const key=developerArtifacts.safeKey(scope);
+ const issue=await requestJson(`${baseAtlassian(config)}/rest/api/3/issue/${encodeURIComponent(key)}?fields=summary,description,assignee,project,updated,labels,issuetype,status,parent`,auth);
+ if(!self?.accountId||issue.fields?.assignee?.accountId!==self.accountId||issue.fields?.project?.key!==validProjectKey(config.get('jira.projectKey')))throw Error('Select a UAT Jira task assigned to your account in this project.');
+ ownership.requireTask(register,issue,'uat-tester');
+ const brId=ownership.fromKey(register,key),br=developerBR.approvedBr(register,brId);
+ return {key,issue,self,brId,br};
+}
 async function runDeveloperDraftPreview(brId){
  requireOpened();
  if(developerBrRun)throw Error('A development run is already active. Stop it before starting an untested preview.');
@@ -5084,14 +5111,17 @@ async function runDeveloperDraftPreview(brId){
  await require('../../br-ownership').verifyOwner({register,brId,projectKey:validProjectKey(config.get('jira.projectKey')),accountId:self?.accountId,readIssue:key=>jiraReadIssue(config,token,key)});
  const repoRoot=await architectRepository.resolve(context.workspaceState,projectId,developerGit,{projectRoot:aiRoot(),githubOwner:config.get('github.owner'),githubRepo:config.get('github.repo')});
  if(path.resolve(repoRoot)!==path.resolve(approval.root)||project.techStackPrepared?.sha!==approval.sha)throw Error('The local checkout differs from the approved technology stack. Preview blocked.');
+ const repositoryReference=await committedRoleRepository(projectId,'software-developer');
+ if(path.resolve(repositoryReference.root)!==path.resolve(repoRoot))throw Error('Project repository changed before preview.');
+ const previewBase=await require('../../developer-revision-baseline').chooseCurrent(repoRoot,null,approval.sha,repositoryReference.sha);
  const abort=new AbortController();
- const run={projectId,brId,revision:br.approvedRevision,approvalSha:approval.sha,abort,worktree:'',branch:'',files:[],evidence:[],previewUrl:'',checksPassed:false,previewOnly:true,status:'running',summary:''};
+ const run={projectId,brId,revision:br.approvedRevision,approvalSha:approval.sha,repositorySource:roleRepository.identity(repositoryReference),abort,worktree:'',branch:'',files:[],evidence:[],previewUrl:'',checksPassed:false,previewOnly:true,status:'running',summary:''};
  developerBrRun=run;
  const check=()=>{if(abort.signal.aborted||activeProject?.id!==projectId)throw Error('Draft preview stopped or project changed.');};
  const progress=async(stage,message,extra={})=>{check();await dashboard?.webview.postMessage({type:'developerBrProgress',projectId,brId,stage,message,previewOnly:true,...extra});};
  try{
   await progress('analyze','Creating a separate UNTESTED local draft from the approved BR. No TDD, tests or production build will run.');
-  const workspace=await developerBR.createWorktree({root:repoRoot,approvedSha:approval.sha,baseDirectory:path.join(context.globalStorageUri.fsPath,'developer-br-draft-previews',projectId),brId});
+  const workspace=await developerBR.createWorktree({root:repoRoot,approvedSha:approval.sha,baseSha:previewBase,baseDirectory:path.join(context.globalStorageUri.fsPath,'developer-br-draft-previews',projectId),brId});
   run.worktree=workspace.worktree;run.branch=workspace.branch;
   const target=await activeAiTarget();
   const source=await developerBR.snapshotSource(run.worktree,45);
@@ -5177,7 +5207,9 @@ async function runDeveloperBrAutomation(brId,{restartFresh=false}={}){
  const storedTdd=await developerTdd.loadRecord(recoveryBase,projectId,brId);
  const revisionBaseline=require('../../developer-revision-baseline');
  const priorCompleted=await developerTdd.lastCompletedRecord(recoveryBase,projectId,brId,br.approvedRevision);
- const nextBaseSha=revisionBaseline.choose(priorCompleted,approval.sha);
+ const repositoryReference=await committedRoleRepository(projectId,'software-developer');
+ if(path.resolve(repositoryReference.root)!==path.resolve(repoRoot))throw Error('Project repository changed before development.');
+ const nextBaseSha=await revisionBaseline.chooseCurrent(repoRoot,priorCompleted,approval.sha,repositoryReference.sha);
  let failedCriterionIndex=(storedTdd?.criteria||[]).findIndex(row=>row.status==='regenerating-red'||row.status==='needs-attention');
  const hasFailedRecord=failedCriterionIndex>=0;
  const resumeRequested=!restartFresh&&hasFailedRecord&&storedTdd?.checkpoint&&storedTdd.approvalSha===approval.sha&&storedTdd.revision===br.approvedRevision;
@@ -5227,7 +5259,7 @@ async function runDeveloperBrAutomation(brId,{restartFresh=false}={}){
    const workspace=await developerBR.createWorktree({root:repoRoot,approvedSha:approval.sha,baseSha:nextBaseSha,baseDirectory:path.join(context.globalStorageUri.fsPath,'developer-br-worktrees',projectId),brId});
    run.worktree=workspace.worktree;run.branch=workspace.branch;
    record=developerTdd.newRecord({projectId,brId,revision:br.approvedRevision,branch:run.branch,worktree:run.worktree});
-   record.approvalSha=approval.sha;record.baseSha=workspace.baseSha;record.previousCompletedRevision=priorCompleted?.revision||0;record.model=selectedRecoveryModel;
+   record.approvalSha=approval.sha;record.repositorySource=roleRepository.identity(repositoryReference);record.baseSha=workspace.baseSha;record.previousCompletedRevision=priorCompleted?.revision||0;record.model=selectedRecoveryModel;
    record.modelHistory=[...(Array.isArray(storedTdd?.modelHistory)?storedTdd.modelHistory:[]),{at:new Date().toISOString(),runId:record.runId,model:selectedRecoveryModel,reason:restartFresh||startFreshFromStaleRecord?'new development from Start Development':'first development'}].slice(-50);
    // Prior failures remain inspectable even if a changed BR or stack requires a fresh tree.
    record.previousRunId=storedTdd?.runId||'';
@@ -6720,6 +6752,7 @@ async function handleDashboardMessage(msg){
           if(prior.revision!==String(msg.expectedRevision||''))throw Error('UI/UX generation status changed. Reload before regenerating.');
           const approved=designProposals.approvedInputs(await currentPublishedRoleRegister(projectId));
           const reference=await uxDesignReferences.readBundle(root,key);
+          const repositoryReference=await committedRoleRepository(projectId,'ux-designer');
           const target=await activeAiTarget();
           const designFramework=context.workspaceState.get(uxFrameworkKey(projectId,key),'aia-qi');
           const workspace=getWorkspace()?.uri.fsPath;
@@ -6736,7 +6769,8 @@ async function handleDashboardMessage(msg){
           const existingProjectScreens=require('../../project-ux-prototype').combined(sharedManifest).screens.map(screen=>({name:screen.name,jiraKey:screen.jiraKey,storyKey:screen.storyKey}));
           const projectScreenGuide='Existing approved project screens (do not overwrite other tickets; align navigation and avoid duplicate screen names): '+JSON.stringify(existingProjectScreens).slice(0,7000)+'\nCurrent task must add only screens supported by its Jira Story and approved BR.';
           const uxRoleGuide=await roleSkillPrompt('ux-designer');
-          const guide=baseGuide+'\n'+projectScreenGuide+'\n'+componentsGuide+uxRoleGuide+'\nSelected UI/UX framework: '+selectedFramework.label+' ('+designFramework+', kit '+selectedFramework.kitVersion+'). Use only the approved version-pinned GitHub catalog design system. Do not mix in any other design-system classes, tokens or runtime assets.'+(designFramework==='aia-qi'?' This is an independent Qi-inspired kit, not official AIA Qi.':'');
+          const guide=repositoryReference.hasDesign?projectScreenGuide+'\n'+uxRoleGuide+'\nExisting repository design system takes precedence over the library kit. Use uploaded reference for requested changes.':baseGuide+'\n'+projectScreenGuide+'\n'+componentsGuide+uxRoleGuide+'\nSelected UI/UX framework: '+selectedFramework.label+' ('+designFramework+', kit '+selectedFramework.kitVersion+'). Use only the approved version-pinned GitHub catalog design system. Do not mix in any other design-system classes, tokens or runtime assets.'+(designFramework==='aia-qi'?' This is an independent Qi-inspired kit, not official AIA Qi.':'');
+          const repositoryGuide=roleRepository.guidance(repositoryReference);
           checkStop();
           const ticket={key,summary:issue.fields?.summary,description:textFromAdf(issue.fields?.description)};
           let sourceStoryKey=key;
@@ -6754,20 +6788,20 @@ async function handleDashboardMessage(msg){
           const progress=async(stage,message)=>{checkStop();await dashboard?.webview.postMessage({type:'uxPipelineWorking',projectId,key,stage,message,canStop:true});};
           await progress(1,reference.exists?'Design reference loaded.':'No design reference; optional stage skipped.');
           await progress(2,'Generating user flow diagram…');
-          const flowRaw=await aiAnswer(target,uxDesignPipeline.flowPrompt(ticket,approved,guide,referenceNotes),30000,{json:true,signal:run.controller.signal});
+          const flowRaw=await aiAnswer(target,uxDesignPipeline.flowPrompt(ticket,approved,guide,referenceNotes,repositoryGuide),30000,{json:true,signal:run.controller.signal});
           checkStop();let flow;
           try{flow=uxDesignPipeline.validFlow(JSON.parse(String(flowRaw).replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim()));}
           catch(e){throw Error('User-flow AI response is invalid: '+e.message);}
           await progress(3,'Generating wireframe…');
           const priorWireframe=await uxTicketDesigns.read(root,key,'wireframe');
-          const wirePrompt=uxTicketDesigns.prompt('wireframe',ticket,approved,guide+'\nValidated user flow: '+JSON.stringify(flow),referenceNotes);
+          const wirePrompt=uxTicketDesigns.prompt('wireframe',ticket,approved,guide+'\nValidated user flow: '+JSON.stringify(flow),referenceNotes,repositoryGuide);
           const wireRaw=await aiAnswer(target,wirePrompt,35000,{json:true,signal:run.controller.signal});
           checkStop();let wireDesign;
           try{wireDesign=JSON.parse(String(wireRaw).replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim());}
           catch{throw Error('Wireframe AI response was invalid JSON. No workflow was approved.');}
           await progress(4,'Generating UI mockup…');
           const priorMockup=await uxTicketDesigns.read(root,key,'mockup');
-          const mockPrompt=uxTicketDesigns.prompt('mockup',ticket,approved,guide+'\nUse this validated user flow: '+JSON.stringify(flow)+'\nFollow wireframe screen structure: '+JSON.stringify(wireDesign).slice(0,12000),referenceNotes);
+          const mockPrompt=uxTicketDesigns.prompt('mockup',ticket,approved,guide+'\nUse this validated user flow: '+JSON.stringify(flow)+'\nFollow wireframe screen structure: '+JSON.stringify(wireDesign).slice(0,12000),referenceNotes,repositoryGuide);
           const mockRaw=await aiAnswer(target,mockPrompt,35000,{json:true,signal:run.controller.signal});
           checkStop();let mockDesign;
           try{mockDesign=JSON.parse(String(mockRaw).replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim());}
@@ -6783,9 +6817,10 @@ async function handleDashboardMessage(msg){
           if(latestBR.hash!==approved.hash)throw Error('Approved Business Requirements changed while generating. Retry with the current BR.');
           const latestRef=await uxDesignReferences.readBundle(root,key);
           if(String(latestRef.sha256||'')!==String(reference.sha256||''))throw Error('The design reference changed during generation. Retry.');
+          await requireSameRoleRepository(projectId,'ux-designer',repositoryReference);
           checkStop();run.phase='committing';
           await dashboard?.webview.postMessage({type:'uxPipelineWorking',projectId,key,stage:6,canStop:false,message:'Saving design drafts and handoff…'});
-          const meta={jiraUpdated:String(issue.fields?.updated||''),aiModel:target.label,sourceBRHash:approved.hash,designReferenceHash:reference.sha256||'',designer:self.displayName||self.accountId,referenceUsed:reference.exists,designFramework,sourceStoryKey};
+          const meta={jiraUpdated:String(issue.fields?.updated||''),aiModel:target.label,sourceBRHash:approved.hash,designReferenceHash:reference.sha256||'',designer:self.displayName||self.accountId,referenceUsed:reference.exists,designFramework,sourceStoryKey,repositorySource:roleRepository.identity(repositoryReference)};
           const wire=await uxTicketDesigns.save(root,key,'wireframe',validatedWireframe,priorWireframe.revision,{...meta,actor:meta.designer});
           const mock=await uxTicketDesigns.save(root,key,'mockup',validatedMockup,priorMockup.revision,{...meta,actor:meta.designer});
           const result=await uxDesignPipeline.generate(root,key,{flow,wireframe:wire.design,mockup:mock.design},prior.revision,{...meta,wireframeRevision:wire.revision,mockupRevision:mock.revision});
@@ -6853,6 +6888,8 @@ async function handleDashboardMessage(msg){
         const current=await uxDesignPipeline.read(aiRoot(),key);
         if(decision==='approved'){
           const approved=designProposals.approvedInputs(roleRegister);
+          if(!current.repositorySource?.sha)throw Error('This design predates repository grounding. Disapprove and regenerate before approval.');
+          await requireSameRoleRepository(activeProject.id,'ux-designer',current.repositorySource);
           const reference=await uxDesignReferences.readBundle(aiRoot(),key);
           const [wire,mock]=await Promise.all([uxTicketDesigns.read(aiRoot(),key,'wireframe'),uxTicketDesigns.read(aiRoot(),key,'mockup')]);
           if(current.sourceBRHash!==approved.hash||current.designReferenceHash!==String(reference.sha256||'')||current.wireframeRevision!==wire.revision||current.mockupRevision!==mock.revision)throw Error('The approved requirements, design reference, or draft changed since generation. Disapprove and regenerate UI/UX.');
@@ -6896,16 +6933,18 @@ async function handleDashboardMessage(msg){
         const registered=await currentPublishedRoleRegister(activeProject.id),approved=designProposals.approvedInputs(registered);
         const prior=await uxTicketDesigns.read(aiRoot(),key,kind);
         const reference=await uxDesignReferences.read(aiRoot(),key);
+        const repositoryProjectId=activeProject.id,repositoryReference=await committedRoleRepository(repositoryProjectId,'ux-designer');
         const target=await activeAiTarget();
         await dashboard?.webview.postMessage({type:'uxDesignWorking',projectId:activeProject.id,key,kind,message:'Generating '+uxTicketDesigns.KINDS[kind]+' with the selected AI service…'});
-        const prompt=uxTicketDesigns.prompt(kind,{key,summary:issue.fields?.summary,description:textFromAdf(issue.fields?.description)},approved,await sdlcCatalog.designReference(getWorkspace()?.uri.fsPath),uxDesignReferences.promptContext(reference));
+        const prompt=uxTicketDesigns.prompt(kind,{key,summary:issue.fields?.summary,description:textFromAdf(issue.fields?.description)},approved,repositoryReference.hasDesign?'Follow existing repository UI conventions.':await sdlcCatalog.designReference(getWorkspace()?.uri.fsPath),uxDesignReferences.promptContext(reference),roleRepository.guidance(repositoryReference));
         const raw=await aiAnswer(target,prompt,35000,{json:true});
         let proposed;try{proposed=JSON.parse(String(raw).replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim());}catch{throw Error('AI returned invalid JSON. No design was saved.');}
         const latestBR=designProposals.approvedInputs(await currentPublishedRoleRegister(activeProject.id));
         if(latestBR.hash!==approved.hash)throw Error('Approved Business Requirements changed during generation. Generate again.');
         const latestRef=await uxDesignReferences.read(aiRoot(),key);
         if(String(latestRef.sha256||'')!==String(reference.sha256||''))throw Error('Design reference changed while generating. Regenerate with the current reference.');
-        const saved=await uxTicketDesigns.save(aiRoot(),key,kind,proposed,prior.revision,{jiraUpdated:String(issue.fields?.updated||''),aiModel:target.label,sourceBRHash:approved.hash,designReferenceHash:reference.sha256||'',actor:self.displayName||self.accountId});
+        await requireSameRoleRepository(repositoryProjectId,'ux-designer',repositoryReference);
+        const saved=await uxTicketDesigns.save(aiRoot(),key,kind,proposed,prior.revision,{repositorySource:roleRepository.identity(repositoryReference),jiraUpdated:String(issue.fields?.updated||''),aiModel:target.label,sourceBRHash:approved.hash,designReferenceHash:reference.sha256||'',actor:self.displayName||self.accountId});
         await dashboard?.webview.postMessage({type:'uxDesignLoaded',projectId:activeProject.id,value:saved,generated:true});break;
       }
       case 'uxDesignSave':{
@@ -11660,9 +11699,40 @@ async function handleDashboardMessage(msg){
         await dashboard?.webview.postMessage({type:'roleStepScopeLoaded',scopeId:result.scopeId,roleSteps:result});
         break;
       }
+      case 'uatGenerateRepositoryTests':{
+        requireOpened();requireOnline();
+        const projectId=activeProject.id,scope=String(msg.scopeId||'');
+        const roles=(await workState(registry,projectId)).roles;
+        if(!roles.some(r=>r.id==='uat-tester'))throw Error('UAT Tester role is not enabled.');
+        const assigned=await assignedUatScope(projectId,scope);
+        const source=await committedRoleRepository(projectId,'uat-tester');
+        const target=await activeAiTarget();
+        const raw=await aiAnswer(target,roleRepository.uatPrompt(source,{key:assigned.key,summary:assigned.issue.fields?.summary,description:textFromAdf(assigned.issue.fields?.description)},assigned.br.approvedContent),45000,{json:true});
+        const draft=roleRepository.validateUat(raw,source);
+        await requireSameRoleRepository(projectId,'uat-tester',source);
+        const latest=await assignedUatScope(projectId,scope);
+        if(latest.br.approvedRevision!==assigned.br.approvedRevision||latest.issue.fields?.updated!==assigned.issue.fields?.updated)throw Error('Jira acceptance criteria or approved BR changed; regenerate UAT tests.');
+        const relative='documents/uat-tests/'+assigned.key+'/draft-'+crypto.randomUUID()+'.json';
+        const root=aiRoot(),destination=path.join(root,relative);
+        await uxTicketDesigns.checkPath(root,destination);
+        await fs.mkdir(path.dirname(destination),{recursive:true});
+        await uxTicketDesigns.checkPath(root,destination);
+        await fs.writeFile(destination,JSON.stringify({...draft,jiraKey:assigned.key,brId:assigned.brId,brRevision:assigned.br.approvedRevision,generatedAt:new Date().toISOString()},null,2)+'\n',{flag:'wx',mode:0o600});
+        await roleStepEngine.update(registry,projectId,roles,{kind:'add',roleId:'uat-tester',scopeId:assigned.key,stepId:'scenarios',title:'Repository-based UAT test draft '+path.basename(destination,'.json').slice(-12),evidence:relative,owner:assigned.self.displayName||assigned.self.accountId});
+        const overview=await roleStepEngine.overview(registry,projectId,roles,assigned.key);
+        await dashboard?.webview.postMessage({type:'roleStepScopeLoaded',scopeId:overview.scopeId,roleSteps:overview});
+        await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(destination),{preview:true});
+        await refreshDashboard();break;
+      }
       case 'roleStepAction':{
         requireOpened();
         const roles=(await workState(registry,activeProject.id)).roles;
+        if(msg.roleId==='uat-tester'){
+          const projectId=activeProject.id;
+          await committedRoleRepository(projectId,'uat-tester');
+          const assigned=await assignedUatScope(projectId,String(msg.scopeId||''));
+          if(msg.kind==='set-status'&&msg.status==='verified')msg={...msg,reviewer:assigned.self.displayName||assigned.self.accountId};
+        }
         await roleStepEngine.update(registry,activeProject.id,roles,msg);
         await refreshDashboard();
         break;

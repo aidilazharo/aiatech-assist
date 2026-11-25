@@ -4101,6 +4101,11 @@ function renderRoleStepFlow(role){
  $('roleStepStatus').textContent=data.completed+' of '+data.total+' steps locally verified · '+selectedRoleStepScope+' scope · '+(selected?.title||'');
  const outputs=$('roleStepOutputs');outputs.replaceChildren();
  if(!selected)return;
+ if(role.id==='uat-tester'&&selected.id==='scenarios'){
+  const generate=document.createElement('button');generate.type='button';generate.className='secondary';generate.textContent='Generate UAT Tests from Repository';generate.disabled=!activeId||selectedRoleStepScope==='project'||/^BR-\\d+$/.test(selectedRoleStepScope);
+  generate.title='Load an assigned UAT Jira task scope. Generate reviewable tests against committed project code; no tests are executed.';
+  generate.addEventListener('click',()=>{generate.disabled=true;send('uatGenerateRepositoryTests',{scopeId:selectedRoleStepScope});});outputs.append(generate);
+ }
  for(const output of selected.outputs||[]){
   const row=document.createElement('div');row.className='task-row';
   const info=document.createElement('div');info.className='task-info';
