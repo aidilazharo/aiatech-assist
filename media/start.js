@@ -2979,7 +2979,7 @@ function renderUxActions(){
  renderUxProgress();
 }
 function renderUxTickets(rows){
- const picker=$('uxSelectedTicket'),previous=uxSelectedKey,mine=rows.filter(item=>item.mine&&item.brRoot);
+ const picker=$('uxSelectedTicket'),previous=uxSelectedKey,mine=rows.filter(item=>item.mine&&item.taskRole==='ux-designer');
  picker.replaceChildren();const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent='Select an assigned Business Requirement';picker.append(placeholder);
  for(const item of mine){const option=document.createElement('option');option.value=item.key;option.textContent=item.key+' · '+(item.summary||'Jira issue');picker.append(option);}
  uxSelectedKey=mine.some(item=>item.key===previous)?previous:mine[0]?.key||'';picker.value=uxSelectedKey;
@@ -3025,7 +3025,7 @@ function showUxBuilder(){
  if(view==='uxPreview'){setView('work');renderRoleWork();}
 }
 function openUxDesignForIssue(key){
- if(selectedRole!=='ux-designer'||!roleJiraItems.some(row=>row.key===key&&row.mine))return;
+ if(selectedRole!=='ux-designer'||!roleJiraItems.some(row=>row.key===key&&row.mine&&row.taskRole==='ux-designer'))return;
  const picker=$('uxSelectedTicket');
  if(!Array.from(picker.options).some(option=>option.value===key))renderUxTickets(roleJiraItems);
  picker.value=key;uxSelectedKey=key;uxReferenceAvailable=false;uxPipeline=null;uxDrafts={wireframe:null,mockup:null};uxPendingOpenKey=key;uxFramework='';$('uxDesignFramework').value=uxFramework;
@@ -3357,7 +3357,7 @@ function syncBrDeliveryGate(){
 function matchingDeveloperBrTickets(){
  if(!developerBrSelected)return [];
  const br=developerBrSelected.toUpperCase();
- return developerAssignedMine.filter(item=>item.brRoot&&item.brId===br);
+ return developerAssignedMine.filter(item=>item.taskRole==='software-developer'&&item.brId===br);
 }
 function syncDeveloperBrJira(){
  const linked=matchingDeveloperBrTickets();const select=$('developerBrJiraSelect');
@@ -3468,7 +3468,7 @@ function developerBrStatusOf(br){
  // current developer (not a UI/UX issue assigned to the same Jira account)
  // can turn this Business Requirement into In Progress.
  if(selectedRole==='software-developer'&&roleJiraLoaded&&roleJiraProject===activeId&&
-    developerAssignedMine.some(item=>item.mine&&item.brRoot&&item.brId===String(br.id||'').toUpperCase()&&/^in[ _-]*progress$/i.test(String(item.status||''))))return 'in-progress';
+    developerAssignedMine.some(item=>item.mine&&item.taskRole==='software-developer'&&item.brId===String(br.id||'').toUpperCase()&&/^in[ _-]*progress$/i.test(String(item.status||''))))return 'in-progress';
  return 'new';
 }
 function selectedBrLinkedJira(){
@@ -3712,14 +3712,14 @@ function textElement(tag,text,className=''){
 }
 function showDeveloperAssignedTickets(items){
  const root=$('developerAssignedTickets');
- const mine=(Array.isArray(items)?items:[]).filter(item=>item.mine&&item.brRoot);
+ const mine=(Array.isArray(items)?items:[]).filter(item=>item.mine&&item.taskRole==='software-developer');
  developerAssignedMine=mine;renderDeveloperBrAssignment();
  // Refresh status immediately after Jira ownership data loads or changes.
  updateDeveloperBrChangeBadge((brState?.brs||[]).find(br=>br.id===developerBrSelected));
  root.replaceChildren();
- const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent=mine.length?'Select assigned Business Requirement':'No assigned Business Requirements';root.append(placeholder);
- $('developerAssignedTaskCount').textContent='('+mine.length+' BRs)';
- $('developerTaskStatus').textContent=mine.length?`${mine.length} complete Business Requirement${mine.length===1?'':'s'} assigned to you.`:'No BR assigned to you. Use Assign Entire BR in the Jira register after stack approval.';
+ const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent=mine.length?'Select assigned development task':'No assigned development tasks';root.append(placeholder);
+ $('developerAssignedTaskCount').textContent='('+new Set(mine.map(item=>item.brId)).size+' BRs)';
+ $('developerTaskStatus').textContent=mine.length?`${mine.length} Developer task(s) assigned to you.`:'No BR assigned to you. Use Assign Entire BR in the Jira register after stack approval.';
  for(const item of mine){
   const option=document.createElement('option');option.value=item.key;
   option.textContent=`${item.key} · ${item.summary||'Untitled Jira issue'} · ${item.status||'Unknown'}`;
@@ -3929,7 +3929,7 @@ function renderRoleJiraIssues(items,incomplete=false){
  roleJiraItems=rows;roleJiraIncomplete=incomplete;
  if(selectedRole==='software-developer')showDeveloperAssignedTickets(rows);
  if(selectedRole==='ux-designer')renderUxTickets(rows);
- $('roleJiraStatus').textContent=`${rows.length} Jira project item(s)${incomplete?' · results truncated':''} · All issue types are visible. Only approved BR Epic rows support Assign/Release Entire BR.`;
+ $('roleJiraStatus').textContent=`${rows.length} Jira project item(s)${incomplete?' · results truncated':''} · All issue types are visible. Assign/Release Entire BR changes only tasks for your selected role.`;
  if(typeof ATGVDataTables==='undefined'){root.textContent='Jira DataTables component is unavailable.';return;}
  const project=projects.find(p=>p.id===activeId),jiraBase=project?.settings?.jira?.baseUrl||extensionSettings.jira?.baseUrl||'';
  ATGVDataTables.mount(root,rows,[
@@ -3944,19 +3944,21 @@ function renderRoleJiraIssues(items,incomplete=false){
   {key:'assignee',label:'Assignee'},
   {key:'key',label:'Action',sortable:false,render:item=>{
    const developer=selectedRole==='software-developer',designer=selectedRole==='ux-designer';
+   const roleScope=item.roleScopes?.[selectedRole];
    const brId=item.brRoot?item.brId:'';
+   if(item.brRoot)item={...item,mine:!!roleScope?.mine,unassigned:!!roleScope?.available&&!roleScope?.mine};
    const allowClaim=!!projects.find(p=>p.id===activeId)?.techStackApproval?.status;
    const cell=document.createElement('div');cell.className='jira-row-actions';
    const btn=document.createElement('button');btn.type='button';btn.className='secondary';
-   btn.textContent=!item.brRoot?'View Only':item.mine?'Release Entire BR':item.unassigned?'Assign Entire BR':'Assigned to Other';
-   btn.disabled=developerBrAssignmentBusy||developerBrBusy||!item.brRoot||(!item.mine&&!item.unassigned)||developer&&item.unassigned&&!allowClaim;
-   btn.title=item.brRoot?'This action covers the entire '+item.brId+' including '+item.descendantCount+' descendants; it never claims a subtask separately.':'Children inherit BR ownership.';
+   btn.textContent=!item.brRoot?'View Only':item.mine?'Release Entire BR':!roleScope?.count?'No Role Tasks':item.unassigned?'Assign Entire BR':'Assigned to Other';
+   btn.disabled=developerBrAssignmentBusy||developerBrBusy||!item.brRoot||!roleScope?.count||(!item.mine&&!item.unassigned)||developer&&item.unassigned&&!allowClaim;
+   btn.title=item.brRoot?'This action covers '+(roleScope?.count||0)+' mapped tasks for the selected role in '+item.brId+'; shared parent issues and other roles are unchanged.':'Use the BR row to assign tasks for the selected role.';
    btn.setAttribute('aria-label',item.mine?`Unassign Jira ${item.key}`:`Assign Jira ${item.key} to me`);
    btn.addEventListener('click',()=>{
     if(developerBrAssignmentBusy||developerBrBusy)return;
-    if(designer&&item.mine){
+    if(!developer&&item.mine){
      btn.disabled=true;btn.textContent='Releasing BR…';$('roleJiraStatus').textContent='Releasing '+item.brId+'…';
-     send('roleJiraUnassign',{key:item.key,brId:item.brId,expectedUpdated:item.updated,roleId:'ux-designer'});return;
+     send('roleJiraUnassign',{key:item.key,brId:item.brId,expectedUpdated:item.updated,roleId:selectedRole});return;
     }
     if(developer&&brId){
      developerBrAssignmentBusy=true;btn.disabled=true;btn.textContent=item.mine?'Unassigning…':'Assigning…';
@@ -3966,7 +3968,7 @@ function renderRoleJiraIssues(items,incomplete=false){
     btn.disabled=true;btn.textContent='Assigning…';$('roleJiraStatus').textContent='Assigning '+item.key+'…';
     send('roleJiraAssign',{key:item.key,brId:item.brId,expectedUpdated:item.updated,roleId:selectedRole});
    });cell.append(btn);
-   if(designer&&item.mine&&item.brRoot){
+   if(designer&&item.mine&&item.taskRole==='ux-designer'){
     const open=document.createElement('button');open.type='button';open.className='secondary';
     open.textContent='Open Design';open.title='Open or edit the UI/UX design for '+item.key;
     open.setAttribute('aria-label',`Open or edit design for Jira ${item.key}`);
@@ -4284,7 +4286,7 @@ function renderRoleWork(){
     progress:$('rolePercent')?.textContent||'',
     next:$('roleNext')?.textContent||'',
     tasks:(role.tasks||[]).map(task=>({title:task.label,done:progress[task.id]===true})),
-    assigned:((role.id==='software-developer'||role.id==='ux-designer')&&Array.isArray(roleJiraItems)?roleJiraItems.filter(item=>item.mine):[]).map(item=>({key:item.key,status:item.status})),
+    assigned:((role.id==='software-developer'||role.id==='ux-designer')&&Array.isArray(roleJiraItems)?roleJiraItems.filter(item=>item.mine&&item.taskRole===role.id):[]).map(item=>({key:item.key,status:item.status})),
     requirements:role.id==='business-analyst'?activeBusinessRequirements().map(item=>({id:item.id,status:item.status})):[]
   });
 }

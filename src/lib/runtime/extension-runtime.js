@@ -5022,7 +5022,7 @@ async function runDeveloperBrAutomation(brId,{restartFresh=false}={}){
  const register=await brWorkflow.load(registry,projectId);
  const br=developerBR.approvedBr(register,brId);
  // Authoritative Jira mapping is the BA-published path register, never an AI-invented key.
- const publishedJiraItems=Object.entries(register.synced||{}).filter(([nodePath,item])=>(nodePath===brId||nodePath.startsWith(brId+'/'))&&/^[A-Z][A-Z0-9_]{1,20}-\d{1,12}$/.test(String(item?.key||''))).map(([nodePath,item])=>({key:item.key,path:nodePath,kind:String(item.kind||item.issueType||''),title:String(item.title||'').slice(0,180)})).slice(0,150);
+ const publishedJiraItems=require('../../br-ownership').roleTree(register,brId,'software-developer').entries.map(item=>({...item,title:String(register.synced?.[item.path]?.title||register.roleTaskMappings?.[item.path]?.title||'').slice(0,180)})).slice(0,150);
  const approvedJiraKeys=[...new Set(publishedJiraItems.map(row=>row.key))];
  const epicJiraKey=String(register.synced?.[brId]?.key||'');
  const cfgProject=effectiveConfig(activeProject);
@@ -6372,11 +6372,12 @@ async function handleDashboardMessage(msg){
         if(!token)throw Error('Jira credentials are required.');
         const auth={token,basicEmail:String(config.get('jira.email')||'').trim()};
         const [issue,self]=await Promise.all([
-          requestJson(`${baseAtlassian(config)}/rest/api/3/issue/${encodeURIComponent(issueKey)}?fields=summary,status,issuetype,assignee,subtasks,project,updated`,auth),
+          requestJson(`${baseAtlassian(config)}/rest/api/3/issue/${encodeURIComponent(issueKey)}?fields=summary,status,issuetype,assignee,subtasks,project,updated,labels`,auth),
           requestJson(`${baseAtlassian(config)}/rest/api/3/myself`,auth)
         ]);
         if(String(issue.fields?.project?.key||'')!==validProjectKey(config.get('jira.projectKey')))throw Error('Issue does not belong to the configured Jira project.');
         if(!self?.accountId||issue.fields?.assignee?.accountId!==self.accountId)throw Error('The selected Jira ticket is not assigned to your account.');
+        require('../../br-ownership').requireTask(await brWorkflow.load(registry,activeProject.id),issue,'software-developer');
         const progress=developerArtifacts.progress(issue);
         const artifacts=await Promise.all(Object.keys(developerArtifacts.TYPES).map(async type=>{const item=await developerArtifacts.read(aiRoot(),issueKey,type);return {type,label:item.title,exists:item.exists};}));
         const designs=await designProposals.load(registry,activeProject.id);
@@ -6578,9 +6579,10 @@ async function handleDashboardMessage(msg){
           checkStop();const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
           if(!token)throw Error('Connect Jira in Settings before generating UI/UX.');
           const auth={token,basicEmail:String(config.get('jira.email')||'').trim()};
-          const [issue,self]=await Promise.all([requestJson(`${baseAtlassian(config)}/rest/api/3/issue/${encodeURIComponent(key)}?fields=summary,description,status,assignee,project,updated,parent,labels`,auth),requestJson(`${baseAtlassian(config)}/rest/api/3/myself`,auth)]);
+          const [issue,self]=await Promise.all([requestJson(`${baseAtlassian(config)}/rest/api/3/issue/${encodeURIComponent(key)}?fields=summary,description,status,assignee,project,updated,parent,labels,issuetype`,auth),requestJson(`${baseAtlassian(config)}/rest/api/3/myself`,auth)]);
           if(issue.fields?.project?.key!==validProjectKey(config.get('jira.projectKey')))throw Error('Jira ticket is outside this project.');
           if(!self?.accountId||issue.fields?.assignee?.accountId!==self.accountId)throw Error('Assign this Jira ticket to yourself before generating UI/UX.');
+          require('../../br-ownership').requireTask(await brWorkflow.load(registry,projectId),issue,'ux-designer');
           if(String(issue.fields?.status?.statusCategory?.key||'').toLowerCase()==='done')throw Error('The Jira ticket is Done. Reopen it before generating a new design.');
           const prior=await uxDesignPipeline.read(root,key);
           if(prior.exists&&prior.status!=='rejected')throw Error('Preview or reject the current generated design before regenerating.');
@@ -6750,9 +6752,10 @@ async function handleDashboardMessage(msg){
         const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
         if(!token)throw Error('Connect Jira in Settings before generating a design.');
         const auth={token,basicEmail:String(config.get('jira.email')||'').trim()};
-        const [issue,self]=await Promise.all([requestJson(`${baseAtlassian(config)}/rest/api/3/issue/${encodeURIComponent(key)}?fields=summary,description,status,assignee,project,updated,parent,labels`,auth),requestJson(`${baseAtlassian(config)}/rest/api/3/myself`,auth)]);
+        const [issue,self]=await Promise.all([requestJson(`${baseAtlassian(config)}/rest/api/3/issue/${encodeURIComponent(key)}?fields=summary,description,status,assignee,project,updated,parent,labels,issuetype`,auth),requestJson(`${baseAtlassian(config)}/rest/api/3/myself`,auth)]);
         if(issue.fields?.project?.key!==validProjectKey(config.get('jira.projectKey')))throw Error('Jira ticket is outside this project.');
         if(!self?.accountId||issue.fields?.assignee?.accountId!==self.accountId)throw Error('Assign this Jira ticket to yourself before generating wireframes or mockups.');
+        require('../../br-ownership').requireTask(await brWorkflow.load(registry,activeProject.id),issue,'ux-designer');
         if(String(issue.fields?.status?.statusCategory?.key||'').toLowerCase()==='done')throw Error('This Jira ticket is already Done. Reopen it in Jira before starting new design work.');
         const registered=await brWorkflow.load(registry,activeProject.id),approved=designProposals.approvedInputs(registered);
         const prior=await uxTicketDesigns.read(aiRoot(),key,kind);
@@ -6959,23 +6962,24 @@ async function handleDashboardMessage(msg){
         try{
           requireOpened();requireOnline();
           const roleId=String(msg.roleId||''),mode=msg.command==='roleJiraUnassign'?'unassign':'assign';
-          if(!['software-developer','ux-designer'].includes(roleId))throw Error('Use approved BR handoff for this role.');
+          if(!require('../../my-work-role-prompts').ROLES[roleId]||!(await getRoleSettings(registry,activeProject.id)).roles.some(role=>role.id===roleId))throw Error('Selected SDLC role is not enabled.');
           if(roleId==='software-developer'&&mode==='assign')require('../../architect-stack-approval').requireDeveloperApproval(await registry.read(activeProject.id));
           const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
           if(!token)throw Error('Jira credentials required.');
           const register=await brWorkflow.load(registry,activeProject.id),ownership=require('../../br-ownership');
-          const brId=String(msg.brId||'').toUpperCase(),scope=ownership.tree(register,brId);
+          const brId=String(msg.brId||'').toUpperCase(),scope=ownership.roleTree(register,brId,roleId);
+          if(!scope.entries.length)throw Error('No Jira tasks mapped for the selected role.');
           if(scope.rootKey!==developerGit.jiraKey(msg.key))throw Error('Subtask/Feature assignment is disabled. Select the BR Epic.');
           const projectKey=validProjectKey(config.get('jira.projectKey'));
           const current=await jiraReadIssue(config,token,scope.rootKey);
           if(String(current.fields?.updated||'')!==String(msg.expectedUpdated||''))throw Error('BR Epic changed. Refresh and try again.');
-          const confirmation=await uiWarning(`${mode==='assign'?'Assign':'Release'} the ENTIRE ${brId} (${scope.entries.length} Jira issues) ${mode==='assign'?'to your Jira account':'from your Jira account'}? Epic, Features, Stories and subtasks are kept, with one owner.`,{modal:true},mode==='assign'?'Assign Entire BR':'Release Entire BR');
+          const confirmation=await uiWarning(`${mode==='assign'?'Assign':'Release'} the ENTIRE ${brId} (${scope.entries.length} tasks for ${roleId}) ${mode==='assign'?'to your Jira account':'from your Jira account'}? Shared Epic, Features, Stories and other roles are unchanged.`,{modal:true},mode==='assign'?'Assign Entire BR':'Release Entire BR');
           if(confirmation!==(mode==='assign'?'Assign Entire BR':'Release Entire BR')){
             await dashboard?.webview.postMessage({type:'roleJiraAssignCancelled',key:scope.rootKey});break;
           }
           const auth={token,basicEmail:String(config.get('jira.email')||'').trim()},base=baseAtlassian(config);
           const self=await requestJson(`${base}/rest/api/3/myself`,auth);
-          const result=await ownership.changeWholeBr({register,brId,projectKey,accountId:self.accountId,mode,
+          const result=await ownership.changeWholeBr({register,brId,projectKey,accountId:self.accountId,mode,roleId,
             readIssue:key=>jiraReadIssue(config,token,key),
             setAssignee:(key,accountId)=>requestJson(`${base}/rest/api/3/issue/${encodeURIComponent(key)}/assignee`,{...auth,method:'PUT',data:{accountId}})});
           await dashboard?.webview.postMessage({type:mode==='assign'?'roleJiraAssigned':'roleJiraUnassigned',key:scope.rootKey,roleId,value:{key:scope.rootKey,...result}});
@@ -8126,19 +8130,21 @@ async function handleDashboardMessage(msg){
         try{
           if(!['assign','unassign'].includes(action))throw Error('Invalid whole-BR assignment action.');
           if(developerBrRun)throw Error('Stop Development before changing BR ownership.');
-          const register=await brWorkflow.load(registry,projectId),ownership=require('../../br-ownership'),scope=ownership.tree(register,brId);
-          if(key!==scope.rootKey)throw Error('Only the published BR Epic can be assigned; Stories and subtasks inherit ownership.');
+          const register=await brWorkflow.load(registry,projectId),ownership=require('../../br-ownership'),scope=ownership.roleTree(register,brId,'software-developer');
+          if(!(await getRoleSettings(registry,projectId)).roles.some(role=>role.id==='software-developer'))throw Error('Developer role is not enabled.');
+          if(!scope.entries.length)throw Error('No mapped Developer tasks. Publish or repair Jira role tasks first.');
+          if(key!==scope.rootKey)throw Error('Select the published BR Epic to claim its Developer tasks.');
           const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
           if(!token)throw Error('Jira connection is required.');
           const current=await jiraReadIssue(config,token,key);
           if(String(current.fields?.updated||'')!==String(msg.expectedUpdated||''))throw Error('Jira Epic changed. Refresh before assigning.');
           if(action==='assign')require('../../architect-stack-approval').requireDeveloperApproval(await registry.read(projectId));
-          const yes=await uiWarning(`${action==='assign'?'Assign':'Unassign'} the entire ${brId} (${scope.entries.length} Jira issues, including Epic, Features, Stories and subtasks) ${action==='assign'?'to yourself':'from yourself'}?`+(action==='unassign'?' All locally generated BR worktrees and TDD evidence will also be deleted.':''),{modal:true},action==='assign'?'Assign Entire BR':'Unassign & Delete Work');
+          const yes=await uiWarning(`${action==='assign'?'Assign':'Unassign'} the entire ${brId} (${scope.entries.length} Developer tasks; shared Epic, Features, Stories and other roles stay unchanged) ${action==='assign'?'to yourself':'from yourself'}?`+(action==='unassign'?' All locally generated BR worktrees and TDD evidence will also be deleted.':''),{modal:true},action==='assign'?'Assign Entire BR':'Unassign & Delete Work');
           if(yes!==(action==='assign'?'Assign Entire BR':'Unassign & Delete Work')){
             await dashboard?.webview.postMessage({type:'developerBrAssignmentResult',projectId,brId,action,success:false,message:'BR assignment cancelled. No changes made.'});break;
           }
           const auth={token,basicEmail:String(config.get('jira.email')||'').trim()},base=baseAtlassian(config),self=await requestJson(`${base}/rest/api/3/myself`,auth);
-          const result=await ownership.changeWholeBr({register,brId,projectKey:validProjectKey(config.get('jira.projectKey')),accountId:self.accountId,mode:action,
+          const result=await ownership.changeWholeBr({register,brId,projectKey:validProjectKey(config.get('jira.projectKey')),accountId:self.accountId,mode:action,roleId:'software-developer',
             readIssue:key=>jiraReadIssue(config,token,key),setAssignee:(key,accountId)=>requestJson(`${base}/rest/api/3/issue/${encodeURIComponent(key)}/assignee`,{...auth,method:'PUT',data:{accountId}})});
           let deleted=0;
           if(action==='unassign'){
@@ -8150,7 +8156,7 @@ async function handleDashboardMessage(msg){
             deleted=removal.deletedWorktrees;
             if(prior?.projectId===projectId&&prior.brId===brId)developerBrLast=null;
           }
-          await dashboard?.webview.postMessage({type:'developerBrAssignmentResult',projectId,brId,action,success:true,message:`${brId}: ${result.count} mapped Jira issues ${action==='assign'?'assigned':'unassigned'} as one BR.`+(deleted?` Removed ${deleted} local worktrees.`:'')});
+          await dashboard?.webview.postMessage({type:'developerBrAssignmentResult',projectId,brId,action,success:true,message:`${brId}: ${result.count} Developer tasks ${action==='assign'?'assigned':'unassigned'} for this BR.`+(deleted?` Removed ${deleted} local worktrees.`:'')});
         }catch(error){await dashboard?.webview.postMessage({type:'developerBrAssignmentResult',projectId,brId,action,success:false,message:'Whole-BR assignment failed: '+String(error.message||error)});}
         break;
       }

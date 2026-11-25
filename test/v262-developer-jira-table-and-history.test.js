@@ -26,7 +26,7 @@ test('Developer Jira table offers scoped assign/unassign and retains the confirm
  assert.match(ui,/const developer=selectedRole==='software-developer',designer=selectedRole==='ux-designer'/);
  assert.match(ui,/btn.textContent=!item.brRoot\?'View Only':item.mine\?'Release Entire BR'/);
  assert.match(ui,/send\('developerBrAssignment',\{brId,key:item.key,action:item.mine\?'unassign':'assign',expectedUpdated:item.updated\}\)/);
- assert.match(ui,/send\('roleJiraUnassign',\{key:item.key,brId:item.brId,expectedUpdated:item.updated,roleId:'ux-designer'\}\)/);
+ assert.match(ui,/send\('roleJiraUnassign',\{key:item.key,brId:item.brId,expectedUpdated:item.updated,roleId:selectedRole\}\)/);
  assert.match(screen,/Unassign & Delete Work/);
  assert.match(screen,/developerBRCleanup\.removeLocalDevelopment/);
 });

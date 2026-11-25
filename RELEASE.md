@@ -1,12 +1,11 @@
-# ATGV AIATECH Assist v0.1.1
+# ATGV AIATECH Assist v0.1.2
 
 ## Changes
 
-- Business Analysts can approve and publish saved requirements with open quality findings, including a batch where every BR needs attention.
-- The ISO document and Jira preview include flagged requirements. The confirmation lists findings for follow-up, and subsequent BR revisions update their existing Jira issues.
-- The release workflow installs the pinned ZIP compressor used by the VSIX packager.
+- My Work assigns and releases only mapped tasks for the selected SDLC role, leaving shared Epic, Feature and Story ownership unchanged.
+- Role-specific work selectors and assignment status derive from actual task assignees; developer automation checks Developer ownership and design generation checks UI/UX ownership.
+- Preserve v0.1.1 publishing with open quality findings.
 
 ## Validation
 
-- Regression coverage includes all-flagged and mixed batches, unresolved source conflicts, an unavailable quality review, Jira verification failures, and updating a previously published Epic.
-- All 2,667 Node regression tests passed locally with both catalogue fixtures. The five Python distribution tests, UI theme check, and packaged extension activation check also passed.
+- Updated role assignment regression cases for mixed roles, shared parent preservation, conflicts and rollback. Full Node regression execution was unavailable in the editing environment; no VSIX generated.

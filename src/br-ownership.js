@@ -1,6 +1,5 @@
 'use strict';
-// BR is the only assignable ATGV unit. Jira Epic/Feature/Story/Subtask
-// records remain intact and are assigned together, never claimed separately.
+// BR is the navigation unit. My Work changes ownership of role tasks only.
 const ISSUE=/^[A-Z][A-Z0-9]{1,19}-[1-9][0-9]*$/;
 const BR=/^BR-[0-9]{1,6}$/;
 function tree(register,brId){
@@ -30,38 +29,89 @@ function developmentTree(register,brId){
  }
  return {...scope,entries};
 }
+const {ROLES}=require('./my-work-role-prompts');
+const ROLE_ALIASES=Object.freeze({ba:'business-analyst',pm:'project-manager',sa:'solution-architect',uiux:'ux-designer',developer:'software-developer',qa:'qa-engineer',uat:'uat-tester'});
+function canonicalRole(value){
+ const id=String(value||'').toLowerCase().replace(/^atgv-role-/,'');
+ return ROLE_ALIASES[id]||(Object.hasOwn(ROLES,id)?id:'');
+}
+function roleTree(register,brId,roleId='software-developer'){
+ const role=canonicalRole(roleId);
+ if(!role)throw Error('Unsupported SDLC assignment role.');
+ const scope=tree(register,brId),entries=[],seen=new Map();
+ const add=(path,row)=>{
+  if(!path.startsWith(scope.brId+'/')||!row?.key)return;
+  const kind=String(row.kind||row.issueType||''),marker=path.match(/\/ROLE-([^/]+)$/i);
+  if(/^(?:epic|feature|user story|story|br|business requirement)$/i.test(kind))return;
+  const hints=[row.roleId,row.roleLabel,marker?.[1]].filter(Boolean);
+  const declared=hints.map(canonicalRole);
+  if(hints.length&&(declared.some(x=>!x)||new Set(declared).size!==1))return;
+  const explicit=declared[0]||'';
+  if(!explicit&&(!/^(?:task|subtask|sub-task|sub task)$/i.test(kind)||/\/ROLE-/i.test(path)))return;
+  const taskRole=explicit||'software-developer',key=String(row.key).toUpperCase();
+  if(!ISSUE.test(key))throw Error('Invalid role task mapping for '+scope.brId);
+  if(scope.entries.some(item=>item.key===key&&(/^(?:epic|feature|user story|story|br|business requirement)$/i.test(item.kind)||item.path===scope.brId)))throw Error('Role task maps to a shared parent: '+key);
+  const prior=seen.get(key);
+  if(prior&&prior!==taskRole)throw Error('Conflicting role mappings for '+key);
+  if(prior)return;
+  seen.set(key,taskRole);
+  if(taskRole===role)entries.push({path,key,kind:kind||'Role',roleId:role,explicit:!!explicit});
+ };
+ for(const [path,row] of Object.entries(register.synced||{}))add(path,row);
+ for(const [path,row] of Object.entries(register.roleTaskMappings||{}))add(path,row);
+ return {...scope,roleId:role,entries};
+}
+function matchesRoleTask(entry,issue){
+ const fields=issue?.fields||{};
+ const type=String(fields.issuetype?.name||issue?.type||issue?.issueType||'');
+ if(!/^(?:task|subtask|sub-task|sub task)$/i.test(type)&&!(fields.issuetype?.subtask===true&&!/^(?:story|feature|epic)$/i.test(type)))return false;
+ const labels=(fields.labels||issue?.labels||[]).filter(x=>typeof x==='string'&&x.toLowerCase().startsWith('atgv-role-'));
+ const roles=new Set(labels.map(canonicalRole));
+ if(roles.size)return roles.size===1&&roles.has(entry.roleId);
+ return entry.explicit||entry.roleId==='software-developer';
+}
+function requireTask(register,issue,roleId){
+ const brId=fromKey(register,issue?.key);
+ const entry=brId&&roleTree(register,brId,roleId).entries.find(x=>x.key===issue.key);
+ if(!entry||!matchesRoleTask(entry,issue))throw Error('This Jira issue is not a verified task for the selected SDLC role.');
+ return entry;
+}
 function fromKey(register,key){
  const wanted=String(key||'').toUpperCase();
- for(const [p,v] of Object.entries(register?.synced||{}))if(String(v?.key||'').toUpperCase()===wanted){
+ for(const [p,v] of [...Object.entries(register?.synced||{}),...Object.entries(register?.roleTaskMappings||{})])if(String(v?.key||'').toUpperCase()===wanted){
   const id=p.split('/')[0].toUpperCase();if(BR.test(id))return id;
  }
  return '';
 }
-async function verifyOwner({register,brId,projectKey,accountId,readIssue}){
+async function verifyOwner({register,brId,projectKey,accountId,readIssue,roleId='software-developer'}){
  if(!accountId)throw Error('Jira identity is unavailable for BR ownership verification.');
- const scope=developmentTree(register,brId);
+ const scope=roleTree(register,brId,roleId);
+ if(!scope.entries.length)throw Error('No mapped tasks for the selected role. Publish or repair Jira role tasks first.');
  for(const entry of scope.entries){
   const issue=await readIssue(entry.key);
   if(issue?.key!==entry.key||issue?.fields?.project?.key!==projectKey)throw Error('Jira mapping changed for '+entry.key+'.');
-  if(issue?.fields?.assignee?.accountId!==accountId)throw Error('Entire BR must be assigned to your Jira account. '+entry.key+' is not owned by you; use Assign Entire BR first.');
+  if(!matchesRoleTask(entry,issue))throw Error('Role or issue type changed for '+entry.key+'. Reconcile Jira before continuing.');
+  if(issue?.fields?.assignee?.accountId!==accountId)throw Error('All tasks for this role in the BR must be assigned to your Jira account. '+entry.key+' is not owned by you; use Assign Entire BR first.');
  }
  return scope;
 }
-async function changeWholeBr({register,brId,projectKey,accountId,mode,readIssue,setAssignee}){
+async function changeWholeBr({register,brId,projectKey,accountId,mode,readIssue,setAssignee,roleId='software-developer'}){
  if(!['assign','unassign'].includes(mode))throw Error('Invalid whole-BR ownership action.');
  if(!accountId||typeof readIssue!=='function'||typeof setAssignee!=='function')throw Error('Jira identity and read/write operations are required.');
- const scope=developmentTree(register,brId);
- // Phase 1: validate the complete published hierarchy BEFORE any remote mutation.
+ const scope=roleTree(register,brId,roleId);
+ if(!scope.entries.length)throw Error('No mapped tasks for the selected role. Publish or repair Jira role tasks first.');
+ // Phase 1: validate every role task BEFORE any remote mutation.
  const before=[];
  for(const entry of scope.entries){
   const issue=await readIssue(entry.key),fields=issue?.fields||{};
   if(issue?.key!==entry.key||fields.project?.key!==projectKey)throw Error('Jira mapping/project mismatch for '+entry.key+'; no assignments changed.');
+  if(!matchesRoleTask(entry,issue))throw Error('Role or issue type changed for '+entry.key+'; no assignments changed.');
   const owner=String(fields.assignee?.accountId||'');
   if(mode==='assign'&&owner&&owner!==accountId)throw Error(entry.key+' is already assigned to another user. Transfer ownership in Jira first; no BR tasks were claimed.');
   if(mode==='unassign'&&owner&&owner!==accountId)throw Error(entry.key+' belongs to another user. Cannot partially release BR.');
   before.push({...entry,updated:String(fields.updated||''),owner});
  }
- if(mode==='unassign'&&before[0].owner!==accountId)throw Error('Only the current BR Epic owner can release the entire BR.');
+ if(mode==='unassign'&&!before.some(entry=>entry.owner===accountId))throw Error('Only a current role-task owner can release the BR role scope.');
  const changed=[];
  try{
   for(const entry of before){
@@ -69,7 +119,7 @@ async function changeWholeBr({register,brId,projectKey,accountId,mode,readIssue,
    if(entry.owner===target)continue;
    // Optimistic concurrency: check the revision and owner again just before writing.
    const current=await readIssue(entry.key);
-   if(String(current.fields?.updated||'')!==entry.updated||String(current.fields?.assignee?.accountId||'')!==entry.owner)
+   if(current?.key!==entry.key||current.fields?.project?.key!==projectKey||!matchesRoleTask(entry,current)||String(current.fields?.updated||'')!==entry.updated||String(current.fields?.assignee?.accountId||'')!==entry.owner)
     throw Error(entry.key+' changed during BR ownership transfer.');
    await setAssignee(entry.key,target||null);
    changed.push({...entry,target});
@@ -78,11 +128,11 @@ async function changeWholeBr({register,brId,projectKey,accountId,mode,readIssue,
   const failures=[];
   for(const previous of [...changed].reverse())try{
    const now=await readIssue(previous.key);
-   if(String(now.fields?.assignee?.accountId||'')===previous.target)await setAssignee(previous.key,previous.owner||null);
+   if(now?.key===previous.key&&now.fields?.project?.key===projectKey&&matchesRoleTask(previous,now)&&String(now.fields?.assignee?.accountId||'')===previous.target)await setAssignee(previous.key,previous.owner||null);
    else failures.push(previous.key+' changed externally');
   }catch(e){failures.push(previous.key+': '+String(e.message||e));}
   throw Error('Whole-BR '+mode+' failed: '+String(error.message||error)+'. '+(failures.length?'Rollback incomplete for '+failures.join(', ')+'.':'Completed changes rolled back.'));
  }
  return {...scope,mode,count:before.length,changed:changed.length,accountId:mode==='assign'?accountId:null};
 }
-module.exports={tree,developmentTree,fromKey,verifyOwner,changeWholeBr};
+module.exports={tree,developmentTree,roleTree,matchesRoleTask,requireTask,fromKey,verifyOwner,changeWholeBr};

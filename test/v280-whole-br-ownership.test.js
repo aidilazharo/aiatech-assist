@@ -1,64 +1,72 @@
 'use strict';
-const test=require('node:test');
-const assert=require('node:assert/strict');
-const fs=require('node:fs');
-const path=require('node:path');
-const root=path.resolve(__dirname,'..');
-const ownership=require('../src/br-ownership');
-const register={brs:[{id:'BR-007',status:'approved',needsRefresh:false,approvedContent:{title:'Person Name CRUD'}}],synced:{
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const ownership=require('../src/br-ownership'),inventory=require('../src/role-jira-inventory');
+const register={brs:[{id:'BR-007',status:'approved',approvedContent:{title:'Person Name CRUD'}}],synced:{
  'BR-007':{key:'TC-400',kind:'Epic'},
- 'BR-007/feature/frontend':{key:'TC-401',kind:'Feature'},
- 'BR-007/feature/frontend/story/add':{key:'TC-402',kind:'Story'},
- 'BR-007/feature/frontend/story/add/task/validation':{key:'TC-403',kind:'Subtask'}
+ 'BR-007/F-1':{key:'TC-401',kind:'Feature'},
+ 'BR-007/F-1/S-1':{key:'TC-402',kind:'Story'},
+ 'BR-007/F-1/S-1/T-1':{key:'TC-403',kind:'Subtask'},
+ 'BR-007/F-1/S-1/ROLE-DEVELOPER':{key:'TC-404',kind:'Role'}
+},roleTaskMappings:{
+ 'BR-007/F-1/S-1/ROLE-UIUX':{key:'TC-405',roleId:'uiux'},
+ 'BR-007/F-1/S-1/ROLE-UAT':{key:'TC-406',roleId:'uat'}
 }};
-function fixture({owners={},failAt=''}={}){
- const state=new Map(Object.values(register.synced).map(x=>[x.key,{key:x.key,rev:1,owner:owners[x.key]||''}]));
+function fixture({owners={},failAt='',wrongRole=false}={}){
+ const keys=['TC-400','TC-401','TC-402','TC-403','TC-404','TC-405','TC-406'];
+ const state=new Map(keys.map((key,i)=>[key,{key,rev:1,owner:owners[key]||'',type:['Epic','Feature','Story','Subtask','Subtask','Subtask','Subtask'][i],labels:i<4?[]:['atgv-role-'+['software-developer','ux-designer','uat-tester'][i-4]]}]));
+ if(wrongRole)state.get('TC-404').labels=['atgv-role-ux-designer'];
  const calls=[];
- return {state,calls,
-  readIssue:async key=>{const row=state.get(key);return {key,fields:{project:{key:'TC'},updated:String(row.rev),assignee:row.owner?{accountId:row.owner}:null}};},
-  setAssignee:async(key,owner)=>{if(key===failAt)throw Error('Simulated Jira failure'); const row=state.get(key);row.owner=owner||'';row.rev++;calls.push({key,owner});}
- };
+ return {state,calls,readIssue:async key=>{const row=state.get(key);return {key,fields:{project:{key:'TC'},issuetype:{name:row.type},labels:row.labels,updated:String(row.rev),assignee:row.owner?{accountId:row.owner}:null}};},
+ setAssignee:async(key,owner)=>{if(key===failAt)throw Error('Simulated Jira failure');const row=state.get(key);row.owner=owner||'';row.rev++;calls.push(key);}};
 }
-test('BR owner scope preserves Epic, Feature, Story and Subtask hierarchy',()=>{
- const scope=ownership.tree(register,'BR-007');
- assert.equal(scope.rootKey,'TC-400');assert.equal(scope.entries.length,4);
- assert.equal(ownership.fromKey(register,'TC-403'),'BR-007');
- assert.throws(()=>ownership.tree(register,'BR-008'),/approved/);
+const args=(f,roleId='software-developer',mode='assign',accountId='user-A')=>({register,brId:'BR-007',projectKey:'TC',roleId,mode,accountId,...f});
+test('BR tree retains the hierarchy; role scopes exclude all shared parents',()=>{
+ assert.equal(ownership.tree(register,'BR-007').rootKey,'TC-400');
+ assert.deepEqual(ownership.roleTree(register,'BR-007').entries.map(x=>x.key),['TC-403','TC-404']);
+ assert.deepEqual(ownership.roleTree(register,'BR-007','ux-designer').entries.map(x=>x.key),['TC-405']);
+ assert.equal(ownership.fromKey(register,'TC-405'),'BR-007');
 });
-test('Assign Entire BR updates every mapped Jira issue',async()=>{
- const f=fixture();const result=await ownership.changeWholeBr({register,brId:'BR-007',projectKey:'TC',accountId:'user-A',mode:'assign',...f});
- assert.equal(result.count,4);assert.equal(f.calls.length,4);
- assert.deepEqual([...f.state.values()].map(x=>x.owner),Array(4).fill('user-A'));
+test('Designer and Developer can independently claim and release the same BR',async()=>{
+ const f=fixture({owners:{'TC-400':'parent-owner','TC-401':'feature-owner','TC-402':'story-owner','TC-406':'uat-owner'}});
+ await ownership.changeWholeBr(args(f,'ux-designer','assign','designer'));
+ await ownership.changeWholeBr(args(f));
+ assert.deepEqual(f.calls,['TC-405','TC-403','TC-404']);
+ assert.equal(f.state.get('TC-405').owner,'designer');
+ assert.equal((await ownership.verifyOwner(args(f))).entries.length,2);
+ await ownership.changeWholeBr(args(f,'ux-designer','unassign','designer'));
+ assert.equal(f.state.get('TC-403').owner,'user-A');assert.equal(f.state.get('TC-405').owner,'');
+ for(const [key,owner] of [['TC-400','parent-owner'],['TC-401','feature-owner'],['TC-402','story-owner'],['TC-406','uat-owner']])assert.equal(f.state.get(key).owner,owner);
 });
-test('Developer gate requires ownership of the entire Jira hierarchy',async()=>{
- const f=fixture({owners:{'TC-400':'user-A','TC-401':'user-A','TC-402':'user-A','TC-403':'user-A'}});
- assert.equal((await ownership.verifyOwner({register,brId:'BR-007',projectKey:'TC',accountId:'user-A',readIssue:f.readIssue})).entries.length,4);
- f.state.get('TC-403').owner='';
- await assert.rejects(ownership.verifyOwner({register,brId:'BR-007',projectKey:'TC',accountId:'user-A',readIssue:f.readIssue}),/Assign Entire BR/);
+test('Conflicting ownership or wrong Jira role blocks all writes',async()=>{
+ for(const f of [fixture({owners:{'TC-404':'user-B'}}),fixture({wrongRole:true})]){
+  await assert.rejects(ownership.changeWholeBr(args(f)),/another user|Role or issue type changed/);
+  assert.equal(f.calls.length,0);
+ }
 });
-test('One owned descendant prevents any partial assignment',async()=>{
- const f=fixture({owners:{'TC-403':'user-B'}});
- await assert.rejects(ownership.changeWholeBr({register,brId:'BR-007',projectKey:'TC',accountId:'user-A',mode:'assign',...f}),/another user/);
+test('Partial Jira failure rolls back role writes and preserves shared parents',async()=>{
+ const f=fixture({failAt:'TC-404',owners:{'TC-400':'parent-owner'}});
+ await assert.rejects(ownership.changeWholeBr(args(f)),/rolled back/);
+ assert.equal(f.state.get('TC-403').owner,'');assert.equal(f.state.get('TC-400').owner,'parent-owner');
+});
+test('Role release requires ownership; empty scope cannot claim shared parents',async()=>{
+ const f=fixture();
+ await assert.rejects(ownership.changeWholeBr(args(f,'software-developer','unassign')),/current role-task owner/);
+ await assert.rejects(ownership.changeWholeBr(args(f,'project-manager')),/No mapped tasks/);
  assert.equal(f.calls.length,0);
 });
-test('Partial Jira failure rolls back successfully assigned children and Epic',async()=>{
- const f=fixture({failAt:'TC-403'});
- await assert.rejects(ownership.changeWholeBr({register,brId:'BR-007',projectKey:'TC',accountId:'user-A',mode:'assign',...f}),/rolled back/);
- assert.deepEqual([...f.state.values()].map(x=>x.owner),['','','','']);
+test('Inventory calculates separate ownership on the same shared BR row',()=>{
+ const f=fixture({owners:{'TC-400':'parent-owner','TC-403':'user-A','TC-404':'user-A'}});
+ const items=[...f.state.values()].map(x=>({...x,assigneeId:x.owner}));
+ const rows=inventory.enrich(items,register,'user-A'),root=rows.find(x=>x.brRoot);
+ assert.equal(root.mine,false);assert.equal(root.roleScopes['software-developer'].mine,true);
+ assert.equal(root.roleScopes['ux-designer'].available,true);
+ assert.equal(rows.find(x=>x.key==='TC-405').taskRole,'ux-designer');
 });
-test('Only owner can release the entire BR and release never deletes Jira objects',async()=>{
- const f=fixture({owners:Object.fromEntries(Object.values(register.synced).map(x=>[x.key,'user-A']))});
- const result=await ownership.changeWholeBr({register,brId:'BR-007',projectKey:'TC',accountId:'user-A',mode:'unassign',...f});
- assert.equal(result.changed,4);assert.deepEqual([...f.state.values()].map(x=>x.owner),['','','','']);
- const other=fixture();await assert.rejects(ownership.changeWholeBr({register,brId:'BR-007',projectKey:'TC',accountId:'user-A',mode:'unassign',...other}),/current BR Epic owner/);
-});
-test('Webview and host enforce whole-BR ownership rather than individual issue claim',()=>{
- const host=fs.readFileSync(path.join(root,'test/generated/extension-source.txt'),'utf8'),ui=fs.readFileSync(path.join(root,'media/start.js'),'utf8');
- assert.match(host,/case 'developerBrAssignment':[\s\S]*?scope\.rootKey/);
- assert.match(host,/case 'devAssignJira':[\s\S]*?Individual Jira Story\/subtask assignment is disabled/);
- assert.match(host,/case 'roleJiraIssues':[\s\S]*?role-jira-inventory'\)\.enrich/);
- assert.match(fs.readFileSync(path.join(root,'src/role-jira-inventory.js'),'utf8'),/brRoot:!!root/);
- assert.match(ui,/btn\.textContent=!item\.brRoot\?'View Only':item\.mine\?'Release Entire BR'/);
- assert.match(ui,/mine=rows\.filter\(item=>item\.mine&&item\.brRoot\)/);
- assert.match(ui,/return developerAssignedMine\.filter\(item=>item\.brRoot&&item\.brId===br\)/);
+test('Host and UI wire role-only scope while BR rows remain navigation',()=>{
+ const root=path.resolve(__dirname,'..'),host=fs.readFileSync(path.join(root,'src/lib/runtime/extension-runtime.js'),'utf8'),ui=fs.readFileSync(path.join(root,'media/start.js'),'utf8');
+ assert.match(host,/scope=ownership\.roleTree\(register,brId,roleId\)/);
+ assert.match(host,/mode:action,roleId:'software-developer'/);
+ assert.match(ui,/item\.roleScopes\?\.\[selectedRole\]/);
+ assert.match(ui,/item\.taskRole==='ux-designer'/);
+ assert.match(ui,/item\.taskRole==='software-developer'/);
 });
