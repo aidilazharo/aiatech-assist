@@ -1,11 +1,11 @@
-# ATGV AIATECH Assist v0.1.3
+# ATGV AIATECH Assist v0.1.4
 
 ## Changes
 
-- Correct two stale regression tests from v0.1.2 to reflect role-specific BR assignment, including exact BR matching and exclusion of shared parents and other roles.
-- Use the Developer-only published Jira task mapping for TDD recovery history, and make the TDD planning prompt explicitly exclude shared parents and specialist tasks.
-- Retain the v0.1.2 role assignment and v0.1.1 BR publishing behavior.
+- Allow Approved and Publish with BR quality findings and verified Jira items that have no available transition to To Do. Keep both Needs attention badges and explain skipped resets in the confirmation and Jira panel.
+- Publish requirement changes, execute available resets, and retain existing status and assignee for skipped resets. Record skipped status resets in the publication audit.
+- Preserve revision, ownership, issue identity, permission, required-field, and remote conflict safeguards. A failed transition lookup remains blocking; unavailable transitions are advisory only when the lookup succeeds.
 
 ## Validation
 
-- macOS v0.1.2 log reported 2,662 passing, two failing and three skipped tests. Both failing expectations have been updated and targeted source-function checks passed in an isolated JavaScript sandbox. Full Node regression suite and VSIX packaging have not been run for this version.
+- Updated status reset and publish eligibility regression cases; targeted isolated source checks performed. Full Node regression suite and VSIX packaging not run.

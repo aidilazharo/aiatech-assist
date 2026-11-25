@@ -30,7 +30,7 @@ test('preview is scoped to active project and exact BR revision with zero confli
 });
 test('Approved and Publish is available with open BR findings on a verified Jira preview',()=>{
  const brState={revision:'r',baDraftQuality:{excluded:[{id:'BR-001',reason:'Scope needs clarification.'}]}};
- const state={projectId:'p',preview:{revision:'r',sourceNotes:['BR-001 · Scope needs clarification.'],conflicts:[]}};
+ const state={projectId:'p',preview:{revision:'r',sourceNotes:['BR-001 · Scope needs clarification.'],reopenSkipped:[{key:'TC-1455',message:'No available transition to To Do from Open.'}],conflicts:[]}};
  const canPublish=build(state,'p',brState,()=>false,null).canPublishPrepared;
  assert.equal(canPublish('ready',false),true);
  assert.equal(canPublish('ready',true),false);

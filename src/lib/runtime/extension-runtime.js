@@ -4329,7 +4329,7 @@ async function runBRPreparation(from){
   const currentState=await current();
   const complete=prepared.changes.length===0&&prepared.reopenRows.length===0&&!prepared.conflicts.length&&!currentState.baPendingReopen&&
    Object.keys(currentState.synced||{}).length>0;
-  await postBAPreparation(projectId,{phase:prepared.conflicts.length?'draft':complete?'published':'ready',stage:'jira',preview:prepared,sourceNotes:prepared.sourceNotes,
+  await postBAPreparation(projectId,{phase:prepared.conflicts.length?'draft':complete?'published':'ready',stage:'jira',preview:prepared,sourceNotes:prepared.sourceNotes,reopenSkipped:prepared.reopenSkipped||[],
    error:prepared.conflicts[0]||'',title:brPreparationTitle(currentState)});
  }catch(error){
   if(typeof recordBAProcess==='function'&&activeProject?.id===projectId&&error.name!=='AbortError')
@@ -4407,16 +4407,17 @@ async function publishPreparedBRs(msg){
  const actor=await verifiedBAActor();
  const reopenLines=preview.reopenRows.map(row=>row.key+'  '+row.from+' → '+row.to);
  const retired=preview.changes.filter(item=>item.action==='retire').map(item=>item.key);
+ const skipped=preview.reopenSkipped||[];
  const action='Approved and Publish';
  const decision=await uiWarning(action+' for '+scope.size+' Business Requirement(s)?\n\n'+preview.changes.length+
-  ' Jira issue change(s) and '+reopenLines.length+' status reset(s).',
+  ' Jira issue change(s), '+reopenLines.length+' status reset(s), and '+skipped.length+' status reset(s) skipped.',
   {modal:true,detail:[reopenLines.length?'Move to To Do:\n'+reopenLines.join('\n'):'',retired.length?'Mark obsolete:\n'+retired.join('\n'):'',
-   preview.sourceNotes?.length?'BR findings for follow-up:\n'+preview.sourceNotes.join('\n'):''].filter(Boolean).join('\n\n').slice(0,14000)},action);
+   skipped.length?'Jira status warnings (status unchanged):\n'+skipped.map(row=>row.message).join('\n'):'',preview.sourceNotes?.length?'BR findings for follow-up:\n'+preview.sourceNotes.join('\n'):''].filter(Boolean).join('\n\n').slice(0,14000)},action);
  if(decision!==action){await postBAPreparation(projectId,{phase:'ready'});return;}
  if(activeProject?.id!==projectId||baPreparationRun||jiraSyncBusy)throw Error('The project or operation changed during Jira confirmation.');
  const token=await getAtlassianToken(activeProject);
  const fresh=await baJiraRepublish.preview(register,preview.reopenRoots,{...reopenServices(register,config,token),retiring:preview.changes.filter(item=>item.action==='retire').map(item=>item.path)});
- if(fresh.blocked.length||JSON.stringify(fresh.rows)!==JSON.stringify(preview.reopenRows))
+ if(fresh.blocked.length||JSON.stringify(fresh.rows)!==JSON.stringify(preview.reopenRows)||JSON.stringify(fresh.skipped||[])!==JSON.stringify(skipped))
   throw Error('Jira status or transitions changed after preview. Refresh affected artifacts and review the current reset list.');
  if(activeProject?.id!==projectId||(await brWorkflow.load(registry,projectId)).revision!==preview.revision)
   throw Error('The Business Requirements revision changed. Refresh the preview.');
@@ -4429,9 +4430,9 @@ async function publishPreparedBRs(msg){
  approvedJiraPreviewBinding=sha(JSON.stringify({atgvProjectId:projectId,site:preview.site,project:config.get('jira.projectKey'),actor,items,fields:jiraPreviewFieldPlans}));
  await postBAPreparation(projectId,{phase:'publishing',stage:'publish',error:''});
  try{
-  await syncApprovedBRs(saved.revision,{confirmed:true,projectId,roots:preview.reopenRoots});
+  await syncApprovedBRs(saved.revision,{confirmed:true,projectId,roots:preview.reopenRoots,skipped});
   const state=await brWorkflow.load(registry,projectId);
-  await postBAPreparation(projectId,{phase:'published',stage:'publish',title:brPreparationTitle(state),preview:null,error:''});
+  await postBAPreparation(projectId,{phase:'published',stage:'publish',title:brPreparationTitle(state),preview:null,reopenSkipped:skipped,error:''});
  }catch(error){
   await postBAPreparation(projectId,{phase:'draft',stage:'jira',preview:null,error:String(error.message||error).slice(0,550)});
   throw error;
@@ -4459,7 +4460,7 @@ async function prepareBRJiraPreview({automatic=false,signal,qualityWarning=''}={
  let changes=brWorkflow.plan(register);
  const conflicts=[];
  let previewTypes=[],linkCandidates=[],protection=[],reopenRoots=automatic?brWorkflow.changedPublishedBRs(original,register,changes):[];
- let reopen={rows:[],blocked:[]},issueTypes={},jiraProject='',site='',checkedCount=0,check='Verify Jira project';
+ let reopen={rows:[],blocked:[],skipped:[]},issueTypes={},jiraProject='',site='',checkedCount=0,check='Verify Jira project';
  const activeRetirements=register.brs.some(item=>!item.archivedFromRestart&&item.status==='retire-proposed'&&item.approvedContent);
  if(!automatic){
   const currentRequirements=register.brs.filter(item=>!item.archivedFromRestart&&!['retired','retire-proposed'].includes(item.status));
@@ -4612,7 +4613,7 @@ async function prepareBRJiraPreview({automatic=false,signal,qualityWarning=''}={
  await progress(blockers.length?'Jira Work Items need attention. Found '+blockers.length+' blocker(s).':'Jira Preview ready for '+changes.length+' planned change(s).',100);
  const payload={changes,issueTypes,jiraProject,fieldPlans:jiraPreviewFieldPlans,conflicts:blockers,linkCandidates,protection,revision:register.revision,checkedCount};
  if(automatic){
-  return {...payload,reviewIssues,projectionIssues,reopenRoots,reopenRows:reopen.rows,
+  return {...payload,reviewIssues,projectionIssues,reopenRoots,reopenRows:reopen.rows,reopenSkipped:reopen.skipped||[],
    sourceNotes:[...baAutomatic.sourceNotes(original),...(qualityWarning?[qualityWarning]:[])],projectId,planHash,fieldPlansHash,verifiedAt,site,
    rows:projected.map(item=>({...item,key:register.synced?.[item.path]?.key||'',jiraType:issueTypes[item.path]||register.synced?.[item.path]?.issueType||''})),
    republish:changes.some(item=>register.synced[item.path.split('/')[0]]?.key)||reopenRoots.length>0};
@@ -4753,6 +4754,7 @@ async function syncApprovedBRs(expectedRevision,automatic=null){
     const updatedRoots=new Set([...items.map(item=>item.path.split('/')[0]),...automatic.roots]);
     const published=next.brs.filter(br=>updatedRoots.has(br.id)&&br.approvedContent&&next.synced?.[br.id]?.key);
     next.baPublishedBRs={...next.baPublishedBRs,...Object.fromEntries(published.map(br=>[br.id,brWorkflow.normalizedContent(br.approvedContent)]))};
+    next.events=(next.events||[]).concat((automatic.skipped||[]).map(row=>({action:'jira-reset-skipped-for-br-republish',key:row.key,from:row.from,reason:row.message,at:new Date().toISOString()}))).slice(-200);
     delete next.baPendingReopen;
    });
    state=(await brWorkflow.repairPendingExports(registry,pinnedProject)).register;
@@ -4763,7 +4765,7 @@ async function syncApprovedBRs(expectedRevision,automatic=null){
   await dashboard?.webview.postMessage({type:'brUpdated',register:state});
   await publishProgress('completed',`Published and recorded ${confirmed} of ${total} Jira changes.`);
   await dashboard?.webview.postMessage({type:'brJiraDone',count:items.length});
-  await notice('Published '+items.length+' Jira changes.');
+  await notice('Published '+items.length+' Jira changes.'+(automatic?.skipped?.length?' '+automatic.skipped.length+' status reset(s) skipped; review Jira Work Items.':''));
  }catch(error){
   if(publicationStarted||total){
    await publishProgress('failed',`Publication interrupted after ${confirmed} of ${total} confirmed changes: ${error.message}. Review already-published issues before retrying.`,{error:String(error.message||error).slice(0,1000)}).catch(()=>{});

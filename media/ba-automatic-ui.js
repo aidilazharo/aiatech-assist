@@ -326,7 +326,7 @@
  function renderJira(){
   const rows=rowsForTable();
   get('baAutoJiraCount').textContent=rows.length?rows.filter(row=>row.category!=='br').length+' Jira items':'';
-  const issues=state?.preview?.conflicts||[];
+  const issues=[...(state?.preview?.conflicts||[]),...(state?.preview?.reopenSkipped||state?.reopenSkipped||[]).map(row=>'Warning: '+row.message)];
   get('baAutoJiraBlockers').hidden=!issues.length;
   const warnings=get('baAutoJiraBlockers');
   warnings.replaceChildren(...issues.map(message=>{const row=document.createElement('li');row.textContent=message;return row;}));
@@ -443,7 +443,7 @@
   const sourceStatus=!sourceReady?'not-started':artifactDirty()||phase==='running'&&!brState.mappingCompleted?'in-progress':brState.mappingCompleted?'ready':'in-progress';
   const discoveryStatus=!sourceReady?'not-started':discoveryDirty?'in-progress':discoveryReady?'ready':'in-progress';
   const requirementsStatus=generatedRequirementsStatus({sourceReady,discoveryReady,excluded,requirementsReady,allApproved,phase,previewCurrent,unsaved:dirty()});
-  const jiraStatus=state?.preview?.conflicts?.length?'needs-attention':phase==='published'?'completed':
+  const jiraStatus=(state?.preview?.conflicts?.length||(state?.preview?.reopenSkipped||state?.reopenSkipped||[]).length)?'needs-attention':phase==='published'?'completed':
    phaseRunning?'in-progress':phase==='ready'&&previewCurrent&&!dirty()?'ready':jiraReady?'in-progress':'not-started';
   const historyStatus=completedReady?'completed':'not-started';
   for(const [id,status] of [
@@ -505,10 +505,12 @@
   publish.title=publishLabel;publish.setAttribute('aria-label',publishLabel);
   publish.disabled=sharedReadOnly()||!canPublishPrepared(phase,unsaved);if(foreignOwners().length)publish.title=readOnlyMessage();
   const reopen=state?.preview?.reopenRows?.length||0;
+  const skipped=(state?.preview?.reopenSkipped||state?.reopenSkipped||[]).length;
+  const statusWarning=skipped?' '+skipped+' Jira status reset(s) unavailable; publishing can continue.':'';
   const messages={idle:source()?'Preparing source…':'Upload a document to start.',running:'Preparing affected artifacts…',draft:'Draft. Refresh affected artifacts to continue.',
    ready:!currentJiraPreview()?'Jira preview is out of date. Refresh affected artifacts.':reopen?reopen+' linked Jira item'+(reopen===1?'':'s')+' will move to To Do.':'Jira preview is ready.',
    publishing:'Publishing approved changes to Jira…',published:'Jira publication is up to date.'};
-  const detail=unsaved?'Save your edits to refresh the affected artifacts.':state?.error||messages[phase]||'';
+  const detail=unsaved?'Save your edits to refresh the affected artifacts.':state?.error||((messages[phase]||'')+(['ready','published'].includes(phase)?statusWarning:''));
   if(get('baAutoStatus').textContent!==detail)get('baAutoStatus').textContent=detail;
   const discoverySave=get('discoverySave');
   discoverySave.type='submit';discoverySave.textContent='Save Discovery';

@@ -163,7 +163,16 @@ test('republish previews and moves only linked started or completed work of chan
  assert.deepEqual(moves,[['TC-1','21'],['TC-2','21']]);
  assert.equal(remote.get('TC-4').name,'In Progress');
  const unavailable=await resets.preview(register,['BR-002'],{...io,transitions:async()=>[]});
- assert.match(unavailable.blocked[0],/TC-4 has no available transition/);
+ assert.deepEqual(unavailable.blocked,[]);
+ assert.deepEqual(unavailable.rows,[]);
+ assert.match(unavailable.skipped[0].message,/TC-4 has no available transition/);
+ assert.equal(remote.get('TC-4').name,'In Progress');
+ const mixed=await resets.preview(register,['BR-001','BR-002'],{...io,transitions:async key=>key==='TC-4'?[]:[{id:'21',to:'To Do'}]});
+ assert.equal(mixed.blocked.length,0);assert.equal(mixed.skipped.length,1);
+ const denied=await resets.preview(register,['BR-002'],{...io,transitions:async()=>{throw Error('HTTP 403');}});
+ assert.match(denied.blocked[0],/HTTP 403/);assert.equal(denied.skipped.length,0);
+ const wrong=await resets.preview(register,['BR-002'],{...io,verify:()=>{throw Error('identity mismatch');}});
+ assert.match(wrong.blocked[0],/identity mismatch/);assert.equal(wrong.skipped.length,0);
 });
 
 test('a changed BR draft checks Jira links against its published parent hierarchy',async()=>{

@@ -10,7 +10,7 @@ function shouldReopen(status){
 
 /** Plan a status reset only for verified links of BRs that actually changed. */
 async function preview(register,roots,{read,transitions,verify,retiring=[]}){
- const included=new Set(roots),exclude=new Set(retiring),rows=[],blocked=[];
+ const included=new Set(roots),exclude=new Set(retiring),rows=[],blocked=[],skipped=[];
  for(const [path,link] of Object.entries(register.synced||{})){
   if(!included.has(root(path))||exclude.has(path)||!link?.key)continue;
   try{
@@ -23,11 +23,11 @@ async function preview(register,roots,{read,transitions,verify,retiring=[]}){
    }
    const options=(await transitions(link.key)).filter(item=>isToDo(item.to));
    const transition=options.find(item=>String(item.id)===register.baPendingReopen?.rows?.find(row=>row.path===path)?.transitionId)||options[0];
-   if(!transition){blocked.push(link.key+' has no available transition to To Do from '+status.name+'.');continue;}
+   if(!transition){skipped.push({path,key:link.key,from:status.name,statusId:String(status.id||''),assigneeId:String(issue.fields?.assignee?.accountId||''),message:link.key+' has no available transition to To Do from '+status.name+'. Publish the requirement changes and retain the current status and assignee.'});continue;}
    rows.push({path,key:link.key,from:status.name,statusId:String(status.id||''),to:transition.to,transitionId:String(transition.id),assigneeId:String(issue.fields?.assignee?.accountId||'')});
   }catch(error){blocked.push(link.key+' could not be verified for republish. '+String(error.message||error).slice(0,200));}
  }
- return {rows,blocked};
+ return {rows,blocked,skipped};
 }
 
 async function apply(row,{read,transitions,verify,move}){
