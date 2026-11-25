@@ -1,11 +1,11 @@
-# ATGV AIATECH Assist v0.1.32
+# ATGV AIATECH Assist v0.1.33
 
 ## Changes
 
-- Pull opted-in bundled projects from the selected nested project Git checkout; retain the current branch for ATGV-managed preview.
-- Restore Windows x64 Node.js 24 dependencies from lockfile-bound split archives tracked in the project repository, with SHA-256 verification, safe extraction and read-only npm validation.
-- Skip npm install and npm ci for opted-in applications; fail clearly if the bundle is missing or incompatible. Restore both frontend and backend for a detected full-stack project and reuse the shared helper in Developer worktrees.
+- Add Scan Folder at the right of the Solution Architect Technology Stack header. Discover project repository folders, prompt on explicit scans when more than one folder exists, and remember the selected folder per project for subsequent Custom Stack operations.
+- Integrate imported Windows x64 offline Library v0.0.11 packages for new single-stack starters: React, Angular, NestJS, .NET and Spring Boot. Match scaffold fingerprints, restore prepared npm modules without online installation, use local NuGet and Maven offline, and stop if a required package is missing.
+- Preserve existing older starter and other-platform behavior; do not silently migrate edited projects or execute Library scripts.
 
 ## Validation
 
-- JavaScript syntax checked and regression coverage added for missing bundles, platform isolation and manifest fingerprinting. Full regression, Windows archive extraction, runtime and VSIX packaging have not been verified. Windows bundle publication depends on the project build workflow.
+- JavaScript syntax checked for changed modules; folder-selection regression test added. Full regression, Windows builds, offline package publication and VSIX packaging not verified.
