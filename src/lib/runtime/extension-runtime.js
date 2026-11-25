@@ -8686,7 +8686,12 @@ async function handleDashboardMessage(msg){
         const choice=await uiWarning(`Start AI development for ${key} (${stackId}) on branch ${branch}? ${roleTask?'The existing remote parent Story branch and UI/UX handoff must be verified; an isolated worktree will be used.':existing?'Existing branch will be resumed.':'A new local feature branch will be created.'} Jira will not be transitioned. AI will prepare a code implementation draft; no application files will be overwritten, committed or pushed automatically.`,{modal:true},'Start AI Development');
         if(choice!=='Start AI Development'){await dashboard?.webview.postMessage({type:'devCopilotStartCancelled',key,message:'AI Development cancelled. No branch or files were changed.'});break;}
         const target=await activeAiTarget();
-        if(!await askAiSendConsent(`Send Jira ${key} requirements and the selected stack to ${target.label} for an implementation draft? No local source files or secrets will be shared.`)){await dashboard?.webview.postMessage({type:'devCopilotStartCancelled',key,message:'AI consent declined. No branch or files were changed.'});break;}
+        if(!await askAiSendConsent(`Send Jira ${key}, sanitized committed project source excerpts and linked uploaded design reference evidence to ${target.label} for an implementation draft?`)){await dashboard?.webview.postMessage({type:'devCopilotStartCancelled',key,message:'AI consent declined. No branch or files were changed.'});break;}
+        const designRegister=await currentPublishedRoleRegister(activeProject.id);
+        const designBrId=require('../../br-ownership').fromKey(designRegister,key);
+        if(!designBrId)throw Error('Link this development task to its approved BR before drafting.');
+        const designRepo=await committedRoleRepository(activeProject.id,'software-developer');
+        const designSource=await developerDesignSource(activeProject.id,aiRoot(),designRepo,designRegister,designBrId,[],target);
         const result=roleTask
           ?(await require('../../jira-task-handoff').ensureDeveloperReady({config,token,issue,project,root:folder,aiRoot:aiRoot()}),await require('../../git-handoff-coordinator').checkoutDeveloper({root:folder,storyKey:sourceStory}))
           :existing?await developerGit.resumeBranch(folder,existing):await developerGit.createBranch(folder,key,{summary,base});
@@ -8695,7 +8700,7 @@ async function handleDashboardMessage(msg){
         await context.workspaceState.update('atgvAssist.developerStories.'+activeProject.id,local);
         await dashboard?.webview.postMessage({type:'developerBranch',value:{...result,key,summary}});
         queueProjectActivity([{type:'development_started',subject:key,status:'started',title:summary,revision:result.branch,role:'software-developer'}]);
-        const prompt=`Act as a senior developer. Start implementing Jira ${key} for technology stack ${stackId}. Produce a practical development proposal with exact file paths, code examples for key changes and unit tests, plus a sequence of small commits. The draft must be suitable for developer review, never claim files were written or tests passed. Summarize security and integration implications. Jira summary: ${summary}. Jira requirement: ${textFromAdf(issue.fields?.description||'').slice(0,14000)}. Repository branch: ${result.branch}. No existing source code was provided, so clearly mark assumptions and do not invent file contents.`;
+        const prompt=`Act as a senior developer. Start implementing Jira ${key} for technology stack ${stackId}. Produce a practical development proposal with exact file paths, code examples for key changes and unit tests, plus a sequence of small commits. The draft must be suitable for developer review, never claim files were written or tests passed. Summarize security and integration implications. Jira summary: ${summary}. Jira requirement: ${textFromAdf(issue.fields?.description||'').slice(0,14000)}. Repository branch: ${result.branch}. Use the committed source evidence below. Do not invent file contents or design details.\n${designSource.guide}`;
         const answer=await aiAnswer(target,prompt,28000);
         await dashboard?.webview.postMessage({type:'devCopilotAI',value:{key,action:'start',text:String(answer).slice(0,28000),model:target.label,branch:result.branch}});
         await dashboard?.webview.postMessage({type:'devCopilotStartResult',value:{key,branch:result.branch,base,stackId,readyTest:readiness.readyTest}});
@@ -8992,7 +8997,7 @@ async function handleDashboardMessage(msg){
             const approved=deliveryBlueprint.snapshot(currentBRs);
             await dashboard?.webview.postMessage({type:'blueprintProgress',message:`Generating ${designProposals.KINDS[kind]} (${savedCount+1}/${tasks.length})…`,done:savedCount,total:tasks.length});
             await dashboard?.webview.postMessage({type:'designProgress',kind,percent:20,message:'Generating SDLC blueprint: '+kind});
-            const raw=await aiAnswer(target,designProposals.prompt(kind,approved,await sdlcCatalog.designReference(getWorkspace()?.uri.fsPath)),55000,{json:true});
+            const raw=await aiAnswer(target,designProposals.prompt(kind,approved,['design','ux','mockup','prototype'].includes(kind)?(()=>{throw Error('Generate visual design from an assigned UI/UX Jira ticket with a user-uploaded design reference. Independent AI design is disabled.');})():''),55000,{json:true});
             const proposed=parseJson(raw,kind);
             await checkSnapshot();
             const saved=await designProposals.add(registry,activeProject.id,currentDesigns.revision,{
@@ -9049,7 +9054,7 @@ async function handleDashboardMessage(msg){
           const approved=designProposals.approvedInputs(register);
           await dashboard?.webview.postMessage({type:'designProgress',kind,percent:25,message:`Regenerating ${kind} (${generated+1}/${kinds.length})…`});
           let raw;
-          try{raw=await aiAnswer(target,designProposals.prompt(kind,approved,await sdlcCatalog.designReference(getWorkspace()?.uri.fsPath)),55000,{json:true});}
+          try{raw=await aiAnswer(target,designProposals.prompt(kind,approved,['design','ux','mockup','prototype'].includes(kind)?(()=>{throw Error('Generate visual design from an assigned UI/UX Jira ticket with a user-uploaded design reference. Independent AI design is disabled.');})():''),55000,{json:true});}
           catch(err){throw Error(`${generated} draft(s) safely saved. ${kind}: ${err.message}`);}
           let value;
           try{value=JSON.parse(String(raw).replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim());}
@@ -9070,7 +9075,7 @@ async function handleDashboardMessage(msg){
         // The user initiated Generate Design and selected the AI provider in Settings.
         await dashboard?.webview.postMessage({type:'designProgress',kind,percent:20,message:'Preparing approved Business Requirements…'});
         await dashboard?.webview.postMessage({type:'designProgress',kind,percent:45,message:'Sending approved requirements to the selected AI service…'});
-        const raw=await aiAnswer(target,designProposals.prompt(kind,approved,await sdlcCatalog.designReference(getWorkspace()?.uri.fsPath)),55000,{json:true});
+        const raw=await aiAnswer(target,designProposals.prompt(kind,approved,['design','ux','mockup','prototype'].includes(kind)?(()=>{throw Error('Generate visual design from an assigned UI/UX Jira ticket with a user-uploaded design reference. Independent AI design is disabled.');})():''),55000,{json:true});
         await dashboard?.webview.postMessage({type:'designProgress',kind,percent:75,message:'AI response received. Validating structured design…'});
         let value;try{value=JSON.parse(String(raw).replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim());}catch{throw Error('AI design response was not valid JSON. Nothing was saved.');}
         const fresh=designProposals.approvedInputs(await brWorkflow.load(registry,activeProject.id));if(fresh.hash!==approved.hash)throw Error('Approved BR revision changed during generation. No proposal saved.');
