@@ -42,7 +42,7 @@ function enrich(issues,register,accountId,options={}){
  const mapped=new Map(), roots=new Map(), brStatuses=new Map(), taskRoles=new Map();
  const byKey=new Map((issues||[]).map(issue=>[issue.key,issue]));
  for(const br of register?.brs||[]){
-  if(br.status!=='approved'||br.needsRefresh||!br.approvedContent)continue;
+  if(!ownership.publishedSnapshot(register,br)&&(br.status!=='approved'||br.needsRefresh||!br.approvedContent))continue;
   brStatuses.set(br.id,br.externalReviewRequired?'Updated':'Completed');
   let scope;try{scope=ownership.tree(register,br.id);}catch{continue;}
   const roleScopes={};
@@ -72,9 +72,15 @@ function enrich(issues,register,accountId,options={}){
   const root=roots.get(issue.key);
   const publishedBR=ambiguous.has(issue.key)?null:published.get(issue.key);
   const brId=mapped.get(issue.key)||mapped.get(issue.parentKey)||publishedBR?.id||'';
+  const br=register?.brs?.find(row=>row.id===brId);
+  const snapshotReady=!!br?.approvedContent&&!!br.approvedRevision&&(ownership.publishedSnapshot(register,br)||(br.status==='approved'&&!br.needsRefresh&&!br.externalReviewRequired&&!br.roleReviewRequired&&!br.dependencyReviewRequired));
+  const labels=[...new Set((issue.labels||[]).filter(x=>typeof x==='string'&&x.startsWith('atgv-role-')).map(x=>x.slice(10)))];
+  // Live labels on a verified published tree allow discovery, not execution
+  // or bulk assignment before canonical mappings have been recovered.
+  const discoveredRole=publishedBR&&!taskRoles.has(issue.key)&&/^(task|subtask|sub-task|sub task)$/i.test(issue.type)&&labels.length===1&&Object.hasOwn(ROLES,labels[0])?labels[0]:'';
   const assigneeId=String(issue.assigneeId||'');
   return {...issue,issueType:issue.type||'Unknown',brId,brStatus:publishedBR?'Approved & Published':brStatuses.get(brId)||'',publishedApproval:!!publishedBR,publishedRootKey:publishedBR?.key||'',brRoot:!!root,
-   descendantCount:root?.descendantCount||0,roleScopes:root?.roleScopes||{},taskRole:taskRoles.get(issue.key)||'',
+   descendantCount:root?.descendantCount||0,roleScopes:root?.roleScopes||{},taskRole:taskRoles.get(issue.key)||discoveredRole,roleMappingVerified:taskRoles.has(issue.key),publishedSnapshotReady:snapshotReady,
    mine:!!assigneeId&&assigneeId===accountId,unassigned:!assigneeId,
    scopeSummary:root?`${root.descendantCount+1} linked Jira issues in entire BR`:''};
  });

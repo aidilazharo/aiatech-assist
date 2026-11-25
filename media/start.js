@@ -3005,9 +3005,9 @@ function renderUxActions(){
 function renderUxTickets(rows){
  const picker=$('uxSelectedTicket'),previous=uxSelectedKey,mine=rows.filter(item=>item.mine&&item.taskRole==='ux-designer');
  picker.replaceChildren();const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent='Select an assigned Business Requirement';picker.append(placeholder);
- for(const item of mine){const option=document.createElement('option');option.value=item.key;option.textContent=item.key+' · '+(item.summary||'Jira issue');picker.append(option);}
- uxSelectedKey=mine.some(item=>item.key===previous)?previous:mine[0]?.key||'';picker.value=uxSelectedKey;
- if(!uxSelectedKey){uxPipeline=null;uxDrafts={wireframe:null,mockup:null};setUxStatus('Assign an entire BR to begin designing the full application.');$('uxDesignVersionInfo').replaceChildren();$('uxReferenceInfo').textContent='';$('uxReferencePreview').replaceChildren();$('uxReferencePreview').classList.add('hidden');$('uxDesignFramework').value=uxFramework||'';showUxBuilder();renderUxActions();send('uxFrameworkRead',{key:''});return;}
+ for(const item of mine){const option=document.createElement('option');option.value=item.key;option.textContent=item.key+' · '+(item.summary||'Jira issue')+(item.roleMappingVerified===false?' · BR mapping recovery required':'');option.disabled=item.roleMappingVerified===false;picker.append(option);}
+ const ready=mine.filter(item=>item.roleMappingVerified!==false);uxSelectedKey=ready.some(item=>item.key===previous)?previous:ready[0]?.key||'';picker.value=uxSelectedKey;
+ if(!uxSelectedKey){uxPipeline=null;uxDrafts={wireframe:null,mockup:null};setUxStatus(mine.length?'Assigned UI/UX tasks found. Recover the verified BR mapping before generating a design.':'Assign an entire BR to begin designing the full application.');$('uxDesignVersionInfo').replaceChildren();$('uxReferenceInfo').textContent='';$('uxReferencePreview').replaceChildren();$('uxReferencePreview').classList.add('hidden');$('uxDesignFramework').value=uxFramework||'';showUxBuilder();renderUxActions();send('uxFrameworkRead',{key:''});return;}
  if(previous!==uxSelectedKey){uxPipeline=null;uxReferenceAvailable=false;uxDrafts={wireframe:null,mockup:null};uxFramework='';$('uxDesignFramework').value=uxFramework;showUxBuilder();}
  renderUxActions();loadUxDrafts();
 }
@@ -3465,7 +3465,7 @@ function renderDeveloperBrStages(){
  start.textContent=developerBrStopping?'Stopping Development…':processing?'■ Stop Development':developerBrStage==='needs-attention'?'↻ Retry Development':developerBrCanRetry||developerBrDone?'↻ Restart Development':'▶ Start Development';
  const ownsScope=roleJiraLoaded&&roleJiraProject===activeId&&roleJiraItems.some(item=>item.brRoot&&item.brId===developerBrSelected&&item.roleScopes?.['software-developer']?.mine);
  start.disabled=!developerBrSelected||developerBrStopping||developerBrAssignmentBusy||(!processing&&!ownsScope);
- const preview=$('developerBrPreviewDraft');preview.classList.toggle('hidden',!projectDraftPreviewEnabled());preview.disabled=!projectDraftPreviewEnabled()||!developerBrSelected||developerBrBusy||developerBrServerRunning||developerBrServerBusy||developerBrAssignmentBusy||!ownsScope;preview.title='Preview Draft — create and open an untested local application. Tests and builds are skipped; approval and delivery remain locked.';
+ const preview=$('developerBrPreviewDraft');preview.classList.toggle('hidden',false);preview.disabled=!projectDraftPreviewEnabled()||!developerBrSelected||developerBrBusy||developerBrServerRunning||developerBrServerBusy||developerBrAssignmentBusy||!ownsScope;preview.title='Preview Draft — create and open an untested local application. Tests and builds are skipped; approval and delivery remain locked.';if(!projectDraftPreviewEnabled())preview.title+=' Enable Allow untested development preview in Project Settings.';
  start.classList.toggle('is-stopping',developerBrStopping);
  start.classList.toggle('is-running',processing&&!developerBrStopping);
  start.title=processing?'Stop the current AI development process':!roleJiraLoaded||roleJiraProject!==activeId?'Refresh Jira tasks to verify Developer ownership.':!ownsScope?'Assign the remaining Developer tasks for this BR before starting development.':(typeof developerBrRecovery!=='undefined'&&developerBrRecovery?.available)?'Resume from the failed criterion using persisted repair history and the currently selected AI model':developerBrCanRetry||developerBrDone?'Regenerate from the approved BR using a fresh RED → GREEN → REFACTOR cycle':'Start automatic TDD development immediately';
@@ -3515,7 +3515,7 @@ function updateDeveloperBrChangeBadge(br){
 }
 function developerEligibleBRs(register,assigned){
  const ids=new Set((assigned||[]).filter(item=>item.mine&&item.taskRole==='software-developer'&&!item.brRoot).map(item=>item.brId));
- return (register?.brs||[]).filter(br=>ids.has(br.id)&&br.status==='approved'&&!br.needsRefresh&&!br.externalReviewRequired&&!br.roleReviewRequired&&!br.dependencyReviewRequired&&br.approvedContent&&br.approvedRevision);
+ return (register?.brs||[]).filter(br=>ids.has(br.id)&&br.approvedContent&&br.approvedRevision&&((assigned||[]).some(item=>item.brId===br.id&&item.mine&&item.taskRole==='software-developer'&&item.publishedApproval&&item.publishedSnapshotReady&&item.roleMappingVerified)||br.status==='approved'&&!br.needsRefresh&&!br.externalReviewRequired&&!br.roleReviewRequired&&!br.dependencyReviewRequired));
 }
 function renderDeveloperBrChoices(){
  const select=$('developerBrSelect');if(!select)return;
@@ -3523,7 +3523,8 @@ function renderDeveloperBrChoices(){
  const currentInventory=roleJiraLoaded&&roleJiraProject===activeId;
  const eligible=developerEligibleBRs(brState,currentInventory?developerAssignedMine:[]);
  const missing=currentInventory&&roleJiraItems.some(item=>item.mine&&/^(task|subtask|sub-task|sub task)$/i.test(item.type||item.issueType||'')&&!item.taskRole);
- const emptyText=!currentInventory?'Refresh Jira tasks to load assigned BRs':missing||developerAssignedMine.length?'Assigned tasks found — approved BR unavailable':'No approved BR assigned to you';
+ const unresolved=currentInventory?developerAssignedMine.filter(item=>item.brId&&!eligible.some(br=>br.id===item.brId)):[];
+ const emptyText=!currentInventory?'Refresh Jira tasks to load assigned BRs':missing||developerAssignedMine.length?'Assigned tasks found — recovering published BR snapshot':'No approved BR assigned to you';
  const previous=developerBrSelected;
  select.replaceChildren();
  const prompt=document.createElement('option');prompt.value='';prompt.textContent=eligible.length?'Select approved Business Requirement':emptyText;select.append(prompt);
@@ -3532,6 +3533,7 @@ function renderDeveloperBrChoices(){
   option.textContent=br.id+' · '+String(br.approvedContent?.title||br.title||'Untitled requirement').slice(0,130)+' · '+(br.approvedRevision?'Approved R'+br.approvedRevision:'');
   option.disabled=status==='cancelled';select.append(option);
  }
+ for(const id of new Set(unresolved.map(item=>item.brId))){const option=document.createElement('option');option.value='unresolved:'+id;option.textContent=id+' · Published Jira assignment — source snapshot or mapping required';option.disabled=true;select.append(option);}
  developerBrSelected=eligible.some(br=>br.id===previous)?previous:'';
  select.value=developerBrSelected;
  const chosen=eligible.find(x=>x.id===developerBrSelected);

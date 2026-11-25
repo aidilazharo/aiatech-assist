@@ -35,6 +35,22 @@ test('shared recovery is restricted to missing approved BRs mapped to assigned D
  assert.deepEqual(recovery.assignedCandidates(register,{brs:[],deletedRequirements:[br]},rows,'dev'),[]);
  assert.deepEqual(recovery.assignedCandidates(register,{brs:[]},rows,'another'),[]);
 });
+test('assigned UI/UX tasks are eligible for selective shared recovery',()=>{
+ assert.deepEqual(recovery.assignedCandidates(register,{brs:[]},rows,'dev','ux-designer'),[{brId:'BR-001',jiraKey:'TC-1'}]);
+ const live=[{key:'TC-1',type:'Epic',summary:'BR-001: Example',labels:['m1']},
+ {key:'TC-4',type:'Subtask',parentKey:'TC-1',assigneeId:'dev',labels:['atgv-role-ux-designer']}];
+ const result=inventory.enrich(live,{brs:[]},'dev',{projectKey:'TC',verifyMarker:(id,row)=>row.labels.includes('m1')});
+ assert.equal(result[1].taskRole,'ux-designer');assert.equal(result[1].roleMappingVerified,false);
+ assert.equal(result[1].publishedSnapshotReady,false);
+});
+test('published immutable content survives a separate BA draft',()=>{
+ const hash=require('../src/br-workflow').normalizedContent(br.approvedContent);
+ const state={...register,brs:[{...br,status:'draft',needsRefresh:true}],baPublishedBRs:{'BR-001':hash}};
+ const result=inventory.enrich([{...rows[0],labels:['m1']},...rows.slice(1)],state,'dev',{projectKey:'TC'});
+ assert.equal(result.find(x=>x.key==='TC-3').publishedSnapshotReady,true);
+ assert.equal(require('../src/developer-br-pipeline').approvedBr(state,'BR-001').status,'approved');
+ assert.deepEqual(eligible(state,result).map(x=>x.id),['BR-001']);
+});
 test('role refresh pulls shared content before mapping and refreshes the selector',()=>{
  assert.ok(host.includes("vault.sync({mode:'pull'})"));
  assert.ok(host.includes('confluenceBRRecovery.recoverAssigned'));

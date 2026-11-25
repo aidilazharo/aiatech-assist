@@ -31,7 +31,7 @@ test('Preview Draft uses a tooltip-accessible eye icon and retains project permi
  assert.match(host,/<svg[^>]+aria-hidden="true"/);
  assert.doesNotMatch(host,/>Preview Draft<\/button>/);
  assert.match(css,/#developerBrPreviewDraft\{[^}]+width:44px/);
- assert.match(view,/preview\.classList\.toggle\('hidden',!projectDraftPreviewEnabled\(\)\)/);
+ assert.match(view,/preview\.classList\.toggle\('hidden',false\)/);
  assert.match(view,/preview\.disabled=!projectDraftPreviewEnabled\(\)/);
  assert.match(view,/preview\.title='Preview Draft/);
 });

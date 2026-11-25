@@ -17,6 +17,7 @@ const safeSegment=/^[a-zA-Z0-9_.@+-]+$/;
 function approvedBr(register,id){
  if(!BR_ID.test(String(id||'')))throw Error('Select a valid Business Requirement.');
  const br=(register?.brs||[]).find(x=>x.id===id);
+ if(require('./br-ownership').publishedSnapshot(register,br))return {...br,status:'approved',needsRefresh:false,externalReviewRequired:false,roleReviewRequired:false,dependencyReviewRequired:false};
  if(!br||br.status!=='approved'||br.needsRefresh||br.externalReviewRequired||br.roleReviewRequired||br.dependencyReviewRequired||!br.approvedContent||!br.approvedRevision)throw Error('Only the current approved Business Requirement revision can be developed.');
  return br;
 }

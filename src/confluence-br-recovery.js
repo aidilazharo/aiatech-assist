@@ -10,13 +10,13 @@ const sha=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 const belongs=(path,id)=>path===id||path.startsWith(id+'/');
 const ownership=require('./br-ownership');
 const approved=br=>br?.status==='approved'&&!br.needsRefresh&&!br.externalReviewRequired&&!br.roleReviewRequired&&!br.dependencyReviewRequired&&!!br.approvedContent&&!!br.approvedRevision;
-function assignedCandidates(remote,current,issues,accountId){
+function assignedCandidates(remote,current,issues,accountId,roleId='software-developer'){
  const mine=new Map((issues||[]).filter(issue=>accountId&&issue.assigneeId===accountId).map(issue=>[issue.key,issue]));
  const existing=new Set([...(current.brs||[]),...(current.deletedRequirements||[])].map(br=>br.id));
  const result=[];
  for(const br of remote.brs||[]){
-  if(!approved(br)||existing.has(br.id))continue;
-  let scope;try{scope=ownership.roleTree(remote,br.id,'software-developer');}catch{continue;}
+  if((!approved(br)&&!ownership.publishedSnapshot(remote,br))||existing.has(br.id))continue;
+  let scope;try{scope=ownership.roleTree(remote,br.id,roleId);}catch{continue;}
   if(scope.entries.some(entry=>mine.has(entry.key)&&ownership.matchesRoleTask(entry,mine.get(entry.key))))result.push({brId:br.id,jiraKey:scope.rootKey});
  }
  return result;
@@ -64,8 +64,8 @@ async function recover({registry,projectId,config,token,brId,jiraKey,snapshot=nu
  if([...combined.values()].some(x=>!x?.key||!x?.marker||inUse.has(x.key))||new Set([...combined.values()].map(x=>x.key)).size!==combined.size)
   throw Error('A linked Jira issue is unverified, duplicated or belongs to another local BR.');
  if(assignment){
-  if(!approved(br))throw Error('The shared BR is no longer approved for development.');
-  const scope=ownership.roleTree(remote,id,'software-developer');
+  if(!approved(br)&&!ownership.publishedSnapshot(remote,br))throw Error('The shared BR has no approved published snapshot.');
+  const scope=ownership.roleTree(remote,id,assignment.roleId||'software-developer');
   const developerKeys=new Map(scope.entries.map(entry=>[entry.key,entry]));
   let owned=false;
   for(const [p,x] of combined){
@@ -80,27 +80,31 @@ async function recover({registry,projectId,config,token,brId,jiraKey,snapshot=nu
    const entry=developerKeys.get(x.key);
    if(entry&&ownership.matchesRoleTask(entry,live)&&live.fields?.assignee?.accountId===assignment.accountId)owned=true;
   }
-  if(!owned)throw Error('No verified Developer task is assigned to this account.');
+  if(!owned)throw Error('No verified task for the selected role is assigned to this account.');
  }
  const docs=[...(remote.sourceDocuments||[]),...(remote.archivedSources||[])].filter(x=>validDocument(x));
- const restored=await vault.restore(manifest,sha(bytes),space,String(page.id),attachments,{allowRegister:false});
+ // Role work needs the verified published BR snapshot and Jira links, not an
+ // overwrite of conflicting BA discovery/source files. Manual full recovery
+ // still restores and checks those files. Automatic recovery leaves them alone.
+ const restored=assignment?{downloaded:0,conflicts:[]}:await vault.restore(manifest,sha(bytes),space,String(page.id),attachments,{allowRegister:false});
  if(restored.conflicts.length)throw Error('Confluence recovery blocked: '+restored.conflicts.slice(0,3).join('; '));
  await brWorkflow.write(registry,projectId,current.revision,next=>{
   if(next.brs.some(x=>x.id===id)||next.deletedRequirements?.some(x=>x.id===id)||assignment&&!assignment.shouldContinue())throw Error('BR or project changed while recovering.');
   next.brs.push(structuredClone(br));
+  if(remote.baPublishedBRs?.[id]){next.baPublishedBRs=next.baPublishedBRs||{};next.baPublishedBRs[id]=remote.baPublishedBRs[id];}
   for(const [p,x] of linked)next.synced[p]=structuredClone(x);
   if(remote.roleTaskMappings){
    next.roleTaskMappings=next.roleTaskMappings||{};
    for(const [p,x] of Object.entries(remote.roleTaskMappings))if(belongs(p,id))next.roleTaskMappings[p]=structuredClone(x);
   }
   next.archivedSources=next.archivedSources||[];
-  for(const doc of docs){
+  for(const doc of assignment?[]:docs){
    if(br.source?.digest!==doc.digest&&br.sourceDigest!==doc.digest)continue;
    if(![...(next.sourceDocuments||[]),...next.archivedSources].some(x=>x.digest===doc.digest))
     next.archivedSources.push(structuredClone(doc));
   }
   const remoteLink=remote.links?.entries?.['approved-brs/'+id+'.md'];
-  if(remoteLink){
+  if(remoteLink&&!assignment){
    next.links.entries=next.links.entries||{};
    if(!next.links.entries['approved-brs/'+id+'.md'])
     next.links.entries['approved-brs/'+id+'.md']=structuredClone(remoteLink);
@@ -118,15 +122,15 @@ async function recover({registry,projectId,config,token,brId,jiraKey,snapshot=nu
  return {brId:id,jiraKey:key,restoredDocuments:restored.downloaded,linkedIssues:linked.length,
   warning:'Other local discovery answers were preserved. Review evidence before deleting anything.'};
 }
-async function recoverAssigned({registry,projectId,config,token,issues,accountId,verify,shouldContinue=()=>true}){
+async function recoverAssigned({registry,projectId,config,token,issues,accountId,roleId='software-developer',verify,shouldContinue=()=>true}){
  const snapshot=await readManifest({registry,projectId,config,token});
  const current=await brWorkflow.load(registry,projectId);
- const candidates=assignedCandidates(snapshot.manifest.register,current,issues,accountId);
+ const candidates=assignedCandidates(snapshot.manifest.register,current,issues,accountId,roleId);
  const recovered=[],warnings=[];
  for(const candidate of candidates){
   if(!shouldContinue())break;
   try{
-   const result=await recover({registry,projectId,config,token,...candidate,snapshot,assignment:{accountId,verify,shouldContinue}});
+   const result=await recover({registry,projectId,config,token,...candidate,snapshot,assignment:{accountId,roleId,verify,shouldContinue}});
    recovered.push(result.brId);
   }catch(error){warnings.push(candidate.brId+': '+String(error.message||error).slice(0,240));}
  }

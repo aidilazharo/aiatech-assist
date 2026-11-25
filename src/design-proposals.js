@@ -7,7 +7,7 @@ const { sha } = require('./utils');
 const { normalizeModel } = require('./diagram-model');
 const KINDS = { design: 'Product & UI Design', ux: 'User Experience Flows', mockup: 'Screen Mockups', prototype: 'Interactive UI Prototype', architecture: 'Architecture Diagram', api: 'Application Programming Interface Design', database: 'Database Design' };
 function approvedInputs(register) {
-    const entries = (register.brs || []).filter(b => b.status === 'approved' && b.approvedContent && !b.needsRefresh).map(b => ({ id: b.id, revision: b.approvedRevision, title: b.approvedContent.title, objective: b.approvedContent.objective, scope: b.approvedContent.scope, acceptanceCriteria: b.approvedContent.acceptanceCriteria, features: b.approvedContent.features || [] }));
+    const entries = (register.brs || []).filter(b => (b.status === 'approved' && b.approvedContent && !b.needsRefresh) || require('./br-ownership').publishedSnapshot(register,b)).map(b => ({ id: b.id, revision: b.approvedRevision, title: b.approvedContent.title, objective: b.approvedContent.objective, scope: b.approvedContent.scope, acceptanceCriteria: b.approvedContent.acceptanceCriteria, features: b.approvedContent.features || [] }));
     if (!entries.length)
         throw Error('Approve a Business Requirement before generating a design.');
     const hash = sha(JSON.stringify(entries));

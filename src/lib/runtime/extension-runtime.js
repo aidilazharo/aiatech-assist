@@ -7050,9 +7050,10 @@ async function handleDashboardMessage(msg){
            warnings.push(...(pulled.conflicts||[]),...(pulled.skipped?[pulled.skipped]:[]));
            register=await brWorkflow.load(registry,projectId);
            if(activeProject?.id!==projectId)break;
-           const known=new Set(inventory.enrich(all,register,self.accountId).filter(item=>item.mine&&item.taskRole==='software-developer').map(item=>item.key));
-           if(msg.roleId==='software-developer'&&all.some(issue=>issue.assigneeId===self.accountId&&/^(task|subtask|sub-task|sub task)$/i.test(issue.type)&&!known.has(issue.key))){
-            const recovered=await confluenceBRRecovery.recoverAssigned({registry,projectId,config,token,issues:all,accountId:self.accountId,
+           const recoveryRole=msg.roleId;
+           const known=new Set(inventory.enrich(all,register,self.accountId).filter(item=>item.mine&&item.taskRole===recoveryRole&&item.publishedSnapshotReady).map(item=>item.key));
+           if(['software-developer','ux-designer'].includes(recoveryRole)&&all.some(issue=>issue.assigneeId===self.accountId&&/^(task|subtask|sub-task|sub task)$/i.test(issue.type)&&!known.has(issue.key))){
+            const recovered=await confluenceBRRecovery.recoverAssigned({registry,projectId,config,token,issues:all,accountId:self.accountId,roleId:recoveryRole,
              verify:(remote,p,live)=>verifyLinkedJiraIdentity(remote,config,p,live),shouldContinue:()=>activeProject?.id===projectId});
             warnings.push(...recovered.warnings);
            }

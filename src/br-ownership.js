@@ -2,11 +2,19 @@
 // BR is the navigation unit. My Work changes ownership of role tasks only.
 const ISSUE=/^[A-Z][A-Z0-9]{1,19}-[1-9][0-9]*$/;
 const BR=/^BR-[0-9]{1,6}$/;
+// An immutable approved snapshot remains usable when its exact content is
+// recorded as published, even while the BA prepares a separate revision.
+function publishedSnapshot(register,br){
+ if(!br?.approvedContent||!br.approvedRevision||['retired','retire-proposed','cancelled','canceled','rejected'].includes(br.status))return false;
+ if(!register?.synced?.[br.id]?.key||register.deletedRequirements?.some(x=>x.id===br.id))return false;
+ const hash=register.baPublishedBRs?.[br.id];
+ return typeof hash==='string'&&hash===require('./br-workflow').normalizedContent(br.approvedContent);
+}
 function tree(register,brId){
  const id=String(brId||'').toUpperCase();
  if(!BR.test(id))throw Error('Invalid Business Requirement ID.');
  const br=(register?.brs||[]).find(row=>row.id===id);
- if(!br||br.status!=='approved'||br.needsRefresh||!br.approvedContent)throw Error('Assign only a current approved Business Requirement.');
+ if(!br||(!publishedSnapshot(register,br)&&(br.status!=='approved'||br.needsRefresh||!br.approvedContent)))throw Error('Assign only a current approved or previously published Business Requirement.');
  const mapped=register?.synced||{};
  if(!mapped[id]?.key)throw Error(id+' has no published Jira Epic. Publish the full BR first.');
  const entries=Object.entries(mapped).filter(([p,v])=>(p===id||p.startsWith(id+'/'))&&v?.key)
@@ -136,4 +144,4 @@ async function changeWholeBr({register,brId,projectKey,accountId,mode,readIssue,
  }
  return {...scope,mode,count:before.length,changed:changed.length,accountId:mode==='assign'?accountId:null};
 }
-module.exports={tree,developmentTree,roleTree,matchesRoleTask,requireTask,fromKey,verifyOwner,changeWholeBr};
+module.exports={publishedSnapshot,tree,developmentTree,roleTree,matchesRoleTask,requireTask,fromKey,verifyOwner,changeWholeBr};

@@ -31,7 +31,7 @@ function html(webview,{resumeLibrary=false}={}){
     subtask:"<path d=\"M5 5v7h4m-3-3 3 3-3 3M12 8h7v8h-7zM14 12l1 1 2-2\"/>"
   };
   const baHeaderIcon=(name,variant='')=>`<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${variant}>${baHeaderIcons[name]}</svg>`;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.1.14';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.1.15';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const uiConsistencyCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-consistency.css'));
@@ -761,7 +761,7 @@ function html(webview,{resumeLibrary=false}={}){
         </div>
         <div class="developer-br-topbar">
           <div class="developer-br-picker"><div class="developer-br-picker-row"><select id="developerBrSelect" aria-label="Select an approved Business Requirement"><option value="">Select approved BR…</option></select><span id="developerBrChangeBadge" class="developer-br-change-badge hidden" aria-live="polite"></span></div></div>
-          <div class="developer-br-actions"><button id="developerBrStart" type="button" disabled>▶ Start Development</button><button id="developerBrPreviewDraft" type="button" class="secondary developer-br-icon-button hidden" disabled aria-label="Preview Draft" title="Preview Draft — open an untested local application (tests skipped)"><svg aria-hidden="true" focusable="false" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.8"/></svg></button><button id="developerBrStop" type="button" class="secondary hidden" disabled aria-hidden="true" tabindex="-1">Stop Development</button></div>
+          <div class="developer-br-actions"><button id="developerBrStart" type="button" disabled>▶ Start Development</button><button id="developerBrPreviewDraft" type="button" class="secondary developer-br-icon-button" disabled aria-label="Preview Draft" title="Preview Draft — open an untested local application (tests skipped)"><svg aria-hidden="true" focusable="false" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.8"/></svg></button><button id="developerBrStop" type="button" class="secondary hidden" disabled aria-hidden="true" tabindex="-1">Stop Development</button></div>
         </div>
         <small id="developerBrRevision" class="muted developer-br-revision">Select the current approved revision.</small>
         <div class="developer-br-live-status" aria-label="Current development activity">
