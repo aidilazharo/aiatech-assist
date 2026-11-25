@@ -55,10 +55,11 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
     if(url.includes('/rest/api/3/project/search'))return {ok:true,status:200,json:async()=>({values:[{key:'FIN',name:'Finance',id:'10'}]})};
     throw new Error('Unexpected discovery API '+url);
   };
+  let ext;
   try{
     Module._load=function(name,parent,main){return name==='vscode'?fake:orig.call(this,name,parent,main);};
     delete require.cache[require.resolve('../src/extension')];
-    const ext=require('../src/extension');Module._load=orig;
+    ext=require('../src/extension');Module._load=orig;
     const ctx={extensionUri:uri(path.resolve(__dirname,'..')),globalStorageUri:uri(path.join(root,'private')),
       globalState:{get:k=>globalState.get(k),update:async(k,v)=>{if(v===undefined)globalState.delete(k);else globalState.set(k,v);}},
       workspaceState:{get:k=>workspaceState.get(k),update:async(k,v)=>{if(v===undefined)workspaceState.delete(k);else workspaceState.set(k,v);}},
@@ -274,5 +275,5 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
     assert.equal(globalState.get('atgvAssist.coordinationProvider'),'local');
     assert.deepEqual((await fs.readFile(path.join(root,'projects','claims','atgv.project.json'),'utf8').then(JSON.parse)).settings.jira.projectKey,'CLM');
     assert.equal(workspaceState.has('atgvAssist.activeProject'),false);
-  }finally{Module._load=orig;global.fetch=originalFetch;resetGit.cloneConfigured=originalClone;resetCatalog.syncGitWorkspace=originalCatalogSync;releaseUpdater.latestRelease=originalReleaseLookup;libraryUpdater.latest=originalLibraryLookup;await fs.rm(root,{recursive:true,force:true});}
+  }finally{try{await ext?.deactivate();}finally{Module._load=orig;global.fetch=originalFetch;resetGit.cloneConfigured=originalClone;resetCatalog.syncGitWorkspace=originalCatalogSync;releaseUpdater.latestRelease=originalReleaseLookup;libraryUpdater.latest=originalLibraryLookup;await fs.rm(root,{recursive:true,force:true,maxRetries:5,retryDelay:100});}}
 });

@@ -18,7 +18,7 @@ test('v399: packaged webview styles precede controllers, without duplicate fallb
   ({createDashboardHtml:renderer}=require('../src/lib/webview/dashboard-html'));
  }finally{Module._load=original;}
  const html=renderer(()=>({extensionUri:{fsPath:'/atgv-extension'}}),()=>null)({
-  asWebviewUri:uri=>uri.fsPath,cspSource:'vscode-resource:'
+  asWebviewUri:uri=>uri.fsPath.replace(/\\/g,'/'),cspSource:'vscode-resource:'
  });
  const head=html.slice(0,html.indexOf('</head>'));
  const body=html.slice(html.indexOf('</head>'));
@@ -26,7 +26,8 @@ test('v399: packaged webview styles precede controllers, without duplicate fallb
   assert.ok(head.includes('/media/'+css),'Missing head stylesheet '+css);
  assert.equal((head.match(/\/media\/start\.css"/g)||[]).length,1,'start.css loaded once even without vendor cache');
  assert.ok(head.indexOf('library-loader-probe.js')<head.indexOf('start.css'),'CSS probe must load before styles');
- assert.ok(body.indexOf('atgv-kanban.js')<body.indexOf('start.js'),'Kanban controller must load before start.js');
+ assert.ok(head.includes('/media/atgv-kanban.js')&&body.includes('/media/start.js'),'Kanban loads in head before the main controller');
+ assert.ok(!body.includes('/media/atgv-kanban.js'),'Kanban must not load twice');
  assert.ok(body.indexOf('webview-asset-boot.js')>body.indexOf('user-guide-controller.js'),'readiness probe must be last');
  assert.ok(body.includes('id="pmKanbanBoard"'));
  assert.ok(body.includes('id="overviewUserRows"'));

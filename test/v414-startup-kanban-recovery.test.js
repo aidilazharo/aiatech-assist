@@ -11,7 +11,11 @@ const setup=require('../src/lib/startup-setup');
 test('v414: GitHub source is trusted and Project Repository is part of Start',()=>{
  const parsed=setup.validate({...setup.DEFAULTS,projectRepoUrl:'https://github.com/evil/ignored',libraryRepoUrl:'https://github.com/evil/ignored'});
  assert.equal(parsed.libraryRepoUrl,setup.SOURCE_REPOS.aiamalaysia.library);
- assert.equal(parsed.project,undefined);
+ assert.deepEqual(parsed.project,{owner:'aiamalaysia',repo:setup.DEFAULTS.projectRepository});
+ assert.equal(parsed.projectRepoUrl,'https://github.com/aiamalaysia/'+setup.DEFAULTS.projectRepository);
+ const personal=setup.validate({...setup.DEFAULTS,githubUrl:'github.com/aidilazharo',projectRepository:'tech-cockpit-new'});
+ assert.deepEqual(personal.project,{owner:'aidilazharo',repo:'tech-cockpit-new'});
+ assert.equal(personal.libraryRepoUrl,setup.SOURCE_REPOS.aiamalaysia.library);
  const html=read('src/lib/webview/dashboard-html.js');
  const start=html.slice(html.indexOf('<form id="startupConnectionForm"'),html.indexOf('</form>',html.indexOf('<form id="startupConnectionForm"')));
  assert.match(start,/id="startupProjectRepository"/);assert.doesNotMatch(start,/id="startupLibraryRepo"/);
@@ -33,7 +37,7 @@ test('v414: rendered SortableJS closes its script tag before loading the Kanban 
   ({createDashboardHtml}=require('../src/lib/webview/dashboard-html'));
  }finally{Module._load=old;}
  const html=createDashboardHtml(()=>({extensionUri:{fsPath:'/atgv-extension'}}),()=>({dir:'/verified-library'}))({
-  asWebviewUri:uri=>uri.fsPath,cspSource:'vscode-resource:'
+  asWebviewUri:uri=>uri.fsPath.replace(/\\/g,'/'),cspSource:'vscode-resource:'
  });
  const a='<script src="/verified-library/sortablejs/sortablejs-1.15.7.min.js"></script>';
  const b='<script src="/atgv-extension/media/atgv-kanban.js"></script>';

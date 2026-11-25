@@ -10,7 +10,7 @@ const skeleton=require('../src/project-skeleton');
 const {ProjectRegistry}=require('../src/projects');
 const remote=require('../src/remote-br-deletion');
 const root=path.join(__dirname,'..');
-const exampleRepo={root:'/tmp/a-reviewed-repo',sha:'abc123',clean:true};
+const exampleRepo={root:path.resolve(os.tmpdir(),'a-reviewed-repo'),sha:'abc123',clean:true};
 const resultSet=relative=>['test','build','run'].map(operation=>({relative,operation,passed:true,head:'abc123',at:'2026-11-04T00:00:00Z'}));
 const verification=(stackId='react',companionId='')=>({techStackPrepared:{stackId,companionId,root:exampleRepo.root,sha:exampleRepo.sha,branch:'bootstrap/react-initial'},techStackServerVerification:{status:'verified',stackId,companionId,root:exampleRepo.root,sha:exampleRepo.sha,branch:'bootstrap/react-initial',at:'2026-11-05T12:00:00Z'}});
 

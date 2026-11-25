@@ -68,7 +68,8 @@ test('Test & Run diagnostics include npm test failure stdout stderr and exit sta
   let trace='';
   const result=await developer.executeLocal(folder,{operation:'test',onDiagnostic:chunk=>{trace+=chunk;}});
   assert.equal(result.passed,false);
-  for(const item of ['npm run test','test stdout info','test stderr info','Exit code: 23'])assert.ok(trace.includes(item),item);
+  assert.match(trace,/Command: [^\r\n]*npm(?:-cli\.js)? run test/);
+  for(const item of ['test stdout info','test stderr info','Exit code: 23'])assert.ok(trace.includes(item),item);
   assert.equal(result.diagnosticLogs,trace);
  }finally{await fs.rm(folder,{recursive:true,force:true});}
 });

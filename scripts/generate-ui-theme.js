@@ -133,6 +133,6 @@ main h3, #landingView h3, #workView h3, #planningView h3, #discoveryView h3, #pr
 }
 `;
 if(process.argv.includes('--check')) {
- if(!fs.existsSync(outFile)||fs.readFileSync(outFile,'utf8')!==css) {console.error('ATGV UI design-token CSS is out of sync: npm run ui:generate');process.exitCode=1;}
+ if(!fs.existsSync(outFile)||fs.readFileSync(outFile,'utf8').replace(/\r\n/g,'\n')!==css.replace(/\r\n/g,'\n')) {console.error('ATGV UI design-token CSS is out of sync: npm run ui:generate');process.exitCode=1;}
  else console.log('ATGV UI theme matches JSON tokens');
 } else {fs.writeFileSync(outFile,css);console.log(`Generated ${path.relative(root,outFile)} from ${path.relative(root,tokenFile)}`);}

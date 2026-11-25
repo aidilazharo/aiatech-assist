@@ -1,4 +1,5 @@
 'use strict';
+const {logicalCommand}=require('./portable-command-fixture');
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs/promises');
@@ -9,7 +10,7 @@ const source=()=>fs.readFile(path.join(__dirname,'../test/generated/extension-so
 const webview=()=>fs.readFile(path.join(__dirname,'../media/start.js'),'utf8');
 async function fixture(body){const folder=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-deps-'));try{return await body(folder);}finally{await fs.rm(folder,{recursive:true,force:true});}}
 async function manifest(folder,data){await fs.writeFile(path.join(folder,'package.json'),JSON.stringify(data));}
-async function fakeNpm(folder,commands){return async(bin,args)=>{commands.push([bin,...args].join(' '));if(args[0]==='install'){
+async function fakeNpm(folder,commands){return async(bin,args)=>{[bin,args]=logicalCommand(bin,args);commands.push([bin,...args].join(' '));if(args[0]==='install'){
  const data=JSON.parse(await fs.readFile(path.join(folder,'package.json'),'utf8'));
  for(const name of Object.keys({...data.dependencies,...data.devDependencies})){
   const file=path.join(folder,'node_modules',name,'package.json');await fs.mkdir(path.dirname(file),{recursive:true});await fs.writeFile(file,JSON.stringify({name}));
@@ -37,13 +38,13 @@ test('A failed npm health check triggers repair, even with all modules present',
  await manifest(root,{dependencies:{express:'^4.21.0'}});
  await fs.mkdir(path.join(root,'node_modules/express'),{recursive:true});await fs.writeFile(path.join(root,'node_modules/express/package.json'),'{}');
  const commands=[];let first=true;
- await helper.ensureForTarget(root,{kind:'npm',relative:''},{runner:async(bin,args,options)=>{
+ await helper.ensureForTarget(root,{kind:'npm',relative:''},{runner:async(bin,args,options)=>{[bin,args]=logicalCommand(bin,args);
   commands.push(args[0]);if(args[0]==='ls'&&first){first=false;throw Object.assign(Error('invalid dependency tree'),{code:1,stderr:'missing peer dependencies'});}return {stdout:'ok',stderr:''};
  }});
  assert.deepEqual(commands,['ls','install','ls']);
 }));
 test('Uses native restore commands for dotnet and Maven without changing SDKs',async()=>fixture(async root=>{
- const commands=[];const runner=async(bin,args)=>{commands.push([bin,...args].join(' '));return {stdout:'ok',stderr:''};};
+ const commands=[];const runner=async(bin,args)=>{[bin,args]=logicalCommand(bin,args);commands.push([bin,...args].join(' '));return {stdout:'ok',stderr:''};};
  await helper.ensureAll(root,[{kind:'dotnet',relative:''},{kind:'maven',relative:''}],{runner});
  assert.deepEqual(commands,['dotnet --version','dotnet restore','java -version','mvn --version','mvn -B -ntp dependency:go-offline']);
 }));
@@ -72,7 +73,7 @@ test('Solution Architect UI and handlers wire the dependency helper',async()=>{
 test('Installs immediately using a reusable private cache, avoiding root-owned default npm cache',async()=>fixture(async root=>{
  await manifest(root,{dependencies:{react:'^19.0.0',express:'^4.21.0'}});
  const commands=[],trace=[];
- const runner=async(bin,args,options)=>{
+ const runner=async(bin,args,options)=>{[bin,args]=logicalCommand(bin,args);
   commands.push({bin,args,options});
   if(args[0]==='install'){
    assert.equal(options.env.npm_config_cache,options.env.NPM_CONFIG_CACHE);

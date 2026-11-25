@@ -45,7 +45,7 @@ test('v413: verified Library SortableJS loads before Kanban with an offline nati
   ({createDashboardHtml}=require('../src/lib/webview/dashboard-html'));
  }finally{Module._load=original;}
  const ctx=()=>({extensionUri:{fsPath:'/atgv-extension'}});
- const webview={asWebviewUri:uri=>uri.fsPath,cspSource:'vscode-resource:'};
+ const webview={asWebviewUri:uri=>uri.fsPath.replace(/\\/g,'/'),cspSource:'vscode-resource:'};
  const html=createDashboardHtml(ctx,()=>({dir:'/verified-sdlc-library'}))(webview);
  const vendor=html.indexOf('src="/verified-sdlc-library/sortablejs/sortablejs-1.15.7.min.js"');
  const kanban=html.indexOf('src="/atgv-extension/media/atgv-kanban.js"');
@@ -150,7 +150,7 @@ test('v400: Project Manager defaults to Jira DataTable and can switch to drag-an
   ({createDashboardHtml}=require('../src/lib/webview/dashboard-html'));
  }finally{Module._load=original;}
  const html=createDashboardHtml(()=>({extensionUri:{fsPath:'/atgv-extension'}}),()=>null)({
-  asWebviewUri:uri=>uri.fsPath,cspSource:'vscode-resource:'
+  asWebviewUri:uri=>uri.fsPath.replace(/\\/g,'/'),cspSource:'vscode-resource:'
  });
  for(const id of ['pmJiraWorkspace','pmJiraTableView','pmJiraKanbanView','pmShowTable','pmShowKanban','pmJiraTable','pmKanbanBoard']){
   assert.equal((html.match(new RegExp('id="'+id+'"','g'))||[]).length,1,'one '+id);

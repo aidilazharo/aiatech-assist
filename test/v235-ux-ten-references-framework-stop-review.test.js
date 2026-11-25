@@ -18,7 +18,7 @@ test('ticket scoped design framework selection is persisted and affects generati
  assert.match(host,/case 'uxFrameworkSave':/);assert.match(host,/workspaceState\.update\(uxFrameworkKey/);
  assert.match(host,/case 'uxFrameworkRead':/);
  assert.match(host,/Selected UI\/UX framework/);
- assert.match(host,/designFramework,sourceStoryKey\}/);
+ assert.match(host,/designFramework,sourceStoryKey,repositorySource:roleRepository\.identity\(repositoryReference\)\}/);
  assert.match(host,/Design framework changed since generation/);
  assert.match(ui,/send\('uxFrameworkSave'/);
 });

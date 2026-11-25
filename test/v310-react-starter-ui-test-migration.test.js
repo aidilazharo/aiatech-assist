@@ -58,7 +58,7 @@ test('v0.3.13 does not follow symlinks to replace starter tests',async t=>{
 });
 test('v0.3.13 migration supports CRLF on Windows',async t=>{
  const s=await setup(t);
- await fs.writeFile(s.file,s.stock.replace(/\n/g,'\r\n'));
+ await fs.writeFile(s.file,s.stock.replace(/\r?\n/g,'\r\n'));
  assert.ok(await migration.retireReactDemoTest(s.args));
 });
 test('v0.3.13 keeps Product BR-specific RED/GREEN tests mandatory and visible',async()=>{

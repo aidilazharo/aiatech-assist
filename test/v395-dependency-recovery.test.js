@@ -1,4 +1,5 @@
 'use strict';
+const {logicalCommand}=require('./portable-command-fixture');
 const test=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),fsp=require('node:fs/promises'),path=require('node:path'),os=require('node:os');
 const helper=require('../src/stack-dependency-helper'),recovery=require('../src/dependency-recovery');
@@ -15,7 +16,7 @@ test('recognizes only specific version errors and sorts stable versions newest f
 test('npm persists a version failure through stop and resumes with latest unfailed compatible version',async t=>{
  const root=temp(t),history=path.join(root,'history.json');fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({dependencies:{demo:'^1.0.0'}}));
  let attempts=0,stopped=false;const calls=[];
- const runner=async(bin,args)=>{
+ const runner=async(bin,args)=>{[bin,args]=logicalCommand(bin,args);
   calls.push(args.join(' '));
   if(args[0]==='view')return {stdout:JSON.stringify(['1.0.0','1.2.0','1.3.0']),stderr:''};
   if(args[0]==='install'&&!args.includes('--no-save')){attempts++;throw Object.assign(Error('npm failure'),{code:1,stderr:'npm ERR! code ETARGET\nnpm ERR! notarget No matching version found for demo@1.3.0.'});}
@@ -34,7 +35,7 @@ test('npm recovery handles the direct packages used by React, Angular and NestJS
  const root=temp(t);
  for(const [stack,name] of [['react','vite'],['angular','@angular/core'],['nestjs','@nestjs/core']]){
   const cwd=path.join(root,stack),historyFile=path.join(root,stack+'-history.json');fs.mkdirSync(cwd);fs.writeFileSync(path.join(cwd,'package.json'),JSON.stringify({dependencies:{[name]:'^1.0.0'}}));
-  const attempts=[];const runner=async(bin,args)=>{
+  const attempts=[];const runner=async(bin,args)=>{[bin,args]=logicalCommand(bin,args);
    if(args[0]==='view')return {stdout:JSON.stringify(['1.1.0','1.2.0','1.3.0'])};
    if(args[0]==='install'){attempts.push(args);if(attempts.length===1)throw Object.assign(Error('npm failed'),{code:1,stderr:'ETARGET No matching version found for '+name+'@1.3.0.'});assert.ok(args.includes(name+'@1.2.0'));return {stdout:'ok'};}
    throw Error('Unexpected npm command');
@@ -49,7 +50,7 @@ test('resume replaces a recorded failed version left in node_modules',async t=>{
  fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({dependencies:{demo:'^1.0.0'}}));fs.mkdirSync(moduleDir,{recursive:true});
  fs.writeFileSync(path.join(moduleDir,'package.json'),JSON.stringify({name:'demo',version:'1.3.0'}));
  await recovery.record({manager:'npm',package:'demo',version:'1.3.0',error:'ETARGET: not available',kind:'version'},{file:historyFile});
- const calls=[];const runner=async(bin,args)=>{
+ const calls=[];const runner=async(bin,args)=>{[bin,args]=logicalCommand(bin,args);
   calls.push(args);
   if(args[0]==='view')return {stdout:JSON.stringify(['1.2.0','1.3.0'])};
   if(args[0]==='install'){assert.ok(args.includes('demo@1.2.0'));fs.writeFileSync(path.join(moduleDir,'package.json'),JSON.stringify({name:'demo',version:'1.2.0'}));return {stdout:'installed'};}
@@ -79,7 +80,7 @@ test('NuGet retries a direct failed package at the latest unfailed same-major ve
  const root=temp(t),history=path.join(root,'history.json'),file=path.join(root,'Api.csproj');
  fs.writeFileSync(file,'<Project><ItemGroup><PackageReference Include="Foo.Bar" Version="2.1.0" /></ItemGroup></Project>');
  fs.writeFileSync(path.join(root,'atgv.bootstrap.json'),JSON.stringify({schema:1,generatedFiles:['Api.csproj','atgv.bootstrap.json']}));
- let restores=0;const runner=async(bin,args)=>{
+ let restores=0;const runner=async(bin,args)=>{[bin,args]=logicalCommand(bin,args);
   if(args[0]==='--version')return {stdout:'10.0.0'};
   if(args[0]==='package')return {stdout:JSON.stringify({searchResult:[{packages:[{id:'Foo.Bar',versions:[{version:'2.3.0'},{version:'2.2.0'},{version:'2.1.0'},{version:'3.0.0'}]}]}]})};
   if(args[0]==='restore'){restores++;if(restores===1)throw Object.assign(Error('restore error'),{code:1,stderr:'error NU1102: Unable to find package Foo.Bar with version (>= 2.1.0)'});assert.match(fs.readFileSync(file,'utf8'),/Version="2.3.0"/);return {stdout:'restored'};}
@@ -90,7 +91,7 @@ test('NuGet retries a direct failed package at the latest unfailed same-major ve
  assert.equal((await recovery.failedVersions('dotnet','Foo.Bar',{file:history})).has('2.1.0'),true);
  const resumed=path.join(root,'resumed');fs.mkdirSync(resumed);fs.writeFileSync(path.join(resumed,'Api.csproj'),'<Project><PackageReference Include="Foo.Bar" Version="2.1.0" /></Project>');
  fs.writeFileSync(path.join(resumed,'atgv.bootstrap.json'),JSON.stringify({schema:1,generatedFiles:['Api.csproj','atgv.bootstrap.json']}));
- const resumeRunner=async(bin,args)=>{
+ const resumeRunner=async(bin,args)=>{[bin,args]=logicalCommand(bin,args);
   if(args[0]==='--version')return {stdout:'10.0.0'};
   if(args[0]==='package')return {stdout:JSON.stringify({searchResult:[{packages:[{id:'Foo.Bar',versions:[{version:'2.3.0'},{version:'2.1.0'}]}]}]})};
   if(args[0]==='restore'){assert.match(fs.readFileSync(path.join(resumed,'Api.csproj'),'utf8'),/Version="2.3.0"/);return {stdout:'restored'};}
@@ -104,7 +105,7 @@ test('Maven retries a direct failed artifact using configured local metadata',as
  fs.writeFileSync(file,'<project><dependencies><dependency><groupId>com.example</groupId><artifactId>thing</artifactId><version>3.2.0</version></dependency></dependencies></project>');
  fs.writeFileSync(path.join(root,'atgv.bootstrap.json'),JSON.stringify({schema:1,generatedFiles:['pom.xml','atgv.bootstrap.json']}));
  const metadata=path.join(repo,'com','example','thing');fs.mkdirSync(metadata,{recursive:true});fs.writeFileSync(path.join(metadata,'maven-metadata-central.xml'),'<metadata><versioning><versions><version>3.1.0</version><version>3.2.0</version><version>3.4.0</version><version>4.0.0</version></versions></versioning></metadata>');
- let restores=0;const runner=async(bin,args)=>{
+ let restores=0;const runner=async(bin,args)=>{[bin,args]=logicalCommand(bin,args);
   if(bin==='java'||args[0]==='--version')return {stdout:'ready'};
   if(args.includes('help:evaluate'))return {stdout:repo};
   if(args.some(x=>x.includes('maven-dependency-plugin')))return {stdout:'metadata fetched'};

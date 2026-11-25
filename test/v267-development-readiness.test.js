@@ -38,7 +38,9 @@ test('safely expands a fixed-file Node command in isolated worktree only; approv
   assert.deepEqual(tdd.allowedDiscoveredPaths([{path:'server/br-007-ac01.test.mjs'}],discover),[]);
   assert.ok(tdd.discoveryInstructions(discover)[0].installedDependencies.includes('react'));
   await fs.writeFile(path.join(worktree,'server/br-007-ac01.test.mjs'),'import test from "node:test";test("RED",()=>{throw Error("missing behavior")});\n');
-  const runner=spawnSync('npm',['test'],{cwd:worktree,encoding:'utf8',timeout:20000,env});
+  const npm=require('../src/platform-process').npmCommand(['test']);
+  const runner=spawnSync(npm.bin,npm.args,{cwd:worktree,encoding:'utf8',timeout:20000,env});
+  assert.ifError(runner.error);
   assert.notEqual(runner.status,0);
   assert.match(runner.stdout+'\n'+runner.stderr,/RED/);
   await assert.rejects(()=>tdd.repairFixedFileTestCommands(original,original),/isolated worktree/);

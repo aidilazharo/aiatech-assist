@@ -1,4 +1,5 @@
 'use strict';
+const {logicalCommand}=require('./portable-command-fixture');
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs/promises');
@@ -122,7 +123,7 @@ test('Solution Architect clears a cross-OS node_modules tree before installing t
  await write(path.join(root,'node_modules/vite/package.json'),{name:'vite'});
  await write(path.join(root,'node_modules/@libsql/client/package.json'),{name:'@libsql/client'});
  let cleared=false;
- const runner=async(bin,args)=>{
+ const runner=async(bin,args)=>{[bin,args]=logicalCommand(bin,args);
   if(args[0]==='install'){
    cleared=!(await fs.stat(path.join(root,'node_modules')).catch(()=>null));
    await write(path.join(root,'node_modules/@libsql/client/package.json'),{name:'@libsql/client'});

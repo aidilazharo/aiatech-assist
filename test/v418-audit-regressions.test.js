@@ -86,7 +86,7 @@ test('permission checks use temporary files and report trust and write failures'
 });
 test('stack checks run concurrently and an error freezes only the affected stack',async()=>{
  const events=[],started=[];
- const result=await readiness.check({runner:async command=>{started.push(command);await new Promise(resolve=>setTimeout(resolve,command==='node'?1:8));if(command==='dotnet')throw Error('missing');return {stdout:command==='java'?'java 25':command==='node'?'v24.2.0':'10.0.0'};},onStackProgress:event=>events.push(event)});
+ const result=await readiness.check({platform:'win32',env:{},fsApi:{stat:async()=>{throw Object.assign(Error('not installed'),{code:'ENOENT'});}},runner:async command=>{started.push(command);await new Promise(resolve=>setTimeout(resolve,command==='node'?1:8));if(command==='dotnet')throw Error('missing');return {stdout:command==='java'?'java 25':command==='node'?'v24.2.0':'10.0.0'};},onStackProgress:event=>events.push(event)});
  assert.equal(started.length,Object.keys(readiness.TOOLS).length);
  const dotnet=events.filter(event=>event.id==='dotnet');assert.equal(dotnet.filter(event=>event.status==='error').length,1);assert.equal(dotnet.at(-1).status,'error');
  assert.ok(events.some(event=>event.id==='react'&&event.status==='complete'));assert.equal(result.stacks.find(x=>x.id==='dotnet').ready,false);

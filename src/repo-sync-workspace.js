@@ -47,7 +47,10 @@ async function cleanManagedCheckout(checkout,outcome,{git=async(args,cwd)=>(awai
   throw Error('PR identity could not be verified; temporary checkout preserved.');
  const dotGit=await fs.lstat(path.join(dir,'.git'));
  if(!dotGit.isDirectory()||dotGit.isSymbolicLink())throw Error('Temporary Git metadata changed; preserved for review.');
- if(await git(['rev-parse','--show-toplevel'],dir)!==dir||
+ const gitRoot=await git(['rev-parse','--show-toplevel'],dir);
+ // Git for Windows prints forward slashes. Resolve the actual absolute path
+ // without weakening the checkout identity and cleanliness guards.
+ if(!path.isAbsolute(gitRoot)||await fs.realpath(gitRoot)!==dir||
     await git(['symbolic-ref','--quiet','--short','HEAD'],dir)!==outcome.branch||
     await git(['status','--porcelain','--untracked-files=all','--ignored'],dir))
   throw Error('Temporary checkout contains unexpected changes or files; preserved for review.');

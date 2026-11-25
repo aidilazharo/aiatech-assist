@@ -10,6 +10,9 @@ const https = require('node:https');
 // Repository fixtures use local Git remotes. Child Git processes must not
 // contact a remote if a test misses a mock.
 process.env.GIT_ALLOW_PROTOCOL = 'file';
+// Temporary test repositories use deterministic line endings independent of
+// the user's Git global configuration. Local fixtures may override this.
+process.env.GIT_CONFIG_GLOBAL = require('node:path').join(__dirname,'fixtures','gitconfig');
 function local(host) { return !host || ['localhost','localhost.localdomain','127.0.0.1','::1','[::1]'].includes(String(host).toLowerCase()); }
 function allowed(host) {
  if (!local(host)) throw new Error('Offline verification rejected an external request.');

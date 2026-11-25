@@ -89,8 +89,8 @@ test('unrecoverable filesystem failure reports cause and does not delete verifie
 });
 
 test('catalog Git uses explicitly configured executable even when shell PATH has no git',async()=>{
- const bin=execFileSync('which',['git'],{encoding:'utf8'}).trim();
- const result=await catalog.runCatalogGit(os.tmpdir(),['--version'],{...process.env,PATH:'',ATGV_GIT_PATH:bin});
+ const bin=execFileSync(process.platform==='win32'?'where.exe':'which',['git'],{encoding:'utf8'}).trim().split(/\r?\n/)[0];
+ const result=await catalog.runCatalogGit(os.tmpdir(),['--version'],{...Object.fromEntries(Object.entries(process.env).filter(([key])=>key.toUpperCase()!=='PATH')),PATH:'',ATGV_GIT_PATH:bin});
  assert.match(result,/git version/);
 });
 

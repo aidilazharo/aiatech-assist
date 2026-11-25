@@ -9,7 +9,7 @@ const gate=require('../src/architect-stack-approval');
 const {normalizeProjectInput}=require('../src/projects');
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');
 const sha='a'.repeat(40);
-const prepared={stackId:'react',companionId:'',root:'/tmp/test-project',branch:'bootstrap/react-initial',sha};
+const prepared={stackId:'react',companionId:'',root:path.resolve(require('node:os').tmpdir(),'test-project'),branch:'bootstrap/react-initial',sha};
 const verification={status:'verified',stackId:'react',companionId:'',root:prepared.root,branch:prepared.branch,sha,at:'2026-11-06T02:00:00Z'};
 const resultSet=['test','build','run'].map(operation=>({operation,relative:'',head:sha,passed:true,at:'2026-11-06T02:00:00Z'}));
 const validated=gate.evidence({stackId:'react',repo:{root:prepared.root,sha,clean:true},results:resultSet});

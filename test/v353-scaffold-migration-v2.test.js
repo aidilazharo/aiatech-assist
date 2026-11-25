@@ -70,7 +70,10 @@ test('v0.3.55 accepts Windows CRLF only when templateDigest verifies the origina
  // Simulate Git for Windows checkout: committed blob LF, worktree CRLF.
  const src=await fs.readFile(file,'utf8');
  await fs.writeFile(file,src.replace(/\r?\n/g,'\r\n'));
- assert.match(git(root,'status','--porcelain'),/M src\/main\.jsx/);
+ assert.match(await fs.readFile(file,'utf8'),/\r\n/);
+ // Git for Windows may report a content-clean CRLF worktree as clean.
+ assert.match(git(root,'status','--porcelain','--','src/main.jsx'),/^(?:M src\/main\.jsx)?$/);
+ assert.equal(git(root,'diff','--numstat','--','src/main.jsx'),'');
  const change=await migration.migrate({root,stackIds:['react']});
  assert.equal(change.provenance,'verified-CRLF-only');
  assert.equal((await architect.generatedCommitPlan(root,['react'])).migration,true);

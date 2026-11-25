@@ -1,8 +1,13 @@
-# ATGV AIATECH Assist v0.1.26
+# ATGV AIATECH Assist v0.1.27
 
 ## Changes
-- Close every test workflow journal, including reopened SQLite instances, before removing temporary directories. Wait for queued workflow operations and keep cleanup failures visible.
-- Retry temporary filesystem sharing violations with bounded recursive removal retries.
-- Preserve the SQLite persistence regression and explicitly assert that both handles are closed and the temporary directory is removed.
-- Close symlink-test journal handles before cleanup and use a Windows directory junction for the directory-link security check; retain file-symlink coverage.
-- Synchronize package, display, README and dashboard versions.
+- Consolidated Windows regression compatibility changes based on the v0.1.26 build log: deterministic Git fixture line endings, LF/CRLF source and generated stylesheet comparisons, and canonical text-only catalog fixtures.
+- Update test mocks to interpret actual npm CLI and Maven cmd.exe argument wrappers; use the production npm launcher in the real subprocess test.
+- Close the activated extension and workflow journal before removing the integration test workspace.
+- Use platform-native temporary paths in approval tests and slash-normalized mock webview URIs; update assertions for independent project repository validation and repository-grounded UI/UX metadata.
+- Resolve the actual Git worktree root before safe Workspace checkout cleanup; retain identity, branch, PR and clean-tree checks.
+- Isolate prerequisite checks from machine-specific installed-tool fallback and test Windows executable lookup.
+- Preserve existing regression tests; add command-wrapper coverage.
+
+## Validation
+- Full Windows regression execution and VSIX packaging remain to be verified on a build host.
