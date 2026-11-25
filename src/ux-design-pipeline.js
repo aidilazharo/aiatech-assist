@@ -7,7 +7,7 @@ const crypto=require('node:crypto');
 const {withLock}=require('./file-lock');
 const {safeKey}=require('./developer-task-artifacts');
 const {checkPath}=require('./ux-ticket-designs');
-const STEPS=Object.freeze(['Upload Design Reference (Optional)','User Flow','Wireframe','UI Mockup','Interactive Prototype','Developer Handoff']);
+const STEPS=Object.freeze(['Upload Design Reference','User Flow','Wireframe','UI Mockup','Interactive Prototype','Developer Handoff']);
 const hash=text=>crypto.createHash('sha256').update(text).digest('hex');
 const clamp=(value,max)=>String(value??'').trim().slice(0,max);
 function location(root,key){return path.join(path.resolve(root),'documents','jira-designs',safeKey(key),'ui-ux-workflow.json');}
