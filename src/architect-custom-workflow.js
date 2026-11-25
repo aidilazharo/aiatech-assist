@@ -72,6 +72,7 @@ async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgr
   await report(7,1,'1/6 Scanning verified Git repository and detecting application targets…');
   const inspection=await stack.scan(key,{driver});
   cancelled(state);
+  if(!/^[a-f0-9]{40,64}$/i.test(String(inspection.sha||'')))throw Error('Git repository has no initial commit. Review and commit project source before Install & Run.');
   if(expectedSha&&inspection.sha!==expectedSha)throw Error('Git revision changed since the previous scan. Nothing was modified; retry after refreshing the repository.');
   // Local application edits are valid development state: do not stash, reset,
   // switch branches or commit them behind the user's back. Run in-place instead.

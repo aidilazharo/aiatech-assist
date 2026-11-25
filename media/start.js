@@ -8633,8 +8633,9 @@ function renderArchitectCustomPanel(){
  singleRun.textContent=stopMode?'Stop':'Install & Run';
  singleRun.classList.toggle('atgv-custom-stop-mode',stopMode);
  singleRun.setAttribute('aria-pressed',String(stopMode));
- singleRun.disabled=!activeId||architectActionBusy||
-  projects.find(p=>p.id===activeId)?.techStackId!=='custom'; 
+ singleRun.disabled=!activeId||architectActionBusy||(!stopMode&&!!current&&!current.sha)||
+  projects.find(p=>p.id===activeId)?.techStackId!=='custom';
+ singleRun.title=current&&!current.sha?'Review and commit project files before Install & Run.':singleRun.textContent; 
  const stages=$('architectCustomSteps');
  if(stages)for(const item of stages.querySelectorAll('[data-step]')){
   const number=Number(item.dataset.step);
@@ -8642,7 +8643,7 @@ function renderArchitectCustomPanel(){
  }
  const waves=$('architectCustomAiWave');
  if(waves)waves.classList.toggle('hidden',!architectCustomAiActive);
- $('architectCustomMockRun').disabled=architectCustomBusy||!current?.ready||architectCustomRunning||!selected?.mockable;
+ $('architectCustomMockRun').disabled=architectCustomBusy||!current?.sha||!current?.ready||architectCustomRunning||!selected?.mockable;
  $('architectCustomStop').disabled=architectCustomBusy||!architectCustomRunning;
  const branchSelect=$('architectCustomBranch'),priorBranch=branchSelect.value;
  branchSelect.replaceChildren();

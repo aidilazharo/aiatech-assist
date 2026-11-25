@@ -41,3 +41,8 @@ test('catalog baseline can resume an already initialized empty Git folder',()=>f
 test('nested project is not initialized inside another repository',()=>fixture(async root=>{
  await git.initializeProjectGit(root,'main');const sub=path.join(root,'sub');await fs.mkdir(sub);await assert.rejects(git.initializeProjectGit(sub,'main'),/another Git repository/);
 }));
+test('unborn repository cannot start dependency installation or application execution',async()=>{
+ const {installAndRun}=require('../src/architect-custom-workflow');
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-unborn-run-'));
+ try{await assert.rejects(installAndRun(root,{stack:{scan:async()=>({sha:'',targets:[],clean:true})},driver:{localLogs:()=>{throw Error('Must not execute project code');}}}),/no initial commit/);}finally{await fs.rm(root,{recursive:true,force:true});}
+});
