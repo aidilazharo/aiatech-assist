@@ -34,6 +34,13 @@ test('practice interaction is limited to navigation, not Git Jira or approval bu
   assert.ok(step.selector.includes('data-nav')||step.selector.includes('data-sdlc-tab')||step.selector==='#sidebarRoleTrigger',`${id}/${step.id} permits unsafe interaction`);
  }
 });
+test('Solution Architect guide follows the current save, publish and approve workflow',()=>{
+ const guide=get('solution-architect');
+ assert.deepEqual(guide.steps.map(step=>step.id),['stack','save','publish','approve']);
+ assert.deepEqual(guide.steps.map(step=>step.selector),['#architectStackSelect','#architectSaveStack','#architectPublishLocalStack','#architectApproveStack']);
+ assert.equal(validStep('solution-architect','test'),false);
+ assert.equal(normalizeProgress('solution-architect',{stepId:'test'}).stepId,'stack');
+});
 test('all tour targets exist in real extension webview markup',()=>{
  const source=read('test/generated/extension-source.txt');
  for(const id of ids)for(const step of get(id).steps){

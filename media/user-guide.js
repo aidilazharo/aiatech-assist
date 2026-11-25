@@ -76,11 +76,11 @@
    s('generate','Generate BR documents','Generate editable Business Requirement documents and review before approval.','#brGenerate','discovery'),
    s('jira','Jira preview and publishing','Preview Jira changes after BR approval. Publishing is a separate authorized action.','#brJiraPreview','discovery')
   ]},
-  'solution-architect':{label:'Solution Architect',description:'Choose, test, and approve the technology stack.',steps:[
+  'solution-architect':{label:'Solution Architect',description:'Choose, prepare, publish, and approve the technology stack.',steps:[
    s('stack','Choose stack','Select a technology stack for the project.','#architectStackSelect','solution-architect'),
-   s('save','Save stack','Create a bootstrap branch from an application-empty main, install and validate the starter, launch the browser, then push the verified branch to GitHub.','#architectSaveStack','solution-architect'),
-   s('test','Test and run','Run unit tests, build, and an application smoke check after reviewing local commands.','#architectTestStack','solution-architect'),
-   s('approve','Approve for Developers','Approve the validated Git revision to allow Developer Jira assignment.','#architectApproveStack','solution-architect')
+   s('save','Save stack','Prepare the selected stack and install its dependencies. Catalog stacks are prepared locally before GitHub publication.','#architectSaveStack','solution-architect'),
+   s('publish','Publish to GitHub','For a locally prepared catalog stack, use Publish to GitHub to upload the saved revision. If already published, or using Custom Stack, continue to approval.','#architectPublishLocalStack','solution-architect'),
+   s('approve','Approve for Developers','Approve the saved Git revision for development. Separate test/build and server verification are not required for catalog approval. Custom Stack requires its verified synthetic preview.','#architectApproveStack','solution-architect')
   ]},
   'technical-lead':{label:'Technical Lead',description:'Coordinate Developers, review and hand off.',steps:[
    s('role','Technical Lead workspace','This optional role can be enabled in project role settings. Start from assigned deliverables.','#roleChecklist','technical-lead'),
