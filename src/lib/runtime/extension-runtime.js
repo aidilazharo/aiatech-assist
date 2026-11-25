@@ -8169,7 +8169,9 @@ async function handleDashboardMessage(msg){
         const project=await registry.read(activeProject.id);
         const register=await brWorkflow.load(registry,activeProject.id);
         const br=register.brs.find(item=>item.id===brId);
-        const recoveryJiraKeys=new Set(Object.entries(register.synced||{}).filter(([nodePath,item])=>(nodePath===brId||nodePath.startsWith(brId+'/'))&&item?.key).map(([,item])=>String(item.key)));
+        let recoveryJiraKeys=new Set();
+        // Preserve recovery diagnostics for stale/unpublished BRs without showing foreign role or parent keys.
+        try{recoveryJiraKeys=new Set(require('../../br-ownership').roleTree(register,brId,'software-developer').entries.map(item=>item.key));}catch{/* no verified Developer mapping */}
         const recoveryEpic=String(register.synced?.[brId]?.key||'');
         const validRevision=!!br&&br.approvedRevision===record?.revision&&project.techStackPrepared?.sha===record?.approvalSha;
         const events=(record?.repairHistory||[]).slice(-25).map(item=>({at:item.at,phase:item.phase,outcome:item.outcome,category:item.category,criterion:item.criterion,attempt:item.attempt,model:item.model,message:item.message}));

@@ -36,11 +36,22 @@ test('Complete Delivery is outside hidden legacy panel, with only BR-correlated 
  assert.match(ui,/if\(!developerBrDone\|\|!developerSelectedTicket\|\|developerDeliveryBusy\|\|developerArtifactDirty\)return;/);
  assert.match(host,/case 'developerDeliveryComplete'/);
 });
-test('BR matching uses exact token boundary and never silently takes unrelated first Jira issue',()=>{
+test('BR matching uses exact BR and Developer role, never a shared parent or another role',()=>{
  const start=ui.indexOf('function matchingDeveloperBrTickets(){'),end=ui.indexOf('function syncDeveloperBrJira()',start);
  const snippet=ui.slice(start,end);
- const ctx={developerBrSelected:'BR-007',developerAssignedMine:[{key:'TC-1',brRoot:true,brId:'BR-007'},{key:'TC-2',brRoot:true,brId:'BR-0071'},{key:'TC-3',brRoot:false,brId:'BR-007'},{key:'TC-4',brRoot:true,brId:'BR-008'}]};
+ const ctx={developerBrSelected:'BR-007',developerAssignedMine:[
+  {key:'TC-1',brRoot:false,taskRole:'software-developer',brId:'BR-007'},
+  {key:'TC-2',brRoot:false,taskRole:'software-developer',brId:'BR-0071'},
+  {key:'TC-3',brRoot:true,brId:'BR-007'},
+  {key:'TC-4',brRoot:false,taskRole:'software-developer',brId:'BR-008'},
+  {key:'TC-5',brRoot:false,taskRole:'ux-designer',brId:'BR-007'},
+  {key:'TC-6',brRoot:false,taskRole:'uat-tester',brId:'BR-007'},
+  {key:'TC-7',brRoot:false,brId:'BR-007'},
+  {key:'TC-8',brRoot:false,taskRole:'software-developer',brId:'BR-007'}
+ ]};
  vm.runInNewContext(snippet+'\nthis.matches=matchingDeveloperBrTickets()',ctx);
- assert.deepEqual([...ctx.matches.map(x=>x.key)],['TC-1']);
+ assert.deepEqual([...ctx.matches.map(x=>x.key)],['TC-1','TC-8']);
+ ctx.developerBrSelected='';vm.runInNewContext(snippet+'\nthis.matches=matchingDeveloperBrTickets()',ctx);
+ assert.equal(ctx.matches.length,0);
  assert.doesNotMatch(ui,/if\(mine\.length\)selectDeveloperTicket\(mine\[0\]\.key\)/);
 });
