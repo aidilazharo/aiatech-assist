@@ -687,6 +687,7 @@ function html(webview,{resumeLibrary=false}={}){
           <button id="architectPullStackUpdates" type="button" class="secondary" disabled>Pull &amp; Update</button>
         </div>
         <span id="architectStackStatusBadge" class="architect-state-chip">Not configured</span>
+        <button id="architectScanProjectFolders" type="button" class="secondary" title="Scan project repository folders and select a checkout">Scan Folder</button>
       </div>
       <div class="architect-gated-progress" aria-label="Technology stack process and readiness">
         <div class="architect-gated-stages architect-stepper" role="list" aria-label="Technology stack workflow">
