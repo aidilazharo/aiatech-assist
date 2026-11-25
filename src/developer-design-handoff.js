@@ -67,7 +67,7 @@ async function ticketDesignsForBr(root,register,brId,{approvedHash=''}={}){
   }));
   if(!screens.length)continue;
   result.push({kind:'ux-ticket',number:record.revisionNumber,sourceTicketKey:key,
-   sourceStoryKey:storyKey,repositorySource:record.repositorySource||null,designFramework:record.repositorySource?.hasDesign?'repository':String(record.designFramework||'').slice(0,40),
+   sourceStoryKey:storyKey,designReferenceHash:String(record.designReferenceHash||''),repositorySource:record.repositorySource||null,designFramework:record.repositorySource?.hasDesign?'repository':String(record.designFramework||'').slice(0,40),
    approvedBy:String(record.reviewedBy||'').slice(0,140),approvedAt:String(record.reviewedAt||''),
    title:`Approved UI/UX for ${storyKey}`,summary:String(record.handoff?.summary||'').slice(0,1600),
    screens,flows:(record.flow?.nodes||[]).slice(0,16).map(node=>String(node.label||'').slice(0,160)),
