@@ -30,7 +30,9 @@ test('connection tests validate permissions and exact repository identity withou
 test('UI has independent test buttons and masks/strips PAT URLs',()=>{
  const html=workspace.workspaceHtml({nonce:'safe',version:'0.3.79',cspSource:'vscode-resource:'});
  for(const snippet of ['id="testSource"','id="testDestination"','id="sourceConnection"','id="destinationConnection"','username:PAT','consumeUrl('])assert.ok(html.includes(snippet),snippet);
- assert.equal((html.match(/>Test Connection</g)||[]).length,2);
+ assert.equal((html.match(/>Test Connection</g)||[]).length,4);
+ assert.equal((html.match(/type="password"/g)||[]).length,4);
+ for(const id of ['library-testSource','library-testDestination','library-sourceConnection','library-destinationConnection'])assert.ok(html.includes('id="'+id+'"'),id);
  assert.match(html,/type="password"/);
  const script=html.match(/<script nonce="safe">([\s\S]*?)<\/script>/)?.[1];
  assert.ok(script);assert.doesNotThrow(()=>new Function(script));

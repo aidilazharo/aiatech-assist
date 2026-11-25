@@ -1,3 +1,3 @@
-**Version: 0.1.6**
+**Version: 0.1.7**
 
 **Author:** [Muhamad Aidil Azhar Salim](mailto:muhamadaidilazhar.salim@aia.com)

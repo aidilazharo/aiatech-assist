@@ -485,9 +485,9 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
   }
   if(message.command==='forgetRepoConnection'){
    const kind=message.kind;let repo=null;
+   if(busy){await post({type:'repoSyncForgetResult',kind,success:false,message:'A repository operation is already running.'});return;}
+   busy=true;
    try{
-    if(busy)throw Error('A repository operation is already running.');
-    busy=true;
     repo=safeStoredRepo(message.url);
     if(!repo)throw Error('Select a saved repository to forget.');
     const confirmed=await vscode.window.showWarningMessage('Forget the saved '+kind+' connection for '+repo.name+'? The stored PAT for this role will be deleted.',{modal:true},'Forget Connection');
@@ -503,7 +503,8 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
    return;
   }
   if(message.command==='selectRepoB'){
-   if(busy)return;
+   if(busy){await post({type:'repoSyncResult',success:false,message:'A repository operation is already running.'});return;}
+   busy=true;
    try{
     const picked=await vscode.window.showOpenDialog({canSelectFolders:true,canSelectFiles:false,canSelectMany:false,openLabel:'Select Destination Git root',title:'ATGV Workspace: Choose Destination Git root or an empty folder'});
     if(picked?.[0]){
@@ -514,6 +515,7 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
      await post({type:'repoBSelected',folder:selectedFolder});
     }
    }catch(error){await post({type:'repoSyncResult',success:false,message:sanitize(error)});}
+   finally{busy=false;}
    return;
   }
   if(message.command==='openCreatedPr'){if(createdPr)await vscode.env.openExternal(vscode.Uri.parse(createdPr));return;}

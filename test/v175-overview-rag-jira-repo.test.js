@@ -54,5 +54,9 @@ test('Developer and UX Designer both get searchable Jira DataTables and protecte
  assert.match(host,/case 'roleJiraAssign':/);
  assert.match(host,/ownership\.changeWholeBr/);
  assert.match(host,/scope.rootKey/);
- assert.match(host,/type:'roleJiraIssues',projectId:activeProject.id/);
+ const scan=host.slice(host.indexOf("case 'roleJiraIssues':"),host.indexOf("case 'roleJiraAssign':"));
+ assert.match(scan,/const projectId=activeProject\.id,requestId=msg\.requestId/);
+ assert.match(scan,/if\(activeProject\?\.id!==projectId\)break;/);
+ assert.match(scan,/type:'roleJiraIssues',projectId,items,incomplete:!!result\.truncated,requestId/);
+ assert.match(ui,/msg\.projectId===activeId&&msg\.requestId===roleJiraRequest/);
 });

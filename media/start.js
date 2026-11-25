@@ -3439,12 +3439,12 @@ function renderDeveloperBrStages(){
  const start=$('developerBrStart');
  const processing=developerBrBusy&&!developerBrDone;
  start.textContent=developerBrStopping?'Stopping Development…':processing?'■ Stop Development':developerBrStage==='needs-attention'?'↻ Retry Development':developerBrCanRetry||developerBrDone?'↻ Restart Development':'▶ Start Development';
- const ownsScope=roleJiraItems.some(item=>item.brRoot&&item.brId===developerBrSelected&&item.roleScopes?.['software-developer']?.mine);
+ const ownsScope=roleJiraLoaded&&roleJiraProject===activeId&&roleJiraItems.some(item=>item.brRoot&&item.brId===developerBrSelected&&item.roleScopes?.['software-developer']?.mine);
  start.disabled=!developerBrSelected||developerBrStopping||developerBrAssignmentBusy||(!processing&&!ownsScope);
  const preview=$('developerBrPreviewDraft');preview.classList.toggle('hidden',!projectDraftPreviewEnabled());preview.disabled=!projectDraftPreviewEnabled()||!developerBrSelected||developerBrBusy||developerBrServerRunning||developerBrServerBusy||developerBrAssignmentBusy||!ownsScope;preview.title='Preview Draft — create and open an untested local application. Tests and builds are skipped; approval and delivery remain locked.';
  start.classList.toggle('is-stopping',developerBrStopping);
  start.classList.toggle('is-running',processing&&!developerBrStopping);
- start.title=processing?'Stop the current AI development process':!ownsScope?'Assign the remaining Developer tasks for this BR before starting development.':(typeof developerBrRecovery!=='undefined'&&developerBrRecovery?.available)?'Resume from the failed criterion using persisted repair history and the currently selected AI model':developerBrCanRetry||developerBrDone?'Regenerate from the approved BR using a fresh RED → GREEN → REFACTOR cycle':'Start automatic TDD development immediately';
+ start.title=processing?'Stop the current AI development process':!roleJiraLoaded||roleJiraProject!==activeId?'Refresh Jira tasks to verify Developer ownership.':!ownsScope?'Assign the remaining Developer tasks for this BR before starting development.':(typeof developerBrRecovery!=='undefined'&&developerBrRecovery?.available)?'Resume from the failed criterion using persisted repair history and the currently selected AI model':developerBrCanRetry||developerBrDone?'Regenerate from the approved BR using a fresh RED → GREEN → REFACTOR cycle':'Start automatic TDD development immediately';
  const inDevelopment=developerBrBusy||developerBrServerRunning||developerBrServerBusy;
  const stop=$('developerBrStop');stop.disabled=!inDevelopment;stop.classList.toggle('hidden',true);
  $('developerBrOpenWorktree').disabled=developerBrBusy||!developerBrWorktree;

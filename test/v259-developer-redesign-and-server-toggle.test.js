@@ -41,7 +41,7 @@ test('server control only launches the tested matching BR worktree and opens ext
 const start=client.indexOf('function renderDeveloperBrStages(){');
 const end=client.indexOf('let developerBrFailedAt=',start);
 const renderCode=client.slice(start,end);
-function simulate({selected='',stage='idle',done=false,busy=false,serverRunning=false,serverBusy=false,canRetry=false,worktree='',url=''}={}){
+function simulate({selected='',stage='idle',done=false,busy=false,serverRunning=false,serverBusy=false,canRetry=false,worktree='',url='',owns=true,loaded=true,inventoryProject='p'}={}){
  const nodes={};
  function fake(){const flags=new Set();return {
   disabled:false,textContent:'',attributes:{},
@@ -54,6 +54,7 @@ function simulate({selected='',stage='idle',done=false,busy=false,serverRunning=
   developerBrStages:['analyze','plan','red','green','refactor','tests','build','local','verify'],
   developerBrNodes:['developerBrStepAnalyze','developerBrStepPlan','developerBrStepRed','developerBrStepGreen','developerBrStepRefactor','developerBrStepTest','developerBrStepBuild','developerBrStepLocal','developerBrStepVerify'],
   developerBrStage:stage,developerBrDone:done,developerBrBusy:busy,developerBrServerRunning:serverRunning,developerBrServerBusy:serverBusy,developerBrPreviewOnly:false,projectDraftPreviewEnabled:()=>false,
+  roleJiraLoaded:loaded,roleJiraProject:inventoryProject,activeId:'p',roleJiraItems:selected?[{brRoot:true,brId:selected,roleScopes:{'software-developer':{mine:owns}}}]:[],
   developerBrSelected:selected,developerBrWorktree:worktree,developerBrCanRetry:canRetry,developerBrUrl:url,developerBrStopping:false,developerBrAssignmentBusy:false,renderDeveloperBrAssignment:()=>{},
   matchingDeveloperBrTickets:()=>[],syncBrDeliveryGate:()=>{},windowDeveloperBrFailedAt:()=>stage,renderDeveloperCriterionProgress:()=>{},
   $:id=>{assert.ok(nodes[id],id);return nodes[id];}
@@ -87,4 +88,13 @@ test('Start Server changes to Stop Server only for a running verified server',()
  assert.equal(loading.developerBrServerToggle.disabled,true);
  assert.equal(loading.developerBrStop.classList.contains('hidden'),true);
  assert.match(loading.developerBrStart.textContent,/Stop Development/);
+});
+
+test('Start Development requires verified ownership from the current project but Stop remains available',()=>{
+ for(const options of [{owns:false},{loaded:false},{inventoryProject:'other'}]){
+  const nodes=simulate({selected:'BR-007',...options});
+  assert.equal(nodes.developerBrStart.disabled,true);
+  assert.equal(simulate({selected:'BR-007',busy:true,...options}).developerBrStart.disabled,false);
+ }
+ assert.equal(simulate({selected:'BR-007'}).developerBrStart.disabled,false);
 });
