@@ -12,6 +12,7 @@ const diagnostic=require('./stack-process-diagnostics');
 const {npmCommand,mavenCommand}=require('./platform-process');
 const recovery=require('./dependency-recovery');
 const policyRecovery=require('./npm-policy-recovery');
+const windowsBundle=require('./windows-dependency-bundle');
 const execute=promisify(execFile);
 const LIMIT=8*1024*1024;
 function commandFor(name,args){return name==='npm'?npmCommand(args):name==='mvn'?mavenCommand(args):{bin:name,args};}
@@ -245,7 +246,7 @@ function nativeTriple({platform=process.platform,arch=process.arch,libc}={}){
  if(platform==='linux')return `linux-${arch}-${libc||(process.report?.getReport?.().header?.glibcVersionRuntime?'gnu':'musl')}`;
  return '';
 }
-async function verifyPlatformPackages(cwd,{platform=process.platform,arch=process.arch,libc,runner=execute,onDiagnostic=async()=>{}}={}){
+async function verifyPlatformPackages(cwd,{platform=process.platform,arch=process.arch,libc,runner=execute,onDiagnostic=async()=>{},runtimeNode=process.execPath}={}){
  const packages=await npmManifest(cwd);
  const result={platform,arch,vite:false,libsql:false};
  // libsql is a transitive dependency of @libsql/client and selects a native
@@ -265,7 +266,7 @@ async function verifyPlatformPackages(cwd,{platform=process.platform,arch=proces
     // supported. A constructor-shape error must not be reported as a broken
     // native binary or trigger a destructive reinstall of valid dependencies.
     const probe=`const entry=require('libsql');const Database=typeof entry==='function'?entry:entry.default;if(typeof Database!=='function')throw Error('libsql default Database export is unavailable');const db=new Database(':memory:');try{const row=db.prepare('SELECT 1 AS ok').get();if(!row||Number(row.ok)!==1)throw Error('libsql in-memory SQL smoke test returned an unexpected result');}finally{db.close();}`;
-    await run({stage:'libSQL native binary smoke check',bin:process.execPath,args:['-e',probe],cwd,runner,onDiagnostic});
+    await run({stage:'libSQL native binary smoke check',bin:runtimeNode,args:['-e',probe],cwd,runner,onDiagnostic});
    }
   }
  }
@@ -280,7 +281,7 @@ async function verifyPlatformPackages(cwd,{platform=process.platform,arch=proces
    catch{throw Error('Vite launcher is broken or points to another installation. Reinstall packages in this isolated worktree.');}
   }
   if(platform===process.platform&&arch===process.arch){
-   await run({stage:'Vite CLI smoke check',bin:process.execPath,args:[cli,'--version'],cwd,runner,onDiagnostic});
+   await run({stage:'Vite CLI smoke check',bin:runtimeNode,args:[cli,'--version'],cwd,runner,onDiagnostic});
   }
   result.vite=true;
  }
@@ -293,6 +294,15 @@ async function ensureForTarget(root,target,{runner=execute,onDiagnostic=async()=
  const options={cwd,runner,onDiagnostic,signal,historyFile};
  if(target.kind==='npm'){
   if(!['auto','fresh'].includes(installMode))throw Error('Unsupported npm dependency installation mode.');
+  const bundled=await windowsBundle.prepare(root,cwd,{runner,onProgress,signal});
+  if(bundled){
+   const missing=await missingNpmPackages(cwd);
+   if(missing.length||await nativePlatformMismatch(cwd))throw Error('Bundled Windows dependencies are incomplete or incompatible. Restore the published bundle; npm installation is disabled.');
+   await run({stage:'Bundled npm dependency validation (read-only)',bin:'npm',args:['ls','--all','--json'],...options});
+   const runtime=await verifyPlatformPackages(cwd,{runner,onDiagnostic,runtimeNode:bundled.node});
+   await onProgress('Verified bundled Windows dependencies; npm install and npm ci skipped.');
+   return {kind:'npm',cwd,installed:false,restored:bundled.restored,verified:true,runtime};
+  }
   const nodeModulesPath=path.join(cwd,'node_modules');
   const nodeModules=await fs.lstat(nodeModulesPath).catch(()=>null);
   const missing=await missingNpmPackages(cwd);
