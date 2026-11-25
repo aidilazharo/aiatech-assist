@@ -3,6 +3,9 @@
 const crypto=require('node:crypto');
 const fs=require('node:fs/promises');
 const path=require('node:path');
+const {execFile}=require('node:child_process');
+const {promisify}=require('node:util');
+const gitExec=promisify(execFile);
 const repoSync=require('./repo-sync-pr');
 const repoCredentials=require('./repo-sync-credentials');
 const releasePublisher=require('./repo-sync-release-publisher');
@@ -19,6 +22,40 @@ const SAVED_URL_KEYS=Object.freeze({Source:'atgvAssist.repoSync.lastSourceUrl',D
 const SAVED_LIST_KEYS=Object.freeze({Source:'atgvAssist.repoSync.savedSourceUrls',Destination:'atgvAssist.repoSync.savedDestinationUrls'});
 const MAX_SAVED_REPOS=30;
 const SAVED_FOLDER_KEY='atgvAssist.repoSync.lastDestinationFolder';
+const PROFILES=Object.freeze(['extension','library']);
+const LIBRARY_SOURCE='https://github.com/aidilazharo/tech-stacks-skills';
+const profileKey=(key,profile)=>profile==='library'?key+'.library':key;
+async function managedCheckout(folder){
+ if(await fs.realpath(folder)!==folder)throw Error('Selected folder changed. Choose it again.');
+ const root=await fs.lstat(folder);
+ if(!root.isDirectory()||root.isSymbolicLink())throw Error('Selected folder is no longer a real directory.');
+ if((await fs.readdir(folder)).length)return null;
+ const dir=await fs.mkdtemp(path.join(folder,'.atgv-sync-'));
+ const stat=await fs.lstat(dir);
+ return {folder,dir,dev:stat.dev,ino:stat.ino,rootDev:root.dev,rootIno:root.ino};
+}
+async function cleanManagedCheckout(checkout,outcome,{git=async(args,cwd)=>(await gitExec('git',args,{cwd,encoding:'utf8',maxBuffer:4*1024*1024,timeout:30000})).stdout.trim()}={}){
+ if(!checkout||!outcome?.prUrl||outcome.unchanged)return false;
+ const {folder,dir}=checkout;
+ const root=await fs.lstat(folder),stat=await fs.lstat(dir);
+ if(root.isSymbolicLink()||!root.isDirectory()||root.dev!==checkout.rootDev||root.ino!==checkout.rootIno||
+    stat.isSymbolicLink()||!stat.isDirectory()||stat.dev!==checkout.dev||stat.ino!==checkout.ino||
+    await fs.realpath(dir)!==dir||path.dirname(dir)!==folder||!path.basename(dir).startsWith('.atgv-sync-'))throw Error('Temporary checkout identity changed; preserved for review.');
+ const pr=new URL(outcome.prUrl);
+ if(pr.protocol!=='https:'||pr.hostname!=='github.com'||pr.username||pr.password||pr.search||pr.hash||
+    !/^\/[^/]+\/[^/]+\/pull\/[1-9][0-9]*$/.test(pr.pathname)||pr.pathname.split('/').slice(1,3).join('/').toLowerCase()!==String(outcome.destinationRepo||'').toLowerCase())
+  throw Error('PR identity could not be verified; temporary checkout preserved.');
+ const dotGit=await fs.lstat(path.join(dir,'.git'));
+ if(!dotGit.isDirectory()||dotGit.isSymbolicLink())throw Error('Temporary Git metadata changed; preserved for review.');
+ if(await git(['rev-parse','--show-toplevel'],dir)!==dir||
+    await git(['symbolic-ref','--quiet','--short','HEAD'],dir)!==outcome.branch||
+    await git(['status','--porcelain','--untracked-files=all','--ignored'],dir))
+  throw Error('Temporary checkout contains unexpected changes or files; preserved for review.');
+ const latest=await fs.lstat(dir);
+ if(latest.dev!==checkout.dev||latest.ino!==checkout.ino||latest.isSymbolicLink())throw Error('Temporary checkout changed during cleanup.');
+ await fs.rm(dir,{recursive:true,force:false});
+ return true;
+}
 function safeStoredRepo(input){
  if(typeof input!=='string')return null;
  try{
@@ -40,7 +77,7 @@ body{margin:0;background:var(--vscode-editor-background,#202124);color:var(--vsc
 header{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:21px clamp(16px,4vw,40px);background:var(--vscode-sideBar-background,#252933);border-bottom:1px solid var(--vscode-panel-border,#50535b)}
 h1{font-size:23px;margin:0 0 5px}h2{font-size:15px;margin:0 0 10px}p{line-height:1.55}
 .muted{color:var(--vscode-descriptionForeground,#afb5bd);font-size:12px}
-main{max-width:980px;margin:auto;padding:25px clamp(16px,4vw,40px) 45px}
+main{max-width:1500px;margin:auto;padding:25px clamp(16px,4vw,40px) 45px}
 .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
 .card{min-width:0;padding:18px 20px;border:1px solid var(--vscode-panel-border,#50535b);border-radius:10px;background:var(--vscode-editorWidget-background,var(--vscode-editor-background,#25282d))}
 .card.full{grid-column:1/-1}
@@ -51,7 +88,7 @@ button{background:var(--vscode-button-background,#096db5);color:var(--vscode-but
 button.secondary{background:var(--vscode-button-secondaryBackground,#454c58);color:var(--vscode-button-secondaryForeground,#fff)}
 button:hover:not(:disabled){filter:brightness(1.1)}button:disabled{opacity:.52;cursor:not-allowed}
 .folder,.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-#destinationLabel{font-size:11px;font-weight:500;overflow-wrap:anywhere;min-width:0;flex:1}
+#destinationLabel,#library-destinationLabel{font-size:11px;font-weight:500;overflow-wrap:anywhere;min-width:0;flex:1}
 .actions{margin:19px 0 13px}.note{line-height:1.55}
 .connection-action{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
 .connection-status{font-size:12px;color:var(--vscode-descriptionForeground,#afb5bd)}
@@ -61,10 +98,11 @@ ol{line-height:1.85;padding-left:20px}
 .status{min-height:49px;border:1px solid var(--vscode-panel-border,#50535b);border-radius:6px;padding:13px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55}
 .status[data-state=success]{border-color:var(--vscode-testing-iconPassed,#3aaf80)}
 .status[data-state=error]{border-color:var(--vscode-errorForeground,#e4787d)}
-#reviewPanel[hidden]{display:none}
-#reviewPanel textarea{resize:vertical;min-height:82px}
-#sourceAnalysis{white-space:pre-wrap;font-size:12px}
+#reviewPanel[hidden],#library-reviewPanel[hidden]{display:none}
+#reviewPanel textarea,#library-reviewPanel textarea{resize:vertical;min-height:82px}
+#sourceAnalysis,#library-sourceAnalysis{white-space:pre-wrap;font-size:12px}
 .review-help{margin:8px 0 15px}
+.sync-profile{margin-bottom:28px}.sync-profile>h2{font-size:19px;margin:0 0 12px;padding-bottom:8px;border-bottom:1px solid var(--vscode-panel-border,#50535b)}
 @media(max-width:680px){.grid{grid-template-columns:1fr}.card.full{grid-column:auto}}
 </style></head>
 <body>
@@ -90,7 +128,7 @@ ol{line-height:1.85;padding-left:20px}
 <label for="destinationRepo">Destination GitHub URL with PAT</label><input id="destinationRepo" type="password" required placeholder="https://USERNAME:TOKEN@github.com/OWNER/repo-b" autocomplete="off" spellcheck="false">
 <div class="connection-action"><button id="testDestination" type="button" class="secondary">Test Connection</button><span id="destinationConnection" class="connection-status" role="status" aria-live="polite">Not tested</span></div>
 <label>Local Destination Git root or empty folder (outside ATGV workspace)</label>
-<p class="muted">The selected folder is remembered across VS Code restarts. If the folder moves, choose it again.</p><div class="folder"><button id="selectRepoB" type="button" class="secondary">Choose Destination folder</button><strong id="destinationLabel">No folder selected</strong></div>
+<p class="muted">The folder is remembered for this repository pair. Empty folders use a temporary checkout removed after a successful PR. Existing Git checkouts and failed operations are preserved.</p><div class="folder"><button id="selectRepoB" type="button" class="secondary">Choose Destination folder</button><strong id="destinationLabel">No folder selected</strong></div>
 <label for="baseBranch">Destination base branch</label><input id="baseBranch" type="text" maxlength="110" placeholder="GitHub default branch (auto)">
 
 </section>
@@ -115,7 +153,9 @@ ol{line-height:1.85;padding-left:20px}
 <script nonce="__NONCE__">
 'use strict';
 const vscode=acquireVsCodeApi();
-const get=id=>document.getElementById(id);
+function initProfile(profile){
+const get=id=>document.getElementById((profile==='library'?'library-':'')+id);
+const send=message=>vscode.postMessage({...message,profile});
 let folder='',busy=false,createdPr='',reviewReady=false,publishedRelease='';
 function invalidateReview(){
  if(!reviewReady)return;
@@ -170,6 +210,7 @@ function selectSavedRepo(kind){
  invalidateReview();
  const selection=savedSelect(kind).value;
  repoField(kind).value=selection;
+ if(selection)send({command:'selectSavedRepo',kind,url:selection});
  const node=connectionNode(kind);
  node.textContent=selection?'Saved repository selected · Test to verify permissions':'New connection · Enter GitHub URL and PAT';
  node.dataset.state='ready';
@@ -180,7 +221,7 @@ for(const kind of ['Source','Destination']){
  get(kind==='Source'?'forgetSource':'forgetDestination').addEventListener('click',()=>{
   if(busy||!savedSelect(kind).value)return;
   busy=true;buttons();
-  vscode.postMessage({command:'forgetRepoConnection',kind,url:savedSelect(kind).value});
+  send({command:'forgetRepoConnection',kind,url:savedSelect(kind).value});
  });
 }
 function testRepository(kind){
@@ -189,7 +230,7 @@ function testRepository(kind){
  const raw=consumeUrl(kind==='Source'?'sourceUrl':'destinationRepo');
  busy=true;buttons();
  const node=connectionNode(kind);node.textContent='Testing GitHub permissions…';node.dataset.state='ready';
- vscode.postMessage({command:'testRepoConnection',kind,url:raw});
+ send({command:'testRepoConnection',kind,url:raw});
 }
 get('testSource').addEventListener('click',()=>testRepository('Source'));
 get('testDestination').addEventListener('click',()=>testRepository('Destination'));
@@ -201,12 +242,12 @@ for(const id of ['sourceUrl','destinationRepo'])get(id).addEventListener('input'
  const select=savedSelect(kind);const value=get(id).value.trim();
  select.value=[...select.options].some(item=>item.value===value)?value:'';buttons();
 });
-get('selectRepoB').addEventListener('click',()=>{invalidateReview();vscode.postMessage({command:'selectRepoB'});});
+get('selectRepoB').addEventListener('click',()=>{invalidateReview();send({command:'selectRepoB'});});
 get('repoSyncForm').addEventListener('submit',e=>{
  e.preventDefault();
  if(busy||!folder||!get('repoSyncForm').reportValidity())return;
  busy=true;createdPr='';reviewReady=false;get('reviewPanel').hidden=true;buttons();show('Cloning and studying Source; Destination stays untouched.');
- vscode.postMessage({command:'prepareSyncReview',sourceUrl:consumeUrl('sourceUrl'),sourceBranch:get('sourceBranch').value.trim(),sourcePrNumber:get('sourcePrNumber').value.trim(),destinationUrl:consumeUrl('destinationRepo'),copyScope:get('copyScope').value.trim()||'.',baseBranch:get('baseBranch').value.trim()});
+ send({command:'prepareSyncReview',sourceUrl:consumeUrl('sourceUrl'),sourceBranch:get('sourceBranch').value.trim(),sourcePrNumber:get('sourcePrNumber').value.trim(),destinationUrl:consumeUrl('destinationRepo'),copyScope:get('copyScope').value.trim()||'.',baseBranch:get('baseBranch').value.trim()});
 });
 function publishReviewed(branchOnly){
  if(busy||!reviewReady)return;
@@ -215,17 +256,18 @@ function publishReviewed(branchOnly){
   show(branchOnly?'Enter a branch and commit message before pushing.':'Enter a branch, commit message, PR title and PR description before publishing.','error');return;
  }
  busy=true;buttons();show('Confirm final publication in VS Code. Source SHA is pinned to your review.');
- vscode.postMessage({command:'publishReviewedSync',branchOnly,branch:get('reviewBranch').value.trim(),
+ send({command:'publishReviewedSync',branchOnly,branch:get('reviewBranch').value.trim(),
   commitMessage:get('reviewCommit').value.trim(),prTitle:get('reviewTitle').value.trim(),
   prDescription:get('reviewDescription').value.trim()});
 }
 get('publishReviewed').addEventListener('click',()=>publishReviewed(false));
 get('pushBranchOnly').addEventListener('click',()=>publishReviewed(true));
 get('redoReview').addEventListener('click',()=>get('repoSyncForm').requestSubmit());
-get('openPr').addEventListener('click',()=>{if(createdPr)vscode.postMessage({command:'openCreatedPr'});});
-get('checkReleaseSync').addEventListener('click',()=>vscode.postMessage({command:'checkReleaseSync'}));
+get('openPr').addEventListener('click',()=>{if(createdPr)send({command:'openCreatedPr'});});
+get('checkReleaseSync').addEventListener('click',()=>send({command:'checkReleaseSync'}));
 window.addEventListener('message',e=>{
  const data=e.data||{};
+ if(data.type!=='releaseQueueStatus'&&(data.profile||'extension')!==profile)return;
  if(data.type==='repoSyncSavedList')showSavedRepos(data.kind,data.entries);
  if(data.type==='repoSyncSaved'){
   const id=data.kind==='Source'?'sourceUrl':'destinationRepo';
@@ -296,15 +338,29 @@ window.addEventListener('message',e=>{
  if(data.type==='repoSyncResult'){busy=false;createdPr=data.success?String(data.prUrl||''):'';if(data.success){reviewReady=false;get('reviewPanel').hidden=true;}buttons();show(data.message||'Sync finished.',data.success?'success':'error');}
 });
 buttons();
-vscode.postMessage({command:'getRepoSyncSaved'});
+send({command:'getRepoSyncSaved'});
+}
+initProfile('extension');initProfile('library');
 </script></body></html>`;
- return html.replaceAll('__CSP__',escapeHtml(csp).replaceAll('&#39;',"'")).replaceAll('__NONCE__',escapeHtml(nonce)).replaceAll('__VERSION__',escapeHtml(version));
+ const form=html.match(/<form id="repoSyncForm">[\s\S]*?<\/form>/)?.[0];
+ if(!form)throw Error('Workspace sync form is unavailable.');
+ const library=form.replace(/\b(id|for)="([^"]+)"/g,(_match,attr,id)=>attr+'="library-'+id+'"');
+ const dual=html.replace(form,'<section class="sync-profile"><h2>ATGV Extension</h2>'+form+'</section><section class="sync-profile"><h2>SDLC Library</h2>'+library+'</section>');
+ return dual.replaceAll('__CSP__',escapeHtml(csp).replaceAll('&#39;',"'")).replaceAll('__NONCE__',escapeHtml(nonce)).replaceAll('__VERSION__',escapeHtml(version));
 }
 function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null,workspaceRoot='',describePr=async()=>'',planSync=async()=>null,testConnection=repoCredentials.verifyConnection,onWorkflowEvent=async()=>null}={}){
  if(panel){panel.reveal();return panel;}
  const current=vscode.window.createWebviewPanel('atgvAssist.workspace','ATGV: Workspace',vscode.ViewColumn.One,{enableScripts:true,retainContextWhenHidden:true});
  panel=current;
- let selectedFolder='',busy=false,createdPr='',pendingReview=null,publishedRelease='';
+ let busy=false;
+ const broadcast=async data=>{if(panel===current)await current.webview.postMessage(data);};
+ releasePanelPost=broadcast;
+ current.onDidDispose(()=>{if(panel===current){panel=null;releasePanelPost=null;}});
+ function createProfile(profile){
+ const urlKeys=Object.fromEntries(Object.entries(SAVED_URL_KEYS).map(([kind,key])=>[kind,profileKey(key,profile)]));
+ const listKeys=Object.fromEntries(Object.entries(SAVED_LIST_KEYS).map(([kind,key])=>[kind,profileKey(key,profile)]));
+ const folderKey=profileKey(SAVED_FOLDER_KEY,profile);
+ let selectedFolder='',createdPr='',pendingReview=null;
  async function eligibleFolder(candidate){
   if(typeof candidate!=='string'||!path.isAbsolute(candidate))return '';
   const stat=await fs.lstat(candidate).catch(error=>error.code==='ENOENT'?null:Promise.reject(error));
@@ -318,7 +374,7 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
   return resolved;
  }
  async function restoreSelectedFolder(){
-  const stored=preferences?.get?.(SAVED_FOLDER_KEY,'');
+  const stored=preferences?.get?.(folderKey,'');
   if(!stored)return;
   const resolved=await eligibleFolder(stored);
   if(!resolved){
@@ -329,13 +385,13 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
   await post({type:'repoBSelected',folder:selectedFolder});
  }
  async function rememberSelectedFolder(folder){
-  if(preferences?.update)await preferences.update(SAVED_FOLDER_KEY,folder);
+  if(preferences?.update)await preferences.update(folderKey,folder);
  }
  const patKey=(kind,repo)=>'atgvAssist.repoSync.'+kind+'.'+crypto.createHash('sha256').update(repo.name.toLowerCase()).digest('hex');
  function knownRepos(kind){
-  const previous=preferences?.get?.(SAVED_URL_KEYS[kind],'');
-  const raw=preferences?.get?.(SAVED_LIST_KEYS[kind],[]);
-  const values=[...(Array.isArray(raw)?raw:[]),previous];
+  const previous=preferences?.get?.(urlKeys[kind],'');
+  const raw=preferences?.get?.(listKeys[kind],[]);
+  const values=[...(Array.isArray(raw)?raw:[]),previous,...(kind==='Source'&&profile==='library'&&preferences?.get?.(listKeys[kind],null)===null?[LIBRARY_SOURCE]:[])];
   const unique=[],seen=new Set();
   for(const value of values){
    const repo=safeStoredRepo(value);
@@ -356,14 +412,14 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
   // GlobalState stores URL metadata only; tokens remain independently in SecretStorage.
   if(!preferences?.update)return;
   const list=[repo,...knownRepos(kind).filter(item=>item.name.toLowerCase()!==repo.name.toLowerCase())].slice(0,MAX_SAVED_REPOS);
-  await preferences.update(SAVED_LIST_KEYS[kind],list.map(item=>item.webUrl));
-  await preferences.update(SAVED_URL_KEYS[kind],repo.webUrl);
+  await preferences.update(listKeys[kind],list.map(item=>item.webUrl));
+  await preferences.update(urlKeys[kind],repo.webUrl);
   await postSavedRepos(kind);
  }
  async function restoreRepos(){
   for(const kind of ['Source','Destination']){
    await postSavedRepos(kind);
-   const repo=safeStoredRepo(preferences?.get?.(SAVED_URL_KEYS[kind],''));
+   const repo=safeStoredRepo(preferences?.get?.(urlKeys[kind],''))||(kind==='Source'&&profile==='library'&&preferences?.get?.(listKeys[kind],null)===null?safeStoredRepo(LIBRARY_SOURCE):null);
    if(!repo)continue;
    const credentialSaved=!!(await secrets?.get?.(patKey(kind,repo)));
    await post({type:'repoSyncSaved',kind,safeUrl:repo.webUrl,repo:repo.name,credentialSaved});
@@ -377,12 +433,15 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
   if(!secrets?.delete||!preferences?.update)
    throw Error('SecretStorage deletion and VS Code globalState are required to forget a repository.');
   // Fail closed on secret deletion; never pretend a saved credential was forgotten.
-  await secrets.delete(patKey(kind,repo));
+  const other=profile==='library'?'extension':'library';
+  const otherList=preferences?.get?.(profileKey(SAVED_LIST_KEYS[kind],other),[]);
+  const otherLast=preferences?.get?.(profileKey(SAVED_URL_KEYS[kind],other),'');
+  if(![...(Array.isArray(otherList)?otherList:[]),otherLast].some(value=>safeStoredRepo(value)?.name.toLowerCase()===repo.name.toLowerCase()))await secrets.delete(patKey(kind,repo));
   const remaining=knownRepos(kind).filter(item=>item.name.toLowerCase()!==repo.name.toLowerCase());
-  await preferences.update(SAVED_LIST_KEYS[kind],remaining.map(item=>item.webUrl));
-  const last=preferences?.get?.(SAVED_URL_KEYS[kind],'');
+  await preferences.update(listKeys[kind],remaining.map(item=>item.webUrl));
+  const last=preferences?.get?.(urlKeys[kind],'');
   if(safeStoredRepo(last)?.name.toLowerCase()===repo.name.toLowerCase())
-   await preferences.update(SAVED_URL_KEYS[kind],remaining[0]?.webUrl||'');
+   await preferences.update(urlKeys[kind],remaining[0]?.webUrl||'');
   await postSavedRepos(kind);
   await post({type:'repoSyncForgot',kind,safeUrl:repo.webUrl});
  }
@@ -402,19 +461,26 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
   if(credentials.save)await secrets.store(credentials.key,credentials.token);
   return {...credentials,access};
  }
- const post=async data=>{if(panel===current)await current.webview.postMessage(data);};
+ const post=async data=>broadcast({...data,profile});
  const sanitize=(error,tokens=[])=>{
   let message=String(error?.message||error);
   for(const token of tokens)if(token)message=message.split(token).join('[REDACTED]');
   return message.slice(0,550);
  };
- releasePanelPost=post;
- current.onDidDispose(()=>{if(panel===current){panel=null;releasePanelPost=null;}});
- current.webview.onDidReceiveMessage(async message=>{
+ return async message=>{
   if(!message||typeof message.command!=='string')return;
   if(message.command==='getRepoSyncSaved'){
    try{await restoreRepos();await restoreSelectedFolder();await post({type:'releaseQueueStatus',items:releaseQueue?.rows()||[]});}
    catch(error){onLog('Repo Sync saved connection and folder restore: '+sanitize(error));}
+   return;
+  }
+  if(message.command==='selectSavedRepo'){
+   if(busy)return;
+   const kind=message.kind,repo=safeStoredRepo(message.url);
+   if(['Source','Destination'].includes(kind)&&repo&&knownRepos(kind).some(item=>item.name.toLowerCase()===repo.name.toLowerCase())){
+    pendingReview=null;
+    await preferences?.update?.(urlKeys[kind],repo.webUrl);
+   }
    return;
   }
   if(message.command==='forgetRepoConnection'){
@@ -529,8 +595,12 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
    const destinationCredentials=await verifiedPat('Destination',destination);destPat=destinationCredentials.token;
    await rememberRepo('Destination',destination);
    await post({type:'repoConnectionResult',kind:'Destination',duringSync:true,success:true,safeUrl:destination.webUrl,message:'Connected · '+destination.name+' · write access verified'});
-   const outcome=await repoSync.sync({
-    sourceUrl:source.url,sourceBranch,sourcePrNumber,destinationFolder:selectedFolder,copyScope:scope,baseBranch:base,
+   let checkout=null;
+   if(!isPrepare)checkout=await managedCheckout(selectedFolder);
+   if(checkout)await post({type:'repoSyncProgress',message:'Temporary destination checkout: '+checkout.dir});
+   let outcome;
+   try{outcome=await repoSync.sync({
+    sourceUrl:source.url,sourceBranch,sourcePrNumber,destinationFolder:checkout?.dir||selectedFolder,copyScope:scope,baseBranch:base,
     sourcePat,destPat,workspaceRoot,destinationUrl:destination.url,
     planSync,describePr,previewOnly:isPrepare,approvedReview:reviewed,branchOnly,
     onProgress:async event=>{
@@ -538,7 +608,7 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
      if(workflowJobId)try{await onWorkflowEvent({type:'stage',jobId:workflowJobId,stage:event.stage||'processing'});}
       catch(error){onLog('ATGV Workspace stage journal: '+String(error.message||error).slice(0,160));}
     }
-   });
+   });}catch(error){throw Error(String(error.message||error)+(checkout?' Temporary checkout retained at '+checkout.dir:''));}
    if(isPrepare){
     if(!outcome.preview||!outcome.review)throw Error('No source review generated.');
     pendingReview={folder:selectedFolder,input:{
@@ -563,11 +633,18 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
     (branchOnly?'Branch pushed: '+outcome.branch:'PR created: '+outcome.prUrl)+'\nSource: '+outcome.sourceRepo+' / '+outcome.sourceBranch+' @ '+outcome.sourceSha+
     '\nDestination: '+outcome.destinationRepo+'/'+outcome.base+
     '\nBranch: '+outcome.branch+'\nFiles selected: '+outcome.fileCount;
+   let cleanupNotice='';
+   if(checkout){
+    if(createdPr&&!branchOnly&&!outcome.unchanged){
+     try{if(await cleanManagedCheckout(checkout,outcome))cleanupNotice='\nTemporary checkout removed. Selected folder retained for the next sync.';}
+     catch(error){cleanupNotice='\nPR created; cleanup skipped: '+sanitize(error)+' · '+checkout.dir;}
+    }else cleanupNotice='\nTemporary checkout preserved: '+checkout.dir;
+   }else if(createdPr)cleanupNotice='\nExisting destination checkout preserved.';
    const enrichedSummary=summary+'\\nCopied code version: '+(outcome.codeVersion||'Not declared')+
     '\\nLatest published release: '+(outcome.releaseTag||'None published')+
     '\\nRelease assets included: '+String(outcome.releaseAssetCount||0)+
     '\\nRelease artifact paths: '+(outcome.releaseArtifactPaths||[]).join(', ')+(outcome.releaseNotice?'\n'+outcome.releaseNotice:'');
-   await post({type:'repoSyncResult',success:true,prUrl:createdPr,releaseTag:outcome.releaseTag||'',message:enrichedSummary+releaseNotice});
+   await post({type:'repoSyncResult',success:true,prUrl:createdPr,releaseTag:outcome.releaseTag||'',message:enrichedSummary+releaseNotice+cleanupNotice});
    onLog('Repo Sync: '+summary);
   }catch(error){
    workflowFailure=error;
@@ -579,8 +656,11 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
     catch(error){onLog('ATGV Workspace finish journal: '+String(error.message||error).slice(0,160));}
    busy=false;
   }
- });
+ };
+ }
+ const handlers=Object.fromEntries(PROFILES.map(profile=>[profile,createProfile(profile)]));
+ current.webview.onDidReceiveMessage(message=>{const profile=message?.profile||'extension';if(PROFILES.includes(profile))return handlers[profile](message);});
  current.webview.html=workspaceHtml({nonce:crypto.randomBytes(18).toString('base64'),version,cspSource:current.webview.cspSource});
  return current;
 }
-module.exports={open,workspaceHtml,startReleaseSync};
+module.exports={open,workspaceHtml,startReleaseSync,profileKey,managedCheckout,cleanManagedCheckout};

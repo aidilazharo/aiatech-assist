@@ -1,11 +1,11 @@
-# ATGV AIATECH Assist v0.1.5
+# ATGV AIATECH Assist v0.1.6
 
 ## Changes
 
-- Developer BR choices now use verified live Developer task assignments and the exact current approved BR revision, independent of Epic ownership.
-- Refresh Developer Jira inventory with read-only Confluence Source Vault synchronization, selectively recover missing approved BRs from verified Jira mappings, refresh local register and SQLite mappings, and publish shared BR state promptly after successful BA publication.
-- Never infer approval from a Jira title, overwrite divergent local BRs, revive deleted records or claim another role's task. Show synchronization diagnostics and preserve whole-role ownership requirements for development.
+- Display Extension and SDLC Library source/destination sync forms on one Workspace page, with independent remembered connection selections, folder paths and review state.
+- Preserve existing Extension settings and keep PATs in SecretStorage by repository identity, including release-queue compatibility.
+- Use a disposable destination checkout in initially empty folders. After successful PR creation, remove only the verified clean temporary checkout; preserve existing repositories, failed/branch-only runs and unexpected files.
 
 ## Validation
 
-Targeted source-function and syntax checks performed; full Node regression and live Jira/Confluence integration were not run in this environment. No VSIX packaged.
+Targeted host/client syntax, unique form IDs and profile key checks passed in an isolated JavaScript environment. Full Node regression tests and live GitHub PR creation/cleanup not run; no VSIX packaged.
