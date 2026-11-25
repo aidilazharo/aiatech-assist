@@ -2566,7 +2566,7 @@ function refreshArchitectStageClasses(project){
  const approved=saved&&project?.techStackApproval?.status==='approved'&&project.techStackApproval.stackId===stackId;
  const customStack=stackId==='custom';
  const preview=project?.techStackCustomPreview;
- const mockReady=!!(customStack&&saved&&preview?.status==='verified'&&preview.mockOnly===true&&
+ const mockReady=!!(customStack&&saved&&['verified','local-preview-only'].includes(preview?.status)&&preview.mockOnly===true&&
   preview.sha===prepared.sha&&preview.branch===prepared.branch);
  const serverReady=customStack?mockReady:architectServerRequirementReady(project,stackId);
  for(const [id,done,current] of [
@@ -2576,7 +2576,7 @@ function refreshArchitectStageClasses(project){
   const step=$(id);step.classList.toggle('complete',!!done);step.classList.toggle('current',!!current);
   step.setAttribute('aria-label',step.textContent.trim()+': '+(done?'Completed':current?'Current step':'Pending'));
  }
- $('architectApprovalStatus').textContent=customStack?(approved?'Developer MOCK handoff approved · '+String(project.techStackApproval.remoteBranch||'')+' · real integrations remain unverified.':mockReady?'Mock preview verified. Approve for Developers publishes a reviewed development-only handoff; test/build verification is optional.':'Complete Install & Run before approving a Custom Stack development handoff.'):approved?'Approved for Developers · '+new Date(project.techStackApproval.approvedAt||Date.now()).toLocaleString():saved?(prepared?.remotePushed?'Ready for Architect approval. Test and server checks are informational.':'Publish the saved stack to GitHub before approval.'):'';
+ $('architectApprovalStatus').textContent=customStack?(approved?'Developer MOCK handoff approved · '+String(project.techStackApproval.remoteBranch||'')+' · real integrations remain unverified.':mockReady?(preview.status==='local-preview-only'?'Local mock preview running. Approve the committed Git revision only; uncommitted edits are excluded.':'Mock preview verified. Approve for Developers publishes a reviewed development-only handoff; test/build verification is optional.'):'Complete Install & Run before approving a Custom Stack development handoff.'):approved?'Approved for Developers · '+new Date(project.techStackApproval.approvedAt||Date.now()).toLocaleString():saved?(prepared?.remotePushed?'Ready for Architect approval. Test and server checks are informational.':'Publish the saved stack to GitHub before approval.'):'';
 }
 function customStackForPublish(stackId,prepared){return !stackId||stackId==='custom'||!!prepared?.remotePushed||prepared?.stackId!==stackId;}
 function syncArchitectStackButtons(project){
@@ -2606,7 +2606,7 @@ function syncArchitectStackButtons(project){
   // A verified mock preview unlocks REQUESTING handoff validation, not
   // approval itself. Host execution checks every target and confirms a push.
   const preview=project?.techStackCustomPreview;
-  const mockReady=!!(saved&&preview?.status==='verified'&&preview.mockOnly===true&&
+  const mockReady=!!(saved&&['verified','local-preview-only'].includes(preview?.status)&&preview.mockOnly===true&&
     preview.root===prepared.root&&preview.sha===prepared.sha&&preview.branch===prepared.branch);
   const handedOff=!!(mockReady&&approved&&project?.techStackApproval?.scope==='development-mock'&&
     project.techStackApproval.remoteVerified===true&&project.techStackApproval.remoteSha===prepared.sha);
@@ -2614,8 +2614,8 @@ function syncArchitectStackButtons(project){
   handoff.disabled=architectActionBusy||!mockReady||handedOff;
   handoff.textContent=handedOff?'Development Handoff Approved':'Approve for Developers';
   handoff.title=handedOff?'Development-only handoff pinned to a verified remote SHA; real integrations remain unverified.':
-    mockReady?'Confirm and publish the mock-only handoff branch without mandatory test/build checks or merging main.':
-    'Complete Install & Run to verify a committed, local synthetic preview first.';
+    mockReady?(preview.status==='local-preview-only'?'Approve committed Git revision only. Local edits are preserved and excluded; exact revision runtime is unverified.':'Confirm and publish the mock-only handoff branch without mandatory test/build checks or merging main.'):
+    'Complete Install & Run to start a local synthetic preview first.';
   return;
  }
  $('architectApproveStack').textContent='Approve for Developers';

@@ -1,6 +1,6 @@
-# ATGV AIATECH Assist v0.1.12
+# ATGV AIATECH Assist v0.1.13
 
-- Repair Solution Architect user guide after removal of the Test & Run control in v0.1.11. Guide now covers selecting, saving, publishing and approving the stack; Custom Stack remains subject to its synthetic-preview requirement.
-- Retain the all-tour-targets regression test and add explicit guide workflow and legacy progress migration coverage.
-- Synchronize manifest, README and dashboard version metadata.
-- Prior macOS v0.1.11 run: 2,676 passed, 1 failed (obsolete guide target), 3 skipped. Source checks for the fix completed; full v0.1.12 regression suite and VSIX packaging not run.
+- Enable Custom Stack Approve for Developers after successful local mock Install & Run on an ordinary Git branch, including dirty main.
+- Persist local-preview-only evidence rather than silently discarding it. Publish only the committed baseline SHA after explicit confirmation; local edits remain untouched and excluded. Exact baseline runtime and test/build are marked unverified.
+- Retain clean fix-branch verified preview path, SHA and remote checks, and development-only scope. No auto-commit, stash, reset, force-push, or merge into project main.
+- Add dirty-main baseline approval regression coverage. Full regression suite and live VS Code verification not run; no VSIX generated.

@@ -8,10 +8,23 @@ const developer=require('./developer-git');
 const dependencies=require('./stack-dependency-helper');
 const SHA=/^[a-f0-9]{40}$/;
 const FIX=/^fix\/atgv-custom-stack-[a-f0-9]{10}$/;
+function localPreviewEvidence(root,result){
+ const snapshot=result?.inspection;
+ if(!result?.running||result.mockPreview!==true||result.mockDatabase!==true||
+   !SHA.test(snapshot?.sha||'')||result.sha!==snapshot.sha||!snapshot.branch||result.branch!==snapshot.branch||
+   path.resolve(root)!==path.resolve(snapshot.root||''))
+  throw Error('A successful ATGV synthetic preview on a committed Git branch is required.');
+ const target=snapshot.targets?.find(x=>x.relative===result.relative&&x.runnable);
+ if(!target||(target.mockable!==true&&target.mockApi!==true))throw Error('Unsupported Custom Stack preview target.');
+ return {status:'local-preview-only',stackId:'custom',root:snapshot.root,branch:snapshot.branch,sha:snapshot.sha,
+  relative:target.relative,url:custom.loopbackPreview(result.frontendUrl||result.url),mockOnly:true,
+  localChangesPreserved:snapshot.clean!==true||result.localChangesPreserved===true,at:new Date().toISOString()};
+}
 function matches(project){
  const prep=project?.techStackPrepared,preview=project?.techStackCustomPreview;
- return !!(project?.techStackId==='custom'&&prep?.stackId==='custom'&&SHA.test(prep.sha||'')&&FIX.test(prep.branch||'')&&
-  prep.root&&path.isAbsolute(prep.root)&&preview?.status==='verified'&&preview.mockOnly===true&&
+ return !!(project?.techStackId==='custom'&&prep?.stackId==='custom'&&SHA.test(prep.sha||'')&&typeof prep.branch==='string'&&!!prep.branch&&
+  prep.root&&path.isAbsolute(prep.root)&&['verified','local-preview-only'].includes(preview?.status)&&
+  (preview.status!=='verified'||FIX.test(prep.branch))&&preview.mockOnly===true&&
   preview.root===prep.root&&preview.sha===prep.sha&&preview.branch===prep.branch&&
   preview.relative!==undefined&&typeof preview.relative==='string'&&
   preview.url===prep.previewUrl&&preview.at);
@@ -31,7 +44,7 @@ function previewEvidence(root,result){
   relative:target.relative,url,mockOnly:true,at:new Date().toISOString()};
 }
 async function verifyRuntime(project,inspection,{driver=developer,http=fetch}={}){
- if(!matches(project))throw Error('Install & Run must verify and save a clean Custom Stack mock preview before Developer handoff.');
+ if(!matches(project)||project.techStackCustomPreview.status!=='verified')throw Error('Install & Run must verify and save a clean Custom Stack mock preview before Developer handoff.');
  const prep=project.techStackPrepared,preview=project.techStackCustomPreview;
  if(inspection.root!==prep.root||inspection.sha!==prep.sha||inspection.branch!==prep.branch||inspection.clean!==true)
   throw Error('The Custom Stack checkout changed after the mock preview. Re-run Install & Run before approval.');
@@ -97,16 +110,30 @@ async function validate(root,{project,driver=developer,scanner=custom,deps=depen
 async function prepareHandoff(root,{project,driver=developer,scanner=custom,http=fetch,onProgress=async()=>{}}={}){
  if(!matches(project)||root!==project.techStackPrepared.root)throw Error('Save and verify the Custom Stack synthetic preview first.');
  const inspection=await scanner.scan(root,{driver});
- await verifyRuntime(project,inspection,{driver,http});
+ const preview=project.techStackCustomPreview,prep=project.techStackPrepared;
+ const localOnly=preview.status==='local-preview-only';
+ if(localOnly){
+  if(inspection.root!==prep.root||inspection.sha!==prep.sha||inspection.branch!==prep.branch)
+   throw Error('The Custom Stack Git revision changed. Re-run Install & Run before approving the current commit.');
+  const target=inspection.targets.find(x=>x.relative===preview.relative&&x.runnable&&(x.mockable||x.mockApi));
+  const process=driver.localLogs();
+  if(!target||process.running!==true||process.mockPreview!==true||process.head!==prep.sha||
+     path.resolve(process.cwd||'')!==path.resolve(prep.root,preview.relative)||process.relative!==preview.relative||
+     custom.loopbackPreview(process.previewUrl)!==preview.url)
+   throw Error('The ATGV local mock preview is no longer running for this repository. Re-run Install & Run.');
+  const response=await http(preview.url,{redirect:'manual',signal:AbortSignal.timeout(3000)});
+  if(!response?.ok||response.status>=300)throw Error('Local mock preview is not reachable.');
+ }else await verifyRuntime(project,inspection,{driver,http});
  const targets=inspection.targets.filter(t=>t.runnable&&t.role!=='workspace');
  if(!targets.length)throw Error('No runnable Custom Stack application targets found.');
- await onProgress('Verified clean Git revision and synthetic preview; test/build checks were not requested.');
- return {status:'preview-verified',scope:'development-mock',stackId:'custom',root:inspection.root,branch:inspection.branch,sha:inspection.sha,at:new Date().toISOString(),previewRelative:project.techStackCustomPreview.relative,previewUrl:project.techStackCustomPreview.url,results:[],targets:targets.map(x=>({relative:x.relative,kind:x.kind,framework:x.framework})),synthetic:true,liveBackendVerified:false,realDatabaseVerified:false};
+ await onProgress(localOnly?'Local preview reachable; only committed Git revision is eligible for publication. Uncommitted changes are excluded.':'Verified clean Git revision and synthetic preview; test/build checks were not requested.');
+ return {status:localOnly?'baseline-only':'preview-verified',scope:'development-mock',stackId:'custom',root:inspection.root,branch:inspection.branch,sha:inspection.sha,at:new Date().toISOString(),previewRelative:project.techStackCustomPreview.relative,previewUrl:project.techStackCustomPreview.url,results:[],targets:targets.map(x=>({relative:x.relative,kind:x.kind,framework:x.framework})),synthetic:true,liveBackendVerified:false,realDatabaseVerified:false};
 }
 function approval(project,validation,actor,remote,at=new Date().toISOString()){
  if(!matches(project))throw Error('Custom Stack preview evidence does not match the saved revision.');
  const prep=project.techStackPrepared;
- if(!['tested','preview-verified'].includes(validation?.status)||validation.scope!=='development-mock'||validation.stackId!=='custom'||
+ if(!['tested','preview-verified','baseline-only'].includes(validation?.status)||
+   (project.techStackCustomPreview.status==='local-preview-only')!==(validation?.status==='baseline-only')||validation.scope!=='development-mock'||validation.stackId!=='custom'||
    validation.root!==prep.root||validation.sha!==prep.sha||validation.branch!==prep.branch||
    validation.previewUrl!==project.techStackCustomPreview.url||!Array.isArray(validation.targets)||!validation.targets.length||
    !Array.isArray(validation.results)||(validation.status==='tested'?validation.results.length!==validation.targets.length*2:validation.results.length!==0))
@@ -124,15 +151,16 @@ function approval(project,validation,actor,remote,at=new Date().toISOString()){
  return {status:'approved',stackId:'custom',scope:'development-mock',synthetic:true,
   root:prep.root,branch:prep.branch,sha:prep.sha,remoteBranch:remote.branch,
   remoteSha:remote.sha,remoteVerified:true,approvedAt:at,approvedBy:String(actor).trim(),
-  targetCount:validation.targets.length,validationAt:validation.at,testStatus:validation.status==='tested'?'tested':'unverified',
-  limitations:['Synthetic mock preview only','Real database and external identity/integrations unverified','Not production deployment approval']};
+  targetCount:validation.targets.length,validationAt:validation.at,previewStatus:validation.status==='baseline-only'?'unverified':'verified',testStatus:validation.status==='tested'?'tested':'unverified',
+  limitations:['Synthetic mock preview only','Real database and external identity/integrations unverified','Not production deployment approval',...(validation.status==='baseline-only'?['Committed baseline only; local changes excluded and exact revision runtime unverified']:[])]};
 }
 function developerAllowed(project){
  const p=project?.techStackPrepared,v=project?.techStackValidation,a=project?.techStackApproval;
- return matches(project)&&p.remotePushed===true&&['tested','preview-verified'].includes(v?.status)&&v.scope==='development-mock'&&
+ return matches(project)&&p.remotePushed===true&&['tested','preview-verified','baseline-only'].includes(v?.status)&&
+  (project.techStackCustomPreview.status==='local-preview-only')===(v.status==='baseline-only')&&v.scope==='development-mock'&&
   v.stackId==='custom'&&v.sha===p.sha&&v.branch===p.branch&&v.root===p.root&&
   a?.status==='approved'&&a.scope==='development-mock'&&a.synthetic===true&&a.stackId==='custom'&&
   a.sha===p.sha&&a.branch===p.branch&&a.root===p.root&&a.remoteVerified===true&&
   a.remoteSha===p.sha&&Boolean(a.remoteBranch&&a.approvedBy);
 }
-module.exports={matches,previewEvidence,verifyRuntime,validate,prepareHandoff,approval,developerAllowed};
+module.exports={matches,previewEvidence,localPreviewEvidence,verifyRuntime,validate,prepareHandoff,approval,developerAllowed};

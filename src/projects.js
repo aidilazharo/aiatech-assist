@@ -180,7 +180,7 @@ function normalizeProjectInput(input = {}, existing) {
                 /^bootstrap\/[a-z0-9-]{1,80}$/.test(requestedPreparation.branch) ||
                 (/^migration\/[a-z0-9-]{1,120}$/.test(requestedPreparation.branch) &&
                  requestedPreparation.branch.startsWith('migration/'+techStackId+'-catalog-')) ||
-                (techStackId==='custom' && /^fix\/atgv-custom-stack-[a-f0-9]{10}$/.test(requestedPreparation.branch))
+                (techStackId==='custom' && validGithubBranch(requestedPreparation.branch)===requestedPreparation.branch)
             ) ? requestedPreparation.branch : '',
             baseBranch: validGithubBranch(requestedPreparation.baseBranch || '') || 'main',
             sha: typeof requestedPreparation.sha === 'string' && /^[a-f0-9]{40}$/.test(requestedPreparation.sha) ? requestedPreparation.sha : '',
@@ -193,7 +193,9 @@ function normalizeProjectInput(input = {}, existing) {
     // Never reinterpret a synthetic database as a verified PostgreSQL instance.
     const requestedMock = stackChanged ? null : (input.techStackCustomPreview === undefined ? existing?.techStackCustomPreview || null : input.techStackCustomPreview);
     const techStackCustomPreview = techStackId==='custom' && techStackPrepared &&
-      requestedMock?.status==='verified' && requestedMock.mockOnly===true &&
+      ['verified','local-preview-only'].includes(requestedMock?.status) && requestedMock.mockOnly===true &&
+      !!techStackPrepared.branch && !!techStackPrepared.sha &&
+      (requestedMock.status!=='verified'||/^fix\/atgv-custom-stack-[a-f0-9]{10}$/.test(techStackPrepared.branch)) &&
       requestedMock.stackId==='custom' && requestedMock.root===techStackPrepared.root &&
       requestedMock.branch===techStackPrepared.branch && requestedMock.sha===techStackPrepared.sha &&
       typeof requestedMock.relative==='string' &&
@@ -201,10 +203,10 @@ function normalizeProjectInput(input = {}, existing) {
       typeof requestedMock.url==='string' && requestedMock.url===techStackPrepared.previewUrl &&
       /^http:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d{1,5})?\//.test(requestedMock.url) &&
       typeof requestedMock.at==='string' ? {
-        status:'verified',stackId:'custom',root:techStackPrepared.root,
+        status:requestedMock.status,stackId:'custom',root:techStackPrepared.root,
         branch:techStackPrepared.branch,sha:techStackPrepared.sha,
         relative:requestedMock.relative,url:requestedMock.url,
-        mockOnly:true,at:requestedMock.at.slice(0,60)
+        mockOnly:true,localChangesPreserved:requestedMock.localChangesPreserved===true,at:requestedMock.at.slice(0,60)
       } : null;
     const techStackValidation = stackChanged ? null : (input.techStackValidation === undefined ? existing?.techStackValidation || null : input.techStackValidation);
     const techStackApproval = stackChanged ? null : (input.techStackApproval === undefined ? existing?.techStackApproval || null : input.techStackApproval);

@@ -104,6 +104,27 @@ test('Mock preview only cannot approve; stale server or missing backend build bl
   root,sha,branch,previewUrl:p.techStackCustomPreview.url,targets:[frontend],results:[]},
   'architect',{remoteVerified:true,branch:'tech-stack/custom-v1',sha}),/full Custom Stack/);
 });
+test('dirty main mock preview permits approval of committed baseline only',async()=>{
+ const fixture=driver(),snapshot={...inspection(),branch:'main',clean:false};
+ const preview=handoff.localPreviewEvidence(root,{running:true,mockPreview:true,mockDatabase:true,
+  sha,branch:'main',relative:frontend.relative,frontendUrl:'http://127.0.0.1:5173/',inspection:snapshot});
+ const p=projects.normalizeProjectInput({...state(),techStackPrepared:{...state().techStackPrepared,branch:'main'},
+  techStackCustomPreview:preview});
+ assert.equal(p.techStackPrepared.branch,'main');assert.equal(p.techStackCustomPreview.status,'local-preview-only');
+ assert.equal(p.techStackCustomPreview.localChangesPreserved,true);assert.equal(handoff.matches(p),true);
+ const options={project:p,driver:fixture.d,scanner:{scan:async()=>snapshot},http:fixture.http};
+ const validation=await handoff.prepareHandoff(root,options);
+ assert.equal(validation.status,'baseline-only');assert.deepEqual(validation.results,[]);
+ const remote={branch:'tech-stack/custom-v1',sha,remoteVerified:true};
+ const signature=handoff.approval(p,validation,'architect',remote);
+ assert.equal(signature.previewStatus,'unverified');assert.equal(signature.testStatus,'unverified');
+ assert.equal(gate.developerAllowed({...p,techStackPrepared:{...p.techStackPrepared,remotePushed:true},
+  techStackValidation:validation,techStackApproval:signature}),true);
+ assert.throws(()=>handoff.approval(p,{...validation,status:'preview-verified'},'architect',remote),/full Custom Stack/);
+ await assert.rejects(()=>handoff.prepareHandoff(root,{...options,scanner:{scan:async()=>({...snapshot,sha:other})}}),/revision changed/);
+ await assert.rejects(()=>handoff.prepareHandoff(root,{...options,driver:{...fixture.d,localLogs:()=>({running:false})}}),/no longer running/);
+ assert.equal(projects.normalizeProjectInput({...p,techStackCustomPreview:{...preview,sha:other}},p).techStackCustomPreview,null);
+});
 test('Host and UI expose a distinct consent-gated custom handoff while catalog gate remains intact',()=>{
  const host=fs.readFileSync(path.join(__dirname,'../src/lib/runtime/extension-runtime.js'),'utf8');
  const ui=fs.readFileSync(path.join(__dirname,'../media/start.js'),'utf8');
@@ -114,7 +135,7 @@ test('Host and UI expose a distinct consent-gated custom handoff while catalog g
  assert.match(code,/Approve Development Handoff/);
  assert.match(code,/No force-push or merge to main/);
  assert.match(code,/techStackValidation:validation,techStackApproval:signoff/);
- assert.match(host,/const preview=eligible\?handoff\.previewEvidence\(root,result\)/);
+ assert.match(host,/const preview=eligible\?handoff\.previewEvidence\(root,result\):localEligible\?handoff\.localPreviewEvidence/);
  assert.match(ui,/architectBegin\(custom\?'architectApproveCustomStack':'architectApproveStack'/);
  assert.match(ui,/handoff\.disabled=architectActionBusy\|\|!mockReady\|\|handedOff/);
  assert.match(ui,/m\.type==='architectCustomHandoffProgress'/);

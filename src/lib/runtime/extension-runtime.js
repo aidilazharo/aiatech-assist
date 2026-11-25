@@ -7554,7 +7554,8 @@ async function handleDashboardMessage(msg){
             const handoff=require('../../architect-custom-handoff');
             const eligible=result.mockPreview===true&&result.mockDatabase===true&&
               result.inspection?.clean===true&&/^fix\/atgv-custom-stack-[a-f0-9]{10}$/.test(result.branch||'');
-            const preview=eligible?handoff.previewEvidence(root,result):{
+            const localEligible=result.mockPreview===true&&result.mockDatabase===true&&!!result.branch&&!!result.inspection?.sha;
+            const preview=eligible?handoff.previewEvidence(root,result):localEligible?handoff.localPreviewEvidence(root,result):{
               status:'local-preview-only',stackId:'custom',root,branch:result.branch,
               sha:result.inspection?.sha,relative:result.relative,
               url:result.frontendUrl,mockOnly:result.mockPreview===true,
@@ -7562,7 +7563,7 @@ async function handleDashboardMessage(msg){
             };
             const current=await registry.read(projectId);
             if(current.techStackId!=='custom')throw Error('Custom Stack selection changed during Install & Run.');
-            const keep=eligible&&current.techStackApproval?.scope==='development-mock' &&
+            const keep=(eligible||localEligible)&&current.techStackCustomPreview?.status===preview.status&&current.techStackApproval?.scope==='development-mock' &&
               current.techStackApproval?.sha===preview.sha && current.techStackApproval?.remoteVerified===true &&
               current.techStackValidation?.sha===preview.sha;
             const saved=await registry.update(projectId,{...current,
@@ -8103,7 +8104,8 @@ async function handleDashboardMessage(msg){
           'Approve Custom Stack for DEVELOPER MOCK DEVELOPMENT only?\n\n'+
           'Verified '+validation.targets.length+' runnable application(s); test/build checks not required. Git revision '+validation.sha.slice(0,12)+
           ' on branch '+validation.branch+'.\n\n'+
-          'The local synthetic preview is healthy. Real PostgreSQL, external authentication and integrations remain UNVERIFIED; this is NOT production approval.\n\n'+
+          (validation.status==='baseline-only'?'The local preview may include uncommitted edits. Only the committed Git revision will be published; all local edits remain untouched and excluded. The published revision runtime is UNVERIFIED.\n\n':'The local synthetic preview is healthy.\n\n')+
+          'Real PostgreSQL, external authentication and integrations remain UNVERIFIED; this is NOT production approval.\n\n'+
           'ATGV will publish the exact verified SHA to a dedicated GitHub tech-stack/custom-vN handoff branch (or a safe SHA-pinned alias). '+
           'No force-push or merge to main will occur.',
           {modal:true},approve);
@@ -8111,6 +8113,9 @@ async function handleDashboardMessage(msg){
           await dashboard?.webview.postMessage({type:'architectStackCancelled',projectId,message:'Custom Stack handoff approval cancelled. No branch published.'});
           break;
         }
+        const currentRevision=await developerGit.repository(root);
+        if(currentRevision.sha!==validation.sha||currentRevision.branch!==validation.branch||currentRevision.root!==root||
+           (validation.status!=='baseline-only'&&!currentRevision.clean))throw Error('The checkout changed during approval. No handoff was published.');
         const published=await require('../../git-handoff-coordinator').publishApprovedStack({
           root,stackId:'custom',generation:Number(project.techStackGeneration||1),sha:validation.sha});
         const signoff=handoff.approval(project,validation,actor,published);
@@ -8124,12 +8129,12 @@ async function handleDashboardMessage(msg){
         activeProject=updated;
         architectErrorLogs.clear(projectId,'approval');
         await recordStackActivity(projectId,'Custom Stack approved for Developer mock work',
-          'Verified synthetic preview at '+validation.sha.slice(0,12)+'; test/build not required'+
+          (validation.status==='baseline-only'?'Approved committed baseline; local edits excluded; runtime unverified at ':'Verified synthetic preview at ')+validation.sha.slice(0,12)+'; test/build not required'+
           '. Remote handoff '+published.branch+'. Production/database/identity integrations remain unverified.');
         await refreshDashboard();
         await dashboard?.webview.postMessage({type:'architectStackState',
           value:{message:'Custom Stack approved for DEVELOPER MOCK DEVELOPMENT · '+published.branch+
-            ' @ '+validation.sha.slice(0,12)+'. Real PostgreSQL/identity/external integrations remain unverified.'}});
+            ' @ '+validation.sha.slice(0,12)+(validation.status==='baseline-only'?'. Committed baseline only; local edits excluded; runtime unverified.':'')+'. Real PostgreSQL/identity/external integrations remain unverified.'}});
         break;
       }
       case 'architectApproveStack':{
