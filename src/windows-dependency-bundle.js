@@ -115,4 +115,13 @@ async function prepare(root,cwd,{runner=execute,onProgress=async()=>{},signal,pl
  pending.set(cwd,job);
  try{return await job;}finally{pending.delete(cwd);}
 }
-module.exports={prepare,fingerprint};
+async function offlineEnv(root,cwd,{platform=process.platform,arch=process.arch}={}){
+ if(platform!=='win32'||arch!=='x64')return {};
+ const policyFile=path.join(root,'vendor','windows-x64','bundle-policy.json');
+ const stat=await fs.lstat(policyFile).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
+ if(!stat)return {};
+ const policy=await readJson(policyFile),app=path.relative(root,cwd).split(path.sep).join('/');
+ if(policy.schema!==1||policy.required!==true||policy.platform!=='win32'||policy.arch!=='x64'||!Array.isArray(policy.applications))throw Error('Invalid required Windows dependency bundle policy.');
+ return policy.applications.includes(app)?{npm_config_offline:'true',NPM_CONFIG_OFFLINE:'true',npm_config_audit:'false',npm_config_fund:'false'}:{};
+}
+module.exports={prepare,fingerprint,offlineEnv};
