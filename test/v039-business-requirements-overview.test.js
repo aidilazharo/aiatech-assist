@@ -36,7 +36,7 @@ async function fixture(t){
  return {registry,drafts};
 }
 
-test('quality review excludes the conflicting draft and leaves an unrelated Jira plan publishable',async t=>{
+test('review findings stay visible while the BA publishes both flagged and clean drafts and later updates the same Epic',async t=>{
  const {registry,drafts}=await fixture(t);
  const input=drafts.brs.map(auto.draftForReview),concerns=auto.sourceConcerns(drafts);
  const verdict={id:'BR-002',quote:'The workshop must finish before drafting starts.',reason:'Unresolved conflict.',conflict:0};
@@ -48,7 +48,7 @@ test('quality review excludes the conflicting draft and leaves an unrelated Jira
  const assess=vm.runInNewContext('('+runtime.slice(start,end).trim()+')',{
   registry,brWorkflow:workflow,baAutomatic:auto,activeProject:{id:'test'},dashboard:null,
   activeAiTarget:async()=>({}),roleSkillPrompt:async()=>'',
-  aiAnswer:async(_target,prompt)=>{calls++;return JSON.stringify({excluded:prompt.includes('"id":"BR-002","title"')?[verdict]:[]});}
+  aiAnswer:async(_target,prompt)=>{calls++;return JSON.stringify({excluded:prompt.includes('"id":"BR-002","title"')&&prompt.includes(verdict.quote)?[verdict]:[]});}
  });
  const {signal}=new AbortController();
  await assess('test',signal);
@@ -59,12 +59,28 @@ test('quality review excludes the conflicting draft and leaves an unrelated Jira
  assert.match(auto.sourceNotes(reviewed).join(' '),/question 12/);
  assert.match(auto.sourceNotes(reviewed).join(' '),/BR-002/);
  const changes=workflow.plan(workflow.projectPreparedJira(reviewed));
- assert.ok(changes.length&&changes.every(row=>row.path.startsWith('BR-001')));
+ assert.deepEqual([...new Set(changes.map(row=>row.path.split('/')[0]))],['BR-001','BR-002']);
+ assert.match(auto.isoDocument('Project intake.pdf',reviewed,''),/BR-002 · Enforce workshop sequencing/);
+ assert.equal(reviewed.brs[1].status,'draft');
  assert.equal(changes.find(row=>row.title==='Confirm the project delivery owner').roleId,'project-manager');
  const after=await workflow.approvePreparedJira(registry,'test',reviewed.revision,{
   actor:'BA',expectedPlan:sha(JSON.stringify(changes)),publication:{roots:[],rows:[]}
  });
- assert.equal(after.brs.find(br=>br.id==='BR-002').status,'draft');
+ assert.equal(after.brs.find(br=>br.id==='BR-002').status,'approved');
+ const epic=changes.find(row=>row.path==='BR-002');
+ await workflow.recorded(registry,'test',after.revision,{...epic,key:'TC-42'});
+ await assess('test',signal);
+ const published=await workflow.load(registry,'test');
+ assert.match(auto.sourceNotes(published).join(' '),/BR-002/);
+ assert.equal(calls,2);
+ await workflow.edit(registry,'test',published.revision,{brId:'BR-002',actor:'BA',automatic:true,
+  content:{...sequencing,objective:'The BA records the agreed workshop schedule.',acceptanceCriteria:'The agreed schedule is available for review.'}});
+ await assess('test',signal);
+ const corrected=await workflow.load(registry,'test');
+ assert.equal(corrected.baDraftQuality.excluded.length,0);
+ const update=workflow.plan(workflow.projectPreparedJira(corrected)).find(row=>row.path===epic.path);
+ assert.equal(update.action,'update');
+ assert.equal(update.key,'TC-42');
  assert.match(auto.invalidDraft({...intake,acceptanceCriteria:'TBD'}),/acceptance criteria/);
 });
 

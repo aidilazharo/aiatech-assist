@@ -1,12 +1,12 @@
-# ATGV AIATECH Assist v0.1.0
+# ATGV AIATECH Assist v0.1.1
 
 ## Changes
 
-- Remove 4 redundant version-only regression tests and duplicated metadata assertions; retain canonical release validation and UI accessibility checks.
-- Normalize test temporary directories to their physical path on Unix to address macOS /var and /private/var alias failures without weakening production symlink protections.
-- Make project-folder collision, scheduler paths, and native dependency fixtures platform-aware; update GitHub connection mocks and expected credential persistence, and isolate Repo B remote probes to local fixture repositories.
-- Preserve actionable pull-request permission diagnostics alongside rate-limit and SSO messages.
+- Business Analysts can approve and publish saved requirements with open quality findings, including a batch where every BR needs attention.
+- The ISO document and Jira preview include flagged requirements. The confirmation lists findings for follow-up, and subsequent BR revisions update their existing Jira issues.
+- The release workflow installs the pinned ZIP compressor used by the VSIX packager.
 
 ## Validation
 
-- Reviewed the v0.0.98 macOS log (2,667 tests; 56 failures). This targeted cleanup does not claim every recorded failure is resolved. Full regression execution and packaging remain pending. No VSIX generated.
+- Regression coverage includes all-flagged and mixed batches, unresolved source conflicts, an unavailable quality review, Jira verification failures, and updating a previously published Epic.
+- All 2,667 Node regression tests passed locally with both catalogue fixtures. The five Python distribution tests, UI theme check, and packaged extension activation check also passed.

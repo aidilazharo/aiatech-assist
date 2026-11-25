@@ -1275,7 +1275,7 @@ function approveRecord(next,brId,{actor,requireBusinessOwner=false,automatic=fal
    history.push({revision:br.approvedRevision,content:structuredClone(br.approvedContent),approval:structuredClone(br.approval)});
   }
   if(br.dependencyReviewRequired)throw Error('Resolve upstream requirement impact before approving this BR.');
-  if((next.sourceConflicts||[]).some(x=>x.brId===brId&&next.sourceConflictDecisions?.[x.id]!==true))throw Error('Review source document contradictions before approving this BR.');
+  if(!automatic&&(next.sourceConflicts||[]).some(x=>x.brId===brId&&next.sourceConflictDecisions?.[x.id]!==true))throw Error('Review source document contradictions before approving this BR.');
   if(requireBusinessOwner){const endorsement=br.businessApproval;if(!endorsement||endorsement.decision!=='approved'||endorsement.contentHash!==normalizedContent(br)||endorsement.discoveryRevision!==next.discoveryRevision||endorsement.sourceDigest!==next.importDigest)throw Error('Current draft requires Business Owner approval before BA final approval.');if(endorsement.actor===br.draftAuthor)throw Error('Independent Business Owner approver must differ from the draft author.');}
   br.approvedRevisions=history;
   br.status='approved';br.approvedEpoch=next.importEpoch;br.approvedRevision=(br.approvedRevision||0)+1;br.revisionNumber=br.approvedRevision;
@@ -1305,7 +1305,6 @@ function projectPreparedJira(register,{actor='Business Analyst',blockers}={}){
   return next;
  }
  for(const br of active){
-  if(automaticWorkflow.excludedDraft(next,br))continue;
   try{
    if(br.status==='draft')approveRecord(next,br.id,{actor,automatic:true});
    if(br.status!=='approved'||br.needsRefresh||br.externalReviewRequired||br.roleReviewRequired||br.dependencyReviewRequired)

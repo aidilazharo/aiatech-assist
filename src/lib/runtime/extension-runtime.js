@@ -4144,14 +4144,14 @@ function brPreparationTitle(register){
 function currentAttentionFindings(register){
  return (register.baDraftQuality?.excluded||[]).filter(row=>{
   const draft=(register.brs||[]).find(br=>br.id===row.id&&!br.archivedFromRestart&&br.status==='draft');
-  return !!draft&&baAutomatic.excludedDraft(register,draft);
+  return !!draft&&baAutomatic.hasQualityFinding(register,draft);
  });
 }
 
 async function resolveBAAttention(msg){
  const projectId=msg.projectId;
  const report=(type,message,extra={})=>dashboard?.webview.postMessage({type,projectId,message:String(message).slice(0,1200),...extra});
- let run;
+ let run,refreshPreview=false;
  try{
   requireBAWorkspace(msg);
   if(baAttentionRun||baPreparationRun||jiraSyncBusy||baPublishIntent)throw Error('Finish the current BR operation before AI repair.');
@@ -4197,7 +4197,7 @@ async function resolveBAAttention(msg){
    (unresolved.length?'Review remaining findings or supply missing business decisions.':'Review and approve draft revisions before Jira publication.');
   await report('baAutoResolveResult',result,{resolved:fixed,total:originalIds.length,changed:changed.size,unresolved});
   await notice(result);
-  if(activeProject?.id===projectId)await postBAPreparation(projectId,{phase:'draft',stage:'requirements',preview:null,error:'',sourceNotes:baAutomatic.sourceNotes(final)});
+  refreshPreview=true;
  }catch(error){
   const cancelled=error?.name==='AbortError'||run?.controller.signal.aborted;
   const message=cancelled?'AI repair stopped; saved drafts preserved, Jira unchanged.':'AI repair failed: '+String(error?.message||error).slice(0,1000);
@@ -4205,20 +4205,27 @@ async function resolveBAAttention(msg){
   await report('baAutoResolveResult',message,{failed:!cancelled,cancelled});
   if(!cancelled)await notice(message);
  }finally{if(baAttentionRun===run)baAttentionRun=null;}
+ if(refreshPreview&&activeProject?.id===projectId)await runBRPreparation('jira');
 }
 
 async function assessAutomaticDrafts(projectId,signal){
  const register=await brWorkflow.load(registry,projectId);
  const drafts=register.brs.filter(br=>br.status==='draft'&&!br.archivedFromRestart);
  const checked=Object.fromEntries(drafts.map(br=>[br.id,baAutomatic.qualityFingerprint(register,br)]));
- if(JSON.stringify(checked)===JSON.stringify(register.baDraftQuality?.checked||{}))return;
- const preserved=(register.baDraftQuality?.excluded||[]).filter(row=>checked[row.id]===row.fingerprint);
- const excluded=[...preserved];
+ const previous=register.baDraftQuality?.checked||{};
+ for(const br of register.brs){
+  if(br.status==='approved'&&!br.archivedFromRestart&&previous[br.id]&&previous[br.id]===baAutomatic.qualityFingerprint(register,br))
+   checked[br.id]=previous[br.id];
+ }
+ const priorFindings=register.baDraftQuality?.excluded||[];
+ const excluded=priorFindings.filter(row=>checked[row.id]===row.fingerprint).map(row=>
+  row.reason?.startsWith('Local draft excluded because its ')?{...row,reason:row.reason.replace('Local draft excluded because its ','The ')}:row);
+ if(JSON.stringify(checked)===JSON.stringify(previous)&&JSON.stringify(excluded)===JSON.stringify(priorFindings))return;
  const concerns=baAutomatic.sourceConcerns(register);
  const questions=register.discoveryAnswers?.questions||'';
  let target,skill;
  for(const draft of drafts){
-  if(register.baDraftQuality?.checked?.[draft.id]===checked[draft.id])continue;
+  if(previous[draft.id]===checked[draft.id])continue;
   signal.throwIfAborted();
   const local=baAutomatic.invalidDraft(draft);
   const crossSource=(register.sourceConflicts||[]).some(item=>item.brId===draft.id&&register.sourceConflictDecisions?.[item.id]!==true);
@@ -4308,14 +4315,14 @@ async function runBRPreparation(from){
    },
    prepareJira:async()=>{
     await current();
-    let qualityBlocker='';
+    let qualityWarning='';
     try{await assessAutomaticDrafts(projectId,signal);}
     catch(error){
      signal.throwIfAborted();
-     qualityBlocker='Draft quality review: '+atgvJobSafeError(error);
+     qualityWarning='Draft quality review: '+atgvJobSafeError(error);
     }
     await current();
-    prepared=await prepareBRJiraPreview({automatic:true,signal,qualityBlocker});
+    prepared=await prepareBRJiraPreview({automatic:true,signal,qualityWarning});
     if((await current()).revision!==prepared.revision)throw Error('Business Requirements changed while Jira was being checked. Refresh affected artifacts.');
    }
   });
@@ -4383,7 +4390,7 @@ async function baSaveArtifact(msg){
 
 async function publishPreparedBRs(msg){
  requireBAWorkspace(msg);
- if(baPreparationRun||jiraSyncBusy)throw Error('A Business Requirements operation is already running.');
+ if(baPreparationRun||baAttentionRun||jiraSyncBusy)throw Error('A Business Requirements operation is already running.');
  const projectId=activeProject.id;
  const session=baPreparationSessions.get(projectId),preview=session?.preview;
  const register=await brWorkflow.load(registry,projectId);
@@ -4403,7 +4410,8 @@ async function publishPreparedBRs(msg){
  const action='Approved and Publish';
  const decision=await uiWarning(action+' for '+scope.size+' Business Requirement(s)?\n\n'+preview.changes.length+
   ' Jira issue change(s) and '+reopenLines.length+' status reset(s).',
-  {modal:true,detail:[reopenLines.length?'Move to To Do:\n'+reopenLines.join('\n'):'',retired.length?'Mark obsolete:\n'+retired.join('\n'):''].filter(Boolean).join('\n\n').slice(0,14000)},action);
+  {modal:true,detail:[reopenLines.length?'Move to To Do:\n'+reopenLines.join('\n'):'',retired.length?'Mark obsolete:\n'+retired.join('\n'):'',
+   preview.sourceNotes?.length?'BR findings for follow-up:\n'+preview.sourceNotes.join('\n'):''].filter(Boolean).join('\n\n').slice(0,14000)},action);
  if(decision!==action){await postBAPreparation(projectId,{phase:'ready'});return;}
  if(activeProject?.id!==projectId||baPreparationRun||jiraSyncBusy)throw Error('The project or operation changed during Jira confirmation.');
  const token=await getAtlassianToken(activeProject);
@@ -4430,7 +4438,7 @@ async function publishPreparedBRs(msg){
  }
 }
 
-async function prepareBRJiraPreview({automatic=false,signal,qualityBlocker=''}={}){
+async function prepareBRJiraPreview({automatic=false,signal,qualityWarning=''}={}){
  requireOpened();
  const projectId=activeProject.id;
  const assertCurrent=()=>{
@@ -4449,7 +4457,7 @@ async function prepareBRJiraPreview({automatic=false,signal,qualityBlocker=''}={
  };
  let register=projectRequirements();
  let changes=brWorkflow.plan(register);
- const conflicts=qualityBlocker?[qualityBlocker]:[];
+ const conflicts=[];
  let previewTypes=[],linkCandidates=[],protection=[],reopenRoots=automatic?brWorkflow.changedPublishedBRs(original,register,changes):[];
  let reopen={rows:[],blocked:[]},issueTypes={},jiraProject='',site='',checkedCount=0,check='Verify Jira project';
  const activeRetirements=register.brs.some(item=>!item.archivedFromRestart&&item.status==='retire-proposed'&&item.approvedContent);
@@ -4460,7 +4468,7 @@ async function prepareBRJiraPreview({automatic=false,signal,qualityBlocker=''}={
  }
  try{
   assertCurrent();
-  if(!qualityBlocker&&(changes.length||reopenRoots.length)){
+  if(changes.length||reopenRoots.length){
    await progress('Verifying Jira project and checking planned changes…',10);
    const target=await ensureJiraPreviewTarget(register,{automatic});
    assertCurrent();
@@ -4595,7 +4603,7 @@ async function prepareBRJiraPreview({automatic=false,signal,qualityBlocker=''}={
  const projected=automatic?brWorkflow.flattenApproved(register.brs.filter(br=>!br.archivedFromRestart)):[];
  const reviewIssues=automatic?baAutomatic.publicationIssues(original):[];
  if(automatic&&!projected.length&&!activeRetirements&&!projectionIssues.length)
-  reviewIssues.push('No draft passed the quality review. Update a draft in Generated Requirements, then refresh the preview.');
+  reviewIssues.push('Prepare at least one Business Requirement before publishing.');
  const blockers=[...new Set([...projectionIssues,...conflicts,...reviewIssues])];
  const verifiedAt=blockers.length?0:Date.now();
  const fieldPlansHash=sha(JSON.stringify(jiraPreviewFieldPlans));
@@ -4605,7 +4613,7 @@ async function prepareBRJiraPreview({automatic=false,signal,qualityBlocker=''}={
  const payload={changes,issueTypes,jiraProject,fieldPlans:jiraPreviewFieldPlans,conflicts:blockers,linkCandidates,protection,revision:register.revision,checkedCount};
  if(automatic){
   return {...payload,reviewIssues,projectionIssues,reopenRoots,reopenRows:reopen.rows,
-   sourceNotes:baAutomatic.sourceNotes(original),projectId,planHash,fieldPlansHash,verifiedAt,site,
+   sourceNotes:[...baAutomatic.sourceNotes(original),...(qualityWarning?[qualityWarning]:[])],projectId,planHash,fieldPlansHash,verifiedAt,site,
    rows:projected.map(item=>({...item,key:register.synced?.[item.path]?.key||'',jiraType:issueTypes[item.path]||register.synced?.[item.path]?.issueType||''})),
    republish:changes.some(item=>register.synced[item.path.split('/')[0]]?.key)||reopenRoots.length>0};
  }

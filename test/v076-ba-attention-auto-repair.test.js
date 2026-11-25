@@ -45,7 +45,7 @@ test('only current, actively rejected drafts are eligible',()=>{
  const a=runtime.indexOf('function currentAttentionFindings('),b=runtime.indexOf('async function resolveBAAttention(',a);
  assert.ok(a>0&&b>a);
  const fn=vm.runInNewContext(runtime.slice(a,b)+'\ncurrentAttentionFindings',{
-  baAutomatic:{excludedDraft:(_register,br)=>br.id==='BR-013'}
+  baAutomatic:{hasQualityFinding:(_register,br)=>br.id==='BR-013'}
  });
  const register={baDraftQuality:{excluded:[{id:'BR-013'},{id:'BR-014'},{id:'BR-020'}]},
   brs:[{id:'BR-013',status:'draft'},{id:'BR-014',status:'draft'},
