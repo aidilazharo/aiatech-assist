@@ -68,6 +68,14 @@ test('v286 deletion shows animated progress and refreshes all role caches only o
  assert.match(host,/await refreshDashboard\(\)/);
  assert.match(ui,/roleJiraRequest\+\+;roleJiraLoaded=false;roleJiraLoading=false;roleJiraItems=\[\]/);
  assert.match(ui,/if\(activeId&&projectConnectionsSnapshot\.jira\?\.key\)searchJiraInventory\(\)/);
- assert.match(ui,/if\(view==='work'&&\['software-developer','ux-designer'\]\.includes\(selectedRole\)\)loadRoleJiraIssues\(true\)/);
+ // Inspect the completed-deletion handler, not an unrelated refresh route.
+ const start=ui.indexOf("if(msg.type==='brDeletedEverywhere'){");
+ const end=ui.indexOf("if(msg.type==='projectDeliveryForecast'){",start);
+ assert.ok(start>=0&&end>start);
+ const completed=ui.slice(start,end);
+ assert.match(completed,/if\(msg.projectId!==activeId\)return;/);
+ assert.match(completed,/roleJiraRequest\+\+;roleJiraLoaded=false;roleJiraLoading=false;roleJiraItems=\[\]/);
+ assert.match(completed,/if\(view==='work'&&selectedRole\)loadRoleJiraIssues\(true\)/);
+ assert.match(completed,/if\(view==='work'&&selectedRole==='software-developer'\)loadAssignedJiraTasks\(true\)/);
  assert.match(ui,/msg\.requestId===roleJiraRequest/);
 });

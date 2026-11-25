@@ -44,14 +44,21 @@ test('Business Analyst My Work contains requirements summary and Jira; editing r
  assert.match(ui,/navigate\('discovery'\)/);
 });
 
-test('Developer and UX Designer both get searchable Jira DataTables and protected Assign to Me',()=>{
+test('All selected roles get searchable Jira DataTables; Developer and UX keep scoped workspaces and protected assignment',()=>{
  assert.match(host,/id="roleJiraWork"/);
- assert.match(ui,/roleId==='software-developer'\|\|roleId==='ux-designer'/);
+ assert.match(ui,/const jiraRole=!!roleId;\s*\$\('roleJiraWork'\)\.classList\.toggle\('hidden',!jiraRole\)/);
+ assert.match(ui,/\$\('developerTaskDashboard'\)\.classList\.toggle\('hidden',roleId!=='software-developer'\)/);
+ assert.match(ui,/\$\('uxDesignWorkspace'\)\.classList\.toggle\('hidden',roleId!=='ux-designer'\)/);
+ assert.match(ui,/send\('roleJiraIssues',\{roleId:selectedRole,requestId:\+\+roleJiraRequest\}\)/);
+ assert.match(ui,/if\(selectedRole==='software-developer'\)showDeveloperAssignedTickets\(rows\)/);
+ assert.match(ui,/if\(selectedRole==='ux-designer'\)renderUxTickets\(rows\)/);
  assert.match(ui,/ATGVDataTables\.mount\(root,rows/);
  assert.match(ui,/roleJiraAssign',\{key:item.key,brId:item.brId,expectedUpdated:item.updated,roleId:selectedRole\}\)/);
  assert.match(host,/case 'roleJiraIssues':/);
  assert.match(fs.readFileSync(path.join(__dirname,'../src/role-jira-inventory.js'),'utf8'),/ownership\.tree\(register,br.id\)/);
  assert.match(host,/case 'roleJiraAssign':/);
+ assert.match(host,/ownership\.roleTree\(register,brId,roleId\)/);
+ assert.match(host,/roles\.some\(role=>role.id===roleId\)\)throw Error\('Selected SDLC role is not enabled\.'\)/);
  assert.match(host,/ownership\.changeWholeBr/);
  assert.match(host,/scope.rootKey/);
  const scan=host.slice(host.indexOf("case 'roleJiraIssues':"),host.indexOf("case 'roleJiraAssign':"));
