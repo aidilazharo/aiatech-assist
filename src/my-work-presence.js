@@ -125,14 +125,19 @@ async function visit(config,token,{projectKey,roleId='',confirmRegistration,asse
  if(me.active===false)throw Error('The connected Jira user is inactive.');
  const email=clean(me.emailAddress||config.get('jira.email'),250).toLowerCase();
  const validEmail=/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)?email:'';
- const name=clean(me.displayName)|| (validEmail?displayName(validEmail):String(me.accountId));
+ const jiraName=clean(me.displayName)|| (validEmail?displayName(validEmail):String(me.accountId));
  const project=validProjectKey(projectKey);
  const initial=await readRoster(config,token,project);
  const existing=initial.rows.find(row=>row.id===me.accountId);
+ if(validEmail&&initial.rows.some(row=>row.email.toLowerCase()===validEmail&&row.id&&row.id!==me.accountId))throw Error('Email is already linked to a different verified Atlassian account. Manual reconciliation required.');
+ // Preserve an existing verified profile, or prefill a legacy email-only profile.
+ const matched=existing||(validEmail?initial.rows.find(row=>!row.id&&row.email.toLowerCase()===validEmail):null);
+ const name=clean(matched?.name)||jiraName;
+ const registrationEmail=clean(matched?.email,250)||validEmail;
  let registrationConfirmed=false;
  if(!existing){
-  if(typeof confirmRegistration!=='function')throw Error('Confirm your ATGV user registration before adding this account.');
-  registrationConfirmed=await confirmRegistration({id:me.accountId,name,email:validEmail,projectKey:project,spaceKey:initial.space.key});
+  if(typeof confirmRegistration!=='function')return {...await snapshot(config,token,project),registrationPending:true};
+  registrationConfirmed=await confirmRegistration({id:me.accountId,name,email:registrationEmail,projectKey:project,spaceKey:initial.space.key});
   assertActive();
   if(registrationConfirmed!==true)return {...await snapshot(config,token,project),registrationCancelled:true};
   const confirmed=await requestJson(baseAtlassian(config)+'/rest/api/3/myself',auth);
@@ -154,7 +159,8 @@ async function visit(config,token,{projectKey,roleId='',confirmRegistration,asse
   if(!current?.id&&!registrationConfirmed)throw Error('User registration changed. Confirm registration again.');
   if(validEmail&&rows.some(x=>x.email===validEmail&&x.id&&x.id!==me.accountId))throw Error('Email is already linked to a different verified Atlassian account. Manual reconciliation required.');
   if(current?.id&&current.id!==me.accountId)throw Error('Email is already linked to a different verified Atlassian account. Manual reconciliation required.');
-  const effectiveEmail=validEmail||current?.email||'';
+  const effectiveEmail=registrationConfirmed?registrationEmail:(current?.email||validEmail);
+  if(registrationConfirmed&&current&&(clean(current.name)!==name||clean(current.email,250)!==registrationEmail))throw Error('Existing user profile changed. Reopen Overview and confirm again.');
   const unchanged=!!current&&current.id===me.accountId&&current.email===effectiveEmail&&current.name===name&&current.tasks===tasks&&(!role||current.roles.includes(role))&&!!page&&JSON.stringify(extractRows(page.body?.storage?.value||''))===JSON.stringify(normalizeRows(rows).rows);
   if(unchanged){
    const db=await syncDatabase(config,token,project,rows);
