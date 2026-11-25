@@ -4,7 +4,7 @@ const fs=require('node:fs'),vm=require('node:vm');
 const {normalizeRows}=require('../src/confluence-user-database');
 const source=fs.readFileSync(require.resolve('../src/my-work-presence'),'utf8');
 function fixture({email='person@example.test',failDatabase=false,existing=[]}={}){
- const state={page:null,db:existing.map(row=>({...row,roles:[...row.roles]})),writes:0,dbWrites:0};
+ const state={page:null,db:existing.map(row=>({...row,roles:[...row.roles]})),writes:0,dbWrites:0,versions:[],versionWrites:0};
  const config={get:key=>({'jira.email':email,'jira.baseUrl':'https://example.atlassian.net'}[key]||'')};
  const me={accountId:'account-123',displayName:'Verified Person',emailAddress:email,active:true};
  const clients={
@@ -22,6 +22,8 @@ function fixture({email='person@example.test',failDatabase=false,existing=[]}={}
   }
  };
  class Database{
+  async readVersions(){return {rows:state.versions};}
+  async reportVersion(_databaseId,id,version){state.versionWrites++;const row={id,version,reportedAt:new Date().toISOString()};state.versions=[...state.versions.filter(item=>item.id!==id),row];return row;}
   async read(){return {db:state.db.length?{id:'88'}:null,rows:state.db};}
   async upsert(rows){state.dbWrites++;if(failDatabase)throw Error('HTTP 403');state.db=normalizeRows([...state.db,...rows]).rows;return {databaseId:'88',rows:state.db};}
  }
@@ -96,4 +98,29 @@ test('only explicit Overview navigation requests modal; no project or space deta
  const modal=host.split("showInformationMessage('Please update your account'")[1].split(",'Confirm')")[0];
  assert.match(modal,/Full Name:/);assert.match(modal,/Email:/);
  assert.equal(modal.includes('Project:'),false);assert.equal(modal.includes('Confluence space:'),false);
+});
+
+test('verified user reports actual installed version and later changes, without altering other users',async()=>{
+ const {state,config,presence}=fixture({existing:[{id:'other-123',name:'Other Person',email:'other@example.test',roles:[],tasks:'No assigned task'}]});
+ state.versions.push({id:'other-123',version:'0.1.20',reportedAt:'2026-01-01T00:00:00.000Z'});
+ const options={projectKey:'TC',confirmRegistration:async()=>true};
+ let result=await presence.visit(config,'token',{...options,installedVersion:'0.1.38'});
+ assert.equal(result.rows.find(row=>row.id==='account-123').atgvVersion,'0.1.38');
+ assert.equal(result.rows.find(row=>row.id==='other-123').atgvVersion,'0.1.20');
+ result=await presence.visit(config,'token',{projectKey:'TC',installedVersion:'0.1.36'});
+ assert.equal(result.rows.find(row=>row.id==='account-123').atgvVersion,'0.1.36');
+ assert.equal(result.rows.find(row=>row.id==='other-123').atgvVersion,'0.1.20');
+});
+test('unregistered or cancelled users never report their installed version',async()=>{
+ const {state,config,presence}=fixture();
+ await presence.visit(config,'token',{projectKey:'TC',installedVersion:'0.1.38'});
+ await presence.visit(config,'token',{projectKey:'TC',installedVersion:'0.1.38',confirmRegistration:async()=>false});
+ assert.equal(state.versionWrites,0);
+});
+test('Overview renders ATGV version and host reads installed package version',()=>{
+ const host=fs.readFileSync(require.resolve('../src/lib/runtime/extension-runtime.js'),'utf8');
+ const ui=fs.readFileSync(require.resolve('../media/start.js'),'utf8');
+ assert.match(host,/installedVersion:require\('\.\.\/\.\.\/\.\.\/package\.json'\)\.version/);
+ assert.match(ui,/label:'ATGV Version'/);
+ assert.match(ui,/atgvVersionLabel:user\.atgvVersion\?'v'\+user\.atgvVersion:'Unknown'/);
 });
