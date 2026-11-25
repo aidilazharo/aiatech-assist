@@ -2786,7 +2786,7 @@ $('jiraIssueModalClose').addEventListener('click',closeJiraIssueModal);$('jiraIs
 // One ticket-scoped six-stage UI/UX workflow. All review actions stay local.
 let uxSelectedKey='',uxDrafts={wireframe:null,mockup:null},uxPipeline=null,uxPipelineBusy=false,uxPipelineStage=0,uxPendingOpenKey='',uxReferenceAvailable=false,uxPipelineStopping=false,uxCanStop=true,uxFramework='',uxFrameworks=[];
 let uxFrontendPublishing=false;
-const UX_STAGES=['Upload Design Reference (Optional)','User Flow','Wireframe','UI Mockup','Interactive Prototype','Developer Handoff'];
+const UX_STAGES=['Upload Design Reference','User Flow','Wireframe','UI Mockup','Interactive Prototype','Developer Handoff'];
 const uxReadyForPreview=()=>!!uxPipeline?.exists&&['review','approved'].includes(uxPipeline.status);
 function setUxStatus(message){const status=$('uxDesignStatus');status.textContent=String(message||'');status.classList.toggle('hidden',!status.textContent);}
 function renderUxProgress(){
@@ -2797,7 +2797,7 @@ function renderUxProgress(){
   const complete=!(index===0&&!uxReferenceAvailable)&&( (ready&&(index<5||uxPipeline.status==='approved'))||(uxPipelineBusy&&index<uxPipelineStage-1) );
   const running=uxPipelineBusy&&index===uxPipelineStage-1;
   const awaitingApproval=uxPipeline?.status==='review'&&index===5&&!uxPipelineBusy;
-  const optionalSkipped=index===0&&!uxReferenceAvailable&&!running;
+  const optionalSkipped=false;
   const starting=!uxPipelineBusy&&!ready&&(!uxPipeline||uxPipeline.status==='rejected')&&index===1;
   step.classList.toggle('complete',complete);
   step.classList.toggle('running',running);
@@ -2992,7 +2992,7 @@ function renderUxActions(){
  const button=$('uxGenerateUIUX');
  button.textContent=uxPipelineBusy?(uxPipelineStopping?'Stopping UI/UX…':'Stop UI/UX'):(uxReadyForPreview()?'Preview UI/UX':'Generate UI/UX');
  button.classList.toggle('ux-stop-action',uxPipelineBusy);
- button.disabled=!uxSelectedKey||(!uxReadyForPreview()&&!uxFramework)||(uxPipelineBusy&&(!uxCanStop||uxPipelineStopping));
+ button.disabled=!uxSelectedKey||(!uxPipelineBusy&&!uxReadyForPreview()&&(!uxFramework||!uxReferenceAvailable))||(uxPipelineBusy&&(!uxCanStop||uxPipelineStopping));
  $('uxDeleteEntireDesign').disabled=!uxSelectedKey||uxPipelineBusy||!uxPipeline?.exists;
  $('uxPreviewDeleteEntireDesign').disabled=!uxSelectedKey||uxPipelineBusy||!uxPipeline?.exists;
  $('uxUploadReference').disabled=!uxSelectedKey||uxPipelineBusy;
@@ -3215,6 +3215,7 @@ $('uxGenerateUIUX').addEventListener('click',()=>{
   uxPipelineStopping=true;renderUxActions();setUxStatus('Stopping UI/UX generation…');send('uxPipelineStop',{key:uxSelectedKey});return;
  }
  if(uxReadyForPreview()){openUxPipelinePreview();return;}
+ if(!uxReferenceAvailable){setUxStatus('Upload a design reference before generating UI/UX.');return;}
  uxPipelineBusy=true;uxPipelineStopping=false;uxCanStop=true;uxPipelineStage=1;renderUxActions();setUxStatus('Preparing full UI/UX design for '+uxSelectedKey+'…');
  send('uxPipelineGenerate',{key:uxSelectedKey,expectedRevision:uxPipeline?.revision||'',framework:uxFramework});
 });
@@ -3243,7 +3244,7 @@ window.addEventListener('message',event=>{
  if(m.type==='uxFrameworkCatalogChanged'){renderUxFrameworkOptions(m.frameworks,uxFramework);renderUxFrameworkAvailability(m);$('uxFrameworkSync').disabled=false;renderUxActions();}
  if(m.type==='uxFrameworkCatalogRefreshError'){$('uxFrameworkSync').disabled=false;const info=$('uxFrameworkSource');info.textContent='Catalog update unavailable: '+String(m.message||'Check your GitHub connection.').slice(0,320)+' · Using local design systems.';}
  if(m.type==='uxFrameworkCatalogueLoaded'){renderUxFrameworkGuide(m);updateUxFrameworkDocs();}
- if(m.type==='uxDesignReferenceLoaded'&&m.key===uxSelectedKey){uxReferenceAvailable=!!m.value?.exists;renderUxReference(m.value);renderUxProgress();if(m.uploaded)setUxStatus('Design references saved for '+m.key+'.');if(m.deleted)setUxStatus('Design reference image deleted for '+m.key+'.');}
+ if(m.type==='uxDesignReferenceLoaded'&&m.key===uxSelectedKey){uxReferenceAvailable=!!m.value?.exists;renderUxReference(m.value);renderUxActions();if(m.uploaded)setUxStatus('Design references saved for '+m.key+'.');if(m.deleted)setUxStatus('Design reference image deleted for '+m.key+'.');}
  if(m.type==='uxDesignReferenceCancelled'&&m.key===uxSelectedKey)loadUxDrafts();
  if(m.type==='uxDesignLoaded'&&m.value?.key===uxSelectedKey){uxDrafts[m.value.kind]=m.value;if(view==='uxPreview'){renderUxVisuals('uxWireframePreviews','wireframe');renderUxVisuals('uxMockupPreviews','mockup');}}
  if(m.type==='uxPipelineDeleted'&&m.key===uxSelectedKey){uxPipeline=m.value;uxDrafts={wireframe:null,mockup:null};uxPipelineBusy=false;uxPipelineStopping=false;uxPipelineStage=0;showUxBuilder();renderUxActions();renderUxVersionInfo();$('uxDeleteDesignStatus').textContent='Design deleted. Reference images retained. Select Generate UI/UX to regenerate.';setUxStatus('Design deleted from this ticket. Ready to regenerate.');return;}
