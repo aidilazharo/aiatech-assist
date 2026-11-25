@@ -10,14 +10,26 @@ const sha=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 const belongs=(path,id)=>path===id||path.startsWith(id+'/');
 const ownership=require('./br-ownership');
 const approved=br=>br?.status==='approved'&&!br.needsRefresh&&!br.externalReviewRequired&&!br.roleReviewRequired&&!br.dependencyReviewRequired&&!!br.approvedContent&&!!br.approvedRevision;
+function compatibleExisting(local,remote){
+ return !!local?.approvedContent&&!!remote?.approvedContent&&
+  !['retired','retire-proposed','cancelled','canceled','rejected'].includes(local.status)&&
+  Number(local.approvedRevision)===Number(remote.approvedRevision)&&
+  JSON.stringify(local.approvedContent)===JSON.stringify(remote.approvedContent);
+}
 function assignedCandidates(remote,current,issues,accountId,roleId='software-developer'){
  const mine=new Map((issues||[]).filter(issue=>accountId&&issue.assigneeId===accountId).map(issue=>[issue.key,issue]));
- const existing=new Set([...(current.brs||[]),...(current.deletedRequirements||[])].map(br=>br.id));
+ const existing=new Map((current.brs||[]).map(br=>[br.id,br]));
+ const deleted=new Set((current.deletedRequirements||[]).map(br=>br.id));
  const result=[];
  for(const br of remote.brs||[]){
-  if((!approved(br)&&!ownership.publishedSnapshot(remote,br))||existing.has(br.id))continue;
+  if((!approved(br)&&!ownership.publishedSnapshot(remote,br))||deleted.has(br.id))continue;
+  const local=existing.get(br.id);
+  if(local&&!compatibleExisting(local,br))continue;
   let scope;try{scope=ownership.roleTree(remote,br.id,roleId);}catch{continue;}
-  if(scope.entries.some(entry=>mine.has(entry.key)&&ownership.matchesRoleTask(entry,mine.get(entry.key))))result.push({brId:br.id,jiraKey:scope.rootKey});
+  const assigned=scope.entries.filter(entry=>mine.has(entry.key)&&ownership.matchesRoleTask(entry,mine.get(entry.key)));
+  if(!assigned.length)continue;
+  if(local&&current.synced?.[br.id]?.key===scope.rootKey&&assigned.every(entry=>current.synced?.[entry.path]?.key===entry.key||current.roleTaskMappings?.[entry.path]?.key===entry.key))continue;
+  result.push({brId:br.id,jiraKey:scope.rootKey});
  }
  return result;
 }
@@ -53,15 +65,18 @@ async function recover({registry,projectId,config,token,brId,jiraKey,snapshot=nu
  if(linked.some(([p,x])=>!x?.key||!x?.marker)||new Set(linked.map(([,x])=>x.key)).size!==linked.length)
   throw Error('Confluence has incomplete or duplicate Jira ownership markers.');
  const current=await brWorkflow.load(registry,projectId);
- if(current.brs.some(x=>x.id===id)||current.deletedRequirements?.some(x=>x.id===id))
-  throw Error('BR exists or was deliberately deleted. Manual reconciliation required.');
- const inUse=new Set([...Object.values(current.synced||{}),...Object.values(current.roleTaskMappings||{})].map(x=>x?.key).filter(Boolean));
+ const local=current.brs.find(x=>x.id===id);
+ if(current.deletedRequirements?.some(x=>x.id===id)||local&&(!assignment||!compatibleExisting(local,br)))
+  throw Error('BR differs locally or was deliberately deleted. Manual reconciliation required.');
+ const existingMappings=[...Object.entries(current.synced||{}),...Object.entries(current.roleTaskMappings||{})];
+ const inUse=new Set(existingMappings.filter(([p])=>!belongs(p,id)).map(([,x])=>x?.key).filter(Boolean));
  const combined=new Map(linked);
  for(const [p,x] of roleLinked){
   if(combined.has(p)&&combined.get(p).key!==x?.key)throw Error('Conflicting Jira role mapping in Confluence.');
   if(!combined.has(p))combined.set(p,x);
  }
- if([...combined.values()].some(x=>!x?.key||!x?.marker||inUse.has(x.key))||new Set([...combined.values()].map(x=>x.key)).size!==combined.size)
+ if(existingMappings.some(([p,x])=>belongs(p,id)&&combined.has(p)&&x?.key!==combined.get(p).key)||
+    [...combined.values()].some(x=>!x?.key||!x?.marker||inUse.has(x.key))||new Set([...combined.values()].map(x=>x.key)).size!==combined.size)
   throw Error('A linked Jira issue is unverified, duplicated or belongs to another local BR.');
  if(assignment){
   if(!approved(br)&&!ownership.publishedSnapshot(remote,br))throw Error('The shared BR has no approved published snapshot.');
@@ -89,13 +104,14 @@ async function recover({registry,projectId,config,token,brId,jiraKey,snapshot=nu
  const restored=assignment?{downloaded:0,conflicts:[]}:await vault.restore(manifest,sha(bytes),space,String(page.id),attachments,{allowRegister:false});
  if(restored.conflicts.length)throw Error('Confluence recovery blocked: '+restored.conflicts.slice(0,3).join('; '));
  await brWorkflow.write(registry,projectId,current.revision,next=>{
-  if(next.brs.some(x=>x.id===id)||next.deletedRequirements?.some(x=>x.id===id)||assignment&&!assignment.shouldContinue())throw Error('BR or project changed while recovering.');
-  next.brs.push(structuredClone(br));
-  if(remote.baPublishedBRs?.[id]){next.baPublishedBRs=next.baPublishedBRs||{};next.baPublishedBRs[id]=remote.baPublishedBRs[id];}
-  for(const [p,x] of linked)next.synced[p]=structuredClone(x);
+  const savedLocal=next.brs.find(x=>x.id===id);
+  if(next.deletedRequirements?.some(x=>x.id===id)||savedLocal&&(!assignment||!compatibleExisting(savedLocal,br))||assignment&&!assignment.shouldContinue())throw Error('BR or project changed while recovering.');
+  if(!savedLocal)next.brs.push(structuredClone(br));
+  if(remote.baPublishedBRs?.[id]){next.baPublishedBRs=next.baPublishedBRs||{};if(!next.baPublishedBRs[id])next.baPublishedBRs[id]=remote.baPublishedBRs[id];}
+  for(const [p,x] of linked)if(!next.synced[p])next.synced[p]=structuredClone(x);
   if(remote.roleTaskMappings){
    next.roleTaskMappings=next.roleTaskMappings||{};
-   for(const [p,x] of Object.entries(remote.roleTaskMappings))if(belongs(p,id))next.roleTaskMappings[p]=structuredClone(x);
+   for(const [p,x] of Object.entries(remote.roleTaskMappings))if(belongs(p,id)&&!next.roleTaskMappings[p])next.roleTaskMappings[p]=structuredClone(x);
   }
   next.archivedSources=next.archivedSources||[];
   for(const doc of assignment?[]:docs){
