@@ -1,11 +1,11 @@
-# ATGV AIATECH Assist v0.1.4
+# ATGV AIATECH Assist v0.1.5
 
 ## Changes
 
-- Allow Approved and Publish with BR quality findings and verified Jira items that have no available transition to To Do. Keep both Needs attention badges and explain skipped resets in the confirmation and Jira panel.
-- Publish requirement changes, execute available resets, and retain existing status and assignee for skipped resets. Record skipped status resets in the publication audit.
-- Preserve revision, ownership, issue identity, permission, required-field, and remote conflict safeguards. A failed transition lookup remains blocking; unavailable transitions are advisory only when the lookup succeeds.
+- Developer BR choices now use verified live Developer task assignments and the exact current approved BR revision, independent of Epic ownership.
+- Refresh Developer Jira inventory with read-only Confluence Source Vault synchronization, selectively recover missing approved BRs from verified Jira mappings, refresh local register and SQLite mappings, and publish shared BR state promptly after successful BA publication.
+- Never infer approval from a Jira title, overwrite divergent local BRs, revive deleted records or claim another role's task. Show synchronization diagnostics and preserve whole-role ownership requirements for development.
 
 ## Validation
 
-- Updated status reset and publish eligibility regression cases; targeted isolated source checks performed. Full Node regression suite and VSIX packaging not run.
+Targeted source-function and syntax checks performed; full Node regression and live Jira/Confluence integration were not run in this environment. No VSIX packaged.

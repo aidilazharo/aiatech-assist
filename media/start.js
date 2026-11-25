@@ -3246,6 +3246,7 @@ let developerBrProjectId='',developerBrSelected='',developerBrBusy=false,develop
 const developerBrDraftPhases=['analyze','plan','local','verify'];
 let developerBrDraftPhase='analyze',developerBrDraftReady=false;
 function projectDraftPreviewEnabled(){return projects.some(project=>project.id===activeId&&project.settings?.development?.previewWithoutTests===true);}
+let developerBrSyncWarnings=[];
 let developerAssignedMine=[],developerBrArchitecture={tables:[],endpoints:[],files:[]},developerBrAssignmentBusy=false;
 let developerBrStopping=false,developerBrCycleIndex=0,developerBrCycleTotal=0,developerBrJiraKey='',developerBrJiraCriterion='',developerBrEpicKey='';
 let developerBrFiles=[],developerBrEvidence=[],developerBrActivity=[],developerBrBranch='',developerBrWorktree='',developerBrUrl='',developerBrSummary='',developerBrServerLogs='',developerBrCanRetry=false,developerBrServerRunning=false,developerBrServerBusy=false;
@@ -3438,11 +3439,12 @@ function renderDeveloperBrStages(){
  const start=$('developerBrStart');
  const processing=developerBrBusy&&!developerBrDone;
  start.textContent=developerBrStopping?'Stopping Development…':processing?'■ Stop Development':developerBrStage==='needs-attention'?'↻ Retry Development':developerBrCanRetry||developerBrDone?'↻ Restart Development':'▶ Start Development';
- start.disabled=!developerBrSelected||developerBrStopping||developerBrAssignmentBusy;
- const preview=$('developerBrPreviewDraft');preview.classList.toggle('hidden',!projectDraftPreviewEnabled());preview.disabled=!projectDraftPreviewEnabled()||!developerBrSelected||developerBrBusy||developerBrServerRunning||developerBrServerBusy||developerBrAssignmentBusy;preview.title='Preview Draft — create and open an untested local application. Tests and builds are skipped; approval and delivery remain locked.';
+ const ownsScope=roleJiraItems.some(item=>item.brRoot&&item.brId===developerBrSelected&&item.roleScopes?.['software-developer']?.mine);
+ start.disabled=!developerBrSelected||developerBrStopping||developerBrAssignmentBusy||(!processing&&!ownsScope);
+ const preview=$('developerBrPreviewDraft');preview.classList.toggle('hidden',!projectDraftPreviewEnabled());preview.disabled=!projectDraftPreviewEnabled()||!developerBrSelected||developerBrBusy||developerBrServerRunning||developerBrServerBusy||developerBrAssignmentBusy||!ownsScope;preview.title='Preview Draft — create and open an untested local application. Tests and builds are skipped; approval and delivery remain locked.';
  start.classList.toggle('is-stopping',developerBrStopping);
  start.classList.toggle('is-running',processing&&!developerBrStopping);
- start.title=processing?'Stop the current AI development process':(typeof developerBrRecovery!=='undefined'&&developerBrRecovery?.available)?'Resume from the failed criterion using persisted repair history and the currently selected AI model':developerBrCanRetry||developerBrDone?'Regenerate from the approved BR using a fresh RED → GREEN → REFACTOR cycle':'Start automatic TDD development immediately';
+ start.title=processing?'Stop the current AI development process':!ownsScope?'Assign the remaining Developer tasks for this BR before starting development.':(typeof developerBrRecovery!=='undefined'&&developerBrRecovery?.available)?'Resume from the failed criterion using persisted repair history and the currently selected AI model':developerBrCanRetry||developerBrDone?'Regenerate from the approved BR using a fresh RED → GREEN → REFACTOR cycle':'Start automatic TDD development immediately';
  const inDevelopment=developerBrBusy||developerBrServerRunning||developerBrServerBusy;
  const stop=$('developerBrStop');stop.disabled=!inDevelopment;stop.classList.toggle('hidden',true);
  $('developerBrOpenWorktree').disabled=developerBrBusy||!developerBrWorktree;
@@ -3487,16 +3489,21 @@ function updateDeveloperBrChangeBadge(br){
  badge.className='developer-br-change-badge'+(status?' status-'+status:' hidden');
  badge.setAttribute('aria-label',label?'Business Requirement status: '+label:'');
 }
+function developerEligibleBRs(register,assigned){
+ const ids=new Set((assigned||[]).filter(item=>item.mine&&item.taskRole==='software-developer'&&!item.brRoot).map(item=>item.brId));
+ return (register?.brs||[]).filter(br=>ids.has(br.id)&&br.status==='approved'&&!br.needsRefresh&&!br.externalReviewRequired&&!br.roleReviewRequired&&!br.dependencyReviewRequired&&br.approvedContent&&br.approvedRevision);
+}
 function renderDeveloperBrChoices(){
  const select=$('developerBrSelect');if(!select)return;
  if(developerBrProjectId!==activeId){developerBrProjectId=activeId;developerBrSelected='';resetDeveloperBr();}
- const all=(brState?.brs||[]);
- const eligible=all.filter(br=>br.status==='approved'&&!br.needsRefresh&&br.approvedContent&&br.approvedRevision);
- const cancelled=all.filter(br=>['retired','cancelled','canceled'].includes(String(br.status||'').toLowerCase()));
+ const currentInventory=roleJiraLoaded&&roleJiraProject===activeId;
+ const eligible=developerEligibleBRs(brState,currentInventory?developerAssignedMine:[]);
+ const missing=currentInventory&&roleJiraItems.some(item=>item.mine&&/^(task|subtask|sub-task|sub task)$/i.test(item.type||item.issueType||'')&&!item.taskRole);
+ const emptyText=!currentInventory?'Refresh Jira tasks to load assigned BRs':missing||developerAssignedMine.length?'Assigned tasks found — approved BR unavailable':'No approved BR assigned to you';
  const previous=developerBrSelected;
  select.replaceChildren();
- const prompt=document.createElement('option');prompt.value='';prompt.textContent=eligible.length?'Select approved Business Requirement':'No approved Business Requirements';select.append(prompt);
- for(const br of [...eligible,...cancelled]){
+ const prompt=document.createElement('option');prompt.value='';prompt.textContent=eligible.length?'Select approved Business Requirement':emptyText;select.append(prompt);
+ for(const br of eligible){
   const status=developerBrStatusOf(br),option=document.createElement('option');option.value=br.id;
   option.textContent=br.id+' · '+String(br.approvedContent?.title||br.title||'Untitled requirement').slice(0,130)+' · '+(br.approvedRevision?'Approved R'+br.approvedRevision:'');
   option.disabled=status==='cancelled';select.append(option);
@@ -3508,7 +3515,7 @@ function renderDeveloperBrChoices(){
  else if(!developerBrJiraCriterion&&!developerBrJiraKey)setCurrentDeveloperJira({epicJiraKey:brState?.synced?.[chosen.id]?.key||''});
  updateDeveloperBrChangeBadge(chosen);
  select.title=chosen?'Approved '+chosen.id+' · '+$('developerBrChangeBadge').textContent:'Select approved Business Requirement';
- $('developerBrRevision').textContent=chosen?'Approved R'+chosen.approvedRevision+' · development uses this exact revision':'Only approved and unchanged revisions can start development.';
+ $('developerBrRevision').textContent=chosen?'Approved R'+chosen.approvedRevision+' · development uses this exact revision':(currentInventory&&developerBrSyncWarnings.length?developerBrSyncWarnings.join(' · '):emptyText+'. Refresh Jira tasks if shared BRs are missing.');
  syncDeveloperBrJira();renderDeveloperBrAssignment();renderDeveloperBrStages();
 }
 $('developerBrSelect').addEventListener('change',()=>{
@@ -3733,7 +3740,7 @@ function showDeveloperAssignedTickets(items){
   resetDeveloperStageEvidence();
   // A BR-driven workspace must never silently select an unrelated Jira issue.
  }else{root.value=developerSelectedTicket;renderDeveloperWorkflowSteps();}
- syncDeveloperBrJira();
+ renderDeveloperBrChoices();
 }
 $('developerAssignedTickets').addEventListener('change',()=>{
  const root=$('developerAssignedTickets'),chosen=root.value;
@@ -7780,7 +7787,7 @@ window.addEventListener('message',event=>{
         $('brEditError').textContent='Draft saved. Final approval is still pending; review the reported blocker.';
       }else{brEditorSaving=false;if(!brEditorDirty)closeBREditor(true);}
     }
-    brApprovePending=false;renderOverviewJira();renderDiscoveryReview();renderBRs();renderDocumentGroups();if(!discoveryImportBusy)baBusy('',null);if(brEditing)updateBREditorActions();
+    brApprovePending=false;renderOverviewJira();renderDiscoveryReview();renderBRs();renderDeveloperBrChoices();renderDocumentGroups();if(!discoveryImportBusy)baBusy('',null);if(brEditing)updateBREditorActions();
     if(task==='approveBR')baReopenDocuments=false;
     if(task==='skipReview'&&view==='discovery')requestAnimationFrame(()=>{if(!discoveryDirty&&baReviewFinalized())openBAWorkflowStep('generate');});
     if(task==='confirmReview'&&view==='discovery')requestAnimationFrame(()=>{if(!discoveryDirty&&baReviewFinalized())openBAWorkflowStep('generate');});
@@ -8929,7 +8936,7 @@ window.addEventListener('message',event=>{
  }
  if(msg.type==='roleJiraIssueDetails'&&msg.key===jiraModalKey&&msg.requestId===jiraModalRequest){renderJiraIssueModal(msg.value);}
  if(msg.type==='roleJiraIssueDetailsError'&&msg.key===jiraModalKey&&msg.requestId===jiraModalRequest){$('jiraIssueModalReload').disabled=false;$('jiraIssueModalBody').textContent='Unable to load Jira ticket: '+(msg.message||'Retry or check Jira permissions.');$('jiraIssueModalSubtitle').textContent='Request failed';}
- if(msg.type==='roleJiraIssues'&&msg.projectId===activeId&&msg.requestId===roleJiraRequest){roleJiraLoading=false;roleJiraLoaded=true;renderRoleJiraIssues(msg.items,msg.incomplete);if(roleJiraRefreshAfterSave){roleJiraRefreshAfterSave=false;loadRoleJiraIssues(true);}}
+ if(msg.type==='roleJiraIssues'&&msg.projectId===activeId&&msg.requestId===roleJiraRequest){roleJiraLoading=false;roleJiraLoaded=true;if(msg.register&&selectedRole==='software-developer'){brState=msg.register;developerBrSyncWarnings=msg.brSyncWarnings||[];}renderRoleJiraIssues(msg.items,msg.incomplete);if(roleJiraRefreshAfterSave){roleJiraRefreshAfterSave=false;loadRoleJiraIssues(true);}}
  if(msg.type==='developerTaskDetail'&&msg.projectId===activeId)renderDeveloperTaskDetail(msg.value);
  if(msg.type==='developerArtifactLoaded'&&msg.projectId===activeId)renderDeveloperArtifact(msg.value);
  if(msg.type==='developerDeliveryCancelled'&&msg.projectId===activeId){developerDeliveryBusy=false;$('developerDeliveryVerify').disabled=false;$('developerDeliveryRunChecks').disabled=false;$('developerDeliveryComplete').disabled=true;developerDeliveryProof=null;if(developerStageEvidence.key===developerSelectedTicket){developerStageEvidence.verified=false;renderDeveloperWorkflowSteps();}$('developerDeliveryStatus').textContent='Cancelled. No remote changes were made by this action.';}

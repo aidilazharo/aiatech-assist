@@ -4766,6 +4766,8 @@ async function syncApprovedBRs(expectedRevision,automatic=null){
   await publishProgress('completed',`Published and recorded ${confirmed} of ${total} Jira changes.`);
   await dashboard?.webview.postMessage({type:'brJiraDone',count:items.length});
   await notice('Published '+items.length+' Jira changes.'+(automatic?.skipped?.length?' '+automatic.skipped.length+' status reset(s) skipped; review Jira Work Items.':''));
+  // Publish approved content and exact mappings promptly for other role workspaces.
+  if(typeof syncConfluenceSourceVault==='function')await syncConfluenceSourceVault(activeProject.id,'br-published').catch(error=>report('Shared BR publication pending: '+String(error.message||error).slice(0,300)));
  }catch(error){
   if(publicationStarted||total){
    await publishProgress('failed',`Publication interrupted after ${confirmed} of ${total} confirmed changes: ${error.message}. Review already-published issues before retrying.`,{error:String(error.message||error).slice(0,1000)}).catch(()=>{});
@@ -6936,9 +6938,8 @@ async function handleDashboardMessage(msg){
         const auth={token,basicEmail:String(config.get('jira.email')||'').trim()};
         const self=await requestJson(`${baseAtlassian(config)}/rest/api/3/myself`,auth);
         if(!self?.accountId)throw Error('Jira account identity is unavailable.');
-        const register=await brWorkflow.load(registry,projectId),all=[],jiraSite=baseAtlassian(config);
-        try{jiraLocalStore.saveMappings(registry,projectId,{site:jiraSite,register});}
-        catch(error){report('Jira SQLite mapping index unavailable: '+String(error.message||error));}
+        let register=await brWorkflow.load(registry,projectId);
+        const all=[],jiraSite=baseAtlassian(config);
         const result=await jiraProjectInventory.scanProject({config,token,projectKey,
           shouldContinue:()=>activeProject?.id===projectId,
           onPage:async page=>{
@@ -6956,8 +6957,36 @@ async function handleDashboardMessage(msg){
             connectedSync.checkpoint(registry,projectId,{provider:'jira',origin:jiraSite,scope:projectKey,count:result.count,complete:!result.truncated});
         }catch(error){report('Jira SQLite sync state unavailable: '+String(error.message||error));}
         if(activeProject?.id!==projectId||result.cancelled)return;
-        const items=require('../../role-jira-inventory').enrich(all,register,self.accountId);
-        await dashboard?.webview.postMessage({type:'roleJiraIssues',projectId:activeProject.id,items,incomplete:!!result.truncated,requestId});break;
+        const inventory=require('../../role-jira-inventory');
+        const warnings=[];
+        if(msg.roleId==='software-developer'&&all.some(issue=>issue.assigneeId===self.accountId&&/^(task|subtask|sub-task|sub task)$/i.test(issue.type))){
+         if(!config.get('confluence.spaceKey'))warnings.push('Configure Confluence to retrieve shared approved BRs.');
+         else if(sourceVaultBusy)warnings.push('Shared BR synchronization is running. Refresh Jira tasks again after it finishes.');
+         else{
+          sourceVaultBusy=true;
+          try{
+           const vault=new ConfluenceSourceVault({registry,projectId,config,token});
+           const pulled=await vault.sync({mode:'pull'});
+           warnings.push(...(pulled.conflicts||[]),...(pulled.skipped?[pulled.skipped]:[]));
+           register=await brWorkflow.load(registry,projectId);
+           if(activeProject?.id!==projectId)break;
+           const known=new Set(inventory.enrich(all,register,self.accountId).filter(item=>item.mine&&item.taskRole==='software-developer').map(item=>item.key));
+           if(all.some(issue=>issue.assigneeId===self.accountId&&/^(task|subtask|sub-task|sub task)$/i.test(issue.type)&&!known.has(issue.key))){
+            const recovered=await confluenceBRRecovery.recoverAssigned({registry,projectId,config,token,issues:all,accountId:self.accountId,
+             verify:(remote,p,live)=>verifyLinkedJiraIdentity(remote,config,p,live),shouldContinue:()=>activeProject?.id===projectId});
+            warnings.push(...recovered.warnings);
+           }
+          }catch(error){warnings.push('Shared BR synchronization: '+String(error.message||error).slice(0,300));}
+          finally{sourceVaultBusy=false;}
+         }
+        }
+        if(activeProject?.id!==projectId)break;
+        register=await brWorkflow.load(registry,projectId);
+        try{jiraLocalStore.saveMappings(registry,projectId,{site:jiraSite,register});}
+        catch(error){report('Jira SQLite mapping index unavailable: '+String(error.message||error));}
+        const items=inventory.enrich(all,register,self.accountId);
+        await dashboard?.webview.postMessage({type:'roleJiraIssues',projectId,items,incomplete:!!result.truncated,requestId,
+         ...(msg.roleId==='software-developer'?{register,brSyncWarnings:warnings.slice(0,5)}:{})});break;
       }
       case 'roleJiraAssign':
       case 'roleJiraUnassign':{

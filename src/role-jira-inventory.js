@@ -14,12 +14,13 @@ function enrich(issues,register,accountId){
    let role;try{role=ownership.roleTree(register,br.id,roleId);}catch{continue;}
    if(!role.entries.length)continue;
    const tasks=role.entries.map(entry=>({entry,issue:byKey.get(entry.key)}));
-   const complete=tasks.every(({entry,issue})=>issue&&ownership.matchesRoleTask(entry,issue));
+   const verified=tasks.filter(({entry,issue})=>issue&&ownership.matchesRoleTask(entry,issue));
+   for(const {entry} of verified){mapped.set(entry.key,br.id);taskRoles.set(entry.key,roleId);}
+   const complete=verified.length===tasks.length;
    if(!complete)continue;
    const mine=tasks.every(({issue})=>!!accountId&&issue.assigneeId===accountId);
    const available=tasks.every(({issue})=>!issue.assigneeId||issue.assigneeId===accountId);
    roleScopes[roleId]={count:tasks.length,mine,available,keys:tasks.map(({entry})=>entry.key)};
-   for(const {entry} of tasks){mapped.set(entry.key,br.id);taskRoles.set(entry.key,roleId);}
   }
   roots.set(scope.rootKey,{brId:br.id,descendantCount:scope.entries.length-1,roleScopes});
   for(const entry of scope.entries)mapped.set(entry.key,br.id);
