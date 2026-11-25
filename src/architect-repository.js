@@ -133,6 +133,19 @@ async function ensureCustom(state,projectId,developerGit,options={}){
    }
    if(!developerGit.matchesGithubRepo(checked.remote,owner,repoName))
     throw Error('Repository folder has an unexpected GitHub origin. Existing files were preserved.');
+   // Opted-in bundled projects receive source and module archives from the
+   // same origin branch. Pull only clean configured checkouts; never reset.
+   if(entries.length>1&&checked.clean&&checked.sha&&checked.branch===(options.githubBranch||'main')&&
+      !developerGit.localLogs?.()?.running){
+    const policyPath=path.join(dest,'vendor','windows-x64','bundle-policy.json');
+    const policy=await fs.readFile(policyPath,'utf8').then(JSON.parse,error=>{if(error.code==='ENOENT')return null;throw error;});
+    if(policy?.schema===1&&policy.required===true&&policy.platform==='win32'&&policy.arch==='x64'){
+     const safePull=options.pull||require('./architect-custom-pull').pull;
+     const result=await safePull(dest,{expectedSha:checked.sha,owner,name:repoName,driver:developerGit});
+     checked=await developerGit.repository(dest);
+     mode=result.updated?'pulled':'existing';
+    }
+   }
    if(entries.length===1&&entries[0]==='.git'){
     if(!checked.sha&&checked.clean&&typeof developerGit.hydrateUnbornCheckout==='function'){
      checked=await developerGit.hydrateUnbornCheckout(dest,owner,repoName,options.githubBranch||checked.branch||'main',{token:options.token||''});
