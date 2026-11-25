@@ -3964,10 +3964,32 @@ function verifyLinkedJiraIdentity(reg,config,nodePath,issue){
  // A BR can have a new draft while its prior approval still owns the Jira links.
  const published=reg.brs.find(item=>item.id===nodePath.split('/')[0]&&item.approvedContent);
  const mapped=published&&brWorkflow.flattenApproved([{...published,status:'approved',needsRefresh:false}],{ignoreExternalBlocks:true}).find(item=>item.path===nodePath);
- const parent=mapped?.parent??(nodePath.split('/').length===4?nodePath.split('/').slice(0,2).join('/'):nodePath.includes('/')?nodePath.slice(0,nodePath.lastIndexOf('/')):null);
+ const parts=nodePath.split('/'),root=parts[0],feature=parts.slice(0,2).join('/'),story=parts.slice(0,3).join('/');
+ const modern=published?.jiraHierarchyVersion===2;
+ const parent=mapped?mapped.parent:parts.length===4?(modern?story:feature):parts.length===3?(modern?root:feature):parts.length===2?root:null;
  const expected=parent?reg.synced?.[parent]?.key:null;
- if((fields.parent?.key||null)!==(expected||null))throw Error('JIRA parent relationship changed: '+tracked.key);
- if(tracked.parentIssueId&&String(fields.parent?.id||'')!==String(tracked.parentIssueId))throw Error('JIRA parent numeric ID changed: '+tracked.key+'. Reconcile before publishing.');
+ const actual=fields.parent?.key||null,actualId=String(fields.parent?.id||'');
+ // Persisted numeric parent identity is stronger than a recalculated hierarchy.
+ // Only accept the exact alternate parent on this same BR path, never another
+ // feature/story or an unrelated issue. A genuine remote reparent stays blocked.
+ if(tracked.parentIssueId&&actualId!==String(tracked.parentIssueId))
+  throw Error('JIRA parent numeric ID changed: '+tracked.key+' (expected '+tracked.parentIssueId+', actual '+(actualId||'missing')+'). Reconcile before publishing.');
+ const alternate=parts.length===3?(parent===root?feature:root):parts.length===4?(parent===story?feature:story):null;
+ const alternateMapping=alternate?reg.synced?.[alternate]:null;
+ const expectedMapping=parent?reg.synced?.[parent]:null;
+ const isSubtask=type=>/sub[ -]?task/i.test(String(type||''));
+ const liveSubtask=fields.issuetype?.subtask===true||isSubtask(fields.issuetype?.name);
+ const storyType=reg.synced?.[story]?.issueType;
+ const storySubtask=isSubtask(storyType);
+ const confirmedAlternate=!!(alternateMapping?.key&&actual===alternateMapping.key&&
+  (!alternateMapping.issueId||actualId===String(alternateMapping.issueId))&&(
+   (tracked.parentIssueId&&actualId===String(tracked.parentIssueId))||
+   (parts.length===3&&(alternate===feature?liveSubtask:fields.issuetype?.subtask===false&&String(fields.issuetype?.name||'').toLowerCase()==='story'))||
+   (parts.length===4&&liveSubtask&&(alternate===feature?storySubtask:String(storyType||'').toLowerCase()==='story'))
+  ));
+ if(parent&&!expected&&!confirmedAlternate||actual!==(expected||null)&&!confirmedAlternate||
+    !confirmedAlternate&&expectedMapping?.issueId&&actualId!==String(expectedMapping.issueId))
+  throw Error('JIRA parent relationship changed: '+tracked.key+' (expected '+(expected|| (parent?'unmapped '+parent:'none'))+', actual '+(actual||'none')+'). Reconcile before publishing.');
 }
 async function jiraProtectionAssessment(reg,config,token,items,{approvedPlan=items}={}){
  const cache=new Map();

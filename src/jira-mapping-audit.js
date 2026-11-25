@@ -4,7 +4,7 @@
  * The Jira key is a mutable display identifier; issueId is the permanent
  * numeric identity when available. Never reparent, unlink, create, or delete.
  */
-const MAX_LINKS=250;
+const MAX_LINKS=1000;
 const own=(path,id)=>path===id||path.startsWith(id+'/');
 function mappedRows(register){
  const active=new Set((register?.brs||[]).filter(br=>!br.archivedFromRestart&&br.approvedContent).map(br=>br.id));
@@ -16,7 +16,7 @@ async function audit({register,projectKey,readIssue,verify,signal}={}){
  if(typeof readIssue!=='function'||typeof verify!=='function')throw Error('Jira mapping audit needs verified read and identity callbacks.');
  if(!/^[A-Z][A-Z0-9_]{1,20}$/.test(String(projectKey||'')))throw Error('Jira project key is not verified.');
  const rows=mappedRows(register);
- if(rows.length>MAX_LINKS)throw Error('Jira mapping identity audit exceeds 250 active links. Review the project in smaller BR groups; no Jira changes were made.');
+ if(rows.length>MAX_LINKS)throw Error('Jira mapping identity audit exceeds '+MAX_LINKS+' active links. Review the project in smaller BR groups; no Jira changes were made.');
  const conflicts=[],verified=[],knownKeys=new Map(),knownIds=new Map();
  for(const row of rows){
   if(knownKeys.has(row.key)&&knownKeys.get(row.key)!==row.path)

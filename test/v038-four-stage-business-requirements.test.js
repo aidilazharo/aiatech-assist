@@ -192,6 +192,38 @@ test('a changed BR draft checks Jira links against its published parent hierarch
  assert.throws(()=>verify(register,config,story,issue('TC-3','TC-2')),/parent relationship changed/);
 });
 
+test('published Jira hierarchy accepts only corroborated historical parents',async()=>{
+ const host=await fs.readFile(hostFile,'utf8');
+ const root='BR-001',feature=root+'/F-001',story=feature+'/S-001',task=story+'/T-001',role=story+'/ROLE-DEVELOPER';
+ const register={brs:[{id:root,status:'approved',jiraHierarchyVersion:2,approvedContent:{...edited,features:[{id:'F-001',title:'Registration',stories:[{id:'S-001',title:'Register visitor',tasks:[{id:'T-001',title:'Show reference'}]}]}]}}],synced:{
+  [root]:{key:'TC-1',issueId:'101'},[feature]:{key:'TC-2',issueId:'102'},
+  [story]:{key:'TC-3',issueId:'103',issueType:'Sub-task',parentIssueId:'102'},
+  [task]:{key:'TC-4',issueId:'104',issueType:'Sub-task',parentIssueId:'102'},
+  [role]:{key:'TC-5',issueId:'105',issueType:'Sub-task'}
+ }};
+ const verify=hostFunction(host,'function verifyLinkedJiraIdentity(','async function jiraProtectionAssessment(',{brWorkflow:workflow,jiraScopedMarker:()=> 'trusted-marker',validProjectKey:()=> 'TC'});
+ const config={get:()=> 'TC'};
+ const issue=(key,id,parent,parentId)=>({key,id,fields:{project:{key:'TC'},labels:['trusted-marker'],issuetype:{name:'Sub-task',subtask:true},parent:{key:parent,id:parentId}}});
+ verify(register,config,story,issue('TC-3','103','TC-2','102'));
+ verify(register,config,task,issue('TC-4','104','TC-2','102'));
+ verify(register,config,role,issue('TC-5','105','TC-2','102'));
+ assert.throws(()=>verify(register,config,task,issue('TC-4','104','TC-3','103')),/parent numeric ID changed/);
+ assert.throws(()=>verify(register,config,role,issue('TC-5','105','TC-99','199')),/expected TC-3, actual TC-99/);
+ assert.throws(()=>verify(register,config,role,issue('TC-5','105','TC-2','999')),/parent relationship changed/);
+ assert.throws(()=>verify(register,config,story,issue('TC-3','999','TC-2','102')),/numeric issue identity changed/);
+ delete register.synced[story].parentIssueId;
+ verify(register,config,story,issue('TC-3','103','TC-2','102'));
+});
+
+test('Jira mapping audit supports a 297-item BR project without skipping verification',async()=>{
+ const audit=require('../src/jira-mapping-audit');
+ const synced=Object.fromEntries(Array.from({length:297},(_,i)=>['BR-001/F-'+i,{key:'TC-'+(i+1),issueId:String(i+1000)}]));
+ const register={brs:[{id:'BR-001',approvedContent:{}}],synced};
+ let count=0;
+ const result=await audit.audit({register,projectKey:'TC',readIssue:async key=>({key,fields:{}}),verify:()=>{count++;}});
+ assert.equal(count,297);assert.equal(result.checked,297);assert.equal(result.conflicts.length,0);
+});
+
 test('the preparation bridge clears the busy state for both ready and failed previews',async()=>{
  const host=await fs.readFile(hostFile,'utf8');
  const messages=[],statuses=new Map();
