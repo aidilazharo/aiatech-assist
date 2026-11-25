@@ -3264,3 +3264,6 @@ body:not(.gate-mode) .app-layout{
 #discoveryView #baAutoDocumentToolbar #baAutoFileActions .ba-source-icon-action{width:34px!important;min-width:34px!important;max-width:34px!important;height:34px!important;min-height:34px!important;flex:0 0 34px!important;margin:0;padding:0!important}
 
 .jira-issue-detail-grid>.jira-role-assignment-card{grid-column:1/-1;min-width:0}.jira-role-assignment-list{display:grid;gap:8px;margin-top:8px}.jira-role-assignment-row{display:grid;grid-template-columns:minmax(130px,1fr) minmax(100px,1fr) minmax(150px,1.5fr) auto;gap:8px;align-items:center;padding:8px;border:1px solid var(--atgv-line);border-radius:6px}.jira-role-assignment-row select{width:100%;min-width:0}.jira-role-assignment-row span{overflow-wrap:anywhere}@media(max-width:850px){.jira-role-assignment-row{grid-template-columns:1fr 1fr}.jira-role-assignment-row select{grid-column:1}.jira-role-assignment-row button{justify-self:start}}
+
+/* My Work uses dedicated role workspaces, never the shared Jira inventory table. */
+#workView #roleJiraWork{display:none!important}

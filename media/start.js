@@ -3974,6 +3974,9 @@ function renderRoleJiraIssues(items,incomplete=false){
  if(selectedRole==='software-developer')showDeveloperAssignedTickets(rows);
  if(selectedRole==='ux-designer')renderUxTickets(rows);
  $('roleJiraStatus').textContent=`${rows.length} Jira project item(s)${incomplete?' · results truncated':''} · All issue types are visible. Assign/Release Entire BR changes only tasks for your selected role.`+(developerBrSyncWarnings.length?' · '+developerBrSyncWarnings.join(' · '):'');
+ // Keep role selectors, ownership checks and refresh state above intact, but
+ // do not mount a hidden duplicate project-wide table.
+ if($('roleJiraWork').hidden){root.replaceChildren();return;}
  if(typeof ATGVDataTables==='undefined'){root.textContent='Jira DataTables component is unavailable.';return;}
  const project=projects.find(p=>p.id===activeId),jiraBase=project?.settings?.jira?.baseUrl||extensionSettings.jira?.baseUrl||'';
  ATGVDataTables.mount(root,rows,[
@@ -4176,7 +4179,8 @@ function applyFocusedRoleLayout(roleId){
  const work=$('workView');
  const focused=roleId!=='business-analyst'&&roleId!=='software-developer';
  const jiraRole=!!roleId;
- $('roleJiraWork').classList.toggle('hidden',!jiraRole);
+ // The shared inventory is data-only; never display its duplicate table on My Work.
+ $('roleJiraWork').classList.add('hidden');
  $('developerTaskDashboard').classList.toggle('hidden',roleId!=='software-developer');
  $('uxDesignWorkspace').classList.toggle('hidden',roleId!=='ux-designer');
  if(jiraRole){if(roleJiraLoaded&&roleJiraProject===activeId&&roleJiraRole===roleId)renderRoleJiraIssues(roleJiraItems,roleJiraIncomplete);else{loadRoleJiraIssues();if(roleId==='software-developer')showDeveloperAssignedTickets([]);if(roleId==='ux-designer')renderUxTickets([]);}}

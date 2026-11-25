@@ -31,7 +31,7 @@ function html(webview,{resumeLibrary=false}={}){
     subtask:"<path d=\"M5 5v7h4m-3-3 3 3-3 3M12 8h7v8h-7zM14 12l1 1 2-2\"/>"
   };
   const baHeaderIcon=(name,variant='')=>`<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${variant}>${baHeaderIcons[name]}</svg>`;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.1.28';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.1.29';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const uiConsistencyCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-consistency.css'));
@@ -879,7 +879,7 @@ function html(webview,{resumeLibrary=false}={}){
         <div id="uxGuideCanvas" class="ux-guide-canvas" aria-live="polite"></div>
       </aside>
     </section>
-    <section id="roleJiraWork" class="role-jira-work hidden" aria-label="Jira issues for My Work"><div class="section-title"><div><h2>Jira Issues · My Work</h2></div><button id="roleJiraRefresh" type="button" class="secondary">Refresh Jira</button></div><p id="roleJiraStatus" class="muted" role="status" aria-live="polite">Open a project to retrieve Jira issues.</p><div id="roleJiraTable"></div></section>
+    <section id="roleJiraWork" hidden inert aria-hidden="true" class="role-jira-work hidden" aria-label="Jira issues for My Work"><div class="section-title"><div><h2>Jira Issues · My Work</h2></div><button id="roleJiraRefresh" type="button" class="secondary">Refresh Jira</button></div><p id="roleJiraStatus" class="muted" role="status" aria-live="polite">Open a project to retrieve Jira issues.</p><div id="roleJiraTable"></div></section>
   </main>
   <main id="uxPreviewView" class="hidden work-container ux-preview-dedicated" aria-label="UI/UX Design Preview page">
     <div class="ux-preview-hero">

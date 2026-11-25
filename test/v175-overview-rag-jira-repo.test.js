@@ -44,9 +44,16 @@ test('Business Analyst My Work contains requirements summary and Jira; editing r
  assert.match(ui,/navigate\('discovery'\)/);
 });
 
-test('All selected roles get searchable Jira DataTables; Developer and UX keep scoped workspaces and protected assignment',()=>{
+test('All roles hide duplicate Jira inventory while Developer and UX retain scoped task data and protected assignment',()=>{
  assert.match(host,/id="roleJiraWork"/);
- assert.match(ui,/const jiraRole=!!roleId;\s*\$\('roleJiraWork'\)\.classList\.toggle\('hidden',!jiraRole\)/);
+ assert.match(host,/<section id="roleJiraWork" hidden inert aria-hidden="true"/);
+ assert.match(css,/#workView #roleJiraWork\{display:none!important\}/);
+ assert.match(ui,/\$\('roleJiraWork'\)\.classList\.add\('hidden'\)/);
+ assert.doesNotMatch(ui,/\$\('roleJiraWork'\)\.classList\.(?:toggle|remove)\('hidden'/);
+ const refresh=ui.slice(ui.indexOf('function renderRoleJiraIssues('),ui.indexOf("$('roleJiraRefresh').addEventListener"));
+ assert.ok(refresh.indexOf('showDeveloperAssignedTickets(rows)')<refresh.indexOf("if($('roleJiraWork').hidden)"));
+ assert.ok(refresh.indexOf('renderUxTickets(rows)')<refresh.indexOf("if($('roleJiraWork').hidden)"));
+ assert.ok(refresh.indexOf("if($('roleJiraWork').hidden)")<refresh.indexOf('ATGVDataTables.mount(root,rows'));
  assert.match(ui,/\$\('developerTaskDashboard'\)\.classList\.toggle\('hidden',roleId!=='software-developer'\)/);
  assert.match(ui,/\$\('uxDesignWorkspace'\)\.classList\.toggle\('hidden',roleId!=='ux-designer'\)/);
  assert.match(ui,/send\('roleJiraIssues',\{roleId:selectedRole,requestId:\+\+roleJiraRequest\}\)/);
