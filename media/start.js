@@ -3005,6 +3005,7 @@ function renderUxActions(){
 function renderUxTickets(rows){
  const picker=$('uxSelectedTicket'),previous=uxSelectedKey,mine=rows.filter(item=>item.mine&&item.taskRole==='ux-designer');
  picker.replaceChildren();const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent='Select an assigned Business Requirement';picker.append(placeholder);
+ for(const br of rows.filter(item=>item.brRoot&&item.roleScopes?.['ux-designer']?.mine&&!mine.some(task=>task.brId===item.brId))){const option=document.createElement('option');option.value='waiting:'+br.brId;option.textContent=br.brId+' · BR assigned — waiting for UI/UX tasks';option.disabled=true;picker.append(option);}
  for(const item of mine){const option=document.createElement('option');option.value=item.key;option.textContent=item.key+' · '+(item.summary||'Jira issue')+(item.roleMappingVerified===false?' · BR mapping recovery required':'');option.disabled=item.roleMappingVerified===false;picker.append(option);}
  const ready=mine.filter(item=>item.roleMappingVerified!==false);uxSelectedKey=ready.some(item=>item.key===previous)?previous:ready[0]?.key||'';picker.value=uxSelectedKey;
  if(!uxSelectedKey){uxPipeline=null;uxDrafts={wireframe:null,mockup:null};setUxStatus(mine.length?'Assigned UI/UX tasks found. Recover the verified BR mapping before generating a design.':'Assign an entire BR to begin designing the full application.');$('uxDesignVersionInfo').replaceChildren();$('uxReferenceInfo').textContent='';$('uxReferencePreview').replaceChildren();$('uxReferencePreview').classList.add('hidden');$('uxDesignFramework').value=uxFramework||'';showUxBuilder();renderUxActions();send('uxFrameworkRead',{key:''});return;}
@@ -3522,6 +3523,7 @@ function renderDeveloperBrChoices(){
  if(developerBrProjectId!==activeId){developerBrProjectId=activeId;developerBrSelected='';resetDeveloperBr();}
  const currentInventory=roleJiraLoaded&&roleJiraProject===activeId;
  const eligible=developerEligibleBRs(brState,currentInventory?developerAssignedMine:[]);
+ const waiting=currentInventory?roleJiraItems.filter(item=>item.brRoot&&item.roleScopes?.['software-developer']?.mine&&!eligible.some(br=>br.id===item.brId)):[];
  const missing=currentInventory&&roleJiraItems.some(item=>item.mine&&/^(task|subtask|sub-task|sub task)$/i.test(item.type||item.issueType||'')&&!item.taskRole);
  const unresolved=currentInventory?developerAssignedMine.filter(item=>item.brId&&!eligible.some(br=>br.id===item.brId)):[];
  const emptyText=!currentInventory?'Refresh Jira tasks to load assigned BRs':missing||developerAssignedMine.length?'Assigned tasks found — recovering published BR snapshot':'No approved BR assigned to you';
@@ -3533,6 +3535,7 @@ function renderDeveloperBrChoices(){
   option.textContent=br.id+' · '+String(br.approvedContent?.title||br.title||'Untitled requirement').slice(0,130)+' · '+(br.approvedRevision?'Approved R'+br.approvedRevision:'');
   option.disabled=status==='cancelled';select.append(option);
  }
+ for(const item of waiting){const option=document.createElement('option');option.value='waiting:'+item.brId;option.textContent=item.brId+' · BR assigned — waiting for eligible development tasks';option.disabled=true;select.append(option);}
  for(const id of new Set(unresolved.map(item=>item.brId))){const option=document.createElement('option');option.value='unresolved:'+id;option.textContent=id+' · Published Jira assignment — source snapshot or mapping required';option.disabled=true;select.append(option);}
  developerBrSelected=eligible.some(br=>br.id===previous)?previous:'';
  select.value=developerBrSelected;
@@ -3975,18 +3978,17 @@ function renderRoleJiraIssues(items,incomplete=false){
   {key:'summary',label:'Summary',render:item=>{const btn=document.createElement('button');btn.type='button';btn.className='jira-issue-summary-link';btn.textContent=item.summary;btn.addEventListener('click',()=>openJiraIssueModal(item.key));return btn;}},
   {key:'status',label:'Status'},
   {key:'priority',label:'Priority'},
-  {key:'assignee',label:'Assignee'},
+  {key:'assignee',label:'Assignee',render:item=>item.brRoot?(item.roleScopes?.[selectedRole]?.ownerName||(item.roleScopes?.[selectedRole]?.mine?'Assigned to me':item.roleScopes?.[selectedRole]?.available?'Unassigned':'Assigned / unavailable')):item.assignee||'Unassigned'},
   {key:'key',label:'Action',sortable:false,render:item=>{
    const developer=selectedRole==='software-developer',designer=selectedRole==='ux-designer';
    const roleScope=item.roleScopes?.[selectedRole];
    const brId=item.brRoot?item.brId:'';
    if(item.brRoot)item={...item,mine:!!roleScope?.mine,unassigned:!!roleScope?.available&&!roleScope?.mine};
-   const allowClaim=!!projects.find(p=>p.id===activeId)?.techStackApproval?.status;
    const cell=document.createElement('div');cell.className='jira-row-actions';
    const btn=document.createElement('button');btn.type='button';btn.className='secondary';
-   btn.textContent=!item.brRoot?'View Only':item.mine?'Release Entire BR':!roleScope?.count?'No Role Tasks':item.unassigned?'Assign Entire BR':'Assigned to Other';
-   btn.disabled=developerBrAssignmentBusy||developerBrBusy||!item.brRoot||!roleScope?.count||(!item.mine&&!item.unassigned)||developer&&item.unassigned&&!allowClaim;
-   btn.title=item.brRoot?'This action covers '+(roleScope?.count||0)+' mapped tasks for the selected role in '+item.brId+'; shared parent issues and other roles are unchanged.':'Use the BR row to assign tasks for the selected role.';
+   btn.textContent=!item.brRoot?'View Only':item.mine?'Release Entire BR':item.unassigned?'Assign Entire BR':'Assigned to Other / unavailable';
+   btn.disabled=developerBrAssignmentBusy||developerBrBusy||!item.brRoot||(!item.mine&&!item.unassigned);
+   btn.title=item.brRoot?'This action covers '+(roleScope?.count||0)+' mapped tasks for the selected role in '+item.brId+'; BR ownership remains even without tasks. Shared parents and other roles are unchanged.':'Use the BR row to assign tasks for the selected role.';
    btn.setAttribute('aria-label',item.mine?`Unassign Jira ${item.key}`:`Assign Jira ${item.key} to me`);
    btn.addEventListener('click',()=>{
     if(developerBrAssignmentBusy||developerBrBusy)return;
