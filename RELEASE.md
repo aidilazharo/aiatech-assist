@@ -1,11 +1,12 @@
-# ATGV AIATECH Assist v0.1.33
+# ATGV AIATECH Assist v0.1.34
 
 ## Changes
 
-- Add Scan Folder at the right of the Solution Architect Technology Stack header. Discover project repository folders, prompt on explicit scans when more than one folder exists, and remember the selected folder per project for subsequent Custom Stack operations.
-- Integrate imported Windows x64 offline Library v0.0.11 packages for new single-stack starters: React, Angular, NestJS, .NET and Spring Boot. Match scaffold fingerprints, restore prepared npm modules without online installation, use local NuGet and Maven offline, and stop if a required package is missing.
-- Preserve existing older starter and other-platform behavior; do not silently migrate edited projects or execute Library scripts.
+- Require UI/UX generation to use the committed project repository and user-uploaded design references; disable independent AI visual design and Library-only fallback.
+- Include repository design evidence and linked uploaded reference observations in Developer planning, TDD, draft, final UI and recovery prompts. Require current approved handoff reference fingerprints and reject UI-file changes without uploaded references.
+- Make reference upload mandatory for new UI/UX generation; preserve backend-only work without UI changes. Reject stale references and require review before approval/publication.
+- Apply the source policy to role chat guidance and legacy Developer implementation proposals; route legacy visual design generation through the ticket-based UI/UX workflow.
 
 ## Validation
 
-- JavaScript syntax checked for changed modules; folder-selection regression test added. Full regression, Windows builds, offline package publication and VSIX packaging not verified.
+- Changed JavaScript syntax checked and source-policy regression tests added. Full test suite, runtime UI fidelity and VSIX packaging not verified.
