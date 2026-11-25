@@ -120,7 +120,8 @@ async function run(root,{inspection,pair=detectPair(inspection),driver,onProgres
  try{
   const launch=async(name,cwd,args)=>{
    const cmd=npmCommand(args);
-   const child=spawnImpl(cmd.bin,cmd.args,{cwd,env:{...process.env},windowsHide:true,
+   const offline=await require('./windows-dependency-bundle').offlineEnv(root,cwd);
+   const child=spawnImpl(cmd.bin,cmd.args,{cwd,env:{...process.env,...offline},windowsHide:true,
     stdio:['ignore','pipe','pipe'],shell:false,detached:process.platform!=='win32'});
    const entry=track(name,child,cwd);instance.services.push(entry);
    await new Promise((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject);});
