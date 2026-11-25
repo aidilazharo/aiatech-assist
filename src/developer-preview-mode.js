@@ -47,7 +47,7 @@ async function inspectRealPreview(worktree,handoff){
    }
   }
  }
- await walk(path.join(worktree,'src'));
+ for(const relative of result.frontendRoots||[''])await walk(path.join(worktree,relative,'src'));
  const source=pieces.join('\n').toLocaleLowerCase('en');
  const problems=[...result.issues];
  if(result.skipped){
