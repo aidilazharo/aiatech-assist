@@ -7537,9 +7537,16 @@ async function handleDashboardMessage(msg){
           requireOpened();
           if(msg.projectId!==projectId)throw Error('The project changed. Select Custom Stack again.');
           const conf=effectiveConfig(activeProject);
-          await progress(10,'Verifying configured Git checkout and revision…');
-          const root=await architectRepository.resolve(context.workspaceState,projectId,developerGit,{
-            projectRoot:aiRoot(),githubOwner:conf.get('github.owner'),githubRepo:conf.get('github.repo')});
+          await progress(10,'Discovering project repository folders and verifying Git…');
+          if(developerGit.localLogs()?.running)throw Error('Stop the running application before scanning or selecting another repository folder.');
+          const repoOptions={projectRoot:aiRoot(),githubOwner:conf.get('github.owner'),githubRepo:conf.get('github.repo'),githubBranch:conf.get('github.branch'),catalogRepositoryUrl:catalogConfig().repositoryUrl};
+          const selectedFolder=await architectRepository.chooseCustomFolder(context.workspaceState,projectId,{...repoOptions,chooseFolder:async(folders,previous)=>{
+            const choice=await vscode.window.showQuickPick(folders.map(folder=>({label:folder.label,description:folder.kind+(folder.root===previous?' · previously selected':''),detail:folder.root,root:folder.root})),{placeHolder:'Select project repository folder',ignoreFocusOut:true});
+            return choice?.root;
+          }});
+          if(activeProject?.id!==projectId)throw Error('Active project changed.');
+          const checkout=await architectRepository.ensureCustom(context.workspaceState,projectId,developerGit,{...repoOptions,selectedFolder,initializeExisting:true,token:await getGithubToken(activeProject)});
+          const root=checkout.root;
           await progress(27,'Identifying application manifests and run scripts…');
           const detected=await require('../../architect-custom-stack').scan(root);
           await progress(48,'Inspecting dependency, environment and external service requirements…');
@@ -7902,15 +7909,16 @@ async function handleDashboardMessage(msg){
             githubRepo:config.get('github.repo'),githubBranch:config.get('github.branch'),
             catalogRepositoryUrl:catalogConfig().repositoryUrl
           };
+          const selectedFolder=await architectRepository.chooseCustomFolder(context.workspaceState,projectId,{...repoOptions,chooseFolder:async(folders,previous)=>{
+            const choice=await vscode.window.showQuickPick(folders.map(folder=>({label:folder.label,description:folder.kind+(folder.root===previous?' · previously selected':''),detail:folder.root,root:folder.root})),{placeHolder:'Select project repository folder',ignoreFocusOut:true});
+            return choice?.root;
+          }});
           let checkout,archivePlan,stackHistory,workspaceRoot,projectFolder;
           if(switching){
             // Custom Stack scans the current project source. Returning to the
             // base branch could hide the application on a migration branch.
-            const root=await architectRepository.resolve(context.workspaceState,projectId,developerGit,repoOptions);
-            const repo=await developerGit.repository(root);
-            if(!developerGit.matchesGithubRepo(repo.remote,repoOptions.githubOwner,repoOptions.githubRepo))
-              throw Error('The current checkout must match the configured GitHub project repository before switching to Custom Stack.');
-            checkout={...repo,root,mode:'existing'};
+            const root=selectedFolder||path.join(repoOptions.projectRoot,'repository',String(repoOptions.githubRepo||''));
+            const repo=await developerGit.repository(root).catch(()=>({branch:repoOptions.githubBranch||'main',sha:''}));
             stackHistory=require('../../architect-stack-reset');
             workspaceRoot=getWorkspace().uri.fsPath;
             projectFolder=path.join(workspaceRoot,'projects',projectId);
@@ -7923,14 +7931,17 @@ async function handleDashboardMessage(msg){
             if(proceed!==action){
               await dashboard?.webview.postMessage({type:'architectStackCancelled',projectId,message:'Custom Stack switch cancelled. The saved stack and approval are unchanged.'});break;
             }
-          }else{
-            await recordStackActivity(projectId,'Save Stack / repository','Checking checkout; clone or pull only if folder is missing or empty.');
+          }
+          {
+            await recordStackActivity(projectId,'Save Stack / repository','Checking discovered checkout; initialize Git or clone missing source without overwriting files.');
             // Save is an explicit user action. Initialize Git metadata for a
             // project-local source folder without staging or committing its files.
-            checkout=await architectRepository.ensureCustom(context.workspaceState,projectId,developerGit,{...repoOptions,initializeExisting:true,token:await getGithubToken(activeProject)});
+            if(activeProject?.id!==projectId)throw Error('Active project changed before repository selection.');
+            checkout=await architectRepository.ensureCustom(context.workspaceState,projectId,developerGit,{...repoOptions,selectedFolder,initializeExisting:true,token:await getGithubToken(activeProject)});
           }
           await recordStackActivity(projectId,'Save Stack / repository','Checkout mode: '+checkout.mode+'; directory: '+checkout.root);
           const detected=await require('../../architect-custom-stack').scan(checkout.root);
+          detected.branches=await require('../../architect-custom-repair').branches(checkout.root);
           if(switching&&(detected.branch!==checkout.branch||detected.sha!==checkout.sha))
             throw Error('The Git branch or revision changed during the switch. Review the checkout and try again.');
           const latest=await registry.read(projectId);

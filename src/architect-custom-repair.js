@@ -69,9 +69,9 @@ async function analyse(root,inspection,{fsApi=fs}={}){
 }
 async function branches(root,{driver=developer,run=executeGit}={}){
  const repo=await driver.repository(root);
- const raw=await run(repo.root,'for-each-ref','--format=%(refname:short)','refs/heads');
- const items=raw.split(/\r?\n/).filter(x=>x&&/^[a-zA-Z0-9][a-zA-Z0-9/_-]{0,110}$/.test(x)&&!x.includes('..')&&!x.includes('//')).slice(0,80);
- return {current:repo.branch,items:items.includes(repo.branch)?items:[repo.branch,...items].filter(Boolean)};
+ const raw=await run(repo.root,'for-each-ref','--sort=refname','--sort=-committerdate','--format=%(refname:short)','refs/heads');
+ const items=[...new Set(raw.split(/\r?\n/).filter(x=>x&&/^[a-zA-Z0-9][a-zA-Z0-9/_-]{0,110}$/.test(x)&&!x.includes('..')&&!x.includes('//')))].slice(0,5);
+ return {current:repo.branch,items:items.length?items:[repo.branch].filter(Boolean)};
 }
 async function switchBranch(root,{branch,expectedSha,driver=developer,run=executeGit}={}){
  const before=await driver.repository(root);
@@ -95,8 +95,8 @@ async function createFixBranch(root,{expectedSha,driver=developer,run=executeGit
  if(await fs.lstat(folder).then(()=>true,e=>e.code==='ENOENT'?false:Promise.reject(e)))
   throw Error('An atgv-preview folder already exists. ATGV will not overwrite it.');
  const ref='fix/atgv-custom-stack-'+before.sha.slice(0,10);
- const refs=await branches(root,{driver,run});
- if(refs.items.includes(ref))throw Error('The proposed fix branch already exists; select it in the branch dropdown.');
+ const existing=await run(before.root,'for-each-ref','--format=%(refname:short)','refs/heads/'+ref);
+ if(existing.split(/\r?\n/).includes(ref))throw Error('The proposed fix branch already exists; review the existing local branch.');
  await run(before.root,'switch','-c',ref);
  if(report)await report('Created local fix branch '+ref+' without modifying main.');
  await fs.mkdir(folder,{recursive:false});

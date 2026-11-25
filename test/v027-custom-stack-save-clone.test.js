@@ -112,12 +112,13 @@ test('No configured repository or catalog-as-project is rejected before filesyst
   assert.equal((await fs.readdir(root)).length,0);
  });
 });
-test('Custom Stack Save is enabled and no automatic scan runs on selection',()=>{
+test('Custom Stack Save discovers project folders and offers a rescan action',()=>{
  const ui=read('media/start.js'),host=read('src/lib/runtime/extension-runtime.js');
  const git=read('src/developer-git.js'),repo=read('src/architect-repository.js');
  assert.match(ui,/save\.disabled=architectActionBusy\|\|!activeId/);
  assert.match(ui,/architectBegin\('architectSaveStack','Checking configured project repository/);
- assert.match(ui,/Choose Save Stack to verify or clone the configured GitHub checkout/);
+ assert.match(ui,/Choose Save Stack to discover project folders and initialize or verify Git/);
+ assert.match(host,/architectRepository\.chooseCustomFolder/);
  assert.match(host,/if\(id==='custom'\)/);
  assert.match(host,/architectRepository\.ensureCustom/);
  assert.match(host,/type:'architectCustomScanResult'/);
@@ -132,7 +133,7 @@ test('switch to Custom Stack scans a pushed migration checkout in place after co
  const end=source.indexOf('\n          break;',start);
  assert.ok(start>0&&end>start);
  const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
- const run=new AsyncFunction('deps','let {activeProject,registry,effectiveConfig,aiRoot,catalogConfig,context,developerGit,architectRepository,getWorkspace,path,uiWarning,dashboard,recordStackActivity,refreshDashboard,require}=deps; do {\n'+source.slice(start,end)+'\n} while(false);');
+ const run=new AsyncFunction('deps','let {activeProject,registry,effectiveConfig,aiRoot,catalogConfig,context,developerGit,architectRepository,getWorkspace,path,uiWarning,dashboard,recordStackActivity,refreshDashboard,require,getGithubToken}=deps; do {\n'+source.slice(start,end)+'\n} while(false);');
  const root=path.join(os.tmpdir(),'atgv-existing-checkout');
  const branch='migration/react-catalog-1-1-14-07bbe5e6',sha='a'.repeat(40);
  const activeProject={id:'demo',techStackId:'react',techStackPrepared:{stackId:'react',branch,sha,remotePushed:true},techStackApproval:{status:'approved'}};
@@ -144,7 +145,7 @@ test('switch to Custom Stack scans a pushed migration checkout in place after co
   getWorkspace:()=>({uri:{fsPath:os.tmpdir()}}),
   registry:{read:async()=>activeProject,update:async(_id,value)=>{events.push('update');return value}},
   uiWarning:async(message,_options,action)=>{assert.ok(message.includes(branch));return confirmed?action:undefined},
-  architectRepository:{resolve:async()=>root,ensureCustom:async()=>assert.fail('Switch must reuse the checkout')},
+  getGithubToken:async()=>'',architectRepository:{chooseCustomFolder:async()=>root,ensureCustom:async(_state,_id,driver,options)=>{assert.equal(options.selectedFolder,root);return {...await driver.repository(root),mode:'existing'};}},
   developerGit:{repository:async()=>({root,branch,sha,remote:'https://github.com/acme/project',clean:false}),matchesGithubRepo:()=>true,localLogs:()=>({})},
   dashboard:{webview:{postMessage:async msg=>messages.push(msg)}},
   recordStackActivity:async()=>{},refreshDashboard:async()=>{},
@@ -152,6 +153,7 @@ test('switch to Custom Stack scans a pushed migration checkout in place after co
    if(name.endsWith('architect-stack-reset'))return {
     planProjectStackArchive:async()=>({}),archiveProjectStackDocuments:async()=>{events.push('archive');return {}}
    };
+   if(name.endsWith('architect-custom-repair'))return {branches:async()=>({current:branch,items:[branch]})};
    assert.ok(name.endsWith('architect-custom-stack'));
    return {scan:async folder=>{assert.equal(folder,root);events.push('scan');return {branch,sha:scanSha,targets:[]}}};
   }

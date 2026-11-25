@@ -8661,7 +8661,7 @@ function renderArchitectCustomPanel(){
   branchSelect.append(option);
  }
  if((current?.branches?.items||[]).includes(priorBranch))branchSelect.value=priorBranch;
- else if(current?.branches?.current)branchSelect.value=current.branches.current;
+ else if((current?.branches?.items||[]).includes(current?.branches?.current))branchSelect.value=current.branches.current;
  branchSelect.disabled=architectCustomBusy||!current?.branches?.items?.length;
  $('architectCustomSwitchBranch').disabled=architectCustomBusy||architectCustomRunning||!current?.clean||!branchSelect.value||branchSelect.value===current?.branch;
  $('architectCustomBranchStatus').textContent=current?.branch?'Current: '+current.branch:'No branch selected';
@@ -8918,7 +8918,7 @@ $('architectStackSelect').addEventListener('change',event=>{
  if(event.target.value==='custom'&&activeId){
   architectCustomBusy=false;architectCustomScanPending=false;architectCustomInfo=null;architectCustomRunning=false;architectCustomStage=0;architectCustomAiActive=false;
   architectCustomSetProgress(0,'Ready to scan');
-  architectCustomNotify('Choose Save Stack to verify or clone the configured GitHub checkout. Scan Repository for AI-assisted readiness guidance.');
+  architectCustomNotify('Choose Save Stack to discover project folders and initialize or verify Git. Scan Repository for AI-assisted readiness guidance.');
   renderArchitectCustomPanel();
  }
 });

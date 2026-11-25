@@ -1,11 +1,5 @@
-# ATGV AIATECH Assist v0.1.29
+# ATGV AIATECH Assist v0.1.30
 
-## Changes
-
-- Remove the duplicate Jira Issues · My Work table from the visible workspace of every SDLC role. Keep the underlying Jira inventory, role-specific assigned-task selectors and ownership validation intact.
-- Skip mounting the hidden shared table. Preserve BA requirement/Jira workflows and the PM's dedicated assignment controls.
-- Update the role workspace regression contract to verify permanent hiding and continued task data projection.
-
-## Validation
-
-- Changed JavaScript syntax checked. Full regression and VSIX build pending local execution.
+- Automatically discover repository folders during Custom Stack Save and Scan. Select a folder when several are found; initialize non-Git folders without overwriting source.
+- Display the latest five local Git branches by commit date. Preserve Git history and initial-commit safeguards.
+- JavaScript syntax checks completed; regression and packaging pending.

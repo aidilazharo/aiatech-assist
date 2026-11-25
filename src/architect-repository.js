@@ -68,6 +68,32 @@ async function ensure(state,projectId,developerGit,options={}){
 // Custom Stack Save creates only an absent/empty project repository folder,
 // then clones the configured GitHub source. Never overwrite a nonempty folder,
 // accept symlinks, auto-reset a checkout, or run downloaded project code.
+async function discoverCustomFolders(options={}){
+ const root=await fs.realpath(options.projectRoot),parent=path.join(root,'repository');
+ const stat=await fs.lstat(parent).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
+ if(!stat)return [];
+ if(!stat.isDirectory()||stat.isSymbolicLink()||path.relative(root,await fs.realpath(parent))!=='repository')throw Error('Unsafe project repository parent.');
+ const entries=await fs.readdir(parent,{withFileTypes:true});
+ if(entries.some(e=>e.name==='.git'||e.isFile()&&/^(?:package\.json|pom\.xml|[^/]+\.sln|[^/]+\.csproj|pyproject\.toml|go\.mod|Cargo\.toml|composer\.json|index\.html)$/i.test(e.name)))return [{root:parent,label:'repository',kind:'Project root'}];
+ const folders=[];
+ for(const entry of entries){
+  if(!entry.isDirectory()||entry.isSymbolicLink()||entry.name.startsWith('.')||/^(?:node_modules|dist|build|coverage|vendor|__pycache__)$/i.test(entry.name))continue;
+  const real=await fs.realpath(path.join(parent,entry.name));
+  if(path.dirname(real)!==parent)continue;
+  const children=await fs.readdir(real,{withFileTypes:true});
+  folders.push({root:real,label:entry.name,kind:children.some(x=>x.name==='.git')?'Git repository':children.length?'Existing files':'Empty folder'});
+ }
+ return folders.sort((a,b)=>a.label.localeCompare(b.label));
+}
+async function chooseCustomFolder(state,projectId,options={}){
+ const folders=await discoverCustomFolders(options);
+ if(!folders.length)return '';
+ if(folders.length===1)return folders[0].root;
+ if(typeof options.chooseFolder!=='function')throw Error('More than one project folder found. Select a repository folder.');
+ const selected=await options.chooseFolder(folders,state.get('atgvAssist.localRepo.'+projectId));
+ if(!folders.some(x=>x.root===selected))throw Error('Repository folder selection cancelled. No files were changed.');
+ return selected;
+}
 async function ensureCustom(state,projectId,developerGit,options={}){
  const owner=String(options.githubOwner||''),repoName=String(options.githubRepo||'');
  if(!state||!projectId||!options.projectRoot||
@@ -84,7 +110,8 @@ async function ensureCustom(state,projectId,developerGit,options={}){
  const sub=path.relative(root,parentReal);
  if(sub!=='repository'||path.isAbsolute(sub))
   throw Error('Repository folder resolves outside the active ATGV project.');
- const dest=path.join(parentReal,repoName);
+ const dest=options.selectedFolder?path.resolve(options.selectedFolder):path.join(parentReal,repoName);
+ if(options.selectedFolder&&!(await discoverCustomFolders(options)).some(x=>x.root===dest))throw Error('Selected repository folder is no longer available or safe.');
  let existing=await fs.lstat(dest).catch(error=>error.code==='ENOENT'?null:Promise.reject(error));
  if(existing&&(!existing.isDirectory()||existing.isSymbolicLink()))
   throw Error('Project repository destination is not a safe directory; no files were modified.');
@@ -119,6 +146,11 @@ async function ensureCustom(state,projectId,developerGit,options={}){
     mode=result.updated?'pulled':'existing';
     }
    }
+  }else if(options.selectedFolder&&path.resolve(dest)!==path.resolve(parentReal,repoName)){
+   checked=await developerGit.initializeProjectGit(dest,options.githubBranch||'main');
+   checked=await developerGit.configureOrigin(dest,owner,repoName);
+   if(typeof developerGit.hydrateUnbornCheckout==='function')checked=await developerGit.hydrateUnbornCheckout(dest,owner,repoName,options.githubBranch||'main',{token:options.token||''});
+   mode=checked.sha?'pulled':'initialized';
   }else mode='cloned';
  }else{
   await fs.mkdir(dest);
@@ -172,4 +204,4 @@ async function selectLocal(state,projectId,root){
  await state.update('atgvAssist.localRepo.'+projectId,root);
  await state.update('atgvAssist.bootstrapRepo.'+projectId,root);
 }
-module.exports={resolve,ensure,ensureCustom,ensureLocal,selectLocal};
+module.exports={resolve,ensure,ensureCustom,ensureLocal,selectLocal,discoverCustomFolders,chooseCustomFolder};

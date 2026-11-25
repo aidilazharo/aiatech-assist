@@ -31,7 +31,7 @@ function html(webview,{resumeLibrary=false}={}){
     subtask:"<path d=\"M5 5v7h4m-3-3 3 3-3 3M12 8h7v8h-7zM14 12l1 1 2-2\"/>"
   };
   const baHeaderIcon=(name,variant='')=>`<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${variant}>${baHeaderIcons[name]}</svg>`;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.1.29';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.1.30';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const uiConsistencyCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-consistency.css'));
@@ -714,7 +714,7 @@ function html(webview,{resumeLibrary=false}={}){
           <label for="architectCustomTarget">Detected application<select id="architectCustomTarget" aria-label="Detected custom application"></select></label>
           <label for="architectCustomMode">Run mode<select id="architectCustomMode"><option value="live">Real frontend + backend</option><option value="preview">Frontend + mock API</option></select></label>
           <label for="architectCustomPreviewUrl">Frontend URL<input id="architectCustomPreviewUrl" type="url" spellcheck="false" value="http://127.0.0.1:5173/" placeholder="http://127.0.0.1:5173/"></label>
-          <button id="architectCustomScan" class="secondary hidden" type="button">Scan Repository</button>
+          <button id="architectCustomScan" class="secondary" type="button">Scan Repository</button>
           <button id="architectCustomPull" class="secondary hidden" type="button" disabled>Pull Repository</button>
           <button id="architectCustomRun" type="button" disabled>Install &amp; Run</button>
           <button id="architectCustomMockRun" class="secondary hidden" type="button" disabled title="Launch a local Vite UI with simulated login and read-only API responses">Run Mock Preview</button>
