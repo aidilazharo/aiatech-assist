@@ -32,7 +32,7 @@ async function read(root,key,kind){
  if(raw===null)return {key:k,kind:t,exists:false,revision:'',status:'not-started',design:null,path:path.relative(root,file).replaceAll('\\','/')};
  const value=JSON.parse(raw);
  if(value.key!==k||value.kind!==t||!value.design||value.status!=='draft')throw Error('The stored UI/UX design draft is invalid.');
- return {...value,exists:true,revision:revision(raw),path:path.relative(root,file).replaceAll('\\','/'),previews:visual.renderScreens(value.design,t,k)};
+ return {...value,exists:true,revision:revision(raw),path:path.relative(root,file).replaceAll('\\','/'),previews:visual.renderScreens(value.design,t,k,value.repositorySource)};
 }
 async function save(root,key,kind,proposal,expectedRevision,metadata={}){
  const k=safeKey(key),t=safeKind(kind);
@@ -51,7 +51,7 @@ async function save(root,key,kind,proposal,expectedRevision,metadata={}){
    designReferenceHash:String(metadata.designReferenceHash||prior.designReferenceHash||'').slice(0,100),
    repositorySource:metadata.repositorySource||prior.repositorySource||null,
    actor:String(metadata.actor||prior.actor||'').slice(0,140),revisionNumber:(prior.revisionNumber||0)+1};
-  const images=visual.renderScreens(design,t,k);
+  const images=visual.renderScreens(design,t,k,record.repositorySource);
   record.images=images.map(screen=>path.posix.join('documents','jira-designs',k,visual.svgName(t,record.revisionNumber,screen.index)));
   const temporary=file+'.'+crypto.randomUUID()+'.tmp';
   try{

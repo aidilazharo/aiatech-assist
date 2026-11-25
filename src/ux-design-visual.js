@@ -1,6 +1,7 @@
 'use strict';
 // Deterministic, safe SVG screen images from a validated AI screen specification.
 // These are editable review mockups/wireframes, never photographs or screenshots.
+const repositoryStyle=require('./repository-design-style');
 const palette={
  wireframe:{bg:'#edf1f5',frame:'#ffffff',top:'#dbe2ea',line:'#b5bfcd',ink:'#243346',muted:'#667487',accent:'#687c94',soft:'#f1f4f8',chip:'#dee6ee'},
  mockup:{bg:'#e8eef7',frame:'#ffffff',top:'#17283d',line:'#d7e1ee',ink:'#1b2b40',muted:'#60758b',accent:'#2765d8',soft:'#f4f7fc',chip:'#e3edff'}
@@ -59,17 +60,17 @@ function wireframeSvg(screen,opts={}){
 }
 function screenSvg(screen,opts={}){
  if(opts.kind==='wireframe')return wireframeSvg(screen,opts);
- const type=opts.kind==='wireframe'?'wireframe':'mockup',p=palette[type],key=shorten(opts.key||'JIRA',18),title=shorten(screen.name||'New screen',54),purpose=shorten(screen.purpose||'Interactive design draft',92);
+ const type=opts.kind==='wireframe'?'wireframe':'mockup',p=opts.repositorySource?.hasDesign?repositoryStyle.palette(opts.repositorySource):palette[type],key=shorten(opts.key||'JIRA',18),title=shorten(screen.name||'New screen',54),purpose=shorten(screen.purpose||'Interactive design draft',92);
  const comps=(screen.components||[]).slice(0,12).map(c=>({text:label(c),type:kindOf(c)}));
  const w=1060,h=680,b=[];
  b.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${xml(title)} design preview">`);
  b.push(rect(0,0,w,h,p.bg,'',0));b.push(rect(30,25,1000,628,p.frame,p.line,14));
  b.push(rect(30,25,1000,66,p.top,'',14));b.push(rect(30,78,1000,13,p.top,'',0));
  for(let i=0;i<3;i++)b.push(`<circle cx="${55+i*18}" cy="57" r="5" fill="${type==='wireframe'?p.muted:['#fd717b','#ffbf4e','#4cc38a'][i]}" opacity=".75"/>`);
- b.push(text(128,62,type==='wireframe'?'WIREFRAME  /  '+key:'ATGV  /  '+key,13,type==='wireframe'?p.ink:'#d8e6fa',650));
- b.push(text(874,62,type==='wireframe'?'LOW FIDELITY':'DESIGN DRAFT',12,type==='wireframe'?p.muted:'#d8e6fa',550));
+ b.push(text(128,62,type==='wireframe'?'WIREFRAME  /  '+key:'ATGV  /  '+key,13,opts.repositorySource?.hasDesign?repositoryStyle.contrast(p.top):type==='wireframe'?p.ink:'#d8e6fa',650));
+ b.push(text(874,62,type==='wireframe'?'LOW FIDELITY':'DESIGN DRAFT',12,opts.repositorySource?.hasDesign?repositoryStyle.contrast(p.top):type==='wireframe'?p.muted:'#d8e6fa',550));
  b.push(rect(48,109,213,520,p.soft,'',9));b.push(text(70,143,'WORKSPACE',13,p.muted,650));
- const nav=['Overview','Requests','My work','Approvals','Settings'];
+ const nav=opts.repositorySource?.hasDesign?(opts.screenNames||[title]).slice(0,5).map(n=>shorten(n,22)):['Overview','Requests','My work','Approvals','Settings'];
  nav.forEach((name,i)=>{const y=166+i*54;if(i===1)b.push(rect(60,y-25,188,43,p.chip,'',7));b.push(`<circle cx="78" cy="${y-6}" r="7" fill="${i===1?p.accent:p.line}"/>`);b.push(text(98,y,name,15,i===1?p.ink:p.muted,i===1?660:430));});
  b.push(text(295,140,title,25,p.ink,720));b.push(text(295,171,purpose,13,p.muted));
  b.push(rect(294,193,710,417,p.frame,p.line,10));
@@ -89,7 +90,7 @@ function screenSvg(screen,opts={}){
   }
   if(c.type==='status'){b.push(rect(x,y,648,41,p.chip,p.line,6));b.push(`<circle cx="${x+21}" cy="${y+21}" r="7" fill="${p.accent}"/>`);b.push(text(x+38,y+26,shorten(c.text,80),13,p.ink));currentY+=53;continue;}
   if(c.type==='card'){b.push(rect(x,y,318,60,p.soft,p.line,7));b.push(text(x+15,y+36,c.text,13,p.ink,600));currentY+=70;continue;}
-  if(c.type==='button'){b.push(rect(x,y,Math.min(350,Math.max(185,c.text.length*10+28)),41,p.accent,'',7));b.push(text(x+17,y+26,c.text,14,'#ffffff',620));currentY+=53;continue;}
+  if(c.type==='button'){b.push(rect(x,y,Math.min(350,Math.max(185,c.text.length*10+28)),41,p.accent,'',7));b.push(text(x+17,y+26,c.text,14,opts.repositorySource?.hasDesign?repositoryStyle.contrast(p.accent):'#ffffff',620));currentY+=53;continue;}
   if(c.type==='upload'){b.push(rect(x,y,648,48,p.soft,p.line,7));b.push(text(x+18,y+29,'+   '+c.text,13,p.muted));currentY+=60;continue;}
   b.push(text(x,y+3,shorten(c.text,62),13,p.ink,600));b.push(rect(x,y+13,648,35,p.frame,p.line,6));
   if(c.type==='select')b.push(text(x+625,y+37,'⌄',20,p.muted));else if(c.type==='search')b.push(text(x+18,y+36,'Search…',12,p.muted));
@@ -100,6 +101,6 @@ function screenSvg(screen,opts={}){
  b.push(text(825,651,'NOT AN APPROVED SCREEN',11,p.muted,600));
  b.push('</svg>');return b.join('');
 }
-function renderScreens(design,kind,key){const screens=(design?.screens||[]).slice(0,12);return screens.map((screen,i)=>({name:String(screen.name||`Screen ${i+1}`),index:i+1,svg:screenSvg(screen,{kind,key})}));}
+function renderScreens(design,kind,key,repositorySource){const screens=(design?.screens||[]).slice(0,12);return screens.map((screen,i)=>({name:String(screen.name||`Screen ${i+1}`),index:i+1,svg:screenSvg(screen,{kind,key,repositorySource,screenNames:screens.map(s=>String(s.name||'Screen'))})}));}
 function svgName(kind,revisionNumber,screen){const safe=kind==='wireframe'?'wireframe':'mockup';return `${safe}-r${Math.max(1,Number(revisionNumber)||1)}-screen-${String(screen).padStart(2,'0')}.svg`;}
 module.exports={xml,shorten,kindOf,screenSvg,renderScreens,svgName};

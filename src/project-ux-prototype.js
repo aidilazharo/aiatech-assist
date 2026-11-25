@@ -27,7 +27,7 @@ function contribution(record){
  const screens=record.prototype?.screens;
  if(!Array.isArray(screens)||!screens.length)throw Error('Approved UI/UX has no prototype screens.');
  return {jiraKey:key,storyKey,revisionNumber:record.revisionNumber,approvedAt:record.reviewedAt||'',approvedBy:record.reviewedBy||'',
-  framework:String(record.designFramework||'aia-qi').slice(0,40),sourceBRHash:String(record.sourceBRHash||'').slice(0,120),
+  repositorySource:record.repositorySource||null,framework:String(record.designFramework||'aia-qi').slice(0,40),sourceBRHash:String(record.sourceBRHash||'').slice(0,120),
   screens:screens.map((screen,index)=>cleanScreen(screen,key,index,storyKey))};
 }
 function blank(){return {schema:1,kind:'atgv-project-ux-prototype',tickets:{}};}
@@ -58,7 +58,7 @@ function combined(data,{draft=null}={}){
  for(const screen of screens){const name=slug(screen.name);duplicateNames.set(name,(duplicateNames.get(name)||0)+1);}
  return {schema:1,projects:entries.length,screenCount:screens.length,
   potentialDuplicateScreens:[...duplicateNames].filter(([,n])=>n>1).map(([name])=>name),
-  screens};
+  repositorySource:draft?.repositorySource||entries.filter(x=>x.repositorySource?.hasDesign).sort((a,b)=>String(b.approvedAt).localeCompare(String(a.approvedAt)))[0]?.repositorySource||null,screens};
 }
 function render(data,{draft=null}={}){
  const project=combined(data,{draft});
@@ -66,7 +66,7 @@ function render(data,{draft=null}={}){
  if(!key)throw Error('No approved UI/UX Jira screens exist in the project prototype.');
  return exporter.render({exists:true,key,status:'approved',revisionNumber:draft?.revisionNumber||1,
   handoff:{summary:'Cumulative project UI/UX prototype · '+project.projects+' Jira design task(s)'},
-  prototype:{screens:project.screens}}, {projectMode:true,taskCount:project.projects,duplicateNames:project.potentialDuplicateScreens});
+  repositorySource:project.repositorySource,prototype:{screens:project.screens}}, {projectMode:true,taskCount:project.projects,duplicateNames:project.potentialDuplicateScreens});
 }
 async function atomicText(file,text){
  const tmp=file+'.'+crypto.randomUUID()+'.tmp';
