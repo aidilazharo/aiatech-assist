@@ -2115,22 +2115,17 @@ async function publishBlueprintState(){
 }
 let presenceQueue=Promise.resolve();
 function enqueueRosterOperation(operation){const pending=presenceQueue.catch(()=>{}).then(operation);presenceQueue=pending.catch(()=>{});return pending;}
-// Confirmation is handled by the extension host, not by untrusted webview payloads.
-const declinedRosterRegistrations=new Set();
-async function confirmedRosterVisit(config,token,projectId,projectKey,roleId='',retry=false){
+// Only explicit Overview navigation can request first-time registration.
+async function confirmedRosterVisit(config,token,projectId,projectKey,roleId='',overviewClicked=false){
  if(!token)throw Error('Connect Jira and Confluence before registering.');
  const assertActive=()=>{if(activeProject?.id!==projectId)throw Error('Project changed before user registration.');};
  assertActive();
- return myWorkPresence.visit(config,token,{projectKey,roleId,assertActive,confirmRegistration:async identity=>{
+ return myWorkPresence.visit(config,token,{projectKey,roleId,assertActive,...(overviewClicked?{confirmRegistration:async identity=>{
   assertActive();
-  const key=JSON.stringify([projectId,identity.projectKey,identity.spaceKey,identity.id]);
-  if(!retry&&declinedRosterRegistrations.has(key))return false;
-  const choice=await vscode.window.showInformationMessage('Register your ATGV user account?',{modal:true,detail:'Name: '+identity.name+'\nEmail: '+(identity.email||'Not available from Jira')+'\nProject: '+identity.projectKey+'\nConfluence space: '+identity.spaceKey+'\n\nConfirm to save your verified Jira identity in the shared ATGV user register.'},'Confirm');
+  const choice=await vscode.window.showInformationMessage('Register your ATGV user account?',{modal:true,detail:'Full Name: '+identity.name+'\nEmail: '+(identity.email||'Not available from Jira')},'Confirm');
   assertActive();
-  if(choice!=='Confirm'){declinedRosterRegistrations.add(key);return false;}
-  declinedRosterRegistrations.delete(key);
-  return true;
- }});
+  return choice==='Confirm';
+ }}:{})});
 }
 function queueMyWorkPresence(roleId){
  const projectId=activeProject?.id;
@@ -9434,7 +9429,7 @@ async function handleDashboardMessage(msg){
              }
             }else{
              const roleId=registeredRole&&used.includes(registeredRole)&&myWorkPresence.ROLES[registeredRole]?registeredRole:'';
-             result=await confirmedRosterVisit(config,token,projectId,key,roleId,msg.retryRegistration===true);
+             result=await confirmedRosterVisit(config,token,projectId,key,roleId,msg.overviewClicked===true);
             }
             if(activeProject?.id===projectId)await dashboard?.webview.postMessage({type:'myWorkRoster',projectId,...result,requestId:msg.requestId});
            });
