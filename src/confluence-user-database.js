@@ -5,6 +5,9 @@
 const {requestJson,baseConfluence,getConfluenceSpace}=require('./clients');
 const {validProjectKey}=require('./remote-actions');
 const PROPERTY_KEY='atgv.my-work-users.v1';
+// Separate property keeps version telemetry intact when older ATGV clients rewrite the roster.
+const VERSION_PROPERTY_KEY='atgv.my-work-user-versions.v1';
+const validVersion=value=>/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(String(value||''))&&String(value).length<=80;
 const clean=(v,n=200)=>String(v??'').trim().slice(0,n);
 const EMAIL=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const auth=(config,token)=>({token,basicEmail:config.get('jira.email')});
@@ -80,6 +83,48 @@ class ConfluenceUserDatabase{
   if(normalized.conflicts.length)throw Error(normalized.conflicts.join('; '));
   return {space,db:database,property,rows:normalized.rows};
  }
+ async readVersions(databaseId){
+  if(!/^\d+$/.test(String(databaseId||'')))throw Error('Invalid Confluence database ID for version register.');
+  const base=this.base+'/api/v2/databases/'+encodeURIComponent(databaseId)+'/properties';
+  const response=await this.request(base+'?key='+encodeURIComponent(VERSION_PROPERTY_KEY)+'&limit=25',this.credentials);
+  const matches=(response.results||[]).filter(item=>item.key===VERSION_PROPERTY_KEY);
+  if(matches.length>1)throw Error('Multiple ATGV version properties found.');
+  let property=matches[0]||null;
+  if(property&&property.value===undefined)property=await this.request(base+'/'+encodeURIComponent(property.id),this.credentials);
+  const value=property?.value;
+  if(property&&(value?.schema!==1||value.projectKey!==this.projectKey||!Array.isArray(value.rows)))throw Error('Invalid ATGV version register.');
+  const rows=(value?.rows||[]).filter(row=>typeof row.id==='string'&&row.id.length<=200&&validVersion(row.version)&&Number.isFinite(Date.parse(row.reportedAt)));
+  if(property&&(rows.length!==value.rows.length||new Set(rows.map(row=>row.id)).size!==rows.length))throw Error('Invalid or duplicate version records; no records were overwritten.');
+  return {base,property,rows};
+ }
+ async reportVersion(databaseId,accountId,version){
+  if(!/^[A-Za-z0-9:_-]{4,200}$/.test(String(accountId||''))||!validVersion(version))throw Error('Invalid verified account or installed ATGV version.');
+  const reportedAt=new Date().toISOString();
+  for(let attempt=0;attempt<3;attempt++){
+   const current=await this.readVersions(databaseId);
+   const existing=current.rows.find(row=>row.id===accountId);
+   if(existing?.version===version||existing&&Date.parse(existing.reportedAt)>Date.parse(reportedAt))return existing;
+   const rows=[...current.rows.filter(row=>row.id!==accountId),{id:accountId,version,reportedAt}].sort((a,b)=>a.id.localeCompare(b.id));
+   const value={schema:1,projectKey:this.projectKey,rows};
+   try{
+    let saved;
+    if(current.property){
+     const number=Number(current.property.version?.number);
+     if(!Number.isSafeInteger(number))throw Error('Version register has no valid Confluence property version.');
+     saved=await this.request(current.base+'/'+encodeURIComponent(current.property.id),{...this.credentials,method:'PUT',data:{key:VERSION_PROPERTY_KEY,value,version:{number:number+1,message:'ATGV installed version report'}}});
+    }else saved=await this.request(current.base,{...this.credentials,method:'POST',data:{key:VERSION_PROPERTY_KEY,value}});
+    const propertyId=String(saved?.id||current.property?.id||'');
+    if(!propertyId)throw Error('Confluence did not return the saved version property ID.');
+    const checked=await this.request(current.base+'/'+encodeURIComponent(propertyId),this.credentials);
+    const row=checked.value?.rows?.find(item=>item.id===accountId);
+    if(checked.key!==VERSION_PROPERTY_KEY||checked.value?.projectKey!==this.projectKey||!row||row.version!==version)throw Error('ATGV version report could not be verified.');
+    return row;
+   }catch(error){
+    if(!/HTTP (409|412)\b|version conflict/i.test(String(error.message||error))||attempt===2)throw error;
+   }
+  }
+  throw Error('Confluence version register changed concurrently.');
+ }
  async upsert(incoming){
   const cleaned=normalizeRows(incoming);
   if(cleaned.conflicts.length)throw Error(cleaned.conflicts.join('; '));
@@ -119,4 +164,4 @@ class ConfluenceUserDatabase{
   throw Error('Confluence roster changed concurrently.');
  }
 }
-module.exports={PROPERTY_KEY,databaseTitle,normalizeRows,ConfluenceUserDatabase};
+module.exports={PROPERTY_KEY,VERSION_PROPERTY_KEY,databaseTitle,normalizeRows,ConfluenceUserDatabase};
