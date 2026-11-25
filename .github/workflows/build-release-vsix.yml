@@ -71,9 +71,11 @@ jobs:
             'source_filename=ATGV-AIATECH-Assist-v' + pkg.version + '-Source.zip\n');
           NODE
 
-      - name: Install pinned build-only minifiers
+      - name: Install pinned build-only minifiers and ZIP compressor
         if: steps.source.outputs.ready == 'true'
-        run: npm install --ignore-scripts --no-save --no-package-lock --no-audit --no-fund
+        run: |
+          npm install --ignore-scripts --no-save --no-package-lock --no-audit --no-fund
+          python -m pip install --only-binary=:all: zopfli==0.4.3
 
       - name: Verify the Copilot SDK runtime
         if: steps.source.outputs.ready == 'true'

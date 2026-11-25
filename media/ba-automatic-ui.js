@@ -232,7 +232,7 @@
     item.append(name,message);list.append(item);
    }
    const guidance=document.createElement('p');guidance.className='ba-auto-attention-guidance';
-   guidance.textContent='Edit the affected BR using verified evidence, Save Draft, and regenerate with specific feedback. Repeating identical content cannot clear a quality finding.';
+   guidance.textContent='You can publish these requirements with open findings and edit them later.';
    notice.append(heading,list,guidance);body.append(notice);
   }
   if(impact.length){
@@ -411,6 +411,9 @@
  function currentJiraPreview(){
   return !!state?.preview&&state.projectId===activeId&&state.preview.revision===brState?.revision&&Array.isArray(state.preview.conflicts)&&state.preview.conflicts.length===0;
  }
+ function canPublishPrepared(phase,unsaved){
+  return phase==='ready'&&currentJiraPreview()&&!unsaved&&!busy()&&!baBusyTask;
+ }
  function renderReadyPanels(phase){
   const sourceReady=!!source()?.digest;
   const discoveryReady=!!brState?.discoveryRevision&&!!brState?.mappingCompleted&&!discoveryDirty;
@@ -500,7 +503,7 @@
   stop.classList.toggle('hidden',phase!=='running');
   const publishLabel=phase==='publishing'?'Publishing…':'Approved and Publish';publish.textContent=publishLabel;
   publish.title=publishLabel;publish.setAttribute('aria-label',publishLabel);
-  publish.disabled=sharedReadOnly()||phase!=='ready'||unsaved||!!baBusyTask||!currentJiraPreview();if(foreignOwners().length)publish.title=readOnlyMessage();
+  publish.disabled=sharedReadOnly()||!canPublishPrepared(phase,unsaved);if(foreignOwners().length)publish.title=readOnlyMessage();
   const reopen=state?.preview?.reopenRows?.length||0;
   const messages={idle:source()?'Preparing source…':'Upload a document to start.',running:'Preparing affected artifacts…',draft:'Draft. Refresh affected artifacts to continue.',
    ready:!currentJiraPreview()?'Jira preview is out of date. Refresh affected artifacts.':reopen?reopen+' linked Jira item'+(reopen===1?'':'s')+' will move to To Do.':'Jira preview is ready.',

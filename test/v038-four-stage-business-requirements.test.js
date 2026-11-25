@@ -233,9 +233,15 @@ test('Jira preview projects eligible requirements while reporting other BRs that
  assert.throws(()=>workflow.projectPreparedJira(mixed),/Save the BR draft/);
 });
 
-test('Jira Work Items retain draft rows when Jira inventory fails, and a retry verifies the same draft',async t=>{
+test('an all-flagged BR still gets a verified preview and approval, while failed Jira checks block publishing',async t=>{
  const {registry,register}=await registerFixture(t);
  const draft=await workflow.generated(registry,'demo',register.revision,{discoveryRevision:'discovery',requirements:[edited],actor:'BA',automatic:true});
+ const flagged=await workflow.write(registry,'demo',draft.revision,next=>{
+  next.sourceConflicts=[{id:'source-conflict',brId:'BR-001'}];
+  next.discoveryAnswers.scope=automatic.missing;
+  const fingerprint=automatic.qualityFingerprint(next,next.brs[0]);
+  next.baDraftQuality={checked:{'BR-001':fingerprint},excluded:[{id:'BR-001',fingerprint,reason:'Visitor rules need clarification.'}]};
+ });
  const host=await fs.readFile(hostFile,'utf8');
  const diagnostics=[];
  let inventoryFailure=true;
@@ -260,17 +266,49 @@ test('Jira Work Items retain draft rows when Jira inventory fails, and a retry v
  assert.equal(blocked.checkedCount,0);
  assert.match(blocked.conflicts[0],/Read Jira issue inventory: HTTP 429/);
  assert.equal(diagnostics[0].action,'verify-work-items');
- const unreviewed=await prepare({automatic:true,qualityBlocker:'Draft quality review: model timed out'});
- assert.equal(unreviewed.rows.length,1);
- assert.equal(unreviewed.verifiedAt,0);
- assert.match(unreviewed.conflicts[0],/model timed out/);
  inventoryFailure=false;
- const ready=await prepare({automatic:true});
+ const ready=await prepare({automatic:true,qualityWarning:'Draft quality review: model timed out'});
  assert.equal(ready.conflicts.length,0);
+ assert.match(ready.sourceNotes.join('\n'),/BR-001 · Visitor rules need clarification/);
+ assert.match(ready.sourceNotes.join('\n'),/Discovery needs more detail/);
+ assert.match(ready.sourceNotes.join('\n'),/conflicting rules/);
+ assert.match(ready.sourceNotes.join('\n'),/model timed out/);
  assert.ok(ready.verifiedAt>0);
  assert.ok(ready.fieldPlans[draft.brs[0].id].schema);
  assert.equal(ready.checkedCount,1);
  assert.equal((await workflow.load(registry,'demo')).brs[0].status,'draft');
+ let confirm=false;
+ const published=[];
+ const publish=hostFunction(host,'async function publishPreparedBRs(','async function prepareBRJiraPreview(',{
+  requireBAWorkspace:()=>{},activeProject:{id:'demo'},registry,brWorkflow:workflow,sha,
+  baPreparationRun:null,baAttentionRun:null,jiraSyncBusy:false,approvedJiraPreviewRevision:null,approvedJiraPreviewBinding:null,
+  baPreparationSessions:new Map([['demo',{phase:'ready',preview:ready}]]),jiraPreviewFieldPlans:ready.fieldPlans,
+  effectiveConfig:()=>target.config,baseAtlassian:()=>ready.site,validProjectKey:key=>key,
+  requireBAOwner:async()=>{},requireBAWritableCycle:async()=>{},verifiedBAActor:async()=>'BA',
+  uiWarning:async(_title,options,action)=>{
+   assert.match(options.detail,/BR-001 · Visitor rules need clarification/);
+   return confirm?action:undefined;
+  },
+  postBAPreparation:async()=>{},getAtlassianToken:async()=>target.token,baJiraRepublish:resets,
+  reopenServices:()=>({}),brPreparationTitle:()=>edited.title,
+  syncApprovedBRs:async revision=>{
+   const approved=await workflow.load(registry,'demo');
+   assert.equal(approved.revision,revision);
+   const [item]=workflow.plan(approved);
+   published.push(item.path);
+   await workflow.recorded(registry,'demo',revision,{...item,key:'TC-42'});
+  }
+ });
+ await publish({projectId:'demo',revision:flagged.revision});
+ assert.deepEqual(published,[]);
+ assert.equal((await workflow.load(registry,'demo')).brs[0].status,'draft');
+ confirm=true;
+ await publish({projectId:'demo',revision:flagged.revision});
+ const saved=await workflow.load(registry,'demo');
+ assert.equal(saved.brs[0].status,'approved');
+ assert.deepEqual(published,['BR-001']);
+ assert.equal(saved.synced['BR-001'].key,'TC-42');
+ assert.equal(saved.sourceConflictDecisions['source-conflict'],undefined);
 });
 
 test('automatic identity verification checks all markers from the completed inventory',async()=>{
