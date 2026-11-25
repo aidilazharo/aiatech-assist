@@ -7525,6 +7525,24 @@ async function handleDashboardMessage(msg){
         }
         break;
       }
+      case 'architectScanProjectFolders':{
+        const projectId=activeProject?.id||'';
+        try{
+          requireOpened();
+          if(msg.projectId!==projectId)throw Error('Active project changed.');
+          if(developerGit.localLogs()?.running)throw Error('Stop the running application before selecting a repository folder.');
+          const selected=await architectRepository.chooseCustomFolder(context.workspaceState,projectId,{
+            projectRoot:aiRoot(),forceChoose:true,chooseFolder:async(folders,previous)=>{
+              const choice=await vscode.window.showQuickPick(folders.map(folder=>({label:folder.label,description:folder.kind+(folder.root===previous?' · previously selected':''),detail:folder.root,root:folder.root})),{placeHolder:'Select project repository folder',ignoreFocusOut:true});
+              return choice?.root;
+            }
+          });
+          if(activeProject?.id!==projectId)throw Error('Active project changed.');
+          if(!selected){await vscode.window.showInformationMessage('No repository folder found in this project.');break;}
+          await vscode.window.showInformationMessage('Repository folder selected: '+path.basename(selected));
+        }catch(error){if(!String(error.message).includes('selection cancelled'))await vscode.window.showErrorMessage('Scan Folder: '+error.message);}
+        break;
+      }
       case 'architectCustomScan':{
         const projectId=activeProject?.id||'';
         const scanId=Number.isSafeInteger(msg.scanId)&&msg.scanId>0?msg.scanId:null;
