@@ -1219,7 +1219,7 @@ function navigate(destination){
     if(baWorkspace&&openWorkspace){renderBAUncompleted();send('baOwnersRefresh');}
     renderRoleTimeline();ensurePMJiraInventory(true);ensureBAJiraInventory(true);send('roleHandoffOwners');requestRoleConnectionAccess();renderRoleCredentialBanner();return;
   }
-  if(destination==='overview'){setView('landing');$('overviewGanttDetails').open=false;send('loadPlanning');send('myWorkRosterRefresh',{projectId:activeId,roleId:selectedRole});return;}
+  if(destination==='overview'){setView('landing');$('overviewGanttDetails').open=false;send('loadPlanning');send('myWorkRosterRefresh',{projectId:activeId,roleId:selectedRole,overviewClicked:true});return;}
   if(destination==='settings'){$('settingsBack').textContent=workspaceOpened?'← Back to Workspace':'← Back to Projects';collapseExtensionSettings();setView('settings');updateExtensionSettingBadges();if(workspaceOpened)send('devRepositoryStatus');return;}
   if(destination==='library'){setView('library');window.atgvLibraryStudio?.refresh();return;}
   if(destination==='documents'){setView('documents');renderDocumentGroups();return;}
@@ -8421,7 +8421,7 @@ $('overviewUserAddForm').addEventListener('submit',event=>{
 });
 $('overviewUserRefresh').addEventListener('click',()=>{
  $('overviewUserStatus').textContent='Loading verified My Work users from Confluence…';
- send('myWorkRosterRefresh',{projectId:activeId,roleId:selectedRole,retryRegistration:true});
+ send('myWorkRosterRefresh',{projectId:activeId,roleId:selectedRole});
 });
 window.addEventListener('message',event=>{
  const m=event.data||{};
@@ -8431,7 +8431,7 @@ window.addEventListener('message',event=>{
   if(rosterAddProject===activeId&&m.requestId!==rosterAddRequest)return;
   renderMyWorkRoster(m.rows);
   if((m.reason==='added-user'||m.addCancelled)&&m.requestId===rosterAddRequest){rosterAddProject='';setRosterAddBusy(false);if(m.reason==='added-user'&&m.syncComplete)$('overviewUserAccountId').value='';}
-  $('overviewUserStatus').textContent=(m.registrationCancelled?'Registration cancelled · ':m.addCancelled?'User selection cancelled · ':m.syncComplete===false?'Confluence page saved; database sync incomplete · ':m.registrationConfirmed?'Registered '+(m.registeredName||'')+' · ':m.reason==='added-user'?(m.registrationAction==='updated'?'Updated ':'Added ')+(m.registeredName||m.registeredAccountId)+' · ':'')+(m.rows?.length||0)+' users · assigned Jira tasks refreshed'+(m.assignmentWarning?' · '+m.assignmentWarning:'')+(m.registryWarning?' · '+m.registryWarning:'')+(m.databaseId?' · Database v2 #'+m.databaseId:'')+' · Confluence space '+(m.spaceKey||'')+(m.updatedAt?' · '+new Date(m.updatedAt).toLocaleString():'');
+  $('overviewUserStatus').textContent=(m.registrationPending?'Open Overview to confirm registration · ':m.registrationCancelled?'Registration cancelled · ':m.addCancelled?'User selection cancelled · ':m.syncComplete===false?'Confluence page saved; database sync incomplete · ':m.registrationConfirmed?'Registered '+(m.registeredName||'')+' · ':m.reason==='added-user'?(m.registrationAction==='updated'?'Updated ':'Added ')+(m.registeredName||m.registeredAccountId)+' · ':'')+(m.rows?.length||0)+' users · assigned Jira tasks refreshed'+(m.assignmentWarning?' · '+m.assignmentWarning:'')+(m.registryWarning?' · '+m.registryWarning:'')+(m.databaseId?' · Database v2 #'+m.databaseId:'')+' · Confluence space '+(m.spaceKey||'')+(m.updatedAt?' · '+new Date(m.updatedAt).toLocaleString():'');
  }else if(m.type==='myWorkRosterError'){
   if(rosterAddProject===activeId&&m.requestId!==rosterAddRequest)return;
   if(rosterAddProject===activeId){rosterAddProject='';setRosterAddBusy(false);}
