@@ -1,8 +1,8 @@
-# ATGV AIATECH Assist v0.1.25
+# ATGV AIATECH Assist v0.1.26
 
 ## Changes
-- Normalize CRLF line endings in the migrated source-test index generator before matching runtime and dashboard boundaries.
-- Diagnose missing runtime and renderer markers separately instead of suppressing regression tests.
-- Enforce LF checkout for text sources and CRLF for Windows batch scripts; retain source-only memory exclusion.
-- Add regression tests against the actual runtime and dashboard for LF, CRLF and mixed line endings and invalid boundaries.
-- Synchronize the dashboard fallback version with the package manifest.
+- Close every test workflow journal, including reopened SQLite instances, before removing temporary directories. Wait for queued workflow operations and keep cleanup failures visible.
+- Retry temporary filesystem sharing violations with bounded recursive removal retries.
+- Preserve the SQLite persistence regression and explicitly assert that both handles are closed and the temporary directory is removed.
+- Close symlink-test journal handles before cleanup and use a Windows directory junction for the directory-link security check; retain file-symlink coverage.
+- Synchronize package, display, README and dashboard versions.
