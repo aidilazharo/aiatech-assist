@@ -62,7 +62,7 @@ async function verifyMock(url,driver,root,relative,state){
  throw Error('The mock service did not pass localhost health verification.');
 }
 async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgress=async()=>{},
- driver=developer,stack=custom,repairs=repair,dependencies=dependency,onAiReview=null,fullStack=fullstack,fullStackMode='auto'}={}){
+ driver=developer,stack=custom,repairs=repair,dependencies=dependency,onAiReview=null,fullStack=fullstack,fullStackMode='auto',prepareBaseline=null}={}){
  const key=path.resolve(root);
  if(running.has(key))throw Error('Custom Stack Install & Run is already in progress.');
  const state={controller:new AbortController(),started:false};
@@ -70,8 +70,19 @@ async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgr
  const report=async(percent,step,message,ai=false)=>onProgress({percent,step,message,ai});
  try{
   await report(7,1,'1/6 Scanning verified Git repository and detecting application targets…');
-  const inspection=await stack.scan(key,{driver});
+  let inspection=await stack.scan(key,{driver});
   cancelled(state);
+  if(typeof prepareBaseline==='function'){
+   if(inspection.sha||expectedSha)throw Error('Git revision changed since initial-commit review; rescan and retry.');
+   if(driver.localLogs().running)throw Error('Stop the currently managed application before creating the initial commit.');
+   if(!selectPreviewTarget(inspection,relative))throw Error('No runnable Vite frontend detected.');
+   await report(8,1,'Creating the reviewed first local Git commit…');
+   expectedSha=await prepareBaseline(state.controller.signal);
+   cancelled(state);
+   inspection=await stack.scan(key,{driver});
+   cancelled(state);
+   if(!expectedSha||inspection.sha!==expectedSha)throw Error('Initial Git revision changed after commit; rescan and retry.');
+  }
   if(!/^[a-f0-9]{40,64}$/i.test(String(inspection.sha||'')))throw Error('Git repository has no initial commit. Review and commit project source before Install & Run.');
   if(expectedSha&&inspection.sha!==expectedSha)throw Error('Git revision changed since the previous scan. Nothing was modified; retry after refreshing the repository.');
   // Local application edits are valid development state: do not stash, reset,

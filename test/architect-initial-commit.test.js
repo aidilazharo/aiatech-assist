@@ -43,5 +43,19 @@ test('Install & Run offers first-commit review before invoking execution',async(
  assert.ok(flow.indexOf('initialCommit.plan(')<flow.indexOf('approved=await uiWarning('));
  assert.ok(flow.indexOf('if(consentCancelled||approved!==action)')<flow.indexOf('initialCommit.commit('));
  assert.ok(flow.indexOf('initialCommit.commit(')<flow.indexOf('workflow.installAndRun('));
- assert.match(flow,/expectedSha:executionSha/);
+ assert.match(flow,/expectedSha:inspected.sha,prepareBaseline/);
+ assert.match(ui,/m.type==='architectCustomBaselineResult'/);
+});
+
+test('cancelled initial-commit review does not stage files',()=>fixture(async root=>{
+ const p=await initial.plan(root,identity),controller=new AbortController();
+ controller.abort();await assert.rejects(initial.commit(root,p,{...identity,signal:controller.signal}),/cancelled/);
+ assert.equal(git(root,'ls-files'),'');
+}));
+test('first-commit callback is protected by the running workflow cancellation state',async()=>{
+ const workflow=require('../src/architect-custom-workflow'),root=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-first-run-'));
+ try{let called=false;
+ await assert.rejects(workflow.installAndRun(root,{driver:{localLogs:()=>({running:false})},stack:{scan:async()=>({sha:'',targets:[{relative:'web',runnable:true,mockable:true,role:'frontend'}]})},prepareBaseline:async signal=>{called=true;assert.equal(workflow.isPending(root),true);assert.equal(workflow.cancel(root),true);assert.equal(signal.aborted,true);return 'a'.repeat(40);}}),/cancelled/);
+ assert.equal(called,true);assert.equal(workflow.isPending(root),false);
+ }finally{await fs.rm(root,{recursive:true,force:true});}
 });

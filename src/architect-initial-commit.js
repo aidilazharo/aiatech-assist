@@ -46,29 +46,40 @@ async function plan(root,{owner,name}={}){
  return {root:repo.root,branch:repo.branch,files,excluded,fingerprint};
 }
 function reviewText(p){return ['# Review initial local Git commit','Repository: '+p.root,'Branch: '+p.branch,'No GitHub push. Review these files before approving; automated secret detection is not exhaustive.','','Files proposed for commit ('+p.files.length+'):',...p.files.map(x=>x.path),'','Excluded untracked files ('+p.excluded.length+'); ignored files are not listed:',...p.excluded.map(x=>JSON.stringify(x))].join('\n');}
-async function commit(root,review,{owner,name}={}){
- const checked=await plan(root,{owner,name});
+async function commit(root,review,{owner,name,signal}={}){
+ const checkStop=()=>{if(signal?.aborted)throw Error('Initial commit cancelled before committing.');};
+ checkStop();const checked=await plan(root,{owner,name});checkStop();
  if(checked.fingerprint!==review?.fingerprint)throw Error('Source files or repository changed during review. Rescan and approve again.');
  const expected=checked.files.map(x=>x.path).sort(),staged=new Set();
  const hooks=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-no-git-hooks-'));
  try{
   // Explicit paths only; never stage ignored files or directories. Git's normal
   // filters and line endings are retained, but hooks are not run by this commit.
-  for(const item of checked.files){
-   const bytes=await readSafe(checked.root,item.path);
-   if(!bytes||digest(bytes)!==item.sha256)throw Error('Source changed during staging; review again.');
-   await git(checked.root,'--literal-pathspecs','add','--',item.path);staged.add(item.path);
+  let batch=[],length=0;
+  async function flush(){
+   if(!batch.length)return;checkStop();
+   // Track the attempted paths so a partial Git failure can be rolled back.
+   for(const name of batch)staged.add(name);
+   await git(checked.root,'--literal-pathspecs','add','--',...batch);
+   batch=[];length=0;
   }
+  for(const item of checked.files){
+   checkStop();const bytes=await readSafe(checked.root,item.path);
+   if(!bytes||digest(bytes)!==item.sha256)throw Error('Source changed during staging; review again.');
+   if(length+item.path.length>6000)await flush();
+   batch.push(item.path);length+=item.path.length+3;
+  }
+  await flush();
   const index=entries(await git(checked.root,'ls-files','-z')).sort();
   if(JSON.stringify(index)!==JSON.stringify(expected))throw Error('Git index changed during review. No commit was created.');
   for(const item of checked.files){
-   const bytes=await readSafe(checked.root,item.path);
+   checkStop();const bytes=await readSafe(checked.root,item.path);
    const blob=await git(checked.root,'show',':'+item.path);
    if(!bytes||digest(bytes)!==item.sha256||!safeText(blob))throw Error('A staged file changed or contains potentially sensitive content; no commit created.');
   }
   const latest=await driver.repository(checked.root);
   if(latest.sha||latest.branch!==checked.branch||!driver.matchesGithubRepo(latest.remote,owner,name))throw Error('Git history, branch or origin changed during review.');
-  await git(checked.root,'-c','core.hooksPath='+hooks,'commit','-m','chore: initialize reviewed project source');
+  checkStop();await git(checked.root,'-c','core.hooksPath='+hooks,'commit','-m','chore: initialize reviewed project source');
   const result=await driver.repository(checked.root);
   if(!/^[a-f0-9]{40,64}$/i.test(result.sha||''))throw Error('Initial commit could not be verified.');
   return result;

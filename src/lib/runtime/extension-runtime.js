@@ -7763,19 +7763,18 @@ async function handleDashboardMessage(msg){
           }
           if(activeProject?.id!==projectId||(await registry.read(projectId)).techStackId!=='custom')throw Error('Project or stack changed before Install & Run.');
           architectErrorLogs.begin(projectId,'custom-stack');
-          let executionSha=inspected.sha;
-          if(initialReview){
+          const prepareBaseline=initialReview?async signal=>{
             await recordStackActivity(projectId,'Install & Run / initial commit','Creating the approved first local commit; excluded files are preserved. No remote push.');
-            const committed=await initialCommit.commit(root,initialReview,identity);
-            executionSha=committed.sha;
-            await recordStackActivity(projectId,'Install & Run / initial commit','Verified local baseline '+executionSha+' on '+committed.branch+'.');
+            const committed=await initialCommit.commit(root,initialReview,{...identity,signal});
+            await recordStackActivity(projectId,'Install & Run / initial commit','Verified local baseline '+committed.sha+' on '+committed.branch+'.');
             if(activeProject?.id!==projectId)throw Error('Project changed after local commit; execution stopped.');
             const updated=await stack.scan(root);
             updated.branches=await require('../../architect-custom-repair').branches(root);
-            await dashboard?.webview.postMessage({type:'architectCustomScanned',projectId,value:updated});
-          }
+            await dashboard?.webview.postMessage({type:'architectCustomBaselineResult',projectId,value:updated});
+            return committed.sha;
+          }:null;
           const result=await workflow.installAndRun(root,{
-            expectedSha:executionSha,
+            expectedSha:inspected.sha,prepareBaseline,
             relative:typeof msg.relative==='string'?msg.relative:undefined,
             previewUrl:String(msg.previewUrl||''),fullStackMode,
             onAiReview:async (verified,report)=>{

@@ -8828,6 +8828,10 @@ window.addEventListener('message',event=>{
   if(!architectCustomBusy)architectCustomRunning=!!m.value?.running;
   renderArchitectCustomPanel();
  }
+ if(m.type==='architectCustomBaselineResult'){
+  architectCustomInfo={...m.value,projectId:activeId,previewCustomized:false};
+  renderArchitectCustomPanel();
+ }
  if(m.type==='architectCustomScanResult'||m.type==='architectCustomPullResult'||
     m.type==='architectCustomBranchResult'||m.type==='architectCustomInstallResult'){
   architectCustomBusy=false;architectCustomScanPending=false;architectCustomOperation='';architectCustomLastError='';architectCustomAiActive=false;
