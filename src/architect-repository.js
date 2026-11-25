@@ -88,10 +88,17 @@ async function discoverCustomFolders(options={}){
 async function chooseCustomFolder(state,projectId,options={}){
  const folders=await discoverCustomFolders(options);
  if(!folders.length)return '';
- if(folders.length===1)return folders[0].root;
- if(typeof options.chooseFolder!=='function')throw Error('More than one project folder found. Select a repository folder.');
- const selected=await options.chooseFolder(folders,state.get('atgvAssist.localRepo.'+projectId));
- if(!folders.some(x=>x.root===selected))throw Error('Repository folder selection cancelled. No files were changed.');
+ const key='atgvAssist.selectedRepositoryFolder.'+projectId;
+ const previous=state.get(key)||state.get('atgvAssist.localRepo.'+projectId);
+ let selected;
+ if(folders.length===1)selected=folders[0].root;
+ else if(!options.forceChoose&&folders.some(x=>x.root===previous))selected=previous;
+ else{
+  if(typeof options.chooseFolder!=='function')throw Error('More than one project folder found. Select a repository folder.');
+  selected=await options.chooseFolder(folders,previous);
+  if(!folders.some(x=>x.root===selected))throw Error('Repository folder selection cancelled. No files were changed.');
+ }
+ if(typeof state.update==='function')await state.update(key,selected);
  return selected;
 }
 async function ensureCustom(state,projectId,developerGit,options={}){
