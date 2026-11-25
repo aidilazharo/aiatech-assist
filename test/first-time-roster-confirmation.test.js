@@ -93,7 +93,7 @@ test('only explicit Overview navigation requests modal; no project or space deta
  assert.match(ui,/destination==='overview'.*overviewClicked:true/);
  assert.match(host,/msg\.overviewClicked===true/);
  assert.match(host,/overviewClicked\?\{confirmRegistration:/);
- const modal=host.split("showInformationMessage('Register your ATGV user account?'")[1].split(",'Confirm')")[0];
+ const modal=host.split("showInformationMessage('Please update your account'")[1].split(",'Confirm')")[0];
  assert.match(modal,/Full Name:/);assert.match(modal,/Email:/);
  assert.equal(modal.includes('Project:'),false);assert.equal(modal.includes('Confluence space:'),false);
 });
