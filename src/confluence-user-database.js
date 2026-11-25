@@ -94,13 +94,24 @@ class ConfluenceUserDatabase{
    const value={schema:1,projectKey:this.projectKey,spaceId:String(current.space.id),updatedAt:new Date().toISOString(),rows:merged.rows};
    const base=this.base+'/api/v2/databases/'+encodeURIComponent(current.db.id)+'/properties';
    try{
+    let saved;
     if(current.property){
      const version=Number(current.property.version?.number);
      if(!Number.isSafeInteger(version))throw Error('Confluence roster property has no trustworthy version.');
-     await this.request(base+'/'+encodeURIComponent(current.property.id),{...this.credentials,method:'PUT',
+     saved=await this.request(base+'/'+encodeURIComponent(current.property.id),{...this.credentials,method:'PUT',
       data:{key:PROPERTY_KEY,value,version:{number:version+1,message:'ATGV verified user roster update'}}});
-    }else await this.request(base,{...this.credentials,method:'POST',data:{key:PROPERTY_KEY,value}});
-    return {databaseId:String(current.db.id),rows:merged.rows,changed:true};
+    }else saved=await this.request(base,{...this.credentials,method:'POST',data:{key:PROPERTY_KEY,value}});
+    const propertyId=String(saved?.id||current.property?.id||'');
+    if(!propertyId)throw Error('Confluence did not return the saved roster property ID.');
+    const verified=await this.request(base+'/'+encodeURIComponent(propertyId),this.credentials);
+    if(verified.key!==PROPERTY_KEY||verified.value?.projectKey!==this.projectKey||String(verified.value?.spaceId)!==String(current.space.id)||!Array.isArray(verified.value?.rows))throw Error('Saved Confluence roster property could not be verified.');
+    const checked=normalizeRows(verified.value.rows);
+    if(checked.conflicts.length)throw Error(checked.conflicts.join('; '));
+    for(const row of merged.rows){
+     const match=checked.rows.find(x=>row.id?x.id===row.id:x.email===row.email);
+     if(!match||match.name!==row.name||match.email!==row.email||row.roles.some(role=>!match.roles.includes(role)))throw Error('Confluence database roster read-back does not contain the saved identity and roles.');
+    }
+    return {databaseId:String(current.db.id),rows:checked.rows,changed:true};
    }catch(error){
     if(!/HTTP (409|412)\b|version conflict/i.test(String(error.message||error))||attempt===2)throw error;
    }
