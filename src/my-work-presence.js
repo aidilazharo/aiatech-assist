@@ -116,15 +116,29 @@ async function syncDatabase(config,token,projectKey,rows){
   return {databaseId:'',registryWarning:'Database v2 sync needs attention: '+clean(error.message,180)};
  }
 }
-async function visit(config,token,{projectKey,roleId}){
- const role=ROLES[roleId];if(!role)throw Error('Unknown role cannot be added to the register.');
+async function visit(config,token,{projectKey,roleId='',confirmRegistration,assertActive=()=>{}}){
+ const role=roleId?ROLES[roleId]:'';
+ if(roleId&&!role)throw Error('Unknown role cannot be added to the register.');
  const auth={token,basicEmail:config.get('jira.email')};
  const me=await requestJson(baseAtlassian(config)+'/rest/api/3/myself',auth);
  if(!me?.accountId)throw Error('Jira did not verify the current user.');
+ if(me.active===false)throw Error('The connected Jira user is inactive.');
  const email=clean(me.emailAddress||config.get('jira.email'),250).toLowerCase();
- if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw Error('User email is unavailable. The Confluence register was not changed.');
- const name=displayName(email,me.displayName);
+ const validEmail=/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)?email:'';
+ const name=clean(me.displayName)|| (validEmail?displayName(validEmail):String(me.accountId));
  const project=validProjectKey(projectKey);
+ const initial=await readRoster(config,token,project);
+ const existing=initial.rows.find(row=>row.id===me.accountId);
+ let registrationConfirmed=false;
+ if(!existing){
+  if(typeof confirmRegistration!=='function')throw Error('Confirm your ATGV user registration before adding this account.');
+  registrationConfirmed=await confirmRegistration({id:me.accountId,name,email:validEmail,projectKey:project,spaceKey:initial.space.key});
+  assertActive();
+  if(registrationConfirmed!==true)return {...await snapshot(config,token,project),registrationCancelled:true};
+  const confirmed=await requestJson(baseAtlassian(config)+'/rest/api/3/myself',auth);
+  if(confirmed?.accountId!==me.accountId||confirmed.active===false||clean(confirmed.displayName)!==clean(me.displayName)||clean(confirmed.emailAddress||config.get('jira.email'),250).toLowerCase()!==email)
+   throw Error('Connected Jira identity changed. Confirm registration again.');
+ }
  let tasks='No assigned task';
  try{
   const result=await requestJson(baseAtlassian(config)+'/rest/api/3/search/jql',{...auth,method:'POST',data:{
@@ -135,24 +149,34 @@ async function visit(config,token,{projectKey,roleId}){
  }catch{tasks='Jira tasks unavailable';}
  for(let attempt=0;attempt<3;attempt++){
   const {space,page,name:pageName,rows}=await readRoster(config,token,project);
-  const current=rows.find(x=>x.id===me.accountId||x.email.toLowerCase()===email);
+  assertActive();
+  const current=rows.find(x=>x.id===me.accountId)|| (validEmail?rows.find(x=>!x.id&&x.email.toLowerCase()===validEmail):null);
+  if(!current?.id&&!registrationConfirmed)throw Error('User registration changed. Confirm registration again.');
+  if(validEmail&&rows.some(x=>x.email===validEmail&&x.id&&x.id!==me.accountId))throw Error('Email is already linked to a different verified Atlassian account. Manual reconciliation required.');
   if(current?.id&&current.id!==me.accountId)throw Error('Email is already linked to a different verified Atlassian account. Manual reconciliation required.');
-  const unchanged=!!current&&current.id===me.accountId&&current.email===email&&current.name===name&&current.tasks===tasks&&current.roles.includes(role);
+  const effectiveEmail=validEmail||current?.email||'';
+  const unchanged=!!current&&current.id===me.accountId&&current.email===effectiveEmail&&current.name===name&&current.tasks===tasks&&(!role||current.roles.includes(role))&&!!page&&JSON.stringify(extractRows(page.body?.storage?.value||''))===JSON.stringify(normalizeRows(rows).rows);
   if(unchanged){
    const db=await syncDatabase(config,token,project,rows);
    const refreshed=await snapshot(config,token,project);
    verifyRegistered(refreshed.rows,me.accountId);
-   return {...refreshed,registryWarning:db.registryWarning||refreshed.registryWarning};
+   return {...refreshed,databaseId:db.databaseId||refreshed.databaseId,registryWarning:db.registryWarning||refreshed.registryWarning,syncComplete:!db.registryWarning};
   }
-  if(current){current.id=me.accountId;current.email=email;current.name=name;current.tasks=tasks;current.roles=[...new Set([...current.roles,role])];}
-  else rows.push({id:me.accountId,email,name,roles:[role],tasks});
+  if(current){current.id=me.accountId;current.email=effectiveEmail;current.name=name;current.tasks=tasks;current.roles=[...new Set([...current.roles,...(role?[role]:[])])];}
+  else rows.push({id:me.accountId,email:effectiveEmail,name,roles:role?[role]:[],tasks});
   rows.sort((a,b)=>a.name.localeCompare(b.name));
   try{
+   assertActive();
    const saved=await writeConfluence(config,token,{pageId:page?.id,spaceId:space.id,title:pageName,bodyHtml:renderRows(rows),version:page?.version?.number});
+   const savedId=String(saved?.id||page?.id||'');
+   if(!savedId)throw Error('Confluence did not return the saved roster page ID.');
+   const confirmedPage=await getConfluencePage(config,token,savedId);
+   const verified=verifyRegistered(extractRows(confirmedPage?.body?.storage?.value||''),me.accountId,{name,email:effectiveEmail});
    const db=await syncDatabase(config,token,project,rows);
    const refreshed=await snapshot(config,token,project);
-   verifyRegistered(refreshed.rows,me.accountId);
-   return {...refreshed,pageId:String(saved.id||page?.id||''),registryWarning:db.registryWarning||refreshed.registryWarning};
+   const combined=normalizeRows([...refreshed.rows.filter(row=>row.id!==me.accountId),{...verified,tasks:refreshed.rows.find(row=>row.id===me.accountId)?.tasks||verified.tasks}]);
+   if(combined.conflicts.length)throw Error(combined.conflicts.join('; '));
+   return {...refreshed,rows:combined.rows,pageId:savedId,databaseId:db.databaseId||refreshed.databaseId,registryWarning:db.registryWarning||refreshed.registryWarning,registrationConfirmed,registeredName:name,syncComplete:!db.registryWarning};
   }catch(error){
    if(/version conflict|HTTP (409|412)/i.test(error.message)&&attempt<2)continue;
    throw error;
@@ -210,7 +234,7 @@ async function addUser(config,token,{projectKey,accountId}){
    if(combined.conflicts.length)throw Error(combined.conflicts.join('; '));
    verifyRegistered(combined.rows,id,{name,email});
    return {...refreshed,rows:combined.rows,pageId:savedId,databaseId:database.databaseId||refreshed.databaseId,
-    registryWarning:database.registryWarning||refreshed.registryWarning,reason:'added-user',registeredAccountId:id,registeredName:name,registrationAction:old?'updated':'added'};
+    registryWarning:database.registryWarning||refreshed.registryWarning,reason:'added-user',registeredAccountId:id,registeredName:name,registrationAction:old?'updated':'added',syncComplete:!database.registryWarning};
   }catch(error){
    if(/version conflict|HTTP (409|412)/i.test(error.message)&&attempt<2)continue;
    throw error;
@@ -218,4 +242,14 @@ async function addUser(config,token,{projectKey,accountId}){
  }
  throw Error('Concurrent Confluence edits prevented the user from being registered.');
 }
-module.exports={readRoster,verifyRegistered,ROLES,displayName,title,extractRows,renderRows,locate,assignedTasks,snapshot,visit,addUser};
+async function searchUsers(config,token,{projectKey,query}){
+ const project=validProjectKey(projectKey),q=clean(query,200);
+ if(q.length<2)throw Error('Enter at least two characters of a name or email.');
+ const auth={token,basicEmail:config.get('jira.email')},site=baseAtlassian(config);
+ const result=await requestJson(site+'/rest/api/3/user/assignable/search?project='+encodeURIComponent(project)+'&query='+encodeURIComponent(q)+'&maxResults=50',auth);
+ if(!Array.isArray(result))throw Error('Jira returned an invalid user search result.');
+ const users=new Map();
+ for(const person of result)if(person?.active!==false&&/^[A-Za-z0-9:_-]{4,200}$/.test(String(person?.accountId||'')))users.set(person.accountId,{id:person.accountId,name:clean(person.displayName)||person.accountId,email:clean(person.emailAddress,250)});
+ return [...users.values()].sort((a,b)=>a.name.localeCompare(b.name));
+}
+module.exports={searchUsers,readRoster,verifyRegistered,ROLES,displayName,title,extractRows,renderRows,locate,assignedTasks,snapshot,visit,addUser};
