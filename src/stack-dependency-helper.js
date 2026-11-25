@@ -11,6 +11,7 @@ const {promisify}=require('node:util');
 const diagnostic=require('./stack-process-diagnostics');
 const {npmCommand,mavenCommand}=require('./platform-process');
 const recovery=require('./dependency-recovery');
+const policyRecovery=require('./npm-policy-recovery');
 const execute=promisify(execFile);
 const LIMIT=8*1024*1024;
 function commandFor(name,args){return name==='npm'?npmCommand(args):name==='mvn'?mavenCommand(args):{bin:name,args};}
@@ -119,31 +120,78 @@ async function installNpmWithCacheRecovery(options,onProgress){
  const env={...(options.env||{}),npm_config_cache:cache,NPM_CONFIG_CACHE:cache};
  const manifest=JSON.parse(await fs.readFile(path.join(options.cwd,'package.json'),'utf8'));
  const declared={...(manifest.dependencies||{}),...(manifest.devDependencies||{}),...(manifest.optionalDependencies||{})};
- const selected={};
+ const selected=Object.create(null),scopes=new Map(),policySelections=new Map();
+ const policy=await policyRecovery.readPolicy(options.historyFile||recovery.defaultFile());
+ const candidateOptions={cwd:options.cwd,runner:options.runner||execute,env,signal:options.signal};
+ const scope=async name=>{
+  if(!scopes.has(name))scopes.set(name,await policyRecovery.scopeFor(policy,name,declared[name],candidateOptions));
+  return scopes.get(name);
+ };
  const choose=async name=>{
   const failed=await recovery.failedVersions('npm',name,{file:options.historyFile});
-  const list=await recovery.npmCandidates(name,declared[name],{cwd:options.cwd,runner:options.runner,env,signal:options.signal});
+  const list=await recovery.npmCandidates(name,declared[name],candidateOptions);
   const candidate=list.find(v=>!failed.has(v));
   if(!candidate)throw Error('No unfailed version of '+name+' matches the approved package range '+declared[name]+'. Review the dependency or registry; no incompatible version was selected.');
   selected[name]=candidate;await onProgress('Trying '+name+'@'+candidate+' (latest compatible version not recorded as failed).');
  };
- // Consult persisted failures before the first install, including after restart.
- for(const name of Object.keys(declared))if((await recovery.failedVersions('npm',name,{file:options.historyFile})).size)await choose(name);
+ const choosePolicy=async(ctx,original)=>{
+  const list=await recovery.npmCandidates(ctx.name,declared[ctx.name],candidateOptions);
+  const ordinaryFailures=await recovery.failedVersions('npm',ctx.name,{file:options.historyFile});
+  const next=policyRecovery.candidates(ctx,list.filter(v=>!ordinaryFailures.has(v)),await policyRecovery.history(ctx),original)[0];
+  if(!next)throw Error('No approved same-major version of '+ctx.name+' within '+declared[ctx.name]+' remains. Review the lockfile or request IT/architecture approval; registry and security settings unchanged.');
+  selected[ctx.name]=next;policySelections.set(ctx.name,{ctx,version:next});
+  await onProgress('Trying approved '+ctx.name+'@'+next+' (same module; scoped version history applied).');
+ };
+ // Only a matching unexpired administrator-approved local policy can permit
+ // 403 recovery. Otherwise the original failure is returned without retries.
+ let lock=null;
+ if(policy&&args[0]==='ci')lock=JSON.parse(await fs.readFile(path.join(options.cwd,'package-lock.json'),'utf8'));
+ for(const name of Object.keys(declared)){
+  const ctx=await scope(name);
+  if(ctx){
+   const rows=await policyRecovery.history(ctx);
+   const original=lock?(lock.packages?.['node_modules/'+name]?.version||lock.dependencies?.[name]?.version):rows.find(r=>r.outcome==='rejected')?.version;
+   if(original&&rows.some(r=>r.version===original&&r.outcome==='rejected')){await choosePolicy(ctx,original);continue;}
+   // Do not use the legacy version retry path to select an unapproved version
+   // of a package covered by the explicit corporate policy.
+   const legacy=await recovery.failedVersions('npm',name,{file:options.historyFile});
+   const known=original&&legacy.has(original)?original:!lock?[...legacy][0]:null;
+   if(known){await choosePolicy(ctx,known);continue;}
+   continue;
+  }
+  if((await recovery.failedVersions('npm',name,{file:options.historyFile})).size)await choose(name);
+ }
  for(let attempt=0;attempt<12;attempt++){
+  if(options.signal?.aborted)throw Error('Dependency installation stopped.');
+  if(policySelections.size&&policy.expiresAt<=Date.now())throw Error('Approved npm version policy expired; recovery stopped.');
   const override=Object.entries(selected).map(([name,version])=>name+'@'+version);
   const plan=override.length?['install','--no-save','--package-lock=false','--ignore-scripts','--include=optional','--include=dev','--no-audit','--no-fund',...override]:args;
-  try{return await run({...options,stage:override.length?'npm install (compatible recovery)':stage,bin:'npm',args:plan,env});}
+  try{
+   const result=await run({...options,stage:override.length?'npm install (compatible recovery)':stage,bin:'npm',args:plan,env});
+   return {...result,policySelections:[...policySelections.values()]};
+  }
   catch(error){
    if(error.cancelled||options.signal?.aborted)throw error;
-   const details=String(error.diagnosticLogs||error.message||error),failure=recovery.parseFailure('npm',details);
+   const details=String(error.diagnosticLogs||error.message||error),denial=policyRecovery.parse403(details);
+   if(denial&&Object.prototype.hasOwnProperty.call(declared,denial.package)){
+    const ctx=await scope(denial.package);
+    if(policyRecovery.matches(ctx,denial)){
+     await policyRecovery.record(ctx,denial.version,'rejected');
+     await onProgress('Recorded version-specific npm rejection '+denial.package+'@'+denial.version+'; checking approved same-module versions.');
+     await choosePolicy(ctx,denial.version);continue;
+    }
+   }
+   const failure=recovery.parseFailure('npm',details);
    await recovery.record({manager:'npm',package:failure?.package||'',version:failure?.version||'',kind:failure?'version':'failure',error:details},{file:options.historyFile});
    if(!failure||!Object.prototype.hasOwnProperty.call(declared,failure.package))throw error;
-   await onProgress('Recorded npm failure '+failure.package+'@'+failure.version+'; looking for another compatible version.');
-   await choose(failure.package);
+   const ctx=await scope(failure.package);
+   if(ctx){await policyRecovery.record(ctx,failure.version,'rejected');await choosePolicy(ctx,failure.version);}
+   else{await onProgress('Recorded npm failure '+failure.package+'@'+failure.version+'; looking for another compatible version.');await choose(failure.package);}
   }
  }
  throw Error('Dependency recovery stopped after 12 attempts. Review the recorded errors and approved dependency ranges.');
 }
+
 async function restoreNativeWithRecovery(root,target,options,{onProgress,allowManifestRecovery=false}={}){
  const manager=target.kind;
  const choose=async item=>{
@@ -256,7 +304,7 @@ async function ensureForTarget(root,target,{runner=execute,onDiagnostic=async()=
    let installed;try{installed=JSON.parse(await fs.readFile(manifest,'utf8'));}catch{previouslyFailed.push(name+' (invalid installed manifest)');continue;}
    if(installed.version&&(await recovery.failedVersions('npm',name,{file:historyFile})).has(installed.version))previouslyFailed.push(name+'@'+installed.version);
   }
-  let invalidNativeOrCli=false;
+  let invalidNativeOrCli=false,installation=null;
   let needsInstall=installMode==='fresh'||!nodeModules?.isDirectory()||missing.length>0||wrongPlatform||previouslyFailed.length>0;
   if(!needsInstall){
    try{await verifyPlatformPackages(cwd,{runner,onDiagnostic});}
@@ -274,7 +322,7 @@ async function ensureForTarget(root,target,{runner=execute,onDiagnostic=async()=
     await fs.rm(nodeModulesPath,{recursive:true,force:true});
    }
    await onProgress('Installing dependencies for '+process.platform+'/'+process.arch+' with npm'+(missing.length?' (missing: '+missing.join(', ')+')':'')+(previouslyFailed.length?' (replacing recorded failures: '+previouslyFailed.join(', ')+')':'')+'…');
-   await installNpmWithCacheRecovery(options,onProgress);
+   installation=await installNpmWithCacheRecovery(options,onProgress);
    const remaining=await missingNpmPackages(cwd);
    if(remaining.length){
     const err=Error('npm installation completed but required packages are still missing: '+remaining.join(', '));
@@ -284,6 +332,15 @@ async function ensureForTarget(root,target,{runner=execute,onDiagnostic=async()=
    await run({stage:'npm post-install validation',bin:'npm',args:['ls','--depth=0','--json'],...options});
   }else await onProgress('npm dependencies verified for this operating system.');
   const runtime=await verifyPlatformPackages(cwd,{runner,onDiagnostic});
+  // A successful npm process is not sufficient. Confirm actual installed
+  // versions, npm ls and platform checks before writing positive memory.
+  for(const {ctx,version} of installation?.policySelections||[]){
+   const file=path.join(cwd,'node_modules',...ctx.name.split('/'),'package.json');
+   if(!await isFile(file)||JSON.parse(await fs.readFile(file,'utf8')).version!==version)throw Error('Approved recovery version could not be verified: '+ctx.name+'@'+version);
+   if(ctx.policy.expiresAt<=Date.now())throw Error('Approved npm version policy expired before verification.');
+   await policyRecovery.record(ctx,version,'dependency-verified');
+   await onProgress('Remembered dependency-verified '+ctx.name+'@'+version+'; application startup validation remains separate.');
+  }
   return {kind:'npm',cwd,installed:needsInstall,verified:true,runtime};
  }
  if(target.kind==='dotnet'){
