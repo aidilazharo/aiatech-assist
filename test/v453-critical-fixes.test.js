@@ -24,6 +24,6 @@ test('Confluence roster preserves Jira Account ID in a real table column even wh
 test('PM permission gate and verified reconciliation precede Jira assignee actions',()=>{
  assert.match(host,/pmJiraAssignment\.canAssign\(permissions\)/);
  assert.match(host,/used\.includes\('project-manager'\)/);
- assert.match(host,/myWorkPresence\.visit\(config,token,\{projectKey,roleId:'project-manager'\}\)/);
+ assert.match(host,/confirmedRosterVisit\(config,token,projectId,projectKey,'project-manager'\)/);
  assert.match(host,/registeredRole&&used\.includes\(registeredRole\)/);
 });
