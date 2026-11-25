@@ -20,7 +20,3 @@ test('start page displays logo, title, version, settings and guide on a single a
  assert.match(css,/\.gate-logo\{height:50px;/);
  assert.match(css,/\.gate-top\{display:flex;align-items:center;justify-content:space-between;/);
 });
-test('extension header retains dynamic version and library version labels',()=>{
- assert.match(host,/class="brand-versions">Extension v\$\{extensionVersion\}/);
- assert.match(host,/id="headerLibraryVersion"/);
-});

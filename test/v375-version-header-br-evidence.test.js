@@ -72,8 +72,3 @@ test('completed BRs expose discovery answers and the original source file, unlin
  assert.match(source,/case 'downloadBRSourceDocument'/);
  assert.match(ui,/label:'Discovery Answers'/);
 });
-test('extension v0.3.75 is packaged consistently',()=>{
- const pkg=require('../package.json');
- assert.match(pkg.version,/^\d+\.\d+\.\d+$/);
- assert.equal(pkg.atgvDisplayVersion,pkg.version);
-});

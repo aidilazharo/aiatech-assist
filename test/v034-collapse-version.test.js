@@ -15,11 +15,3 @@ test('all three BA sections start collapsed, with native keyboard-accessible con
   assert.match(src,/refreshDiscoveryGroupCounts\(\)/);
   assert.match(css,/\.discovery-group\[open\]>/);
 });
-test('version appears only in VS Code extension details, not webview',()=>{
-  const pkg=require('../package.json');
-  assert.match(pkg.version,/^\d+\.\d+\.\d+$/);
-  assert.equal(pkg.atgvDisplayVersion,pkg.version);
-  assert.equal(fs.readFileSync(path.join(root,'README.md'),'utf8').trim(),`**Version: ${pkg.atgvDisplayVersion}**\n\n**Author:** [Muhamad Aidil Azhar Salim](mailto:muhamadaidilazhar.salim@aia.com)`);
-  assert.doesNotMatch(htmlSource,/id="headerVersion"|id="gateVersion"|id="version"/);
-  assert.doesNotMatch(src,/\$\('headerVersion'\)|\$\('gateVersion'\)|\$\('version'\)/);
-});

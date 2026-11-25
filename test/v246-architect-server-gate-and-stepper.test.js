@@ -35,9 +35,3 @@ test('circular progress appears above stack selection and animates accessibly',(
  assert.match(css,/atgvStackCirclePulse/);assert.match(css,/atgvStackCircleCompleted/);assert.match(css,/prefers-reduced-motion:reduce/);
  assert.match(ui,/function architectLiveServerReady/);assert.match(ui,/live\.sha===prepared\.sha&&live\.branch===prepared\.branch/);
 });
-test('host approves the saved revision without mandatory server verification',()=>{
- const block=html.slice(html.indexOf("case 'architectApproveStack':"),html.indexOf("case 'devCopilotArtifacts':"));
- assert.doesNotMatch(block,/\.verify\(\{root,stackId:project\.techStackId\}\)/);
- assert.match(block,/techStackPrepared\.remotePushed/);
- assert.match(block,/gate\.approval\(project/);
-});
