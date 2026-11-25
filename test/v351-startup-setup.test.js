@@ -113,6 +113,7 @@ test('setup host requires Jira and Confluence but treats GitHub source access as
    if(url.endsWith('/user')){events.push('github-account');return {login:'tester'};}
    if(url.endsWith('/users/aiamalaysia')){events.push('github-organization');return {login:'aiamalaysia'};}
    if(url.includes('/releases?per_page=1'))return [];
+   if(url.endsWith('/branches/main'))return {name:'main'};
    const match=url.match(/\/repos\/([^/]+)\/([^/]+)$/);
    if(match){events.push('github-repo:'+match[2]);return {full_name:match[1]+'/'+match[2],permissions:{pull:true,push:true}};}
    throw Error('Unexpected URL: '+url);

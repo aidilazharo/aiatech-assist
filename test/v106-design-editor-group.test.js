@@ -18,9 +18,3 @@ test('solution design previews never create or require VS Code editor group 2',(
   assert.match(css,/design-workspace-split/);
   assert.match(css,/design-right-pane/);
 });
-
-test('v0.1.07 metadata is consistent',()=>{
-  const pkg=JSON.parse(read('package.json'));
-  assert.match(pkg.version,/^\d+\.\d+\.\d+$/);
-  assert.equal(pkg.atgvDisplayVersion,pkg.version);
-});

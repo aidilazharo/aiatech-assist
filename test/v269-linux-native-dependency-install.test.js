@@ -114,8 +114,10 @@ test('actual Linux npm install creates a working Vite shim and runs tests/build 
 }));
 
 test('Solution Architect clears a cross-OS node_modules tree before installing the current platform native optional modules',async()=>temp(async root=>{
+ const currentNative=helper.nativeTriple();
+ const foreignNative=process.platform==='darwin'?'linux-x64-gnu':'darwin-arm64';
  await write(path.join(root,'package.json'),{dependencies:{'@libsql/client':'^0.15'},devDependencies:{vite:'^7'}});
- await write(path.join(root,'node_modules/@libsql/darwin-arm64/package.json'),{name:'@libsql/darwin-arm64'});
+ await write(path.join(root,'node_modules','@libsql',foreignNative,'package.json'),{name:'@libsql/'+foreignNative});
  await write(path.join(root,'node_modules/libsql/package.json'),{name:'libsql'});
  await write(path.join(root,'node_modules/vite/package.json'),{name:'vite'});
  await write(path.join(root,'node_modules/@libsql/client/package.json'),{name:'@libsql/client'});
@@ -125,14 +127,14 @@ test('Solution Architect clears a cross-OS node_modules tree before installing t
    cleared=!(await fs.stat(path.join(root,'node_modules')).catch(()=>null));
    await write(path.join(root,'node_modules/@libsql/client/package.json'),{name:'@libsql/client'});
    await write(path.join(root,'node_modules/libsql/package.json'),{name:'libsql'});
-   await write(path.join(root,'node_modules/@libsql/linux-x64-gnu/package.json'),{name:'@libsql/linux-x64-gnu'});
+   await write(path.join(root,'node_modules','@libsql',currentNative,'package.json'),{name:'@libsql/'+currentNative});
    await write(path.join(root,'node_modules/vite/package.json'),{name:'vite'});
    await write(path.join(root,'node_modules/vite/bin/vite.js'),'console.log("vite")');
-   await fs.mkdir(path.join(root,'node_modules/.bin'),{recursive:true});await fs.symlink('../vite/bin/vite.js',path.join(root,'node_modules/.bin/vite'));
+   await fs.mkdir(path.join(root,'node_modules/.bin'),{recursive:true});if(process.platform==='win32')await write(path.join(root,'node_modules/.bin/vite.cmd'),'@echo off\r\n');else await fs.symlink('../vite/bin/vite.js',path.join(root,'node_modules/.bin/vite'));
   }
   return {stdout:'ok',stderr:''};
  };
  const result=await helper.ensureForTarget(root,{kind:'npm',relative:''},{runner});
- assert.equal(cleared,true,'macOS dependency tree removed before Linux npm installation');
- assert.equal(result.verified,true);assert.equal(result.runtime.libsql,'@libsql/linux-x64-gnu');
+ assert.equal(cleared,true,'foreign dependency tree removed before host-native npm installation');
+ assert.equal(result.verified,true);assert.equal(result.runtime.libsql,'@libsql/'+currentNative);
 }));

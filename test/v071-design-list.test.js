@@ -7,7 +7,6 @@ const base=path.join(__dirname,'..');
 const html=fs.readFileSync(path.join(base,'test','generated','extension-source.txt'),'utf8');
 const js=fs.readFileSync(path.join(base,'media','start.js'),'utf8');
 const css=fs.readFileSync(path.join(base,'media','start.css'),'utf8');
-const manifest=require('../package.json');
 test('Design revisions are consolidated inside expandable workflow sections',()=>{
  assert.match(html,/id="designCards"/);
  assert.doesNotMatch(html,/Generated Designs &amp; Diagrams/);
@@ -30,8 +29,4 @@ test('Diagram editing opens from a generated architecture draft and does not ove
 test('Overview Gantt explanatory text remains removed',()=>{
  assert.doesNotMatch(html,/Role schedule and recorded progress\. Update role dates in Settings\./);
  assert.match(html,/id="overviewGanttDetails"/);
-});
-test('Version metadata updated',()=>{
- assert.match(manifest.version,/^\d+\.\d+\.\d+$/);
- assert.equal(manifest.atgvDisplayVersion,manifest.version);
 });

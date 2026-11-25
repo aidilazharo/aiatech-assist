@@ -45,9 +45,3 @@ test('AI design validation safely normalizes common structured text fields',()=>
  assert.equal(result.assumptions[0],'Desktop first');
  assert.equal(result.questions[0],'Should mobile be included?');
 });
-
-test('version is 0.1.37',async()=>{
- const manifest=JSON.parse(await fs.readFile(path.join(__dirname,'..','package.json'),'utf8'));
- assert.match(manifest.version,/^\d+\.\d+\.\d+$/);
- assert.equal(manifest.atgvDisplayVersion,manifest.version);
-});

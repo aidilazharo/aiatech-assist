@@ -7,7 +7,6 @@ const root=path.join(__dirname,'..');
 const ui=fs.readFileSync(path.join(root,'media/start.js'),'utf8');
 const markup=fs.readFileSync(path.join(root,'test/generated/extension-source.txt'),'utf8');
 const css=fs.readFileSync(path.join(root,'media/start.css'),'utf8');
-const manifest=require('../package.json');
 
 class FakeElement{
  constructor(tag){this.tagName=tag;this.children=[];this.parentNode=null;this.attributes={};this.dataset={};this.className='';this.textContent='';this.open=false;this.style={};this.handlers={};}
@@ -75,9 +74,4 @@ test('review UI has advanced editors collapsed and lifecycle actions visible onl
  assert.match(ui,/classList\.toggle\('hidden',item\.status!=='approved'\)/);
  assert.match(css,/\.design-revisions\[open\]>summary/);
  assert.equal((ui.match(/document\.createElement\('button'\);browser\./g)||[]).length,0,'no duplicate browser buttons in history');
-});
-
-test('release version follows requested rollover convention',()=>{
- assert.match(manifest.version,/^\d+\.\d+\.\d+$/);
- assert.equal(manifest.atgvDisplayVersion,manifest.version);
 });

@@ -52,9 +52,19 @@ test('blocks case-insensitive collisions and prevents creating duplicate IDs',as
   await fs.mkdir(path.join(registry.root,'COC'));
   assert.equal((await registry.unmanagedFolders())[0].blocked,false);
   await assert.rejects(()=>registry.create({id:'coc',name:'Another'}),{code:'EEXIST'});
-  await fs.mkdir(path.join(registry.root,'coc'));
-  assert.equal((await registry.unmanagedFolders()).every(x=>x.blocked),true);
-  await assert.rejects(()=>registry.importExistingFolder('COC'),/same ID/i);
+  // APFS/NTFS may reject the second directory themselves.
+  let collisionCreated=true;
+  try{await fs.mkdir(path.join(registry.root,'coc'));}catch(error){
+   if(error.code!=='EEXIST')throw error;
+   collisionCreated=false;
+  }
+  if(collisionCreated){
+   assert.equal((await registry.unmanagedFolders()).every(x=>x.blocked),true);
+   await assert.rejects(()=>registry.importExistingFolder('COC'),/same ID/i);
+  }else{
+   assert.deepEqual(await fs.readdir(registry.root),['COC']);
+   await assert.rejects(()=>registry.create({id:'coc',name:'Another'}),{code:'EEXIST'});
+  }
  }finally{await fs.rm(workspace,{recursive:true,force:true});}
 });
 

@@ -57,7 +57,7 @@ function requireOk(result,expected,activity){
  const status=Number(result?.status)||0;
  if(status===expected)return result.body;
  if(status===401)throw Error('GitHub Destination PAT authentication failed (HTTP 401).');
- if(status===403||status===429)throw Error('GitHub denied '+activity+' (HTTP '+status+'). '+diagnostic(status,result.headers,result.body?.message));
+ if(status===403||status===429){const detail=diagnostic(status,result.headers,result.body?.message);const permissions=status===403&&activity==='pull request creation'&&/access denied/i.test(detail)?' Verify the Destination PAT grants Pull requests: Read and write.':'';throw Error('GitHub denied '+activity+' (HTTP '+status+'). '+detail+permissions);}
  if(status===404)throw Error('Destination repository or GitHub PR endpoint is inaccessible (HTTP 404). Verify the PAT and repository URL.');
  if(status===422)throw Error('GitHub rejected '+activity+' (HTTP 422): confirm the review branch differs from the base and a matching PR does not already exist.');
  throw Error('GitHub '+activity+' failed (HTTP '+status+').');

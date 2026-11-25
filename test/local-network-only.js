@@ -1,4 +1,9 @@
 'use strict';
+// macOS exposes TMPDIR through /var -> /private/var. Normalize fixtures
+// without relaxing production symlink guards or offline network restrictions.
+const fs = require('node:fs');
+const os = require('node:os');
+if (process.platform !== 'win32') process.env.TMPDIR = fs.realpathSync(os.tmpdir());
 const net = require('node:net');
 const http = require('node:http');
 const https = require('node:https');

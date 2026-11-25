@@ -69,7 +69,7 @@ test('sync clones Repo B into an empty external folder before creating review br
   }
   if(args[0]==='remote'&&args[1]==='get-url')return 'https://github.com/Acme/repo-b.git';
   if(args[0]==='fetch'&&cwd===empty)return git(['fetch',bBare,args.at(-1)],cwd);
-  if(args[0]==='ls-remote'&&cwd===empty)return git(['ls-remote','--heads',bBare,args.at(-1)],cwd);
+  if(args[0]==='ls-remote'&&(args.includes('https://github.com/Acme/repo-b.git')||cwd===empty))return git(['ls-remote','--heads',bBare,args.at(-1)],cwd||tmp);
   if(args[0]==='push'&&cwd===empty)return git(['push','--set-upstream',bBare,args.at(-1)],cwd);
   return git(args,cwd||tmp);
  };

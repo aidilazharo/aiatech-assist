@@ -113,8 +113,9 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
     assert.equal(globalState.get('atgvAssist.extensionSettings').github?.repo,undefined);
     handler({command:'saveGithub',settings:{owner:'aia-org',repo:'shared-docs'}});
     await until(()=>globalState.get('atgvAssist.extensionSettings')?.github?.repo==='shared-docs');
-    await until(()=>secrets.size===2);
-    assert.ok([...secrets.values()].some(x=>JSON.parse(x).token==='github-personal'));
+    await until(()=>secrets.has('atgvAssist.extension.githubToken')&&secrets.has('atgvAssist.sdlcCatalogToken'));
+    assert.equal(JSON.parse(secrets.get('atgvAssist.extension.githubToken')).token,'github-personal');
+    assert.equal(secrets.get('atgvAssist.sdlcCatalogToken'),'github-personal');
     handler({command:'listExtensionGithubRepositories',requestId:31,owner:'aia-org'});
     await until(()=>messages.some(m=>m.type==='githubRepositoriesResult'&&m.requestId===31));
     const repos=messages.find(m=>m.type==='githubRepositoriesResult'&&m.requestId===31);

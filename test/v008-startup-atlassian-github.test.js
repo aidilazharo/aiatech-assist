@@ -47,7 +47,7 @@ test('host checks services sequentially, enforces read PAT for sources with opti
  assert.match(host,/await spec\.check\(\)/);
  assert.match(host,/await onProgress\(value\)/);
  assert.match(host,/meta\.permissions\?\.pull===false/);
- assert.match(host,/sourceAccess=\{read:true,write:meta\.permissions\?\.push===true\}/);
+ assert.match(host,/sourceAccess=\{read:true,write:meta\.permissions\?\.push===true&&!meta\.archived&&!meta\.disabled\}/);
  assert.match(host,/await verifyReleaseAssetDownload\(url,asset\.id\)/);
  assert.match(host,/redirect:'manual'/);
  assert.match(host,/release-assets\|github-releases\|objects/);

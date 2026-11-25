@@ -1,12 +1,12 @@
-# ATGV AIATECH Assist v0.0.99
+# ATGV AIATECH Assist v0.1.0
 
 ## Changes
 
-- Add explicit PAT and VS Code GitHub sign-in modes in Extension Settings; use the selected mode for project API operations instead of silently preferring an old PAT.
-- Separate read-only Git transport checks from REST API validation and report main branch protection or pull-request rules independently. Never test write access with a remote mutation.
-- Recognize GH013/GH006 repository policy errors; use selected credentials for developer story push and architect bootstrap publish, with origin verification and transient Git headers.
-- Retain independent Library and Startup credential handling and preserve optional GitHub access for Jira/Confluence workflows.
+- Remove 4 redundant version-only regression tests and duplicated metadata assertions; retain canonical release validation and UI accessibility checks.
+- Normalize test temporary directories to their physical path on Unix to address macOS /var and /private/var alias failures without weakening production symlink protections.
+- Make project-folder collision, scheduler paths, and native dependency fixtures platform-aware; update GitHub connection mocks and expected credential persistence, and isolate Repo B remote probes to local fixture repositories.
+- Preserve actionable pull-request permission diagnostics alongside rate-limit and SSO messages.
 
 ## Validation
 
-- Added focused policy and authentication regressions; full suite, live corporate credentials and VS Code interactive sign-in remain unverified. No VSIX generated.
+- Reviewed the v0.0.98 macOS log (2,667 tests; 56 failures). This targeted cleanup does not claim every recorded failure is resolved. Full regression execution and packaging remain pending. No VSIX generated.

@@ -70,7 +70,7 @@ test('GitHub repository selection auto-prepares only the matching project checko
  assert.doesNotMatch(host,/id="devCloneRepo" class="secondary"/);
  assert.match(host,/const dest=path\.join\(resolvedParent,fields\.repo\)/);
  assert.match(host,/developerGit\.matchesGithubRepo\(checkout\.remote,fields\.owner,fields\.repo\)/);
- assert.match(host,/developerGit\.cloneConfigured\(resolvedParent,fields\.owner,fields\.repo,fields\.branch\)/);
+ assert.match(host,/developerGit\.cloneConfigured\(resolvedParent,fields\.owner,fields\.repo,fields\.branch,\{token:/);
  assert.match(web,/function showGithubRepoPreview\(\)/);
  assert.match(host,/id="githubRepository" type="hidden"/);
 });
