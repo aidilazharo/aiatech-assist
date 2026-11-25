@@ -45,6 +45,16 @@ test('Quill uses the verified vendored asset and preserves plain-text source sem
  assert.match(ui,/input\.hidden=kind==='iso'\|\|preflight\|\|showQuill/);
  assert.doesNotMatch(ui,/dangerouslyPasteHTML|\.innerHTML\s*=/);
 });
+test('editable source requires Quill and exposes a safe retry',()=>{
+ assert.match(ui,/input\.hidden=kind==='iso'\|\|preflight\|\|showQuill\|\|kind==='source'/);
+ assert.match(ui,/input\.readOnly=kind!=='source'\|\|!showQuill/);
+ assert.match(ui,/quillFallback\.textContent=artifactContext\.text/);
+ assert.match(ui,/invoke\('librarySync',\{fromBAQuill:true/);
+ assert.match(ui,/artifactQuill\.history\.clear\(\)/);
+ assert.match(html,/id="baAutoQuillRetry"/);
+ assert.match(html,/<pre id="baAutoQuillFallback"/);
+ assert.match(css,/\.ba-quill-actions\[hidden\]/);
+});
 test('all edited first-party UI code is syntactically valid',()=>{
  for(const file of ['src/lib/webview/dashboard-html.js','media/ba-automatic-ui.js','media/start.js'])
   assert.doesNotThrow(()=>new vm.Script(read(file),{filename:file}));

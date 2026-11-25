@@ -23,7 +23,8 @@
  let jiraFieldView=null,jiraFieldDirty=false,jiraFieldLoading=false,jiraFieldRequest=0;
  const collapsed=new Set();
  const input=get('baAutoArtifactText'),quillMount=get('baAutoQuillEditor');
- let artifactQuill=null,quillKey='',quillHadFinalLine=false;
+ let artifactQuill=null,quillKey='',quillHadFinalLine=false,quillFailure=false,quillRetrying=false;
+ const quillHelp=get('baAutoQuillHelp'),quillRetry=get('baAutoQuillRetry'),quillFallback=get('baAutoQuillFallback'),quillActions=get('baAutoQuillActions');
 
  const active=()=>view==='discovery'&&selectedRole==='business-analyst';
  const busy=()=>aiResolve.running||state?.phase==='running'||state?.phase==='publishing';
@@ -98,17 +99,21 @@
   return !quillHadFinalLine&&value.endsWith('\n')?value.slice(0,-1):value;
  }
  function syncQuill(){
-  if(!['source','original'].includes(kind)||!artifactContext||typeof window.Quill!=='function')return false;
+  if(!['source','original'].includes(kind)||!artifactContext||typeof window.Quill!=='function'||quillFailure)return false;
   const key=activeId+'|'+sourceDigest+'|'+kind+'|'+artifactContext.revision;
   if(quillKey!==key){
    resetQuill();
    const editor=document.createElement('div');
    editor.setAttribute('aria-label',kind==='source'?'Editable source document text':'Original source document text');
    quillMount.append(editor);
-   artifactQuill=new window.Quill(editor,{theme:'snow',readOnly:kind!=='source',
-    modules:{toolbar:false},formats:[],placeholder:'Document text'});
+   try{artifactQuill=new window.Quill(editor,{theme:'snow',readOnly:kind!=='source',
+    modules:{toolbar:false},formats:[],placeholder:'Document text'});}
+   catch(error){quillFailure=true;resetQuill();return false;}
+   artifactQuill.root.setAttribute('aria-label',kind==='source'?'Editable source document text':'Original source document text');
+   artifactQuill.root.setAttribute('aria-multiline','true');
    quillHadFinalLine=artifactContext.text.endsWith('\n');
    artifactQuill.setText(artifactContext.text,'api');
+   artifactQuill.history.clear();
    artifactQuill.on('text-change',(_delta,_old,origin)=>{
     if(origin!=='user'||kind!=='source')return;
     input.value=quillText();
@@ -136,7 +141,7 @@
   get('baAutoArtifactLabel').textContent=kindNames[kind];
   get('baAutoArtifactStatus').textContent='Loading document…';
   if(kind==='iso')viewer.textContent='Loading structured Business Requirements…';
-  artifactContext=null;input.readOnly=true;
+  artifactContext=null;input.readOnly=true;resetQuill();
   invoke('baReadArtifact',{kind,digest:sourceDigest,requestId:++request});
  }
 
@@ -159,7 +164,17 @@
   viewer.hidden=kind!=='iso';
   const showQuill=syncQuill();
   quillMount.hidden=!showQuill;
-  input.hidden=kind==='iso'||preflight||showQuill;
+  input.hidden=kind==='iso'||preflight||showQuill||kind==='source';
+  const sourceTab=kind==='source';
+  const unavailable=sourceTab&&!!artifactContext&&!showQuill;
+  quillActions.hidden=!sourceTab||!showQuill;
+  for(const control of quillActions.querySelectorAll('button'))control.disabled=busy()||!baCanEdit('ba-discovery');
+  quillHelp.hidden=!unavailable;quillFallback.hidden=!unavailable;
+  if(unavailable){
+   if(quillFallback.textContent!==artifactContext.text)quillFallback.textContent=artifactContext.text;
+   get('baAutoQuillMessage').textContent='Quill is unavailable. Load the verified Library to edit this source; the preview below is read-only.';
+   quillRetry.disabled=quillRetrying||busy();
+  }else if(quillFallback.textContent)quillFallback.textContent='';
   get('baAutoArtifactLabel').hidden=kind==='iso'||preflight;
   get('baAutoPreflightPlaceholder').hidden=!get('baSourcePreflight').classList.contains('hidden');
   const documentPanel=get('baAutoDocumentPanel');
@@ -174,8 +189,8 @@
   if(kind==='jira-fields'){if(!jiraFieldView&&!jiraFieldLoading)loadJiraFields();updateJiraFieldButtons();}
   if(currentSource&&get('baAutoSource').open&&changed&&!preflight)requestArtifact();
   if(artifactContext){
-   input.readOnly=kind!=='source'||busy()||!baCanEdit('ba-discovery');
-   get('baAutoArtifactSave').disabled=input.readOnly||!artifactDirty()||!input.value.trim();
+   input.readOnly=kind!=='source'||!showQuill||busy()||!baCanEdit('ba-discovery');
+   get('baAutoArtifactSave').disabled=input.readOnly||!artifactDirty()||!input.value.trim()||input.value.length>1000000;
   }else get('baAutoArtifactSave').disabled=true;
   syncDocumentActions();
  }
@@ -552,6 +567,7 @@
   if(jiraFieldDirty){get('baAutoJiraFieldsStatus').textContent='Save your field selection before switching tabs.';return;}
   if(artifactDirty()){get('baAutoArtifactStatus').textContent='Save your edits before switching documents.';return;}
   kind=selected.dataset.baDocument;
+  artifactContext=null;input.value='';resetQuill();
   renderArtifacts();
   if(kind==='preflight'&&!get('baSourcePreflight').classList.contains('hidden'))get('baSourcePreflight').open=true;
   requestArtifact();
@@ -596,6 +612,14 @@
   renderJira();
  });
  get('baAutoSource').addEventListener('toggle',()=>{if(get('baAutoSource').open&&!artifactContext)requestArtifact();});
+ get('baAutoQuillUndo').addEventListener('click',()=>artifactQuill?.history.undo());
+ get('baAutoQuillRedo').addEventListener('click',()=>artifactQuill?.history.redo());
+ quillRetry.addEventListener('click',()=>{
+  if(quillRetry.disabled||artifactDirty())return;
+  quillRetrying=true;quillRetry.disabled=true;
+  get('baAutoArtifactStatus').textContent='Loading verified Quill assets…';
+  invoke('librarySync',{fromBAQuill:true,query:'',category:'All',scope:'user'});
+ });
  input.addEventListener('input',render);
  get('baAutoArtifactSave').addEventListener('click',()=>{
   if(get('baAutoArtifactSave').disabled||!artifactContext)return;
@@ -634,6 +658,10 @@
  });
  window.addEventListener('message',({data:m})=>{
   if(!m)return;
+   if(m.type==='librarySyncResult'&&quillRetrying){
+    quillRetrying=false;quillRetry.disabled=false;
+    get('baAutoArtifactStatus').textContent=m.message||'Library sync finished. Reopen Business Documents if the editor reloads.';
+   }
   if(m.projectId===activeId&&m.requestId===jiraFieldRequest&&['baJiraFieldSelectionLoaded','baJiraFieldSelectionSaved','baJiraFieldSelectionError'].includes(m.type)){
    jiraFieldLoading=false;
    if(m.type==='baJiraFieldSelectionLoaded'){jiraFieldDirty=false;drawJiraFields(m.value);}

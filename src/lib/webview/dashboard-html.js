@@ -31,7 +31,7 @@ function html(webview,{resumeLibrary=false}={}){
     subtask:"<path d=\"M5 5v7h4m-3-3 3 3-3 3M12 8h7v8h-7zM14 12l1 1 2-2\"/>"
   };
   const baHeaderIcon=(name,variant='')=>`<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${variant}>${baHeaderIcons[name]}</svg>`;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.96';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.97';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const uiConsistencyCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-consistency.css'));
@@ -454,7 +454,10 @@ function html(webview,{resumeLibrary=false}={}){
             <div id="baAutoDocumentPanel" role="tabpanel" aria-labelledby="baAutoTabIso">
               <label for="baAutoArtifactText" id="baAutoArtifactLabel">Structured ISO BRD</label>
               <div id="baAutoFormattedDocument" class="ba-document-viewer" role="document" aria-label="Formatted ISO 29148 Business Requirements" hidden></div>
+              <div id="baAutoQuillActions" class="ba-quill-actions" role="toolbar" aria-label="Source document editing" hidden><button id="baAutoQuillUndo" type="button" class="secondary" aria-label="Undo source edit">Undo</button><button id="baAutoQuillRedo" type="button" class="secondary" aria-label="Redo source edit">Redo</button><span class="muted">Plain-text evidence · Quill editor</span></div>
               <div id="baAutoQuillEditor" class="ba-auto-quill-editor" aria-label="Quill document text editor" hidden></div>
+              <div id="baAutoQuillHelp" class="ba-quill-help" hidden><p id="baAutoQuillMessage" role="status"></p><button id="baAutoQuillRetry" type="button" class="secondary">Load Quill editor</button></div>
+              <pre id="baAutoQuillFallback" class="ba-quill-fallback" aria-label="Read-only source preview" hidden></pre>
               <textarea id="baAutoArtifactText" rows="11" maxlength="1000000" spellcheck="false" readonly></textarea>
               <div class="ba-auto-inline"><span id="baAutoArtifactStatus" role="status"></span></div>
             </div>

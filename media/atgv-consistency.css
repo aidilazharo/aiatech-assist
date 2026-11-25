@@ -301,8 +301,12 @@ body:not(.gate-mode) #topNotification .top-notification-actions button{
  outline:2px solid var(--vscode-focusBorder,#83bcff);outline-offset:2px
 }
 /* Quill is loaded from the pinned, verified Library bundle (not a CDN).
-   Keep the textarea fallback usable if the Library is not installed. */
+   Editable evidence uses Quill; missing assets expose a read-only preview. */
 #discoveryView .ba-auto-quill-editor{width:100%;min-width:0;margin-top:8px}
+#discoveryView .ba-quill-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#discoveryView .ba-quill-actions[hidden],#discoveryView .ba-quill-help[hidden],#discoveryView .ba-quill-fallback[hidden]{display:none!important}
+#discoveryView .ba-quill-help{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+#discoveryView .ba-quill-fallback{max-height:420px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-family:inherit;padding:14px;border:1px solid var(--vscode-panel-border,#485260);border-radius:6px}
 #discoveryView .ba-auto-quill-editor[hidden]{display:none!important}
 #discoveryView .ba-auto-quill-editor .ql-container.ql-snow{
  min-height:clamp(290px,42vh,560px);max-height:560px;overflow:auto;
@@ -311,7 +315,7 @@ body:not(.gate-mode) #topNotification .top-notification-actions button{
 }
 #discoveryView .ba-auto-quill-editor .ql-editor{
  min-height:clamp(290px,42vh,560px);padding:14px 16px;
- white-space:pre-wrap;font-family:var(--vscode-editor-font-family,inherit);
+ white-space:pre-wrap;font-family:var(--vscode-font-family,system-ui,sans-serif);
  font-size:var(--vscode-editor-font-size,13px);line-height:1.65;
  overflow-wrap:anywhere
 }

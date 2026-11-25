@@ -9162,7 +9162,7 @@ async function handleDashboardMessage(msg){
           let libraryNotice='', activateEditorAssets=false;
           try{
             const installed=await catalogVendorLibraries.install({catalogRoot:selected.checkout||selected.root,storageRoot:context.globalStorageUri.fsPath,commit:selected.sha});
-            const changed=webviewVendorDir!==installed.dir||!vendorWebviewReady;
+            const changed=webviewVendorDir!==installed.dir||!vendorWebviewReady||msg.fromBAQuill===true;
             installedVendorAssets=installed;
             if(changed){activateEditorAssets=true;libraryNotice=' Verified UI libraries installed. Reloading editor.';}vendorLibraryLastError='';
           }catch(e){vendorLibraryLastError=e.message;libraryNotice=' Editor library install failed: '+e.message;report('Library asset sync: '+e.message);}
