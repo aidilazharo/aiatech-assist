@@ -12,7 +12,7 @@ test('Developer uses one Jira DataTable, without the old three-step workbench',(
  assert.match(js,/ATGVDataTables\.mount\(root,rows/);
 });
 test('Jira assignment and architect approval backend routes are preserved',()=>{
- for(const id of ['roleJiraTable','roleJiraRefresh','architectSaveStack','architectTestStack','architectApproveStack'])assert.equal((ext.match(new RegExp('id="'+id+'"','g'))||[]).length,1,id);
+ for(const id of ['roleJiraTable','roleJiraRefresh','architectSaveStack','architectApproveStack'])assert.equal((ext.match(new RegExp('id="'+id+'"','g'))||[]).length,1,id);
  for(const command of ['roleJiraAssign','roleJiraIssues','architectSaveStack','architectTestStack','architectApproveStack','devExecute'])assert.match(ext,new RegExp("case '"+command+"':"));
  assert.match(js,/send\('roleJiraAssign'/);
 });

@@ -109,7 +109,7 @@ test('Host and UI expose a distinct consent-gated custom handoff while catalog g
  const ui=fs.readFileSync(path.join(__dirname,'../media/start.js'),'utf8');
  const code=host.slice(host.indexOf("case 'architectApproveCustomStack':{"),host.indexOf("case 'architectApproveStack':{"));
  assert.ok(code.startsWith("case 'architectApproveCustomStack':{"));
- assert.match(code,/handoff\.validate\(root/);
+ assert.match(code,/handoff\.prepareHandoff\(root/);
  assert.match(code,/publishApprovedStack/);
  assert.match(code,/Approve Development Handoff/);
  assert.match(code,/No force-push or merge to main/);

@@ -39,7 +39,7 @@ test('after successful Reset Tech Stack, Save is re-enabled for the retained sel
  vm.runInContext('syncArchitectStackButtons(project)',vm.createContext({...context,project:afterReset}));
  assert.equal(controls.architectSaveStack.disabled,false);
  assert.equal(controls.architectResetStack.disabled,true);
- assert.equal(controls.architectTestStack.disabled,true);
+ assert.equal(controls.architectApproveStack.disabled,true);
 });
 test('after reset, changing selection allows Save; blank selections and active operations do not',()=>{
  const {controls,context}=mock();

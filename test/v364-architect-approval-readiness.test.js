@@ -16,11 +16,11 @@ function project(){
   techStackValidation:gate.evidence({stackId:'react',repo,results:['test','build','run'].map(operation=>({relative:'',operation,passed:true,head:sha,at:'2026-11-16T00:00:00Z'}))})
  }};
 }
-test('approval must still reject a stopped or mismatched server despite clickable button',()=>{
+test('approval accepts stopped or mismatched server evidence without claiming verification',()=>{
  const {project:p,repo}=project();
- assert.throws(()=>gate.approval(p,repo,'Architect'),/Run Server successfully/);
+ assert.equal(gate.approval(p,repo,'Architect').serverStatus,'unverified');
  p.techStackServerVerification={status:'verified',stackId:'react',companionId:'',root:repo.root,branch:p.techStackPrepared.branch,sha:'b'.repeat(40),at:'2026-11-16T00:00:00Z'};
- assert.throws(()=>gate.approval(p,repo,'Architect'),/Run Server successfully/);
+ assert.equal(gate.approval(p,repo,'Architect').serverStatus,'unverified');
  p.techStackServerVerification.sha=repo.sha;
  assert.equal(gate.approval(p,repo,'Architect').sha,repo.sha);
 });
@@ -45,12 +45,12 @@ test('Test & Run actually checks HTTP and API identity before issuing test evide
 test('approval remains actionable and host checks live state or saved verified SHA',()=>{
  const ui=fs.readFileSync(path.join(root,'media/start.js'),'utf8');
  const src=fs.readFileSync(path.join(root,'src/lib/runtime/extension-runtime.js'),'utf8');
- assert.match(ui,/const canRequestApproval=!!\(saved&&tested&&prepared\?\.remotePushed===true\)/);
+ assert.match(ui,/const canRequestApproval=!!\(saved&&prepared\?\.remotePushed===true\)/);
  assert.match(ui,/architectApproveStack'\)\.disabled=architectActionBusy\|\|!canRequestApproval\|\|approved/);
  const code=src.slice(src.indexOf("case 'architectApproveStack':{"),src.indexOf("case 'devCopilotArtifacts':{"));
- assert.match(code,/approvalEvidence\(project,serverState\)/);
+ assert.doesNotMatch(code,/approvalEvidence\(project,serverState\)/);
  assert.doesNotMatch(code,/if\(!serverState\.running\|\|!serverState\.healthy\)throw Error/);
- assert.match(code,/gate\.requireServerVerification\(verifiedProject\)/);
- assert.match(code,/gate\.approval\(verifiedProject,repo,actor\)/);
+ assert.doesNotMatch(code,/gate\.requireServerVerification/);
+ assert.match(code,/gate\.approval\(project,repo,actor\)/);
  assert.match(code,/publishApprovedStack/);
 });

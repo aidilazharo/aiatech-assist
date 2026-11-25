@@ -47,8 +47,8 @@ test('Test & Run allows committed changes but blocks auto committing edited or u
 }));
 
 test('Solution Architect UI includes three progressive controls and all extra buttons are removed',()=>{
- for(const id of ['architectStackSelect','architectSaveStack','architectTestStack','architectApproveStack'])assert.match(host,new RegExp('id="'+id+'"'));
- assert.match(ui,/architectTestStack'\)\.classList\.remove\('hidden'\)/);
+ for(const id of ['architectStackSelect','architectSaveStack','architectApproveStack'])assert.match(host,new RegExp('id="'+id+'"'));
+ assert.doesNotMatch(host,/id="architectTestStack"/);
  assert.match(ui,/architectApproveStack'\)\.classList\.remove\('hidden'\)/);
  for(const id of ['architectInitialize','architectGenerate','architectCommit','architectPublish','architectRecommend','architectUseConfiguredRepo','architectCompanion'])assert.doesNotMatch(host,new RegExp('id="'+id+'"'));
  assert.match(host,/techStackPrepared/);
@@ -56,7 +56,7 @@ test('Solution Architect UI includes three progressive controls and all extra bu
  assert.match(require('node:fs').readFileSync(require('node:path').join(__dirname,'../src/architect-stack-bootstrap.js'),'utf8'),/architect\.save\(root,\[stackId\]\)/);
  assert.match(host,/architectSimple\.generatedCommitPlan/);
  assert.match(host,/stack-dependency-helper/);
- assert.match(host,/gate\.approval\(verifiedProject,repo,actor\)/);
+ assert.match(host,/gate\.approval\(project,repo,actor\)/);
 });
 
 test('Developer role table requires architect approval to claim, and duplicate panels are absent',()=>{

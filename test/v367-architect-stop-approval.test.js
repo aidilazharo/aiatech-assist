@@ -57,16 +57,16 @@ test('unknown server state cannot silently approve using cached proof',()=>{
  const p=preparedProject();p.techStackServerVerification=verification.evidenceIfHealthy(p,live);
  for(const state of [{},{healthy:false},null])assert.throws(()=>verification.approvalEvidence(p,state),/Unable to determine/);
 });
-test('host and webview agree that a stopped verified revision is ready for approval',()=>{
+test('host and webview approve the saved revision independently of optional server evidence',()=>{
  const ui=fs.readFileSync(path.join(root,'media/start.js'),'utf8');
  const host=fs.readFileSync(path.join(root,'src/lib/runtime/extension-runtime.js'),'utf8');
  const block=host.slice(host.indexOf("case 'architectApproveStack':{"),host.indexOf("case 'devCopilotArtifacts':{"));
- assert.match(ui,/verified for this commit and is now stopped\. Ready for Architect approval/);
+ assert.match(ui,/Test and server checks are informational/);
  assert.doesNotMatch(ui,/Restart before approval/);
- assert.match(ui,/const serverVerified=!!\(saved&&tested&&architectServerRequirementReady\(project,stackId\)\)/);
- assert.match(block,/approvalEvidence\(project,serverState\)/);
- assert.match(block,/gate\.requireServerVerification\(verifiedProject\)/);
- assert.match(block,/gate\.approval\(verifiedProject,repo,actor\)/);
+ assert.match(ui,/const canRequestApproval=!!\(saved&&prepared\?\.remotePushed===true\)/);
+ assert.doesNotMatch(block,/approvalEvidence\(project,serverState\)/);
+ assert.doesNotMatch(block,/gate\.requireServerVerification/);
+ assert.match(block,/gate\.approval\(project,repo,actor\)/);
  assert.match(block,/publishApprovedStack/);
  assert.doesNotMatch(block,/if\(!serverState\.running\|\|!serverState\.healthy\)/);
 });

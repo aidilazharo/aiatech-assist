@@ -14,9 +14,9 @@ const verification={status:'verified',stackId:'react',companionId:'',root:prepar
 const resultSet=['test','build','run'].map(operation=>({operation,relative:'',head:sha,passed:true,at:'2026-11-06T02:00:00Z'}));
 const validated=gate.evidence({stackId:'react',repo:{root:prepared.root,sha,clean:true},results:resultSet});
 const project={techStackId:'react',techStackCompanionId:'',techStackPrepared:prepared,techStackValidation:validated};
-test('Developer approval requires an explicit successful server run for saved revision',()=>{
+test('Developer approval accepts a saved revision without server verification',()=>{
  assert.equal(gate.serverVerified(project),false);
- assert.throws(()=>gate.approval(project,{root:prepared.root,sha,clean:true},'Architect'),/Run Server successfully/);
+ assert.equal(gate.approval(project,{root:prepared.root,sha,clean:true},'Architect').serverStatus,'unverified');
  assert.equal(gate.serverVerified({...project,techStackServerVerification:verification}),true);
  const approved=gate.approval({...project,techStackServerVerification:verification},{root:prepared.root,sha,clean:true},'Architect');
  assert.equal(approved.sha,sha);
@@ -36,23 +36,23 @@ test('server proof is persisted but invalidated by selected stack change and pre
  const stopped=normalizeProjectInput({...base,techStackServerVerification:null},base);
  assert.equal(stopped.techStackServerVerification,null);
 });
-test('Solution Architect markup uses compact four-step tracker and one set of controls',()=>{
+test('Solution Architect markup uses compact three-step tracker and one set of controls',()=>{
  const html=read('test/generated/extension-source.txt');const css=read('media/start.css');
- for(const id of ['architectSaveStage','architectDependenciesStage','architectTestStage','architectApproveStage','architectServerToggle','architectApproveStack','architectStackStatusBadge','architectCatalogStatus']){
+ for(const id of ['architectSaveStage','architectDependenciesStage','architectApproveStage','architectServerToggle','architectApproveStack','architectStackStatusBadge','architectCatalogStatus']){
   assert.equal((html.match(new RegExp('id="'+id+'"','g'))||[]).length,1,id);
  }
  assert.match(html,/class="architect-gated-stages architect-stepper"/);
  assert.match(html,/architect-server-actions/);
  assert.match(css,/#242529/);
 });
-test('server approval is enforced in host and re-evaluated after server status changes',()=>{
+test('approval uses saved Git revision and does not require server verification',()=>{
  const host=read('test/generated/extension-source.txt'),ui=read('media/start.js');
  const block=host.slice(host.indexOf("case 'architectApproveStack':{"),host.indexOf("case 'devCopilotArtifacts':{"));
- assert.match(block,/approvalEvidence\(project,serverState\)/);
- assert.match(block,/gate\.requireServerVerification\(verifiedProject\)/);
+ assert.doesNotMatch(block,/approvalEvidence\(project,serverState\)/);
+ assert.doesNotMatch(block,/gate\.requireServerVerification/);
  assert.match(host,/techStackServerVerification:verification/);
  assert.match(host,/techStackServerVerification:null/);
- assert.match(ui,/const canRequestApproval=!!\(saved&&tested&&prepared\?\.remotePushed===true\)/);
+ assert.match(ui,/const canRequestApproval=!!\(saved&&prepared\?\.remotePushed===true\)/);
  assert.match(ui,/architectApproveStack'\)\.disabled=architectActionBusy\|\|!canRequestApproval\|\|approved/);
  assert.doesNotMatch(block,/if\(!serverState\.running\|\|!serverState\.healthy\)throw Error/);
  assert.match(ui,/architectServerSnapshotProjectId===activeId/);

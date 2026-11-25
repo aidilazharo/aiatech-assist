@@ -64,7 +64,7 @@ test('an empty cloned repo can receive its initial baseline, scaffold branch and
 test('Architect exposes only Save, Test & Run and Approve; Developer uses the Jira assignment table',()=>{
  const html=require('node:fs').readFileSync(path.join(__dirname,'../test/generated/extension-source.txt'),'utf8');
  const ui=require('node:fs').readFileSync(path.join(__dirname,'../media/start.js'),'utf8');
- for(const id of ['architectStackSelect','architectSaveStack','architectTestStack','architectApproveStack','roleJiraTable','roleJiraRefresh']){
+ for(const id of ['architectStackSelect','architectSaveStack','architectApproveStack','roleJiraTable','roleJiraRefresh']){
   assert.match(html,new RegExp(`id="${id}"`));assert.ok(ui.includes(`'${id}'`),`UI control ${id} missing its listener or reference`);
  }
  for(const removed of ['architectGenerate','architectInitialize','architectCommit','architectPublish','developerWorkbench','devLoadJira','devTest','workGithub'])assert.doesNotMatch(html,new RegExp(`id="${removed}"`));

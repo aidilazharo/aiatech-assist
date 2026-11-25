@@ -75,7 +75,7 @@ test('UI has red Stop Server and persistent pinned-SHA approval readiness',()=>{
  const status=runtime.slice(runtime.indexOf("case 'architectServerStatus':{"),runtime.indexOf("case 'architectRunServer':{"));
  assert.match(status,/retainVerifiedEvidence/);
  const approve=runtime.slice(runtime.indexOf("case 'architectApproveStack':{"),runtime.indexOf("case 'architectApproveStack':{")+3500);
- assert.match(approve,/approvalEvidence\(project,serverState\)/);
+ assert.doesNotMatch(approve,/approvalEvidence\(project,serverState\)/);
  assert.doesNotMatch(approve,/!serverState\.running\|\|!serverState\.healthy/);
  const tests=runtime.slice(runtime.indexOf("case 'architectTestStack':{"),runtime.indexOf("case 'architectServerStatus':{"));
  assert.match(tests,/startAfterSuccessfulTest/);

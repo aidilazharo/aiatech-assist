@@ -14,17 +14,19 @@ const exampleRepo={root:'/tmp/a-reviewed-repo',sha:'abc123',clean:true};
 const resultSet=relative=>['test','build','run'].map(operation=>({relative,operation,passed:true,head:'abc123',at:'2026-11-04T00:00:00Z'}));
 const verification=(stackId='react',companionId='')=>({techStackPrepared:{stackId,companionId,root:exampleRepo.root,sha:exampleRepo.sha,branch:'bootstrap/react-initial'},techStackServerVerification:{status:'verified',stackId,companionId,root:exampleRepo.root,sha:exampleRepo.sha,branch:'bootstrap/react-initial',at:'2026-11-05T12:00:00Z'}});
 
-test('Architect cannot approve without full test, build and run evidence for each target',()=>{
+test('Architect approval requires a saved revision; test evidence remains independently validated',()=>{
  const selected={techStackId:'react',techStackCompanionId:''};
- assert.throws(()=>gate.approval(selected,exampleRepo,'Architect'),/Test & Run Stack/);
+ assert.throws(()=>gate.approval(selected,exampleRepo,'Architect'),/Save the current technology stack/);
  assert.throws(()=>gate.evidence({stackId:'react',repo:exampleRepo,results:resultSet('').slice(0,2)}),/test, build, and run/);
  assert.throws(()=>gate.evidence({stackId:'react',repo:exampleRepo,results:resultSet('').map(r=>r.operation==='run'?{...r,passed:false}:r)}),/must pass/);
  assert.throws(()=>gate.evidence({stackId:'react',repo:{...exampleRepo,clean:false},results:resultSet('')}),/clean Git/);
  assert.throws(()=>gate.evidence({stackId:'react',repo:exampleRepo,results:resultSet('').map(r=>({...r,head:'wrong'}))}),/revision changed/);
  const tested=gate.evidence({stackId:'react',repo:exampleRepo,results:resultSet('')});
  const proof=gate.approval({...selected,...verification(),techStackValidation:tested},exampleRepo,'Architect');
+ const untested=gate.approval({...selected,techStackPrepared:verification().techStackPrepared},exampleRepo,'Architect');
+ assert.equal(untested.testStatus,'unverified');assert.equal(untested.serverStatus,'unverified');
  assert.equal(proof.status,'approved');assert.equal(proof.sha,'abc123');
- assert.throws(()=>gate.approval({...selected,techStackValidation:tested},{...exampleRepo,sha:'changed'},'Architect'),/repository changed/);
+ assert.throws(()=>gate.approval({...selected,...verification(),techStackValidation:tested},{...exampleRepo,sha:'changed'},'Architect'),/repository changed/);
  assert.equal(gate.developerAllowed({...selected,techStackApproval:proof}),true);
  assert.throws(()=>gate.requireDeveloperApproval({...selected,techStackApproval:null}),/Solution Architect must/);
 });
@@ -92,6 +94,6 @@ test('Solution Architect bootstrap remains visible despite progress-only layout'
  assert.match(css,/#workView\.role-progress-only > :not\(\.role-overview\):not\(#architectBootstrap\)/);
  assert.match(css,/#workView\.role-progress-only > #architectBootstrap:not\(\.hidden\)\{display:block!important\}/);
  assert.match(host,/id="architectStackSelect"/);
- assert.match(host,/id="architectTestStack"/);
+ assert.doesNotMatch(host,/id="architectTestStack"/);
  assert.match(host,/id="architectApproveStack"/);
 });
