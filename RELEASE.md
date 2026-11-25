@@ -1,12 +1,11 @@
-# ATGV AIATECH Assist v0.1.31
+# ATGV AIATECH Assist v0.1.32
 
 ## Changes
 
-- Enable Custom Stack Install & Run after a runnable application is scanned, even if its Git repository has no initial commit.
-- Review the exact eligible source-file list and obtain explicit confirmation before creating the first local Git commit. Exclude ignored files, sensitive paths, likely embedded secrets, binaries and dependencies. Preserve all excluded working files and pre-existing Git staging/history. No GitHub push occurs from the project workflow.
-- Verify the new SHA and continue the existing six-stage workflow. Dirty working trees remain runnable in-place. The optional AI advisory does not gate execution.
+- Pull opted-in bundled projects from the selected nested project Git checkout; retain the current branch for ATGV-managed preview.
+- Restore Windows x64 Node.js 24 dependencies from lockfile-bound split archives tracked in the project repository, with SHA-256 verification, safe extraction and read-only npm validation.
+- Skip npm install and npm ci for opted-in applications; fail clearly if the bundle is missing or incompatible. Restore both frontend and backend for a detected full-stack project and reuse the shared helper in Developer worktrees.
 
 ## Validation
 
-- JavaScript syntax checks performed; new initial-commit regression tests added. Full regression, Windows runtime and VSIX packaging not yet verified.
-- npm access-policy errors remain separate; no policy bypass or package substitutions in this release.
+- JavaScript syntax checked and regression coverage added for missing bundles, platform isolation and manifest fingerprinting. Full regression, Windows archive extraction, runtime and VSIX packaging have not been verified. Windows bundle publication depends on the project build workflow.
