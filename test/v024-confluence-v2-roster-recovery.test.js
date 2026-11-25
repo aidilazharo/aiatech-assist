@@ -42,6 +42,7 @@ test('Confluence database v2 CRUD is versioned, project-scoped and idempotent',a
   if(url.endsWith('/databases/91/properties')&&method==='POST'){
    property={id:'50',key:options.data.key,value:options.data.value,version:{number:1}};return property;
   }
+  if(url.endsWith('/databases/91/properties/50')&&method==='GET')return property;
   if(url.endsWith('/databases/91/properties/50')&&method==='PUT'){
    assert.equal(options.data.version.number,property.version.number+1);
    property={...property,value:options.data.value,version:{number:property.version.number+1}};
