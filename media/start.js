@@ -2142,11 +2142,13 @@ window.addEventListener('message',event=>{
     $('jiraInventoryRefresh').disabled=false;
     $('jiraInventoryStatus').textContent=msg.count+' Jira items loaded'+(msg.truncated?' · 20,000-item safety cap reached; additional Jira records may exist.':' · search complete.');
     renderJiraInventory();renderBAJiraInventory();renderPMDashboard();
+    if(jiraRoleAssignmentRefresh?.requestId===msg.requestId){const pending=jiraRoleAssignmentRefresh;jiraRoleAssignmentRefresh=null;if(pending.projectId===activeId&&pending.key===jiraModalKey)refreshJiraIssueModal();}
     if(reviewStaleLinks)send('reconcileBRJiraLinks',{brId:'*',projectId:activeId});
  }
  if(msg.type==='jiraInventoryError'){
     if(jiraLinkReconcileAfterRefreshRequest===msg.requestId)jiraLinkReconcileAfterRefreshRequest=0;
     jiraInventoryRunning=false;jiraInventoryError=msg.message||'Unknown error';
+    if(jiraRoleAssignmentRefresh?.requestId===msg.requestId){jiraRoleAssignmentRefresh=null;const note=document.getElementById('jiraIssueAssigneeStatus');if(note)note.textContent='Assignment saved, but refresh failed. Refresh the Jira table and reopen the Epic.';}
     $('jiraInventoryRefresh').disabled=false;
     $('jiraInventoryStatus').textContent='Jira search failed after '+jiraInventoryItems.length+' item(s): '+jiraInventoryError;
     renderJiraInventory();renderBAJiraInventory();renderPMDashboard();
@@ -2635,7 +2637,7 @@ function syncArchitectStackButtons(project){
 let roleJiraProject='',roleJiraLoading=false,roleJiraLoaded=false,roleJiraItems=[],roleJiraIncomplete=false,roleJiraRequest=0;
 let jiraModalKey='',jiraModalRequest=0,jiraModalPreviousFocus=null,jiraModalUrl='';
 let jiraModalDetail=null,jiraModalEditing=false,jiraModalSaving=false,jiraModalSaveRequest=0,roleJiraRefreshAfterSave=false;
-let jiraModalAssigneeRequest=0,jiraModalAssigneeBusy=false,jiraModalAssigneeData=null;
+let jiraModalAssigneeRequest=0,jiraModalAssigneeBusy=false,jiraModalAssigneeData=null,jiraRoleAssignmentRefresh=null;
 let jiraModalFieldInputs=[];
 function jiraFieldInput(field){
  const select=field.kind==='select'||field.kind==='boolean';
@@ -2709,6 +2711,7 @@ function refreshJiraIssueModal(){if(!jiraModalKey)return;resetJiraIssueEditor();
 function jiraIssueAssigneeEditor(value){
  const wrap=document.createElement('div');wrap.className='jira-assignee-editor';
  const current=pmText('span','Current: '+(value.assignee||'Unassigned'),'muted');
+ const isRoot=/^(?:epic|br|business requirements?)$/i.test(String(value.type||''));
  const select=document.createElement('select');select.id='jiraIssueAssigneeSelect';select.setAttribute('aria-label','Select verified SDLC role assignee');select.disabled=true;
  const loading=document.createElement('option');loading.value='';loading.textContent='Loading eligible team members…';select.append(loading);
  const apply=document.createElement('button');apply.type='button';apply.className='secondary';apply.id='jiraIssueAssigneeApply';apply.textContent='Assign';apply.disabled=true;
@@ -2722,14 +2725,42 @@ function jiraIssueAssigneeEditor(value){
   send('pmJiraSetAssignee',{projectId:activeId,key:value.key,accountId:select.value==='__unassigned__'?null:select.value,
     expectedUpdated:value.updated,requestId:++jiraModalAssigneeRequest});
  });
- wrap.append(current,select,apply,note);
+ if(isRoot){wrap.classList.add('jira-role-assignment-editor');const list=document.createElement('div');list.id='jiraIssueRoleAssignments';list.className='jira-role-assignment-list';wrap.append(note,list);}
+ else wrap.append(current,select,apply,note);
  send('pmJiraAssignableUsers',{projectId:activeId,key:value.key,requestId:++jiraModalAssigneeRequest});
  return wrap;
 }
 function applyJiraAssigneeUsers(msg){
  if(msg.key!==jiraModalKey||!jiraModalDetail||msg.projectId!==activeId||msg.requestId!==jiraModalAssigneeRequest)return;
  const select=document.getElementById('jiraIssueAssigneeSelect'),apply=document.getElementById('jiraIssueAssigneeApply'),note=document.getElementById('jiraIssueAssigneeStatus');
- if(!select||!apply||!note)return;
+ if(!note)return;
+ const list=document.getElementById('jiraIssueRoleAssignments');
+ if(list&&Array.isArray(msg.roleGroups)){
+  jiraModalAssigneeData=msg;list.replaceChildren();note.textContent=msg.message||'Assign each SDLC role separately.';
+  for(const group of msg.roleGroups){
+   const row=document.createElement('div');row.className='jira-role-assignment-row';
+   const label=pmText('strong',group.role+' · '+group.count+' Jira items');
+   const current=pmText('span','Current: '+group.ownerLabel,'muted');
+   const picker=document.createElement('select');picker.setAttribute('aria-label','Assign '+group.role);
+   const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent='Select assignee';picker.append(placeholder);
+   const empty=document.createElement('option');empty.value='__unassigned__';empty.textContent='Unassigned';picker.append(empty);
+   for(const user of group.users||[]){const option=document.createElement('option');option.value=user.accountId;option.textContent=user.name;picker.append(option);}
+   if(group.owner&&!group.users.some(user=>user.accountId===group.owner)){const old=document.createElement('option');old.value=group.owner;old.textContent=group.ownerLabel+' (not eligible)';old.disabled=true;picker.append(old);}
+   const previous=group.owner===null?'':group.owner||'__unassigned__';
+   picker.value=previous;
+   const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='Assign';button.disabled=true;
+   picker.addEventListener('change',()=>{button.disabled=jiraModalAssigneeBusy||!picker.value||picker.value===previous;});
+   button.addEventListener('click',()=>{
+    if(button.disabled||jiraModalAssigneeBusy||!jiraModalDetail||jiraModalKey!==msg.key)return;
+    jiraModalAssigneeBusy=true;for(const control of list.querySelectorAll('select,button'))control.disabled=true;
+    note.textContent='Confirming '+group.role+' assignment…';
+    send('pmJiraSetAssignee',{projectId:activeId,key:msg.key,roleId:group.roleId,accountId:picker.value==='__unassigned__'?null:picker.value,expectedUpdated:jiraModalDetail.updated,requestId:++jiraModalAssigneeRequest});
+   });
+   row.append(label,current,picker,button);list.append(row);
+  }
+  return;
+ }
+ if(!select||!apply)return;
  const current=jiraModalDetail.assigneeId||'';
  jiraModalAssigneeData=msg;select.replaceChildren();
  const empty=document.createElement('option');empty.value='__unassigned__';empty.textContent='Unassigned';select.append(empty);
@@ -2747,7 +2778,7 @@ function applyJiraAssigneeUsers(msg){
  note.textContent='Required role: '+msg.role+scope+'. '+(msg.message||'Select an eligible user, then click Assign.');
 }
 function renderJiraIssueModal(value){if(!value||value.key!==jiraModalKey)return;resetJiraIssueEditor();jiraModalDetail=value;$('jiraIssueModalEdit').classList.toggle('hidden',!(value.coreEditable?.summary||value.coreEditable?.description||value.editors?.length||value.transitions?.length));const root=$('jiraIssueModalBody');root.replaceChildren();jiraModalUrl=value.url||'';$('jiraIssueModalOpen').disabled=!jiraModalUrl;$('jiraIssueModalReload').disabled=false;$('jiraIssueModalTitle').textContent=value.key+' · '+value.summary;$('jiraIssueModalSubtitle').textContent=value.type+' · '+value.status;
- const fields=[['Status',value.status],['Priority',value.priority],['Type',value.type],['Reporter',value.reporter],['Created',value.created],['Updated',value.updated],['Due date',value.dueDate],['Assignee',value.assignee]];const grid=document.createElement('dl');grid.className='jira-issue-detail-grid';for(const [label,val] of fields){if(!val)continue;const wrapper=document.createElement('div');const dt=document.createElement('dt');dt.textContent=label;const dd=document.createElement('dd');if(label==='Assignee'&&selectedRole==='project-manager'&&view==='work')dd.append(jiraIssueAssigneeEditor(value));else dd.textContent=val;wrapper.append(dt,dd);grid.append(wrapper);}root.append(grid);
+ const fields=[['Status',value.status],['Priority',value.priority],['Type',value.type],['Reporter',value.reporter],['Created',value.created],['Updated',value.updated],['Due date',value.dueDate],['Assignee',value.assignee]];const grid=document.createElement('dl');grid.className='jira-issue-detail-grid';for(const [label,val] of fields){if(!val)continue;const wrapper=document.createElement('div');const dt=document.createElement('dt');dt.textContent=label;const dd=document.createElement('dd');if(label==='Assignee'&&selectedRole==='project-manager'&&view==='work'){if(/^(?:epic|br|business requirements?)$/i.test(String(value.type||''))){dt.textContent='Role assignments';wrapper.classList.add('jira-role-assignment-card');}dd.append(jiraIssueAssigneeEditor(value));}else dd.textContent=val;wrapper.append(dt,dd);grid.append(wrapper);}root.append(grid);
  const section=(label,text)=>{const box=document.createElement('section');box.className='jira-issue-detail-block';const heading=document.createElement('h3');heading.textContent=label;const content=document.createElement('p');content.textContent=text||'Not provided';box.append(heading,content);root.append(box);return box;};
  section('Description',value.description||'No description provided.');
  if(value.parent){const box=section('Parent',value.parent.key+' · '+(value.parent.summary||''));const btn=document.createElement('button');btn.className='jira-issue-inline-link';btn.type='button';btn.textContent='View '+value.parent.key;btn.addEventListener('click',()=>{jiraModalKey=value.parent.key;refreshJiraIssueModal();});box.append(btn);}
@@ -8910,11 +8941,13 @@ window.addEventListener('message',event=>{
    jiraModalAssigneeBusy=false;
    if(msg.cancelled){refreshJiraIssueModal();return;}
    status(msg.changed+' of '+msg.count+' Jira work item(s) assigned and verified'+(msg.excludedCount?' · '+msg.excludedCount+' specialist-role item(s) unchanged':'')+'.');
-   refreshJiraIssueModal();searchJiraInventory();
+   if(document.getElementById('jiraIssueRoleAssignments')){searchJiraInventory();jiraRoleAssignmentRefresh={projectId:activeId,key:jiraModalKey,requestId:jiraInventoryRequest};const note=document.getElementById('jiraIssueAssigneeStatus');if(note)note.textContent='Assignment saved. Refreshing Jira role assignments…';}
+   else{refreshJiraIssueModal();searchJiraInventory();}
  }
  if(msg.type==='pmJiraAssignmentError'&&msg.projectId===activeId&&msg.key===jiraModalKey&&msg.requestId===jiraModalAssigneeRequest){
    jiraModalAssigneeBusy=false;const note=document.getElementById('jiraIssueAssigneeStatus');
    if(note)note.textContent='Jira assignment failed: '+(msg.message||'Refresh and retry.');
+   const list=document.getElementById('jiraIssueRoleAssignments');if(list){for(const picker of list.querySelectorAll('select')){picker.disabled=false;picker.dispatchEvent(new Event('change'));}}
    const select=document.getElementById('jiraIssueAssigneeSelect');if(select)select.disabled=false;
    const apply=document.getElementById('jiraIssueAssigneeApply');if(apply)apply.disabled=false;
  }

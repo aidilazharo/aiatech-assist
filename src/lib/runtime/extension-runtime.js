@@ -6823,43 +6823,67 @@ async function handleDashboardMessage(msg){
           if(!pm)throw Error('Current Jira identity is not registered as Project Manager. Select Project Manager in Role Management, enter My Work, and retry. Assign Issues permission is also required.');
           const item=jiraProjectInventory.normalizeIssue(issue,projectKey);
           if(!item)throw Error('Jira issue is not accessible in this project.');
-          const role=pmJiraAssignment.roleForIssue(item,register);
-          if(!role)throw Error('This Jira Task/Subtask has no unambiguous SDLC role. Add the correct ATGV role label or repair its role mapping before assigning.');
-          let scope=null;
-          if(['br','epic'].includes(pmJiraAssignment.group(item.type))){
+          const isRoot=['br','epic'].includes(pmJiraAssignment.group(item.type));
+          let scope=null,groups=[],role='';
+          if(isRoot){
             const snapshot=pmLatestSnapshot;
             if(!snapshot||snapshot.projectId!==projectId||snapshot.projectKey!==projectKey||Date.now()-snapshot.at>600000)throw Error('Refresh the complete Project Jira Work Items table before assigning an entire BR/Epic.');
-            scope=pmJiraAssignment.plan({rootKey:key,projectKey,items:snapshot.items,register});
+            const plans=pmJiraAssignment.rolePlans({rootKey:key,projectKey,items:snapshot.items,register});
+            groups=plans.scopes;
+            if(writing){
+              scope=groups.find(row=>row.roleId===msg.roleId);
+              if(!scope)throw Error('Select a verified SDLC role with mapped Jira work.');
+              role=scope.role;
+            }
+          }else{
+            role=pmJiraAssignment.roleForIssue(item,register);
+            if(!role)throw Error('This Jira item is shared or has no unambiguous SDLC role. Assign its role-specific work instead.');
           }
-          const candidates=pmJiraAssignment.rosterCandidates(roster,role);
-          if(!candidates.length&&msg.command==='pmJiraAssignableUsers')
-            throw Error('No '+role+' users are recorded in the project roster. Ask a team member to open My Work using the correct role.');
           const targetId=writing?(msg.accountId===null?null:String(msg.accountId||'')):null;
-          if(writing&&targetId&&!candidates.some(user=>user.accountId===targetId))throw Error('Selected Jira user does not have the required '+role+' role in the project roster.');
-          // Jira explicitly verifies assignability. A roster role alone does not
-          // grant the permission to assign or make a user assignable.
-          const assignable=await requestJson(base+'/rest/api/3/user/assignable/search?issueKey='+encodeURIComponent(key)+'&maxResults=1000',auth);
-          if(!Array.isArray(assignable))throw Error('Jira did not return a valid assignable-user list.');
-          const validIds=new Set(assignable.filter(x=>x?.active!==false).map(x=>String(x.accountId||'')));
-          const eligible=candidates.filter(x=>validIds.has(x.accountId));
+          const assignableFor=async issueKey=>{
+            const list=await requestJson(base+'/rest/api/3/user/assignable/search?issueKey='+encodeURIComponent(issueKey)+'&maxResults=1000',auth);
+            if(!Array.isArray(list))throw Error('Jira did not return a valid assignable-user list.');
+            return new Set(list.filter(x=>x?.active!==false).map(x=>String(x.accountId||'')));
+          };
+          const eligibleFor=async(role,targets)=>{
+            let eligible=pmJiraAssignment.rosterCandidates(roster,role);
+            for(let i=0;i<targets.length&&eligible.length;i+=6){
+              if(activeProject?.id!==projectId)throw Error('Project changed during assignment validation.');
+              const allowed=await Promise.all(targets.slice(i,i+6).map(row=>assignableFor(row.key)));
+              eligible=eligible.filter(user=>allowed.every(ids=>ids.has(user.accountId)));
+            }
+            return eligible;
+          };
+          if(!writing&&isRoot){
+            const roleGroups=[];
+            for(const group of groups){
+              const owners=[...new Set(group.targets.map(row=>row.owner))];
+              roleGroups.push({roleId:group.roleId,role:group.role,count:group.count,owner:owners.length===1?owners[0]:null,
+               ownerLabel:owners.length===1?(group.targets[0].ownerName||'Unassigned'):'Mixed assignees',
+               users:await eligibleFor(group.role,group.targets)});
+            }
+            await dashboard?.webview.postMessage({type:'pmJiraAssignableUsersResult',projectId,key,requestId,roleGroups,
+              message:roleGroups.length?'Assign each role independently. Shared hierarchy and other roles are unchanged.':'No verified role-specific items. Publish or repair role mappings first.'});break;
+          }
+          const targets=scope?.targets||[{key,updated:String(issue.fields.updated||''),owner:String(issue.fields.assignee?.accountId||''),type:item.type}];
+          const eligible=await eligibleFor(role,targets);
           if(!writing){
             await dashboard?.webview.postMessage({type:'pmJiraAssignableUsersResult',projectId,key,requestId,role,
-              assigneeId:item.assigneeId,users:eligible,scope:scope?{count:scope.count,excludedCount:scope.excludedCount}:null,
-              message:eligible.length?'Only role-matched, Jira-assignable team members are shown.':'No '+role+' team members are assignable in Jira. Confirm project permissions and role registration.'});
-            break;
+              assigneeId:item.assigneeId,users:eligible,scope:null,
+              message:eligible.length?'Only role-matched, Jira-assignable team members are shown.':'No '+role+' team members are assignable in Jira.'});break;
           }
-          if(targetId&&!eligible.some(x=>x.accountId===targetId))throw Error('Selected user is no longer Jira-assignable for this ticket. Refresh the assignee list.');
+          if(targetId&&!eligible.some(x=>x.accountId===targetId))throw Error('Selected user does not have the '+role+' role or is not assignable to every selected Jira item.');
           if(String(issue.fields?.updated||'')!==String(msg.expectedUpdated||''))throw Error('Jira issue changed. Refresh it before assigning.');
-          const targets=scope?.targets||[{key,updated:String(issue.fields.updated||''),owner:String(issue.fields.assignee?.accountId||''),type:item.type}];
           const user=targetId?eligible.find(x=>x.accountId===targetId):null;
           const targetLabel=targetId?user.name:'Unassigned';
-          const description=scope?'Assign '+targets.length+' development issue(s) under '+key+' to '+targetLabel+'? '+scope.excludedCount+' other-role ticket(s) will remain unchanged.':
+          const description=scope?'Assign '+targets.length+' '+role+' issue(s) under '+key+' to '+targetLabel+'? Shared parent items and other roles will remain unchanged.':
             'Set '+key+' ('+role+') assignee to '+targetLabel+' in Jira?';
           const decision=await uiWarning(description+'\n\nJira will validate all selected issues and revert completed changes if an update fails.',{modal:true},'Confirm Assignment');
           if(decision!=='Confirm Assignment'){
             await dashboard?.webview.postMessage({type:'pmJiraAssigned',projectId,key,requestId,cancelled:true});break;
           }
-          const result=await pmJiraAssignment.change({targets,projectKey,accountId:targetId,expectedUpdated:msg.expectedUpdated,
+          if(activeProject?.id!==projectId)throw Error('Project changed before assignment.');
+          const result=await pmJiraAssignment.change({targets,projectKey,accountId:targetId,expectedUpdated:msg.expectedUpdated,rootKey:scope?key:null,
             readIssue:key=>jiraReadIssue(config,token,key),
             setAssignee:(key,accountId)=>requestJson(base+'/rest/api/3/issue/'+encodeURIComponent(key)+'/assignee',{...auth,method:'PUT',data:{accountId}})
           });

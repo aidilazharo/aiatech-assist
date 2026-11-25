@@ -42,7 +42,7 @@ function roleTree(register,brId,roleId='software-developer'){
  const add=(path,row)=>{
   if(!path.startsWith(scope.brId+'/')||!row?.key)return;
   const kind=String(row.kind||row.issueType||''),marker=path.match(/\/ROLE-([^/]+)$/i);
-  if(/^(?:epic|feature|user story|story|br|business requirement)$/i.test(kind))return;
+  if(/^(?:epic|br|business requirement)$/i.test(kind))return;
   const hints=[row.roleId,row.roleLabel,marker?.[1]].filter(Boolean);
   const declared=hints.map(canonicalRole);
   if(hints.length&&(declared.some(x=>!x)||new Set(declared).size!==1))return;
@@ -50,7 +50,7 @@ function roleTree(register,brId,roleId='software-developer'){
   if(!explicit&&(!/^(?:task|subtask|sub-task|sub task)$/i.test(kind)||/\/ROLE-/i.test(path)))return;
   const taskRole=explicit||'software-developer',key=String(row.key).toUpperCase();
   if(!ISSUE.test(key))throw Error('Invalid role task mapping for '+scope.brId);
-  if(scope.entries.some(item=>item.key===key&&(/^(?:epic|feature|user story|story|br|business requirement)$/i.test(item.kind)||item.path===scope.brId)))throw Error('Role task maps to a shared parent: '+key);
+  if(scope.entries.some(item=>item.key===key&&(item.path===scope.brId||item.path!==path)))throw Error('Role task maps to a different hierarchy item: '+key);
   const prior=seen.get(key);
   if(prior&&prior!==taskRole)throw Error('Conflicting role mappings for '+key);
   if(prior)return;
@@ -64,7 +64,8 @@ function roleTree(register,brId,roleId='software-developer'){
 function matchesRoleTask(entry,issue){
  const fields=issue?.fields||{};
  const type=String(fields.issuetype?.name||issue?.type||issue?.issueType||'');
- if(!/^(?:task|subtask|sub-task|sub task)$/i.test(type)&&!(fields.issuetype?.subtask===true&&!/^(?:story|feature|epic)$/i.test(type)))return false;
+ const roleParent=entry.explicit&&/^(?:feature|user story|story)$/i.test(entry.kind)&&/^(?:feature|user story|story)$/i.test(type);
+ if(!roleParent&&!/^(?:task|subtask|sub-task|sub task)$/i.test(type)&&!(fields.issuetype?.subtask===true&&!/^(?:story|feature|epic)$/i.test(type)))return false;
  const labels=(fields.labels||issue?.labels||[]).filter(x=>typeof x==='string'&&x.toLowerCase().startsWith('atgv-role-'));
  const roles=new Set(labels.map(canonicalRole));
  if(roles.size)return roles.size===1&&roles.has(entry.roleId);

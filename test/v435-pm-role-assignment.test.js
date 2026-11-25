@@ -59,12 +59,16 @@ test('Role-matched choices never assign a user merely because names coincide',()
  assert.deepEqual(pm.rosterCandidates(rows,'UI/UX Designer').map(x=>x.accountId),['jira-B']);
  assert.deepEqual(pm.rosterCandidates(rows,'UAT Tester'),[]);
 });
-test('Whole Epic development scope excludes specialist and unknown-role subtasks',()=>{
+test('Epic has independent role scopes; shared parents and unknown subtasks remain unchanged',()=>{
  const plan=pm.plan({rootKey:'TC-100',items,projectKey:'TC',register});
- assert.deepEqual(plan.targets.map(x=>x.key),['TC-100','TC-101','TC-102','TC-103','TC-107']);
- assert.deepEqual(plan.excluded.map(x=>x.key),['TC-104','TC-105','TC-106','TC-108']);
- assert.equal(plan.count,5);
- assert.equal(plan.excludedCount,4);
+ assert.deepEqual(plan.targets.map(x=>x.key),['TC-103','TC-107']);
+ const groups=pm.rolePlans({rootKey:'TC-100',items,projectKey:'TC',register}).scopes;
+ assert.deepEqual(groups.find(x=>x.roleId==='ux-designer').targets.map(x=>x.key),['TC-105']);
+ assert.deepEqual(groups.find(x=>x.roleId==='qa-engineer').targets.map(x=>x.key),['TC-104']);
+ assert.deepEqual(groups.find(x=>x.roleId==='uat-tester').targets.map(x=>x.key),['TC-106']);
+ assert.deepEqual(plan.excluded.map(x=>x.key).sort(),['TC-100','TC-101','TC-102','TC-104','TC-105','TC-106','TC-108']);
+ assert.equal(plan.count,2);
+ assert.equal(plan.excludedCount,7);
  assert.deepEqual(owner.developmentTree(register,'BR-001').entries.map(x=>x.key).sort(),
   ['TC-100','TC-101','TC-102','TC-103','TC-107']);
 });
@@ -73,7 +77,7 @@ test('Update permission guard and issue revision failures must not mutate Jira',
  assert.equal(pm.canAssign({permissions:{ASSIGN_ISSUES:{havePermission:false}}}),false);
  const current=new Map(items.map(item=>[item.key,{updated:item.updated,owner:''}]));
  const calls=[];
- const readIssue=async key=>({key,fields:{project:{key:'TC'},updated:current.get(key).updated,assignee:current.get(key).owner?{accountId:current.get(key).owner}:null}});
+ const readIssue=async key=>({key,fields:{project:{key:'TC'},issuetype:{name:items.find(x=>x.key===key).type},labels:items.find(x=>x.key===key).labels||[],parent:{key:items.find(x=>x.key===key).parentKey},updated:current.get(key).updated,assignee:current.get(key).owner?{accountId:current.get(key).owner}:null}});
  const setAssignee=async(key,assignee)=>{calls.push(key);current.get(key).owner=assignee||'';current.get(key).updated=String(Number(current.get(key).updated)+1);};
  const plan=pm.plan({rootKey:'TC-100',items,projectKey:'TC',register});
  current.get('TC-103').updated='2';
@@ -81,7 +85,9 @@ test('Update permission guard and issue revision failures must not mutate Jira',
  assert.equal(calls.length,0);
  current.get('TC-103').updated='1';
  const done=await pm.change({targets:plan.targets,projectKey:'TC',accountId:'jira-A',expectedUpdated:'1',readIssue,setAssignee});
- assert.equal(done.changed,5);
+ assert.equal(done.changed,2);
+ assert.equal(current.get('TC-100').owner,'');
+ assert.equal(current.get('TC-102').owner,'');
  assert.deepEqual(calls.sort(),plan.targets.map(x=>x.key).sort());
  assert.equal(current.get('TC-104').owner,'');
 });
@@ -103,4 +109,22 @@ test('PM Assignee card, backend and complete roster requirement are wired',()=>{
  assert.match(host,/myWorkPresence\.locate\(config,token,projectKey\)/);
  assert.match(host,/user\/assignable\/search\?issueKey=/);
  assert.match(host,/scope\?\.targets/);
+});
+
+test('Explicit role Story is assigned with its own role only; shared Story stays unassigned',()=>{
+ const reg={...register,synced:{...register.synced,'BR-001/F-1/S-2':{key:'TC-109',kind:'Story',roleId:'uiux'}}};
+ const rows=[...items,{key:'TC-109',type:'Story',parentKey:'TC-101',labels:['atgv-role-ux-designer'],updated:'1'}];
+ const plan=pm.plan({rootKey:'TC-100',items:rows,projectKey:'TC',register:reg,roleId:'ux-designer'});
+ assert.deepEqual(plan.targets.map(x=>x.key),['TC-105','TC-109']);
+ assert.ok(!plan.targets.some(x=>x.key==='TC-102'));
+});
+
+test('Individual role classification agrees with Epic role scope; no role guessed from title',()=>{
+ const reg={...register,synced:{...register.synced,'BR-001/F-1/S-2':{key:'TC-109',kind:'Story',roleId:'sa'}}};
+ const story={key:'TC-109',type:'Story',parentKey:'TC-101',labels:['atgv-role-solution-architect'],updated:'1'};
+ assert.equal(pm.roleForIssue(story,reg),'Solution Architect');
+ assert.equal(pm.roleForIssue({...story,labels:['atgv-role-ux-designer']},reg),'');
+ assert.equal(pm.roleForIssue({key:'TC-110',type:'Task',summary:'UI/UX Design — unknown'},reg),'');
+ assert.equal(pm.roleForIssue(items[2],reg),'');
+ assert.deepEqual(pm.plan({rootKey:'TC-100',items:[...items,story],projectKey:'TC',register:reg,roleId:'solution-architect'}).targets.map(x=>x.key),['TC-109']);
 });

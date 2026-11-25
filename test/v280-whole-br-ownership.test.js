@@ -70,3 +70,13 @@ test('Host and UI wire role-only scope while BR rows remain navigation',()=>{
  assert.match(ui,/item\.taskRole==='ux-designer'/);
  assert.match(ui,/item\.taskRole==='software-developer'/);
 });
+
+test('Explicit role-owned Stories and Features can be assigned without claiming shared parents',()=>{
+ const reg={...register,synced:{...register.synced,'BR-007/F-2':{key:'TC-407',kind:'Feature',roleId:'sa'},'BR-007/F-2/S-1':{key:'TC-408',kind:'Story',roleId:'sa'}}};
+ const entries=ownership.roleTree(reg,'BR-007','solution-architect').entries;
+ assert.deepEqual(entries.map(x=>x.key),['TC-407','TC-408']);
+ assert.equal(ownership.matchesRoleTask(entries[1],{type:'Story',labels:['atgv-role-solution-architect']}),true);
+ assert.equal(ownership.matchesRoleTask(entries[1],{type:'Story',labels:['atgv-role-ux-designer']}),false);
+ assert.equal(ownership.matchesRoleTask(entries[1],{type:'Epic',labels:['atgv-role-solution-architect']}),false);
+ assert.deepEqual(ownership.roleTree(reg,'BR-007').entries.map(x=>x.key),['TC-403','TC-404']);
+});

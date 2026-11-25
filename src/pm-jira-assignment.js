@@ -1,8 +1,7 @@
 'use strict';
 // PM Jira assignee planning and safe updates. Jira is authoritative for the
 // caller's ASSIGN_ISSUES permission and the selected user's assignability.
-// A BR/Epic transfer covers development work only; role-specific tasks for
-// UI/UX, QA, UAT, BA, architecture or other roles remain unchanged.
+// An Epic is shared. Assign each explicitly scoped SDLC role independently.
 const KEY=/^[A-Z][A-Z0-9_]{1,20}-[1-9][0-9]*$/;
 const ACCOUNT=/^[^\s<>]{1,240}$/;
 function issueKey(value){const key=String(value||'').toUpperCase();if(!KEY.test(key))throw Error('Invalid Jira issue key.');return key;}
@@ -16,37 +15,16 @@ function group(type){
  return 'other';
 }
 const DEV_LABEL='atgv-role-software-developer';
+const ownership=require('./br-ownership');
 const {ROLES}=require('./my-work-role-prompts');
 const ROLE_LABELS=Object.freeze(Object.fromEntries(Object.entries(ROLES).map(([id,role])=>['atgv-role-'+id,role.name])));
 function roleForIssue(issue,register){
- if(!issue)return '';
- const labels=(Array.isArray(issue.labels)?issue.labels:[]).map(s=>String(s).toLowerCase()).filter(s=>s.startsWith('atgv-role-'));
- if(new Set(labels).size>1)return '';
- if(labels.length)return ROLE_LABELS[labels[0]]||'';
+ if(!issue||['br','epic'].includes(group(issue.type)))return '';
  const key=String(issue.key||'').toUpperCase();
- const mapped=[...Object.entries(register?.roleTaskMappings||{}),...Object.entries(register?.synced||{})].find(([,row])=>String(row?.key||'').toUpperCase()===key);
- if(mapped){
-  const role=String(mapped[1].roleId||'').toLowerCase(),path=mapped[0].toUpperCase();
-  if(role==='uiux'||role==='ux-designer'||path.endsWith('/ROLE-UIUX'))return 'UI/UX Designer';
-  if(role==='qa'||role==='qa-engineer'||path.endsWith('/ROLE-QA'))return 'QA Engineer';
-  if(role==='uat'||role==='uat-tester'||path.endsWith('/ROLE-UAT'))return 'UAT Tester';
-  if(role==='developer'||role==='software-developer'||path.endsWith('/ROLE-DEVELOPER'))return 'Developer';
-  if(/\/ROLE-/.test(path))return '';
-  if(/^(?:feature|features)$/i.test(String(issue.type||'')))return 'Developer';
- }
- const summary=String(issue.summary||'');
- if(/^\s*(?:UI\/UX Design|UI Design|UX Design|Wireframe|Mockup)\s*(?:[-—:|]|$)/i.test(summary))return 'UI/UX Designer';
- if(/^\s*(?:QA Verification|Quality Assurance|QA Testing)\s*(?:[-—:|]|$)/i.test(summary))return 'QA Engineer';
- if(/^\s*(?:User Acceptance Testing|UAT)\s*(?:[-—:|]|$)/i.test(summary))return 'UAT Tester';
- if(/^\s*(?:Business Analyst|Requirements Analysis|BA Review)\s*(?:[-—:|]|$)/i.test(summary))return 'Business Analyst';
- if(/^\s*(?:Solution Architect|Architecture Review)\s*(?:[-—:|]|$)/i.test(summary))return 'Solution Architect';
- if(/^\s*(?:Project Manager|PMO)\s*(?:[-—:|]|$)/i.test(summary))return 'Project Manager';
- if(['br','epic','story'].includes(group(issue.type)))return 'Developer';
- // Generic Jira Tasks are development work only if their role is known;
- // unlabeled Subtasks must be explicitly classified, not guessed.
- if(mapped&&!/\/ROLE-/i.test(mapped[0])&&
-  /^(?:task|subtask|sub-task)$/i.test(String(mapped[1].kind||mapped[1].issueType||issue.type||'')))return 'Developer';
- return '';
+ const rows=[...Object.entries(register?.synced||{}),...Object.entries(register?.roleTaskMappings||{})].filter(([,row])=>String(row?.key||'').toUpperCase()===key);
+ if(rows.length&&new Set(rows.map(([path])=>path)).size!==1)return '';
+ const id=mappedRole(issue,rows);
+ return ROLES[id]?.name||'';
 }
 function rosterCandidates(rows,role){
  if(!role)return [];
@@ -83,47 +61,96 @@ function linkedDevelopmentKeys(register,rootKey){
  }
  return {keys:[...keys],rootId};
 }
-function plan({rootKey,items,projectKey,register}){
- const root=issueKey(rootKey),p=String(projectKey||'').toUpperCase();
- if(!/^[A-Z][A-Z0-9_]{1,20}$/.test(p)||!root.startsWith(p+'-'))throw Error('Selected Jira project does not match this issue.');
+const aliases={ba:'business-analyst',pm:'project-manager',sa:'solution-architect',uiux:'ux-designer',developer:'software-developer',qa:'qa-engineer',uat:'uat-tester'};
+function canonicalRole(value){
+ const id=String(value||'').trim().toLowerCase().replace(/^atgv-role-/,'');
+ return aliases[id]||(Object.hasOwn(ROLES,id)?id:'');
+}
+function mappedRole(item,rows){
+ const type=group(item.type),feature=/^features?$/i.test(String(item.type||''));
+ if(!['task','subtask','story'].includes(type)&&!feature)return '';
+ const labels=[...new Set((item.labels||[]).filter(x=>String(x).toLowerCase().startsWith('atgv-role-')).map(canonicalRole))];
+ const declared=[];
+ for(const [path,row] of rows){
+  for(const hint of [row.roleId,row.roleLabel,path.match(/\/ROLE-([^/]+)$/i)?.[1]].filter(Boolean))declared.push(canonicalRole(hint));
+ }
+ const hints=[...new Set([...labels,...declared])];
+ if(hints.length)return hints.length===1?hints[0]:'';
+ // Shared Stories/Features are not implicitly Developer-owned. Legacy mapped implementation tasks are.
+ if(!['task','subtask'].includes(type))return '';
+ return rows.length>0&&rows.every(([path,row])=>! /\/ROLE-/i.test(path)&&/^(task|subtask|sub-task|sub task)$/i.test(String(row.kind||row.issueType||'')))?'software-developer':'';
+}
+function rolePlans({rootKey,items,projectKey,register}){
+ const root=issueKey(rootKey),project=String(projectKey||'').toUpperCase();
+ if(!/^[A-Z][A-Z0-9_]{1,20}$/.test(project)||!root.startsWith(project+'-'))throw Error('Selected Jira project does not match this issue.');
  if(!Array.isArray(items)||items.length>20000)throw Error('Refresh the full Jira project inventory before assigning.');
  const map=new Map();
- for(const item of items){
-  const key=issueKey(item.key);
-  if(!key.startsWith(p+'-')||map.has(key))throw Error('Jira inventory has duplicate or foreign-project keys.');
-  map.set(key,{...item,key});
- }
+ for(const item of items){const key=issueKey(item.key);if(!key.startsWith(project+'-')||map.has(key))throw Error('Jira inventory has duplicate or foreign-project keys.');map.set(key,{...item,key});}
  const record=map.get(root);
- if(!record)throw Error('Root issue is missing from the complete Jira inventory. Refresh Jira.');
- if(!['br','epic'].includes(group(record.type)))throw Error('Whole-development assignment applies only to BR and Epic issues.');
- const linked=linkedDevelopmentKeys(register,root);
- const targets=[],excluded=[],orphaned=[];
- for(const item of map.values()){
-  let current=item,owned=item.key===root,depth=0;
-  const seen=new Set();
-  while(!owned&&current?.parentKey&&depth++<30){
-   const parent=String(current.parentKey||'').toUpperCase();
-   if(seen.has(parent))throw Error('Cyclic Jira parent hierarchy; cannot assign.');
-   seen.add(parent);
-   if(parent===root){owned=true;break;}
-   current=map.get(parent);
-  }
-  if(!owned&&!linked.keys.includes(item.key))continue;
-  if(item.key!==root&&!developable(item,register)){excluded.push({key:item.key,reason:excludedRole(item)||'No verified Developer role'});continue;}
-  targets.push({key:item.key,updated:String(item.updated||''),owner:String(item.assigneeId||''),type:item.type});
+ if(!record||!['br','epic'].includes(group(record.type)))throw Error('Select a BR or Epic in the complete Jira inventory.');
+ const brId=ownership.fromKey(register,root);
+ const tree=ownership.tree(register,brId);
+ if(tree.rootKey!==root)throw Error('Selected Epic is not the approved BR root.');
+ const mapped=new Map(),foreign=new Set();
+ for(const [path,row] of [...Object.entries(register.synced||{}),...Object.entries(register.roleTaskMappings||{})]){
+  if(!row?.key)continue;
+  const key=issueKey(row.key);
+  if(path!==brId&&!path.startsWith(brId+'/')){foreign.add(key);continue;}
+  if(!mapped.has(key))mapped.set(key,[]);
+  mapped.get(key).push([path,row]);
  }
- for(const key of linked.keys)if(!map.has(key))orphaned.push(key);
- if(orphaned.length)throw Error('Some published BR issues are absent from the Jira inventory: '+orphaned.slice(0,5).join(', ')+'. Refresh or reconcile before assigning.');
- if(!targets.some(x=>x.key===root))throw Error('Root Jira issue could not be validated.');
- targets.sort((a,z)=>a.key===root?-1:z.key===root?1:a.key.localeCompare(z.key));
- if(targets.length>500)throw Error('Assignment affects over 500 Jira issues. Narrow the BR and review the hierarchy first.');
- return {rootKey:root,rootId:linked.rootId,targets,excluded,count:targets.length,excludedCount:excluded.length};
+ const groups=new Map(),excluded=[];
+ for(const [key,rows] of mapped){
+  if(foreign.has(key))throw Error('Jira issue is mapped to more than one BR: '+key);
+  if(new Set(rows.map(([path])=>path)).size!==1)throw Error('Conflicting Jira mappings: '+key);
+  const item=map.get(key);
+  if(!item)throw Error('Published BR issue missing from inventory: '+key+'. Refresh or reconcile before assigning.');
+  const roleId=key===root?'':mappedRole(item,rows);
+  if(!roleId){excluded.push({key,reason:'Shared or unverified role'});continue;}
+  const parent=String(item.parentKey||'');
+  const markers=[...new Set(rows.map(([,row])=>row.marker).filter(Boolean))];
+  if(!markers.every(marker=>(item.labels||[]).includes(marker)))throw Error('Jira mapping marker changed for '+key);
+  const expectedParents=[...new Set(rows.map(([,row])=>row.parentKey).filter(Boolean))];
+  if(expectedParents.length&&(expectedParents.length!==1||expectedParents[0]!==parent))throw Error('Jira parent changed for '+key);
+  if(!groups.has(roleId))groups.set(roleId,[]);
+  groups.get(roleId).push({key,updated:String(item.updated||''),owner:String(item.assigneeId||''),ownerName:String(item.assignee||item.assigneeId||''),type:item.type,roleId,parentKey:parent,markers,rows});
+ }
+ // Count linked but unmapped descendants as excluded; never infer a role from summary alone.
+ for(const item of map.values()){
+  if(mapped.has(item.key))continue;
+  let key=item.parentKey,seen=new Set();
+  while(key){if(seen.has(key))throw Error('Cyclic Jira parent hierarchy; cannot assign.');seen.add(key);if(key===root){excluded.push({key:item.key,reason:'Unmapped Jira descendant'});break;}key=map.get(key)?.parentKey;}
+ }
+ const scopes=[...groups].map(([roleId,targets])=>{
+  targets.sort((a,b)=>a.key.localeCompare(b.key));
+  if(targets.length>500)throw Error('Role assignment exceeds 500 issues.');
+  return {roleId,role:ROLES[roleId].name,rootKey:root,rootId:brId,targets,count:targets.length,excludedCount:map.size?mapped.size+excluded.filter(x=>!mapped.has(x.key)).length-targets.length:0};
+ });
+ return {rootKey:root,rootId:brId,rootUpdated:String(record.updated||''),scopes,excluded};
 }
-async function change({targets,projectKey,accountId,expectedUpdated,readIssue,setAssignee}){
+function plan(options){
+ const all=rolePlans(options),roleId=canonicalRole(options.roleId||'software-developer');
+ const scope=all.scopes.find(row=>row.roleId===roleId);
+ if(!scope)throw Error('No verified Jira items for the selected SDLC role.');
+ const keys=new Set(scope.targets.map(x=>x.key));
+ return {...scope,excluded:[...all.excluded,...all.scopes.filter(x=>x.roleId!==roleId).flatMap(x=>x.targets.map(t=>({key:t.key,reason:'Other SDLC role'})))],rootUpdated:all.rootUpdated};
+}
+function verifyTarget(target,issue){
+ if(!target.roleId)return;
+ const fields=issue?.fields||{};
+ const live={type:fields.issuetype?.name,labels:fields.labels||[]};
+ if(String(live.type||'').toLowerCase()!==String(target.type||'').toLowerCase()||
+    mappedRole(live,target.rows)!==target.roleId||
+    String(fields.parent?.key||'')!==target.parentKey||
+    !target.markers.every(marker=>live.labels.includes(marker)))
+  throw Error(target.key+' role, parent, type or mapping changed. Refresh Jira before assigning.');
+}
+async function change({targets,projectKey,accountId,expectedUpdated,readIssue,setAssignee,rootKey=null}){
  if(!Array.isArray(targets)||!targets.length||targets.length>500)throw Error('Invalid Jira assignment scope.');
  if(accountId!==null&&(!ACCOUNT.test(String(accountId||''))||String(accountId).length>240))throw Error('Invalid Jira assignee.');
  if(typeof readIssue!=='function'||typeof setAssignee!=='function')throw Error('Jira read/write callbacks are required.');
  const validProject=String(projectKey||'').toUpperCase();
+ if(rootKey){const root=await readIssue(issueKey(rootKey));if(root?.key!==rootKey||root.fields?.project?.key!==validProject||String(root.fields?.updated||'')!==String(expectedUpdated||''))throw Error('BR Epic changed. Refresh Jira before assigning.');}
  const original=[];
  const seen=new Set();
  for(const target of targets){
@@ -131,10 +158,11 @@ async function change({targets,projectKey,accountId,expectedUpdated,readIssue,se
   if(seen.has(key))throw Error('Duplicate Jira assignment target.');seen.add(key);
   const issue=await readIssue(key),fields=issue?.fields||{};
   if(issue?.key!==key||fields.project?.key!==validProject)throw Error('Jira issue '+key+' changed project or identity; nothing assigned.');
-  if(!String(target.updated||'')||String(fields.updated||'')!==String(target.updated)||key===targets[0].key&&String(fields.updated||'')!==String(expectedUpdated||''))throw Error(key+' was updated after it was loaded. Refresh Jira before assigning.');
+  verifyTarget(target,issue);
+  if(!String(target.updated||'')||String(fields.updated||'')!==String(target.updated)||!rootKey&&key===targets[0].key&&String(fields.updated||'')!==String(expectedUpdated||''))throw Error(key+' was updated after it was loaded. Refresh Jira before assigning.');
   const before=String(fields.assignee?.accountId||'');
   if(before!==String(target.owner||''))throw Error(key+' assignee changed. Refresh Jira before assigning.');
-  original.push({key,updated:String(fields.updated||''),owner:before});
+  original.push({...target,key,updated:String(fields.updated||''),owner:before});
  }
  const desired=String(accountId||'');
  const applied=[];
@@ -142,18 +170,21 @@ async function change({targets,projectKey,accountId,expectedUpdated,readIssue,se
   for(const prior of original){
    if(prior.owner===desired)continue;
    const latest=await readIssue(prior.key);
-   if(latest?.fields?.project?.key!==validProject||String(latest.fields?.updated||'')!==prior.updated||String(latest.fields?.assignee?.accountId||'')!==prior.owner)
+   verifyTarget(prior,latest);
+   if(latest?.key!==prior.key||latest?.fields?.project?.key!==validProject||String(latest.fields?.updated||'')!==prior.updated||String(latest.fields?.assignee?.accountId||'')!==prior.owner)
     throw Error(prior.key+' changed during assignment.');
    await setAssignee(prior.key,accountId);
    applied.push(prior);
    const verified=await readIssue(prior.key);
-   if(String(verified?.fields?.assignee?.accountId||'')!==desired)throw Error(prior.key+' assignment could not be verified.');
+   verifyTarget(prior,verified);
+   if(verified?.key!==prior.key||verified?.fields?.project?.key!==validProject||String(verified?.fields?.assignee?.accountId||'')!==desired)throw Error(prior.key+' assignment could not be verified.');
   }
  }catch(error){
   const rollbackErrors=[];
   for(const item of [...applied].reverse())try{
    const current=await readIssue(item.key);
-   if(String(current?.fields?.assignee?.accountId||'')===desired)await setAssignee(item.key,item.owner||null);
+   verifyTarget(item,current);
+   if(current?.key===item.key&&current?.fields?.project?.key===validProject&&String(current?.fields?.assignee?.accountId||'')===desired)await setAssignee(item.key,item.owner||null);
    else rollbackErrors.push(item.key+' changed concurrently');
   }catch(rollback){rollbackErrors.push(item.key+': '+String(rollback.message||rollback));}
   throw Error('Jira assignment failed: '+String(error.message||error)+'. '+(rollbackErrors.length?'Rollback incomplete: '+rollbackErrors.join('; ')+'. Refresh Jira and reconcile.':'Completed updates rolled back.'));
@@ -161,4 +192,4 @@ async function change({targets,projectKey,accountId,expectedUpdated,readIssue,se
  return {count:original.length,changed:applied.length,accountId:accountId||null};
 }
 function canAssign(permissionResponse){return permissionResponse?.permissions?.ASSIGN_ISSUES?.havePermission===true;}
-module.exports={group,roleForIssue,rosterCandidates,excludedRole,developable,linkedDevelopmentKeys,plan,change,canAssign};
+module.exports={group,roleForIssue,rosterCandidates,excludedRole,developable,linkedDevelopmentKeys,plan,rolePlans,change,canAssign};
