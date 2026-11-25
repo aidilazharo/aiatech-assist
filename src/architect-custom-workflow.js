@@ -88,6 +88,10 @@ async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgr
   // Local application edits are valid development state: do not stash, reset,
   // switch branches or commit them behind the user's back. Run in-place instead.
   const dirty=inspection.clean!==true;
+  // Bundled Windows projects use the normal checkout and ephemeral mock overlay;
+  // do not switch away from the branch that receives dependency bundles.
+  const bundlePolicy=process.platform==='win32'&&process.arch==='x64'?await fs.readFile(path.join(key,'vendor','windows-x64','bundle-policy.json'),'utf8').then(JSON.parse,error=>{if(error.code==='ENOENT')return null;throw error;}):null;
+  const preserveCheckout=bundlePolicy?.schema===1&&bundlePolicy.required===true&&bundlePolicy.platform==='win32'&&bundlePolicy.arch==='x64';
   if(driver.localLogs().running)throw Error('Stop the currently managed application before Install & Run.');
   const chosen=selectPreviewTarget(inspection,relative);
   if(!chosen){
@@ -117,9 +121,11 @@ async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgr
    await report(21,1,'1/6 Repository analysis finished. Continuing with verified local actions…');
   }
   cancelled(state);
-  await report(24,2,dirty?'2/6 Preserving local edits and running in-place (no stash, reset, branch switch, or commit)…':'2/6 Preparing isolated local fix branch; main remains untouched…');
+  await report(24,2,preserveCheckout?'2/6 Keeping the project Git branch for future pulls…':dirty?'2/6 Preserving local edits and running in-place (no stash, reset, branch switch, or commit)…':'2/6 Preparing isolated local fix branch; main remains untouched…');
   let branch=inspection.branch;
-  if(dirty){
+  if(preserveCheckout){
+   await report(45,3,'3/6 Using current Git checkout and ephemeral preview overlay; no local fix branch.');
+  }else if(dirty){
    await report(45,3,'3/6 Existing uncommitted files are preserved. No Git operations will modify this checkout.');
   }else if(/^fix\/atgv-custom-stack-[a-f0-9]{10}$/.test(branch)){
    await assertPreviewScaffold(key);
@@ -136,7 +142,7 @@ async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgr
   if(after.branch!==branch||!after.sha||(!dirty&&!after.clean)||
      (dirty&&after.sha!==inspection.sha)||(!dirty&&branch===inspection.branch&&after.sha!==inspection.sha))
    throw Error('Local branch/revision verification failed. No service was started.');
-  if(!dirty)await assertPreviewScaffold(key);
+  if(!dirty&&!preserveCheckout)await assertPreviewScaffold(key);
   const fullStackPair=fullStack.detectPair(after);
   const hasBackendEnv=fullStackPair ? await fullStack.hasEnvironment(key,fullStackPair.backend) : false;
   let runMode=fullStack.modeForPair(fullStackPair,hasBackendEnv,fullStackMode);
@@ -147,7 +153,7 @@ async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgr
   if(!dependencyTarget)throw Error('Application target changed after creating the local fix branch.');
   await dependencies.ensureForTarget(key,dependencyTarget,{signal:state.controller.signal,
    onProgress:async message=>{cancelled(state);await report(61,4,message);}});
-  if(runMode==='live'){
+  if(runMode==='live'||(preserveCheckout&&fullStackPair)){
    try{
     const backendTarget=inspected.targets.find(x=>x.relative===fullStackPair.backend.relative&&x.kind===fullStackPair.backend.kind);
     if(!backendTarget)throw Error('NestJS backend disappeared during install.');
@@ -155,7 +161,7 @@ async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgr
      onProgress:async message=>{cancelled(state);await report(67,4,'Backend: '+message);}});
    }catch(error){
     cancelled(state);
-    if(fullStackMode!=='auto')throw error;
+    if(preserveCheckout||fullStackMode!=='auto')throw error;
     runMode='preview';backendFallback=true;
     await report(69,4,'Real backend dependencies were unavailable. Continuing with Vite frontend and clearly marked synthetic API; no real database claim.');
    }
