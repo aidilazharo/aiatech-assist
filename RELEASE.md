@@ -1,12 +1,12 @@
-# ATGV AIATECH Assist v0.1.35
+# ATGV AIATECH Assist v0.1.36
 
 ## Changes
 
-- Prompt unregistered connected Jira users with a host-controlled Confirm registration modal displaying their verified name, email (or unavailable), project and Confluence space. Cancel writes no new user record; Refresh can reopen the modal. Existing verified users do not need to register again.
-- Search Jira project-assignable users by name or email and select the verified account. Preserve PM and Jira permission checks for adding other users.
-- Use the merged Confluence page and database-property roster for PM assignment and BA ownership transfer. Preserve multiple roles and unique account IDs; reconcile database-only records on roster refresh.
-- Verify user registration by reading the saved page and database property directly. Report incomplete database sync explicitly rather than full success. Keep the visible Confluence page as a compatible mirror; this integration does not populate native Confluence Database rows.
+- Request first-time user registration only after explicit Overview navigation; background refresh and role visits do not prompt or register a new account.
+- Show only Full Name and Email in the registration modal. Reuse stored identity details when the verified account or an unlinked matching email already exists, and reject conflicting account IDs.
+- Keep existing role memberships, shared Confluence synchronization and registration confirmation safeguards.
+- Preserve existing automatic extension and Library release checks and pinned AIA Malaysia release repositories.
 
 ## Validation
 
-- Changed JavaScript syntax checked; five simulated registration scenarios passed (no consent, cancellation, confirmed registration, multi-role visits, partial sync, database-only recovery and unavailable email are covered). Existing roster regression fixtures updated. Live Confluence calls, full regression suite and VSIX packaging remain unverified.
+- Changed JavaScript syntax checked; nine simulated registration and navigation tests passed in a mocked harness. Live Confluence, VS Code UI, full regression suite and VSIX packaging remain unverified.
