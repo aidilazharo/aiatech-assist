@@ -1,4 +1,4 @@
-# ATGV AIATECH Assist v0.1.21
+# ATGV AIATECH Assist v0.1.22
 
 - Build a read-only, role-facing approved BR snapshot from verified published Jira Epics and live descendants, independently of local BA drafts or Confluence recovery. Preserve exact published descriptions and explicit acceptance criteria/definition of done, including named custom fields.
 - Store semantic revisions and history in project SQLite; unchanged assignment/status changes do not create a content revision. Fresh complete verification is required before execution; unverified roots fail closed.
@@ -7,3 +7,5 @@
 - Existing architectural execution approval and task ownership gates retained. Full regression, live company testing and VSIX packaging pending.
 
 - Follow-up: persist the verified Epic marker and stable published approval timestamp; use the same live published snapshot for UI/UX review and frontend publication; group Designer Jira choices by BR; refresh the snapshot immediately after BR publication and query only the latest cached revision per Epic.
+
+- Correct six outdated regression assertions/VM fixtures identified by the v0.1.20 build. Tests explicitly verify the separate published role register, correct selected role, nonzero task count, and ability to stop an active development run even when current ownership is stale. The runtime checks are unchanged and no tests are skipped.

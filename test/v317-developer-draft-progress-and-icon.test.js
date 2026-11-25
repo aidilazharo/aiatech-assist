@@ -10,7 +10,7 @@ const host=fs.readFileSync(path.join(root,'test/generated/extension-source.txt')
 const css=fs.readFileSync(path.join(root,'media/start.css'),'utf8');
 const renderer=view.slice(view.indexOf('function renderDeveloperBrStages(){'),view.indexOf('let developerBrFailedAt=',view.indexOf('function renderDeveloperBrStages(){')));
 const ids=['Analyze','Plan','Red','Green','Refactor','Test','Build','Local','Verify'];
-function renderPreview(phase,{ready=false,stage=phase,preview=true,owns=true,loaded=true,inventoryProject='p',serverRunning=ready}={}){
+function renderPreview(phase,{ready=false,stage=phase,preview=true,owns=true,loaded=true,inventoryProject='p',inventoryRole='software-developer',taskCount=1,serverRunning=ready}={}){
  const nodes={};
  function node(){const flags=new Set();return {
   textContent:'',disabled:false,className:'',title:'',attrs:{},
@@ -21,7 +21,7 @@ function renderPreview(phase,{ready=false,stage=phase,preview=true,owns=true,loa
  for(const id of ids.map(n=>'developerBrStep'+n).concat(['developerBrProgressCount','developerBrServerIndicator','developerBrDetails','developerBrWorkArea','developerBrStart','developerBrStop','developerBrPreviewDraft','developerBrOpenWorktree','developerBrOpenPreview','developerBrRetryLocal','developerBrServerToggle','developerBrSelect','developerBrJiraSelect']))nodes[id]=node();
  const ctx={developerBrStages:['analyze','plan','red','green','refactor','tests','build','local','verify'],developerBrNodes:ids.map(n=>'developerBrStep'+n),developerBrDraftPhases:['analyze','plan','local','verify'],developerBrDraftPhase:phase,developerBrDraftReady:ready,
  developerBrStage:stage,developerBrPreviewOnly:preview,developerBrDone:false,developerBrSelected:'BR-011',developerBrBusy:!ready,developerBrServerBusy:false,developerBrServerRunning:serverRunning,developerBrStopping:false,developerBrAssignmentBusy:false,developerBrCanRetry:false,developerBrWorktree:'',developerBrUrl:'',developerBrCycleIndex:0,developerBrCycleTotal:0,developerBrRecovery:null,
- roleJiraLoaded:loaded,roleJiraProject:inventoryProject,activeId:'p',roleJiraItems:[{brRoot:true,brId:'BR-011',roleScopes:{'software-developer':{mine:owns}}}],
+ roleJiraLoaded:loaded,roleJiraProject:inventoryProject,roleJiraRole:inventoryRole,activeId:'p',roleJiraItems:[{brRoot:true,brId:'BR-011',roleScopes:{'software-developer':{mine:owns,count:taskCount}}}],
  projectDraftPreviewEnabled:()=>true,renderDeveloperCriterionProgress:()=>{},renderDeveloperBrAssignment:()=>{},syncBrDeliveryGate:()=>{},matchingDeveloperBrTickets:()=>[],windowDeveloperBrFailedAt:()=>stage,$:id=>{assert.ok(nodes[id],id);return nodes[id];}};
  vm.runInNewContext(renderer+'\nrenderDeveloperBrStages();',ctx);
  return nodes;
@@ -73,4 +73,6 @@ test('Draft preview requires current verified role ownership',()=>{
  assert.equal(renderPreview('idle',{ready:true,preview:false,serverRunning:false,owns:false}).developerBrPreviewDraft.disabled,true);
  assert.equal(renderPreview('idle',{ready:true,preview:false,serverRunning:false,loaded:false}).developerBrPreviewDraft.disabled,true);
  assert.equal(renderPreview('idle',{ready:true,preview:false,serverRunning:false,inventoryProject:'other'}).developerBrPreviewDraft.disabled,true);
+ assert.equal(renderPreview('idle',{ready:true,preview:false,serverRunning:false,inventoryRole:'ux-designer'}).developerBrPreviewDraft.disabled,true);
+ assert.equal(renderPreview('idle',{ready:true,preview:false,serverRunning:false,taskCount:0}).developerBrPreviewDraft.disabled,true);
 });

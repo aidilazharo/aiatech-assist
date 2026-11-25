@@ -57,6 +57,8 @@ test('role refresh pulls shared content before mapping and refreshes the selecto
  assert.ok(host.includes("vault.sync({mode:'pull'})"));
  assert.ok(host.includes('confluenceBRRecovery.recoverAssigned'));
  assert.ok(host.includes('jiraLocalStore.saveMappings'));
- assert.ok(ui.includes('brState=msg.register;developerBrSyncWarnings'));
+ assert.ok(host.includes('refreshPublishedRoleRegister(projectId,{config,token,register,items:all'));
+ assert.ok(ui.includes('roleBrState=msg.register;developerBrSyncWarnings'));
+ assert.ok(!ui.includes('brState=msg.register;developerBrSyncWarnings'));
  assert.ok(ui.includes('renderDeveloperBrChoices();'));
 });
