@@ -203,18 +203,20 @@ test('Jira connection test uses read-only myself endpoint with Basic auth and re
   }finally{global.fetch=original;}
 });
 
-test('GitHub connection test accepts public unauthenticated repositories and validates API owner/repo',async()=>{
+test('GitHub connection test distinguishes public browsing from authenticated repository access',async()=>{
   const original=global.fetch;
   const c=config({'github.owner':'n6ffp2r5m5-prog','github.repo':'app-test','github.apiUrl':'https://api.github.com'});
   global.fetch=async(url,options)=>{
-    assert.equal(url,'https://api.github.com/repos/n6ffp2r5m5-prog/app-test');
+    assert.ok(url.startsWith('https://api.github.com/repos/n6ffp2r5m5-prog/app-test'));
     assert.equal(options.method,'GET');
     assert.equal(options.headers.Authorization,undefined);
-    return ok({full_name:'n6ffp2r5m5-prog/app-test',private:false,default_branch:'main'});
+    return ok(url.includes('/branches?')?[]:{full_name:'n6ffp2r5m5-prog/app-test',private:false,default_branch:'main'});
   };
   try{
-    assert.deepEqual(await testGithubConnection(c,undefined),{fullName:'n6ffp2r5m5-prog/app-test',private:false,defaultBranch:'main'});
+    await assert.rejects(()=>testGithubConnection(c,undefined),/required/);
+    const publicRepo=await testGithubConnection(c,undefined,{requireAuthentication:false});
+    assert.equal(publicRepo.authenticated,false);assert.equal(publicRepo.permissions.push,false);assert.equal(publicRepo.fullName,'n6ffp2r5m5-prog/app-test');
     global.fetch=async()=>ok({full_name:'other-org/different-repo'});
-    await assert.rejects(()=>testGithubConnection(c,undefined),/does not match/);
+    await assert.rejects(()=>testGithubConnection(c,undefined,{requireAuthentication:false}),/does not match/);
   }finally{global.fetch=original;}
 });

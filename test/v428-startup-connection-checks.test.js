@@ -146,7 +146,7 @@ function hostFixture(failures={}){
   cfg:()=>({get:()=>undefined}),normalizeExtensionSettings:normalized,
   projectConfig:(_p,settings)=>({get:key=>key==='github.apiUrl'?'https://api.github.com':settings[key.split('.')[0]]?.[key.split('.')[1]]||''}),
   validateUrl:s=>s,globalSecretKey:k=>k,readToken:async k=>k==='atlassian'?'saved-atl':'saved-git',
-  storeToken:async()=>writes.push('token'),
+  storeToken:async(kind)=>writes.push('token:'+kind),
   persistConnectionSettings:async ({extension})=>{if(extension)context.extensionSettings=extension;writes.push('setting');},
   startupSavedConnectionFields:()=>setup.DEFAULTS,
   STARTUP_VERIFIED_SECRET:'atgv-test-startup-verified',
@@ -159,6 +159,7 @@ function hostFixture(failures={}){
    if(id==='organization')return {login:'aiamalaysia'};
    if(id==='releases')return [];
    if(id==='library'){
+    if(url.endsWith('/branches/main'))return {name:'main'};
     const match=url.match(/\/repos\/([^/]+)\/([^/]+)$/);
     if(!match)throw Error('Unexpected GitHub repository resource '+url);
     return {full_name:match[1]+'/'+match[2],permissions:{pull:!failures.readDenied,push:!failures.readonly}};
@@ -235,6 +236,7 @@ test('GitHub account, organization and source HTTP 403 failures stay visible but
   assert.equal(row.state,'error');
  }
  assert.ok(h.writes.includes('setting'));
+ assert.ok(!h.writes.includes('token:github'),'unverified PAT must not overwrite stored credentials');
 });
 test('A missing GitHub token does not prevent startup setup when Atlassian connections pass',async()=>{
  const h=hostFixture();

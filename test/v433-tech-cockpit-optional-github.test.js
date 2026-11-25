@@ -30,7 +30,7 @@ function harness({accountOwner='',repo='',repoOwner='',jiraProjectKey='',githubF
   baseAtlassian:()=> 'https://example.atlassian.net',
   openingProgress:async()=>{},
   recordStartupDiagnostic:async x=>{events.push(x);},
-  testGithubConnection:async()=>{calls.push('github-repo');if(githubFailure)throw Error('HTTP 403 repository permission denied');return {name:'tech-cockpit'};},
+  testGithubConnection:async()=>{calls.push('github-repo');if(githubFailure)throw Error('HTTP 403 repository permission denied');return {name:'tech-cockpit',authenticated:true,permissions:{pull:true,push:true}};},
   report:()=>{},startupConnectionFailure:e=>String(e.message||e)
  };
  vm.createContext(sandbox);

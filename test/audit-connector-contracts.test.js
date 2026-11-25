@@ -53,7 +53,7 @@ test('Confluence remote version conflict prevents blind overwrite',async t=>{
 });
 
 test('GitHub skills repo identity is verified and mismatches rejected',async t=>{
- mockFetch(t,()=>({body:{full_name:'example-org/tech-stacks-skills',default_branch:'main',private:true}}));
+ mockFetch(t,url=>({body:url.endsWith('/user')?{login:'tester'}:url.includes('/branches?')?[]:url.endsWith('/branches/main')?{name:'main'}:{full_name:'example-org/tech-stacks-skills',default_branch:'main',private:true}}));
  const status=await testGithubConnection(config,'fake-token');
  assert.equal(status.fullName,'example-org/tech-stacks-skills');
  assert.equal(status.private,true);

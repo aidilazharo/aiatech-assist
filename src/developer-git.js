@@ -7,6 +7,12 @@ const crypto = require('node:crypto');
 const diagnostic = require('./stack-process-diagnostics');
 const {nodeExecutable,npmCommand,mavenCommand} = require('./platform-process');
 const run = promisify(execFile);
+// Scope the supplied credential to github.com via process-local Git config; never persist it.
+function gitCredentialEnvironment(token){
+ if(!token)return {};
+ const value=String(token);if(!/^[^\s\x00-\x1f\x7f]{1,512}$/.test(value))throw Error('Invalid GitHub credential.');
+ return {GIT_CONFIG_COUNT:'2',GIT_CONFIG_KEY_0:'http.https://github.com/.extraheader',GIT_CONFIG_VALUE_0:'',GIT_CONFIG_KEY_1:'http.https://github.com/.extraheader',GIT_CONFIG_VALUE_1:'AUTHORIZATION: basic '+Buffer.from('x-access-token:'+value).toString('base64')};
+}
 const KEY = /^[A-Z][A-Z0-9]{1,19}-[1-9][0-9]*$/;
 const BRANCH = /^[a-z0-9][a-z0-9/_-]{0,110}$/;
 function jiraKey(input) { const key = String(input || '').trim().toUpperCase(); if (!KEY.test(key))
@@ -183,7 +189,7 @@ async function publishBootstrap(root, base = 'main') {
     await git(root, 'push', '--set-upstream', 'origin', repo.branch);
     return { ...repo, base, baseSha: localBase, published: true };
 }
-async function cloneConfigured(parent, owner, name, branch = '', {allowExistingEmpty=false} = {}) {
+async function cloneConfigured(parent, owner, name, branch = '', {allowExistingEmpty=false,token=''} = {}) {
     if (!/^[a-zA-Z0-9-]{1,39}$/.test(owner) || !/^[-.a-zA-Z0-9_]{1,100}$/.test(name) || name === '.' || name === '..')
         throw Error('Invalid GitHub repository identity.');
     const root = await fs.realpath(parent), dest = path.join(root, name);
@@ -196,7 +202,8 @@ async function cloneConfigured(parent, owner, name, branch = '', {allowExistingE
     const address = `https://github.com/${owner}/${name}.git`;
     const { validGithubBranch } = require('./projects');
     const selected=validGithubBranch(branch);
-    await run('git', ['clone', ...(selected?['--branch',selected]:[]), '--', address, dest], { cwd: root, timeout: 120000, maxBuffer: 1024 * 1024, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'Never' } });
+    try{await run('git', ['clone', ...(selected?['--branch',selected]:[]), '--', address, dest], { cwd: root, timeout: 120000, maxBuffer: 1024 * 1024, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'Never', ...gitCredentialEnvironment(token) } });}
+    catch(error){if(token)throw Error('Git clone failed using the configured GitHub credential. Check repository Contents read, network, SSO and branch access.');throw error;}
     return repository(dest);
 }
 async function pushStory(root, key) {

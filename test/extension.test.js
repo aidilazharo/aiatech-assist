@@ -44,6 +44,9 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
     if(url.includes('/rest/api/3/project/FIN'))return {ok:true,status:200,json:async()=>({id:'10',key:'FIN',name:'Finance'})};
     if(url.includes('/wiki/api/v2/spaces/1005'))return {ok:true,status:200,json:async()=>({id:'1005',key:'FIN',name:'Finance Knowledge'})};
     if(url.includes('/rest/api/3/myself'))return {ok:true,status:200,json:async()=>({accountId:'some-id',displayName:'ATGV Test User'})};
+    if(url==='https://api.github.com/user')return {ok:true,status:200,json:async()=>({login:'test-user'})};
+    if(url.endsWith('/branches/main'))return {ok:true,status:200,json:async()=>({name:'main'})};
+    if(url.includes('/branches?'))return {ok:true,status:200,json:async()=>[]};
     if(url.includes('/repos/aia-org/shared-docs'))return {ok:true,status:200,json:async()=>({full_name:'aia-org/shared-docs',private:true,default_branch:'main'})};
     if(url.includes('/user/repos?'))return {ok:true,status:200,json:async()=>[
       {full_name:'aia-org/shared-docs',private:true,default_branch:'main'},

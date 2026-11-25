@@ -4,6 +4,7 @@
 // or PR descriptions. GitHub CLI (gh) is not required.
 const https=require('node:https');
 const MAX_RESPONSE=1024*1024;
+const {diagnostic}=require('./github-credential-validator');
 function assertToken(token){
  if(!/^[^\s\x00-\x1f\x7f]{20,512}$/.test(String(token||'')))throw Error('A valid Destination PAT is required for GitHub API access.');
 }
@@ -41,7 +42,7 @@ function githubRequest(repo,token,method,suffix='',payload){
     content+=chunk;
    });
    response.on('end',()=>{
-    try{resolve({status:response.statusCode||0,body:content?JSON.parse(content):null});}
+    try{resolve({status:response.statusCode||0,body:content?JSON.parse(content):null,headers:response.headers});}
     catch{reject(Error('GitHub API returned an invalid JSON response.'));}
    });
    response.on('error',()=>reject(Error('GitHub API response failed.')));
@@ -56,7 +57,7 @@ function requireOk(result,expected,activity){
  const status=Number(result?.status)||0;
  if(status===expected)return result.body;
  if(status===401)throw Error('GitHub Destination PAT authentication failed (HTTP 401).');
- if(status===403)throw Error('GitHub denied '+activity+' (HTTP 403). For fine-grained Destination PATs, grant repository Contents: Read and write and Pull requests: Read and write; check organisation restrictions.');
+ if(status===403||status===429)throw Error('GitHub denied '+activity+' (HTTP '+status+'). '+diagnostic(status,result.headers,result.body?.message));
  if(status===404)throw Error('Destination repository or GitHub PR endpoint is inaccessible (HTTP 404). Verify the PAT and repository URL.');
  if(status===422)throw Error('GitHub rejected '+activity+' (HTTP 422): confirm the review branch differs from the base and a matching PR does not already exist.');
  throw Error('GitHub '+activity+' failed (HTTP '+status+').');

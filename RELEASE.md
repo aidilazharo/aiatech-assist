@@ -1,11 +1,12 @@
-# ATGV AIATECH Assist v0.0.97
+# ATGV AIATECH Assist v0.0.98
 
 ## Changes
 
-- Use verified Quill for editable BA source documents, with undo/redo and theme-aware typography.
-- If Quill is unavailable, expose a read-only source preview and a verified Library sync/retry action instead of an editable textarea.
-- Preserve plain-text evidence, revision and ownership checks; reset stale editor state when switching tabs.
+- Authenticate GitHub accounts and validate repository branch/content access before reporting authenticated connections; expose write permission as an assessment, not a successful push.
+- Preserve saved credentials when optional Startup GitHub authentication fails. Synchronize shared Library credentials when updating the verified global token, preserve independently configured Library tokens, and invalidate cached project checks.
+- Classify GitHub authentication, rate limit, SSO, IP restrictions and other HTTP failures. Use the configured credential for direct project clone via transient Git configuration.
+- Add focused regression coverage for credential and permission handling.
 
 ## Validation
 
-- Added source-editor regression assertions. Full regression and live VS Code verification remain pending. VSIX packaging intentionally skipped for this source-only change.
+- Source-only update; full local regression and live corporate GitHub verification pending. VSIX packaging intentionally skipped.

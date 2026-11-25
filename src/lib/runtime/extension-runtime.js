@@ -4,6 +4,7 @@ const fs=require('node:fs/promises');
 const fsSync=require('node:fs');
 const path=require('node:path');
 const {markdownToStorage,validateUrl,sha,textFromAdf}=require('../../utils');
+const githubCredentials=require('../../github-credential-validator');
 const {requestJson,baseAtlassian,baseConfluence,getConfluenceSpace,listConfluence,getConfluencePage,writeConfluence,listJira,githubRepoInfo,listGithub,listGithubRepositories,listGithubBranches,discoverJiraProjects,discoverConfluenceSpaces,testJiraConnection,testGithubConnection}=require('../../clients');
 const {KnowledgeStore}=require('../../knowledge');
 const jiraTemplateKnowledge=require('../../jira-template-knowledge');
@@ -975,6 +976,10 @@ async function setSecret(kind,scope='project'){
   const labelScope=project?`project ${project.name}`:'extension-wide settings';
   const token=await uiInput({prompt:`${label} API token for ${labelScope}`,password:true,ignoreFocusOut:true,validateInput:v=>v.trim()?'':`${label} token required`});
   if(token===undefined)return false;
+  if(kind==='github'){
+    const user=await githubCredentials.account(identity.endpoint,token.trim(),requestJson);
+    identity.login=user.login;
+  }
   await storeToken(project?secretKey(project,kind):globalSecretKey(kind),identity,token.trim());
   uiInformation(`${label} token saved for ${labelScope}.`);
   tree?.refresh();await refreshDashboard();return true;
@@ -1669,6 +1674,7 @@ async function requireAutomaticStartup(projectId){
  if(!project||project.id!==projectId)throw Error('The saved project selection changed. Select a project from the list.');
 }
 function startupConnectionFailure(error){
+ if(error?.githubDiagnostic)return 'HTTP '+error.status+': '+error.githubDiagnostic;
  const text=String(error?.message||error||''),status=/\bHTTP\s+(\d{3})\b/i.exec(text)?.[1];
  if(status){
   const advice=status==='401'||status==='403'?'Check the account, token and permissions.':status==='404'?'Check the service URL and account access.':status==='429'?'The service is rate limiting requests; retry later.':'Check the service and retry.';
@@ -1701,7 +1707,7 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
  ]);
  const gitHeaders={Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'};
  const libraryConf=sdlcCatalog.normalizeConfig({repositoryUrl:data.libraryRepoUrl,ref:'main',authentication:'token',autoCheck:true});
- let library,offlineFallback=null;
+ let library,offlineFallback=null,githubAccountVerified=false;
  const jiraApi=data.jiraUrl+'/rest/api/3/myself';
  const confluenceApi=data.confluenceUrl+'/api/v2/spaces';
  const accountApi='https://api.github.com/user';
@@ -1740,7 +1746,11 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
   // Read access is mandatory for source repos; write is optional.
   if(requireRead&&meta.permissions?.pull===false)
    throw Error('GitHub repository read permission denied. Grant Contents: read-only to the selected repository.');
-  const sourceAccess={read:true,write:meta.permissions?.push===true};
+  if(requireRead){
+   const branch=await requestJson(url+'/branches/main',{token:github,headers:gitHeaders});
+   if(branch?.name!=='main')throw Error('GitHub main branch content access could not be verified.');
+  }
+  const sourceAccess={read:true,write:meta.permissions?.push===true&&!meta.archived&&!meta.disabled};
   if(checkRelease){
    const releases=await requestJson(url+'/releases?per_page=1',{token:github,headers:gitHeaders});
    if(!Array.isArray(releases))throw Error('GitHub release listing was not accessible.');
@@ -1768,6 +1778,7 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
    if(!github)throw Error('GitHub token required');
    const user=await requestJson(accountApi,{token:github,headers:gitHeaders});
    if(!user?.login)throw Error('Unexpected GitHub account response');
+   githubAccountVerified=true;
   }},
   {id:'organization',label:'GitHub organization · optional',url:organizationApi,required:false,check:async()=>{
    const org=await requestJson(organizationApi,{token:github,headers:gitHeaders});
@@ -1801,7 +1812,7 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
      info?.asset?'Authenticated release download verified.':info?.releases===0?
      'Repository access verified. No published release assets to download yet.':'Reachable and verified.'};
   }catch(error){
-   const sourceDenied=(spec.id==='extension'||spec.id==='library')&&/\bHTTP\s+403\b/i.test(String(error?.message||error));
+   const sourceDenied=!error?.githubDiagnostic&&(spec.id==='extension'||spec.id==='library')&&/\bHTTP\s+403\b/i.test(String(error?.message||error));
    value={id:spec.id,label:spec.label,url:spec.url,required:spec.required,state:'error',
     message:sourceDenied?'GitHub repository HTTP 403. Read/write checks are optional for Start; continue with Next. Grant repository read access to enable GitHub operations.':startupConnectionFailure(error)};
   }
@@ -1818,8 +1829,11 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
  // Do not store raw tokens in extension settings or send them to the webview.
  await persistConnectionSettings({extension:settings,library:libraryConf});
  if(enteredAtlassian)await storeToken(globalSecretKey('atlassian'),atlIdentity,atlassian);
- if(enteredGithub)await storeToken(globalSecretKey('github'),gitIdentity,github);
- await context.secrets.store('atgvAssist.sdlcCatalogToken',github||'');
+ // GitHub remains optional, but an unsuccessful authentication must never replace a saved credential.
+ if(enteredGithub&&githubAccountVerified)await storeToken(globalSecretKey('github'),gitIdentity,github);
+ const persistedGithub=githubAccountVerified?github:await readToken(globalSecretKey('github'),gitIdentity).catch(()=>undefined);
+ if(githubAccountVerified)await context.secrets.store('atgvAssist.sdlcCatalogToken',github);
+ else if(!persistedGithub&&!enteredGithub)await context.secrets.store('atgvAssist.sdlcCatalogToken','');
  
  pendingTests={jira:null,github:null};
  catalogRemote=null;catalogLastCheck='';catalogLastError='';scheduleCatalogChecks();
@@ -1828,7 +1842,7 @@ async function testAndSaveStartupConnections(message,{save=true,onProgress=()=>{
  // when the user originally entered trailing slashes or a GitHub .git suffix.
  const persistedSignature=sha(JSON.stringify(startupSetup.validate(startupSavedConnectionFields())));
  await context.secrets.store(STARTUP_VERIFIED_SECRET,JSON.stringify({
-  signature:persistedSignature,tokenDigest:sha(atlassian+'\\0'+(github||''))
+  signature:persistedSignature,tokenDigest:sha(atlassian+'\\0'+(persistedGithub||''))
  }));
  return {success:true,checks,librarySha:library?.sha?.slice(0,12)||'',
   message:connectionMessage+' Project repository: '+data.projectRepoUrl+'.'};
@@ -1912,13 +1926,9 @@ async function roleConnectionAccess(roleId){
    const gitToken=await getGithubToken(project);
    if(!gitToken)issues.push('GitHub token unavailable; configure it in Settings');
    else{
-    const info=githubRepoInfo(config);
-    const meta=await requestJson(info.route,{token:gitToken,timeoutMs:9000,
-     headers:{Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'}});
-    if(String(meta?.full_name||'').toLowerCase()===(info.owner+'/'+info.repo).toLowerCase()){
-     observed.githubRead=meta.permissions?.pull===true;
-     observed.githubWrite=observed.githubRead&&meta.permissions?.push===true;
-    }
+    const meta=await testGithubConnection(config,gitToken);
+    observed.githubRead=meta.authenticated===true&&meta.permissions?.pull===true;
+    observed.githubWrite=observed.githubRead&&meta.permissions?.push===true;
     if(!observed.githubRead)issues.push('GitHub repository read permission not verified');
     else if(roleConnectionPolicy.isDeveloperRole(roleId)&&!observed.githubWrite)
      issues.push('Developer GitHub repository write permission not verified');
@@ -2236,8 +2246,8 @@ async function testExtensionGithub(msg){
   // be able to authenticate first, list private repos, and choose one later.
   if(!fields.repo){
     if(token){
-      const user=await requestJson(`${identity.endpoint.replace(/\/$/,'')}/user`,{token,headers:{Accept:'application/vnd.github+json'}});
-      if(!user||(!user.login&&!user.id))throw new Error('GitHub authentication did not return an account. Check the personal access token.');
+      const user=await githubCredentials.account(identity.endpoint,token,requestJson);
+      identity.login=user.login;
       pendingTests.github={fields,token:enteredToken,identity,repoConfigured:false};
       return {message:`GitHub account verified (${String(user.login||user.id)}). You can save the token now and enter a repository URL later.`,fields,repoConfigured:false};
     }
@@ -2250,18 +2260,10 @@ async function testExtensionGithub(msg){
     pendingTests.github={fields,token:'',disabled:true,identity};
     return {message:'No GitHub account, token or repository configured. Saving will clear optional GitHub settings.',fields,disabled:true};
   }
-  let repo;
-  try{repo=await testGithubConnection(config,token);}catch(e){
-    if(/HTTP 404/.test(e.message))throw new Error('GitHub repository not found, or your token does not have access. Check owner, repository, and token.');
-    if(/HTTP 401|HTTP 403/.test(e.message))throw new Error('GitHub authentication failed or access was denied. Check token permissions and repository access.');
-    throw e;
-  }
-  if(fields.branch){
-    try{await requestJson(`${githubRepoInfo(config).route}/branches/${encodeURIComponent(fields.branch)}`,{token,headers:{Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'}});}
-    catch(error){throw Error('GitHub branch '+fields.branch+' is not accessible. The configured repository must provide main; verify repository access and test again. '+error.message);}
-  }
-  pendingTests.github={fields,token:enteredToken,identity,repoConfigured:true};
-  return {message:`GitHub connection successful (${repo.fullName}${repo.private?', private':''}). Branch: ${fields.branch||repo.defaultBranch||'repository default'}${fields.branch?' (verified)':' (default)'}. You can now save the verified main-branch GitHub settings.`,fields,repoConfigured:true};
+  const repo=await testGithubConnection(config,token,{branch:fields.branch});
+  identity.login=repo.login;
+  pendingTests.github={fields,token:enteredToken,identity,repoConfigured:true,permission:repo.permissions};
+  return {message:`GitHub connection successful (${repo.fullName}${repo.private?', private':''}). Branch: ${fields.branch||repo.defaultBranch||'repository default'}${fields.branch?' (verified)':' (default)'}. Content read verified; write permission assessment: ${repo.permissions.push?'available (not push-tested)':'not verified'}. You can now save the verified main-branch GitHub settings.`,fields,repoConfigured:true};
 }
                                                                               
                                                                                   
@@ -2341,7 +2343,7 @@ async function testOpeningProject(){
      await openingProgress('connection','Checking GitHub repository read/write permissions (optional)…',33);
      try{
       const result=await testGithubConnection(config,gToken);
-      if(result?.permissions?.push===false)warnings.push('GitHub repository write access is unavailable (optional). Project access continues; push/publish needs permission.');
+      if(result?.permissions?.push!==true)warnings.push('GitHub repository write access is unavailable (optional). Project access continues; push/publish needs permission.');
      }catch(error){
       warnings.push('GitHub repository access is unavailable (optional): '+startupConnectionFailure(error)+' Project access continues.');
       await recordStartupDiagnostic({stage:'project-opening',projectId:project.id,status:'optional-github-unavailable',detail:startupConnectionFailure(error)});
@@ -8311,8 +8313,8 @@ async function handleDashboardMessage(msg){
           if(!insideFolder(repo.root,resolvedProject))throw Error('The existing Git checkout resolves outside this project; refusing to use a linked directory.');
           if(!developerGit.matchesGithubRepo(repo.remote,owner,name))throw Error('Existing project checkout points to a different GitHub origin. Review it manually; nothing was overwritten.');
         }else{
-          const yes=await uiWarning(`Clone https://github.com/${owner}/${name}.git into this project's repository folder?\n\n${dest}\n\nGit uses your configured credential helper. Existing files will not be overwritten.`,{modal:true},'Clone');if(yes!=='Clone')break;
-          repo=await developerGit.cloneConfigured(resolvedParent,owner,name);
+          const yes=await uiWarning(`Clone https://github.com/${owner}/${name}.git into this project's repository folder?\n\n${dest}\n\nGit uses the configured GitHub credential when available. Existing files will not be overwritten.`,{modal:true},'Clone');if(yes!=='Clone')break;
+          repo=await developerGit.cloneConfigured(resolvedParent,owner,name,'',{token:await getGithubToken(activeProject,true)});
         }
         if(!insideFolder(repo.root,resolvedProject))throw Error('Git checkout is outside the active project folder.');
         await context.workspaceState.update('atgvAssist.localRepo.'+activeProject.id,repo.root);
@@ -9106,8 +9108,17 @@ async function handleDashboardMessage(msg){
           throw new Error('Test GitHub Connection with the current settings before saving.');
         await persistConnectionSettings({extension:next,setupComplete:false});
         
-        if(verified.disabled)await context.secrets.delete(globalSecretKey('github'));
-        else if(verified.token)await storeToken(globalSecretKey('github'),verified.identity,verified.token);
+        if(verified.disabled){
+          const old=await readToken(globalSecretKey('github'),verified.identity).catch(()=>undefined);
+          await context.secrets.delete(globalSecretKey('github'));
+          if(old&&await context.secrets.get('atgvAssist.sdlcCatalogToken')===old)await context.secrets.delete('atgvAssist.sdlcCatalogToken');
+        }else if(verified.token){
+          const old=await readToken(globalSecretKey('github'),verified.identity).catch(()=>undefined);
+          const libraryToken=await context.secrets.get('atgvAssist.sdlcCatalogToken');
+          await storeToken(globalSecretKey('github'),verified.identity,verified.token);
+          if(!libraryToken||libraryToken===old)await context.secrets.store('atgvAssist.sdlcCatalogToken',verified.token);
+        }
+        verifiedConnections.clear();
         pendingTests.github=null;
         if(openingFlow.candidate&&openingFlow.phase!=='open')openingFlow.select(openingFlow.candidate);
         let cloneStatus='';
@@ -9121,7 +9132,7 @@ async function handleDashboardMessage(msg){
             const exists=await fs.lstat(dest).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
             let checkout;
             if(exists){if(!exists.isDirectory()||exists.isSymbolicLink())throw Error('Existing checkout path is not a safe directory.');checkout=await developerGit.repository(dest);if(!developerGit.matchesGithubRepo(checkout.remote,fields.owner,fields.repo))throw Error('Existing checkout uses a different GitHub origin; not modified.');}
-            else checkout=await developerGit.cloneConfigured(resolvedParent,fields.owner,fields.repo,fields.branch);
+            else checkout=await developerGit.cloneConfigured(resolvedParent,fields.owner,fields.repo,fields.branch,{token:await readToken(globalSecretKey('github'),verified.identity)});
             if(!insideFolder(checkout.root,resolvedProject))throw Error('Checkout resolves outside project.');
             await context.workspaceState.update('atgvAssist.localRepo.'+activeProject.id,checkout.root);
             await context.workspaceState.update('atgvAssist.bootstrapRepo.'+activeProject.id,checkout.root);

@@ -43,6 +43,7 @@ function probeHarness({projectKeys=true,jiraRead=true,jiraWrite=true,confluenceC
   baseAtlassian:()=> 'https://example.atlassian.net',
   baseConfluence:()=> 'https://example.atlassian.net/wiki',
   getGithubToken:async()=> 'github-token',
+  testGithubConnection:async()=>({authenticated:true,permissions:{pull:true,push:githubWrite}}),
   githubRepoInfo:()=>({owner:'org',repo:'project',route:'https://api.github.com/repos/org/project'}),
   requestJson:async url=>{
    calls.push(url);

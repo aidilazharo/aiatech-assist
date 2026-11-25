@@ -21,7 +21,7 @@ test('credential URL rejects invalid hosts, queries, missing fields and malforme
 });
 test('connection tests validate permissions and exact repository identity without mutation',async()=>{
  const repo=credentials.parseCredentialUrl('https://person:'+source+'@github.com/Acme/repo-a');
- const request=async()=>({status:200,body:{full_name:'Acme/repo-a',private:true,permissions:{pull:true,push:false}}});
+ const request=async(_repo,_token,suffix)=>({status:200,body:suffix==='/user'?{login:'tester'}:suffix?[]:{full_name:'Acme/repo-a',private:true,permissions:{pull:true,push:false}}});
  assert.equal((await credentials.verifyConnection(repo,source,'Source',request)).permission,'pull');
  await assert.rejects(credentials.verifyConnection(repo,source,'Destination',request),/write access/);
  await assert.rejects(credentials.verifyConnection(repo,source,'Source',async()=>({status:401})),/authentication failed/);

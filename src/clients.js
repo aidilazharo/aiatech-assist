@@ -1,6 +1,7 @@
 'use strict';
 const { textFromAdf, htmlToText, validateUrl } = require('./utils');
 const { githubIpAllowlistHint } = require('./github-ip-allowlist');
+const githubCredentials=require('./github-credential-validator');
 // Produce actionable, non-secret HTTP diagnostics. Jira often returns an
 // empty body, JSON null, or {errorMessages:[],errors:{}} for 404 responses.
 // Never echo request query strings (which can contain JQL and other private data).
@@ -49,12 +50,14 @@ async function requestJson(url, options = {}) {
         const destination = new URL(url);
         const detail = responseErrorDetail(body);
         const hint = destination.hostname === 'api.github.com'
-            ? githubIpAllowlistHint(response.status, detail)
+            ? githubIpAllowlistHint(response.status, detail)||githubCredentials.diagnostic(response.status,response.headers,detail)
             : response.status === 404 ? jira404Hint(destination) : '';
         // Do not include URL query parameters, Authorization headers or token values.
         const context = `${String(method).toUpperCase()} ${destination.pathname}`;
         const explanation = detail || (response.status === 404 ? 'No error details returned by the server.' : 'No response error details.');
-        throw new Error(`HTTP ${response.status} from ${destination.host} ${context}: ${explanation}${hint ? ' ' + hint : ''}`);
+        const safeDetail=token?explanation.split(String(token)).join('[REDACTED]'):explanation;
+        const error=new Error(`HTTP ${response.status} from ${destination.host} ${context}: ${safeDetail}${hint ? ' ' + hint : ''}`);
+        error.status=response.status;error.githubDiagnostic=destination.hostname==='api.github.com'?hint:'';throw error;
     }
     return response.status === 204 ? {} : response.json();
 }
@@ -265,12 +268,9 @@ async function testJiraConnection(config, token) {
         throw new Error('Jira returned an unexpected account response.');
     return { displayName: user.displayName || user.emailAddress || user.accountId, accountId: user.accountId || '' };
 }
-async function testGithubConnection(config, token) {
-    const { owner, repo, route } = githubRepoInfo(config);
-    const data = await githubGet(config, token, route);
-    if (!data || typeof data.full_name !== 'string' || data.full_name.toLowerCase() !== `${owner}/${repo}`.toLowerCase())
-        throw new Error('GitHub returned a repository that does not match the requested owner/repository.');
-    return { fullName: data.full_name, private: !!data.private, defaultBranch: data.default_branch || '' };
+async function testGithubConnection(config, token,{requireAuthentication=true,branch=config.get('github.branch')||''}={}) {
+    const info=githubRepoInfo(config);
+    return githubCredentials.repository({...info,token,branch,requireAuthentication,request:requestJson});
 }
 async function discoverJiraProjects(config, token, query = '') {
     const site = baseAtlassian(config), found = [];
