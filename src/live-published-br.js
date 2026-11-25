@@ -67,7 +67,8 @@ function makeSnapshot({root,register,items,issues,projectKey,previous,verifyMark
   const role=key===root.key?'':roleFor({...item,labels:f.labels||[]},old);
   const kind=key===root.key?'Epic':/^(feature)$/i.test(old?.row?.kind||item.type)?'Feature':/^(story|user story)$/i.test(old?.row?.kind||item.type)?'Story':/^(task|subtask|sub-task|sub task)$/i.test(item.type)?'Task':'Other';
   const taskRole=role&&['Feature','Story','Task'].includes(kind)?role:'';
-  rows.push({key,id:String(issue.id),parentKey:item.parentKey||'',type:item.type,kind,roleId:taskRole,summary:clean(f.summary),description:plain(f.description),...checks(issue),marker:old?.row?.marker||'',labels:[...(f.labels||[])].filter(x=>typeof x==='string').sort(),updated:String(f.updated||'')});
+  const verifiedMarker=old?.row?.marker||(key===root.key?(f.labels||[]).find(label=>typeof label==='string'&&/^atgv-[a-f0-9]{24}$/.test(label)&&verifyMarker(root.id,{...item,labels:[label]})):'')||'';
+  rows.push({key,id:String(issue.id),parentKey:item.parentKey||'',type:item.type,kind,roleId:taskRole,summary:clean(f.summary),description:plain(f.description),...checks(issue),marker:verifiedMarker,labels:[...(f.labels||[])].filter(x=>typeof x==='string').sort(),updated:String(f.updated||'')});
  }
  const epic=rows.find(x=>x.key===root.key);
  if(!epic||!epic.summary)throw Error('Published Epic has no readable summary.');
@@ -103,7 +104,8 @@ function makeSnapshot({root,register,items,issues,projectKey,previous,verifyMark
  }
  const evidence=semantic.map(row=>({key:row.key,type:row.type,roleId:row.roleId,summary:row.summary,description:row.description,acceptanceCriteria:row.acceptanceCriteria,definitionOfDone:row.definitionOfDone,parentKey:row.parentKey}));
  const content={title:epic.summary.replace(new RegExp('^'+root.id+'\\s*[:·.\\-–—]?\\s*','i'),'')||epic.summary,objective:epic.description,scope:'',acceptanceCriteria:epic.acceptanceCriteria||'',features:[...features.values()]};
- return {brId:root.id,epic:root.key,issueId:epic.id,fingerprint,revision,verifiedAt:new Date().toISOString(),content,evidence,synced};
+ const verifiedAt=new Date().toISOString();
+ return {brId:root.id,epic:root.key,issueId:epic.id,fingerprint,revision,verifiedAt,publishedAt:previousSame?(previous.publishedAt||previous.verifiedAt):verifiedAt,content,evidence,synced};
 }
 async function collect({register,items,projectKey,verifyMarker,readIssue,previous={},shouldContinue=()=>true,maxIssues=350}){
  const roots=publishedRoots(items,register,{projectKey,verifyMarker}),snapshots=[],warnings=[];
@@ -130,7 +132,7 @@ function project(register,snapshots){
  for(const s of snapshots){
   const source=(register.brs||[]).find(b=>b.id===s.brId)||{};
   if(inactive.has(source.status)||register.deletedRequirements?.some(x=>x.id===s.brId))continue;
-  next.brs.push({...source,id:s.brId,title:s.content.title,status:'approved',needsRefresh:false,externalReviewRequired:false,roleReviewRequired:false,dependencyReviewRequired:false,approvedContent:s.content,approvedRevision:s.revision,approvedAt:s.verifiedAt,livePublishedSnapshot:true,publishedJiraEvidence:s.evidence,publishedFingerprint:s.fingerprint});
+  next.brs.push({...source,id:s.brId,title:s.content.title,status:'approved',needsRefresh:false,externalReviewRequired:false,roleReviewRequired:false,dependencyReviewRequired:false,approvedContent:s.content,approvedRevision:s.revision,approvedAt:s.publishedAt||s.verifiedAt,livePublishedSnapshot:true,publishedJiraEvidence:s.evidence,publishedFingerprint:s.fingerprint});
   Object.assign(next.synced,s.synced);
   next.baPublishedBRs[s.brId]=normalizedContent(s.content);
  }

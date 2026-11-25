@@ -133,7 +133,7 @@ function publishedSnapshots(registry,projectId,{site,projectKey,snapshots}){
     put.run(origin,project,row.epic,row.revision,row.fingerprint,data,row.verifiedAt);
    }
   });
-  const rows=store.db.prepare("SELECT payload FROM jira_published_br WHERE site=? AND project_key=? ORDER BY revision DESC").all(origin,project);
+  const rows=store.db.prepare("SELECT t.payload FROM jira_published_br t WHERE t.site=? AND t.project_key=? AND t.revision=(SELECT MAX(r.revision) FROM jira_published_br r WHERE r.site=t.site AND r.project_key=t.project_key AND r.epic=t.epic)").all(origin,project);
   const latest={};
   for(const row of rows){const data=JSON.parse(row.payload);if(!Object.hasOwn(latest,data.epic))latest[data.epic]=data;}
   return latest;

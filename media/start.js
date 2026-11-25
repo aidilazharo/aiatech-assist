@@ -3006,7 +3006,12 @@ function renderUxTickets(rows){
  const picker=$('uxSelectedTicket'),previous=uxSelectedKey,mine=rows.filter(item=>item.mine&&item.taskRole==='ux-designer');
  picker.replaceChildren();const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent='Select an assigned Business Requirement';picker.append(placeholder);
  for(const br of rows.filter(item=>item.brRoot&&item.roleScopes?.['ux-designer']?.mine&&!mine.some(task=>task.brId===item.brId))){const option=document.createElement('option');option.value='waiting:'+br.brId;option.textContent=br.brId+' · BR assigned — waiting for UI/UX tasks';option.disabled=true;picker.append(option);}
- for(const item of mine){const option=document.createElement('option');option.value=item.key;option.textContent=item.key+' · '+(item.summary||'Jira issue')+(item.roleMappingVerified===false?' · BR mapping recovery required':'');option.disabled=item.roleMappingVerified===false;picker.append(option);}
+ const groups=new Map();
+ for(const item of mine){
+  const id=item.brId||'Unresolved BR',br=(roleBrState?.brs||[]).find(b=>b.id===id);
+  if(!groups.has(id)){const group=document.createElement('optgroup');group.label=id+(br?' · '+String(br.approvedContent?.title||br.title||''):'');picker.append(group);groups.set(id,group);}
+  const option=document.createElement('option');option.value=item.key;option.textContent=item.key+' · '+(item.summary||'Jira issue')+(item.roleMappingVerified===false?' · BR mapping recovery required':'');option.disabled=item.roleMappingVerified===false;groups.get(id).append(option);
+ }
  const ready=mine.filter(item=>item.roleMappingVerified!==false);uxSelectedKey=ready.some(item=>item.key===previous)?previous:ready[0]?.key||'';picker.value=uxSelectedKey;
  if(!uxSelectedKey){uxPipeline=null;uxDrafts={wireframe:null,mockup:null};setUxStatus(developerBrSyncWarnings.length?developerBrSyncWarnings.join(' · '):mine.length?'Assigned UI/UX tasks found. Refresh Jira to verify the latest published BR.':'Assign an entire BR to begin designing the full application.');$('uxDesignVersionInfo').replaceChildren();$('uxReferenceInfo').textContent='';$('uxReferencePreview').replaceChildren();$('uxReferencePreview').classList.add('hidden');$('uxDesignFramework').value=uxFramework||'';showUxBuilder();renderUxActions();send('uxFrameworkRead',{key:''});return;}
  if(previous!==uxSelectedKey){uxPipeline=null;uxReferenceAvailable=false;uxDrafts={wireframe:null,mockup:null};uxFramework='';$('uxDesignFramework').value=uxFramework;showUxBuilder();}

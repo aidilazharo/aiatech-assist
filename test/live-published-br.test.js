@@ -32,3 +32,12 @@ test('changed Jira parent or missing marker cannot produce executable snapshot',
  const bad=fixture();bad.issues[0].fields.labels=[];
  assert.equal((await collect(bad)).snapshots.length,0);
 });
+
+test('verified Epic marker persists and unchanged approval evidence stays stable',async()=>{
+ const first=(await collect(fixture())).snapshots[0];
+ assert.equal(first.synced['BR-007'].marker,mark);
+ const prior={...first,publishedAt:'2026-11-25T10:00:00Z'};
+ const next=(await collect(fixture(),{'TC-1':prior})).snapshots[0];
+ assert.equal(next.publishedAt,prior.publishedAt);
+ assert.equal(live.project(register,[next]).brs[0].approvedAt,prior.publishedAt);
+});

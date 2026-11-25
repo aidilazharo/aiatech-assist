@@ -4894,6 +4894,7 @@ async function syncApprovedBRs(expectedRevision,automatic=null){
     }
    }
   }catch(error){report('Published BR role assignment synchronization pending: '+String(error.message||error).slice(0,300));}
+  try{if(activeProject?.id===pinnedProject)await refreshPublishedRoleRegister(pinnedProject);}catch(error){report('Published BR snapshot refresh pending: '+String(error.message||error).slice(0,300));}
  }catch(error){
   if(publicationStarted||total){
    await publishProgress('failed',`Publication interrupted after ${confirmed} of ${total} confirmed changes: ${error.message}. Review already-published issues before retrying.`,{error:String(error.message||error).slice(0,1000)}).catch(()=>{});
@@ -6810,6 +6811,9 @@ async function handleDashboardMessage(msg){
         const auth={token,basicEmail:String(config.get('jira.email')||'').trim()};
         const [issue,self]=await Promise.all([jiraReadIssue(config,token,key),requestJson(`${baseAtlassian(config)}/rest/api/3/myself`,auth)]);
         if(issue.fields?.project?.key!==validProjectKey(config.get('jira.projectKey'))||!self?.accountId||issue.fields?.assignee?.accountId!==self.accountId)throw Error('Only the Jira-assigned UI/UX Designer may publish the approved design.');
+        const roleRegister=await currentPublishedRoleRegister(projectId);
+        require('../../br-ownership').requireTask(roleRegister,issue,'ux-designer');
+        if(record.sourceBRHash!==designProposals.approvedInputs(roleRegister).hash)throw Error('Published Business Requirements changed since design approval. Review and regenerate the design before publishing.');
         await dashboard?.webview.postMessage({type:'uxFrontendPublishProgress',projectId,key,message:'Generating frontend source from the approved UI/UX design…'});
         const output=require('../../ux-frontend-code').generate(record,record.sourceStoryKey);
         const root=await architectRepository.resolve(context.workspaceState,projectId,developerGit,{projectRoot:aiRoot(),githubOwner:config.get('github.owner'),githubRepo:config.get('github.repo')});
@@ -6842,11 +6846,13 @@ async function handleDashboardMessage(msg){
         const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
         if(!token)throw Error('Connect Jira before reviewing a design.');
         const auth={token,basicEmail:String(config.get('jira.email')||'').trim()};
-        const [issue,self]=await Promise.all([requestJson(`${baseAtlassian(config)}/rest/api/3/issue/${encodeURIComponent(key)}?fields=project,assignee,updated`,auth),requestJson(`${baseAtlassian(config)}/rest/api/3/myself`,auth)]);
+        const [issue,self]=await Promise.all([requestJson(`${baseAtlassian(config)}/rest/api/3/issue/${encodeURIComponent(key)}?fields=project,assignee,updated,issuetype,labels`,auth),requestJson(`${baseAtlassian(config)}/rest/api/3/myself`,auth)]);
         if(issue.fields?.project?.key!==validProjectKey(config.get('jira.projectKey'))||!self?.accountId||issue.fields?.assignee?.accountId!==self.accountId)throw Error('Only the Jira-assigned UI/UX designer may review this ticket.');
+        const roleRegister=await currentPublishedRoleRegister(activeProject.id);
+        require('../../br-ownership').requireTask(roleRegister,issue,'ux-designer');
         const current=await uxDesignPipeline.read(aiRoot(),key);
         if(decision==='approved'){
-          const approved=designProposals.approvedInputs(await brWorkflow.load(registry,activeProject.id));
+          const approved=designProposals.approvedInputs(roleRegister);
           const reference=await uxDesignReferences.readBundle(aiRoot(),key);
           const [wire,mock]=await Promise.all([uxTicketDesigns.read(aiRoot(),key,'wireframe'),uxTicketDesigns.read(aiRoot(),key,'mockup')]);
           if(current.sourceBRHash!==approved.hash||current.designReferenceHash!==String(reference.sha256||'')||current.wireframeRevision!==wire.revision||current.mockupRevision!==mock.revision)throw Error('The approved requirements, design reference, or draft changed since generation. Disapprove and regenerate UI/UX.');
