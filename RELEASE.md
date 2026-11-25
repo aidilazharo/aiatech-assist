@@ -1,8 +1,7 @@
-# ATGV AIATECH Assist v0.1.19
+# ATGV AIATECH Assist v0.1.20
 
-- Independent BR ownership per enabled SDLC role, including zero-task BRs; shared versioned Confluence registry keyed by Jira Epic and role with immutable Jira issue ID.
-- PM and My Work support persistent role assignments. Existing role tasks remain independently verified; shared hierarchy and other roles remain unchanged.
-- Full My Work Jira refresh automatically assigns unassigned matching descendants to a recorded owner, respecting Jira Assign Issues permission and reporting conflicts. Developer/UIUX waiting BRs are visible without enabling execution.
-- Existing npm policy recovery remains unchanged. Shared role ownership is saved before Jira task writes; partial synchronization is explicitly reported. No automatic overwrite of another Jira assignee. Live company validation and full regression pending.
-
-- Follow-up: include verified live role-labelled descendants in explicit claim, release and PM transfer, count them in role views, reconcile after BR publishing, recheck immutable Epic ID and role revision immediately before automatic assignment, and update obsolete stack-approval source tests while preserving actual development execution gating. New positive synchronization test included.
+- Build a read-only, role-facing approved BR snapshot from verified published Jira Epics and live descendants, independently of local BA drafts or Confluence recovery. Preserve exact published descriptions and explicit acceptance criteria/definition of done, including named custom fields.
+- Store semantic revisions and history in project SQLite; unchanged assignment/status changes do not create a content revision. Fresh complete verification is required before execution; unverified roots fail closed.
+- Refresh on project open, role switch, complete Jira inventory refresh, periodic source synchronization and before Developer/UX work. Keep BA draft and publication register unchanged.
+- Retain explicit role mappings/labels and legacy verified development mappings, never infer an assignee from a roster or shared parent. Developer and UX use role-specific views and display recovery warnings.
+- Existing architectural execution approval and task ownership gates retained. Full regression, live company testing and VSIX packaging pending.

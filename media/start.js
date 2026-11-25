@@ -2627,7 +2627,7 @@ function syncArchitectStackButtons(project){
  $('architectApproveStack').title=!saved?'Save the selected stack first.':!prepared?.remotePushed?'Publish the saved stack to GitHub before approval.':'Confirm approval for Developers; test and server checks are not prerequisites.';
 }
 
-let roleJiraProject='',roleJiraLoading=false,roleJiraLoaded=false,roleJiraItems=[],roleJiraIncomplete=false,roleJiraRequest=0;
+let roleJiraProject='',roleJiraRole='',roleBrState=null,roleJiraLoading=false,roleJiraLoaded=false,roleJiraItems=[],roleJiraIncomplete=false,roleJiraRequest=0;
 let jiraModalKey='',jiraModalRequest=0,jiraModalPreviousFocus=null,jiraModalUrl='';
 let jiraModalDetail=null,jiraModalEditing=false,jiraModalSaving=false,jiraModalSaveRequest=0,roleJiraRefreshAfterSave=false;
 let jiraModalAssigneeRequest=0,jiraModalAssigneeBusy=false,jiraModalAssigneeData=null,jiraRoleAssignmentRefresh=null;
@@ -3008,7 +3008,7 @@ function renderUxTickets(rows){
  for(const br of rows.filter(item=>item.brRoot&&item.roleScopes?.['ux-designer']?.mine&&!mine.some(task=>task.brId===item.brId))){const option=document.createElement('option');option.value='waiting:'+br.brId;option.textContent=br.brId+' · BR assigned — waiting for UI/UX tasks';option.disabled=true;picker.append(option);}
  for(const item of mine){const option=document.createElement('option');option.value=item.key;option.textContent=item.key+' · '+(item.summary||'Jira issue')+(item.roleMappingVerified===false?' · BR mapping recovery required':'');option.disabled=item.roleMappingVerified===false;picker.append(option);}
  const ready=mine.filter(item=>item.roleMappingVerified!==false);uxSelectedKey=ready.some(item=>item.key===previous)?previous:ready[0]?.key||'';picker.value=uxSelectedKey;
- if(!uxSelectedKey){uxPipeline=null;uxDrafts={wireframe:null,mockup:null};setUxStatus(mine.length?'Assigned UI/UX tasks found. Recover the verified BR mapping before generating a design.':'Assign an entire BR to begin designing the full application.');$('uxDesignVersionInfo').replaceChildren();$('uxReferenceInfo').textContent='';$('uxReferencePreview').replaceChildren();$('uxReferencePreview').classList.add('hidden');$('uxDesignFramework').value=uxFramework||'';showUxBuilder();renderUxActions();send('uxFrameworkRead',{key:''});return;}
+ if(!uxSelectedKey){uxPipeline=null;uxDrafts={wireframe:null,mockup:null};setUxStatus(developerBrSyncWarnings.length?developerBrSyncWarnings.join(' · '):mine.length?'Assigned UI/UX tasks found. Refresh Jira to verify the latest published BR.':'Assign an entire BR to begin designing the full application.');$('uxDesignVersionInfo').replaceChildren();$('uxReferenceInfo').textContent='';$('uxReferencePreview').replaceChildren();$('uxReferencePreview').classList.add('hidden');$('uxDesignFramework').value=uxFramework||'';showUxBuilder();renderUxActions();send('uxFrameworkRead',{key:''});return;}
  if(previous!==uxSelectedKey){uxPipeline=null;uxReferenceAvailable=false;uxDrafts={wireframe:null,mockup:null};uxFramework='';$('uxDesignFramework').value=uxFramework;showUxBuilder();}
  renderUxActions();loadUxDrafts();
 }
@@ -3464,7 +3464,7 @@ function renderDeveloperBrStages(){
  const start=$('developerBrStart');
  const processing=developerBrBusy&&!developerBrDone;
  start.textContent=developerBrStopping?'Stopping Development…':processing?'■ Stop Development':developerBrStage==='needs-attention'?'↻ Retry Development':developerBrCanRetry||developerBrDone?'↻ Restart Development':'▶ Start Development';
- const ownsScope=roleJiraLoaded&&roleJiraProject===activeId&&roleJiraItems.some(item=>item.brRoot&&item.brId===developerBrSelected&&item.roleScopes?.['software-developer']?.mine);
+ const ownsScope=roleJiraLoaded&&roleJiraProject===activeId&&roleJiraRole==='software-developer'&&roleJiraItems.some(item=>item.brRoot&&item.brId===developerBrSelected&&item.roleScopes?.['software-developer']?.mine&&item.roleScopes['software-developer'].count>0);
  start.disabled=!developerBrSelected||developerBrStopping||developerBrAssignmentBusy||(!processing&&!ownsScope);
  const preview=$('developerBrPreviewDraft');preview.classList.toggle('hidden',false);preview.disabled=!projectDraftPreviewEnabled()||!developerBrSelected||developerBrBusy||developerBrServerRunning||developerBrServerBusy||developerBrAssignmentBusy||!ownsScope;preview.title='Preview Draft — create and open an untested local application. Tests and builds are skipped; approval and delivery remain locked.';if(!projectDraftPreviewEnabled())preview.title+=' Enable Allow untested development preview in Project Settings.';
  start.classList.toggle('is-stopping',developerBrStopping);
@@ -3521,8 +3521,8 @@ function developerEligibleBRs(register,assigned){
 function renderDeveloperBrChoices(){
  const select=$('developerBrSelect');if(!select)return;
  if(developerBrProjectId!==activeId){developerBrProjectId=activeId;developerBrSelected='';resetDeveloperBr();}
- const currentInventory=roleJiraLoaded&&roleJiraProject===activeId;
- const eligible=developerEligibleBRs(brState,currentInventory?developerAssignedMine:[]);
+ const currentInventory=roleJiraLoaded&&roleJiraProject===activeId&&roleJiraRole==='software-developer';
+ const eligible=developerEligibleBRs(roleBrState||brState,currentInventory?developerAssignedMine:[]);
  const waiting=currentInventory?roleJiraItems.filter(item=>item.brRoot&&item.roleScopes?.['software-developer']?.mine&&!eligible.some(br=>br.id===item.brId)):[];
  const missing=currentInventory&&roleJiraItems.some(item=>item.mine&&/^(task|subtask|sub-task|sub task)$/i.test(item.type||item.issueType||'')&&!item.taskRole);
  const unresolved=currentInventory?developerAssignedMine.filter(item=>item.brId&&!eligible.some(br=>br.id===item.brId)):[];
@@ -3541,7 +3541,7 @@ function renderDeveloperBrChoices(){
  select.value=developerBrSelected;
  const chosen=eligible.find(x=>x.id===developerBrSelected);
  if(!chosen)setCurrentDeveloperJira();
- else if(!developerBrJiraCriterion&&!developerBrJiraKey)setCurrentDeveloperJira({epicJiraKey:brState?.synced?.[chosen.id]?.key||''});
+ else if(!developerBrJiraCriterion&&!developerBrJiraKey)setCurrentDeveloperJira({epicJiraKey:(roleBrState||brState)?.synced?.[chosen.id]?.key||''});
  updateDeveloperBrChangeBadge(chosen);
  select.title=chosen?'Approved '+chosen.id+' · '+$('developerBrChangeBadge').textContent:'Select approved Business Requirement';
  $('developerBrRevision').textContent=chosen?'Approved R'+chosen.approvedRevision+' · development uses this exact revision':(currentInventory&&developerBrSyncWarnings.length?developerBrSyncWarnings.join(' · '):emptyText+'. Refresh Jira tasks if shared BRs are missing.');
@@ -3751,7 +3751,7 @@ function showDeveloperAssignedTickets(items){
  const mine=(Array.isArray(items)?items:[]).filter(item=>item.mine&&item.taskRole==='software-developer');
  developerAssignedMine=mine;renderDeveloperBrAssignment();
  // Refresh status immediately after Jira ownership data loads or changes.
- updateDeveloperBrChangeBadge((brState?.brs||[]).find(br=>br.id===developerBrSelected));
+ updateDeveloperBrChangeBadge(((roleBrState||brState)?.brs||[]).find(br=>br.id===developerBrSelected));
  root.replaceChildren();
  const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent=mine.length?'Select assigned development task':'No assigned development tasks';root.append(placeholder);
  $('developerAssignedTaskCount').textContent='('+new Set(mine.map(item=>item.brId)).size+' BRs)';
@@ -3937,9 +3937,12 @@ $('developerArtifactSave').addEventListener('click',()=>{
  send('developerArtifactSave',{key:info.key,artifactType:info.type,content:$('developerArtifactContent').value,expectedRevision:info.revision});
 });
 function loadRoleJiraIssues(force=false){
- if(!activeId||roleJiraLoading)return;
- if(!force&&roleJiraLoaded&&roleJiraProject===activeId)return;
- roleJiraProject=activeId;roleJiraLoaded=false;roleJiraLoading=true;
+ if(!activeId)return;
+ const same=roleJiraProject===activeId&&roleJiraRole===selectedRole;
+ if(same&&roleJiraLoading)return;
+ if(!force&&same&&roleJiraLoaded)return;
+ if(!same){roleBrState=null;roleJiraItems=[];developerAssignedMine=[];}
+ roleJiraProject=activeId;roleJiraRole=selectedRole;roleJiraLoaded=false;roleJiraLoading=true;
  $('roleJiraStatus').textContent='Retrieving live Jira issues…';send('roleJiraIssues',{roleId:selectedRole,requestId:++roleJiraRequest});
 }
 function jiraIssueLinkedBr(item){
@@ -3965,7 +3968,7 @@ function renderRoleJiraIssues(items,incomplete=false){
  roleJiraItems=rows;roleJiraIncomplete=incomplete;
  if(selectedRole==='software-developer')showDeveloperAssignedTickets(rows);
  if(selectedRole==='ux-designer')renderUxTickets(rows);
- $('roleJiraStatus').textContent=`${rows.length} Jira project item(s)${incomplete?' · results truncated':''} · All issue types are visible. Assign/Release Entire BR changes only tasks for your selected role.`;
+ $('roleJiraStatus').textContent=`${rows.length} Jira project item(s)${incomplete?' · results truncated':''} · All issue types are visible. Assign/Release Entire BR changes only tasks for your selected role.`+(developerBrSyncWarnings.length?' · '+developerBrSyncWarnings.join(' · '):'');
  if(typeof ATGVDataTables==='undefined'){root.textContent='Jira DataTables component is unavailable.';return;}
  const project=projects.find(p=>p.id===activeId),jiraBase=project?.settings?.jira?.baseUrl||extensionSettings.jira?.baseUrl||'';
  ATGVDataTables.mount(root,rows,[
@@ -4166,7 +4169,7 @@ function applyFocusedRoleLayout(roleId){
  $('roleJiraWork').classList.toggle('hidden',!jiraRole);
  $('developerTaskDashboard').classList.toggle('hidden',roleId!=='software-developer');
  $('uxDesignWorkspace').classList.toggle('hidden',roleId!=='ux-designer');
- if(jiraRole){if(roleJiraLoaded&&roleJiraProject===activeId)renderRoleJiraIssues(roleJiraItems,roleJiraIncomplete);else loadRoleJiraIssues();}
+ if(jiraRole){if(roleJiraLoaded&&roleJiraProject===activeId&&roleJiraRole===roleId)renderRoleJiraIssues(roleJiraItems,roleJiraIncomplete);else{loadRoleJiraIssues();if(roleId==='software-developer')showDeveloperAssignedTickets([]);if(roleId==='ux-designer')renderUxTickets([]);}}
  work.classList.toggle('role-progress-only',focused);
  // The old My Work circular steps are retained for unaffected roles.
  // Developer delivery progress belongs under Developer Tasks; Architect uses its stack steps.
@@ -8965,7 +8968,7 @@ window.addEventListener('message',event=>{
  }
  if(msg.type==='roleJiraIssueDetails'&&msg.key===jiraModalKey&&msg.requestId===jiraModalRequest){renderJiraIssueModal(msg.value);}
  if(msg.type==='roleJiraIssueDetailsError'&&msg.key===jiraModalKey&&msg.requestId===jiraModalRequest){$('jiraIssueModalReload').disabled=false;$('jiraIssueModalBody').textContent='Unable to load Jira ticket: '+(msg.message||'Retry or check Jira permissions.');$('jiraIssueModalSubtitle').textContent='Request failed';}
- if(msg.type==='roleJiraIssues'&&msg.projectId===activeId&&msg.requestId===roleJiraRequest){roleJiraLoading=false;roleJiraLoaded=true;if(msg.register){brState=msg.register;developerBrSyncWarnings=msg.brSyncWarnings||[];}renderRoleJiraIssues(msg.items,msg.incomplete);if(roleJiraRefreshAfterSave){roleJiraRefreshAfterSave=false;loadRoleJiraIssues(true);}}
+ if(msg.type==='roleJiraIssues'&&msg.projectId===activeId&&msg.requestId===roleJiraRequest){roleJiraLoading=false;roleJiraLoaded=true;if(msg.register){roleBrState=msg.register;developerBrSyncWarnings=msg.brSyncWarnings||[];}renderRoleJiraIssues(msg.items,msg.incomplete);if(roleJiraRefreshAfterSave){roleJiraRefreshAfterSave=false;loadRoleJiraIssues(true);}}
  if(msg.type==='developerTaskDetail'&&msg.projectId===activeId)renderDeveloperTaskDetail(msg.value);
  if(msg.type==='developerArtifactLoaded'&&msg.projectId===activeId)renderDeveloperArtifact(msg.value);
  if(msg.type==='developerDeliveryCancelled'&&msg.projectId===activeId){developerDeliveryBusy=false;$('developerDeliveryVerify').disabled=false;$('developerDeliveryRunChecks').disabled=false;$('developerDeliveryComplete').disabled=true;developerDeliveryProof=null;if(developerStageEvidence.key===developerSelectedTicket){developerStageEvidence.verified=false;renderDeveloperWorkflowSteps();}$('developerDeliveryStatus').textContent='Cancelled. No remote changes were made by this action.';}

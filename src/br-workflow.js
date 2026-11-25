@@ -1217,6 +1217,7 @@ function asMarkdown(br){
  return [`# ${br.id}: ${source.title}`,'',`Status: ${br.status.toUpperCase()} | Approved at: ${br.approvedAt||'Not yet approved'}`,'',
  '## Business objective',source.objective,'','## Scope',source.scope,'','## Acceptance criteria',source.acceptanceCriteria,'',
  ...(source.jiraPlacement?['## Suggested Jira placement',source.jiraPlacement,'']:[]),
+ ...(br.livePublishedSnapshot?['## Latest verified published Jira evidence',...(br.publishedJiraEvidence||[]).flatMap(row=>['### '+row.key+' — '+row.summary,'Role: '+(row.roleId||'Shared / unclassified'),row.description||'',...(row.acceptanceCriteria?['Acceptance criteria:',row.acceptanceCriteria]:[]),...(row.definitionOfDone?['Definition of done:',row.definitionOfDone]:[]),''])]:[]),
  '## Features',...(source.features||[]).flatMap((f,i)=>[`### ${i+1}. ${f.title}`,f.description,'',...(f.stories||[]).flatMap((s,j)=>[`- Story ${j+1}: ${s.title} — ${s.description}`,...(s.tasks||[]).map((t,k)=>`  - Task ${k+1}: ${t.title} — ${t.description}`)]),''])].join('\n')+'\n';
 }
 async function exportApproved(registry,id,br){

@@ -120,4 +120,23 @@ function snapshot(registry,projectId,site,projectKey){
   return {issues,mappings,state};
  }finally{store.db.close();}
 }
-module.exports={open,saveIssuePage,saveMappings,finishScan,snapshot,canonicalSite};
+function publishedSnapshots(registry,projectId,{site,projectKey,snapshots}){
+ const origin=canonicalSite(site),project=validProjectKey(projectKey),store=open(registry,projectId);
+ if(!store)return {};
+ try{
+  store.db.exec("CREATE TABLE IF NOT EXISTS jira_published_br (site TEXT NOT NULL,project_key TEXT NOT NULL,epic TEXT NOT NULL,revision INTEGER NOT NULL,fingerprint TEXT NOT NULL,payload TEXT NOT NULL,verified_at TEXT NOT NULL,PRIMARY KEY(site,project_key,epic,revision))");
+  if(snapshots)atomic(store.db,()=>{
+   const put=store.db.prepare("INSERT INTO jira_published_br VALUES(?,?,?,?,?,?,?) ON CONFLICT(site,project_key,epic,revision) DO UPDATE SET payload=excluded.payload,verified_at=excluded.verified_at WHERE fingerprint=excluded.fingerprint");
+   for(const row of snapshots){
+    if(!row.epic.startsWith(project+'-')||!Number.isSafeInteger(row.revision)||!/^[a-f0-9]{64}$/.test(row.fingerprint))throw Error('Invalid published BR snapshot.');
+    const data=JSON.stringify(row);if(Buffer.byteLength(data)>8*1024*1024)throw Error('Published snapshot too large.');
+    put.run(origin,project,row.epic,row.revision,row.fingerprint,data,row.verifiedAt);
+   }
+  });
+  const rows=store.db.prepare("SELECT payload FROM jira_published_br WHERE site=? AND project_key=? ORDER BY revision DESC").all(origin,project);
+  const latest={};
+  for(const row of rows){const data=JSON.parse(row.payload);if(!Object.hasOwn(latest,data.epic))latest[data.epic]=data;}
+  return latest;
+ }finally{store.db.close();}
+}
+module.exports={open,saveIssuePage,saveMappings,finishScan,snapshot,canonicalSite,publishedSnapshots};

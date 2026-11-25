@@ -56,6 +56,36 @@ const projectEffortRegister=require('../../project-effort-register');
 let pmLatestSnapshot=null;
 
 const brRoleOwnership=require('../../br-role-ownership');
+
+const livePublishedBR=require('../../live-published-br');
+const publishedMemory=new Map();
+async function refreshPublishedRoleRegister(projectId,{config,token,register,items,complete=true}={}){
+ if(activeProject?.id!==projectId||openingOffline)throw Error('Open the connected project before reading published BRs.');
+ config=config||effectiveConfig(activeProject);token=token||await getAtlassianToken(activeProject);
+ if(!token)throw Error('Connect Jira to read current published Business Requirements.');
+ register=register||await brWorkflow.load(registry,projectId);
+ const projectKey=validProjectKey(config.get('jira.projectKey')),site=baseAtlassian(config),memoryKey=projectId+'|'+site+'|'+projectKey;
+ if(!items){
+  items=[];const scan=await jiraProjectInventory.scanProject({config,token,projectKey,shouldContinue:()=>activeProject?.id===projectId,onPage:async page=>items.push(...page.issues)});
+  complete=!scan.truncated&&!scan.cancelled;
+ }
+ if(!complete)return {register:livePublishedBR.project(register,[]),warnings:['Incomplete Jira scan; published BR execution cannot be verified.']};
+ let previous=publishedMemory.get(memoryKey)||{};
+ try{previous={...previous,...jiraLocalStore.publishedSnapshots(registry,projectId,{site,projectKey})};}catch(error){report('Published BR SQLite history unavailable: '+error.message);}
+ const auth={token,basicEmail:String(config.get('jira.email')||'').trim()};
+ const result=await livePublishedBR.collect({register,items,projectKey,previous,
+  verifyMarker:(id,issue)=>issue.labels?.includes(jiraScopedMarker(register,config,id))||issue.labels?.includes(jiraMarker(config,id))||issue.labels?.includes(jiraMarker(config,id,projectId)),
+  readIssue:key=>requestJson(site+'/rest/api/3/issue/'+encodeURIComponent(key)+'?fields=*all&expand=names',auth),
+  shouldContinue:()=>activeProject?.id===projectId});
+ if(activeProject?.id!==projectId)throw Error('Project changed during published BR verification.');
+ publishedMemory.set(memoryKey,{...previous,...Object.fromEntries(result.snapshots.map(s=>[s.epic,s]))});
+ try{jiraLocalStore.publishedSnapshots(registry,projectId,{site,projectKey,snapshots:result.snapshots});}catch(error){report('Published BR SQLite save unavailable: '+error.message);}
+ return {register:livePublishedBR.project(register,result.snapshots),warnings:result.warnings};
+}
+async function currentPublishedRoleRegister(projectId){
+ return (await refreshPublishedRoleRegister(projectId)).register;
+}
+
 async function changePersistentRole({config,token,register,brId,projectKey,accountId,accountName,mode,roleId,readIssue,setAssignee,scope,expectedUpdated}){
  const root=await readIssue(scope.rootKey),issueId=brRoleOwnership.rootIdentity(root,projectKey,scope.rootKey);
  if(String(root.fields?.updated||'')!==String(expectedUpdated||''))throw Error('BR Epic changed. Refresh before assigning.');
@@ -1252,9 +1282,9 @@ async function activateProject(id){
   // with the configured Confluence space, independent of Markdown auto-sync.
   if(!openingOffline){
    void flushProjectActivity(project.id);
-   sourceVaultTimer=setInterval(()=>{if(activeProject?.id===project.id){void syncConfluenceSourceVault(project.id,'periodic').catch(e=>report('Confluence source vault retry: '+e.message));void flushProjectActivity(project.id);}},300000);
+   sourceVaultTimer=setInterval(()=>{if(activeProject?.id===project.id){void syncConfluenceSourceVault(project.id,'periodic').then(()=>{if(!jiraSyncBusy&&activeProject?.id===project.id)return refreshPublishedRoleRegister(project.id);}).catch(e=>report('Shared BR synchronization retry: '+e.message));void flushProjectActivity(project.id);}},300000);
    sourceVaultTimer.unref?.();
-   void syncConfluenceSourceVault(project.id,'project-open').catch(async error=>{
+   void syncConfluenceSourceVault(project.id,'project-open').then(()=>refreshPublishedRoleRegister(project.id)).catch(async error=>{
     report('Confluence source recovery deferred: '+String(error.message||error));
     if(activeProject?.id===project.id)await dashboard?.webview.postMessage({type:'confluenceSourceVault',error:String(error.message||error).slice(0,350)});
    });
@@ -5043,7 +5073,7 @@ async function runDeveloperDraftPreview(brId){
  const projectId=activeProject.id,project=await registry.read(projectId);
  const draft=require('../../developer-preview-mode');draft.requireAllowed(project);
  const approval=require('../../architect-stack-approval').requireDeveloperApproval(project);
- const register=await brWorkflow.load(registry,projectId);
+ const register=await currentPublishedRoleRegister(projectId);
  const br=developerBR.approvedBr(register,brId);
  const config=effectiveConfig(activeProject);
  // Preserve the same Jira whole-BR assignment gate as normal development.
@@ -5119,7 +5149,7 @@ async function runDeveloperBrAutomation(brId,{restartFresh=false}={}){
  const projectId=activeProject.id;
  const project=await registry.read(projectId);
  const approval=require('../../architect-stack-approval').requireDeveloperApproval(project);
- const register=await brWorkflow.load(registry,projectId);
+ const register=await currentPublishedRoleRegister(projectId);
  const br=developerBR.approvedBr(register,brId);
  // Authoritative Jira mapping is the BA-published path register, never an AI-invented key.
  const publishedJiraItems=require('../../br-ownership').roleTree(register,brId,'software-developer').entries.map(item=>({...item,title:String(register.synced?.[item.path]?.title||register.roleTaskMappings?.[item.path]?.title||'').slice(0,180)})).slice(0,150);
@@ -6477,7 +6507,7 @@ async function handleDashboardMessage(msg){
         ]);
         if(String(issue.fields?.project?.key||'')!==validProjectKey(config.get('jira.projectKey')))throw Error('Issue does not belong to the configured Jira project.');
         if(!self?.accountId||issue.fields?.assignee?.accountId!==self.accountId)throw Error('The selected Jira ticket is not assigned to your account.');
-        require('../../br-ownership').requireTask(await brWorkflow.load(registry,activeProject.id),issue,'software-developer');
+        require('../../br-ownership').requireTask(await currentPublishedRoleRegister(activeProject.id),issue,'software-developer');
         const progress=developerArtifacts.progress(issue);
         const artifacts=await Promise.all(Object.keys(developerArtifacts.TYPES).map(async type=>{const item=await developerArtifacts.read(aiRoot(),issueKey,type);return {type,label:item.title,exists:item.exists};}));
         const designs=await designProposals.load(registry,activeProject.id);
@@ -6682,12 +6712,12 @@ async function handleDashboardMessage(msg){
           const [issue,self]=await Promise.all([requestJson(`${baseAtlassian(config)}/rest/api/3/issue/${encodeURIComponent(key)}?fields=summary,description,status,assignee,project,updated,parent,labels,issuetype`,auth),requestJson(`${baseAtlassian(config)}/rest/api/3/myself`,auth)]);
           if(issue.fields?.project?.key!==validProjectKey(config.get('jira.projectKey')))throw Error('Jira ticket is outside this project.');
           if(!self?.accountId||issue.fields?.assignee?.accountId!==self.accountId)throw Error('Assign this Jira ticket to yourself before generating UI/UX.');
-          require('../../br-ownership').requireTask(await brWorkflow.load(registry,projectId),issue,'ux-designer');
+          require('../../br-ownership').requireTask(await currentPublishedRoleRegister(projectId),issue,'ux-designer');
           if(String(issue.fields?.status?.statusCategory?.key||'').toLowerCase()==='done')throw Error('The Jira ticket is Done. Reopen it before generating a new design.');
           const prior=await uxDesignPipeline.read(root,key);
           if(prior.exists&&prior.status!=='rejected')throw Error('Preview or reject the current generated design before regenerating.');
           if(prior.revision!==String(msg.expectedRevision||''))throw Error('UI/UX generation status changed. Reload before regenerating.');
-          const approved=designProposals.approvedInputs(await brWorkflow.load(registry,projectId));
+          const approved=designProposals.approvedInputs(await currentPublishedRoleRegister(projectId));
           const reference=await uxDesignReferences.readBundle(root,key);
           const target=await activeAiTarget();
           const designFramework=context.workspaceState.get(uxFrameworkKey(projectId,key),'aia-qi');
@@ -6748,7 +6778,7 @@ async function handleDashboardMessage(msg){
           uxDesignPipeline.buildPrototype(validatedMockup);
           await progress(6,'Preparing developer handoff draft…');
           if(activeProject?.id!==projectId)throw Error('The selected project changed during UI/UX generation. Retry in the original project.');
-          const latestBR=designProposals.approvedInputs(await brWorkflow.load(registry,projectId));
+          const latestBR=designProposals.approvedInputs(await currentPublishedRoleRegister(projectId));
           if(latestBR.hash!==approved.hash)throw Error('Approved Business Requirements changed while generating. Retry with the current BR.');
           const latestRef=await uxDesignReferences.readBundle(root,key);
           if(String(latestRef.sha256||'')!==String(reference.sha256||''))throw Error('The design reference changed during generation. Retry.');
@@ -6855,9 +6885,9 @@ async function handleDashboardMessage(msg){
         const [issue,self]=await Promise.all([requestJson(`${baseAtlassian(config)}/rest/api/3/issue/${encodeURIComponent(key)}?fields=summary,description,status,assignee,project,updated,parent,labels,issuetype`,auth),requestJson(`${baseAtlassian(config)}/rest/api/3/myself`,auth)]);
         if(issue.fields?.project?.key!==validProjectKey(config.get('jira.projectKey')))throw Error('Jira ticket is outside this project.');
         if(!self?.accountId||issue.fields?.assignee?.accountId!==self.accountId)throw Error('Assign this Jira ticket to yourself before generating wireframes or mockups.');
-        require('../../br-ownership').requireTask(await brWorkflow.load(registry,activeProject.id),issue,'ux-designer');
+        require('../../br-ownership').requireTask(await currentPublishedRoleRegister(activeProject.id),issue,'ux-designer');
         if(String(issue.fields?.status?.statusCategory?.key||'').toLowerCase()==='done')throw Error('This Jira ticket is already Done. Reopen it in Jira before starting new design work.');
-        const registered=await brWorkflow.load(registry,activeProject.id),approved=designProposals.approvedInputs(registered);
+        const registered=await currentPublishedRoleRegister(activeProject.id),approved=designProposals.approvedInputs(registered);
         const prior=await uxTicketDesigns.read(aiRoot(),key,kind);
         const reference=await uxDesignReferences.read(aiRoot(),key);
         const target=await activeAiTarget();
@@ -6865,7 +6895,7 @@ async function handleDashboardMessage(msg){
         const prompt=uxTicketDesigns.prompt(kind,{key,summary:issue.fields?.summary,description:textFromAdf(issue.fields?.description)},approved,await sdlcCatalog.designReference(getWorkspace()?.uri.fsPath),uxDesignReferences.promptContext(reference));
         const raw=await aiAnswer(target,prompt,35000,{json:true});
         let proposed;try{proposed=JSON.parse(String(raw).replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim());}catch{throw Error('AI returned invalid JSON. No design was saved.');}
-        const latestBR=designProposals.approvedInputs(await brWorkflow.load(registry,activeProject.id));
+        const latestBR=designProposals.approvedInputs(await currentPublishedRoleRegister(activeProject.id));
         if(latestBR.hash!==approved.hash)throw Error('Approved Business Requirements changed during generation. Generate again.');
         const latestRef=await uxDesignReferences.read(aiRoot(),key);
         if(String(latestRef.sha256||'')!==String(reference.sha256||''))throw Error('Design reference changed while generating. Regenerate with the current reference.');
@@ -6896,7 +6926,7 @@ async function handleDashboardMessage(msg){
           const base=baseAtlassian(config);
           const permissions=await requestJson(base+'/rest/api/3/mypermissions?projectKey='+encodeURIComponent(projectKey)+'&permissions=ASSIGN_ISSUES',auth);
           if(!pmJiraAssignment.canAssign(permissions))throw Error('Your Jira account needs Assign Issues permission for this project.');
-          const [issue,register,found,self]=await Promise.all([
+          const [issue,baseRegister,found,self]=await Promise.all([
             jiraReadIssue(config,token,key),
             brWorkflow.load(registry,projectId),
             myWorkPresence.locate(config,token,projectKey),
@@ -6920,10 +6950,12 @@ async function handleDashboardMessage(msg){
           const item=jiraProjectInventory.normalizeIssue(issue,projectKey);
           if(!item)throw Error('Jira issue is not accessible in this project.');
           const isRoot=['br','epic'].includes(pmJiraAssignment.group(item.type));
+          let register=baseRegister;
           let scope=null,groups=[],role='',roleStore=null,roleState=null,rootIssueId='';
           if(isRoot){
             const snapshot=pmLatestSnapshot;
             if(!snapshot||snapshot.projectId!==projectId||snapshot.projectKey!==projectKey||Date.now()-snapshot.at>600000)throw Error('Refresh the complete Project Jira Work Items table before assigning an entire BR/Epic.');
+            register=(await refreshPublishedRoleRegister(projectId,{config,token,register:baseRegister,items:snapshot.items})).register;
             const plans=pmJiraAssignment.rolePlans({rootKey:key,projectKey,items:snapshot.items,register});
             rootIssueId=brRoleOwnership.rootIdentity(issue,projectKey,key);
             roleStore=new brRoleOwnership.Store(config,token,projectKey);roleState=await roleStore.read();
@@ -7107,12 +7139,14 @@ async function handleDashboardMessage(msg){
            warnings.push(...(pulled.conflicts||[]),...(pulled.skipped?[pulled.skipped]:[]));
            register=await brWorkflow.load(registry,projectId);
            if(activeProject?.id!==projectId)break;
-           const recoveryRole=msg.roleId;
-           const known=new Set(inventory.enrich(all,register,self.accountId).filter(item=>item.mine&&item.taskRole===recoveryRole&&item.publishedSnapshotReady).map(item=>item.key));
-           if(['software-developer','ux-designer'].includes(recoveryRole)&&all.some(issue=>issue.assigneeId===self.accountId&&/^(task|subtask|sub-task|sub task)$/i.test(issue.type)&&!known.has(issue.key))){
-            const recovered=await confluenceBRRecovery.recoverAssigned({registry,projectId,config,token,issues:all,accountId:self.accountId,roleId:recoveryRole,
-             verify:(remote,p,live)=>verifyLinkedJiraIdentity(remote,config,p,live),shouldContinue:()=>activeProject?.id===projectId});
-            warnings.push(...recovered.warnings);
+           for(const recoveryRole of ['software-developer','ux-designer']){
+            const known=new Set(inventory.enrich(all,register,self.accountId).filter(item=>item.mine&&item.taskRole===recoveryRole&&item.publishedSnapshotReady).map(item=>item.key));
+            if(all.some(issue=>issue.assigneeId===self.accountId&&/^(task|subtask|sub-task|sub task|story|user story)$/i.test(issue.type)&&!known.has(issue.key))){
+             const recovered=await confluenceBRRecovery.recoverAssigned({registry,projectId,config,token,issues:all,accountId:self.accountId,roleId:recoveryRole,
+              verify:(remote,p,live)=>verifyLinkedJiraIdentity(remote,config,p,live),shouldContinue:()=>activeProject?.id===projectId});
+             warnings.push(...recovered.warnings);
+             register=await brWorkflow.load(registry,projectId);
+            }
            }
           }catch(error){warnings.push('Shared BR synchronization: '+String(error.message||error).slice(0,300));}
           finally{sourceVaultBusy=false;}
@@ -7120,6 +7154,8 @@ async function handleDashboardMessage(msg){
         }
         if(activeProject?.id!==projectId)break;
         register=await brWorkflow.load(registry,projectId);
+        const projection=await refreshPublishedRoleRegister(projectId,{config,token,register,items:all,complete:!result.truncated&&!result.cancelled});
+        register=projection.register;warnings.unshift(...projection.warnings);
         try{jiraLocalStore.saveMappings(registry,projectId,{site:jiraSite,register});}
         catch(error){report('Jira SQLite mapping index unavailable: '+String(error.message||error));}
         let roleRecords=null,liveItems=all;
@@ -7151,7 +7187,7 @@ async function handleDashboardMessage(msg){
           if(!require('../../my-work-role-prompts').ROLES[roleId]||!(await getRoleSettings(registry,activeProject.id)).roles.some(role=>role.id===roleId))throw Error('Selected SDLC role is not enabled.');
           const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
           if(!token)throw Error('Jira credentials required.');
-          const register=await brWorkflow.load(registry,activeProject.id),ownership=require('../../br-ownership');
+          const register=await currentPublishedRoleRegister(activeProject.id),ownership=require('../../br-ownership');
           const brId=String(msg.brId||'').toUpperCase(),scope=ownership.roleTree(register,brId,roleId);
           if(scope.rootKey!==developerGit.jiraKey(msg.key))throw Error('Subtask/Feature assignment is disabled. Select the BR Epic.');
           const projectKey=validProjectKey(config.get('jira.projectKey'));
@@ -8298,7 +8334,7 @@ async function handleDashboardMessage(msg){
         try{
           if(!['assign','unassign'].includes(action))throw Error('Invalid whole-BR assignment action.');
           if(developerBrRun)throw Error('Stop Development before changing BR ownership.');
-          const register=await brWorkflow.load(registry,projectId),ownership=require('../../br-ownership'),scope=ownership.roleTree(register,brId,'software-developer');
+          const register=await currentPublishedRoleRegister(projectId),ownership=require('../../br-ownership'),scope=ownership.roleTree(register,brId,'software-developer');
           if(!(await getRoleSettings(registry,projectId)).roles.some(role=>role.id==='software-developer'))throw Error('Developer role is not enabled.');
           if(key!==scope.rootKey)throw Error('Select the published BR Epic to claim its Developer tasks.');
           const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
@@ -8333,7 +8369,7 @@ async function handleDashboardMessage(msg){
         const record=await developerTdd.loadRecord(context.globalStorageUri.fsPath,activeProject.id,brId);
         const failed=(record?.criteria||[]).find(item=>item.status==='needs-attention');
         const project=await registry.read(activeProject.id);
-        const register=await brWorkflow.load(registry,activeProject.id);
+        const register=await currentPublishedRoleRegister(activeProject.id);
         const br=register.brs.find(item=>item.id===brId);
         let recoveryJiraKeys=new Set();
         // Preserve recovery diagnostics for stale/unpublished BRs without showing foreign role or parent keys.
@@ -8360,7 +8396,7 @@ async function handleDashboardMessage(msg){
         const prior=developerBrLast;
         if(!prior||prior.projectId!==activeProject.id||prior.brId!==String(msg.brId||'')||!prior.worktree||!(prior.checksPassed||prior.previewOnly&&require('../../developer-preview-mode').allowed(await registry.read(activeProject.id))))throw Error('No approved local application exists for this BR. Generate and test normally, or enable project-level draft preview.');
         const projectId=activeProject.id,project=await registry.read(projectId);
-        const approved=developerBR.approvedBr(await brWorkflow.load(registry,projectId),prior.brId);
+        const approved=developerBR.approvedBr(await currentPublishedRoleRegister(projectId),prior.brId);
         if(approved.approvedRevision!==prior.revision)throw Error('BR approval revision changed. Generate a new implementation.');
         const approval=require('../../architect-stack-approval').requireDeveloperApproval(project);
         if(approval.sha!==prior.approvalSha)throw Error('Approved technology stack changed. Generate again for the new stack.');
