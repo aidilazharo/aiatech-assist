@@ -91,10 +91,18 @@ function verifyRegistered(rows,id,{name,email}={}){
  if(!row||name&&row.name!==name||email&&row.email!==email)throw Error('User registration could not be confirmed from Confluence. Refresh and retry the same account ID.');
  return row;
 }
-async function snapshot(config,token,projectKey){
+async function snapshot(config,token,projectKey,knownDatabaseId=''){
  const found=await readRoster(config,token,projectKey);
- const {rows,registryWarning,databaseId}=found;
- let assignmentWarning='';
+ const {rows,registryWarning}=found;
+ const databaseId=knownDatabaseId||found.databaseId;
+ let assignmentWarning='',versionWarning='';
+ if(databaseId){
+  try{
+   const result=await new ConfluenceUserDatabase(config,token,projectKey).readVersions(databaseId);
+   const versions=new Map(result.rows.map(row=>[row.id,row]));
+   for(const user of rows){const version=versions.get(user.id);user.atgvVersion=version?.version||'';user.atgvVersionReportedAt=version?.reportedAt||'';}
+  }catch(error){versionWarning='ATGV version list unavailable: '+clean(error.message,180);}
+ }
  if(rows.length){
   try{
    const {assignments,truncated}=await assignedTasks(config,token,projectKey);
@@ -105,7 +113,7 @@ async function snapshot(config,token,projectKey){
    if(truncated)assignmentWarning='Jira task search stopped at the 2,000-issue safety limit.';
   }catch(error){assignmentWarning='Live Jira assignments unavailable: '+clean(error.message,180);}
  }
- return {rows,pageId:String(found.page?.id||''),spaceKey:found.space.key,updatedAt:found.page?.version?.createdAt||'',assignmentWarning,registryWarning,databaseId};
+ return {rows,pageId:String(found.page?.id||''),spaceKey:found.space.key,updatedAt:found.page?.version?.createdAt||'',assignmentWarning,registryWarning,databaseId,versionWarning};
 }
 async function syncDatabase(config,token,projectKey,rows){
  try{
@@ -116,7 +124,18 @@ async function syncDatabase(config,token,projectKey,rows){
   return {databaseId:'',registryWarning:'Database v2 sync needs attention: '+clean(error.message,180)};
  }
 }
-async function visit(config,token,{projectKey,roleId='',confirmRegistration,assertActive=()=>{}}){
+// Preserve version data attached to the snapshot when combining verified roster rows.
+function applyVersionLabels(rows,source){
+ const versions=new Map(source.map(row=>[row.id,row]));
+ return rows.map(row=>({...row,atgvVersion:versions.get(row.id)?.atgvVersion||'',atgvVersionReportedAt:versions.get(row.id)?.atgvVersionReportedAt||''}));
+}
+async function reportInstalledVersion(config,token,projectKey,databaseId,accountId,installedVersion){
+ if(!installedVersion)return '';
+ if(!databaseId)return 'Installed ATGV version not synchronized: Confluence database unavailable.';
+ try{await new ConfluenceUserDatabase(config,token,projectKey).reportVersion(databaseId,accountId,installedVersion);return '';}
+ catch(error){return 'Installed ATGV version not synchronized: '+clean(error.message,180);}
+}
+async function visit(config,token,{projectKey,roleId='',installedVersion='',confirmRegistration,assertActive=()=>{}}){
  const role=roleId?ROLES[roleId]:'';
  if(roleId&&!role)throw Error('Unknown role cannot be added to the register.');
  const auth={token,basicEmail:config.get('jira.email')};
@@ -164,9 +183,10 @@ async function visit(config,token,{projectKey,roleId='',confirmRegistration,asse
   const unchanged=!!current&&current.id===me.accountId&&current.email===effectiveEmail&&current.name===name&&current.tasks===tasks&&(!role||current.roles.includes(role))&&!!page&&JSON.stringify(extractRows(page.body?.storage?.value||''))===JSON.stringify(normalizeRows(rows).rows);
   if(unchanged){
    const db=await syncDatabase(config,token,project,rows);
-   const refreshed=await snapshot(config,token,project);
+   const versionWarning=await reportInstalledVersion(config,token,project,db.databaseId,me.accountId,installedVersion);
+   const refreshed=await snapshot(config,token,project,db.databaseId);
    verifyRegistered(refreshed.rows,me.accountId);
-   return {...refreshed,databaseId:db.databaseId||refreshed.databaseId,registryWarning:db.registryWarning||refreshed.registryWarning,syncComplete:!db.registryWarning};
+   return {...refreshed,databaseId:db.databaseId||refreshed.databaseId,registryWarning:db.registryWarning||refreshed.registryWarning,versionWarning:versionWarning||refreshed.versionWarning,syncComplete:!db.registryWarning&&!versionWarning};
   }
   if(current){current.id=me.accountId;current.email=effectiveEmail;current.name=name;current.tasks=tasks;current.roles=[...new Set([...current.roles,...(role?[role]:[])])];}
   else rows.push({id:me.accountId,email:effectiveEmail,name,roles:role?[role]:[],tasks});
@@ -179,10 +199,11 @@ async function visit(config,token,{projectKey,roleId='',confirmRegistration,asse
    const confirmedPage=await getConfluencePage(config,token,savedId);
    const verified=verifyRegistered(extractRows(confirmedPage?.body?.storage?.value||''),me.accountId,{name,email:effectiveEmail});
    const db=await syncDatabase(config,token,project,rows);
-   const refreshed=await snapshot(config,token,project);
+   const versionWarning=await reportInstalledVersion(config,token,project,db.databaseId,me.accountId,installedVersion);
+   const refreshed=await snapshot(config,token,project,db.databaseId);
    const combined=normalizeRows([...refreshed.rows.filter(row=>row.id!==me.accountId),{...verified,tasks:refreshed.rows.find(row=>row.id===me.accountId)?.tasks||verified.tasks}]);
    if(combined.conflicts.length)throw Error(combined.conflicts.join('; '));
-   return {...refreshed,rows:combined.rows,pageId:savedId,databaseId:db.databaseId||refreshed.databaseId,registryWarning:db.registryWarning||refreshed.registryWarning,registrationConfirmed,registeredName:name,syncComplete:!db.registryWarning};
+   return {...refreshed,rows:applyVersionLabels(combined.rows,refreshed.rows),pageId:savedId,databaseId:db.databaseId||refreshed.databaseId,registryWarning:db.registryWarning||refreshed.registryWarning,versionWarning:versionWarning||refreshed.versionWarning,registrationConfirmed,registeredName:name,syncComplete:!db.registryWarning&&!versionWarning};
   }catch(error){
    if(/version conflict|HTTP (409|412)/i.test(error.message)&&attempt<2)continue;
    throw error;
@@ -234,12 +255,12 @@ async function addUser(config,token,{projectKey,accountId}){
    if(!savedId)throw Error('Confluence did not return the saved roster page ID.');
    const confirmed=await getConfluencePage(config,token,savedId);
    const verified=verifyRegistered(extractRows(confirmed?.body?.storage?.value||''),id,{name,email});
-   const refreshed=await snapshot(config,token,project);
+   const refreshed=await snapshot(config,token,project,database.databaseId);
    // The direct read verifies the write even if CQL/title search is stale.
    const combined=normalizeRows([...refreshed.rows.filter(row=>row.id!==id),{...verified,tasks:refreshed.rows.find(row=>row.id===id)?.tasks||verified.tasks}]);
    if(combined.conflicts.length)throw Error(combined.conflicts.join('; '));
    verifyRegistered(combined.rows,id,{name,email});
-   return {...refreshed,rows:combined.rows,pageId:savedId,databaseId:database.databaseId||refreshed.databaseId,
+   return {...refreshed,rows:applyVersionLabels(combined.rows,refreshed.rows),pageId:savedId,databaseId:database.databaseId||refreshed.databaseId,
     registryWarning:database.registryWarning||refreshed.registryWarning,reason:'added-user',registeredAccountId:id,registeredName:name,registrationAction:old?'updated':'added',syncComplete:!database.registryWarning};
   }catch(error){
    if(/version conflict|HTTP (409|412)/i.test(error.message)&&attempt<2)continue;
