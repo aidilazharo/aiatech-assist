@@ -25,3 +25,12 @@ test('automatic assignment never overwrites another assignee or stale role owner
  const stale=await r.sync({store:{read:async()=>({documents:{}})},records,register,items:rows,projectKey:'TC',readIssue:async()=>{throw Error('must not read');},setAssignee:async()=>writes++});
  assert.equal(writes,0);assert.equal(stale.changed.size,0);
 });
+
+test('automatic synchronization assigns a newly labelled task and retains unrelated rows',async()=>{
+ const owner={epic:'TC-1',issueId:'100',brId:'BR-001',roleId:'qa-engineer',ownerId:'qa',ownerName:'QA',revision:1};
+ const records={'TC-1--qa-engineer':owner};let who='',writes=[];
+ const readIssue=async key=>key==='TC-1'?{key,id:'100',fields:{project:{key:'TC'},issuetype:{name:'Epic'}}}:key==='TC-2'?{key,fields:{project:{key:'TC'},issuetype:{name:'Feature'},parent:{key:'TC-1'}}}:{key,fields:{project:{key:'TC'},issuetype:{name:'Task'},labels:['atgv-role-qa-engineer'],parent:{key:'TC-2'},updated:'1',assignee:who?{accountId:who,displayName:'QA user'}:null}};
+ const result=await r.sync({store:{read:async()=>({documents:records})},records,register,items:rows,projectKey:'TC',readIssue,setAssignee:async(key,id)=>{writes.push(key);who=id;}});
+ assert.deepEqual(writes,['TC-3']);assert.equal(result.changed.get('TC-3').assigneeId,'qa');
+ assert.deepEqual(r.scopeTargets({items:rows,register,epic:'TC-1',brId:'BR-001',roleId:'qa-engineer',projectKey:'TC'}).map(x=>x.key),['TC-3']);
+});

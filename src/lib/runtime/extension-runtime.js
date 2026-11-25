@@ -57,25 +57,24 @@ let pmLatestSnapshot=null;
 
 const brRoleOwnership=require('../../br-role-ownership');
 async function changePersistentRole({config,token,register,brId,projectKey,accountId,accountName,mode,roleId,readIssue,setAssignee,scope,expectedUpdated}){
- const ownership=require('../../br-ownership');
  const root=await readIssue(scope.rootKey),issueId=brRoleOwnership.rootIdentity(root,projectKey,scope.rootKey);
  if(String(root.fields?.updated||'')!==String(expectedUpdated||''))throw Error('BR Epic changed. Refresh before assigning.');
  const store=new brRoleOwnership.Store(config,token,projectKey),state=await store.read();
  const prior=brRoleOwnership.recordFor(state.documents,scope.rootKey,roleId,issueId);
  if(prior?.ownerId&&prior.ownerId!==accountId)throw Error('This BR role belongs to another user.');
  if(mode==='unassign'&&!prior?.ownerId&&!scope.entries.length)throw Error('No BR role ownership to release.');
- // Check task ownership before saving the independent role record.
- for(const entry of scope.entries){
-  const live=await readIssue(entry.key);
-  if(live.key!==entry.key||live.fields?.project?.key!==projectKey||!ownership.matchesRoleTask(entry,live))throw Error('Role task mapping changed: '+entry.key);
-  const who=live.fields?.assignee?.accountId;
-  if(who&&who!==accountId)throw Error(entry.key+' belongs to another user. Ask PM to review.');
- }
+ // A complete live scan also covers newly added, explicitly labelled descendants.
+ const items=[];
+ const scan=await jiraProjectInventory.scanProject({config,token,projectKey,onPage:async page=>items.push(...page.issues)});
+ if(scan.truncated||scan.cancelled)throw Error('Refresh complete Jira inventory before changing BR ownership.');
+ const targets=brRoleOwnership.scopeTargets({items,register,epic:scope.rootKey,brId,roleId,projectKey});
+ for(const task of targets)if(task.owner&&task.owner!==accountId)throw Error(task.key+' belongs to another user. Ask PM to review.');
+ const permissions=await requestJson(baseAtlassian(config)+'/rest/api/3/mypermissions?projectKey='+encodeURIComponent(projectKey)+'&permissions=ASSIGN_ISSUES',{token,basicEmail:String(config.get('jira.email')||'').trim()});
+ if(!pmJiraAssignment.canAssign(permissions))throw Error('Jira Assign Issues permission is required for BR ownership.');
  await store.set({state,epic:scope.rootKey,issueId,brId,roleId,actorId:accountId,targetId:mode==='assign'?accountId:null,targetName:accountName});
- if(!scope.entries.length)return {count:0,changed:0,accountId:mode==='assign'?accountId:null};
+ if(!targets.length)return {count:0,changed:0,accountId:mode==='assign'?accountId:null};
  try{
-  if(mode==='unassign'&&!(await Promise.all(scope.entries.map(x=>readIssue(x.key)))).some(x=>x.fields?.assignee?.accountId===accountId))return {count:scope.entries.length,changed:0,accountId:null};
-  return await ownership.changeWholeBr({register,brId,projectKey,accountId,mode,roleId,readIssue,setAssignee});
+  return await pmJiraAssignment.change({targets,projectKey,accountId:mode==='assign'?accountId:null,expectedUpdated,rootKey:scope.rootKey,readIssue,setAssignee});
  }catch(error){throw Error('Shared BR role ownership was saved, but Jira task synchronization needs attention: '+String(error.message||error));}
 }
 
@@ -4849,6 +4848,22 @@ async function syncApprovedBRs(expectedRevision,automatic=null){
   await notice('Published '+items.length+' Jira changes.'+(automatic?.skipped?.length?' '+automatic.skipped.length+' status reset(s) skipped; review Jira Work Items.':''));
   // Publish approved content and exact mappings promptly for other role workspaces.
   if(typeof syncConfluenceSourceVault==='function')await syncConfluenceSourceVault(activeProject.id,'br-published').catch(error=>report('Shared BR publication pending: '+String(error.message||error).slice(0,300)));
+  try{
+   if(activeProject?.id===pinnedProject){
+    const roleProjectKey=validProjectKey(config.get('jira.projectKey')),roleBase=baseAtlassian(config),roleAuth={token,basicEmail:String(config.get('jira.email')||'').trim()};
+    const store=new brRoleOwnership.Store(config,token,roleProjectKey),shared=await store.read();
+    if(Object.values(shared.documents).some(row=>row.ownerId)){
+     const perms=await requestJson(roleBase+'/rest/api/3/mypermissions?projectKey='+encodeURIComponent(roleProjectKey)+'&permissions=ASSIGN_ISSUES',roleAuth);
+     if(pmJiraAssignment.canAssign(perms)){
+      const live=[];const scan=await jiraProjectInventory.scanProject({config,token,projectKey:roleProjectKey,shouldContinue:()=>activeProject?.id===pinnedProject,onPage:async page=>live.push(...page.issues)});
+      if(!scan.truncated&&!scan.cancelled){
+       const synced=await brRoleOwnership.sync({store,records:shared.documents,register:state,items:live,projectKey:roleProjectKey,shouldContinue:()=>activeProject?.id===pinnedProject,readIssue:key=>jiraReadIssue(config,token,key),setAssignee:(key,accountId)=>requestJson(roleBase+'/rest/api/3/issue/'+encodeURIComponent(key)+'/assignee',{...roleAuth,method:'PUT',data:{accountId}})});
+       if(synced.warnings.length)report('BR role assignment needs attention: '+synced.warnings.slice(0,5).join('; '));
+      }
+     }
+    }
+   }
+  }catch(error){report('Published BR role assignment synchronization pending: '+String(error.message||error).slice(0,300));}
  }catch(error){
   if(publicationStarted||total){
    await publishProgress('failed',`Publication interrupted after ${confirmed} of ${total} confirmed changes: ${error.message}. Review already-published issues before retrying.`,{error:String(error.message||error).slice(0,1000)}).catch(()=>{});
@@ -6914,7 +6929,11 @@ async function handleDashboardMessage(msg){
             roleStore=new brRoleOwnership.Store(config,token,projectKey);roleState=await roleStore.read();
             const roles=require('../../my-work-role-prompts').ROLES;
             const enabled=(await getRoleSettings(registry,projectId)).roles;
-            groups=enabled.filter(r=>Object.hasOwn(roles,r.id)).map(r=>plans.scopes.find(x=>x.roleId===r.id)||{roleId:r.id,role:roles[r.id].name,rootKey:key,rootId:plans.rootId,targets:[],count:0,excludedCount:0});
+            groups=enabled.filter(r=>Object.hasOwn(roles,r.id)).map(r=>{
+             const group=plans.scopes.find(x=>x.roleId===r.id)||{roleId:r.id,role:roles[r.id].name,rootKey:key,rootId:plans.rootId,excludedCount:0};
+             const targets=brRoleOwnership.scopeTargets({items:snapshot.items,register,epic:key,brId:plans.rootId,roleId:r.id,projectKey});
+             return {...group,targets,count:targets.length};
+            });
             if(writing){
               scope=groups.find(row=>row.roleId===msg.roleId);
               if(!scope)throw Error('Select an enabled SDLC role for this BR.');
@@ -7120,7 +7139,7 @@ async function handleDashboardMessage(msg){
         }catch(error){warnings.push('Shared BR role ownership: '+String(error.message||error).slice(0,240));}
         if(activeProject?.id!==projectId)break;
         let items=inventory.enrich(liveItems,register,self.accountId,{projectKey,verifyMarker:(id,issue)=>issue.labels?.includes(jiraScopedMarker(register,config,id))||issue.labels?.includes(jiraMarker(config,id))});
-        if(roleRecords)items=brRoleOwnership.overlay(items,roleRecords,self.accountId,enabledRoles);
+        if(roleRecords)items=brRoleOwnership.overlay(items,roleRecords,self.accountId,enabledRoles,register);
         await dashboard?.webview.postMessage({type:'roleJiraIssues',projectId,items,incomplete:!!result.truncated,requestId,
          register,brSyncWarnings:warnings.slice(0,5)});break;
       }

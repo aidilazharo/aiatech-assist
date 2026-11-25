@@ -86,7 +86,10 @@ async function sync({store,records,register,items,projectKey,readIssue,setAssign
    try{
     const latest=await store.read(),current=recordFor(latest.documents,r.epic,r.roleId,r.issueId);
     if(current?.revision!==r.revision||current.ownerId!==r.ownerId)break;
-    rootIdentity(await readIssue(r.epic),projectKey,r.epic);
+    const liveRoot=await readIssue(r.epic);
+    if(rootIdentity(liveRoot,projectKey,r.epic)!==r.issueId)throw Error('BR Epic identity changed.');
+    const rootMarker=register.synced?.[r.brId]?.marker;
+    if(rootMarker&&!(liveRoot.fields?.labels||[]).includes(rootMarker))throw Error('BR Epic marker changed.');
     const live=await readIssue(item.key),fields=live.fields||{};
     if(live.key!==item.key||fields.project?.key!==projectKey||fields.assignee?.accountId||String(fields.updated||'')!==String(item.updated||''))continue;
     if(entry?!ownership.matchesRoleTask(entry,live):!(fields.labels||[]).includes('atgv-role-'+r.roleId)||(fields.labels||[]).filter(x=>x.startsWith('atgv-role-')).length!==1||String(fields.issuetype?.name||'').toLowerCase()!==String(item.type).toLowerCase())continue;
@@ -98,6 +101,10 @@ async function sync({store,records,register,items,projectKey,readIssue,setAssign
      parent=ancestor.fields?.parent?.key;
     }
     if(parent!==r.epic||!shouldContinue())continue;
+    const final=recordFor((await store.read()).documents,r.epic,r.roleId,r.issueId);
+    if(final?.revision!==r.revision||final.ownerId!==r.ownerId)break;
+    const fresh=await readIssue(item.key);
+    if(fresh.key!==item.key||fresh.fields?.project?.key!==projectKey||fresh.fields?.assignee?.accountId||String(fresh.fields?.updated||'')!==String(fields.updated||'')||!shouldContinue())continue;
     await setAssignee(item.key,r.ownerId);
     const verified=await readIssue(item.key);
     if(verified.fields?.assignee?.accountId!==r.ownerId)throw Error('Jira assignment not confirmed.');
@@ -107,18 +114,36 @@ async function sync({store,records,register,items,projectKey,readIssue,setAssign
  }
  return {changed,warnings};
 }
-function overlay(rows,records,accountId,enabledRoles){
+// Merge verified canonical mappings and explicitly labelled live descendants.
+function scopeTargets({items,register,epic,brId,roleId,projectKey}){
+ const plan=pm.rolePlans({rootKey:epic,items,projectKey,register});
+ const mapped=plan.scopes.find(row=>row.roleId===roleId)?.targets||[];
+ const live=candidates({items,register,epic,brId,roleId});
+ const byKey=new Map(live.map(x=>[x.item.key,x]));
+ for(const row of mapped)if(!byKey.has(row.key))throw Error('BR hierarchy or role changed for '+row.key);
+ const targets=[...mapped],known=new Set(mapped.map(x=>x.key));
+ for(const {item,entry} of live){
+  if(known.has(item.key)||entry)continue;
+  targets.push({key:item.key,updated:String(item.updated||''),owner:String(item.assigneeId||''),ownerName:String(item.assignee||item.assigneeId||''),type:item.type,roleId,parentKey:String(item.parentKey||''),markers:[],rows:[]});
+ }
+ if(targets.length>500)throw Error('Role assignment exceeds 500 issues.');
+ return targets;
+}
+function overlay(rows,records,accountId,enabledRoles,register){
  return rows.map(row=>{
   if(!row.brRoot)return row;
   const scopes={...row.roleScopes};
   for(const roleId of enabledRoles){
    if(!Object.hasOwn(ROLES,roleId))continue;
    const old=scopes[roleId],r=recordFor(records,row.key,roleId,row.id);
-   const mine=r?!!r.ownerId&&r.ownerId===accountId:!!old?.mine;
-   const available=r?(!r.ownerId&&(old?.available??true)):old?.available??true;
-   scopes[roleId]={...old,count:old?.count||0,keys:old?.keys||[],mine,available,ownerId:r?.ownerId||'',ownerName:r?.ownerName||'',persistent:!!r?.ownerId};
+   let live=[];
+   if(register)try{live=candidates({items:rows,register,epic:row.key,brId:row.brId,roleId}).map(x=>x.item);}catch{}
+   const mine=r?!!r.ownerId&&r.ownerId===accountId:!!old?.mine||live.length>0&&live.every(x=>x.assigneeId===accountId);
+   const available=r?(!r.ownerId&&(old?.available??true)&&live.every(x=>!x.assigneeId||x.assigneeId===accountId)):(old?.available??true)&&live.every(x=>!x.assigneeId||x.assigneeId===accountId);
+   const keys=[...new Set([...(old?.keys||[]),...live.map(x=>x.key)])];
+   scopes[roleId]={...old,count:keys.length,keys,mine,available,ownerId:r?.ownerId||'',ownerName:r?.ownerName||'',persistent:!!r?.ownerId};
   }
   return {...row,roleScopes:scopes};
  });
 }
-module.exports={Store,recordKey,recordFor,rootIdentity,candidates,sync,overlay,validate};
+module.exports={Store,recordKey,recordFor,rootIdentity,candidates,scopeTargets,sync,overlay,validate};

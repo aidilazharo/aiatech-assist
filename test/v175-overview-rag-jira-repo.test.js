@@ -59,7 +59,8 @@ test('All selected roles get searchable Jira DataTables; Developer and UX keep s
  assert.match(host,/case 'roleJiraAssign':/);
  assert.match(host,/ownership\.roleTree\(register,brId,roleId\)/);
  assert.match(host,/roles\.some\(role=>role.id===roleId\)\)throw Error\('Selected SDLC role is not enabled\.'\)/);
- assert.match(host,/ownership\.changeWholeBr/);
+ assert.match(host,/brRoleOwnership\.scopeTargets/);
+ assert.match(host,/pmJiraAssignment\.change/);
  assert.match(host,/scope.rootKey/);
  const scan=host.slice(host.indexOf("case 'roleJiraIssues':"),host.indexOf("case 'roleJiraAssign':"));
  assert.match(scan,/const projectId=activeProject\.id,requestId=msg\.requestId/);

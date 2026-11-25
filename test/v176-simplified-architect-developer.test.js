@@ -59,10 +59,12 @@ test('Solution Architect UI includes three progressive controls and all extra bu
  assert.match(host,/gate\.approval\(project,repo,actor\)/);
 });
 
-test('Developer role table requires architect approval to claim, and duplicate panels are absent',()=>{
+test('Developer can reserve BR ownership before stack approval, while execution remains gated',()=>{
  for(const removed of ['Developer · Jira Task Workbench','2 · Develop on a dedicated branch','3 · Run unit tests and review delivery','GitHub · Review','Completion flags are local planning records'])assert.doesNotMatch(host,new RegExp(removed.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
  assert.match(host,/id="roleJiraTable"/);
- assert.match(host,/roleId==='software-developer'&&mode==='assign'/);
+ assert.match(host,/changePersistentRole\(\{config,token,scope,expectedUpdated:msg.expectedUpdated/);
+ const execute=host.slice(host.indexOf('async function runDeveloperBrAutomation('),host.indexOf('async function runDeveloperDeliveryChecks('));
+ assert.match(execute,/requireDeveloperApproval\(project\)/);
  assert.match(ui,/roleId:selectedRole/);
  assert.match(host,/jiraAssignCurrentUser/);
 });
