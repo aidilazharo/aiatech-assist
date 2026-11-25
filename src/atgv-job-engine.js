@@ -61,7 +61,7 @@ class DurableWorkflowEngine{
  constructor({root,now=()=>new Date().toISOString(),preferSqlite=true,migrateFrom=null}={}){
   if(!root||typeof root!=='string')throw Error('Workflow journal needs a storage root.');
   this.root=path.resolve(root);this.now=now;this.preferSqlite=preferSqlite;this.migrateFrom=migrateFrom?path.resolve(migrateFrom):null;
-  this.db=null;this.mode='uninitialized';this.pending=Promise.resolve();this.initialized=null;
+  this.db=null;this.mode='uninitialized';this.pending=Promise.resolve();this.initialized=null;this.closing=false;
   this.controllers=new Map();
  }
  async init(){
@@ -135,6 +135,7 @@ class DurableWorkflowEngine{
  // Serialize in-process mutations. SQLite serializes persistence across
  // windows; existing jobs from another window must not be replayed blindly.
  transaction(projectId,change){
+  if(this.closing)return Promise.reject(Error('Workflow journal is closing for workspace replacement.'));
   const op=this.pending.catch(()=>{}).then(async()=>{
    await this.init();const jobs=await this.readUnsafe(projectId),result=await change(jobs);
    if(result?.changed)await this.writeUnsafe(projectId,jobs);
@@ -274,7 +275,15 @@ class DurableWorkflowEngine{
    throw e;
   }
  }
- close(){try{this.db?.close();}finally{this.db=null;}}
+ // Prevent new work, then wait for every previously queued transaction and
+ // any standalone initialization before releasing the Windows SQLite handle.
+ async drainAndClose(){
+  this.closing=true;
+  await this.pending;
+  if(this.initialized)await this.initialized;
+  this.close();
+ }
+ close(){if(this.db){this.db.close();this.db=null;}}
 }
 function transient(error){
  const code=String(error?.code||''),status=Number(error?.status||error?.statusCode)||0,message=String(error?.message||'');

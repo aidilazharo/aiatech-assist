@@ -187,3 +187,20 @@ test('v442: ATGV Workspace runs independent resumable source reviews and non-rep
  assert.equal(category('workspacePrepareSync').kind,'read');
  assert.equal(category('workspacePublishSync').kind,'write');
 });
+
+test('workflow journal drains queued SQLite operations and rejects new transactions before workspace replacement',async t=>{
+ const {root,engine}=await sandbox(t,{preferSqlite:true});
+ const queued=engine.begin('tech-cockpit',{command:'getWorkflowJobs'});
+ const draining=engine.drainAndClose();
+ await assert.rejects(engine.list('tech-cockpit'),/journal is closing/);
+ const job=await queued;assert.ok(job.id);
+ await draining;
+ assert.equal(engine.db,null);
+ const moved=root+'-replacement-check';
+ t.after(()=>fs.rm(moved,{recursive:true,force:true,maxRetries:5,retryDelay:100}));
+ await fs.rename(root,moved);
+ // Rename is particularly important on Windows, which holds SQLite handles.
+ const reopened=new DurableWorkflowEngine({root:moved,preferSqlite:true});
+ try{assert.ok((await reopened.list('tech-cockpit')).some(row=>row.id===job.id));}
+ finally{await reopened.drainAndClose();}
+});

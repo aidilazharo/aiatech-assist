@@ -6114,9 +6114,15 @@ async function startupStackCatalog(){
 // One durable metadata journal across all role workspaces. Sources, tokens,
 // prompts and approval bodies are never recorded in this journal.
 const activeHostProcesses=new Map();
-let atgvDurableJobs=null,atgvDurableJobsRoot='';
+let atgvDurableJobs=null,atgvDurableJobsRoot='',workspaceResetInProgress=false;
 const atgvRecoveredProjects=new Set();
+async function closeWorkspaceWorkflowJournal(){
+ const engine=atgvDurableJobs;
+ if(engine)await engine.drainAndClose();
+ atgvDurableJobs=null;atgvDurableJobsRoot='';atgvRecoveredProjects.clear();
+}
 function atgvJobJournal(){
+ if(workspaceResetInProgress)throw Error('ATGV workspace Reset is in progress; workflow journal is paused.');
  if(!context?.globalStorageUri?.fsPath)throw Error('ATGV storage is not ready.');
  {
   const legacy=path.join(context.globalStorageUri.fsPath,'workflow-jobs');
@@ -6157,6 +6163,7 @@ function hasActiveProjectProcess(id){
 }
 async function handleDashboardMessage(msg){
   if(!msg||typeof msg.command!=='string')return;
+  if(workspaceResetInProgress&&msg.command!=='hostDialogResponse'){await notice('ATGV Reset is in progress. Retry after workspace replacement completes.',true);return;}
   const hostJob=activeProject?.id&&isLongRunningHostProcess(msg.command)?Symbol(msg.command):null;
   if(hostJob)activeHostProcesses.set(hostJob,{projectId:activeProject.id,command:msg.command,startedAt:Date.now()});
   const baAction=isBAProcessCommand(msg.command),baStarted=Date.now(),baCommand=String(msg.command);
@@ -12256,6 +12263,7 @@ function assertRestoreStateSafe(){
 }
 async function reset(){
   await ready;
+  if(workspaceResetInProgress)throw Error('ATGV workspace Reset is already in progress.');
   if(!registry||!getWorkspace())throw Error('Open the workspace whose local ATGV projects you want to reset.');
   if(localBackupBusy)throw Error('A local backup or restore is running. Finish it before Reset.');
   if(remoteBRDeletionBusy)throw Error('A remote deletion is running. Complete it before Reset.');
@@ -12310,6 +12318,9 @@ async function reset(){
   if(typed!==phrase){await uiInformation('ATGV Reset cancelled. No local or remote data was deleted.');return;}
   const token=catalog.repositoryUrl?await catalogToken(catalog,{interactive:false}):'';
   let staged=null,destructionStarted=false;
+  if(workspaceResetInProgress)throw Error('ATGV workspace Reset is already in progress.');
+  if(activeHostProcesses.size||architectInstallAbort||aiServiceBusy||developerBrRun||catalogBusy||jiraMonitorBusy||autoSyncBusy||sourceVaultBusy||localBackupBusy||remoteBRDeletionBusy)throw Error('An ATGV operation is active. Finish it before Reset.');
+  workspaceResetInProgress=true;
   try{
     report(`ATGV Reset: preparing ${projects.length} fresh project(s) and Library without changing existing work.`);
     staged=await localReset.stageFreshWorkspace({workspace,projects,connections,catalogConfig:catalog,catalogToken:token});
@@ -12319,7 +12330,13 @@ async function reset(){
     if(aiServiceTimer){clearInterval(aiServiceTimer);aiServiceTimer=null;}
     if(autoSyncTimer){clearInterval(autoSyncTimer);autoSyncTimer=null;}
     if(jiraMonitorTimer){clearInterval(jiraMonitorTimer);jiraMonitorTimer=null;}
+    if(sourceVaultTimer){clearInterval(sourceVaultTimer);sourceVaultTimer=null;}
+    if(liveRemoteTimer){clearInterval(liveRemoteTimer);liveRemoteTimer=null;}
+    // Do not replace directories while an operation that began before staging
+    // is still working. Invalidate in-flight project reads and drain the journal.
+    if(activeHostProcesses.size||architectInstallAbort||aiServiceBusy||developerBrRun||catalogBusy||jiraMonitorBusy||autoSyncBusy||sourceVaultBusy||localBackupBusy||remoteBRDeletionBusy||liveRemoteBusy)throw Error('An ATGV operation is active. Reset stopped before replacing local files.');
     ++activationEpoch;activeProject=undefined;store=undefined;
+    await closeWorkspaceWorkflowJournal();
     destructionStarted=true;
     const replacement=await localReset.replaceLocalWorkspace({workspace,registry,...staged,storageRoot:context.globalStorageUri.fsPath,workspaceHash:workspaceHash()});
     if(replacement.warnings?.length)for(const warning of replacement.warnings)report('ATGV Reset cleanup: '+warning);
@@ -12349,6 +12366,8 @@ async function reset(){
     openingGeneration++;openingFlow.reset();openingOffline=false;discoveredSpaces=[];discoveredJiraProjects=[];
    if(liveRemoteTimer){clearInterval(liveRemoteTimer);liveRemoteTimer=null;}
     installedVendorAssets=null;catalogLastCheck='';catalogLastError='';uxCatalogAutoRefreshAt.clear();
+    // Replacement is complete; allow the new workspace to initialize normally.
+    workspaceResetInProgress=false;
     await initialize();
     // Refresh verified downloaded UI assets; no remote deletion is performed.
     await prepareVendorAssets({syncIfMissing:false});
@@ -12359,7 +12378,7 @@ async function reset(){
     if(staged?.stage&&!destructionStarted)await fs.rm(staged.stage,{recursive:true,force:true}).catch(()=>{});
     report('ATGV Reset failed: '+error.message+(destructionStarted?` Fresh staging may remain at ${staged?.stage||'the workspace'}; check local files.`:' No original local project was deleted.'));
     throw Error('ATGV Reset failed: '+error.message+(destructionStarted?'. Local replacement may be incomplete; review the workspace before retrying.':'. Local work was preserved.'));
-  }
+  }finally{workspaceResetInProgress=false;}
 }
 
 async function installationStartup(){

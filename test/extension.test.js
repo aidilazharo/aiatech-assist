@@ -250,7 +250,11 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
     await fs.writeFile(path.join(root,'projects','claims','local-only.txt'),'destroy me');
     await fs.writeFile(path.join(root,'keep.txt'),'outside projects');
     await fs.mkdir(path.join(root,'private','projects'),{recursive:true});
+    const resetMessageStart=messages.length;
     await commands.get('atgvAssist.reset')();
+    const resetNotices=messages.slice(resetMessageStart).filter(m=>m.type==='notice');
+    assert.ok(resetNotices.some(m=>!m.error&&/ATGV Reset completed:/.test(m.message)),
+      'Reset must complete; host notices: '+JSON.stringify(resetNotices.map(m=>({error:m.error,message:m.message}))));
     assert.deepEqual((await fs.readdir(path.join(root,'projects'))).sort(),['claims','finance','finance-knowledge']);
     await assert.rejects(()=>fs.access(path.join(root,'projects','claims','local-only.txt')),{code:'ENOENT'});
     assert.equal(await fs.readFile(path.join(root,'projects','claims','repository','shared-docs','fresh-from-origin.txt'),'utf8'),'fresh remote checkout');
