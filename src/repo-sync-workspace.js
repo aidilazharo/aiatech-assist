@@ -109,7 +109,7 @@ ol{line-height:1.85;padding-left:20px}
 <label for="reviewDescription">PR description (for pull requests)</label><textarea id="reviewDescription" rows="4" maxlength="4000"></textarea>
 <div class="actions"><button id="publishReviewed" type="button">Push & Create PR</button><button id="pushBranchOnly" type="button" class="secondary">Push Branch Only</button><button id="redoReview" type="button" class="secondary">Pull & Study Again</button></div>
 </section>
-<section class="card full"><h2>5. Release Synchronization</h2><p class="muted">The latest matching stable release is copied into release-artifacts/ with source code in the same PR. ATGV removes previous managed artifacts and publishes the verified release after the destination PR merges into main. Destination GitHub Actions remain disabled.</p><div id="releaseQueueStatus" class="status" role="status" aria-live="polite">No queued release.</div><div class="actions"><button id="checkReleaseSync" type="button" class="secondary">Check Release Status</button></div></section></div></form>
+<section class="card full"><h2>5. Release Synchronization</h2><p class="muted">The latest available verified stable release is copied independently of source version. Missing or invalid releases do not block source sync. Previous managed artifacts are retained when no valid replacement exists. Destination GitHub Actions remain disabled.</p><div id="releaseQueueStatus" class="status" role="status" aria-live="polite">No queued release.</div><div class="actions"><button id="checkReleaseSync" type="button" class="secondary">Check Release Status</button></div></section></div></form>
 
 </main>
 <script nonce="__NONCE__">
@@ -269,6 +269,7 @@ window.addEventListener('message',e=>{
    '\\nRelease assets to include: '+String(review.release?.assets?.length||0)+
    (review.release?.assets?.length?' ('+review.release.assets.slice(0,8).map(a=>a.name).join(', ')+')':'')+
    (review.release?.skippedAssetCount?'\\nSkipped oversized or unsupported assets: '+review.release.skippedAssetCount:'')+
+   (review.releaseNotice?'\\n'+review.releaseNotice:'')+
    (review.release?.targetCommitish&&review.release.targetCommitish!==review.sourceSha
     ?'\\nNote: latest release targets a different commit; both revisions will be recorded.':'');
   buttons();show('Source study completed. Review or edit the four suggestions, then approve the full operation. Destination is unchanged.','success');
@@ -565,7 +566,7 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
    const enrichedSummary=summary+'\\nCopied code version: '+(outcome.codeVersion||'Not declared')+
     '\\nLatest published release: '+(outcome.releaseTag||'None published')+
     '\\nRelease assets included: '+String(outcome.releaseAssetCount||0)+
-    '\\nRelease artifact paths: '+(outcome.releaseArtifactPaths||[]).join(', ');
+    '\\nRelease artifact paths: '+(outcome.releaseArtifactPaths||[]).join(', ')+(outcome.releaseNotice?'\n'+outcome.releaseNotice:'');
    await post({type:'repoSyncResult',success:true,prUrl:createdPr,releaseTag:outcome.releaseTag||'',message:enrichedSummary+releaseNotice});
    onLog('Repo Sync: '+summary);
   }catch(error){

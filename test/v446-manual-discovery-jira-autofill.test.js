@@ -34,7 +34,7 @@ function saveHarness(){
  assert.ok(start>=0&&end>start);
  const context={
   discovery,brWorkflow,registry:{},activeProject:{id:'demo'},
-  requireOpened:()=>{},requireBAOwner:async()=>{},
+  requireOpened:()=>{},requireBAOwner:async()=>{},requireBAWritableCycle:async()=>{},
   dashboard:{webview:{postMessage:async item=>events.push(item)}},
   refreshDashboard:async()=>{},notice:async()=>{},
  };

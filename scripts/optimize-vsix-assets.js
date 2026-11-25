@@ -3,8 +3,9 @@
 // optimizer in the installed extension. Direct dependencies are pinned.
 const fs=require('node:fs/promises');
 const path=require('node:path');
-const terser=require('terser');
-const CleanCSS=require('clean-css');
+const offline=require('./offline-vsix-optimizer');
+let terser,CleanCSS;
+try{terser=require('terser');CleanCSS=require('clean-css');}catch(error){if(error.code!=='MODULE_NOT_FOUND')throw error;terser=null;CleanCSS=null;}
 const root=path.resolve(__dirname,'..');
 const output=path.resolve(String(process.argv[2]||''));
 if(!process.argv[2]||output===root)throw Error('Specify an isolated VSIX staging directory.');
@@ -21,14 +22,16 @@ async function walk(folder,result=[]){
 async function run(){
  await fs.mkdir(output,{recursive:true});
  const candidates=[...(await walk(path.join(root,'src'))),...(await walk(path.join(root,'media')))];
- const summary={schema:1,optimizer:{javascript:'terser 5.31.6, compress=false, mangle=false',css:'clean-css 5.3.3, level=1'},files:[]};
+ const summary={schema:1,optimizer:{javascript:terser?'terser 5.31.6, compress=false, mangle=false':'offline Acorn token/AST validation',css:CleanCSS?'clean-css 5.3.3, level=1':'offline conservative whitespace'},files:[]};
  let optimized=0,bytesSaved=0;
  for(const file of candidates.sort()){
   const relative=normalized(path.relative(root,file));
   const input=await fs.readFile(file,'utf8');
   if(!input.trim())continue;
   let result;
-  if(file.endsWith('.js')){
+  if(!terser||!CleanCSS){
+   result=file.endsWith('.js')?offline.javascript(input):offline.css(input);
+  }else if(file.endsWith('.js')){
    const parsed=await terser.minify(input,{ecma:2022,compress:false,mangle:false,module:false,
     format:{comments:'some',beautify:false}});
    if(!parsed.code)throw Error('JavaScript minification produced empty output: '+relative);

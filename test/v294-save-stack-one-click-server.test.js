@@ -27,7 +27,12 @@ test('single Save Stack never seizes an occupied server or accepts the wrong SHA
 test('Save Stack persists final Git revision before server check, then pushes snapshot to UI',()=>{
  const code=fs.readFileSync(path.join(__dirname,'../test/generated/extension-source.txt'),'utf8');
  const block=code.slice(code.indexOf("case 'architectSaveStack':{"),code.indexOf("case 'architectTestStack':{"));
- const index=x=>block.indexOf(x);
+ const remote=block.slice(block.indexOf('let updated=await registry.update(activeProject.id,savedProject)'));
+ const index=x=>remote.indexOf(x);
+ const local=block.slice(block.indexOf('const localProject=await registry.read'),block.indexOf('const root=await architectRepository.ensure(context.workspaceState'));
+ assert.ok(local.indexOf('registry.update(projectId,{...latest,techStackId:id')>=0);
+ assert.ok(local.indexOf('reconcileAfterSave')>local.indexOf('techStackPrepared:{stackId:id'));
+ assert.match(local,/remotePushed:false/);
  assert.ok(index('registry.update(activeProject.id,savedProject)')>=0);
  assert.ok(index('reconcileAfterSave')>index('registry.update(activeProject.id,savedProject)'));
  assert.ok(index("type:'architectServerState'")>index('reconcileAfterSave'));

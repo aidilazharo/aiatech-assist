@@ -431,13 +431,14 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   files=await trackedFiles(cloned,scope);
   // Resolve the latest published source GitHub release, excluding prereleases.
   // Source and release are pinned across review and publication.
-  const release=typeof githubApi.getLatestRelease==='function'
-   ?await githubApi.getLatestRelease(source,sourcePat):null;
+  let release=null,releaseNotice='';
+  try{if(typeof githubApi.getLatestRelease==='function')release=await githubApi.getLatestRelease(source,sourcePat);}
+  catch(error){releaseNotice='Release unavailable; source sync continues.';await notify('release',releaseNotice);}
   // The official distribution pairs require an exact published main release.
   const official={ 'aidilazharo/aiatech-assist':'aiamalaysia/my-fow-technology-app-techassists-dev-sdlc','aidilazharo/tech-stacks-skills':'aiamalaysia/my-fow-technology-app-techassists-enterprise-skills' };
   const distribution=official[source.name.toLowerCase()]===destination.name.toLowerCase();
-  if(distribution&&(!release||release.targetCommitish!==sha||!release.assets?.length||release.skippedAssetCount||chosenBranch!=='main'||base!=='main'||scope!=='.'))
-   throw Error('ATGV distribution requires full main-to-main sync and a complete published release for the exact source commit. Wait for the source release build or select the correct repositories.');
+  if(distribution&&(chosenBranch!=='main'||base!=='main'||scope!=='.'))
+   throw Error('ATGV distribution requires full main-to-main source sync.');
   const commitPaths=await runner('git',['show','--format=','--name-only','HEAD'],{cwd:cloned}).catch(()=> '');
   const eligible=new Set(files);
   const sourceCommitPaths=[...new Set(String(commitPaths||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean))];
@@ -456,15 +457,19 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
    ?fallbackBranch:baseName(cleanedSourceBranch);
   const facts=await readSourceFacts({cloned,source,chosenBranch,sha,sourceMessage,files,destination,base,sourceCommitFiles});
   let requiredAssets=[];
-  if(distribution){
-   const publisher=require('./repo-sync-release-publisher');
-   const kind=publisher.pairFor(source,destination).kind;
-   const info=publisher.tagInfo(release.tag,kind);
-   if(info.version!==facts.project.version)throw Error('Latest stable release version does not match source code. Await the matching release.');
-   requiredAssets=publisher.required(kind,info.version);
-   const names=new Set(release.assets.map(a=>a.name));
-   for(const [asset,checksum] of requiredAssets)if(!names.has(asset)||!names.has(checksum))throw Error('Missing required stable release artifact or checksum: '+asset);
+  if(distribution&&release){
+   try{
+    const publisher=require('./repo-sync-release-publisher');
+    const kind=publisher.pairFor(source,destination).kind;
+    const info=publisher.tagInfo(release.tag,kind);
+    if(!release.assets?.length||release.skippedAssetCount)throw Error('Incomplete release asset inventory');
+    requiredAssets=publisher.required(kind,info.version);
+    const names=new Set(release.assets.map(a=>a.name));
+    for(const [asset,checksum] of requiredAssets)if(!names.has(asset)||!names.has(checksum))throw Error('Missing required stable release artifact or checksum: '+asset);
+    if(release.targetCommitish!==sha)releaseNotice='Release '+release.tag+' is independent of source '+facts.project.version+'; original provenance retained.';
+   }catch(error){release=null;releaseNotice='Release incomplete; source sync continues.';}
   }
+  if(releaseNotice)await notify('release',releaseNotice);
   if(!sourcePr||previewOnly){
    await notify('ai','Studying verified source-code structure and commit history for the proposed branch, commit and PR details…');
    try{aiPlan=aiSyncPlan(await planSync(facts),source,sourceMessage,sha);}
@@ -505,7 +510,7 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
     ...proposed,sourceSha:sha,baseSha,sourceBranch:chosenBranch,sourceRepo:source.name,
     destinationRepo:destination.name,base,copyScope:scope,
     sourcePrUrl:sourcePr?.url||'',fileCount:files.length,sourceCode:facts.codeOverview,
-    codeVersion:facts.project.version||'',release,
+    codeVersion:facts.project.version||'',release,releaseNotice,
     sourceCommitFiles,excludedSourceCommitFiles,
     notice:'Suggestions use verified source code structure and latest source commit. No Repo B files were changed.'
    }};
@@ -556,13 +561,14 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   }
   // Release assets are copied with the reviewed code in the same commit.
   const releaseFiles=[],removedReleaseFiles=[];
+  let verified=[],staging;
   if(release?.assets?.length){
+   try{
    if(typeof githubApi.downloadReleaseAsset!=='function')
     throw Error('Cannot include release assets: download support is unavailable.');
    await notify('release','Downloading '+release.assets.length+' verified asset(s) from '+release.tag+'…');
-   const staging=path.join(temp,'verified-release');
+   staging=path.join(temp,'verified-release');
    await fs.mkdir(staging,{recursive:true});
-   const verified=[];
    for(const asset of release.assets){
     const local=path.join(staging,asset.name);
     const item=await githubApi.downloadReleaseAsset(source,sourcePat,asset,local);
@@ -570,15 +576,30 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
        !/^sha256:[a-f0-9]{64}$/.test(String(item.digest||''))||
        (asset.digest&&asset.digest!==item.digest))
      throw Error('Downloaded release artifact did not match the reviewed asset: '+asset.name);
-    const relative='release-artifacts/'+release.tag+'/'+asset.name;
-    const target=await destinationFileSafe(destRoot,relative);
-    await fs.mkdir(path.dirname(target),{recursive:true});
-    await fs.copyFile(local,target);
-    releaseFiles.push(relative);verified.push(item);
+    verified.push(item);
    }
    if(distribution){
     const {verifyChecksum}=require('./repo-sync-release-publisher');
     for(const [asset,checksum] of requiredAssets)verifyChecksum(await fs.readFile(path.join(staging,asset)),await fs.readFile(path.join(staging,checksum)),asset);
+   }
+   if(verified.some(a=>a.name==='release.json'))throw Error('Reserved release manifest filename');
+   if(distribution){
+    const publisher=require('./repo-sync-release-publisher');
+    const kind=publisher.pairFor(source,destination).kind;
+    const tracked=await runner('git',['ls-files','-z','--','release-artifacts'],{cwd:destRoot});
+    for(const file of tracked.split('\0').filter(f=>/^release-artifacts\/[^/]+\/release\.json$/.test(f))){
+     const prior=JSON.parse(await fs.readFile(await destinationFileSafe(destRoot,file),'utf8'));
+     if(prior.sourceRepository===source.name&&publisher.compareTags(prior.releaseTag,release.tag,kind)>0)throw Error('Destination contains a newer managed release');
+    }
+   }
+   }catch(error){release=null;verified=[];releaseNotice='Release verification failed or would downgrade artifacts; source sync continues and previous artifacts are preserved.';await notify('release',releaseNotice);}
+  }
+  if(release?.assets?.length){
+   for(const asset of verified){
+    const relative='release-artifacts/'+release.tag+'/'+asset.name;
+    const target=await destinationFileSafe(destRoot,relative);
+    await fs.mkdir(path.dirname(target),{recursive:true});
+    await fs.copyFile(path.join(staging,asset.name),target);releaseFiles.push(relative);
    }
    const manifestRelative='release-artifacts/'+release.tag+'/release.json';
    if(releaseFiles.includes(manifestRelative))throw Error('Release contains a reserved manifest filename.');
@@ -589,6 +610,7 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
     sourceCommit:sha,codeVersion:facts.project.version||null,
     releaseTag:release.tag,releaseName:release.name,releaseUrl:release.url,
     releaseTargetCommitish:release.targetCommitish,releasePublishedAt:release.publishedAt,
+    releaseVersion:distribution?require('./repo-sync-release-publisher').tagInfo(release.tag,require('./repo-sync-release-publisher').pairFor(source,destination).kind).version:null,
     matchesSourceCommit:release.targetCommitish===sha,
     assets:verified
    },null,2)+'\n','utf8');
@@ -631,7 +653,7 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
   pushed=true;
   const result={branch,sourceBranch:chosenBranch,sourceSha:sha,sourceRepo:source.name,destinationRepo:destination.name,
    base,fileCount:changedFiles.length,codeVersion:facts.project.version||'',releaseTag:release?.tag||'',
-   releaseAssetCount:release?.assets?.length||0,releaseArtifactPaths:releaseFiles,removedReleaseFiles,commitMessage,
+   releaseAssetCount:release?.assets?.length||0,releaseArtifactPaths:releaseFiles,removedReleaseFiles,releaseNotice,commitMessage,
    sourcePrUrl:sourcePr?.url||'',excludedSourceCommitFiles};
   if(branchOnly)return result;
   const details=prDetails({source,destination,sha,scope,base,branch,count:changedFiles.length,changedFiles,sourceBranch:chosenBranch,sourceMessage,sourceCommitFiles});

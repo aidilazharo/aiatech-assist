@@ -81,7 +81,7 @@ test('partial AI reviews cannot generate requirements until all answers are save
  const begin=host.indexOf('async function generateBusinessRequirements(options={}){');
  const end=host.indexOf('async function verifyRoleDocumentImpactTarget',begin);
  assert.ok(begin>=0&&end>begin);
- const context={requireOpened(){},async requireBAOwner(){},registry:{},activeProject:{id:'p'},discovery:{async load(){return {revision:'r',readiness:{filled:11,total:12}}}},brWorkflow:{async load(){return {sourceDocuments:[{}],importEpoch:1,reviewRevision:'r',discoveryRevision:'r'}}}};
+ const context={requireOpened(){},async requireBAOwner(){},async requireBAWritableCycle(){},registry:{},activeProject:{id:'p'},discovery:{async load(){return {revision:'r',readiness:{filled:11,total:12}}}},brWorkflow:{async load(){return {sourceDocuments:[{}],importEpoch:1,reviewRevision:'r',discoveryRevision:'r'}}}};
  const generate=vm.runInNewContext(host.slice(begin,end)+'\ngenerateBusinessRequirements',context);
  await assert.rejects(generate(),/Complete and save all 12 discovery answers/);
 });

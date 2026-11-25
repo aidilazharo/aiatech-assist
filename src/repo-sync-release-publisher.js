@@ -27,6 +27,7 @@ function tagInfo(tag,kind){
  return {version:m.slice(1,4).map(Number).join('.'),key:m.slice(1).map(Number)};
 }
 function compare(a,b){for(let i=0;i<4;i++){if(a[i]!==b[i])return a[i]-b[i];}return 0;}
+function compareTags(a,b,kind){return compare(tagInfo(a,kind).key,tagInfo(b,kind).key);}
 function required(kind,version){return kind==='extension'?
  [[ 'atgv-aiatech-assist-'+version+'.vsix','vsix.sha256'],['ATGV-AIATECH-Assist-v'+version+'-Source.zip','source.sha256']]:
  [['tech-stacks-skills-'+version+'-source.zip','library-source.sha256']];}
@@ -100,8 +101,8 @@ async function publish({source,destination,sourcePat,destPat,prNumber,tag,onProg
  const merged=sha(pr.merge_commit_sha),prUrl=api.safePrUrl(destination,pr.html_url);
  const prefix='release-artifacts/'+tag+'/';
  const manifest=JSON.parse((await readFile(destination,destPat,prefix+'release.json',merged)).toString('utf8'));
- if(manifest.schema!==1||manifest.sourceRepository!==source.name||manifest.sourceBranch!=='main'||manifest.releaseTag!==tag||manifest.codeVersion!==info.version||manifest.matchesSourceCommit!==true||manifest.sourceCommit!==manifest.releaseTargetCommitish||!Array.isArray(manifest.assets))throw Error('Merged PR does not contain a matching source release manifest. Re-sync the exact published main revision.');
- const sourceCommit=sha(manifest.sourceCommit);
+ if(manifest.schema!==1||manifest.sourceRepository!==source.name||manifest.sourceBranch!=='main'||manifest.releaseTag!==tag||manifest.matchesSourceCommit!==(manifest.sourceCommit===manifest.releaseTargetCommitish)||(manifest.releaseVersion||info.version)!==info.version||!Array.isArray(manifest.assets))throw Error('Merged PR does not contain a matching source release manifest. Re-sync the exact published main revision.');
+ const codeCommit=sha(manifest.sourceCommit),sourceCommit=sha(manifest.releaseTargetCommitish);
  const release=await sg('/releases/tags/'+encodeURIComponent(tag));
  if(release.draft||release.prerelease||!release.published_at||release.tag_name!==tag||release.target_commitish!==sourceCommit||await tagCommit(source,sourcePat)!==sourceCommit)throw Error('Source release does not identify the exact copied commit.');
  const sourceCompare=await sg('/compare/'+sourceCommit+'...main');
@@ -111,14 +112,19 @@ async function publish({source,destination,sourcePat,destPat,prNumber,tag,onProg
  const version=pair.kind==='extension'?JSON.parse(versionBytes).version:versionBytes.toString('utf8').trim();
  if(version!==info.version)throw Error('Source release version differs from source code.');
  if(pair.kind==='library'&&JSON.parse(await readFile(source,sourcePat,'catalog.json',sourceCommit)).version!==version)throw Error('Library catalog version differs.');
- const sourceTree=await tree(source,sourcePat,sourceCommit);
+ const codeVersionBytes=await readFile(source,sourcePat,versionFile,codeCommit);
+ const codeVersion=pair.kind==='extension'?JSON.parse(codeVersionBytes).version:codeVersionBytes.toString('utf8').trim();
+ if(codeVersion!==manifest.codeVersion)throw Error('Copied source version differs from manifest.');
+ const codeCompare=await sg('/compare/'+codeCommit+'...main');
+ if(!['ahead','identical'].includes(codeCompare.status))throw Error('Copied source commit is not in main history.');
+ const sourceTree=await tree(source,sourcePat,codeCommit);
  const mergedTree=verifyProjection(sourceTree,await tree(destination,destPat,merged));
  // Check the current main projection again just before making a draft public.
  async function verifyCurrent(){
   const ref=await dg('/git/ref/heads/main'),head=sha(ref.object?.sha);
   const ancestry=await dg('/compare/'+merged+'...'+head);
   if(!['ahead','identical'].includes(ancestry.status))throw Error('Merged PR is not in destination main history.');
-  return verifyProjection(sourceTree,await tree(destination,destPat,head));
+  return new Map((await tree(destination,destPat,head)).map(x=>[x.path,x]));
  }
  const current=await verifyCurrent();
  const assets=release.assets||[],manifestAssets=manifest.assets;
@@ -132,7 +138,7 @@ async function publish({source,destination,sourcePat,destPat,prNumber,tag,onProg
  if(assets.reduce((n,a)=>n+a.size,0)>80*1024*1024||new Set(manifestAssets.map(a=>a.name)).size!==assets.length)throw Error('Invalid merged release asset inventory.');
  for(const [name,checksum] of required(pair.kind,version))if(!byName.has(name)||!byName.has(checksum))throw Error('Missing required release asset or checksum: '+name);
  const marker='ATGV-Sync: '+sourceCommit+' '+tag;
- const notes=marker+'\nDestination commit: '+merged+'\nReviewed PR: '+prUrl;
+ const notes=marker+'\nDestination commit: '+merged+'\nReviewed PR: '+prUrl+(codeCommit!==sourceCommit?'\nArtifact source version: '+version+' @ '+sourceCommit+'\nCopied code version: '+codeVersion+' @ '+codeCommit+' (GitHub generated source archives describe the destination commit, not the older build).':'');
  async function findExisting(){
   let existing=null;
   // Check all listed releases (including drafts) and refuse semantic downgrades.
@@ -147,7 +153,7 @@ async function publish({source,destination,sourcePat,destPat,prNumber,tag,onProg
       if(!plain||plain.slice(1).some(n=>!Number.isSafeInteger(Number(n))))continue;
       prior={key:[...plain.slice(1).map(Number),0]};
      }
-     if(compare(prior.key,info.key)>0)throw Error('A newer destination release already exists. No downgrade.');
+     if(compare(prior.key,info.key)>0){const error=Error('A newer destination release already exists. No downgrade.');error.code='RELEASE_SUPERSEDED';throw error;}
     }
    }
    if(rows.length<100)return existing;
@@ -173,6 +179,12 @@ async function publish({source,destination,sourcePat,destPat,prNumber,tag,onProg
   for(const [name,checksum] of required(pair.kind,version))verifyChecksum(buffers.get(name),buffers.get(checksum),name);
   let row=await findExisting();
   const existingTag=await tagCommit(destination,destPat,true);
+  if(row&&!row.draft&&!row.prerelease&&row.published_at&&existingTag&&existingTag!==merged){
+   if(row.target_commitish!==existingTag||String(row.body||'').split('\n')[0]!==marker)throw Error('Existing release provenance differs. No overwrite.');
+   if(row.assets?.length!==buffers.size||new Set(row.assets.map(a=>a.name)).size!==buffers.size)throw Error('Existing release assets differ.');
+   for(const a of row.assets){const expected=buffers.get(a.name);if(!expected)throw Error('Unexpected existing release asset.');const filename=path.join(temp,'existing-'+crypto.randomUUID());await download(destination,destPat,a,filename);if(!expected.equals(await fs.readFile(filename)))throw Error('Existing release checksum differs.');}
+   return {url:'https://github.com/'+destination.name+'/releases/tag/'+tag,tag,version,assetCount:buffers.size,merged:existingTag,alreadyPublished:true};
+  }
   if(existingTag&&existingTag!==merged)throw Error('Destination tag already refers to another commit.');
   if(row)assertIdentity(row);
   else{
@@ -222,4 +234,4 @@ async function publish({source,destination,sourcePat,destPat,prNumber,tag,onProg
   return {url:expectedUrl,tag,version,assetCount:buffers.size,merged};
  }finally{await fs.rm(temp,{recursive:true,force:true});}
 }
-module.exports={publish,pairFor,tagInfo,required,verifyChecksum,verifyProjection};
+module.exports={publish,pairFor,tagInfo,compareTags,required,verifyChecksum,verifyProjection};

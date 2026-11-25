@@ -31,7 +31,7 @@ function createQueue({preferences,secrets,onLog=()=>{},onChange=()=>{},request=a
   if(ticking)return;
   ticking=true;
   try{
-   for(const job of rows().filter(x=>!['published','closed-unmerged'].includes(x.status))){
+   for(const job of rows().filter(x=>!['published','closed-unmerged','superseded'].includes(x.status))){
     let sourcePat='',destPat='';
     try{
      const source=githubUrl('https://github.com/'+job.source),destination=githubUrl('https://github.com/'+job.destination);
@@ -51,7 +51,7 @@ function createQueue({preferences,secrets,onLog=()=>{},onChange=()=>{},request=a
      let detail=String(error?.message||error);
      for(const token of [sourcePat,destPat])if(token)detail=detail.split(token).join('[REDACTED]');
      detail=detail.slice(0,450);
-     await set(job.id,{status:'retry',detail});onLog('Workspace release queue: '+detail);
+     await set(job.id,{status:error?.code==='RELEASE_SUPERSEDED'?'superseded':'retry',detail});onLog('Workspace release queue: '+detail);
     }
    }
   }finally{ticking=false;}

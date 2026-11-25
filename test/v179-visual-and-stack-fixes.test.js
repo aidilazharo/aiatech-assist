@@ -42,7 +42,7 @@ test('architect can find verified cloned project checkout even when local select
  await assert.rejects(repos.resolve(state,'project-1',git,{projectRoot:root,githubOwner:'someoneelse',githubRepo:'wrong'}),/different GitHub origin|No usable/);
 }));
 test('save action gives immediate feedback and generated SVG preview uses actual image elements',()=>{
- assert.match(ui,/Checking main, preparing the skeleton, installing, testing, launching and pushing/);
+ assert.match(ui,/Preparing a dedicated local Git repository, installing, testing and launching/);
  assert.match(ui,/architectStackError/);assert.match(host,/architectureBootstrapResult/);
  assert.match(ui,/createElement\('img'\)/);assert.match(ui,/data:image\/svg\+xml/);
  assert.match(ui,/Expand Image/);

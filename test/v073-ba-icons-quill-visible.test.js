@@ -21,8 +21,9 @@ test('all five BA sections are permanent and start collapsed with meaningful sta
  assert.match(ui,/const discoveryTarget=get\('baAutoDiscoveryForm'\)/);
 });
 test('document actions and publish refresh controls are icons with accessible labels',()=>{
- for(const id of ['baPreflightDownload','baWorkingBrDownload','baAutoArtifactSave','baAutoStop','baAutoRefresh','baAutoPublish'])
+ for(const id of ['baPreflightDownload','baWorkingBrDownload','baAutoArtifactSave','baAutoStop','baAutoRefresh'])
   assert.match(html,new RegExp('id="'+id+'"[^>]*aria-label="[^"]+"[^>]*>\\$\\{baHeaderIcon\\('));
+ assert.match(html,/id="baAutoPublish"[^>]*aria-label="Approved and Publish"[^>]*>Approved and Publish<\/button>/);
  for(const action of ['replace','remove'])assert.match(host,new RegExp(action+"\\.append\\(sourceActionIcon\\('"));
  assert.match(host,/sourceActionIcon\('upload'\)/);
  assert.match(host,/sourceActionIcon\('delete'\)/);

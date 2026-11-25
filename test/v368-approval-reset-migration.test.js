@@ -86,8 +86,10 @@ test('host reset and stack-switch stop managed servers before reset and never fo
  const host=await fs.readFile(path.join(__dirname,'..','src/lib/runtime/extension-runtime.js'),'utf8');
  const resetBlock=host.slice(host.indexOf("case 'architectResetStack':{"),host.indexOf("case 'architectSaveStack':{"));
  assert.match(resetBlock,/stopProjectManaged\(\{root\}\)/);
- assert.ok(resetBlock.indexOf('planProjectStackArchive(')<resetBlock.indexOf('stopProjectManaged({root})'));
- assert.ok(resetBlock.indexOf('stopProjectManaged({root})')<resetBlock.indexOf('service.resetWithProjectArchive('));
+ const archiveReset=resetBlock.slice(resetBlock.indexOf('const service=require'));
+ assert.ok(archiveReset.indexOf('planProjectStackArchive(')<archiveReset.indexOf('stopProjectManaged({root})'));
+ assert.ok(archiveReset.indexOf('stopProjectManaged({root})')<archiveReset.indexOf('service.resetWithProjectArchive('));
+ assert.match(resetBlock,/Preserve & Reset Local Stack/);
  const switchBlock=host.slice(host.indexOf("case 'architectSaveStack':{"),host.indexOf("case 'architectTestStack':{"));
  assert.match(switchBlock,/stopProjectManaged\(\{root\}\)/);
  assert.ok(switchBlock.indexOf('planProjectStackArchive(')<switchBlock.indexOf('stopProjectManaged({root})'));

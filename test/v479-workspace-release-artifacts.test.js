@@ -138,3 +138,36 @@ test('Reviewed PR includes latest release binaries and source version in the sam
   'release-artifacts/v1.2.3/release.json','release-artifacts/v1.2.3/sample.vsix','src/app.js'
  ]);
 });
+
+for(const mode of ['older','missing','corrupt'])test('Official Workspace main sync with '+mode+' release',async t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'atgv-independent-release-'));
+ t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const a=path.join(root,'source'),b=path.join(root,'destination'),bare=path.join(root,'destination.git');
+ for(const dir of [a,b]){fs.mkdirSync(dir);git(['init','-b','main'],dir);git(['config','user.name','ATGV Test'],dir);git(['config','user.email','atgv@example.invalid'],dir);}
+ fs.writeFileSync(path.join(a,'package.json'),' {"version":"0.0.95"}\n');
+ git(['add','--all'],a);git(['commit','-m','feat: newer source'],a);
+ const sha=git(['rev-parse','HEAD'],a),older='a'.repeat(40);
+ fs.writeFileSync(path.join(b,'keep.txt'),'destination');
+ git(['add','--all'],b);git(['commit','-m','initial destination'],b);
+ git(['init','--bare','-b','main',bare],root);git(['remote','add','origin',bare],b);git(['push','origin','main'],b);
+ const source='aidilazharo/aiatech-assist',destination='aiamalaysia/my-fow-technology-app-techassists-dev-sdlc',targetUrl='https://github.com/'+destination+'.git';
+ const tag='v0.0.94-build.1',bytes=new Map();
+ for(const [name,checksum] of require('../src/repo-sync-release-publisher').required('extension','0.0.94')){
+  const value=Buffer.from('binary '+name);bytes.set(name,value);
+  bytes.set(checksum,Buffer.from((mode==='corrupt'?'0'.repeat(64):crypto.createHash('sha256').update(value).digest('hex'))+'  '+name+'\n'));
+ }
+ const assets=[...bytes].map(([name,data],i)=>({id:i+1,name,size:data.length,digest:'sha256:'+crypto.createHash('sha256').update(data).digest('hex')}));
+ const release=mode==='missing'?null:{tag,name:tag,url:'https://github.com/'+source+'/releases/tag/'+tag,targetCommitish:older,publishedAt:'2026-11-24T00:00:00Z',assets,skippedAssetCount:0};
+ const githubApi={getRepository:async()=>({nameWithOwner:destination,defaultBranch:'main'}),getLatestRelease:async()=>release,downloadReleaseAsset:async(r,token,asset,local)=>{fs.writeFileSync(local,bytes.get(asset.name),{flag:'wx'});return {...asset,verified:true};},findOpenPr:async()=>'',createPr:async()=> 'https://github.com/'+destination+'/pull/50'};
+ const runner=async(bin,args,{cwd}={})=>{if(args[0]==='clone'){git(['clone','--quiet','--branch','main',a,args.at(-1)],root);return '';}if(args[0]==='remote'&&args[1]==='get-url')return targetUrl;if(args[0]==='ls-remote'&&args.includes(targetUrl))return git(args.map(x=>x===targetUrl?bare:x),cwd||root);return git(args,cwd||root);};
+ const params={sourceUrl:'https://github.com/'+source,sourceBranch:'main',destinationUrl:'https://github.com/'+destination,destinationFolder:b,sourcePat:'ghp_'+'a'.repeat(40),destPat:'ghp_'+'b'.repeat(40),copyScope:'.',githubApi,runner};
+ const preview=await sync.sync({...params,previewOnly:true});
+ const result=await sync.sync({...params,approvedReview:preview.review});
+ assert.equal(result.codeVersion,'0.0.95');assert.equal(result.sourceSha,sha);
+ assert.equal(JSON.parse(fs.readFileSync(path.join(b,'package.json'))).version,'0.0.95');
+ const manifest=path.join(b,'release-artifacts',tag,'release.json');
+ if(mode==='older'){
+  assert.equal(result.releaseTag,tag);const record=JSON.parse(fs.readFileSync(manifest));
+  assert.equal(record.sourceCommit,sha);assert.equal(record.releaseTargetCommitish,older);assert.equal(record.releaseVersion,'0.0.94');assert.equal(record.matchesSourceCommit,false);
+ }else{assert.equal(result.releaseTag,'');assert.ok(!fs.existsSync(manifest));assert.equal(result.releaseAssetCount,0);}
+});

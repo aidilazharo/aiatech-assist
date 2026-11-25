@@ -31,7 +31,7 @@ test('Workspace exposes automatic release queue status',()=>{
  assert.match(source,/id="checkReleaseSync"/);assert.match(source,/releaseQueue\.enqueue/);assert.doesNotMatch(source,/id="releasePrNumber"/);
 });
 
-test('publishes and resumes a verified merged release with no workflow or branch writes',async()=>{
+for(const mismatch of [false,true])test('publishes and resumes a verified merged release with independent code revision: '+mismatch,async()=>{
  const tag='v0.0.84-build.921',src='a'.repeat(40),merged='b'.repeat(40),st='c'.repeat(40),dt='d'.repeat(40);
  const gitBlob=bytes=>crypto.createHash('sha1').update('blob '+bytes.length+'\0').update(bytes).digest('hex');
  const digest=bytes=>'sha256:'+crypto.createHash('sha256').update(bytes).digest('hex');
@@ -41,10 +41,12 @@ test('publishes and resumes a verified merged release with no workflow or branch
  }
  files.set('vsix-size-report.json',Buffer.from('{"bytes":123}'));
  const assets=[...files].map(([name,bytes],i)=>({id:i+1,name,size:bytes.length,digest:digest(bytes),state:'uploaded'}));
- const manifest=Buffer.from(JSON.stringify({schema:1,sourceRepository:source.name,sourceBranch:'main',sourceCommit:src,codeVersion:'0.0.84',releaseTag:tag,releaseTargetCommitish:src,matchesSourceCommit:true,assets}));
+ const codeCommit=mismatch?'e'.repeat(40):src,codeVersion=mismatch?'0.0.95':'0.0.84';
+ const manifest=Buffer.from(JSON.stringify({schema:1,sourceRepository:source.name,sourceBranch:'main',sourceCommit:codeCommit,codeVersion,releaseVersion:'0.0.84',releaseTag:tag,releaseTargetCommitish:src,matchesSourceCommit:!mismatch,assets}));
  const pkg=Buffer.from('{"version":"0.0.84"}'),prefix='release-artifacts/'+tag+'/';
  const treeFile=(path,bytes)=>({path,type:'blob',mode:'100644',sha:gitBlob(bytes)});
- const sourceTree=[treeFile('package.json',pkg)];
+ const codePkg=Buffer.from(JSON.stringify({version:codeVersion}));
+ const sourceTree=[treeFile('package.json',codePkg)];
  const destinationTree=[...sourceTree,...[...files].map(([n,b])=>treeFile(prefix+n,b)),treeFile(prefix+'release.json',manifest)];
  const responseFile=bytes=>({type:'file',encoding:'base64',size:bytes.length,content:bytes.toString('base64')});
  const prUrl='https://github.com/'+destination.name+'/pull/9',releaseUrl='https://github.com/'+destination.name+'/releases/tag/'+tag;
@@ -58,6 +60,7 @@ test('publishes and resumes a verified merged release with no workflow or branch
   if(route==='/pulls/9')return ok({merged:true,state:'closed',merge_commit_sha:merged,base:{ref:'main',repo:{full_name:destination.name}},html_url:prUrl});
   if(route==='/contents/'+prefix+'release.json?ref='+merged)return ok(responseFile(manifest));
   if(route==='/contents/package.json?ref='+src)return ok(responseFile(pkg));
+  if(route==='/contents/package.json?ref='+codeCommit)return ok(responseFile(codePkg));
   if(route==='/releases/tags/'+tag)return ok(isSource?{draft:false,published_at:'2026-11-24T00:00:00Z',tag_name:tag,target_commitish:src,assets,name:'ATGV 0.0.84'}:draft);
   if(route==='/git/ref/tags/'+tag)return isSource?ok({object:{type:'commit',sha:src}}):draft&&!draft.draft?ok({object:{type:'commit',sha:merged}}):{status:404};
   if(route==='/git/ref/heads/main')return ok({object:{sha:merged}});

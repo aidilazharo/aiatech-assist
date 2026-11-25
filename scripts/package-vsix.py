@@ -106,6 +106,40 @@ with tempfile.TemporaryDirectory(prefix='atgv-vsix-stage-') as staging:
         for name in files:
             z.write(stage/name if name in modified else root/name,'extension/'+name)
 
+    # If the standard ZIP is over budget, use an optional locally installed
+    # Zopfli optimizer for lossless DEFLATE of large members. No network calls.
+    budget=json.loads((root/'scripts'/'vsix-size-budget.json').read_text(encoding='utf-8'))
+    if output.stat().st_size>budget['maxCompressedBytes']:
+        try:
+            import zopfli.zlib as zopfli_zlib
+        except ImportError:
+            print('Optional offline Zopfli unavailable; standard compression retained.')
+        else:
+            class OfflineDeflate:
+                def __init__(self): self.data=bytearray()
+                def compress(self,data): self.data.extend(data); return b''
+                def flush(self): return zopfli_zlib.compress(bytes(self.data),numiterations=3)[2:-4]
+            # zipfile accepts a compression level per entry; reserve 99 here
+            # as a build-local sentinel for raw DEFLATE (normal ZIP method 8).
+            original_compressor=zipfile._get_compressor
+            def compressor(method,level=None):
+                return OfflineDeflate() if method==zipfile.ZIP_DEFLATED and level==99 else original_compressor(method,level)
+            candidate=stage/'optimized.vsix'
+            zipfile._get_compressor=compressor
+            try:
+                with zipfile.ZipFile(output,'r') as original, zipfile.ZipFile(candidate,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as optimized:
+                    for item in original.infolist():
+                        optimized.writestr(item,original.read(item),compresslevel=99 if item.compress_size>=20000 else 9)
+                with zipfile.ZipFile(output,'r') as original, zipfile.ZipFile(candidate,'r') as optimized:
+                    if original.namelist()!=optimized.namelist() or any(original.read(name)!=optimized.read(name) for name in original.namelist()) or optimized.testzip():
+                        raise SystemExit('Lossless ZIP optimization verification failed.')
+                if candidate.stat().st_size<output.stat().st_size:
+                    import shutil
+                    shutil.copyfile(candidate,output)
+                    audit['zipCompression']='Zopfli raw DEFLATE, large entries; byte-for-byte verified'
+            finally:
+                zipfile._get_compressor=original_compressor
+
     # Measure the actual compressed ZIP members, not estimated source bytes.
     with zipfile.ZipFile(output,'r') as z:
         members=[entry for entry in z.infolist() if entry.filename.startswith('extension/')]
