@@ -7,11 +7,12 @@ const crypto = require('node:crypto');
 const diagnostic = require('./stack-process-diagnostics');
 const {nodeExecutable,npmCommand,mavenCommand} = require('./platform-process');
 const run = promisify(execFile);
+const {gitFailure}=require('./github-credential-validator');
 // Scope the supplied credential to github.com via process-local Git config; never persist it.
 function gitCredentialEnvironment(token){
  if(!token)return {};
  const value=String(token);if(!/^[^\s\x00-\x1f\x7f]{1,512}$/.test(value))throw Error('Invalid GitHub credential.');
- return {GIT_CONFIG_COUNT:'2',GIT_CONFIG_KEY_0:'http.https://github.com/.extraheader',GIT_CONFIG_VALUE_0:'',GIT_CONFIG_KEY_1:'http.https://github.com/.extraheader',GIT_CONFIG_VALUE_1:'AUTHORIZATION: basic '+Buffer.from('x-access-token:'+value).toString('base64')};
+ return {GIT_CONFIG_COUNT:'3',GIT_CONFIG_KEY_2:'http.followRedirects',GIT_CONFIG_VALUE_2:'false',GIT_CONFIG_KEY_0:'http.https://github.com/.extraheader',GIT_CONFIG_VALUE_0:'',GIT_CONFIG_KEY_1:'http.https://github.com/.extraheader',GIT_CONFIG_VALUE_1:'AUTHORIZATION: basic '+Buffer.from('x-access-token:'+value).toString('base64')};
 }
 const KEY = /^[A-Z][A-Z0-9]{1,19}-[1-9][0-9]*$/;
 const BRANCH = /^[a-z0-9][a-z0-9/_-]{0,110}$/;
@@ -21,6 +22,28 @@ function branchName(key, summary = '') { const safe = String(summary).normalize(
 async function git(root, ...args) {
     const { stdout, stderr } = await run('git', ['-C', root, ...args], { timeout: 45000, maxBuffer: 2 * 1024 * 1024, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'Never' } });
     return (stdout || stderr || '').trim();
+}
+async function remoteGit(root,args,token=''){
+ try{const {stdout,stderr}=await run('git',['-C',root,...args],{timeout:60000,maxBuffer:2*1024*1024,windowsHide:true,env:{...process.env,GIT_TERMINAL_PROMPT:'0',GCM_INTERACTIVE:'Never',...gitCredentialEnvironment(token)}});return (stdout||stderr||'').trim();}
+ catch(error){throw Error(gitFailure(error));}
+}
+async function probeRemote(owner,name,branch='main',{token=''}={}){
+ if(!matchesGithubRepo('https://github.com/'+owner+'/'+name+'.git',owner,name))throw Error('Invalid GitHub repository identity.');
+ const selected=require('./projects').validGithubBranch(branch);
+ if(!selected)throw Error('A branch is required for the Git transport probe.');
+ try{
+  const result=await run('git',['ls-remote','--exit-code','--heads','https://github.com/'+owner+'/'+name+'.git','refs/heads/'+selected],{timeout:20000,maxBuffer:262144,windowsHide:true,env:{...process.env,GIT_TERMINAL_PROMPT:'0',GCM_INTERACTIVE:'Never',...gitCredentialEnvironment(token)}});
+  if(!/^[a-f0-9]{40,64}\s+refs\/heads\//m.test(result.stdout||''))throw Error('Remote branch not found.');
+  return {ok:true,method:token?'selected-token':'local-git'};
+ }catch(error){return {ok:false,message:gitFailure(error)};}
+}
+async function checkedPushRemote(root,repo,owner,name,token){
+ if(!token)return 'origin';
+ if(!matchesGithubRepo(repo.remote,owner,name))throw Error('Origin does not match the configured GitHub repository.');
+ const push=await git(root,'remote','get-url','--push','--all','origin');
+ if(push.split('\n').length!==1||!matchesGithubRepo(push,owner,name))throw Error('Push origin does not match the configured GitHub repository.');
+ if(!/^https:\/\/github\.com\//i.test(push))throw Error('The selected API credential requires an HTTPS origin; SSH uses separate credentials.');
+ return 'origin';
 }
 async function repository(root) {
     if (!root || typeof root !== 'string')
@@ -170,7 +193,7 @@ async function configureOrigin(root, owner, name) {
     await git(repo.root, 'remote', 'add', 'origin', remote);
     return { ...await repository(root), message: 'Origin configured.' };
 }
-async function publishBootstrap(root, base = 'main') {
+async function publishBootstrap(root, base = 'main', {token='',owner='',name=''}={}) {
     const repo = await repository(root);
     if (repo.branch !== 'bootstrap/initial-tech-stack')
         throw Error('Checkout the bootstrap branch before publishing.');
@@ -181,12 +204,13 @@ async function publishBootstrap(root, base = 'main') {
     if (!/^[a-z][a-z0-9-]{0,40}$/.test(base))
         throw Error('Invalid integration branch.');
     const localBase = await git(root, 'rev-parse', '--verify', 'refs/heads/' + base);
-    const remoteBase = await git(root, 'ls-remote', '--heads', 'origin', 'refs/heads/' + base);
+    const origin=await checkedPushRemote(root,repo,owner,name,token);
+    const remoteBase = await remoteGit(root,['ls-remote','--heads',origin,'refs/heads/'+base],token);
     if (remoteBase && remoteBase.split(/\s/)[0] !== localBase)
         throw Error('Remote integration branch changed. Review and reconcile before publishing.');
     if (!remoteBase)
-        await git(root, 'push', 'origin', base);
-    await git(root, 'push', '--set-upstream', 'origin', repo.branch);
+        await remoteGit(root,['push',origin,base],token);
+    await remoteGit(root,['push','--set-upstream',origin,repo.branch],token);
     return { ...repo, base, baseSha: localBase, published: true };
 }
 async function cloneConfigured(parent, owner, name, branch = '', {allowExistingEmpty=false,token=''} = {}) {
@@ -203,10 +227,10 @@ async function cloneConfigured(parent, owner, name, branch = '', {allowExistingE
     const { validGithubBranch } = require('./projects');
     const selected=validGithubBranch(branch);
     try{await run('git', ['clone', ...(selected?['--branch',selected]:[]), '--', address, dest], { cwd: root, timeout: 120000, maxBuffer: 1024 * 1024, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'Never', ...gitCredentialEnvironment(token) } });}
-    catch(error){if(token)throw Error('Git clone failed using the configured GitHub credential. Check repository Contents read, network, SSO and branch access.');throw error;}
+    catch(error){throw Error(gitFailure(error));}
     return repository(dest);
 }
-async function pushStory(root, key) {
+async function pushStory(root, key,{token='',owner='',name=''}={}) {
     const repo = await repository(root), prefix = 'feature/' + jiraKey(key).toLowerCase();
     if (!(repo.branch === prefix || repo.branch.startsWith(prefix + '-')))
         throw Error('Checked-out branch does not match the selected Jira story.');
@@ -214,7 +238,8 @@ async function pushStory(root, key) {
         throw Error('Commit or stash your local changes before pushing.');
     if (!repo.remote)
         throw Error('Origin remote is not configured.');
-    await git(root, 'push', '--set-upstream', 'origin', repo.branch);
+    const origin=await checkedPushRemote(root,repo,owner,name,token);
+    await remoteGit(root,['push','--set-upstream',origin,repo.branch],token);
     return repository(root);
 }
 async function inspectScripts(root) {
@@ -579,4 +604,4 @@ async function artifactSnapshot(root, key, base='main') {
         source:'Git files from '+found.basis+' on '+repo.branch};
 }
 
-module.exports = { readinessFlags, checkReadiness, readArtifactFiles, artifactSnapshot, createRuntimeProxyOverlay, findLocalStoryBranch, jiraKey, branchName, repository, findStoryBranch, matchesGithubRepo, createBranch, resumeBranch, initLocalBaseline, commitBootstrap, configureOrigin, publishBootstrap, cloneConfigured, pushStory, inspectScripts, executeLocal, previewCommand, runLocal, runMockServices, stopLocal, localLogs };
+module.exports = { probeRemote, readinessFlags, checkReadiness, readArtifactFiles, artifactSnapshot, createRuntimeProxyOverlay, findLocalStoryBranch, jiraKey, branchName, repository, findStoryBranch, matchesGithubRepo, createBranch, resumeBranch, initLocalBaseline, commitBootstrap, configureOrigin, publishBootstrap, cloneConfigured, pushStory, inspectScripts, executeLocal, previewCommand, runLocal, runMockServices, stopLocal, localLogs };

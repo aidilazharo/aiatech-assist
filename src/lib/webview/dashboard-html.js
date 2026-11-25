@@ -31,7 +31,7 @@ function html(webview,{resumeLibrary=false}={}){
     subtask:"<path d=\"M5 5v7h4m-3-3 3 3-3 3M12 8h7v8h-7zM14 12l1 1 2-2\"/>"
   };
   const baHeaderIcon=(name,variant='')=>`<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${variant}>${baHeaderIcons[name]}</svg>`;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.98';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.0.99';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const uiConsistencyCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-consistency.css'));
@@ -264,15 +264,16 @@ function html(webview,{resumeLibrary=false}={}){
     <div class="guide-token-links"><button id="guideJiraTokenLink" type="button" class="guide-token-link">Get Jira API token ↗</button></div><p class="guide-token-hint">One Atlassian token is used for Jira and Confluence.</p></section></div></details>
     
     <details class="ext-settings-accordion" id="settingsGithubGroup" data-requirement="required"><summary><span>2. GitHub Account &amp; Defaults</span><span class="ext-settings-badge" id="settingsGithubGroupState" data-state="optional">Optional</span></summary><div class="ext-settings-content"><section><form id="githubForm">
+      <div class="field"><label for="githubAuthentication">Authentication method</label><select id="githubAuthentication"><option value="pat">Personal Access Token (PAT)</option><option value="vscode">Sign in with GitHub via VS Code</option></select></div>
       <div class="github-settings-toolbar" role="group" aria-label="GitHub account and repository connection">
         <div class="github-settings-owner">${field('githubOwner','GitHub Owner','aiamalaysia')}</div>
         <input id="githubRepository" type="hidden"><input id="githubBranch" type="hidden" value="main">
         <div class="github-settings-repository field"><label for="githubRepositoryUrl">Repository URL</label><input id="githubRepositoryUrl" type="url" placeholder="https://github.com/OWNER/REPOSITORY" spellcheck="false" autocomplete="off"></div>
-        <div class="github-settings-token">${field('githubPersonalToken','GitHub personal token','Leave blank to retain saved token','type="password"')}</div>
+        <div class="github-settings-token" id="githubPatField">${field('githubPersonalToken','GitHub personal token','Leave blank to retain saved token','type="password"')}</div>
         <button id="testGithub" type="button">Test GitHub Connection</button>
         <button id="saveGithub" type="submit" class="secondary hidden" disabled>Save GitHub Settings</button>
       </div>
-      <div class="github-settings-feedback"><span id="githubCredentialState" class="muted"></span><p id="githubTestStatus" class="test-status muted" role="status" aria-live="polite"></p></div>
+      <p id="githubAuthHelp" class="muted">Git credentials and API credentials are checked separately. Branch policies are not credential failures.</p><div class="github-settings-feedback"><span id="githubCredentialState" class="muted"></span><p id="githubTestStatus" class="test-status muted" role="status" aria-live="polite"></p></div>
       <div class="guide-token-links"><button id="guideGithubTokenLink" type="button" class="guide-token-link">Get GitHub personal access token ↗</button></div>
     </form><p id="settingsLocalRepoPath" class="muted hidden" role="status"></p></section></div></details>
     <details class="ext-settings-accordion" id="settingsCatalogGroup" data-requirement="optional"><summary><span id="catalogHeading">3. GitHub Library</span><span class="ext-settings-badge" id="settingsCatalogGroupState" data-state="optional">Optional</span></summary><div class="ext-settings-content"><section id="sdlcCatalogSection" aria-labelledby="catalogHeading">

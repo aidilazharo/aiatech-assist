@@ -7,7 +7,7 @@ const IMPORT_FOLDER_RE = /^[a-z][a-z0-9-]{0,48}$/i;
 const CONNECTION_KEYS = [
     'jira.baseUrl', 'jira.email', 'jira.projectKey', 'jira.jql',
     'confluence.spaceId', 'confluence.spaceKey', 'confluence.spaceName', 'confluence.baseUrl', 'confluence.parentPageId',
-    'github.owner', 'github.repo', 'github.branch', 'github.pathPrefix', 'github.apiUrl'
+    'github.owner', 'github.repo', 'github.branch', 'github.pathPrefix', 'github.apiUrl', 'github.authentication'
 ];
 const EXTENSION_DEFAULTS = { jira: { baseUrl: '', email: '', projectKey: '', jql: '' }, confluence: { spaceId: '', spaceKey: '', spaceName: '', baseUrl: '', parentPageId: '' }, github: { owner: '', repo: '', branch: '', pathPrefix: '', apiUrl: 'https://api.github.com' } };
 function validGithubBranch(value) {
@@ -106,6 +106,7 @@ function normalizeSettings(fields = {}) {
     }
     if (result.confluence.spaceId && !/^\d+$/.test(result.confluence.spaceId))
         throw new Error('Confluence space ID must contain digits only.');
+    if(result.github.authentication&&!['pat','vscode'].includes(result.github.authentication))throw Error('Invalid GitHub authentication method.');
     if (result.github.branch) result.github.branch = validGithubBranch(result.github.branch);
     if (result.github.apiUrl)
         result.github.apiUrl = validateUrl(result.github.apiUrl);

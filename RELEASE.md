@@ -1,12 +1,12 @@
-# ATGV AIATECH Assist v0.0.98
+# ATGV AIATECH Assist v0.0.99
 
 ## Changes
 
-- Authenticate GitHub accounts and validate repository branch/content access before reporting authenticated connections; expose write permission as an assessment, not a successful push.
-- Preserve saved credentials when optional Startup GitHub authentication fails. Synchronize shared Library credentials when updating the verified global token, preserve independently configured Library tokens, and invalidate cached project checks.
-- Classify GitHub authentication, rate limit, SSO, IP restrictions and other HTTP failures. Use the configured credential for direct project clone via transient Git configuration.
-- Add focused regression coverage for credential and permission handling.
+- Add explicit PAT and VS Code GitHub sign-in modes in Extension Settings; use the selected mode for project API operations instead of silently preferring an old PAT.
+- Separate read-only Git transport checks from REST API validation and report main branch protection or pull-request rules independently. Never test write access with a remote mutation.
+- Recognize GH013/GH006 repository policy errors; use selected credentials for developer story push and architect bootstrap publish, with origin verification and transient Git headers.
+- Retain independent Library and Startup credential handling and preserve optional GitHub access for Jira/Confluence workflows.
 
 ## Validation
 
-- Source-only update; full local regression and live corporate GitHub verification pending. VSIX packaging intentionally skipped.
+- Added focused policy and authentication regressions; full suite, live corporate credentials and VS Code interactive sign-in remain unverified. No VSIX generated.

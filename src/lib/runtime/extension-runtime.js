@@ -964,7 +964,11 @@ async function getAtlassianToken(project){
 async function getGithubToken(project,interactive=false){
   const config=effectiveConfig(project);
   if(!config.get('github.owner')||!config.get('github.repo'))return undefined;
-  const token=await readProjectToken(project,'github');if(token)return token;
+  const method=config.get('github.authentication');
+  if(method!=='vscode'){
+    const token=await readProjectToken(project,'github');if(token)return token;
+    if(method==='pat')return undefined;
+  }
   if(config.get('github.apiUrl')!=='https://api.github.com')throw new Error('GitHub Enterprise requires a project token.');
   try{return (await vscode.authentication.getSession('github',['repo'],interactive?{createIfNone:true}:{silent:true}))?.accessToken;}
   catch(e){report('GitHub authentication: '+e.message);return undefined;}
@@ -1960,7 +1964,7 @@ async function dashboardState(){
 
   let jiraTokenSaved=false,githubTokenSaved=false;
   try{jiraTokenSaved=!!await readToken(globalSecretKey('atlassian'),globalCredentialEndpoint('atlassian'));}catch{}
-  try{githubTokenSaved=!!await readToken(globalSecretKey('github'),globalCredentialEndpoint('github'));}catch{}
+  try{githubTokenSaved=extensionSettings.github?.authentication==='vscode'?!!(await vscode.authentication.getSession('github',['repo'],{silent:true}))?.accessToken:!!await readToken(globalSecretKey('github'),globalCredentialEndpoint('github'));}catch{}
   let techStacks;try{techStacks=await listStacks(getWorkspace()?.uri.fsPath);}catch(e){report('GitHub catalog tech stack: '+e.message);techStacks=[];}
   // Repair any interrupted cross-file BR restart *before* exposing stale
   // discovery data to the webview. Failure is non-destructive and retryable.
@@ -2143,8 +2147,8 @@ function jiraCandidate(msg){
 }
 function githubCandidate(msg){
   const next=normalizeExtensionSettings({...extensionSettings,github:{...extensionSettings.github,
-    owner:String(msg.settings?.owner||'').trim(),repo:String(msg.settings?.repo||'').trim(),branch:String(msg.settings?.repo||'').trim()?'main':''}});
-  const fields={owner:next.github.owner||'',repo:next.github.repo||'',branch:next.github.branch||''};
+    owner:String(msg.settings?.owner||'').trim(),repo:String(msg.settings?.repo||'').trim(),branch:String(msg.settings?.repo||'').trim()?'main':'',authentication:msg.settings?.authentication||extensionSettings.github?.authentication||'pat'}});
+  const fields={owner:next.github.owner||'',repo:next.github.repo||'',branch:next.github.branch||'',authentication:next.github.authentication||'pat'};
   // A GitHub account and PAT may be saved before selecting a project repository.
   // Repositories require an owner, but a standalone owner is useful for discovery.
   if(fields.repo&&!fields.owner)
@@ -2241,15 +2245,20 @@ async function testExtensionGithub(msg){
   const config=projectConfig(null,next,cfg());
   const identity={endpoint:validateUrl(config.get('github.apiUrl')),email:''};
   const enteredToken=String(msg.token||'').trim();
-  const token=enteredToken||await readToken(globalSecretKey('github'),identity);
+  let token;
+  if(fields.authentication==='vscode'){
+    if(identity.endpoint!=='https://api.github.com')throw Error('VS Code GitHub sign-in is supported for github.com; use a PAT for GitHub Enterprise.');
+    const session=await vscode.authentication.getSession('github',['repo'],{createIfNone:true});
+    token=session?.accessToken;if(!token)throw Error('GitHub sign-in was cancelled or unavailable.');
+  }else token=enteredToken||await readToken(globalSecretKey('github'),identity);
   // Do not treat a token-only connection as a request to clear it. Users must
   // be able to authenticate first, list private repos, and choose one later.
   if(!fields.repo){
     if(token){
       const user=await githubCredentials.account(identity.endpoint,token,requestJson);
       identity.login=user.login;
-      pendingTests.github={fields,token:enteredToken,identity,repoConfigured:false};
-      return {message:`GitHub account verified (${String(user.login||user.id)}). You can save the token now and enter a repository URL later.`,fields,repoConfigured:false};
+      pendingTests.github={fields,token:fields.authentication==='pat'?enteredToken:'',identity,repoConfigured:false};
+      return {message:`GitHub account verified (${String(user.login||user.id)}). You can save the authentication method now and enter a repository URL later.`,fields,repoConfigured:false};
     }
     if(fields.owner){
       const user=await requestJson(`${identity.endpoint.replace(/\/$/,'')}/users/${encodeURIComponent(fields.owner)}`,{headers:{Accept:'application/vnd.github+json'}});
@@ -2260,10 +2269,19 @@ async function testExtensionGithub(msg){
     pendingTests.github={fields,token:'',disabled:true,identity};
     return {message:'No GitHub account, token or repository configured. Saving will clear optional GitHub settings.',fields,disabled:true};
   }
-  const repo=await testGithubConnection(config,token,{branch:fields.branch});
+  let repo;
+  try{repo=await testGithubConnection(config,token,{branch:fields.branch});}
+  catch(error){
+    if(identity.endpoint!=='https://api.github.com')throw error;
+    const local=await developerGit.probeRemote(fields.owner,fields.repo,fields.branch);
+    throw Error(startupConnectionFailure(error)+' Git transport using the local Git credential: '+(local.ok?'read access verified. The selected REST API credential is separate and failed; choose VS Code sign-in or enter a valid PAT.':local.message));
+  }
   identity.login=repo.login;
-  pendingTests.github={fields,token:enteredToken,identity,repoConfigured:true,permission:repo.permissions};
-  return {message:`GitHub connection successful (${repo.fullName}${repo.private?', private':''}). Branch: ${fields.branch||repo.defaultBranch||'repository default'}${fields.branch?' (verified)':' (default)'}. Content read verified; write permission assessment: ${repo.permissions.push?'available (not push-tested)':'not verified'}. You can now save the verified main-branch GitHub settings.`,fields,repoConfigured:true};
+  const policy=await githubCredentials.branchPolicy({route:githubRepoInfo(config).route,branch:fields.branch,token,request:requestJson});
+  const transport=identity.endpoint==='https://api.github.com'?await developerGit.probeRemote(fields.owner,fields.repo,fields.branch,{token}):null;
+  pendingTests.github={fields,token:fields.authentication==='pat'?enteredToken:'',identity,repoConfigured:true,permission:repo.permissions};
+  const policyMessage=policy.requiresPullRequest?'Main requires a pull request.':policy.protectedBranch===true?'Main is protected; direct push may be restricted.':'Main branch policy not confirmed; direct push is not guaranteed.';
+  return {message:`GitHub connection successful (${repo.login} · ${repo.fullName}). Content read verified. Git transport: ${transport?(transport.ok?'read verified':transport.message):'not tested for Enterprise'}. Write assessment: ${repo.permissions.push?'available (not push-tested)':'not verified'}. ${policyMessage} Pull request creation permission is not write-tested. Save to use this authentication method.`,fields,repoConfigured:true};
 }
                                                                               
                                                                                   
@@ -8341,7 +8359,8 @@ async function handleDashboardMessage(msg){
       case 'devPush':{
         requireOpened();require('../../architect-stack-approval').requireDeveloperApproval(activeProject);requireOnline();const folder=context.workspaceState.get('atgvAssist.localRepo.'+activeProject.id);if(!folder)throw Error('Choose a repository first.');
         const key=developerGit.jiraKey(msg.key),yes=await uiWarning(`Push the currently checked-out committed branch for ${key} to origin?`,{modal:true},'Push Story');if(yes!=='Push Story')break;
-        const result=await developerGit.pushStory(folder,key);await dashboard?.webview.postMessage({type:'developerExecution',operation:'push',value:{message:'Pushed '+result.branch,head:result.sha}});break;
+        const config=effectiveConfig(activeProject),token=await getGithubToken(activeProject,true);if(!token)throw Error('GitHub authentication required. Test the selected authentication method in Settings.');
+        const result=await developerGit.pushStory(folder,key,{token,owner:config.get('github.owner'),name:config.get('github.repo')});await dashboard?.webview.postMessage({type:'developerExecution',operation:'push',value:{message:'Pushed '+result.branch,head:result.sha}});break;
       }
       case 'devStoryPR':{
         requireOpened();require('../../architect-stack-approval').requireDeveloperApproval(activeProject);requireOnline();const key=developerGit.jiraKey(msg.key),folder=context.workspaceState.get('atgvAssist.localRepo.'+activeProject.id);if(!folder)throw Error('Choose a repository first.');
@@ -8455,7 +8474,7 @@ async function handleDashboardMessage(msg){
         const config=effectiveConfig(activeProject),token=await getGithubToken(activeProject,true);if(!token)throw Error('GitHub authentication required.');
         const repo=await developerGit.repository(root);if(!developerGit.matchesGithubRepo(repo.remote,config.get('github.owner'),config.get('github.repo')))throw Error('Origin must match the configured GitHub repository before publishing.');
         const yes=await uiWarning('Push the baseline and bootstrap branch, then create a DRAFT pull request? This makes changes visible remotely; no automatic merge or approval.',{modal:true},'Publish Bootstrap');if(yes!=='Publish Bootstrap')break;
-        const published=await developerGit.publishBootstrap(root,'main');
+        const published=await developerGit.publishBootstrap(root,'main',{token,owner:config.get('github.owner'),name:config.get('github.repo')});
         const existing=await requestJson(`${githubRepoInfo(config).route}/pulls?state=open&head=${encodeURIComponent(config.get('github.owner')+':'+published.branch)}`,{token,headers:{Accept:'application/vnd.github+json'}});
         const result=Array.isArray(existing)&&existing.length?{url:existing[0].html_url}:await githubPullRequest(config,token,{branch:published.branch,baseBranch:published.base,title:'Bootstrap approved technology stack skeleton',body:'Architecture + Tech Lead review required. Do not merge without CI and dependency validation.',draft:true});
         await dashboard?.webview.postMessage({type:'architectureBootstrapResult',value:{message:'Published bootstrap for human review: '+result.url,prUrl:result.url}});break;
@@ -9106,6 +9125,11 @@ async function handleDashboardMessage(msg){
         const {next,fields}=githubCandidate(msg),verified=pendingTests.github;
         if(!verified||!fieldsEqual(verified.fields,fields))
           throw new Error('Test GitHub Connection with the current settings before saving.');
+        if(fields.authentication==='vscode'){
+          const session=await vscode.authentication.getSession('github',['repo'],{silent:true});
+          const account=await githubCredentials.account(verified.identity.endpoint,session?.accessToken,requestJson);
+          if(account.login!==verified.identity.login)throw Error('GitHub sign-in account changed. Test the connection again.');
+        }
         await persistConnectionSettings({extension:next,setupComplete:false});
         
         if(verified.disabled){
@@ -9132,7 +9156,7 @@ async function handleDashboardMessage(msg){
             const exists=await fs.lstat(dest).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
             let checkout;
             if(exists){if(!exists.isDirectory()||exists.isSymbolicLink())throw Error('Existing checkout path is not a safe directory.');checkout=await developerGit.repository(dest);if(!developerGit.matchesGithubRepo(checkout.remote,fields.owner,fields.repo))throw Error('Existing checkout uses a different GitHub origin; not modified.');}
-            else checkout=await developerGit.cloneConfigured(resolvedParent,fields.owner,fields.repo,fields.branch,{token:await readToken(globalSecretKey('github'),verified.identity)});
+            else checkout=await developerGit.cloneConfigured(resolvedParent,fields.owner,fields.repo,fields.branch,{token:fields.authentication==='vscode'?(await vscode.authentication.getSession('github',['repo'],{silent:true}))?.accessToken:await readToken(globalSecretKey('github'),verified.identity)});
             if(!insideFolder(checkout.root,resolvedProject))throw Error('Checkout resolves outside project.');
             await context.workspaceState.update('atgvAssist.localRepo.'+activeProject.id,checkout.root);
             await context.workspaceState.update('atgvAssist.bootstrapRepo.'+activeProject.id,checkout.root);

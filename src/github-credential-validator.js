@@ -39,4 +39,32 @@ async function repository({api,route,owner,repo,token,branch='',request,requireA
   authenticated:!!user,login:user?.login||'',permissions:{pull:true,push:!!user&&meta.permissions?.push===true&&!meta.archived&&!meta.disabled},
   writeAssessment:'Repository permission estimate only; token scope, rulesets and actual Git push may still restrict writes.'};
 }
-module.exports={HEADERS,diagnostic,account,repository};
+// A failed policy lookup means unknown, never permission denied or unprotected.
+async function branchPolicy({route,branch='main',token,request}){
+ const options={token,headers:HEADERS};
+ let protectedBranch=null,requiresPullRequest=null;
+ try{const data=await request(route+'/branches/'+encodeURIComponent(branch),options);if(data?.name===branch&&typeof data.protected==='boolean')protectedBranch=data.protected;}catch{}
+ try{const rules=await request(route+'/rules/branches/'+encodeURIComponent(branch),options);
+  if(Array.isArray(rules)&&rules.some(rule=>rule?.type==='pull_request'))requiresPullRequest=true;
+ }catch{}
+ if(requiresPullRequest!==true){
+  try{const protection=await request(route+'/branches/'+encodeURIComponent(branch)+'/protection',options);
+   if(protection?.required_pull_request_reviews&&typeof protection.required_pull_request_reviews==='object')requiresPullRequest=true;
+  }catch{}
+ }
+ return {protectedBranch,requiresPullRequest};
+}
+function gitFailure(error){
+ const message=String(error?.stderr||error?.message||error||'');
+ if(/GH013|GH006|repository rule violations|protected branch update failed|changes must be made through a pull request/i.test(message)){
+  if(/pull request/i.test(message))return 'GitHub branch policy requires a pull request. Credentials were not rejected; push an approved work branch and open a PR. No rules were bypassed.';
+  return 'GitHub branch protection or repository rules rejected the update. Review the repository rules and use the approved workflow.';
+ }
+ if(/authentication failed|invalid username or token|could not read username|terminal prompts disabled|HTTP 401|returned error: 401/i.test(message))return 'Git authentication failed. Check the selected credential, Git Credential Manager, or VS Code GitHub sign-in.';
+ if(/permission denied|403|write access.*not granted/i.test(message))return 'Git access denied. Check repository permissions, SSO and organization restrictions.';
+ if(/could not resolve host|ENOTFOUND/i.test(message))return 'Git could not resolve the GitHub host. Check DNS or corporate proxy.';
+ if(/certificate|SSL|TLS/i.test(message))return 'Git TLS certificate verification failed. Check the trusted corporate certificate and proxy.';
+ if(/timeout|timed out|ETIMEDOUT/i.test(message))return 'Git connection timed out. Check network or proxy.';
+ return 'Git operation failed. Check network, repository access and branch configuration.';
+}
+module.exports={HEADERS,diagnostic,account,repository,branchPolicy,gitFailure};

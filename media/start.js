@@ -1107,6 +1107,7 @@ function updateState(msg){
   }
   if(document.activeElement?.closest('form')!==$('githubForm')){
     field('githubOwner',extensionSettings.github?.owner||'');field('githubRepository',extensionSettings.github?.repo||'');setGithubBranch();
+    if($('githubAuthentication')){field('githubAuthentication',extensionSettings.github?.authentication||'pat');syncGithubAuthentication();}
     showGithubRepoPreview();
   }
   $('settingsBack').textContent=workspaceOpened?'← Back to Workspace':'← Back to Projects';
@@ -1119,7 +1120,7 @@ function updateState(msg){
   $('opsJiraCreate').disabled=!hasJira;
   $('opsJiraUpdate').disabled=!hasJira;
   $('jiraCredentialState').textContent=msg.jiraTokenSaved?'Token securely saved':'Token not configured';
-  $('githubCredentialState').textContent=msg.githubTokenSaved?'Token securely saved':'Token not configured (optional)';
+  $('githubCredentialState').textContent=extensionSettings.github?.authentication==='vscode'?(msg.githubTokenSaved?'VS Code GitHub session available':'VS Code GitHub sign-in required'):(msg.githubTokenSaved?'Token securely saved':'Token not configured (optional)');
   settingsTokenState={jira:!!msg.jiraTokenSaved,github:!!msg.githubTokenSaved};settingsModelReady=msg.modelStatus?.state==='ready';updateExtensionSettingBadges();
   renderRoleWork();renderDocumentGroups();renderOperationDocuments();renderKnowledgeState(msg.summary||{});renderLiveRemoteState(msg.liveRemote);renderOverviewConnections(msg.projectConnections);renderOverviewRoles(msg.summary||{});ensureBAJiraInventory();ensurePMJiraInventory();
 
@@ -5278,6 +5279,13 @@ for(const id of ['jiraBaseUrl','jiraEmail','jiraProjectKey','jiraToken']){
 $('githubOwner').addEventListener('input',()=>{if(read('githubRepository'))showGithubRepoPreview();invalidateTest('github');});
 $('githubRepositoryUrl').addEventListener('input',()=>{syncGithubRepositoryUrl();invalidateTest('github');});
 $('githubPersonalToken').addEventListener('input',()=>invalidateTest('github'));
+function syncGithubAuthentication(){
+ const session=$('githubAuthentication')?.value==='vscode';
+ $('githubPatField')?.classList.toggle('hidden',session);
+ if($('githubPersonalToken'))$('githubPersonalToken').disabled=session;
+ if($('githubAuthHelp'))$('githubAuthHelp').textContent=session?'Test Connection opens GitHub sign-in via VS Code. The existing PAT is not used for project operations in this mode.':'Test the PAT separately from local Git credentials. A protected main branch does not mean credentials are invalid.';
+}
+$('githubAuthentication')?.addEventListener('change',()=>{syncGithubAuthentication();invalidateTest('github');});
 function requestTest(section){
   const [testId,saveId,statusId]=testIds(section);
   const form=section==='jira'?'extensionForm':'githubForm';
@@ -5286,7 +5294,7 @@ function requestTest(section){
   $(testId).disabled=true;$(saveId).disabled=true;$(saveId).classList.add('hidden');
   $(statusId).className='test-status muted';$(statusId).textContent='Testing connection…';
   if(section==='jira')send('testExtensionJira',{requestId,settings:{jira:{baseUrl:read('jiraBaseUrl'),email:read('jiraEmail'),projectKey:read('jiraProjectKey')}},token:read('jiraToken')});
-  else send('testExtensionGithub',{requestId,settings:{owner:read('githubOwner'),repo:read('githubRepository'),branch:read('githubRepository')?'main':''},token:read('githubPersonalToken')});
+  else send('testExtensionGithub',{requestId,settings:{owner:read('githubOwner'),repo:read('githubRepository'),branch:read('githubRepository')?'main':'',authentication:$('githubAuthentication')?.value||'pat'},token:$('githubAuthentication')?.value==='vscode'?'':read('githubPersonalToken')});
 }
 $('testAtlassian').addEventListener('click',()=>requestTest('jira'));
 $('testGithub').addEventListener('click',()=>requestTest('github'));
@@ -5296,7 +5304,7 @@ $('extensionForm').addEventListener('submit',e=>{
 });
 $('githubForm').addEventListener('submit',e=>{
   e.preventDefault();if($('saveGithub').disabled)return;
-  send('saveGithub',{settings:{owner:read('githubOwner'),repo:read('githubRepository'),branch:read('githubRepository')?'main':''}});
+  send('saveGithub',{settings:{owner:read('githubOwner'),repo:read('githubRepository'),branch:read('githubRepository')?'main':'',authentication:$('githubAuthentication')?.value||'pat'}});
 });
 let aiProviderEditing=false,aiProviderLoaded=false;
 function renderAIProviderState(data){
