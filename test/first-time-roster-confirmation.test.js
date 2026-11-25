@@ -38,7 +38,8 @@ function fixture({email='person@example.test',failDatabase=false,existing=[]}={}
 }
 test('first-time user requires confirmation; cancellation never writes Confluence',async()=>{
  const {state,config,presence}=fixture();
- await assert.rejects(presence.visit(config,'token',{projectKey:'TC'}),/Confirm your ATGV/);
+ const pending=await presence.visit(config,'token',{projectKey:'TC'});
+ assert.equal(pending.registrationPending,true);assert.equal(state.writes,0);assert.equal(state.dbWrites,0);
  const cancelled=await presence.visit(config,'token',{projectKey:'TC',roleId:'software-developer',confirmRegistration:async identity=>{
   assert.equal(identity.name,'Verified Person');assert.equal(identity.email,'person@example.test');return false;
  }});
@@ -66,4 +67,33 @@ test('account ID can register even when email is not available',async()=>{
  const {config,presence}=fixture({email:''});
  const result=await presence.visit(config,'token',{projectKey:'TC',confirmRegistration:async identity=>{assert.equal(identity.email,'');return true;}});
  assert.equal(result.rows[0].id,'account-123');assert.equal(result.syncComplete,true);
+});
+
+test('email-only existing profile prefills saved full name and email and links one account',async()=>{
+ const {state,config,presence}=fixture({existing:[{id:'',name:'Saved Full Name',email:'person@example.test',roles:['Developer'],tasks:'No assigned task'}]});
+ const result=await presence.visit(config,'token',{projectKey:'TC',confirmRegistration:async identity=>{
+  assert.equal(identity.name,'Saved Full Name');assert.equal(identity.email,'person@example.test');return true;
+ }});
+ assert.equal(result.rows.length,1);assert.equal(result.rows[0].id,'account-123');assert.equal(result.rows[0].name,'Saved Full Name');assert.equal(state.db.length,1);
+});
+test('registered identity retains its stored full name and email',async()=>{
+ const {config,presence}=fixture({existing:[{id:'account-123',name:'Saved Full Name',email:'person@example.test',roles:[],tasks:'No assigned task'}]});
+ const result=await presence.visit(config,'token',{projectKey:'TC',roleId:'software-developer',confirmRegistration:async()=>{throw Error('Unexpected modal');}});
+ assert.equal(result.rows[0].name,'Saved Full Name');assert.equal(result.rows[0].email,'person@example.test');
+});
+test('same email linked to another account is never claimed',async()=>{
+ const {state,config,presence}=fixture({existing:[{id:'other-123',name:'Other Person',email:'person@example.test',roles:[],tasks:'No assigned task'}]});
+ await assert.rejects(presence.visit(config,'token',{projectKey:'TC',confirmRegistration:async()=>{throw Error('Unexpected modal');}}),/different verified Atlassian account/);
+ assert.equal(state.writes,0);assert.equal(state.dbWrites,0);
+});
+test('only explicit Overview navigation requests modal; no project or space details',()=>{
+ const host=fs.readFileSync(require.resolve('../src/lib/runtime/extension-runtime.js'),'utf8');
+ const ui=fs.readFileSync(require.resolve('../media/start.js'),'utf8');
+ assert.equal((ui.match(/overviewClicked:true/g)||[]).length,1);
+ assert.match(ui,/destination==='overview'.*overviewClicked:true/);
+ assert.match(host,/msg\.overviewClicked===true/);
+ assert.match(host,/overviewClicked\?\{confirmRegistration:/);
+ const modal=host.split("showInformationMessage('Register your ATGV user account?'")[1].split(",'Confirm')")[0];
+ assert.match(modal,/Full Name:/);assert.match(modal,/Email:/);
+ assert.equal(modal.includes('Project:'),false);assert.equal(modal.includes('Confluence space:'),false);
 });
