@@ -363,8 +363,9 @@ async function executeLocal(root, { relative = '', operation = 'test', onDiagnos
         throw Error('Use the tracked application process for Run Locally.');
     const cmd = approvedCommand(target, operation), cwd = path.join(info.repo.root, target.relative);
     const at = new Date().toISOString(), head = info.repo.sha;
+    const offline = target.kind==='npm'?await require('./windows-dependency-bundle').offlineEnv(info.repo.root,cwd):{};
     try {
-        const { stdout, stderr } = await run(cmd.bin, cmd.args, { cwd, timeout: 120000, maxBuffer: 4 * 1024 * 1024, windowsHide: true, shell: false });
+        const { stdout, stderr } = await run(cmd.bin, cmd.args, { cwd, timeout: 120000, maxBuffer: 4 * 1024 * 1024, windowsHide: true, shell: false,env:{...process.env,...offline} });
         const details=diagnostic.capture({stage:operation,bin:cmd.bin,args:cmd.args,cwd,stdout,stderr,exitCode:0});
         await onDiagnostic(details);
         return { passed: true, operation, head, at, logs: (stdout + '\n' + stderr).slice(-20000), diagnosticLogs:details, relative };
@@ -493,6 +494,7 @@ async function runLocal(root, { relative = '', env = {}, previewUrl = '', apiPor
     }
     catch(error){if(runtimeProxy)await fs.rm(runtimeProxy.location,{force:true}).catch(()=>{});throw error;}
     const instanceId=apiSource.includes('ATGV_INSTANCE_ID')?crypto.randomUUID():'';
+    const offline=target.kind==='npm'?await require('./windows-dependency-bundle').offlineEnv(info.repo.root,cwd):{};
     const runtimeEnv={
      ...(port?{PORT:String(port),PREVIEW_PORT:String(port),ATGV_PREVIEW_PORT:String(port),ASPNETCORE_URLS:'http://127.0.0.1:'+port,SERVER_PORT:String(port)}:{}),
      ...(selectedApiPort!==null?{API_PORT:String(selectedApiPort),ATGV_API_PORT:String(selectedApiPort),VITE_ATGV_API_PORT:String(selectedApiPort)}:{}),
@@ -500,7 +502,7 @@ async function runLocal(root, { relative = '', env = {}, previewUrl = '', apiPor
      VITE_ATGV_PROJECT:path.basename(info.repo.root),VITE_ATGV_BRANCH:info.repo.branch||'',VITE_ATGV_REVISION:info.repo.sha||''
     };
     let child;
-    try{child=spawn(cmd.bin, cmd.args, { cwd, env: { ...process.env, ...env, ...runtimeEnv }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], shell: false, detached: process.platform !== 'win32' });}
+    try{child=spawn(cmd.bin, cmd.args, { cwd, env: { ...process.env, ...env, ...runtimeEnv, ...offline }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], shell: false, detached: process.platform !== 'win32' });}
     catch(error){if(runtimeProxy)await fs.rm(runtimeProxy.location,{force:true}).catch(()=>{});throw error;}
     const entry = { child, cwd, previewUrl, apiPort:selectedApiPort, instanceId, runtimeProxy, mockPreview:!!mockPreview, command:diagnostic.commandLine(cmd.bin,cmd.args), logs: '', head: info.repo.sha, relative, exitCode:null, signal:null };
     activeProcess = entry;
