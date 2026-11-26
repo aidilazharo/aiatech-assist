@@ -30,7 +30,10 @@ test('Repairs missing Express even if node_modules already exists',async()=>fixt
 test('Does not reinstall a healthy npm dependency tree',async()=>fixture(async root=>{
  await manifest(root,{dependencies:{express:'^4.21.0'}});
  await fs.mkdir(path.join(root,'node_modules/express'),{recursive:true});await fs.writeFile(path.join(root,'node_modules/express/package.json'),'{}');
- const calls=[];await helper.ensureForTarget(root,{kind:'npm',relative:''},{runner:await fakeNpm(root,calls)});
+ const calls=[],progress=[];const result=await helper.ensureForTarget(root,{kind:'npm',relative:''},{runner:await fakeNpm(root,calls),onProgress:message=>progress.push(message)});
+ assert.equal(result.installed,false);
+ assert.ok(progress.some(message=>message.includes('installation skipped')));
+ assert.ok(calls.some(c=>c.includes('ls --all --json --offline')));
  assert.equal(calls.some(c=>c.includes(' install ')),false);
  assert.equal(calls.some(c=>c.includes(' ls ')),true);
 }));
@@ -116,4 +119,16 @@ test('Private npm cache failure reports the actual installation error without re
   return true;
  });
  assert.equal(diagnostics.length,1);
+}));
+
+test('existing modules inspection checks full tree offline and rejects missing or invalid transitive modules',async()=>fixture(async root=>{
+ await manifest(root,{dependencies:{express:'^4.21.0'}});
+ let calls=0;
+ const runner=async(bin,args,opts)=>{[bin,args]=logicalCommand(bin,args);calls++;assert.equal(args[0],'ls');assert.ok(args.includes('--all'));assert.ok(args.includes('--offline'));assert.equal(opts.env.npm_config_offline,'true');return {stdout:'{}'};};
+ assert.equal(await helper.inspectExistingNpm(root,{runner}),null);assert.equal(calls,0);
+ await fs.mkdir(path.join(root,'node_modules/express'),{recursive:true});await fs.writeFile(path.join(root,'node_modules/express/package.json'),'{}');
+ assert.ok(await helper.inspectExistingNpm(root,{runner}));assert.equal(calls,1);
+ assert.equal(await helper.inspectExistingNpm(root,{runner:async()=>{throw Object.assign(Error('missing transitive package'),{code:1});}}),null);
+ const abort=new AbortController();abort.abort();
+ await assert.rejects(helper.inspectExistingNpm(root,{runner,signal:abort.signal}),/stopped/);
 }));

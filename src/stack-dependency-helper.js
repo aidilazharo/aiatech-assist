@@ -289,17 +289,39 @@ async function verifyPlatformPackages(cwd,{platform=process.platform,arch=proces
  return result;
 }
 
+// Inspect actual installed packages and the full dependency graph without contacting
+// a registry. A directory alone is not evidence of a working installation.
+async function inspectExistingNpm(cwd,{runner=execute,onDiagnostic=async()=>{},signal,runtimeNode=process.execPath}={}){
+ if(signal?.aborted)throw Error('Dependency installation stopped.');
+ const nm=await fs.lstat(path.join(cwd,'node_modules')).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
+ if(nm&&(!nm.isDirectory()||nm.isSymbolicLink()))throw Error('Unsafe existing node_modules folder.');
+ if(!nm|| (await missingNpmPackages(cwd)).length || await nativePlatformMismatch(cwd))return null;
+ try{
+  await run({stage:'Existing npm dependency validation (read-only)',bin:'npm',args:['ls','--all','--json','--offline'],cwd,runner,onDiagnostic,signal,env:{npm_config_offline:'true',NPM_CONFIG_OFFLINE:'true',npm_config_audit:'false',npm_config_fund:'false'}});
+  const runtime=await verifyPlatformPackages(cwd,{runner,onDiagnostic,runtimeNode});
+  if(signal?.aborted)throw Error('Dependency installation stopped.');
+  return runtime;
+ }catch(error){if(error.cancelled||signal?.aborted)throw error;return null;}
+}
 async function ensureForTarget(root,target,{runner=execute,onDiagnostic=async()=>{},onProgress=async()=>{},installMode='auto',signal,historyFile,allowManifestRecovery=false}={}){
  if(!target||!['npm','dotnet','maven'].includes(target.kind))throw Error('Unsupported project dependency manager.');
  const cwd=await directory(root,target.relative||'');
  const options={cwd,runner,onDiagnostic,signal,historyFile};
+ if(target.kind==='npm'&&!['auto','fresh'].includes(installMode))throw Error('Unsupported npm dependency installation mode.');
+ let existingRuntime=null;
+ const checkExisting=installMode==='auto'?async runtimeNode=>{
+  existingRuntime=await inspectExistingNpm(cwd,{runner,onDiagnostic,signal,runtimeNode});
+  return !!existingRuntime;
+ }:null;
+ if(target.kind==='npm')await onProgress('Scanning existing modules: '+(target.relative||'repository root')+'…');
  const pack=await libraryOffline.locate(root,cwd);
  if(pack){
   if(pack.kind!==target.kind)throw Error('Offline Library package does not match application type.');
   const env=libraryOffline.env(pack);
   await onProgress('Using offline Library dependencies for '+pack.id+'…');
   if(target.kind==='npm'){
-   const runtimeNode=await libraryOffline.restoreNpm(pack,cwd,{runner,signal});
+   const runtimeNode=await libraryOffline.restoreNpm(pack,cwd,{runner,signal,checkExisting,force:installMode==='fresh'});
+   if(existingRuntime){await onProgress('All required npm modules verified; installation and offline restoration skipped.');return {kind:'npm',cwd,installed:false,restored:false,verified:true,runtime:existingRuntime,offline:true};}
    const missing=await missingNpmPackages(cwd);
    if(missing.length||await nativePlatformMismatch(cwd))throw Error('Offline Library modules incomplete or incompatible; import a verified package.');
    await run({stage:'Offline Library npm validation',bin:'npm',args:['ls','--all','--json','--offline'],...options,env});
@@ -314,8 +336,9 @@ async function ensureForTarget(root,target,{runner=execute,onDiagnostic=async()=
  }
  if(target.kind==='npm'){
   if(!['auto','fresh'].includes(installMode))throw Error('Unsupported npm dependency installation mode.');
-  let bundled=await windowsBundle.prepare(root,cwd,{runner,onProgress,signal});
+  let bundled=await windowsBundle.prepare(root,cwd,{runner,onProgress,signal,checkExisting,force:installMode==='fresh'});
    if(bundled){
+    if(existingRuntime){await onProgress('All required npm modules verified; installation and offline restoration skipped.');return {kind:'npm',cwd,installed:false,restored:false,verified:true,runtime:existingRuntime};}
     let incomplete=(await missingNpmPackages(cwd)).length>0||await nativePlatformMismatch(cwd);
     if(incomplete&&!bundled.restored){
      await onProgress('Cached offline dependencies incomplete; restoring verified archive again (no npm install)…');
@@ -329,7 +352,8 @@ async function ensureForTarget(root,target,{runner=execute,onDiagnostic=async()=
    return {kind:'npm',cwd,installed:false,restored:bundled.restored,verified:true,runtime};
   }
   const nodeModulesPath=path.join(cwd,'node_modules');
-  const nodeModules=await fs.lstat(nodeModulesPath).catch(()=>null);
+  const nodeModules=await fs.lstat(nodeModulesPath).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
+  if(nodeModules&&(!nodeModules.isDirectory()||nodeModules.isSymbolicLink()))throw Error('Unsafe existing node_modules folder.');
   const missing=await missingNpmPackages(cwd);
   const wrongPlatform=nodeModules?.isDirectory()?await nativePlatformMismatch(cwd):false;
   const previouslyFailed=[];
@@ -342,13 +366,14 @@ async function ensureForTarget(root,target,{runner=execute,onDiagnostic=async()=
   let invalidNativeOrCli=false,installation=null;
   let needsInstall=installMode==='fresh'||!nodeModules?.isDirectory()||missing.length>0||wrongPlatform||previouslyFailed.length>0;
   if(!needsInstall){
-   try{await verifyPlatformPackages(cwd,{runner,onDiagnostic});}
-   catch{invalidNativeOrCli=true;needsInstall=true;}
+   try{existingRuntime=await verifyPlatformPackages(cwd,{runner,onDiagnostic});}
+   catch(error){if(error.cancelled||signal?.aborted)throw error;invalidNativeOrCli=true;needsInstall=true;}
   }
   if(!needsInstall){
-   try{await run({stage:'npm dependency validation',bin:'npm',args:['ls','--depth=0','--json'],...options});}
-   catch{needsInstall=true;}
+   try{await run({stage:'npm dependency validation (read-only)',bin:'npm',args:['ls','--all','--json','--offline'],...options,env:{npm_config_offline:'true',NPM_CONFIG_OFFLINE:'true',npm_config_audit:'false',npm_config_fund:'false'}});}
+   catch(error){if(error.cancelled||signal?.aborted)throw error;needsInstall=true;}
   }
+  if(signal?.aborted)throw Error('Dependency installation stopped.');
   if(needsInstall){
    // The fresh mode is used only in ATGV-owned isolated Git worktrees. Never
    // delete dependencies from the user's original checkout. npm ci also
@@ -365,8 +390,8 @@ async function ensureForTarget(root,target,{runner=execute,onDiagnostic=async()=
     await onDiagnostic(err.diagnosticLogs);throw err;
    }
    await run({stage:'npm post-install validation',bin:'npm',args:['ls','--depth=0','--json'],...options});
-  }else await onProgress('npm dependencies verified for this operating system.');
-  const runtime=await verifyPlatformPackages(cwd,{runner,onDiagnostic});
+  }else await onProgress('All required npm modules verified; installation skipped.');
+  const runtime=needsInstall?await verifyPlatformPackages(cwd,{runner,onDiagnostic}):existingRuntime;
   // A successful npm process is not sufficient. Confirm actual installed
   // versions, npm ls and platform checks before writing positive memory.
   for(const {ctx,version} of installation?.policySelections||[]){
@@ -399,4 +424,4 @@ async function ensureAll(root,targets,{onProgress=async()=>{},...options}={}){
  }
  return output;
 }
-module.exports={ensureForTarget,ensureAll,missingNpmPackages,npmManifest,directory,isolatedNpmCache,installNpmWithCacheRecovery,restoreNativeWithRecovery,npmInstallPlan,nativePlatformMismatch,nativeTriple,verifyPlatformPackages};
+module.exports={ensureForTarget,ensureAll,inspectExistingNpm,missingNpmPackages,npmManifest,directory,isolatedNpmCache,installNpmWithCacheRecovery,restoreNativeWithRecovery,npmInstallPlan,nativePlatformMismatch,nativeTriple,verifyPlatformPackages};

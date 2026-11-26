@@ -147,7 +147,7 @@ async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgr
   const hasBackendEnv=fullStackPair ? await fullStack.hasEnvironment(key,fullStackPair.backend) : false;
   let runMode=fullStack.modeForPair(fullStackPair,hasBackendEnv,fullStackMode);
   let backendFallback=false;
-  await report(56,4,runMode==='live'?'4/6 Installing frontend and backend dependencies…':'4/6 Installing and validating application dependencies…');
+  await report(56,4,runMode==='live'?'4/6 Checking existing frontend and backend dependencies…':'4/6 Checking existing application dependencies…');
   const inspected=await driver.inspectScripts(key);
   const dependencyTarget=inspected.targets.find(x=>x.relative===chosen.relative&&x.kind===chosen.kind);
   if(!dependencyTarget)throw Error('Application target changed after creating the local fix branch.');

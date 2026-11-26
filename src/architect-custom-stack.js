@@ -83,7 +83,7 @@ async function run(root,{sha,relative='',previewUrl,mock=false,mockDatabase=fals
  if(inspection.repo.sha!==sha)throw Error('Git revision changed while preparing the custom application.');
  const target=inspection.targets.find(t=>t.relative===selected.relative&&t.kind===selected.kind);
  if(!target)throw Error('Selected custom application is no longer available.');
- await onProgress('Checking and installing approved dependencies for '+(selected.relative||'repository root')+'…');
+ await onProgress('Checking existing dependencies for '+(selected.relative||'repository root')+'…');
  await helper.ensureForTarget(root,target,{onProgress});
  await onProgress('Starting '+selected.framework+' from '+(selected.relative||'repository root')+'…');
  let started=false;

@@ -42,7 +42,7 @@ async function regular(file){
  return st;
 }
 async function readJson(file){await regular(file);return JSON.parse(await fs.readFile(file,'utf8'));}
-async function restore(cwd,dir,entry,app,policy,{runner,onProgress,signal,force}){
+async function restore(cwd,dir,entry,app,policy,{runner,onProgress,signal,force,checkExisting}){
  const node=nodeExecutable();
  const probe=await runner(node,['-p','process.platform+" "+process.arch+" "+process.versions.node'],{cwd,signal,windowsHide:true,timeout:10000});
  if(!new RegExp('^win32 x64 '+policy.nodeMajor+'\\.').test(String(probe.stdout||'').trim()))throw Error('ATGV Windows bundle requires Windows x64 Node.js '+policy.nodeMajor+' on PATH.');
@@ -52,8 +52,13 @@ async function restore(cwd,dir,entry,app,policy,{runner,onProgress,signal,force}
  const previous=await fs.lstat(nm).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
  if(previous&&(!previous.isDirectory()||previous.isSymbolicLink()))throw Error('Unsafe existing node_modules folder.');
  if(previous&&!force){
-  const old=await readJson(marker).catch(()=>null);
-  if(old?.archiveSha256===entry.archiveSha256&&old?.nodeMajor===policy.nodeMajor)return {node,restored:false};
+  // A manually restored tree can be reused after dependency/runtime checks.
+  // This is a health check, not a claim that the installed bytes match the archive.
+  if(checkExisting){if(await checkExisting(node))return {node,restored:false};}
+  else{
+   const old=await readJson(marker).catch(()=>null);
+   if(old?.archiveSha256===entry.archiveSha256&&old?.nodeMajor===policy.nodeMajor)return {node,restored:false};
+  }
  }
  await onProgress('Restoring verified Windows dependencies for '+app+' (no npm install)…');
  const stage=await fs.mkdtemp(path.join(cwd,'.atgv-deps-'));
@@ -92,7 +97,7 @@ async function restore(cwd,dir,entry,app,policy,{runner,onProgress,signal,force}
   return {node,restored:true};
  }finally{if(!preserveStage)await fs.rm(stage,{recursive:true,force:true});}
 }
-async function prepare(root,cwd,{runner=execute,onProgress=async()=>{},signal,platform=process.platform,arch=process.arch,force=false}={}){
+async function prepare(root,cwd,{runner=execute,onProgress=async()=>{},signal,platform=process.platform,arch=process.arch,force=false,checkExisting=null}={}){
  if(platform!=='win32'||arch!=='x64')return null;
  const base=await fs.realpath(root),dir=path.join(base,'vendor','windows-x64'),policyFile=path.join(dir,'bundle-policy.json');
  const exists=await fs.lstat(policyFile).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
@@ -110,7 +115,7 @@ async function prepare(root,cwd,{runner=execute,onProgress=async()=>{},signal,pl
  const manifest=await readJson(path.join(dir,'manifest.json')).catch(e=>{throw Error('Windows dependency bundle not published. Pull main after bundle publication; npm installation is disabled. '+e.message);});
  if(manifest.schema!==1||manifest.platform!==policy.platform||manifest.arch!==policy.arch||manifest.nodeMajor!==policy.nodeMajor)throw Error('Windows dependency bundle platform mismatch.');
  if(pending.has(cwd))return pending.get(cwd);
- const job=restore(cwd,dir,manifest.applications?.[app],app,policy,{runner,onProgress,signal,force});
+ const job=restore(cwd,dir,manifest.applications?.[app],app,policy,{runner,onProgress,signal,force,checkExisting});
  pending.set(cwd,job);
  try{return await job;}finally{pending.delete(cwd);}
 }

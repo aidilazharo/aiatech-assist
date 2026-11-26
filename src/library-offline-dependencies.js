@@ -41,16 +41,19 @@ async function locate(root,cwd,{platform=process.platform,arch=process.arch}={})
  }
  return {id,kind:ids[id],folder,manifest};
 }
-async function restoreNpm(pack,cwd,{runner=exec,signal}={}){
+async function restoreNpm(pack,cwd,{runner=exec,signal,checkExisting=null,force=false}={}){
  const node=nodeExecutable();
  const {stdout}=await runner(node,['-p','process.platform+" "+process.arch+" "+process.versions.node'],{cwd,windowsHide:true,timeout:10000,signal});
  if(!/^win32 x64 24\./.test(String(stdout).trim()))throw Error('Offline Library npm stacks require Windows x64 Node.js 24.');
  const source=path.join(pack.folder,'node_modules'),nm=path.join(cwd,'node_modules');
- const st=await fs.lstat(source);if(!st.isDirectory()||st.isSymbolicLink())throw Error('Offline module tree missing or unsafe.');
  const previous=await fs.lstat(nm).catch(e=>{if(e.code==='ENOENT')return null;throw e;});
  if(previous&&(!previous.isDirectory()||previous.isSymbolicLink()))throw Error('Unsafe existing node_modules.');
  const tag=crypto.createHash('sha256').update(JSON.stringify(pack.manifest)).digest('hex');
- if(previous&&await fs.readFile(path.join(nm,'.atgv-library-bundle'),'utf8').catch(()=>null)===tag)return node;
+ if(previous&&!force){
+  if(checkExisting){if(await checkExisting(node))return node;}
+  else if(await fs.readFile(path.join(nm,'.atgv-library-bundle'),'utf8').catch(()=>null)===tag)return node;
+ }
+ const st=await fs.lstat(source);if(!st.isDirectory()||st.isSymbolicLink())throw Error('Offline module tree missing or unsafe.');
  const stage=await fs.mkdtemp(path.join(cwd,'.atgv-offline-')),copy=path.join(stage,'node_modules'),backup=path.join(stage,'previous');
  let preserve=false;
  try{
