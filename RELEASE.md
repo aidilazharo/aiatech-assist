@@ -1,5 +1,5 @@
-# ATGV AIATECH Assist v0.1.58
+# ATGV AIATECH Assist v0.1.59
 
-- UI/UX references are optional; no-upload generation and approval use the committed repository and active design system. Validate any supplied reference and preserve the ten-image limit.
-- Prioritize live published BR snapshots for the signed-in Jira assignee, keep explicit role-labelled unresolved tasks visible without enabling execution, and provide direct refresh controls in UI/UX and Developer selectors.
-- Preserve project, role, approval and ownership verification. Full regression and VSIX packaging pending.
+- UI/UX generation and design approval no longer require GitHub project publication or a configured remote. Use verified local committed source when available, otherwise record requirements-only design provenance and use the selected design system.
+- Never read an unrelated remote checkout. Keep strict GitHub checks for frontend code publication and Developer/UAT repository work.
+- Preserve Jira ownership, approved BR, optional reference hash and source context checks. Full regression and VSIX build pending.

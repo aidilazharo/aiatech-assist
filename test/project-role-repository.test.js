@@ -17,3 +17,11 @@ test('development selects a newer compatible commit and rejects divergent histor
 test('repository color aliases are extracted safely and unrecognized CSS is never embedded',()=>{const style=require('../src/repository-design-style');const result=style.extract([{path:'frontend/src/theme.css',content:':root { --brand: #a11937; --qi-color-primary: var(--brand); --qi-color-bg: #fff; --color-text-default: url(evil); }'}]);assert.equal(result.colors.accent,'#a11937');assert.equal(result.colors.bg,'#fff');assert.equal(result.colors.ink,undefined);assert.deepEqual(result.evidence,['frontend/src/theme.css']);assert.deepEqual(style.normalize({accent:'</style><script>',bg:'#fff'}),{bg:'#fff'});});
 
 test('repository-specific prototype avoids unrelated hardcoded asset fixture and escapes data',()=>{const exporter=require('../src/ux-prototype-export');const html=exporter.render({exists:true,status:'review',key:'TC-123',repositorySource:{hasDesign:true,repository:'acme/app',branch:'main',sha,style:{colors:{accent:'#a11937'},evidence:['src/theme.css']}},prototype:{screens:[{name:'<script>alert(1)</script>',purpose:'Test source-based UI',components:['Save button'],interactions:['Save record']}]}});assert.match(html,/#a11937/);assert.match(html,/Repository-grounded design draft/);assert.doesNotMatch(html,/Dell Latitude|<script>alert\(1\)<\/script>/);});
+
+test('local committed source is allowed for UX only, without accepting a wrong remote',async()=>{
+ const local=await refs.capture('/repo',{role:'ux-designer',allowLocal:true,...fixture({remote:''})});
+ assert.equal(local.repository,'local-project');assert.equal(local.sha,sha);
+ await assert.rejects(refs.capture('/repo',{owner:'other',name:'app',role:'ux-designer',allowLocal:true,...fixture()}),/Connect the configured/);
+ await assert.rejects(refs.capture('/repo',{role:'software-developer',allowLocal:true,...fixture({remote:''})}),/Connect the configured/);
+ const draft=refs.requirementsOnly();assert.equal(refs.identity(draft).mode,'requirements-only');assert.equal(draft.sha,'');assert.match(refs.guidance(draft),/No verified repository source/);
+});

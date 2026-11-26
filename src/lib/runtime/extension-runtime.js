@@ -5261,6 +5261,24 @@ async function committedRoleRepository(projectId,role){
  const root=await architectRepository.resolve(context.workspaceState,projectId,developerGit,{projectRoot:aiRoot(),githubOwner:owner,githubRepo:name});
  return roleRepository.capture(root,{owner,name,role,driver:developerGit});
 }
+async function uxDesignRepository(projectId){
+ if(activeProject?.id!==projectId)throw Error('Active project changed; design source blocked.');
+ const config=effectiveConfig(activeProject),owner=config.get('github.owner'),name=config.get('github.repo');
+ let root;
+ try{root=await architectRepository.resolve(context.workspaceState,projectId,developerGit,{projectRoot:aiRoot(),githubOwner:owner,githubRepo:name});}
+ catch(error){
+  if(/^The GitHub repository is configured, but no local checkout is selected\.|^No usable project Git checkout\./.test(String(error.message)))return roleRepository.requirementsOnly();
+  throw error;
+ }
+ try{return await roleRepository.capture(root,{owner,name,role:'ux-designer',driver:developerGit,allowLocal:true});}
+ catch(error){if(['ROLE_REPOSITORY_ORIGIN','ROLE_REPOSITORY_UNBORN'].includes(error.code))return roleRepository.requirementsOnly();throw error;}
+}
+async function requireSameUxDesignRepository(projectId,source){
+ if(!source?.sha&&source?.mode!=='requirements-only')throw Error('This design has no verified source context. Disapprove and regenerate.');
+ const latest=await uxDesignRepository(projectId);
+ if((latest.mode||'committed')!==(source.mode||'committed')||latest.repository!==source.repository||latest.sha!==source.sha||latest.branch!==source.branch)throw Error('Design source changed. Regenerate using the current requirements and repository context.');
+ return latest;
+}
 async function developerDesignSource(projectId,root,repositoryReference,register,brId,handoff,target,signal){
  const policy=require('../../design-source-policy');
  const linked=require('../../developer-design-handoff').linkedJiraKeys(register,brId);
@@ -7015,7 +7033,7 @@ async function handleDashboardMessage(msg){
           if(prior.revision!==String(msg.expectedRevision||''))throw Error('UI/UX generation status changed. Reload before regenerating.');
           const approved=designProposals.approvedInputs(await currentPublishedRoleRegister(projectId));
           const reference=require('../../design-source-policy').optionalReference(await uxDesignReferences.readBundle(root,key,{includePreview:true}));
-          const repositoryReference=await committedRoleRepository(projectId,'ux-designer');
+          const repositoryReference=await uxDesignRepository(projectId);
           const target=await activeAiTarget();
           const designFramework=context.workspaceState.get(uxFrameworkKey(projectId,key),'aia-qi');
           const workspace=getWorkspace()?.uri.fsPath;
@@ -7028,8 +7046,8 @@ async function handleDashboardMessage(msg){
           const existingProjectScreens=require('../../project-ux-prototype').combined(sharedManifest).screens.map(screen=>({name:screen.name,jiraKey:screen.jiraKey,storyKey:screen.storyKey}));
           const projectScreenGuide='Existing approved project screens (do not overwrite other tickets; align navigation and avoid duplicate screen names): '+JSON.stringify(existingProjectScreens).slice(0,7000)+'\nCurrent task must add only screens supported by its Jira Story and approved BR.';
           const uxRoleGuide=await roleSkillPrompt('ux-designer');
-          const guide=projectScreenGuide+'\n'+uxRoleGuide+'\n'+require('../../design-source-policy').RULE+'\nReference upload is optional. If none is provided, follow the committed repository and selected catalogue design system ('+designFramework+'), grounded in the verified Jira requirements. Do not invent an independent theme.';
-          const repositoryGuide=roleRepository.guidance(repositoryReference);
+          const guide=projectScreenGuide+'\n'+uxRoleGuide+'\n'+require('../../design-source-policy').UX_RULE+'\nReference upload is optional. If none is provided, follow the committed repository and selected catalogue design system ('+designFramework+'), grounded in the verified Jira requirements. Do not invent an independent theme.';
+          const repositoryGuide=repositoryReference.hasDesign?roleRepository.guidance(repositoryReference):require('../../design-source-policy').UX_RULE+'\nUse the selected design system '+designFramework+'. '+(repositoryReference.mode==='requirements-only'?roleRepository.guidance(repositoryReference):'No existing UI was identified in the sampled local committed source.');
           checkStop();
           const ticket={key,summary:issue.fields?.summary,description:textFromAdf(issue.fields?.description)};
           let sourceStoryKey=key;
@@ -7046,7 +7064,7 @@ async function handleDashboardMessage(msg){
           const visualNotes=await uxDesignReferences.visualContext(vscode,target,reference,{signal:run.controller.signal,verified:target.kind==='vscode'&&verifiedVisionModels.get(modelIdentity(target.model))?.status==='verified'});
           const referenceNotes=visualNotes+'\n'+uxDesignReferences.promptContext(reference);
           const progress=async(stage,message)=>{checkStop();await dashboard?.webview.postMessage({type:'uxPipelineWorking',projectId,key,stage,message,canStop:true});};
-          await progress(1,reference.exists?'User-uploaded design reference and committed project repository loaded.':'Optional reference skipped; committed project repository loaded.');
+          await progress(1,repositoryReference.mode==='requirements-only'?'Preparing requirements-based design; no verified repository source.':reference.exists?'User-uploaded design reference and committed project repository loaded.':'Optional reference skipped; committed project repository loaded.');
           await progress(2,'Generating user flow diagram…');
           const flowRaw=await aiAnswer(target,uxDesignPipeline.flowPrompt(ticket,approved,guide,referenceNotes,repositoryGuide),30000,{json:true,signal:run.controller.signal});
           checkStop();let flow;
@@ -7077,7 +7095,7 @@ async function handleDashboardMessage(msg){
           if(latestBR.hash!==approved.hash)throw Error('Approved Business Requirements changed while generating. Retry with the current BR.');
           const latestRef=await uxDesignReferences.readBundle(root,key);
           if(String(latestRef.sha256||'')!==String(reference.sha256||''))throw Error('The design reference changed during generation. Retry.');
-          await requireSameRoleRepository(projectId,'ux-designer',repositoryReference);
+          await requireSameUxDesignRepository(projectId,repositoryReference);
           checkStop();run.phase='committing';
           await dashboard?.webview.postMessage({type:'uxPipelineWorking',projectId,key,stage:6,canStop:false,message:'Saving design drafts and handoff…'});
           const meta={jiraUpdated:String(issue.fields?.updated||''),aiModel:target.label,sourceBRHash:approved.hash,designReferenceHash:reference.sha256||'',designer:self.displayName||self.accountId,referenceUsed:reference.exists,designFramework,sourceStoryKey,repositorySource:roleRepository.identity(repositoryReference)};
@@ -7115,7 +7133,7 @@ async function handleDashboardMessage(msg){
         await dashboard?.webview.postMessage({type:'uxFrontendPublishProgress',projectId,key,message:'Generating frontend source from the approved UI/UX design…'});
         const reference=require('../../design-source-policy').optionalReference(await uxDesignReferences.readBundle(aiRoot(),key));
         if(reference.sha256!==record.designReferenceHash)throw Error('Design reference changed. Regenerate and approve before publishing.');
-        if(!record.repositorySource?.sha)throw Error('Repository-grounded design required before publishing.');
+        if(!record.repositorySource?.sha||record.repositorySource.repository==='local-project')throw Error('Design approval is local. Connect the configured GitHub project repository and regenerate against its committed revision before publishing frontend code.');
         await requireSameRoleRepository(projectId,'ux-designer',record.repositorySource);
         const output=require('../../ux-frontend-code').generate(record,record.sourceStoryKey);
         const root=await architectRepository.resolve(context.workspaceState,projectId,developerGit,{projectRoot:aiRoot(),githubOwner:config.get('github.owner'),githubRepo:config.get('github.repo')});
@@ -7157,8 +7175,7 @@ async function handleDashboardMessage(msg){
         const current=await uxDesignPipeline.read(aiRoot(),key);
         if(decision==='approved'){
           const approved=designProposals.approvedInputs(roleRegister);
-          if(!current.repositorySource?.sha)throw Error('This design predates repository grounding. Disapprove and regenerate before approval.');
-          await requireSameRoleRepository(activeProject.id,'ux-designer',current.repositorySource);
+          await requireSameUxDesignRepository(activeProject.id,current.repositorySource);
           const reference=require('../../design-source-policy').requireReference(await uxDesignReferences.readBundle(aiRoot(),key));
           const [wire,mock]=await Promise.all([uxTicketDesigns.read(aiRoot(),key,'wireframe'),uxTicketDesigns.read(aiRoot(),key,'mockup')]);
           if(current.sourceBRHash!==approved.hash||current.designReferenceHash!==String(reference.sha256||'')||current.wireframeRevision!==wire.revision||current.mockupRevision!==mock.revision)throw Error('The approved requirements, design reference, or draft changed since generation. Disapprove and regenerate UI/UX.');
@@ -7202,18 +7219,18 @@ async function handleDashboardMessage(msg){
         const registered=await currentPublishedRoleRegister(activeProject.id),approved=designProposals.approvedInputs(registered);
         const prior=await uxTicketDesigns.read(aiRoot(),key,kind);
         const reference=require('../../design-source-policy').optionalReference(await uxDesignReferences.readBundle(aiRoot(),key,{includePreview:true}));
-        const repositoryProjectId=activeProject.id,repositoryReference=await committedRoleRepository(repositoryProjectId,'ux-designer');
+        const repositoryProjectId=activeProject.id,repositoryReference=await uxDesignRepository(repositoryProjectId);
         const target=await activeAiTarget();
         await dashboard?.webview.postMessage({type:'uxDesignWorking',projectId:activeProject.id,key,kind,message:'Generating '+uxTicketDesigns.KINDS[kind]+' with the selected AI service…'});
         const visualNotes=await uxDesignReferences.visualContext(vscode,target,reference,{verified:target.kind==='vscode'&&verifiedVisionModels.get(modelIdentity(target.model))?.status==='verified'});
-        const prompt=uxTicketDesigns.prompt(kind,{key,summary:issue.fields?.summary,description:textFromAdf(issue.fields?.description)},approved,require('../../design-source-policy').RULE,visualNotes+'\n'+uxDesignReferences.promptContext(reference),roleRepository.guidance(repositoryReference));
+        const prompt=uxTicketDesigns.prompt(kind,{key,summary:issue.fields?.summary,description:textFromAdf(issue.fields?.description)},approved,require('../../design-source-policy').UX_RULE,visualNotes+'\n'+uxDesignReferences.promptContext(reference),roleRepository.guidance(repositoryReference));
         const raw=await aiAnswer(target,prompt,35000,{json:true});
         let proposed;try{proposed=JSON.parse(String(raw).replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim());}catch{throw Error('AI returned invalid JSON. No design was saved.');}
         const latestBR=designProposals.approvedInputs(await currentPublishedRoleRegister(activeProject.id));
         if(latestBR.hash!==approved.hash)throw Error('Approved Business Requirements changed during generation. Generate again.');
         const latestRef=await uxDesignReferences.readBundle(aiRoot(),key);
         if(String(latestRef.sha256||'')!==String(reference.sha256||''))throw Error('Design reference changed while generating. Regenerate with the current reference.');
-        await requireSameRoleRepository(repositoryProjectId,'ux-designer',repositoryReference);
+        await requireSameUxDesignRepository(repositoryProjectId,repositoryReference);
         const saved=await uxTicketDesigns.save(aiRoot(),key,kind,proposed,prior.revision,{repositorySource:roleRepository.identity(repositoryReference),jiraUpdated:String(issue.fields?.updated||''),aiModel:target.label,sourceBRHash:approved.hash,designReferenceHash:reference.sha256||'',actor:self.displayName||self.accountId});
         await dashboard?.webview.postMessage({type:'uxDesignLoaded',projectId:activeProject.id,value:saved,generated:true});break;
       }
