@@ -1,11 +1,13 @@
-# ATGV AIATECH Assist v0.1.38
+# ATGV AIATECH Assist v0.1.39
 
 ## Changes
 
-- Add ATGV Version to the Overview My Work Users table. Report the locally installed extension package version for the verified registered Jira account during roster sync; never report versions for cancelled or pending registration.
-- Keep per-user last reported version and version-change timestamp in a separate Confluence database content property to preserve compatibility with older roster clients. Support upgrades and downgrades; unchanged versions do not trigger additional property writes.
-- Display Unknown for users who have not reported a version and surface synchronization failures. Multiple devices sharing one account show the last reported version, not a live device inventory.
+- Stage-aware Developer action and circular progress: initial implementation, application readiness, TDD and delivery verification.
+- Explicit initial implementation is local and untested; required runtime endpoints are checked before TDD. Standalone preview permission remains in force.
+- Persist and verify initial source checkpoints and carry them into isolated TDD worktrees; existing passing behavior is verified without fabricating RED evidence.
+- Preserve Jira ownership, approved design references and delivery review gates.
+- Align package, dashboard and README version identifiers.
 
 ## Validation
 
-- Twelve simulated registration/Overview tests and one mocked Confluence version-property scenario passed. Changed JavaScript syntax checked. Full regression suite, live Confluence/VS Code UI and VSIX packaging remain unverified.
+- JavaScript syntax parsing and five focused progress-state assertions passed. Added stage progress regression tests. Full local Node suite and VSIX packaging not executed in the connector-only environment.

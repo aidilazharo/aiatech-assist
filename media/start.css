@@ -3267,3 +3267,6 @@ body:not(.gate-mode) .app-layout{
 
 /* My Work uses dedicated role workspaces, never the shared Jira inventory table. */
 #workView #roleJiraWork{display:none!important}
+
+/* Developer stage-aware progress: one circular indicator, existing stage labels retained. */
+.developer-stage-ring{display:flex;align-items:center;gap:12px;margin:8px 0}.developer-stage-ring svg{flex:none}.developer-br-steps .developer-br-orbit{display:none!important}

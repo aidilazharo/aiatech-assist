@@ -5102,10 +5102,12 @@ async function launchUntestedDraftServer(run,project,progress,check){
  const started=await developerGit.runLocal(run.worktree,{relative:serve.relative});check();
  await progress('local',`UNTESTED PREVIEW: started local app PID ${started.pid}; waiting for frontend HTTP only (API and acceptance tests not verified).`,{previewOnly:true,worktree:run.worktree,branch:run.branch});
  await progress('verify','UNTESTED PREVIEW: checking frontend HTTP readiness only. Acceptance criteria and API contracts are not tested.',{previewOnly:true});
- const proof=await developerBRServer.waitForGeneratedServer({endpoints:endpoints.slice(0,1),worktree:run.worktree,pid:started.pid,readServer:developerGit.localLogs,signal:run.abort.signal,onUpdate:async state=>{check();await progress('verify',state.message,{previewOnly:true,serverLogs:state.serverLogs});}});
+ if(run.initial)await progress('verify','Checking all required frontend and backend HTTP endpoints before TDD.',{previewOnly:true,initial:true});
+ const proof=await developerBRServer.waitForGeneratedServer({endpoints:run.initial?endpoints:endpoints.slice(0,1),worktree:run.worktree,pid:started.pid,readServer:developerGit.localLogs,signal:run.abort.signal,onUpdate:async state=>{check();await progress('verify',state.message,{previewOnly:true,serverLogs:state.serverLogs});}});
  check();run.previewUrl=proof.url;run.status='untested-preview';run.previewOnly=true;run.checksPassed=false;
  developerBrLast={...run,abort:null};
- await progress('complete',`UNTESTED PREVIEW ONLY — ${proof.url}. No acceptance criteria, tests, builds or API contract have been verified. Use normal Start Development before delivery.`,{previewOnly:true,files:run.files,evidence:[],architecture:await developerBRArchitecture.inspect(run.worktree,run.files),worktree:run.worktree,branch:run.branch,previewUrl:proof.url,serverLogs:proof.serverLogs,summary:run.summary||'Local draft only; tests not run.',canRetry:false});
+ if(run.initial)await context.workspaceState.update('developer.initial.'+run.projectId+'.'+run.brId,{...run,abort:null});
+ await progress('complete',run.initial?`Required application endpoints are running at ${proof.url}. Start TDD; no tests or build have run.`:`UNTESTED PREVIEW ONLY — ${proof.url}. No acceptance criteria, tests, builds or API contract have been verified. Use normal Start Development before delivery.`,{previewOnly:true,initial:!!run.initial,files:run.files,evidence:[],architecture:await developerBRArchitecture.inspect(run.worktree,run.files),worktree:run.worktree,branch:run.branch,previewUrl:proof.url,serverLogs:proof.serverLogs,summary:run.summary||'Local draft only; tests not run.',canRetry:false});
 }
 async function committedRoleRepository(projectId,role){
  if(activeProject?.id!==projectId)throw Error('Active project changed; repository reference blocked.');
@@ -5161,11 +5163,11 @@ async function assignedUatScope(projectId,scope){
  const brId=ownership.fromKey(register,key),br=developerBR.approvedBr(register,brId);
  return {key,issue,self,brId,br};
 }
-async function runDeveloperDraftPreview(brId){
+async function runDeveloperDraftPreview(brId,{initial=false}={}){
  requireOpened();
  if(developerBrRun)throw Error('A development run is already active. Stop it before starting an untested preview.');
  const projectId=activeProject.id,project=await registry.read(projectId);
- const draft=require('../../developer-preview-mode');draft.requireAllowed(project);
+ const draft=require('../../developer-preview-mode');if(!initial)draft.requireAllowed(project);
  const approval=require('../../architect-stack-approval').requireDeveloperApproval(project);
  const register=await currentPublishedRoleRegister(projectId);
  const br=developerBR.approvedBr(register,brId);
@@ -5179,9 +5181,10 @@ async function runDeveloperDraftPreview(brId){
  if(path.resolve(repoRoot)!==path.resolve(approval.root)||project.techStackPrepared?.sha!==approval.sha)throw Error('The local checkout differs from the approved technology stack. Preview blocked.');
  const repositoryReference=await committedRoleRepository(projectId,'software-developer');
  if(path.resolve(repositoryReference.root)!==path.resolve(repoRoot))throw Error('Project repository changed before preview.');
- const previewBase=await require('../../developer-revision-baseline').chooseCurrent(repoRoot,null,approval.sha,repositoryReference.sha);
+ const priorCompleted=initial?await developerTdd.lastCompletedRecord(context.globalStorageUri.fsPath,projectId,brId,br.approvedRevision):null;
+ const previewBase=await require('../../developer-revision-baseline').chooseCurrent(repoRoot,priorCompleted,approval.sha,repositoryReference.sha);
  const abort=new AbortController();
- const run={projectId,brId,revision:br.approvedRevision,approvalSha:approval.sha,repositorySource:roleRepository.identity(repositoryReference),abort,worktree:'',branch:'',files:[],evidence:[],previewUrl:'',checksPassed:false,previewOnly:true,status:'running',summary:''};
+ const run={projectId,brId,revision:br.approvedRevision,approvalSha:approval.sha,repositorySource:roleRepository.identity(repositoryReference),abort,worktree:'',branch:'',files:[],evidence:[],previewUrl:'',checksPassed:false,previewOnly:true,initial,baseSha:previewBase,status:'running',summary:''};
  developerBrRun=run;
  const check=()=>{if(abort.signal.aborted||activeProject?.id!==projectId)throw Error('Draft preview stopped or project changed.');};
  const progress=async(stage,message,extra={})=>{check();await dashboard?.webview.postMessage({type:'developerBrProgress',projectId,brId,stage,message,previewOnly:true,...extra});};
@@ -5194,6 +5197,7 @@ async function runDeveloperDraftPreview(brId){
   const handoff=await require('../../developer-design-handoff').loadForBr(registry,projectId,brId,br.approvedRevision,{root:aiRoot(),brRegister:register,approvedHash:require('../../design-proposals').approvedInputs(register).hash});
   const design=draft.requireApprovedHandoff(handoff);
   const designSource=await developerDesignSource(projectId,aiRoot(),repositoryReference,register,brId,handoff,target,abort.signal);
+  run.designSourceFingerprint=designSource.fingerprint;
   if(!designSource.references.length)throw Error('Upload a design reference linked to this BR before generating a UI preview.');
   let designSystemGuide=designSource.guide;
   if(design.framework==='repository')designSystemGuide=designSource.guide;
@@ -5237,6 +5241,12 @@ async function runDeveloperDraftPreview(brId){
   // Only prepare dependencies; never execute test or production build scripts.
   await progress('local','Preparing approved dependencies for local preview (skipping test and production build commands).',{files:run.files,worktree:run.worktree,branch:run.branch});
   await developerBR.attachDependencies(run.worktree,repoRoot,{onProgress:message=>progress('local',message)});check();
+  if(initial){
+   run.checkpoint=await developerTdd.captureCheckpoint(run.worktree,run.files);
+   run.status='initial-ready';developerBrLast={...run,abort:null};
+   await context.workspaceState.update('developer.initial.'+projectId+'.'+brId,developerBrLast);
+   await progress('initial-ready','Initial implementation ready. Run Application before TDD; no tests or build have run.',{initial:true,files:run.files,worktree:run.worktree,branch:run.branch,summary:run.summary});return;
+  }
   await launchUntestedDraftServer(run,project,progress,check);
   try{if(run.previewUrl)await vscode.env.openExternal(vscode.Uri.parse(run.previewUrl));}catch(error){report('Draft preview browser: '+error.message);}
  }catch(error){
@@ -5246,7 +5256,7 @@ async function runDeveloperDraftPreview(brId){
   await dashboard?.webview.postMessage({type:'developerBrFailed',projectId,brId,stage:run.status,previewOnly:true,message:'Untested local preview: '+String(error.message||error).slice(0,980),worktree:run.worktree,branch:run.branch,files:run.files,evidence:[],serverLogs:logs.logs.slice(-6500),canRetry:false});
  }finally{if(developerBrRun===run)developerBrRun=null;}
 }
-async function runDeveloperBrAutomation(brId,{restartFresh=false}={}){
+async function runDeveloperBrAutomation(brId,{restartFresh=false,fromInitial=false}={}){
  requireOpened();
  if(developerBrRun)throw Error('Another BR generation is in progress. Stop it before starting a new BR.');
  const projectId=activeProject.id;
@@ -5289,6 +5299,8 @@ async function runDeveloperBrAutomation(brId,{restartFresh=false}={}){
  // stale or absent, create a NEW isolated worktree and retain historic evidence;
  // never overwrite the failed checkpoint or quietly consider it verified.
  const startFreshFromStaleRecord=hasFailedRecord&&!resumeRequested&&!restartFresh;
+ const initialDraft=fromInitial&&!resumeRequested?context.workspaceState.get('developer.initial.'+projectId+'.'+brId):null;
+ if(fromInitial&&!resumeRequested&&(!initialDraft?.initial||initialDraft.status!=='untested-preview'||initialDraft.revision!==br.approvedRevision||initialDraft.approvalSha!==approval.sha||initialDraft.baseSha!==nextBaseSha||initialDraft.repositorySource?.sha!==repositoryReference.sha))throw Error('Initial development is absent, not runtime-verified or stale. Recreate it for the current BR and repository.');
  // A completed run may still have its local server active: stop only the matching process.
  const previous=developerBrLast;
  if(previous&&previous.projectId===projectId){
@@ -5361,6 +5373,18 @@ async function runDeveloperBrAutomation(brId,{restartFresh=false}={}){
   const designSource=await developerDesignSource(projectId,aiRoot(),repositoryReference,register,brId,approvedDesignHandoff,target,abort.signal);
   if(resuming&&record.designSourceFingerprint!==designSource.fingerprint)throw Error('Design evidence differs from the saved run. Start a fresh development run with the current references.');
   record.designSourceFingerprint=designSource.fingerprint;
+  if(initialDraft){
+   if(initialDraft.designSourceFingerprint!==designSource.fingerprint)throw Error('Initial design references changed. Recreate initial development.');
+   const draftRoot=await fs.realpath(initialDraft.worktree),protectedRoot=await fs.realpath(path.join(recoveryBase,'developer-br-draft-previews',projectId));
+   if(!draftRoot.startsWith(protectedRoot+path.sep))throw Error('Initial worktree escaped project storage.');
+   await developerTdd.verifyCheckpoint(draftRoot,initialDraft.checkpoint);
+   const initialFiles=await Promise.all(Object.keys(initialDraft.checkpoint.files).map(async name=>({path:name,content:await fs.readFile(path.join(draftRoot,name),'utf8')})));
+   const guarded=developerTdd.guardManifest(JSON.stringify({summary:'Initial development source',files:initialFiles}),{kind:'code'});
+   await assertDeveloperDesignSource(projectId,aiRoot(),designSource,repositoryReference);
+   require('../../design-source-policy').guardVisualFiles(guarded.files,designSource);
+   run.files=await developerBR.writeGenerated(run.worktree,guarded.files);record.codeFiles=[...run.files];
+   await progress('plan','Initial implementation copied into isolated TDD worktree; already implemented behavior will be verified without fabricating RED evidence.',{files:run.files,worktree:run.worktree,branch:run.branch});
+  }
   await progress(resuming?'repair':'plan','Building the unified project artifacts for BA, SA, UI/UX and Developer before development planning…');
   let evidenceBundle;
   if(resuming&&record.contextPath){
@@ -6054,7 +6078,7 @@ async function runDeveloperBrAutomation(brId,{restartFresh=false}={}){
    await progress('local','Runtime repair passed fresh unit tests and build. Restarting the generated server for real HTTP verification…',{evidence:run.evidence,files:run.files});check();
    await launchGeneratedBrServer(run,project,progress,check);
   }
-  if(run.status==='verified'){await capture();record.completedCommit=await revisionBaseline.saveCompleted(record,{worktree:run.worktree,storageRoot:path.join(recoveryBase,'developer-br-worktrees',projectId)});record.status='complete';await save('complete');}
+  if(run.status==='verified'){await capture();record.completedCommit=await revisionBaseline.saveCompleted(record,{worktree:run.worktree,storageRoot:path.join(recoveryBase,'developer-br-worktrees',projectId)});record.status='complete';await save('complete');if(fromInitial||record.codeFiles?.length)await context.workspaceState.update('developer.initial.'+projectId+'.'+brId,undefined);}
  }catch(error){
   const attention=!abort.signal.aborted&&error?.code==='TDD_REPAIR_BLOCKED';
   run.status=abort.signal.aborted?'stopped':attention?'needs-attention':'failed';developerBrLast={...run,abort:null};
@@ -8572,21 +8596,21 @@ async function handleDashboardMessage(msg){
         await dashboard?.webview.postMessage({type:'developerBrRecoveryInfo',projectId:activeProject.id,brId,value:{available:!!failed&&validRevision&&!!record?.checkpoint,criterion:failed?.id||record?.lastFailedCriterion||'',jiraKey:recoveryJiraKeys.has(failed?.jiraKey)?failed.jiraKey:'',epicJiraKey:recoveryEpic,retryCount:Number(record?.retryCount)||0,issueStats:developerTdd.summarizeIssueLedger(Array.isArray(record?.issueLedger)?record.issueLedger:developerTdd.mergeIssueLedger([],record?.repairHistory)),model:record?.model||'',modelHistory:(record?.modelHistory||[]).slice(-15),canRestart:!!failed,events,lastError:String(record?.lastError||'').slice(0,1600),requiresNewRevision:!!failed&&!validRevision}});
         break;
       }
-      case 'developerBrPreviewDraft':{await runDeveloperDraftPreview(String(msg.brId||''));break;}
+      case 'developerBrPreviewDraft':{await runDeveloperDraftPreview(String(msg.brId||''),{initial:msg.initial===true});break;}
       case 'developerBrRun':{
         const restartFresh=msg.restartFresh===true;
         if(restartFresh){
          const choice=await uiWarning('Start NEW development for '+String(msg.brId||'')+' from AC-01? Previous passing code will not be resumed. Saved repair history will be retained.',{modal:true},'Start New Development');
          if(choice!=='Start New Development'){await dashboard?.webview.postMessage({type:'developerBrCancelled',projectId:activeProject.id,brId:String(msg.brId||''),message:'New development cancelled. Existing checkpoint and repair history remain untouched.'});break;}
         }
-        await runDeveloperBrAutomation(String(msg.brId||''),{restartFresh});break;
+        await runDeveloperBrAutomation(String(msg.brId||''),{restartFresh,fromInitial:msg.fromInitial===true});break;
       }
       case 'developerBrRetryLocal':
       case 'developerBrStartServer':{
         requireOpened();
         if(developerBrRun)throw Error('Another BR generation or server startup is running.');
-        const prior=developerBrLast;
-        if(!prior||prior.projectId!==activeProject.id||prior.brId!==String(msg.brId||'')||!prior.worktree||!(prior.checksPassed||prior.previewOnly&&require('../../developer-preview-mode').allowed(await registry.read(activeProject.id))))throw Error('No approved local application exists for this BR. Generate and test normally, or enable project-level draft preview.');
+        const prior=developerBrLast?.projectId===activeProject.id&&developerBrLast?.brId===String(msg.brId||'')?developerBrLast:context.workspaceState.get('developer.initial.'+activeProject.id+'.'+String(msg.brId||''));
+        if(!prior||prior.projectId!==activeProject.id||prior.brId!==String(msg.brId||'')||!prior.worktree||!(prior.checksPassed||prior.initial||prior.previewOnly&&require('../../developer-preview-mode').allowed(await registry.read(activeProject.id))))throw Error('No approved local application exists for this BR. Generate and test normally, or enable project-level draft preview.');
         const projectId=activeProject.id,project=await registry.read(projectId);
         const approved=developerBR.approvedBr(await currentPublishedRoleRegister(projectId),prior.brId);
         if(approved.approvedRevision!==prior.revision)throw Error('BR approval revision changed. Generate a new implementation.');
@@ -8594,10 +8618,11 @@ async function handleDashboardMessage(msg){
         if(approval.sha!==prior.approvalSha)throw Error('Approved technology stack changed. Generate again for the new stack.');
         const repo=await developerGit.repository(prior.worktree);
         if(repo.root!==await fs.realpath(prior.worktree)||repo.branch!==prior.branch)throw Error('The generated BR worktree or branch changed. Review it before retrying.');
+        if(prior.initial){await developerTdd.verifyCheckpoint(prior.worktree,prior.checkpoint);const token=await getAtlassianToken(activeProject),cfg=effectiveConfig(activeProject);if(!token)throw Error('Connect Jira before running initial development.');const self=await requestJson(`${baseAtlassian(cfg)}/rest/api/3/myself`,{token,basicEmail:String(cfg.get('jira.email')||'').trim()});await require('../../br-ownership').verifyOwner({register:await currentPublishedRoleRegister(projectId),brId:prior.brId,projectKey:validProjectKey(cfg.get('jira.projectKey')),accountId:self?.accountId,readIssue:key=>jiraReadIssue(cfg,token,key)});}
         const abort=new AbortController(),run={...prior,abort,status:'running',previewUrl:''};
         developerBrRun=run;
         const check=()=>{if(abort.signal.aborted||activeProject?.id!==projectId)throw Error('Stopped: the BR project changed or the user requested stop.');};
-        const progress=async(stage,message,extra={})=>{check();await dashboard?.webview.postMessage({type:'developerBrProgress',projectId,brId:run.brId,stage,message,...extra});};
+        const progress=async(stage,message,extra={})=>{check();await dashboard?.webview.postMessage({type:'developerBrProgress',projectId,brId:run.brId,stage,message,previewOnly:!!run.previewOnly,initial:!!run.initial,...extra});};
         try{
           await progress('local','Retrying the generated BR server without regenerating code or rerunning completed tests…',{worktree:run.worktree,branch:run.branch,evidence:run.evidence});
           if(run.previewOnly)await launchUntestedDraftServer(run,project,progress,check);
@@ -8645,12 +8670,15 @@ async function handleDashboardMessage(msg){
         break;
       }
       case 'developerBrLogs':{
-        requireOpened();const prior=developerBrRun||developerBrLast;
+        requireOpened();const selectedBr=String(msg.brId||'');
+        const live=developerBrRun||developerBrLast;
+        let prior=live?.projectId===activeProject.id&&live?.brId===selectedBr?live:context.workspaceState.get('developer.initial.'+activeProject.id+'.'+selectedBr);
+        if(prior?.initial){const project=await registry.read(activeProject.id);let approved;try{approved=developerBR.approvedBr(await currentPublishedRoleRegister(activeProject.id),selectedBr);}catch{}if(!approved||approved.approvedRevision!==prior.revision||project.techStackPrepared?.sha!==prior.approvalSha)prior=null;}
         const state=developerGit.localLogs();
         const matching=prior&&prior.projectId===activeProject.id&&prior.brId===String(msg.brId||'');
         const owned=matching&&developerBRServer.insideWorktree(prior.worktree,state.cwd);
-        const verified=!!(owned&&state.running&&prior.status==='verified'&&developerBR.allowedPreviewUrl(prior.previewUrl));
-        await dashboard?.webview.postMessage({type:'developerBrLogState',projectId:activeProject.id,brId:String(msg.brId||''),running:verified,previewUrl:verified?prior.previewUrl:'',worktree:matching?prior.worktree:'',branch:matching?prior.branch:'',files:matching?prior.files:[],evidence:matching?prior.evidence:[],summary:matching?prior.summary||'':'',architecture:matching&&prior.worktree?await developerBRArchitecture.inspect(prior.worktree,prior.files):null,canRetry:!!(matching&&prior.checksPassed),previewOnly:!!(matching&&prior.previewOnly),serverLogs:owned?state.logs.slice(-6500):'No running server belongs to the selected generated BR worktree.'});break;
+        const verified=!!(owned&&state.running&&['verified','untested-preview'].includes(prior.status)&&developerBR.allowedPreviewUrl(prior.previewUrl));
+        await dashboard?.webview.postMessage({type:'developerBrLogState',projectId:activeProject.id,brId:String(msg.brId||''),running:verified,previewUrl:verified?prior.previewUrl:'',worktree:matching?prior.worktree:'',branch:matching?prior.branch:'',files:matching?prior.files:[],evidence:matching?prior.evidence:[],summary:matching?prior.summary||'':'',architecture:matching&&prior.worktree?await developerBRArchitecture.inspect(prior.worktree,prior.files):null,canRetry:!!(matching&&prior.checksPassed),previewOnly:!!(matching&&prior.previewOnly),initial:!!(matching&&prior.initial),initialReady:!!(matching&&prior.initial&&prior.checkpoint),serverLogs:owned?state.logs.slice(-6500):'No running server belongs to the selected generated BR worktree.'});break;
       }
       case 'developerBrStop':{
         if(developerBrRun&&developerBrRun.projectId===activeProject.id)developerBrRun.abort.abort();
@@ -8668,7 +8696,7 @@ async function handleDashboardMessage(msg){
       }
       case 'developerBrOpenPreview':{
         requireOpened();const prior=developerBrLast;
-        if(!prior||prior.projectId!==activeProject.id||!(['verified','untested-preview'].includes(prior.status))||prior.status==='untested-preview'&&!require('../../developer-preview-mode').allowed(await registry.read(activeProject.id))||!developerBR.allowedPreviewUrl(prior.previewUrl))throw Error('No permitted local application preview URL is available.');
+        if(!prior||prior.projectId!==activeProject.id||!(['verified','untested-preview'].includes(prior.status))||prior.status==='untested-preview'&&!prior.initial&&!require('../../developer-preview-mode').allowed(await registry.read(activeProject.id))||!developerBR.allowedPreviewUrl(prior.previewUrl))throw Error('No permitted local application preview URL is available.');
         const state=developerGit.localLogs();if(!state.running||!developerBRServer.insideWorktree(prior.worktree,state.cwd))throw Error('The generated BR local server is no longer running. Use Retry Local Server.');
         await vscode.env.openExternal(vscode.Uri.parse(prior.previewUrl));break;
       }

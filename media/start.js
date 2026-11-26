@@ -3275,7 +3275,7 @@ window.addEventListener('message',event=>{
 let developerBrProjectId='',developerBrSelected='',developerBrBusy=false,developerBrStage='idle',developerBrDone=false,developerBrTab='logs',developerBrRecovery=null,developerBrPreviewOnly=false;
 // A draft uses only its actual preview phases. TDD, unit-test and build circles must never be reported as passed.
 const developerBrDraftPhases=['analyze','plan','local','verify'];
-let developerBrDraftPhase='analyze',developerBrDraftReady=false;
+let developerBrDraftPhase='analyze',developerBrDraftReady=false,developerBrInitial=false,developerBrInitialReady=false;
 function projectDraftPreviewEnabled(){return projects.some(project=>project.id===activeId&&project.settings?.development?.previewWithoutTests===true);}
 let developerBrSyncWarnings=[];
 let developerAssignedMine=[],developerBrArchitecture={tables:[],endpoints:[],files:[]},developerBrAssignmentBusy=false;
@@ -3428,11 +3428,34 @@ function setCurrentDeveloperJira({jiraKey='',criterionId='',epicJiraKey=''}={}){
 $('developerBrCurrentJira').addEventListener('click',()=>{if(developerBrJiraKey)openJiraIssueModal(developerBrJiraKey);});
 function resetDeveloperBr(stage='idle'){
  developerBrJiraKey='';developerBrJiraCriterion='';developerBrEpicKey='';setCurrentDeveloperJira();
- developerBrRecovery=null;developerBrPreviewOnly=false;$('developerBrRecoveryHistory').textContent='No repair attempts recorded.';developerBrDraftPhase='analyze';developerBrDraftReady=false;
+ developerBrRecovery=null;developerBrPreviewOnly=false;$('developerBrRecoveryHistory').textContent='No repair attempts recorded.';developerBrDraftPhase='analyze';developerBrDraftReady=false;developerBrInitial=false;developerBrInitialReady=false;
  updateDeveloperIssueStats(null);
  developerBrStopping=false;developerBrCycleIndex=0;developerBrCycleTotal=0;developerBrBusy=false;developerBrDone=false;developerBrStage=stage;developerBrFiles=[];developerBrEvidence=[];developerBrActivity=[];developerBrBranch='';developerBrWorktree='';developerBrUrl='';developerBrSummary='';developerBrServerLogs='';developerBrCanRetry=false;developerBrServerRunning=false;developerBrServerBusy=false;developerBrArchitecture={tables:[],endpoints:[],files:[]};developerBrTab='logs';
  $('developerBrStatus').textContent='Choose an approved Business Requirement to generate code in an isolated worktree.';
  renderDeveloperBrStages();renderDeveloperBrOutput();
+}
+function developerStageRingModel({stage,initial,preview,ready,running,done,completed,cycleIndex,cycleTotal,failedAt}){
+ const blocked=['failed','stopped','needs-attention'].includes(stage);
+ const active=blocked?failedAt:stage;
+ const model=(title,n,total,color)=>({title,percent:total>0?Math.floor(Math.max(0,Math.min(n,total))*100/total):0,detail:total>0?Math.max(0,Math.min(n,total))+' of '+total:'Not started',color:blocked?'#dc2626':color});
+ if(done)return model('Development verification',9,9,'#16a34a');
+ if(preview){
+  if(running)return model('Application Readiness',1,1,'#16a34a');
+  if(initial&&ready&&!running)return model('Application Readiness',active==='verify'?1:0,2,'#2563eb');
+  if(['local','verify'].includes(active))return model('Application Readiness',active==='verify'?1:0,2,'#2563eb');
+  return model('Initial Development',Math.min(completed,2),2,'#2563eb');
+ }
+ if(['red','green','refactor'].includes(active))return model('TDD — '+active.toUpperCase(),Math.max(0,cycleIndex-1),cycleTotal,active==='red'?'#dc2626':active==='green'?'#16a34a':'#d97706');
+ if(['tests','build','local','verify','server-stopped'].includes(active))return model('Requirements Validation',Math.max(0,completed-5),4,'#9333ea');
+ return model('Initial Development',Math.min(completed,2),2,'#64748b');
+}
+function renderDeveloperStageRing(completed){
+ const result=developerStageRingModel({stage:developerBrStage,initial:developerBrInitial,preview:developerBrPreviewOnly,ready:developerBrInitialReady,running:developerBrServerRunning,done:developerBrDone,completed,cycleIndex:developerBrCycleIndex,cycleTotal:developerBrCycleTotal,failedAt:windowDeveloperBrFailedAt()});
+ $('developerBrRingArc').setAttribute('stroke',result.color);
+ $('developerBrRingArc').setAttribute('stroke-dasharray',result.percent+' 100');
+ $('developerBrRingPercent').textContent=result.percent+'%';
+ $('developerBrRingTitle').textContent=result.title;
+ $('developerBrRingDetail').textContent=result.detail;
 }
 function renderDeveloperBrStages(){
  const current=developerBrStages.indexOf(developerBrStage);
@@ -3466,16 +3489,20 @@ function renderDeveloperBrStages(){
  $('developerBrStart').parentElement?.classList.remove('hidden');
  const counter=$('developerBrProgressCount');counter.textContent=developerBrPreviewOnly?`Draft preview · ${completed} of 4 phases · tests/build skipped`:completed+' of 9 steps'+(typeof developerBrCycleTotal!=='undefined'&&developerBrCycleTotal?` · AC ${developerBrCycleIndex}/${developerBrCycleTotal}`:'');
  renderDeveloperCriterionProgress();
+ if(typeof renderDeveloperStageRing==='function')renderDeveloperStageRing(completed);
  const indicator=$('developerBrServerIndicator');indicator.classList.toggle('running',developerBrServerRunning);indicator.classList.toggle('busy',developerBrBusy||developerBrServerBusy);
  const start=$('developerBrStart');
  const processing=developerBrBusy&&!developerBrDone;
- start.textContent=developerBrStopping?'Stopping Development…':processing?'■ Stop Development':developerBrStage==='needs-attention'?'↻ Retry Development':developerBrCanRetry||developerBrDone?'↻ Restart Development':'▶ Start Development';
+ const initialMode=typeof developerBrInitial!=='undefined'&&developerBrInitial;
+ const initialReady=typeof developerBrInitialReady!=='undefined'&&developerBrInitialReady;
+ start.textContent=developerBrStopping?'Stopping Development…':processing?'■ Stop Development':developerBrDone?'Verify Delivery':developerBrStage==='needs-attention'?'↻ Fix Failed Tests':initialMode&&initialReady?(developerBrServerRunning?'▶ Start TDD':developerBrStage==='failed'?'↻ Fix Runtime Issues':'▶ Run Application'):developerBrPreviewOnly&&developerBrDraftReady?'▶ Start TDD':developerBrCanRetry&&developerBrStage==='server-stopped'?'▶ Run Application':developerBrPreviewOnly?'↻ Initial Development':developerBrStage==='failed'||developerBrStage==='stopped'?'↻ Resume Development':'▶ Initial Development';
  const ownsScope=roleJiraLoaded&&roleJiraProject===activeId&&roleJiraRole==='software-developer'&&roleJiraItems.some(item=>item.brRoot&&item.brId===developerBrSelected&&item.roleScopes?.['software-developer']?.mine&&item.roleScopes['software-developer'].count>0);
- start.disabled=!developerBrSelected||developerBrStopping||developerBrAssignmentBusy||(!processing&&!ownsScope);
+ start.disabled=!developerBrSelected||developerBrStopping||developerBrAssignmentBusy||(!processing&&(developerBrServerBusy||!ownsScope));
  const preview=$('developerBrPreviewDraft');preview.classList.toggle('hidden',false);preview.disabled=!projectDraftPreviewEnabled()||!developerBrSelected||developerBrBusy||developerBrServerRunning||developerBrServerBusy||developerBrAssignmentBusy||!ownsScope;preview.title='Preview Draft — create and open an untested local application. Tests and builds are skipped; approval and delivery remain locked.';if(!projectDraftPreviewEnabled())preview.title+=' Enable Allow untested development preview in Project Settings.';
+ if(developerBrServerRunning&&ownsScope){preview.disabled=false;preview.title='Open running application in browser';}
  start.classList.toggle('is-stopping',developerBrStopping);
  start.classList.toggle('is-running',processing&&!developerBrStopping);
- start.title=processing?'Stop the current AI development process':!roleJiraLoaded||roleJiraProject!==activeId?'Refresh Jira tasks to verify Developer ownership.':!ownsScope?'Assign the remaining Developer tasks for this BR before starting development.':(typeof developerBrRecovery!=='undefined'&&developerBrRecovery?.available)?'Resume from the failed criterion using persisted repair history and the currently selected AI model':developerBrCanRetry||developerBrDone?'Regenerate from the approved BR using a fresh RED → GREEN → REFACTOR cycle':'Start automatic TDD development immediately';
+ start.title=processing?'Stop the current AI development process':!roleJiraLoaded||roleJiraProject!==activeId?'Refresh Jira tasks to verify Developer ownership.':!ownsScope?'Assign the remaining Developer tasks for this BR before starting development.':(typeof developerBrRecovery!=='undefined'&&developerBrRecovery?.available)?'Resume from the failed criterion using persisted repair history and the currently selected AI model':developerBrDone?'Review required acceptance and delivery evidence':initialMode&&initialReady?'Run the initial application or begin TDD after runtime readiness':'Start initial implementation without tests; delivery stays locked until TDD and verification';
  const inDevelopment=developerBrBusy||developerBrServerRunning||developerBrServerBusy;
  const stop=$('developerBrStop');stop.disabled=!inDevelopment;stop.classList.toggle('hidden',true);
  $('developerBrOpenWorktree').disabled=developerBrBusy||!developerBrWorktree;
@@ -3566,6 +3593,7 @@ function stopDeveloperBr(){
  renderDeveloperBrStages();send('developerBrStop',{brId:developerBrSelected});
 }
 $('developerBrPreviewDraft').addEventListener('click',()=>{
+ if(developerBrServerRunning&&developerBrUrl){send('developerBrOpenPreview');return;}
  if(!projectDraftPreviewEnabled()||!developerBrSelected||developerBrBusy||developerBrServerRunning||developerBrServerBusy)return;
  resetDeveloperBr('analyze');developerBrPreviewOnly=true;developerBrBusy=true;developerBrStage='analyze';developerBrDraftPhase='analyze';developerBrDraftReady=false;
  $('developerBrStatus').textContent='UNTESTED LOCAL PREVIEW — generating a draft without TDD or production build. Not eligible for approval.';renderDeveloperBrStages();
@@ -3575,9 +3603,15 @@ $('developerBrStart').addEventListener('click',()=>{
  if(!developerBrSelected||developerBrStopping)return;
  if(developerBrBusy){stopDeveloperBr();return;}
  if(developerBrServerBusy)return;
+ if(developerBrDone){$('developerDeliveryVerify').click();return;}
+ if(developerBrInitial&&developerBrInitialReady&&!developerBrServerRunning||developerBrCanRetry&&!developerBrPreviewOnly&&developerBrStage==='server-stopped'){
+  developerBrBusy=true;developerBrServerBusy=true;developerBrStage='local';renderDeveloperBrStages();send('developerBrStartServer',{brId:developerBrSelected});return;
+ }
+ const fromInitial=developerBrInitial&&developerBrInitialReady&&developerBrServerRunning;
+ const tdd=fromInitial||developerBrPreviewOnly&&developerBrDraftReady||!developerBrPreviewOnly&&(['needs-attention','failed','stopped'].includes(developerBrStage)||developerBrRecovery?.available);
  resetDeveloperBr('analyze');developerBrBusy=true;developerBrStage='analyze';
- $('developerBrStatus').textContent='Checking approved BR and the project stack…';
- developerBrPreviewOnly=false;renderDeveloperBrStages();send('developerBrRun',{brId:developerBrSelected});
+ if(tdd){$('developerBrStatus').textContent='Checking approved BR and starting TDD…';renderDeveloperBrStages();send('developerBrRun',{brId:developerBrSelected,fromInitial});}
+ else{developerBrInitial=true;developerBrPreviewOnly=true;$('developerBrStatus').textContent='Implementing initial development without tests or production build…';renderDeveloperBrStages();send('developerBrPreviewDraft',{brId:developerBrSelected,initial:true});}
 });
 $('developerBrStop').addEventListener('click',stopDeveloperBr);
 $('developerBrServerToggle').addEventListener('click',()=>{
@@ -3639,6 +3673,8 @@ ${row.message||''}`).join('\n\n')||info.lastError||'No repair attempts recorded.
   else if(msg.epicJiraKey&&!developerBrJiraCriterion)setCurrentDeveloperJira({epicJiraKey:msg.epicJiraKey});
   if(Number.isInteger(msg.cycleTotal)&&msg.cycleTotal>0){developerBrCycleIndex=Number(msg.cycleIndex)||0;developerBrCycleTotal=msg.cycleTotal;}
   if(msg.previewOnly===true)developerBrPreviewOnly=true;
+  if(msg.initial===true)developerBrInitial=true;
+  if(msg.stage==='initial-ready')developerBrInitialReady=true;
  if(developerBrPreviewOnly){
    // Backend preview events track real work without pretending TDD gates ran.
    const phase=msg.stage==='code'?'plan':msg.stage==='complete'?'verify':msg.stage;
@@ -3658,7 +3694,8 @@ ${row.message||''}`).join('\n\n')||info.lastError||'No repair attempts recorded.
   if(typeof msg.serverLogs==='string')developerBrServerLogs=msg.serverLogs;
   if(msg.issueStats)updateDeveloperIssueStats(msg.issueStats);
   if(msg.canRetry===true)developerBrCanRetry=true;
-  developerBrBusy=msg.stage!=='complete';
+  developerBrBusy=!['complete','initial-ready'].includes(msg.stage);
+  if(msg.stage==='initial-ready'){developerBrStage='initial-ready';developerBrDraftPhase='local';developerBrServerBusy=false;}
   $('developerBrStatus').textContent=msg.message||'';
   developerBrActivity.push(new Date().toLocaleTimeString()+' · '+String(msg.stage||'')+' · '+String(msg.message||''));
  }else if(msg.type==='developerBrFailed'){
@@ -3694,13 +3731,15 @@ ${row.message||''}`).join('\n\n')||info.lastError||'No repair attempts recorded.
    if(msg.summary)developerBrSummary=msg.summary;
    developerBrCanRetry=msg.canRetry===true||developerBrCanRetry;
    if(msg.previewOnly===true)developerBrPreviewOnly=true;
+   if(msg.initial===true){developerBrInitial=true;developerBrInitialReady=!!msg.initialReady;}
    if(!developerBrBusy){
     developerBrServerRunning=!!msg.running&&!!msg.previewUrl;
     developerBrDone=developerBrServerRunning&&!developerBrPreviewOnly;
     developerBrUrl=developerBrServerRunning?msg.previewUrl:'';
     if(developerBrPreviewOnly&&developerBrServerRunning){developerBrDraftPhase='verify';developerBrDraftReady=true;}
-    developerBrStage=developerBrServerRunning?'verify':developerBrCanRetry?'server-stopped':developerBrStage;
+    developerBrStage=developerBrServerRunning?'verify':developerBrInitialReady?'initial-ready':developerBrCanRetry?'server-stopped':developerBrStage;
     if(developerBrServerRunning)$('developerBrStatus').textContent=(developerBrPreviewOnly?'UNTESTED PREVIEW ONLY — no AC, test or build approval. ':'Generated application is running at ')+developerBrUrl+'. Open Browser to review the implementation.';
+    else if(developerBrInitialReady){developerBrDraftPhase='local';$('developerBrStatus').textContent='Initial implementation ready. Run Application before TDD.';}
     else if(developerBrCanRetry)$('developerBrStatus').textContent='Tested application is ready. Click Start Server to run and open it in your browser.';
    }
   }else if(msg.running===false&&developerBrServerRunning){
