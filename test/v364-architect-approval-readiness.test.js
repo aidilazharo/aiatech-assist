@@ -45,12 +45,22 @@ test('Test & Run actually checks HTTP and API identity before issuing test evide
 test('approval remains actionable and host checks live state or saved verified SHA',()=>{
  const ui=fs.readFileSync(path.join(root,'media/start.js'),'utf8');
  const src=fs.readFileSync(path.join(root,'src/lib/runtime/extension-runtime.js'),'utf8');
- assert.match(ui,/const canRequestApproval=!!\(saved&&prepared\?\.remotePushed===true\)/);
+ assert.match(ui,/const canRequestApproval=!!saved;/);
  assert.match(ui,/architectApproveStack'\)\.disabled=architectActionBusy\|\|!canRequestApproval\|\|approved/);
  const code=src.slice(src.indexOf("case 'architectApproveStack':{"),src.indexOf("case 'devCopilotArtifacts':{"));
  assert.doesNotMatch(code,/approvalEvidence\(project,serverState\)/);
  assert.doesNotMatch(code,/if\(!serverState\.running\|\|!serverState\.healthy\)throw Error/);
  assert.doesNotMatch(code,/gate\.requireServerVerification/);
  assert.match(code,/gate\.approval\(project,repo,actor\)/);
- assert.match(code,/publishApprovedStack/);
+ assert.doesNotMatch(code,/publishApprovedStack|remotePushed!==true/);
+ assert.match(code,/techStackApproval:\{\.\.\.proof,\.\.\.remote\}/);
+ assert.match(code,/No GitHub push or merge will occur/);
+});
+
+test('saved unpublished catalog stack can be approved without remote or server evidence',()=>{
+ const {project:p,repo}=project();p.techStackPrepared.remotePushed=false;delete p.techStackValidation;
+ const proof=gate.approval(p,repo,'Architect');
+ assert.equal(proof.status,'approved');assert.equal(proof.serverStatus,'unverified');
+ assert.equal(gate.developerAllowed({...p,techStackApproval:proof}),true);
+ assert.equal(proof.remoteVerified,undefined);
 });

@@ -2463,8 +2463,7 @@ function architectLiveServerReady(project,stackId){
 }
 function architectServerRequirementReady(project,stackId){
  const prepared=project?.techStackPrepared,validated=project?.techStackValidation,proof=project?.techStackServerVerification;
- return !!(prepared&&prepared.stackId===stackId&&project.techStackId===stackId&&prepared.remotePushed===true&&
-   validated?.status==='tested'&&validated.stackId===stackId&&(!validated.sha||validated.sha===prepared.sha)&&
+ return !!(prepared&&prepared.stackId===stackId&&project.techStackId===stackId&&
    proof?.status==='verified'&&proof.sha===prepared.sha&&proof.branch===prepared.branch&&
    proof.root===prepared.root&&proof.stackId===stackId);
 }
@@ -2506,7 +2505,6 @@ function renderArchitectRequirements(project){
   ['tests','Automated tests',unit||'Selected stack test command',tested],
   ['build','Application build',stack.buildCommand||'Selected stack build command',tested],
   ['server','Application server',architectServerRequirementReady(project,stackId)?'HTTP health verified for saved Git revision'+(architectServerSnapshot.running?' · Running · '+(architectServerSnapshot.url||project?.techStackPrepared?.previewUrl||stack.previewUrl):' · Stopped'):(architectServerSnapshot.url||project?.techStackPrepared?.previewUrl||stack.previewUrl||'Selected stack preview'),architectServerRequirementReady(project,stackId)],
-  ['push','Remote stack branch',project?.techStackPrepared?.branch||'Push verified bootstrap/migration branch (main unchanged)',pushed],
   ['approval','Architect approval','Required before Developer workflow',approved]
  ];
  // Package names and version constraints come only from the activated GitHub
@@ -2581,12 +2579,12 @@ function refreshArchitectStageClasses(project){
  const serverReady=customStack?mockReady:architectServerRequirementReady(project,stackId);
  for(const [id,done,current] of [
   ['architectSaveStage',saved,!saved],['architectDependenciesStage',tested,saved&&!tested],
-  ['architectApproveStage',approved,(customStack?mockReady:saved&&prepared?.remotePushed===true)&&!approved]
+  ['architectApproveStage',approved,(customStack?mockReady:saved)&&!approved]
  ]){
   const step=$(id);step.classList.toggle('complete',!!done);step.classList.toggle('current',!!current);
   step.setAttribute('aria-label',step.textContent.trim()+': '+(done?'Completed':current?'Current step':'Pending'));
  }
- $('architectApprovalStatus').textContent=customStack?(approved?'Developer MOCK handoff approved · '+String(project.techStackApproval.remoteBranch||'')+' · real integrations remain unverified.':mockReady?(preview.status==='local-preview-only'?'Local mock preview running. Approve the committed Git revision only; uncommitted edits are excluded.':'Mock preview verified. Approve for Developers publishes a reviewed development-only handoff; test/build verification is optional.'):'Complete Install & Run before approving a Custom Stack development handoff.'):approved?'Approved for Developers · '+new Date(project.techStackApproval.approvedAt||Date.now()).toLocaleString():saved?(prepared?.remotePushed?'Ready for Architect approval. Test and server checks are informational.':'Publish the saved stack to GitHub before approval.'):'';
+ $('architectApprovalStatus').textContent=customStack?(approved?'Developer MOCK handoff approved · '+String(project.techStackApproval.remoteBranch||'')+' · real integrations remain unverified.':mockReady?(preview.status==='local-preview-only'?'Local mock preview running. Approve the committed Git revision only; uncommitted edits are excluded.':'Mock preview verified. Approve for Developers publishes a reviewed development-only handoff; test/build verification is optional.'):'Complete Install & Run before approving a Custom Stack development handoff.'):approved?'Approved for Developers · '+new Date(project.techStackApproval.approvedAt||Date.now()).toLocaleString():saved?'Ready for Architect approval. GitHub publication, tests and server checks are optional.':'';
 }
 function customStackForPublish(stackId,prepared){return !stackId||stackId==='custom'||!!prepared?.remotePushed||prepared?.stackId!==stackId;}
 function syncArchitectStackButtons(project){
@@ -2598,7 +2596,7 @@ function syncArchitectStackButtons(project){
  const tested=saved&&project?.techStackValidation?.status==='tested'&&project.techStackValidation.stackId===stackId;
  const approved=saved&&project?.techStackApproval?.status==='approved'&&project.techStackApproval.stackId===stackId;
  const proof=project?.techStackServerVerification;
-  const canRequestApproval=!!(saved&&prepared?.remotePushed===true);
+  const canRequestApproval=!!saved;
  const save=$('architectSaveStack');
  if(architectSaveSelectionProjectId!==activeId){
   architectSaveSelectionProjectId=activeId;architectSaveSelectionChanged=false;
@@ -2634,7 +2632,7 @@ function syncArchitectStackButtons(project){
  save.title=locked?'Technology stack saved. Change the selection to save again.':switching?'Review Git safety checks and confirm switching from '+prepared.stackId+' to '+stackId+'. Previous branches remain intact.':'';
  // Approval is based on the saved Git revision, not test or server status.
  $('architectApproveStack').disabled=architectActionBusy||!canRequestApproval||approved;
- $('architectApproveStack').title=!saved?'Save the selected stack first.':!prepared?.remotePushed?'Publish the saved stack to GitHub before approval.':'Confirm approval for Developers; test and server checks are not prerequisites.';
+ $('architectApproveStack').title=!saved?'Save the selected stack first.':'Confirm local approval for Developers; GitHub publication, test and server checks are optional.';
 }
 
 let roleJiraProject='',roleJiraRole='',roleBrState=null,roleJiraLoading=false,roleJiraLoaded=false,roleJiraItems=[],roleJiraIncomplete=false,roleJiraRequest=0;

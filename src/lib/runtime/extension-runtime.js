@@ -7087,7 +7087,10 @@ async function handleDashboardMessage(msg){
         if(record.revision!==String(msg.expectedRevision||'')||record.status!=='approved')throw Error('The UI/UX design revision is no longer approved. Reload and review again.');
         const project=await registry.read(projectId),approval=project.techStackApproval;
         require('../../architect-stack-approval').requireDeveloperApproval(project);
-        if(!approval?.remoteVerified||approval.sha!==approval.remoteSha)throw Error('The Solution Architect must publish the exact approved stack SHA to GitHub first.');
+        const prepared=project.techStackPrepared;
+        const previouslyPublished=approval?.remoteVerified===true&&approval.sha===approval.remoteSha;
+        const publishedCatalog=project.techStackId!=='custom'&&prepared?.remotePushed===true&&prepared.sha===approval?.sha&&prepared.root===approval?.root&&prepared.stackId===approval?.stackId;
+        if(!previouslyPublished&&!publishedCatalog)throw Error('Publish the exact approved stack SHA to GitHub before publishing frontend code. Local stack approval is not blocked.');
         const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
         if(!token)throw Error('Connect Jira before publishing frontend code.');
         const auth={token,basicEmail:String(config.get('jira.email')||'').trim()};
@@ -7105,6 +7108,8 @@ async function handleDashboardMessage(msg){
         const root=await architectRepository.resolve(context.workspaceState,projectId,developerGit,{projectRoot:aiRoot(),githubOwner:config.get('github.owner'),githubRepo:config.get('github.repo')});
         const repo=await developerGit.repository(root);
         if(config.get('github.owner')&&config.get('github.repo')&&!developerGit.matchesGithubRepo(repo.remote,config.get('github.owner'),config.get('github.repo')))throw Error('Project Git repository does not match configured GitHub origin.');
+        const remoteBranch=previouslyPublished?approval.remoteBranch:prepared.branch;
+        if(!remoteBranch||await require('../../git-handoff-coordinator').remoteSha(root,remoteBranch)!==approval.sha)throw Error('Approved stack SHA is not verified on the remote branch. Publish the stack before publishing frontend code.');
         const confirmation=await uiWarning(`Generate and publish ${output.files?Object.keys(output.files).length:0} frontend scaffold files for Jira Story ${output.storyKey} to a remote Git feature branch?\n\nATGV installs locked project dependencies into an isolated task worktree, compiles the component, and runs the stack build and tests before pushing. The generated code contains mock UI only and must be completed by Developers.`,{modal:true},'Generate & Publish UI/UX Code');
         if(confirmation!=='Generate & Publish UI/UX Code'){await dashboard?.webview.postMessage({type:'uxFrontendPublishCancelled',projectId,key});break;}
         await dashboard?.webview.postMessage({type:'uxFrontendPublishProgress',projectId,key,message:'Installing dependencies, compiling and testing the frontend before publication…'});
@@ -8366,7 +8371,10 @@ async function handleDashboardMessage(msg){
         const published=await require('../../architect-stack-bootstrap').publishLocalBootstrap({root:prepared.root,owner:dest.owner,name:dest.repo,branch:prepared.branch,sha:prepared.sha,token});
         const latest=await registry.read(projectId);
         if(activeProject?.id!==projectId||latest.updatedAt!==project.updatedAt)throw Error('Project changed after verified push. Remote preserved; retry to update the project URL.');
-        activeProject=await registry.update(projectId,{...latest,settings:candidate.settings,techStackPrepared:{...prepared,remotePushed:true}});
+        const approval=latest.techStackApproval;
+        const remoteApproval=approval?.status==='approved'&&approval.stackId===prepared.stackId&&approval.root===published.root&&approval.sha===published.sha?
+          {...approval,remoteVerified:true,remoteSha:published.sha,remoteBranch:published.branch}:approval;
+        activeProject=await registry.update(projectId,{...latest,settings:candidate.settings,techStackPrepared:{...prepared,remotePushed:true},techStackApproval:remoteApproval});
         await architectRepository.selectLocal(context.workspaceState,projectId,published.root);
         await refreshDashboard();
         await dashboard?.webview.postMessage({type:'architectStackState',value:{message:'Published verified local stack to '+published.url+' · '+published.branch+'. Project repository URL updated. No PR created.'}});
@@ -8634,10 +8642,9 @@ async function handleDashboardMessage(msg){
         break;
       }
       case 'architectApproveStack':{
-        requireOpened();architectErrorLogs.begin(activeProject.id,'approval');const gate=require('../../architect-stack-approval');const project=await registry.read(activeProject.id);
-        const root=await architectRepository.resolve(context.workspaceState,activeProject.id,developerGit,{projectRoot:aiRoot(),githubOwner:effectiveConfig(activeProject).get('github.owner'),githubRepo:effectiveConfig(activeProject).get('github.repo')});
+        requireOpened();architectErrorLogs.begin(activeProject.id,'approval');const gate=require('../../architect-stack-approval');const projectId=activeProject.id,project=await registry.read(projectId);
+        const root=await architectRepository.resolve(context.workspaceState,activeProject.id,developerGit,{projectRoot:aiRoot(),githubOwner:effectiveConfig(activeProject).get('github.owner'),githubRepo:effectiveConfig(activeProject).get('github.repo'),allowLocalOrigin:true});
         if(!project.techStackPrepared||project.techStackPrepared.root!==root||project.techStackPrepared.stackId!==project.techStackId)throw Error('Save the current stack before approval.');
-        if(project.techStackPrepared.remotePushed!==true)throw Error('Publish the saved stack to GitHub before approval.');
         // Verify the approved branch commit in an isolated worktree; a Developer
         // feature branch may be checked out (and dirty) in the shared repository.
         const pinned=await require('../../architect-preview-worktree').prepare({root,branch:project.techStackPrepared.branch,sha:project.techStackPrepared.sha});
@@ -8645,14 +8652,18 @@ async function handleDashboardMessage(msg){
         const actor=await changeContributorActor();
         const proof=gate.approval(project,repo,actor);
         const action='Approve Stack';
-        const confirmation=await uiWarning(`Approve ${proof.stackId}${proof.companionId?' + '+proof.companionId:''} for Developers?\n\nSaved Git revision ${proof.sha}. Test evidence: ${proof.testStatus}. Server evidence: ${proof.serverStatus}. These checks are not approval prerequisites. Approval is for development, not production. Approval will publish the exact approved SHA to a GitHub tech-stack branch (no force-push). It does NOT approve a GitHub merge.`,{modal:true},action);
+        const confirmation=await uiWarning(`Approve ${proof.stackId}${proof.companionId?' + '+proof.companionId:''} for Developers?\n\nSaved Git revision ${proof.sha}. Test evidence: ${proof.testStatus}. Server evidence: ${proof.serverStatus}. These checks are not approval prerequisites. Approval is for development, not production. This records local approval only. No GitHub push or merge will occur. You may publish the stack separately when ready.`,{modal:true},action);
         if(confirmation!==action)break;
-        const published=await require('../../git-handoff-coordinator').publishApprovedStack({root,stackId:proof.stackId,generation:Number(project.techStackGeneration||1),sha:proof.sha});
-        if(published.renamed)architectErrorLogs.append(activeProject.id,'approval','Existing remote '+published.previousBranch+' was preserved. Verified SHA-pinned approval branch: '+published.branch);
-        const remoteProof={...proof,remoteBranch:published.branch,remoteSha:published.sha,remoteVerified:true};
-        const updated=await registry.update(activeProject.id,{...project,techStackApproval:remoteProof});activeProject=updated;
+        const latest=await registry.read(projectId);
+        if(activeProject?.id!==projectId||latest.updatedAt!==project.updatedAt)throw Error('Project changed during approval. Review the saved stack and retry.');
+        const checked=await require('../../architect-preview-worktree').prepare({root,branch:project.techStackPrepared.branch,sha:proof.sha});
+        if(checked.sha!==proof.sha)throw Error('Saved stack revision changed during approval.');
+        const prior=latest.techStackApproval;
+        const remote=prior?.remoteVerified===true&&prior.sha===proof.sha&&prior.remoteSha===proof.sha&&prior.root===root&&prior.stackId===proof.stackId?
+          {remoteVerified:true,remoteSha:prior.remoteSha,remoteBranch:prior.remoteBranch}:{};
+        const updated=await registry.update(projectId,{...latest,techStackApproval:{...proof,...remote}});activeProject=updated;
         architectErrorLogs.clear(updated.id,'approval');
-        await dashboard?.webview.postMessage({type:'architectStackState',value:{message:'Approved '+proof.stackId+' · GitHub '+published.branch+' @ '+published.sha.slice(0,12)}});
+        await dashboard?.webview.postMessage({type:'architectStackState',value:{message:'Approved '+proof.stackId+' locally @ '+proof.sha.slice(0,12)+'. GitHub publication optional.'}});
         await refreshDashboard();break;
       }
       case 'devCopilotArtifacts':{

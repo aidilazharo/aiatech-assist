@@ -52,7 +52,7 @@ test('approval uses saved Git revision and does not require server verification'
  assert.doesNotMatch(block,/gate\.requireServerVerification/);
  assert.match(host,/techStackServerVerification:verification/);
  assert.match(host,/techStackServerVerification:null/);
- assert.match(ui,/const canRequestApproval=!!\(saved&&prepared\?\.remotePushed===true\)/);
+ assert.match(ui,/const canRequestApproval=!!saved;/);
  assert.match(ui,/architectApproveStack'\)\.disabled=architectActionBusy\|\|!canRequestApproval\|\|approved/);
  assert.doesNotMatch(block,/if\(!serverState\.running\|\|!serverState\.healthy\)throw Error/);
  assert.match(ui,/architectServerSnapshotProjectId===activeId/);

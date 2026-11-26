@@ -30,12 +30,12 @@ test('Requirements appear on stack selection and display metadata from remote ca
  elements.architectStackSelect.value='react';
  vm.runInContext('renderArchitectRequirements(null)',context);
  assert.match(elements.architectRequirementsTitle.textContent,/ReactJS/);
- assert.equal(elements.architectRequirementsList.children.length,13);
+ assert.equal(elements.architectRequirementsList.children.length,12);
  const strings=elements.architectRequirementsList.children.map(c=>c.children[1].children.map(x=>x.textContent).join(' '));
  assert.ok(strings.some(s=>s.includes('Drizzle ORM')));
  assert.ok(strings.some(s=>s.includes('SQLite')));
  assert.ok(strings.some(s=>s.includes('http://127.0.0.1:3001')));
- assert.equal(elements.architectRequirementsCount.textContent,'1 of 13 ready');
+ assert.equal(elements.architectRequirementsCount.textContent,'1 of 12 ready');
  assert.equal(elements.architectStackProgress.attrs['aria-valuenow'],'8');
  elements.architectStackSelect.value='spring-boot';
  vm.runInContext('renderArchitectRequirements(null)',context);
@@ -53,7 +53,7 @@ test('Progress tracks live dependency checks and persisted validated project sta
  const project={techStackId:'react',techStackPrepared:{stackId:'react',remotePushed:true},techStackValidation:{status:'tested',stackId:'react'},techStackApproval:{status:'approved',stackId:'react'}};
  context.projects=[{...project,id:'p'}];
  vm.runInContext('renderArchitectRequirements(projects[0])',context);
- assert.equal(elements.architectRequirementsCount.textContent,'12 of 13 ready'); // Server requires explicit Run Server verification
+ assert.equal(elements.architectRequirementsCount.textContent,'11 of 12 ready'); // Server requires explicit Run Server verification
  assert.equal(elements.architectStackProgress.attrs['aria-valuenow'],'92');
  assert.equal(find('Dependencies').dataset.state,'complete');
 });
@@ -64,25 +64,25 @@ test('Missing catalog API, ORM or database remains visibly incomplete even after
  const item=elements.architectRequirementsList.children.find(x=>x.children[1].children[0].textContent==='ORM');
  assert.equal(item.dataset.state,'failure');
  assert.equal(item.children[2].textContent,'Not defined');
- assert.equal(elements.architectRequirementsCount.textContent,'11 of 13 ready');
+ assert.equal(elements.architectRequirementsCount.textContent,'10 of 12 ready');
 });
 test('Application server requires successful run status, then counts toward readiness',()=>{
  const {context,elements}=harness();
  elements.architectStackSelect.value='react';
- const prepared={stackId:'react',root:'/tmp/stack',branch:'bootstrap/react-initial',sha:'a'.repeat(40),remotePushed:true};
+ const prepared={stackId:'react',root:'/tmp/stack',branch:'bootstrap/react-initial',sha:'a'.repeat(40),remotePushed:false};
  const proof={status:'verified',stackId:'react',root:prepared.root,branch:prepared.branch,sha:prepared.sha,at:'2026-11-06T00:00:00Z'};
  context.architectServerSnapshot={running:true,healthy:true,sha:prepared.sha,branch:prepared.branch};context.architectServerSnapshotProjectId='p';
  const project={techStackId:'react',techStackPrepared:prepared,techStackValidation:{status:'tested',stackId:'react'},techStackApproval:{status:'approved',stackId:'react'},techStackServerVerification:proof};
  vm.runInContext('renderArchitectRequirements(project)',vm.createContext({...context,project}));
- assert.equal(elements.architectRequirementsCount.textContent,'13 of 13 ready');
+ assert.equal(elements.architectRequirementsCount.textContent,'12 of 12 ready');
  assert.equal(elements.architectStackProgress.attrs['aria-valuenow'],'100');
 });
 test('Remote scaffold package list expands into per-package progress items',()=>{
  const {context,elements}=harness();
  elements.architectStackSelect.value='react';
  vm.runInContext("techStacks[0].dependencyPackages=[{name:'express',version:'^4.21',manager:'npm',scope:'runtime'},{name:'drizzle-orm',version:'^0.44',manager:'npm',scope:'runtime'}];renderArchitectRequirements(null)",context);
- assert.equal(elements.architectRequirementsList.children.length,15);
- assert.equal(elements.architectRequirementsCount.textContent,'1 of 15 ready');
+ assert.equal(elements.architectRequirementsList.children.length,14);
+ assert.equal(elements.architectRequirementsCount.textContent,'1 of 14 ready');
  const pkg=elements.architectRequirementsList.children.find(x=>x.children[1].children[0].textContent==='npm · express');
  assert.equal(pkg.children[2].textContent,'Pending');
  vm.runInContext("architectChecklistAdvance('Installing npm dependencies…')",context);
