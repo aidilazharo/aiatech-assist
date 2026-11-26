@@ -31,7 +31,7 @@ function html(webview,{resumeLibrary=false}={}){
     subtask:"<path d=\"M5 5v7h4m-3-3 3 3-3 3M12 8h7v8h-7zM14 12l1 1 2-2\"/>"
   };
   const baHeaderIcon=(name,variant='')=>`<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${variant}>${baHeaderIcons[name]}</svg>`;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.1.59';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.1.60';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const uiConsistencyCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-consistency.css'));
@@ -872,7 +872,7 @@ function html(webview,{resumeLibrary=false}={}){
         </div>
         <div class="ux-design-toolbar" aria-label="UI/UX design controls">
           <div class="ux-design-reference-row">
-            <div class="ux-design-field ux-design-ticket-field"><label for="uxSelectedTicket">Assigned UI/UX Jira task <button id="uxRoleJiraRefresh" type="button" class="secondary" title="Refresh assigned Jira tasks" aria-label="Refresh assigned Jira tasks">↻</button></label><select id="uxSelectedTicket" aria-label="Assigned Jira ticket"><option value="">Select an assigned Jira ticket</option></select></div>
+            <div class="ux-design-field ux-design-ticket-field"><label for="uxSelectedTicket">Business Requirement <button id="uxRoleJiraRefresh" type="button" class="secondary" title="Refresh assigned Jira tasks" aria-label="Refresh assigned Jira tasks">↻</button></label><select id="uxSelectedTicket" aria-label="Assigned Business Requirement"><option value="">Select an assigned Jira ticket</option></select></div>
             <div class="ux-design-field ux-design-framework-field"><label for="uxDesignFramework">Design system</label><div class="ux-framework-picker"><select id="uxDesignFramework" aria-label="Design framework" disabled><option value="">Pull SDLC Catalog to load design frameworks</option></select><button id="uxFrameworkDocs" type="button" class="secondary icon-only ux-framework-docs" aria-label="Show selected design framework style guide in right pane" title="Show visual component style guide in right pane"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3h7v7 M10 14 21 3 M21 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6"/></svg></button><button id="uxFrameworkSync" type="button" class="secondary icon-only ux-framework-sync" aria-label="Refresh design systems from GitHub main" title="Pull latest design systems from the configured SDLC Catalog main branch">↻</button></div></div>
             <div class="ux-design-actions"><button type="button" id="uxGenerateUIUX" disabled>Generate UI/UX</button></div>
           </div>

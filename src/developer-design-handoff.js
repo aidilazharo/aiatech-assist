@@ -67,13 +67,14 @@ async function ticketDesignsForBr(root,register,brId,{approvedHash=''}={}){
   }));
   if(!screens.length)continue;
   result.push({kind:'ux-ticket',number:record.revisionNumber,sourceTicketKey:key,
-   sourceStoryKey:storyKey,designReferenceHash:String(record.designReferenceHash||''),repositorySource:record.repositorySource||null,designFramework:record.repositorySource?.hasDesign?'repository':String(record.designFramework||'').slice(0,40),
+   sourceStoryKey:storyKey,sourceBrId:String(record.sourceBrId||''),sourceTaskKeys:record.sourceTaskKeys||[],designReferenceHash:String(record.designReferenceHash||''),repositorySource:record.repositorySource||null,designFramework:record.repositorySource?.hasDesign?'repository':String(record.designFramework||'').slice(0,40),
    approvedBy:String(record.reviewedBy||'').slice(0,140),approvedAt:String(record.reviewedAt||''),
-   title:`Approved UI/UX for ${storyKey}`,summary:String(record.handoff?.summary||'').slice(0,1600),
+   title:`Approved UI/UX for ${record.sourceBrId||storyKey}`,summary:String(record.handoff?.summary||'').slice(0,1600),
    screens,flows:(record.flow?.nodes||[]).slice(0,16).map(node=>String(node.label||'').slice(0,160)),
    accessibility:(record.handoff?.accessibility||[]).slice(0,12).map(x=>String(x).slice(0,200))});
  }
- return result;
+ const whole=result.filter(item=>item.sourceBrId===brId);
+ return whole.length?whole:result;
 }
 async function loadForBr(registry,projectId,brId,revision,options={}){
  const register=await proposals.load(registry,projectId);

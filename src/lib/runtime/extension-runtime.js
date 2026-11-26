@@ -5261,6 +5261,18 @@ async function committedRoleRepository(projectId,role){
  const root=await architectRepository.resolve(context.workspaceState,projectId,developerGit,{projectRoot:aiRoot(),githubOwner:owner,githubRepo:name});
  return roleRepository.capture(root,{owner,name,role,driver:developerGit});
 }
+async function assignedUxBrScope({register,key,issue,self,config,token}){
+ const ownership=require('../../br-ownership'),projectKey=validProjectKey(config.get('jira.projectKey'));
+ if(issue?.key!==key||issue.fields?.project?.key!==projectKey||!self?.accountId)throw Error('Select a BR in the active Jira project.');
+ const brId=ownership.fromKey(register,key);
+ if(!brId)throw Error('Refresh Jira to recover the published BR mapping.');
+ const scope=await ownership.verifyOwner({register,brId,projectKey,accountId:self.accountId,roleId:'ux-designer',readIssue:k=>jiraReadIssue(config,token,k)});
+ if(scope.rootKey!==key||String(issue.fields?.issuetype?.name||'').toLowerCase()!=='epic')throw Error('Select the entire Business Requirement, not an individual UI/UX task.');
+ const approved=designProposals.approvedInputs(register);
+ const entries=approved.entries.filter(entry=>entry.id===brId);
+ if(entries.length!==1)throw Error('The selected BR has no verified approved snapshot.');
+ return {brId,scope,approved:{...approved,entries}};
+}
 async function uxDesignRepository(projectId){
  if(activeProject?.id!==projectId)throw Error('Active project changed; design source blocked.');
  const config=effectiveConfig(activeProject),owner=config.get('github.owner'),name=config.get('github.repo');
@@ -7024,14 +7036,12 @@ async function handleDashboardMessage(msg){
           if(!token)throw Error('Connect Jira in Settings before generating UI/UX.');
           const auth={token,basicEmail:String(config.get('jira.email')||'').trim()};
           const [issue,self]=await Promise.all([requestJson(`${baseAtlassian(config)}/rest/api/3/issue/${encodeURIComponent(key)}?fields=summary,description,status,assignee,project,updated,parent,labels,issuetype`,auth),requestJson(`${baseAtlassian(config)}/rest/api/3/myself`,auth)]);
-          if(issue.fields?.project?.key!==validProjectKey(config.get('jira.projectKey')))throw Error('Jira ticket is outside this project.');
-          if(!self?.accountId||issue.fields?.assignee?.accountId!==self.accountId)throw Error('Assign this Jira ticket to yourself before generating UI/UX.');
-          require('../../br-ownership').requireTask(await currentPublishedRoleRegister(projectId),issue,'ux-designer');
-          if(String(issue.fields?.status?.statusCategory?.key||'').toLowerCase()==='done')throw Error('The Jira ticket is Done. Reopen it before generating a new design.');
+          const roleRegister=await currentPublishedRoleRegister(projectId);
+          const brScope=await assignedUxBrScope({register:roleRegister,key,issue,self,config,token});
           const prior=await uxDesignPipeline.read(root,key);
           if(prior.exists&&prior.status!=='rejected')throw Error('Preview or reject the current generated design before regenerating.');
           if(prior.revision!==String(msg.expectedRevision||''))throw Error('UI/UX generation status changed. Reload before regenerating.');
-          const approved=designProposals.approvedInputs(await currentPublishedRoleRegister(projectId));
+          const approved=brScope.approved;
           const reference=require('../../design-source-policy').optionalReference(await uxDesignReferences.readBundle(root,key,{includePreview:true}));
           const repositoryReference=await uxDesignRepository(projectId);
           const target=await activeAiTarget();
@@ -7044,23 +7054,13 @@ async function handleDashboardMessage(msg){
           // Existing screens are context, never overwritten without review.
           const sharedManifest=await require('../../project-ux-prototype').reconcileExisting(root);
           const existingProjectScreens=require('../../project-ux-prototype').combined(sharedManifest).screens.map(screen=>({name:screen.name,jiraKey:screen.jiraKey,storyKey:screen.storyKey}));
-          const projectScreenGuide='Existing approved project screens (do not overwrite other tickets; align navigation and avoid duplicate screen names): '+JSON.stringify(existingProjectScreens).slice(0,7000)+'\nCurrent task must add only screens supported by its Jira Story and approved BR.';
+          const projectScreenGuide='Existing approved project screens (do not overwrite other tickets; align navigation and avoid duplicate screen names): '+JSON.stringify(existingProjectScreens).slice(0,7000)+'\nDesign the complete selected BR across all its features, stories, acceptance criteria and role tasks. Do not design unrelated BRs.';
           const uxRoleGuide=await roleSkillPrompt('ux-designer');
           const guide=projectScreenGuide+'\n'+uxRoleGuide+'\n'+require('../../design-source-policy').UX_RULE+'\nReference upload is optional. If none is provided, follow the committed repository and selected catalogue design system ('+designFramework+'), grounded in the verified Jira requirements. Do not invent an independent theme.';
           const repositoryGuide=repositoryReference.hasDesign?roleRepository.guidance(repositoryReference):require('../../design-source-policy').UX_RULE+'\nUse the selected design system '+designFramework+'. '+(repositoryReference.mode==='requirements-only'?roleRepository.guidance(repositoryReference):'No existing UI was identified in the sampled local committed source.');
           checkStop();
-          const ticket={key,summary:issue.fields?.summary,description:textFromAdf(issue.fields?.description)};
-          let sourceStoryKey=key;
-          if((issue.fields?.labels||[]).includes('atgv-role-ux-designer')){
-            const match=ticket.description.match(/^Jira parent Story:\s*([A-Z][A-Z0-9]{1,19}-[1-9][0-9]*)\s*$/m);
-            const candidate=match?.[1]||issue.fields?.parent?.key;
-            if(!candidate)throw Error('The UI/UX Jira subtask has no parent Story reference. Repair Jira role tasks first.');
-            const story=await jiraReadIssue(config,token,candidate);
-            if(story.fields?.project?.key!==validProjectKey(config.get('jira.projectKey'))||
-               (match&&story.fields?.parent?.key!==issue.fields?.parent?.key)||
-               (!match&&!!story.fields?.issuetype?.subtask))throw Error('The UI/UX Jira task is not linked to the expected parent Story.');
-            sourceStoryKey=candidate;
-          }
+          const ticket={key,summary:brScope.brId+' · '+String(approved.entries[0].title||issue.fields?.summary||''),description:textFromAdf(issue.fields?.description),scope:'entire-br'};
+          const sourceStoryKey=key;
           const visualNotes=await uxDesignReferences.visualContext(vscode,target,reference,{signal:run.controller.signal,verified:target.kind==='vscode'&&verifiedVisionModels.get(modelIdentity(target.model))?.status==='verified'});
           const referenceNotes=visualNotes+'\n'+uxDesignReferences.promptContext(reference);
           const progress=async(stage,message)=>{checkStop();await dashboard?.webview.postMessage({type:'uxPipelineWorking',projectId,key,stage,message,canStop:true});};
@@ -7091,14 +7091,16 @@ async function handleDashboardMessage(msg){
           uxDesignPipeline.buildPrototype(validatedMockup);
           await progress(6,'Preparing developer handoff draft…');
           if(activeProject?.id!==projectId)throw Error('The selected project changed during UI/UX generation. Retry in the original project.');
-          const latestBR=designProposals.approvedInputs(await currentPublishedRoleRegister(projectId));
+          const latestRegister=await currentPublishedRoleRegister(projectId);
+          const latestIssue=await jiraReadIssue(config,token,key);
+          const latestBR=(await assignedUxBrScope({register:latestRegister,key,issue:latestIssue,self,config,token})).approved;
           if(latestBR.hash!==approved.hash)throw Error('Approved Business Requirements changed while generating. Retry with the current BR.');
           const latestRef=await uxDesignReferences.readBundle(root,key);
           if(String(latestRef.sha256||'')!==String(reference.sha256||''))throw Error('The design reference changed during generation. Retry.');
           await requireSameUxDesignRepository(projectId,repositoryReference);
           checkStop();run.phase='committing';
           await dashboard?.webview.postMessage({type:'uxPipelineWorking',projectId,key,stage:6,canStop:false,message:'Saving design drafts and handoff…'});
-          const meta={jiraUpdated:String(issue.fields?.updated||''),aiModel:target.label,sourceBRHash:approved.hash,designReferenceHash:reference.sha256||'',designer:self.displayName||self.accountId,referenceUsed:reference.exists,designFramework,sourceStoryKey,repositorySource:roleRepository.identity(repositoryReference)};
+          const meta={jiraUpdated:String(issue.fields?.updated||''),aiModel:target.label,sourceBRHash:approved.hash,designReferenceHash:reference.sha256||'',designer:self.displayName||self.accountId,referenceUsed:reference.exists,designFramework,sourceStoryKey,sourceBrId:brScope.brId,sourceTaskKeys:brScope.scope.entries.map(entry=>entry.key),repositorySource:roleRepository.identity(repositoryReference)};
           const wire=await uxTicketDesigns.save(root,key,'wireframe',validatedWireframe,priorWireframe.revision,{...meta,actor:meta.designer});
           const mock=await uxTicketDesigns.save(root,key,'mockup',validatedMockup,priorMockup.revision,{...meta,actor:meta.designer});
           const result=await uxDesignPipeline.generate(root,key,{flow,wireframe:wire.design,mockup:mock.design},prior.revision,{...meta,wireframeRevision:wire.revision,mockupRevision:mock.revision});
@@ -7126,9 +7128,12 @@ async function handleDashboardMessage(msg){
         if(!token)throw Error('Connect Jira before publishing frontend code.');
         const auth={token,basicEmail:String(config.get('jira.email')||'').trim()};
         const [issue,self]=await Promise.all([jiraReadIssue(config,token,key),requestJson(`${baseAtlassian(config)}/rest/api/3/myself`,auth)]);
-        if(issue.fields?.project?.key!==validProjectKey(config.get('jira.projectKey'))||!self?.accountId||issue.fields?.assignee?.accountId!==self.accountId)throw Error('Only the Jira-assigned UI/UX Designer may publish the approved design.');
         const roleRegister=await currentPublishedRoleRegister(projectId);
-        require('../../br-ownership').requireTask(roleRegister,issue,'ux-designer');
+        if(record.sourceBrId)await assignedUxBrScope({register:roleRegister,key,issue,self,config,token});
+        else {
+         if(issue.fields?.project?.key!==validProjectKey(config.get('jira.projectKey'))||!self?.accountId||issue.fields?.assignee?.accountId!==self.accountId)throw Error('Only the Jira-assigned UI/UX Designer may publish the approved design.');
+         require('../../br-ownership').requireTask(roleRegister,issue,'ux-designer');
+        }
         if(record.sourceBRHash!==designProposals.approvedInputs(roleRegister).hash)throw Error('Published Business Requirements changed since design approval. Review and regenerate the design before publishing.');
         await dashboard?.webview.postMessage({type:'uxFrontendPublishProgress',projectId,key,message:'Generating frontend source from the approved UI/UX design…'});
         const reference=require('../../design-source-policy').optionalReference(await uxDesignReferences.readBundle(aiRoot(),key));
@@ -7141,7 +7146,7 @@ async function handleDashboardMessage(msg){
         if(config.get('github.owner')&&config.get('github.repo')&&!developerGit.matchesGithubRepo(repo.remote,config.get('github.owner'),config.get('github.repo')))throw Error('Project Git repository does not match configured GitHub origin.');
         const remoteBranch=previouslyPublished?approval.remoteBranch:prepared.branch;
         if(!remoteBranch||await require('../../git-handoff-coordinator').remoteSha(root,remoteBranch)!==approval.sha)throw Error('Approved stack SHA is not verified on the remote branch. Publish the stack before publishing frontend code.');
-        const confirmation=await uiWarning(`Generate and publish ${output.files?Object.keys(output.files).length:0} frontend scaffold files for Jira Story ${output.storyKey} to a remote Git feature branch?\n\nATGV installs locked project dependencies into an isolated task worktree, compiles the component, and runs the stack build and tests before pushing. The generated code contains mock UI only and must be completed by Developers.`,{modal:true},'Generate & Publish UI/UX Code');
+        const confirmation=await uiWarning(`Generate and publish ${output.files?Object.keys(output.files).length:0} frontend scaffold files for Jira ${record.sourceBrId?'BR Epic':'Story'} ${output.storyKey} to a remote Git feature branch?\n\nATGV installs locked project dependencies into an isolated task worktree, compiles the component, and runs the stack build and tests before pushing. The generated code contains mock UI only and must be completed by Developers.`,{modal:true},'Generate & Publish UI/UX Code');
         if(confirmation!=='Generate & Publish UI/UX Code'){await dashboard?.webview.postMessage({type:'uxFrontendPublishCancelled',projectId,key});break;}
         await dashboard?.webview.postMessage({type:'uxFrontendPublishProgress',projectId,key,message:'Installing dependencies, compiling and testing the frontend before publication…'});
         const validation=async(worktree)=>{
@@ -7169,14 +7174,17 @@ async function handleDashboardMessage(msg){
         if(!token)throw Error('Connect Jira before reviewing a design.');
         const auth={token,basicEmail:String(config.get('jira.email')||'').trim()};
         const [issue,self]=await Promise.all([requestJson(`${baseAtlassian(config)}/rest/api/3/issue/${encodeURIComponent(key)}?fields=project,assignee,updated,issuetype,labels`,auth),requestJson(`${baseAtlassian(config)}/rest/api/3/myself`,auth)]);
-        if(issue.fields?.project?.key!==validProjectKey(config.get('jira.projectKey'))||!self?.accountId||issue.fields?.assignee?.accountId!==self.accountId)throw Error('Only the Jira-assigned UI/UX designer may review this ticket.');
         const roleRegister=await currentPublishedRoleRegister(activeProject.id);
-        require('../../br-ownership').requireTask(roleRegister,issue,'ux-designer');
         const current=await uxDesignPipeline.read(aiRoot(),key);
+        if(current.sourceBrId)await assignedUxBrScope({register:roleRegister,key,issue,self,config,token});
+        else {
+         if(issue.fields?.project?.key!==validProjectKey(config.get('jira.projectKey'))||!self?.accountId||issue.fields?.assignee?.accountId!==self.accountId)throw Error('Only the Jira-assigned UI/UX designer may review this ticket.');
+         require('../../br-ownership').requireTask(roleRegister,issue,'ux-designer');
+        }
         if(decision==='approved'){
           const approved=designProposals.approvedInputs(roleRegister);
           await requireSameUxDesignRepository(activeProject.id,current.repositorySource);
-          const reference=require('../../design-source-policy').requireReference(await uxDesignReferences.readBundle(aiRoot(),key));
+          const reference=require('../../design-source-policy').optionalReference(await uxDesignReferences.readBundle(aiRoot(),key));
           const [wire,mock]=await Promise.all([uxTicketDesigns.read(aiRoot(),key,'wireframe'),uxTicketDesigns.read(aiRoot(),key,'mockup')]);
           if(current.sourceBRHash!==approved.hash||current.designReferenceHash!==String(reference.sha256||'')||current.wireframeRevision!==wire.revision||current.mockupRevision!==mock.revision)throw Error('The approved requirements, design reference, or draft changed since generation. Disapprove and regenerate UI/UX.');
           if(current.jiraUpdated!==String(issue.fields?.updated||''))throw Error('Jira issue changed since generation. Review it and regenerate UI/UX before approving.');

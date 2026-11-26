@@ -3013,14 +3013,17 @@ function renderUxActions(){
 function renderUxTickets(rows){
  const picker=$('uxSelectedTicket'),previous=uxSelectedKey,mine=rows.filter(item=>item.mine&&item.taskRole==='ux-designer');
  picker.replaceChildren();const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent='Select an assigned Business Requirement';picker.append(placeholder);
- for(const br of rows.filter(item=>item.brRoot&&item.roleScopes?.['ux-designer']?.mine&&!mine.some(task=>task.brId===item.brId))){const option=document.createElement('option');option.value='waiting:'+br.brId;option.textContent=br.brId+' · BR assigned — waiting for UI/UX tasks';option.disabled=true;picker.append(option);}
- const groups=new Map();
- for(const item of mine){
-  const id=item.brId||'Unresolved BR',br=(roleBrState?.brs||[]).find(b=>b.id===id);
-  if(!groups.has(id)){const group=document.createElement('optgroup');group.label=id+(br?' · '+String(br.approvedContent?.title||br.title||''):'');picker.append(group);groups.set(id,group);}
-  const option=document.createElement('option');option.value=item.key;option.textContent=item.key+' · '+(item.summary||'Jira issue')+(item.roleMappingVerified===false||item.publishedSnapshotReady===false?' · BR mapping recovery required':'');option.disabled=item.roleMappingVerified===false||item.publishedSnapshotReady===false;groups.get(id).append(option);
+ const ready=[];
+ for(const br of (roleBrState?.brs||[])){
+  const root=rows.find(item=>item.brRoot&&item.brId===br.id);
+  const tasks=mine.filter(item=>item.brId===br.id);
+  const scope=root?.roleScopes?.['ux-designer'];
+  if(!root||(!tasks.length&&!scope?.mine))continue;
+  const verified=!!scope?.mine&&!!scope?.count&&tasks.length===scope.count&&tasks.every(item=>item.roleMappingVerified!==false&&item.publishedSnapshotReady!==false);
+  const option=document.createElement('option');option.value=root.key;option.textContent=br.id+' · '+String(br.approvedContent?.title||br.title||'Untitled requirement')+(verified?'':' · '+(scope?.count?'UI/UX assignment incomplete':'Waiting for UI/UX tasks'));
+  option.disabled=!verified;picker.append(option);if(verified)ready.push(root);
  }
- const ready=mine.filter(item=>item.roleMappingVerified!==false&&item.publishedSnapshotReady!==false);uxSelectedKey=ready.some(item=>item.key===previous)?previous:ready[0]?.key||'';picker.value=uxSelectedKey;
+ uxSelectedKey=ready.some(item=>item.key===previous)?previous:ready[0]?.key||'';picker.value=uxSelectedKey;
  if(!uxSelectedKey){uxPipeline=null;uxDrafts={wireframe:null,mockup:null};setUxStatus(developerBrSyncWarnings.length?developerBrSyncWarnings.join(' · '):mine.length?'Assigned UI/UX tasks found. Refresh Jira to verify the latest published BR.':'Assign an entire BR to begin designing the full application.');$('uxDesignVersionInfo').replaceChildren();$('uxReferenceInfo').textContent='';$('uxReferencePreview').replaceChildren();$('uxReferencePreview').classList.add('hidden');$('uxDesignFramework').value=uxFramework||'';showUxBuilder();renderUxActions();send('uxFrameworkRead',{key:''});return;}
  if(previous!==uxSelectedKey){uxPipeline=null;uxReferenceAvailable=false;uxDrafts={wireframe:null,mockup:null};uxFramework='';$('uxDesignFramework').value=uxFramework;showUxBuilder();}
  renderUxActions();loadUxDrafts();
@@ -3063,9 +3066,13 @@ function showUxBuilder(){
  if(view==='uxPreview'){setView('work');renderRoleWork();}
 }
 function openUxDesignForIssue(key){
- if(selectedRole!=='ux-designer'||!roleJiraItems.some(row=>row.key===key&&row.mine&&row.taskRole==='ux-designer'))return;
+ if(selectedRole!=='ux-designer')return;
+ const task=roleJiraItems.find(row=>row.key===key&&row.mine&&row.taskRole==='ux-designer');
+ if(!task)return;
+ const root=roleJiraItems.find(row=>row.brRoot&&row.brId===task.brId);if(!root)return;key=root.key;
  const picker=$('uxSelectedTicket');
- if(!Array.from(picker.options).some(option=>option.value===key))renderUxTickets(roleJiraItems);
+ if(!Array.from(picker.options).some(option=>option.value===key&&!option.disabled))renderUxTickets(roleJiraItems);
+ if(!Array.from(picker.options).some(option=>option.value===key&&!option.disabled))return;
  picker.value=key;uxSelectedKey=key;uxReferenceAvailable=false;uxPipeline=null;uxDrafts={wireframe:null,mockup:null};uxPendingOpenKey=key;uxFramework='';$('uxDesignFramework').value=uxFramework;
  showUxBuilder();renderUxActions();loadUxDrafts();
  $('uxDesignWorkspace').scrollIntoView({behavior:'smooth',block:'start'});picker.focus();
@@ -3214,7 +3221,7 @@ function requestUxEntireDesignDeletion(){
 }
 $('uxDeleteEntireDesign').addEventListener('click',requestUxEntireDesignDeletion);
 $('uxPreviewDeleteEntireDesign').addEventListener('click',requestUxEntireDesignDeletion);
-$('uxPublishFrontend').addEventListener('click',()=>{if(uxPipeline?.status!=='approved'||uxFrontendPublishing)return;uxFrontendPublishing=true;$('uxPublishFrontend').disabled=true;const message='Preparing to generate, validate and publish the Jira Story frontend code…';setUxStatus(message);$('uxPreviewReviewState').textContent=message;$('uxPreviewReviewState').classList.remove('hidden');send('uxPublishFrontend',{key:uxSelectedKey,expectedRevision:uxPipeline.revision});});
+$('uxPublishFrontend').addEventListener('click',()=>{if(uxPipeline?.status!=='approved'||uxFrontendPublishing)return;uxFrontendPublishing=true;$('uxPublishFrontend').disabled=true;const message='Preparing to generate, validate and publish the BR frontend scaffold…';setUxStatus(message);$('uxPreviewReviewState').textContent=message;$('uxPreviewReviewState').classList.remove('hidden');send('uxPublishFrontend',{key:uxSelectedKey,expectedRevision:uxPipeline.revision});});
 $('uxOpenPrototypeBrowser').addEventListener('click',()=>{if(!uxReadyForPreview()||uxPipelineBusy)return;$('uxOpenPrototypeBrowser').disabled=true;$('uxPrototypeBrowserStatus').textContent='Opening the local interactive prototype in your browser…';send('uxPrototypeOpenBrowser',{key:uxSelectedKey,expectedRevision:uxPipeline.revision});});
 $('uxGenerateUIUX').addEventListener('click',()=>{
  if(!uxSelectedKey)return;

@@ -56,7 +56,7 @@ test('stale versions are rejected for regenerate and review actions',()=>withRoo
 test('host enforces current Jira ownership, approved BR/reference checks and no automatic publishing',()=>{
  const generation=host.slice(host.indexOf("case 'uxPipelineGenerate':"),host.indexOf("case 'uxPipelineDecide':"));
  const approval=host.slice(host.indexOf("case 'uxPipelineDecide':"),host.indexOf("case 'uxDesignRead':"));
- for(const needle of [/issue\.fields\?\.assignee\?\.accountId!==self\.accountId/,/approved\.hash/,/latestRef\.sha256/,/uxDesignPipeline\.generate/,/uxDesignPipeline\.validFlow/,/progress\(6/])assert.match(generation,needle);
+ for(const needle of [/assignedUxBrScope/,/approved\.hash/,/latestRef\.sha256/,/uxDesignPipeline\.generate/,/uxDesignPipeline\.validFlow/,/progress\(6/])assert.match(generation,needle);
  for(const needle of [/uxDesignPipeline\.decide/,/designProposals\.approvedInputs/,/current\.wireframeRevision!==wire\.revision/,/current\.jiraUpdated/])assert.match(approval,needle);
  assert.doesNotMatch(approval,/jiraCreateIssue|jiraUpdateIssue|writeConfluence/);
 });
@@ -68,3 +68,9 @@ test('UI provides six progress stages, single generation button, clickable previ
  assert.match(host,/id="uxDesignPreviewPage"/);assert.match(host,/id="uxFlowDiagram"/);assert.match(host,/id="uxDeveloperHandoff"/);
  assert.doesNotMatch(host,/id="uxGenerateWireframe"|id="uxGenerateMockup"|class="ux-design-definitions"/);
 });
+
+test('whole BR pipeline stores the Epic and role-task provenance',()=>withRoot(async root=>{
+ const v=await pipeline.generate(root,'TC-392',{flow,wireframe:sample,mockup:sample},'',{...meta(),sourceBrId:'BR-012',sourceStoryKey:'TC-392',sourceTaskKeys:['TC-393','TC-394']});
+ assert.equal(v.sourceBrId,'BR-012');assert.equal(v.sourceStoryKey,'TC-392');assert.deepEqual(v.sourceTaskKeys,['TC-393','TC-394']);
+ assert.match(ui,/option.value=root.key/);assert.match(ui,/tasks.length===scope.count/);assert.match(host,/assignedUxBrScope/);
+}));
