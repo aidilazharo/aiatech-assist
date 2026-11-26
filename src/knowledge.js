@@ -2,6 +2,75 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { sha, htmlToText } = require('./utils');
+const jiraStore=require('./jira-local-store');
+// Only explicitly bound managed projects use the shared private project database.
+// Legacy JSON stays untouched as a migration/rollback backup.
+function openKnowledge(binding){
+    if(!binding)return null;
+    const store=jiraStore.open(binding.registry,binding.projectId);
+    if(!store)throw Error('Managed project SQLite unavailable.');
+    try{
+        store.db.exec(`CREATE TABLE IF NOT EXISTS knowledge_cache_migrations (
+            scope TEXT PRIMARY KEY, migrated_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS knowledge_cache_documents (
+            seq INTEGER PRIMARY KEY, scope TEXT NOT NULL, provider TEXT NOT NULL, payload TEXT NOT NULL);
+            CREATE INDEX IF NOT EXISTS knowledge_cache_scope_provider ON knowledge_cache_documents(scope,provider);`);
+        return store;
+    }catch(error){store.db.close();throw error;}
+}
+const SCOPE='knowledge-index';
+function knowledgeTransaction(store,fn){
+    store.db.exec('BEGIN IMMEDIATE');
+    try{const result=fn();store.db.exec('COMMIT');return result;}
+    catch(error){store.db.exec('ROLLBACK');throw error;}
+}
+function readKnowledge(store){
+    return store.db.prepare('SELECT payload FROM knowledge_cache_documents WHERE scope=? ORDER BY seq').all(SCOPE).map(row=>JSON.parse(row.payload));
+}
+function insertKnowledge(store,documents){
+    const put=store.db.prepare('INSERT INTO knowledge_cache_documents(scope,provider,payload) VALUES(?,?,?)');
+    for(const doc of documents)put.run(SCOPE,String(doc.provider||''),JSON.stringify(doc));
+}
+function migrated(store){
+    return !!store.db.prepare('SELECT scope FROM knowledge_cache_migrations WHERE scope=?').get(SCOPE);
+}
+function markMigrated(store){
+    store.db.prepare('INSERT OR IGNORE INTO knowledge_cache_migrations VALUES(?,?)').run(SCOPE,new Date().toISOString());
+}
+async function readLegacyKnowledge(file){
+    try{const data=JSON.parse(await fs.readFile(file,'utf8'));return Array.isArray(data.documents)?data.documents:[];}
+    catch(error){if(error.code==='ENOENT')return [];throw error;}
+}
+async function loadKnowledge(binding,file){
+    const store=openKnowledge(binding);
+    if(!store)return readLegacyKnowledge(file);
+    try{
+        if(!migrated(store)){
+            const legacy=await readLegacyKnowledge(file);
+            knowledgeTransaction(store,()=>{
+                if(migrated(store))return;
+                insertKnowledge(store,legacy);
+                markMigrated(store);
+            });
+        }
+        return readKnowledge(store);
+    }finally{store.db.close();}
+}
+async function writeKnowledge(binding,file,documents,provider){
+    const store=openKnowledge(binding);
+    if(!store)return null;
+    try{
+        const legacy=migrated(store)?null:await readLegacyKnowledge(file);
+        return knowledgeTransaction(store,()=>{
+            if(!migrated(store)){insertKnowledge(store,legacy||[]);markMigrated(store);}
+            if(provider===undefined)store.db.prepare('DELETE FROM knowledge_cache_documents WHERE scope=?').run(SCOPE);
+            else store.db.prepare('DELETE FROM knowledge_cache_documents WHERE scope=? AND provider=?').run(SCOPE,provider);
+            insertKnowledge(store,documents);
+            return readKnowledge(store);
+        });
+    }finally{store.db.close();}
+}
+
 function tokenize(s) { return (String(s).toLowerCase().match(/[\p{L}\p{N}_]{2,}/gu) || []).slice(0, 15000); }
 function splitChunks(text, size = 1000, overlap = 160) {
     const t = String(text || '').trim();
@@ -71,17 +140,10 @@ function searchChunks(chunks, query, topN = 5) {
     return selected;
 }
 class KnowledgeStore {
-    constructor(folder) { this.folder = folder; this.file = path.join(folder, 'knowledge.json'); this.mirrorFile = path.join(folder, 'mirrors.json'); this.docs = []; this.mirrors = {}; }
+    constructor(folder, binding=null) { this.binding=binding; this.folder = folder; this.file = path.join(folder, 'knowledge.json'); this.mirrorFile = path.join(folder, 'mirrors.json'); this.docs = []; this.mirrors = {}; }
     async load() {
         await fs.mkdir(this.folder, { recursive: true });
-        try {
-            const data = JSON.parse(await fs.readFile(this.file, 'utf8'));
-            this.docs = Array.isArray(data.documents) ? data.documents : [];
-        }
-        catch (e) {
-            if (e.code !== 'ENOENT')
-                throw e;
-        }
+        this.docs = await loadKnowledge(this.binding,this.file);
         try {
             this.mirrors = JSON.parse(await fs.readFile(this.mirrorFile, 'utf8'));
         }
@@ -90,10 +152,16 @@ class KnowledgeStore {
                 throw e;
         }
     }
-    async save() { await this.atomicWrite(this.file, JSON.stringify({ schema: 1, documents: this.docs }, null, 2)); }
+    async save() {
+        const rows=await writeKnowledge(this.binding,this.file,this.docs);
+        if(rows!==null){this.docs=rows;return;}
+        await this.atomicWrite(this.file, JSON.stringify({ schema: 1, documents: this.docs }, null, 2));
+    }
     async saveMirrors() { await this.atomicWrite(this.mirrorFile, JSON.stringify(this.mirrors, null, 2)); }
     async atomicWrite(file, data) { const tmp = file + '.tmp'; await fs.writeFile(tmp, data, { mode: 0o600 }); await fs.rename(tmp, file); }
     async replace(provider, documents) {
+        const rows=await writeKnowledge(this.binding,this.file,documents,provider);
+        if(rows!==null){this.docs=rows;return;}
         this.docs = [...this.docs.filter(d => d.provider !== provider), ...documents];
         await this.save();
     }
