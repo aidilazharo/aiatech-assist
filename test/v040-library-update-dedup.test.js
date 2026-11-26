@@ -29,11 +29,11 @@ test('verified source-build comparisons still offer only truly newer builds',()=
  assert.equal(versions.compareInstalledRelease(installed,{version:'0.0.5',tag:'v0.0.5-source-build.100'}).available,false);
  assert.equal(versions.compareInstalledRelease(installed,{version:'0.0.6',tag:'invalid'}).available,false);
 });
-test('startup deduplicates Library prompts and does not force the same release',()=>{
+test('startup and explicit checks re-offer newer releases while hourly checks deduplicate',()=>{
  const host=read('src/lib/runtime/extension-runtime.js');
  const check=host.slice(host.indexOf('async function checkSoftwareUpdates('),host.indexOf('function scheduleSoftwareUpdates()'));
- assert.match(check,/if\(libraryRelease\)await promptLibraryRelease\(libraryRelease\);/);
- assert.doesNotMatch(check,/promptLibraryRelease\(libraryRelease,\{force:startup\}\)/);
+ assert.match(check,/if\(!extensionOnly&&libraryRelease\)await promptLibraryRelease\(libraryRelease,\{force:startup\|\|interactive\}\)/);
+ assert.match(check,/promptExtensionRelease\(extensionRelease,\{force:startup\|\|interactive\}\)/);
  assert.match(host,/if\(!force&&context\.globalState\.get\(key\)===promptId\)return/);
 });
 test('Pull Library uses verified Git main and cannot activate obsolete ZIP archives',()=>{

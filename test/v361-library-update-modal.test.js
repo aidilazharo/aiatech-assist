@@ -29,7 +29,7 @@ test('update actions retain two fixed immutable GitHub release sources',()=>{
  const html=read('src/lib/webview/dashboard-html.js'),ui=read('media/start.js'),css=read('media/start.css');
  const section=html.slice(html.indexOf('id="settingsSoftwareUpdateGroup"'),html.indexOf('id="projectView"'));
  assert.match(section,/class="software-update-toolbar"/);
- for(const id of ['checkSoftwareUpdates','installExtensionRelease','viewExtensionRelease'])
+ for(const id of ['checkSoftwareUpdates','pullLibraryFiles','viewExtensionRelease','viewLibraryRelease'])
   assert.ok(section.includes('id="'+id+'"'),id);
  for(const id of ['softwareReleaseRepositoryUrl','softwareLibraryRepositoryUrl','saveSoftwareUpdateSources'])
   assert.ok(!section.includes('id="'+id+'"'),id);

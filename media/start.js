@@ -5283,13 +5283,13 @@ function renderSoftwareUpdates(data,force=false){
  const sourceBehind=!!installedLibrary&&compareSemver(sourceLibrary,installedLibrary)<0;
  const sourceAhead=!!installedLibrary&&compareSemver(sourceLibrary,installedLibrary)>0;
  $('softwareLibraryStatus').textContent=data.libraryError?`Library: ${data.libraryError}`:
-  sourceAhead?`Library source main v${sourceLibrary} is newer than active v${installedLibrary}. Pull Library Files to verify and update the selected source.`:
+  sourceAhead?`Library source main v${sourceLibrary} is newer than active v${installedLibrary}. Pull Library Updates to verify and update the selected source.`:
   mirrorBehind?`Active Library v${installedLibrary} is newer than public mirror v${mirrorLibrary}. ${sourceLibrary?'Selected source main v'+sourceLibrary+(sourceBehind?' is also older.':' is verified.'):'Check selected GitHub source main for newer commits.'} No downgrade available.`:
   installedLibrary&&mirrorLibrary&&compareSemver(mirrorLibrary,installedLibrary)===0?`Active Library v${installedLibrary} matches the verified published release. Check selected source main for updates.`:
-  data.libraryLatest?`Library published release: v${mirrorLibrary}${data.libraryLatestAvailable?'. Pull Library Files to check source main first and install only a newer verified version.':'; verified ZIP or checksum is unavailable or the installed Library is newer.'}`:
+  data.libraryLatest?`Library published release: v${mirrorLibrary}${data.libraryLatestAvailable?'. Pull Library Updates to check source main first and install only a newer verified version.':'; verified ZIP or checksum is unavailable or the installed Library is newer.'}`:
   `Library: no published release yet. Check selected GitHub source main for updates.`;
- $('viewExtensionRelease').disabled=!data.extensionLatest;
- $('installExtensionRelease').disabled=!data.latest;
+ $('viewExtensionRelease').disabled=false;
+ $('viewLibraryRelease').disabled=false;
  $('checkSoftwareUpdates').disabled=!!data.busy;
  $('pullLibraryFiles').disabled=softwareLibraryPulling||!!catalogBusyUI||!!catalogState?.busy;
 }
@@ -5300,8 +5300,7 @@ window.addEventListener('message',event=>{
 });
 $('checkSoftwareUpdates').addEventListener('click',()=>{
  $('softwareExtensionStatus').textContent='Checking AIA Malaysia extension releases…';
- $('softwareLibraryStatus').textContent='Checking AIA Malaysia SDLC Library releases…';
- send('checkSoftwareUpdates');
+ send('checkSoftwareUpdates',{extensionOnly:true});
 });
 $('pullLibraryFiles').addEventListener('click',()=>{
  if(softwareLibraryPulling||!!catalogBusyUI||!!catalogState?.busy)return;
@@ -5311,7 +5310,7 @@ $('pullLibraryFiles').addEventListener('click',()=>{
  send('catalogPull');
 });
 $('viewExtensionRelease').addEventListener('click',()=>send('viewExtensionRelease'));
-$('installExtensionRelease').addEventListener('click',()=>send('installExtensionRelease'));
+$('viewLibraryRelease').addEventListener('click',()=>send('viewLibraryRelease'));
 
 $('settingsBack').addEventListener('click',()=>{if(roleSettingsDirty){status('Save role settings before leaving Settings.',true);return;}if(workspaceOpened)navigate('overview');else{spaces=[];showGate();}});
 $('settingsSpaceSearch').addEventListener('click',()=>{

@@ -67,7 +67,7 @@ test('v417: Section 8 shows update buttons and status, not fixed release URLs or
  const end=html.indexOf('id="projectView"',begin);
  assert.ok(begin>0&&end>begin);
  const section=html.slice(begin,end);
- for(const id of ['checkSoftwareUpdates','pullLibraryFiles','installExtensionRelease','viewExtensionRelease','softwareExtensionStatus','softwareLibraryStatus'])
+ for(const id of ['checkSoftwareUpdates','pullLibraryFiles','viewExtensionRelease','viewLibraryRelease','softwareExtensionStatus','softwareLibraryStatus'])
   assert.ok(section.includes('id="'+id+'"'),id+' retained');
  assert.doesNotMatch(section,/Release sources are fixed and verified/);
  assert.doesNotMatch(section,/same-repository prerelease builds/);

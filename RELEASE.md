@@ -1,13 +1,13 @@
-# ATGV AIATECH Assist v0.1.44
+# ATGV AIATECH Assist v0.1.45
 
 ## Changes
 
-- Compact Developer My Work Git progress, source selector, actions and diagnostic status into one horizontally scrollable toolbar.
-- Discover actual active-project repository folders automatically and on refresh, and remember the selected folder per project.
-- Keep Extension and Library choices. Open non-Git folders without enabling Git writes, and validate selected repository identity before Git actions.
-- Isolate Git workflow state and AI chat history per selected project folder. Do not initialize or modify repositories during scanning.
-- Exclude symbolic links, hidden and dependency/generated folders from the scan.
+- Restore four visible Settings > Updates controls: Check Extension Updates, Pull Library Updates, GitHub Release Extension and GitHub Release Library.
+- Open the actual latest published versioned VSIX and Library source ZIP asset links, with the latest-release page as a safe fallback. Verified VSIX installation stays in the upgrade modal.
+- Re-offer newer verified Extension and Library updates on Start and explicit checks; deduplicate hourly notifications and avoid overlapping active update offers.
+- Start update checking after the webview handshake without waiting for the full dashboard snapshot.
+- Preserve version checks, trusted release sources, VSIX checksums, verified Library main pulls and no-downgrade safeguards.
 
 ## Validation
 
-- JavaScript syntax checked. Full regression and VSIX packaging not executed in this environment.
+- JavaScript syntax and focused source checks performed. Full regression suite and VSIX packaging not executed here. Approved release repositories were not accessible via the current GitHub connection.

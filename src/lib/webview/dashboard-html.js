@@ -31,7 +31,7 @@ function html(webview,{resumeLibrary=false}={}){
     subtask:"<path d=\"M5 5v7h4m-3-3 3 3-3 3M12 8h7v8h-7zM14 12l1 1 2-2\"/>"
   };
   const baHeaderIcon=(name,variant='')=>`<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${variant}>${baHeaderIcons[name]}</svg>`;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.1.44';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.1.45';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const uiConsistencyCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-consistency.css'));
@@ -322,10 +322,10 @@ function html(webview,{resumeLibrary=false}={}){
     </section></div></details>
     <details class="ext-settings-accordion" id="settingsSoftwareUpdateGroup" data-requirement="required"><summary><span>8. Updates</span><span class="ext-settings-badge" data-state="required">Required</span></summary><div class="ext-settings-content"><section>
       <div class="software-update-toolbar" role="group" aria-label="Software update actions">
-        <button type="button" id="checkSoftwareUpdates" class="secondary">Check Updates</button>
-        <button type="button" id="pullLibraryFiles" class="secondary" hidden aria-hidden="true" tabindex="-1">Pull Library Files</button>
-        <button type="button" id="installExtensionRelease" class="secondary" disabled>Install Verified VSIX</button>
-        <button type="button" id="viewExtensionRelease" class="secondary" disabled>View GitHub Release</button>
+        <button type="button" id="checkSoftwareUpdates" class="secondary">Check Extension Updates</button>
+        <button type="button" id="pullLibraryFiles" class="secondary">Pull Library Updates</button>
+        <button type="button" id="viewExtensionRelease" class="secondary">GitHub Release Extension</button>
+        <button type="button" id="viewLibraryRelease" class="secondary">GitHub Release Library</button>
       </div>
       <p id="softwareExtensionStatus" class="test-status muted" role="status" aria-live="polite">Extension: not checked.</p>
       <p id="softwareLibraryStatus" class="test-status muted" role="status" aria-live="polite">Library: not checked.</p>

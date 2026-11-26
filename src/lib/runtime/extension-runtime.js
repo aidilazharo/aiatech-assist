@@ -629,6 +629,25 @@ function updateStatus(){return {settings:updatePreferences(),installedVersion:re
 async function publishUpdateStatus(){
  await dashboard?.webview.postMessage({type:'softwareUpdateState',value:updateStatus()});
 }
+async function openLatestReleaseFile(kind){
+ const library=kind==='library',repo=library?libraryReleaseUpdater.REPO:releaseUpdater.REPO;
+ let url='https://github.com/'+repo+'/releases/latest';
+ try{
+  const request=releaseUpdater.authorizedRequest(await githubIssueAccessToken());
+  const checked=library?await libraryReleaseUpdater.latestAcrossRepositories({request}):await releaseUpdater.latestAcrossRepositories({version:require('../../../package.json').version,includeCurrent:true,request});
+  const latest=checked.latest,release=checked.release;
+  const tag=String(latest?.tag||'');
+  const tagPattern=library?/^v?\d+\.\d+\.\d+(?:-source-build\.\d+)?$/:/^v?\d+\.\d+\.\d+(?:-build\.\d+)?$/;
+  if(latest?.repository===repo&&tagPattern.test(tag)){
+   url='https://github.com/'+repo+'/releases/tag/'+encodeURIComponent(tag);
+   const filename=library?'tech-stacks-skills-'+latest.version+'-source.zip':'atgv-aiatech-assist-'+latest.version+'.vsix';
+   const asset=library?release?.archive:release?.asset;
+   if(release?.repository===repo&&release.tag===tag&&release.version===latest.version&&/^\d+\.\d+\.\d+$/.test(latest.version)&&asset?.name===filename)
+    url='https://github.com/'+repo+'/releases/download/'+encodeURIComponent(tag)+'/'+encodeURIComponent(filename);
+  }
+ }catch(error){report('Latest '+kind+' release link unavailable: '+String(error.message||error).slice(0,240));}
+ await vscode.env.openExternal(vscode.Uri.parse(url));
+}
 // Project GitHub actions continue to use their independent account identity.
 async function githubIssueAccessToken({interactive=false}={}){
  try{
@@ -711,7 +730,7 @@ async function offerBrandedExtensionUpgrade(release){
  });
 }
 async function promptExtensionRelease(release,{force=false}={}){
- if(!updatePreferences().promptForUpdates||!release)return;
+ if(!updatePreferences().promptForUpdates||!release||pendingExtensionUpgradeOffers.size||activeExtensionUpgradeInstall)return;
  const key='atgvAssist.updates.promptedRelease';
  const promptId=(release.repository||releaseUpdater.REPO)+'|'+(release.tag||'');
  if(!force&&context.globalState.get(key)===promptId)return;
@@ -794,7 +813,7 @@ async function offerBrandedLibraryUpdate({repository,installedVersion,remoteVers
 async function promptLibraryRelease(release,{force=false}={}){
  const installedCatalog=(await catalogUiState()).installed||{};
  const comparison=libraryUpdateVersion.compareInstalledRelease(installedCatalog,release);
- if(!comparison.available||!updatePreferences().promptForUpdates||!getWorkspace())return;
+ if(!comparison.available||!updatePreferences().promptForUpdates||!getWorkspace()||pendingLibraryUpdateOffers.size||activeLibraryUpdatePullRequestId)return;
  const key='atgvAssist.updates.promptedLibrary';
  const promptId=String(release.repository||'')+'|'+String(release.tag||release.version)+'|'+(comparison.installed||'not-installed')+'|'+getWorkspace().uri.fsPath;
  if(!force&&context.globalState.get(key)===promptId)return;
@@ -824,21 +843,21 @@ async function checkLibraryRelease({prompt=false,interactive=false,forcePrompt=f
  }catch(error){libraryRelease=null;libraryLatest=null;libraryReleaseAvailable=false;libraryUpdateError=error.message;report('GitHub SDLC Library update: '+error.message);if(interactive)throw error;return null;}
  finally{await publishUpdateStatus();}
 }
-async function checkSoftwareUpdates({prompt=false,interactive=false,force=false,startup=false}={}){
+async function checkSoftwareUpdates({prompt=false,interactive=false,force=false,startup=false,extensionOnly=false}={}){
  if(softwareCheckBusy){if(startup)pendingStartupUpdateCheck=true;return;}
  softwareCheckBusy=true;await publishUpdateStatus();
  const config=updatePreferences();const errors=[];
  try{
-  // An explicit Check Updates must also inspect the owner-selected main branch.
+  // Combined checks also inspect the owner-selected main branch.
   // Published releases can legitimately lag and must not replace source metadata.
-  if(force&&!catalogBusy)await catalogCheck({interactive:false});
+  if(force&&!extensionOnly&&!catalogBusy)await catalogCheck({interactive:false});
   await Promise.all([
    (force||config.autoCheckExtension)?checkExtensionRelease({interactive}).catch(e=>errors.push('Extension: '+e.message)):Promise.resolve(),
-   (force||config.autoCheckLibrary)?checkLibraryRelease({interactive}).catch(e=>errors.push('Library: '+e.message)):Promise.resolve()
+   (!extensionOnly&&(force||config.autoCheckLibrary))?checkLibraryRelease({interactive}).catch(e=>errors.push('Library: '+e.message)):Promise.resolve()
   ]);
   if(prompt){
-   if(extensionRelease)await promptExtensionRelease(extensionRelease,{force:startup});
-   if(libraryRelease)await promptLibraryRelease(libraryRelease);
+   if(extensionRelease)await promptExtensionRelease(extensionRelease,{force:startup||interactive});
+   if(!extensionOnly&&libraryRelease)await promptLibraryRelease(libraryRelease,{force:startup||interactive});
   }
   if(errors.length&&interactive)throw Error(errors.join(' | '));
  }finally{softwareCheckBusy=false;await publishUpdateStatus();if(pendingStartupUpdateCheck){pendingStartupUpdateCheck=false;void checkSoftwareUpdates({prompt:true,force:true,startup:true}).catch(e=>report('Startup update check: '+e.message));}}
@@ -6654,11 +6673,13 @@ async function handleDashboardMessage(msg){
         break;
       }
       case 'checkSoftwareUpdates':{
-        await checkSoftwareUpdates({prompt:true,interactive:true,force:true});break;
+        await checkSoftwareUpdates({prompt:true,interactive:true,force:true,extensionOnly:msg.extensionOnly===true});break;
       }
       case 'viewExtensionRelease':{
-        if(!extensionLatest)throw Error('Check for an extension release first.');
-        await vscode.env.openExternal(vscode.Uri.parse(extensionLatest.url));break;
+        await openLatestReleaseFile('extension');break;
+      }
+      case 'viewLibraryRelease':{
+        await openLatestReleaseFile('library');break;
       }
       case 'installExtensionRelease':{
         if(!extensionRelease)throw Error('No verified newer release is available.');
@@ -6701,12 +6722,13 @@ async function handleDashboardMessage(msg){
            report('ATGV core CSS unavailable: '+detail);
            await recordStartupDiagnostic({stage:'webview-assets',status:'failed',detail});
          }
-         await finishManualProjectDiscovery(startupSequence);
+         // Update detection must not wait for the heavier dashboard snapshot.
          publishAiActivity(); // Restore the signal after webview reload while an AI request is still active.
          if(startupUpdateSessionChecked!==startupSessionId){
           startupUpdateSessionChecked=startupSessionId;
           void checkSoftwareUpdates({prompt:true,force:true,startup:true}).catch(e=>report('Startup update check: '+e.message));
          }
+         await finishManualProjectDiscovery(startupSequence);
          break;
        }
        case 'viewNavigateRefresh':{
