@@ -12,10 +12,10 @@ function optionalReference(reference){
  return requireReference(reference);
 }
 function guide(repositoryGuide,referenceGuide){
- return RULE+'\nPROJECT REPOSITORY DESIGN EVIDENCE:\n'+String(repositoryGuide||'')+'\nUSER-UPLOADED DESIGN EVIDENCE:\n'+String(referenceGuide||'No linked uploaded reference. Do not create or change visual design without one.');
+ return RULE+'\nPROJECT REPOSITORY DESIGN EVIDENCE:\n'+String(repositoryGuide||'')+'\nUSER-UPLOADED DESIGN EVIDENCE:\n'+String(referenceGuide||'No linked uploaded reference. Preserve the existing UI and implement only an explicitly human-approved design handoff when present.');
 }
 function guardVisualFiles(files,context){
- if(context?.references?.length)return true;
+ if(context?.references?.length||context?.approvedDesign===true)return true;
  const visual=(files||[]).filter(file=>{
   const p=String(file.path||'').replace(/\\/g,'/');
   return /\.(?:css|scss|sass|less|tsx|jsx|vue|svelte|html|razor|cshtml)$/i.test(p)||/(?:^|\/)(?:frontend|reactts_frontend|components|pages|layouts|styles|theme|design-system|ui|app-shell)(?:\/|\.|[-_])/i.test(p);
