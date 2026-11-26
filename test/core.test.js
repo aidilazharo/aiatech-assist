@@ -220,3 +220,21 @@ test('GitHub connection test distinguishes public browsing from authenticated re
     await assert.rejects(()=>testGithubConnection(c,undefined,{requireAuthentication:false}),/does not match/);
   }finally{global.fetch=original;}
 });
+
+test('Confluence snapshot reads use bounded concurrency and preserve list order',async()=>{
+ const prior=global.fetch;let active=0,peak=0;
+ global.fetch=async(url)=>{
+  if(url.includes('/spaces?'))return ok({results:[{id:'42',key:'DOC'}]});
+  if(url.includes('/spaces/42/pages?'))return ok({results:Array.from({length:9},(_,i)=>({id:String(100+i),title:'Page '+i})),_links:{}});
+  const match=/\/pages\/(\d+)\?/.exec(url);
+  if(!match)throw Error(url);
+  active++;peak=Math.max(peak,active);
+  try{await new Promise(resolve=>setTimeout(resolve,5));return ok({id:match[1],title:match[1],version:{number:1},body:{storage:{value:'<p>Body</p>'}}});}
+  finally{active--;}
+ };
+ try{
+  const docs=await listConfluence(config({'jira.baseUrl':'https://acme.atlassian.net','jira.email':'a@b.com','confluence.spaceKey':'DOC'}),'token',9);
+  assert.equal(peak,4);
+  assert.deepEqual(docs.map(doc=>doc.remoteId),Array.from({length:9},(_,i)=>String(100+i)));
+ }finally{global.fetch=prior;}
+});
