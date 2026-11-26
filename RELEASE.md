@@ -1,7 +1,5 @@
-# ATGV AIATECH Assist v0.1.62
+# ATGV AIATECH Assist v0.1.63
 
-- Correct two obsolete UI/UX regression contracts to verify BR-level selection, refresh control, optional references in generation and approval, and BR/task provenance alongside the selected design framework.
-- Align initial UI/UX selector and status text with BR-level design.
-- Retain existing project-repository Initial Development, ownership and design validation.
-
-Validation: v0.1.61 local log reported 2767 passed, 2 failed, 3 skipped. Full v0.1.62 regression and VSIX packaging remain pending.
+- Initial Development captures eligible modified and untracked project source into a local commit in the isolated BR branch without changing the original checkout or index. Exclude sensitive/runtime/generated files and automatic deletions; retain original files. Scan the captured commit and carry it into the TDD baseline.
+- Keep BR dropdown, Jira refresh, development action and preview control in one compact toolbar with matching heights.
+- Full regression and VSIX packaging pending.

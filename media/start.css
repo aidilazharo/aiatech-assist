@@ -3273,3 +3273,14 @@ body:not(.gate-mode) .app-layout{
 
 /* Single-choice project folder modal. */
 .atgv-host-modal .atgv-folder-radio-list{display:flex;flex-direction:column;gap:8px;max-height:45vh;overflow:auto;margin:12px 0}.atgv-host-modal .atgv-folder-radio-list.hidden{display:none}.atgv-host-modal .atgv-folder-radio-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--atgv-line);border-radius:6px;cursor:pointer}.atgv-host-modal .atgv-folder-radio-row:has(input:checked){border-color:var(--vscode-focusBorder)}.atgv-host-modal .atgv-folder-radio-row input[type=radio]{width:auto;flex:0 0 auto;margin:0;display:inline-block;accent-color:var(--vscode-button-background)}.atgv-folder-radio-row span{min-width:0;display:flex;flex-direction:column;gap:3px}.atgv-folder-radio-row small{color:var(--vscode-descriptionForeground);overflow-wrap:anywhere;font-size:11px}
+
+/* Keep BR selection and all development actions in one compact toolbar. */
+#workView.role-software-developer .developer-br-topbar{grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;overflow-x:auto}
+#workView.role-software-developer .developer-br-picker{min-width:0;width:100%}
+#workView.role-software-developer .developer-br-picker-row{min-width:0}
+#workView.role-software-developer .developer-br-picker-row select{width:100%;min-width:0;min-height:36px;padding:6px 28px 6px 9px!important;font-size:12px;text-overflow:ellipsis}
+#workView.role-software-developer .developer-br-picker-row:has(.developer-br-change-badge:not(.hidden)) select{padding-right:104px!important}
+#workView.role-software-developer .developer-br-actions{width:auto;flex-wrap:nowrap;gap:5px;align-items:center}
+#workView.role-software-developer .developer-br-actions button{width:auto;min-height:36px;padding:6px 10px;flex-shrink:0;white-space:nowrap}
+#workView.role-software-developer .developer-br-actions #developerBrPreviewDraft,#workView.role-software-developer .developer-br-actions #developerRoleJiraRefresh{box-sizing:border-box;width:36px;min-width:36px;max-width:36px;height:36px;min-height:36px;flex:0 0 36px;padding:0;display:inline-flex;align-items:center;justify-content:center}
+@container(max-width:420px){#workView.role-software-developer .developer-br-topbar{grid-template-columns:minmax(100px,1fr) auto}}

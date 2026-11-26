@@ -102,11 +102,11 @@ async function runGit(root,...args){
  const {stdout}=await gitExec('git',['-C',root,...args],{timeout:45000,maxBuffer:1024*1024,windowsHide:true,env:{...process.env,GIT_TERMINAL_PROMPT:'0',GCM_INTERACTIVE:'Never'}});
  return String(stdout||'').trim();
 }
-async function createWorktree({root,approvedSha,baseSha=approvedSha,baseDirectory,brId}){
+async function createWorktree({root,approvedSha,baseSha=approvedSha,baseDirectory,brId,allowDirty=false}){
  if(!/^[0-9a-f]{40}$/.test(String(approvedSha||'')))throw Error('Approved stack SHA is missing or invalid.');
  if(!BR_ID.test(brId))throw Error('Invalid Business Requirement ID.');
  const repo=await developerGit.repository(root);
- if(!repo.clean)throw Error('The main project checkout has uncommitted changes. Review them before generating an isolated worktree.');
+ if(!repo.clean&&!allowDirty)throw Error('The main project checkout has uncommitted changes. Review them before generating an isolated worktree.');
  await runGit(repo.root,'cat-file','-e',approvedSha+'^{commit}');
  if(!/^[0-9a-f]{40}$/.test(String(baseSha||'')))throw Error('Invalid development baseline commit.');
  await runGit(repo.root,'cat-file','-e',baseSha+'^{commit}');
