@@ -1,13 +1,12 @@
-# ATGV AIATECH Assist v0.1.47
+# ATGV AIATECH Assist v0.1.48
 
 ## Changes
 
-- Align owner-aware update routing regression with independent Extension and Library checks.
-- Verify that Pull Library Updates is visible while duplicate AI key controls remain hidden.
-- Verify six independent connection test buttons and password inputs across Extension, Library and Project Repository profiles.
-- Preserve all existing tests, release validation, repository credential protections and production workflow behavior.
+- Restore Windows x64 project dependency bundles with Windows tar.exe, without PowerShell.
+- Validate archive paths, entry types, duplicate names and expansion size before extraction.
+- Reject partial bundle publication rather than falling back to npm.
+- Retry verified offline restoration when a cached module tree is incomplete.
 
 ## Validation
 
-- v0.1.46 macOS log reported three outdated regression expectations. Corrected assertions are checked against current source and rendered Workspace HTML.
-- Full Node regression suite and VSIX packaging require the build environment.
+- Added regression tests for archive preflight and incomplete publication. Full regression and Windows runtime tests pending; local VSIX not built.

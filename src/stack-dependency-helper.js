@@ -314,10 +314,15 @@ async function ensureForTarget(root,target,{runner=execute,onDiagnostic=async()=
  }
  if(target.kind==='npm'){
   if(!['auto','fresh'].includes(installMode))throw Error('Unsupported npm dependency installation mode.');
-  const bundled=await windowsBundle.prepare(root,cwd,{runner,onProgress,signal});
-  if(bundled){
-   const missing=await missingNpmPackages(cwd);
-   if(missing.length||await nativePlatformMismatch(cwd))throw Error('Bundled Windows dependencies are incomplete or incompatible. Restore the published bundle; npm installation is disabled.');
+  let bundled=await windowsBundle.prepare(root,cwd,{runner,onProgress,signal});
+   if(bundled){
+    let incomplete=(await missingNpmPackages(cwd)).length>0||await nativePlatformMismatch(cwd);
+    if(incomplete&&!bundled.restored){
+     await onProgress('Cached offline dependencies incomplete; restoring verified archive again (no npm install)…');
+     bundled=await windowsBundle.prepare(root,cwd,{runner,onProgress,signal,force:true});
+     incomplete=(await missingNpmPackages(cwd)).length>0||await nativePlatformMismatch(cwd);
+    }
+    if(incomplete)throw Error('Bundled Windows dependencies are incomplete or incompatible. Restore the published bundle; npm installation is disabled.');
    await run({stage:'Bundled npm dependency validation (read-only)',bin:'npm',args:['ls','--all','--json','--offline'],...options,env:await windowsBundle.offlineEnv(root,cwd)});
    const runtime=await verifyPlatformPackages(cwd,{runner,onDiagnostic,runtimeNode:bundled.node});
    await onProgress('Verified bundled Windows dependencies; npm install and npm ci skipped.');

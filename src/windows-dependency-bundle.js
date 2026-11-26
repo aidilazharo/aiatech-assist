@@ -12,46 +12,37 @@ const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
 const fingerprint=async file=>hash(JSON.stringify(JSON.parse(await fs.readFile(file,'utf8'))));
 const hex=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);
 const pending=new Map();
-const ps=String.raw`
-$ErrorActionPreference='Stop'
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-$root=[IO.Path]::GetFullPath($env:ATGV_BUNDLE_STAGE)
-$prefix=$root.TrimEnd('\')+'\'
-$zip=[IO.Compression.ZipFile]::OpenRead($env:ATGV_BUNDLE_ZIP)
-$seen=New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
-$total=[long]0
-try {
- if($zip.Entries.Count -gt 250000){throw 'Too many archive entries'}
- foreach($entry in $zip.Entries){
-  $name=$entry.FullName.Replace('\','/')
-  $isDir=$name.EndsWith('/')
-  $name=$name.TrimEnd('/')
-  if($name -ne 'node_modules' -and !$name.StartsWith('node_modules/')){throw 'Unexpected archive path'}
-  foreach($segment in $name.Split('/')){
-   if(!$segment -or $segment -eq '.' -or $segment -eq '..' -or $segment -match '[<>:"|?*\x00-\x1f]' -or $segment.EndsWith('.') -or $segment.EndsWith(' ') -or $segment -match '^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|$)'){throw 'Unsafe archive path'}
+// Windows 11 ships libarchive tar.exe, also used by the bundle producer.
+// Never extract before validating names, types, sizes and duplicate paths.
+function validateTarListings(namesOutput,detailsOutput){
+ const lines=value=>String(value||'').split(/\r?\n/).filter(Boolean);
+ const names=lines(namesOutput),details=lines(detailsOutput);
+ if(!names.length||names.length>250000||names.length!==details.length)throw Error('Invalid dependency archive entry count.');
+ const seen=new Set();let total=0;
+ for(let i=0;i<names.length;i++){
+  const name=names[i],key=name.endsWith('/')?name.slice(0,-1):name;
+  if(key!=='node_modules'&&!key.startsWith('node_modules/'))throw Error('Unexpected dependency archive path.');
+  for(const segment of key.split('/')){
+   if(!segment||segment==='.'||segment==='..'||/[\\<>:"|?*\x00-\x1f]/.test(segment)||/[. ]$/.test(segment)||/^(CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³]|CONIN\$|CONOUT\$)(\.|$)/i.test(segment))throw Error('Unsafe dependency archive path.');
   }
-  if(!$seen.Add($name)){throw 'Duplicate archive path'}
-  $dest=[IO.Path]::GetFullPath([IO.Path]::Combine($root,$name.Replace('/','\')))
-  if(!$dest.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase)){throw 'Archive escapes staging folder'}
-  if($isDir){[IO.Directory]::CreateDirectory($dest)|Out-Null;continue}
-  $total+=$entry.Length
-  if($total -gt 4294967296){throw 'Archive expansion exceeds limit'}
-  [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($dest))|Out-Null
-  $input=$entry.Open()
-  try {
-   $output=[IO.File]::Open($dest,[IO.FileMode]::CreateNew)
-   try {$input.CopyTo($output)} finally {$output.Dispose()}
-  } finally {$input.Dispose()}
+  const folded=key.toLowerCase();if(seen.has(folded))throw Error('Duplicate dependency archive path.');seen.add(folded);
+  const detail=details[i],suffix=' '+name;
+  if(!detail.endsWith(suffix))throw Error('Dependency archive listings disagree.');
+  const meta=detail.slice(0,-suffix.length);
+  const match=/^([d-])\S*\s+\d+\s+\S+\s+\S+\s+(\d+)\s+/.exec(meta);
+  if(!match)throw Error('Unsupported dependency archive entry type or metadata.');
+  const bytes=Number(match[2]);
+  if(!Number.isSafeInteger(bytes)||bytes<0||key==='node_modules'&&match[1]!=='d'||name.endsWith('/')&&match[1]!=='d')throw Error('Invalid dependency archive entry.');
+  total+=bytes;if(total>4294967296)throw Error('Dependency archive expansion exceeds limit.');
  }
-} finally {$zip.Dispose()}
-`;
+}
 async function regular(file){
  const st=await fs.lstat(file);
  if(!st.isFile()||st.isSymbolicLink())throw Error('Unsafe bundle file: '+path.basename(file));
  return st;
 }
 async function readJson(file){await regular(file);return JSON.parse(await fs.readFile(file,'utf8'));}
-async function restore(cwd,dir,entry,app,policy,{runner,onProgress,signal}){
+async function restore(cwd,dir,entry,app,policy,{runner,onProgress,signal,force}){
  const node=nodeExecutable();
  const probe=await runner(node,['-p','process.platform+" "+process.arch+" "+process.versions.node'],{cwd,signal,windowsHide:true,timeout:10000});
  if(!new RegExp('^win32 x64 '+policy.nodeMajor+'\\.').test(String(probe.stdout||'').trim()))throw Error('ATGV Windows bundle requires Windows x64 Node.js '+policy.nodeMajor+' on PATH.');
@@ -60,7 +51,7 @@ async function restore(cwd,dir,entry,app,policy,{runner,onProgress,signal}){
  const nm=path.join(cwd,'node_modules'),marker=path.join(nm,'.atgv-bundle.json');
  const previous=await fs.lstat(nm).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
  if(previous&&(!previous.isDirectory()||previous.isSymbolicLink()))throw Error('Unsafe existing node_modules folder.');
- if(previous){
+ if(previous&&!force){
   const old=await readJson(marker).catch(()=>null);
   if(old?.archiveSha256===entry.archiveSha256&&old?.nodeMajor===policy.nodeMajor)return {node,restored:false};
  }
@@ -84,7 +75,11 @@ async function restore(cwd,dir,entry,app,policy,{runner,onProgress,signal}){
   }finally{await output.close();}
   if(digest.digest('hex')!==entry.archiveSha256)throw Error('Windows dependency archive checksum mismatch.');
   const extracted=path.join(stage,'extract');await fs.mkdir(extracted);
-  await runner('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(ps,'utf16le').toString('base64')],{cwd,windowsHide:true,timeout:600000,signal,maxBuffer:1024*1024,env:{...process.env,ATGV_BUNDLE_STAGE:extracted,ATGV_BUNDLE_ZIP:archive}});
+  const tarOptions={cwd,windowsHide:true,timeout:600000,signal,maxBuffer:64*1024*1024};
+  const names=await runner('tar.exe',['-tf',archive],tarOptions);
+  const details=await runner('tar.exe',['-tvf',archive],tarOptions);
+  validateTarListings(names.stdout,details.stdout);
+  await runner('tar.exe',['-xf',archive,'-C',extracted],tarOptions);
   const source=path.join(extracted,'node_modules');
   if(!(await fs.lstat(source)).isDirectory())throw Error('Bundle did not contain node_modules.');
   await fs.writeFile(path.join(source,'.atgv-bundle.json'),JSON.stringify({archiveSha256:entry.archiveSha256,nodeMajor:policy.nodeMajor}));
@@ -97,11 +92,15 @@ async function restore(cwd,dir,entry,app,policy,{runner,onProgress,signal}){
   return {node,restored:true};
  }finally{if(!preserveStage)await fs.rm(stage,{recursive:true,force:true});}
 }
-async function prepare(root,cwd,{runner=execute,onProgress=async()=>{},signal,platform=process.platform,arch=process.arch}={}){
+async function prepare(root,cwd,{runner=execute,onProgress=async()=>{},signal,platform=process.platform,arch=process.arch,force=false}={}){
  if(platform!=='win32'||arch!=='x64')return null;
  const base=await fs.realpath(root),dir=path.join(base,'vendor','windows-x64'),policyFile=path.join(dir,'bundle-policy.json');
  const exists=await fs.lstat(policyFile).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
- if(!exists)return null;
+ if(!exists){
+  const entries=await fs.readdir(dir).catch(e=>e.code==='ENOENT'?[]:Promise.reject(e));
+  if(entries.some(n=>n==='manifest.json'||/\.zip\.part$/i.test(n)))throw Error('Windows offline archives found but bundle-policy.json is missing. Pull the complete configured repository; npm installation is disabled.');
+  return null;
+ }
  if(await fs.realpath(dir)!==dir)throw Error('Unsafe Windows bundle directory.');
  const policy=await readJson(policyFile);
  if(policy.schema!==1||policy.platform!=='win32'||policy.arch!=='x64'||policy.required!==true||policy.nodeMajor!==24||!Array.isArray(policy.applications))throw Error('Invalid required Windows dependency bundle policy.');
@@ -111,7 +110,7 @@ async function prepare(root,cwd,{runner=execute,onProgress=async()=>{},signal,pl
  const manifest=await readJson(path.join(dir,'manifest.json')).catch(e=>{throw Error('Windows dependency bundle not published. Pull main after bundle publication; npm installation is disabled. '+e.message);});
  if(manifest.schema!==1||manifest.platform!==policy.platform||manifest.arch!==policy.arch||manifest.nodeMajor!==policy.nodeMajor)throw Error('Windows dependency bundle platform mismatch.');
  if(pending.has(cwd))return pending.get(cwd);
- const job=restore(cwd,dir,manifest.applications?.[app],app,policy,{runner,onProgress,signal});
+ const job=restore(cwd,dir,manifest.applications?.[app],app,policy,{runner,onProgress,signal,force});
  pending.set(cwd,job);
  try{return await job;}finally{pending.delete(cwd);}
 }
@@ -124,4 +123,4 @@ async function offlineEnv(root,cwd,{platform=process.platform,arch=process.arch}
  if(policy.schema!==1||policy.required!==true||policy.platform!=='win32'||policy.arch!=='x64'||!Array.isArray(policy.applications))throw Error('Invalid required Windows dependency bundle policy.');
  return policy.applications.includes(app)?{npm_config_offline:'true',NPM_CONFIG_OFFLINE:'true',npm_config_audit:'false',npm_config_fund:'false'}:{};
 }
-module.exports={prepare,fingerprint,offlineEnv};
+module.exports={prepare,fingerprint,offlineEnv,validateTarListings};
