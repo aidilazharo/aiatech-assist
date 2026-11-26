@@ -31,7 +31,7 @@ function html(webview,{resumeLibrary=false}={}){
     subtask:"<path d=\"M5 5v7h4m-3-3 3 3-3 3M12 8h7v8h-7zM14 12l1 1 2-2\"/>"
   };
   const baHeaderIcon=(name,variant='')=>`<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${variant}>${baHeaderIcons[name]}</svg>`;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.1.55';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.1.56';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const uiConsistencyCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-consistency.css'));
@@ -392,7 +392,7 @@ function html(webview,{resumeLibrary=false}={}){
           <div class="developer-chat-ring"><svg width="76" height="76" viewBox="0 0 100 100" role="img" aria-label="Git workflow progress"><circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" stroke-width="8" opacity=".15"/><circle id="developerChatArc" cx="50" cy="50" r="40" pathLength="100" fill="none" stroke="currentColor" stroke-width="8" stroke-dasharray="0 100" stroke-linecap="round" transform="rotate(-90 50 50)"/><text id="developerChatPercent" x="50" y="55" text-anchor="middle" fill="currentColor" font-size="20" font-weight="600">0%</text></svg></div>
           <div class="developer-chat-repo-info"><select id="developerChatRepoSelect" aria-label="Developer source repository"><option value="extension">Extension</option><option value="library">Library</option><option value="project" selected>Scan project folders…</option></select>
             
-            <div id="developerChatGitInfo" class="developer-chat-status" role="status" aria-live="polite" data-state="pending">Select folder</div><div class="developer-chat-git-actions"><button type="button" id="developerChatNext" disabled>Create Branch</button><button type="button" id="developerChatOpenSource" class="secondary" title="Open selected source code in a new VS Code window" disabled>Open Source Code</button><button type="button" id="developerChatOpen" class="secondary" disabled>Open Folder</button><button type="button" id="developerChatRefresh" class="secondary" aria-label="Refresh Git status">↻</button><button type="button" id="developerChatPr" class="secondary" hidden>Open PR</button></div>
+            <div id="developerChatGitInfo" class="developer-chat-status" role="status" aria-live="polite" data-state="pending">Select folder</div><div class="developer-chat-git-actions"><button type="button" id="developerChatNext" disabled>Create Branch</button><button type="button" id="developerChatOpenSource" class="secondary" title="Open selected source code in a new VS Code window" disabled>Open Source Code</button><button type="button" id="developerChatOpen" class="secondary" disabled>Open Folder</button><button type="button" id="developerChatPull" class="secondary" title="Git Pull (fast-forward only)" disabled>Git Pull</button><button type="button" id="developerChatRefresh" class="secondary" aria-label="Refresh Git status">↻</button><button type="button" id="developerChatPr" class="secondary" hidden>Open PR</button></div>
           </div>
         </div>
       </div>

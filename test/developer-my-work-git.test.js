@@ -136,5 +136,37 @@ test('Git failures retain verified folder opening and toolbar omits duplicate st
  assert.match(client,/folderReady=msg\.folderReady===true;gitReady=false/);
  assert.match(client,/repoOpen\.disabled=gitBusy\|\|!folderReady/);
  assert.doesNotMatch(html,/id="developerChatLogInfo"|data-dev-chat-step=/);
- assert.match(client,/info\.textContent=gitReady\?'Ready':folderReady\?'Git not ready'/);
+ assert.match(client,/info\.textContent=gitReady\?\(msg\.pullMessage\|\|'Ready'\):pullReady\?'Clone ready'/);
+});
+
+test('Git Pull uses fixed corporate source URLs and fast-forward only; rejects dirty and changed checkouts',async()=>{
+ const {fixedSource,pull}=require('../src/developer-my-work-git');
+ const repo=fixedSource('extension');
+ assert.equal(repo.name,'aiamalaysia/my-fow-technology-app-techassists-dev-sdlc');
+ assert.equal(fixedSource('library').name,'aiamalaysia/my-fow-technology-app-techassists-enterprise-skills');
+ const root='/repo',local={root,sha:'a',branch:'main',clean:true};
+ const calls=[];
+ const run=async(_root,args)=>{calls.push(args);return args[0]==='remote'?repo.url:'';};
+ const verify=async()=>local;
+ assert.equal((await pull({root,repo,verify,run})).cancelled,true);
+ assert.ok(!calls.some(a=>a[0]==='pull'));
+ await pull({root,repo,verify,run,confirm:async()=>true});
+ assert.deepEqual(calls.find(a=>a[0]==='pull'),['pull','--ff-only','--no-rebase','--no-autostash','--',repo.url,'refs/heads/main']);
+ await assert.rejects(pull({root,repo,verify:async()=>({...local,clean:false}),run}),/local changes/);
+ let checks=0;
+ await assert.rejects(pull({root,repo,verify:async()=>({...local,sha:++checks===1?'a':'b'}),run,confirm:async()=>true}),/changed during confirmation/);
+});
+test('dev-tools exit is local and normal chat does not retain selected extension/library context',()=>{
+ const fs=require('node:fs'),path=require('node:path'),root=path.join(__dirname,'..');
+ const client=fs.readFileSync(path.join(root,'media/atgv-mywork-wave-chat.js'),'utf8');
+ const html=fs.readFileSync(path.join(root,'src/lib/webview/dashboard-html.js'),'utf8');
+ const css=fs.readFileSync(path.join(root,'media/atgv-mywork-ai.css'),'utf8');
+ assert.match(client,/\/\^dev-tools\?\\s\+exit\$\/i\.test\(userText\)/);
+ assert.match(client,/hideDevTools\(\);repoSelect\.value='project';setBusy\(false\);return/);
+ assert.match(client,/repoSelect&&!repoPanel\.hidden\?\{repositoryTarget:repoSelect\.value\}/);
+ assert.match(client,/repoPull\.addEventListener\('click',\(\)=>requestGit\('pull'\)\)/);
+ assert.match(html,/id="developerChatPull"[^>]*>Git Pull<\/button>/);
+ assert.match(css,/background:transparent!important;border:0!important;border-radius:0/);
+ assert.match(css,/select\{[^}]*height:32px;min-height:32px/);
+ assert.match(css,/button\{height:32px;min-height:32px/);
 });

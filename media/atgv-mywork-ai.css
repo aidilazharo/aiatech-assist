@@ -275,12 +275,14 @@ body.atgv-global-ai-active:not(.gate-mode) #topNotification #myWorkHeaderWave.my
 
 /* Compact, responsive Developer command card. No horizontal clipping. */
 #atgvMyWorkAi .developer-chat-tools-message{position:relative;pointer-events:auto;min-width:0}
-#atgvMyWorkAi .developer-chat-tools-message .developer-chat-repo-panel:not([hidden]){position:relative;pointer-events:auto;overflow:visible;padding:10px 12px;background:#11161d;border:1px solid #34404f!important;border-radius:8px;white-space:normal}
+#atgvMyWorkAi .developer-chat-tools-message .developer-chat-repo-panel:not([hidden]){position:relative;pointer-events:auto;overflow:visible;padding:0;background:transparent!important;border:0!important;border-radius:0;box-shadow:none!important;white-space:normal}
 #atgvMyWorkAi .developer-chat-repo-top{width:100%;min-width:0;flex-wrap:wrap;justify-content:flex-start;gap:10px}
 #atgvMyWorkAi .developer-chat-repo-info{flex:1 1 400px;min-width:0;flex-wrap:wrap;gap:8px;white-space:normal}
-#atgvMyWorkAi .developer-chat-repo-info select{flex:1 1 150px;width:auto;min-width:120px;max-width:240px}
+#atgvMyWorkAi .developer-chat-repo-info select{flex:1 1 150px;width:auto;min-width:120px;max-width:240px;height:32px;min-height:32px;box-sizing:border-box;padding:0 8px}
 #atgvMyWorkAi .developer-chat-git-actions{flex:0 1 auto;flex-wrap:wrap;gap:6px;min-width:0}
-#atgvMyWorkAi .developer-chat-git-actions button{min-height:30px;pointer-events:auto}
+#atgvMyWorkAi .developer-chat-git-actions button{height:32px;min-height:32px;box-sizing:border-box;pointer-events:auto}
 #atgvMyWorkAi .developer-chat-status{flex:none;font-size:11px;white-space:nowrap;padding:3px 8px;border-radius:5px;background:#26313c;color:#e2e8f0}
 #atgvMyWorkAi .developer-chat-status[data-state=ready]{background:#17362a;color:#9fe1bb}
 #atgvMyWorkAi .developer-chat-status[data-state=warning]{background:#42331d;color:#f3d39a}
+
+#atgvMyWorkAi .developer-chat-tools-message{background:transparent!important;border:0!important;box-shadow:none!important;border-radius:0}

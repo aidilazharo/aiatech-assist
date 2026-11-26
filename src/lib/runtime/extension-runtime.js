@@ -1207,10 +1207,10 @@ async function developerChatRepository(projectId,kind){
  }else{
   const layout=await idleImprovement.ensureLayout(getWorkspace()?.uri.fsPath);
   root=layout[kind];
-  repo=repoSyncNaming.githubUrl(kind==='extension'?extensionSourceRepository:catalogConfig().repositoryUrl);
+  repo=developerMyWorkGit.fixedSource(kind);
  }
  const managed=await developerMyWorkGit.managedSource(root,repo);
- return {...managed,project,folder};
+ return {...managed,expectedRepo:repo,project,folder};
 }
 async function developerChatLogs(projectId){
  if(activeProject?.id!==projectId||openingOffline)return {available:false,priorities:[]};
@@ -1240,7 +1240,7 @@ async function developerChatGitAction(msg){
  if(msg.projectId!==projectId||msg.roleId!=='software-developer')return;
  if(!(await workState(registry,projectId)).roles.some(x=>x.id==='software-developer'))return;
  const kind=String(msg.repositoryTarget||''),requestId=Number(msg.requestId);
- let projectFolders,selected;
+ let projectFolders,selected,pullMessage='';
  const post=payload=>dashboard?.webview.postMessage({type:'developerChatGitState',projectId,roleId:'software-developer',repositoryTarget:kind,requestId,projectFolders,...payload});
  if(!Number.isSafeInteger(requestId)||requestId<1)return;
  if(developerChatGitBusy){await post({error:'Another repository action is in progress.'});return;}
@@ -1264,6 +1264,19 @@ async function developerChatGitAction(msg){
   }else if(msg.action==='open'){
    if(activeProject?.id!==projectId)throw Error('Active project changed.');
    await vscode.commands.executeCommand('revealFileInOS',vscode.Uri.file(selected.root));
+  }else if(msg.action==='pull'){
+   if(vscode.workspace.isTrusted===false||openingOffline)throw Error('Git Pull requires a trusted, online workspace.');
+   if(developerBrRun||architectInstallAbort||idleImprovementBusy||selfImprovementManager?.busy)throw Error('Finish the active development or maintenance operation first.');
+   const clone=!selected.repo&&selected.cloneReady===true&&!!selected.expectedRepo;
+   const repo=selected.repo|| (clone?selected.expectedRepo:null);
+   if(!repo)throw Error('No verified checkout or empty managed source folder. Existing files will not be overwritten.');
+   const token=selected.folder?await getGithubToken(selected.project,true):await githubIssueAccessToken({interactive:true})||(kind==='library'?await catalogToken(catalogConfig(),{interactive:true}):'');
+   const pulled=await developerMyWorkGit.pull({root:selected.root,repo,token,clone,confirm:async message=>activeProject?.id===projectId&&await uiWarning(message,{modal:true},'Continue')==='Continue'&&activeProject?.id===projectId});
+   if(pulled.cancelled){await post({cancelled:true});return;}
+   selected=await developerChatRepository(projectId,kind);
+   const newKey=selected.repo?developerChatKey(projectId,selected.folder?.target||kind,selected.repo):'';
+   state=newKey?context.workspaceState.get(newKey,{}):{};
+   pullMessage=pulled.cloned?'Cloned':pulled.changed?'Updated':'Up to date';
   }else if(msg.action&&msg.action!=='status'){
    if(!selected.repo||!selected.local)throw Error('This folder does not have a verified GitHub checkout. Open it to configure Git first.');
    if(vscode.workspace.isTrusted===false||openingOffline)throw Error('Git writes require a trusted, online workspace.');
@@ -1282,10 +1295,10 @@ async function developerChatGitAction(msg){
   // Diagnostics remain in the daily brief; their network latency must not lock the toolbar.
   if(msg.action==='status')void developerChatLogs(projectId).catch(error=>report('Developer diagnostics: '+error.message));
   if(activeProject?.id!==projectId)return;
-  if(!selected.repo){await post({repository:selected.folder?.label||(kind==='extension'?'Extension':'Library'),selectedTarget:selected.folder?.target||kind,folderReady:true,gitReady:false,gitNotice:selected.gitNotice||'Git not verified. Open the source folder to configure it.',step:'branch',percent:0});return;}
+  if(!selected.repo){await post({repository:selected.folder?.label||(kind==='extension'?'Extension':'Library'),selectedTarget:selected.folder?.target||kind,folderReady:true,gitReady:false,pullReady:selected.cloneReady===true,repositoryUrl:selected.expectedRepo?.url||'',gitNotice:selected.gitNotice||'Git not verified. Open the source folder to configure it.',step:'branch',percent:0});return;}
   const local=await developerMyWorkGit.verifiedRoot(selected.root,selected.repo);
-  if(activeProject?.id===projectId)await post({repository:selected.repo.name,selectedTarget:selected.folder?.target||kind,folderReady:true,gitReady:true,branch:local.branch,sha:local.sha,clean:local.clean,pr:state.branch===local.branch?state.pr||'':'',published:state.branch===local.branch&&state.published===true,...developerMyWorkGit.stage(state,local)});
- }catch(error){if(activeProject?.id===projectId)await post({error:String(error.message||error).slice(0,260),folderReady:!!selected?.root,gitReady:false});}
+  if(activeProject?.id===projectId)await post({repository:selected.repo.name,selectedTarget:selected.folder?.target||kind,folderReady:true,gitReady:true,pullReady:true,pullMessage,repositoryUrl:selected.repo.url,branch:local.branch,sha:local.sha,clean:local.clean,pr:state.branch===local.branch?state.pr||'':'',published:state.branch===local.branch&&state.published===true,...developerMyWorkGit.stage(state,local)});
+ }catch(error){if(activeProject?.id===projectId)await post({error:String(error.message||error).slice(0,260),folderReady:!!selected?.root,gitReady:false,pullReady:msg.action==='pull'&&!!(selected?.repo||selected?.cloneReady)});}
  finally{developerChatGitBusy=false;}
 }
 

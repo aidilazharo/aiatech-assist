@@ -3,6 +3,8 @@ const path=require('node:path'),fs=require('node:fs/promises'),crypto=require('n
 const {execFile}=require('node:child_process'),{promisify}=require('node:util');
 const exec=promisify(execFile),naming=require('./repo-sync-pr'),api=require('./repo-sync-github-api'),gitRepo=require('./developer-git');
 const targets=['extension','library','project'];
+const FIXED_SOURCE_URLS=Object.freeze({...require('./lib/startup-setup').RELEASES});
+function fixedSource(kind){if(!['extension','library'].includes(kind))throw Error('Unknown managed source.');return naming.githubUrl(FIXED_SOURCE_URLS[kind]);}
 function target(value){if(!targets.includes(value)&&!/^project:[a-f0-9]{64}$/.test(String(value)))throw Error('Select a supported Developer repository.');return value;}
 const folderTarget=label=>'project:'+crypto.createHash('sha256').update(label).digest('hex');
 async function projectFolders(projectRoot){
@@ -66,7 +68,37 @@ async function managedSource(root,expected,{verify=verifiedRoot}={}){
   if(local)matches.push(local);
  }
  if(matches.length===1)return {root:matches[0].root,repo:expected,local:matches[0]};
- return {root:canonical,repo:null,local:null,gitNotice:matches.length>1?'Multiple matching checkouts; open the folder and select one.':'No verified Git checkout. Open the folder to inspect or clone the configured source.'};
+ return {root:canonical,repo:null,local:null,cloneReady:entries.length===0,gitNotice:matches.length>1?'Multiple matching checkouts; open the folder and select one.':'No verified Git checkout. Open the folder to inspect or clone the configured source.'};
+}
+// Explicit fast-forward-only Git Pull; no stash, reset, branch switch or push.
+async function pull({root,repo,token='',clone=false,confirm=async()=>false,verify=verifiedRoot,run=git}){
+ if(clone){
+  if(!Object.values(FIXED_SOURCE_URLS).some(url=>naming.githubUrl(url).name.toLowerCase()===repo.name.toLowerCase()))throw Error('Only fixed managed repositories may be cloned by Git Pull.');
+  const check=async()=>{
+   const stat=await fs.lstat(root);
+   if(!stat.isDirectory()||stat.isSymbolicLink()||await fs.realpath(root)!==root||(await fs.readdir(root)).length)throw Error('Managed source folder is not empty or safe; no files were overwritten.');
+  };
+  await check();
+  if(!await confirm('Clone '+repo.name+' main into the empty managed source folder?'))return {cancelled:true};
+  await check();
+  await run(root,['clone','--branch','main','--single-branch','--',repo.url,'.'],token);
+  const local=await verify(root,repo);
+  if(local.root!==root||local.branch!=='main')throw Error('Cloned source could not be verified.');
+  return {cloned:true,local};
+ }
+ const local=await verify(root,repo);
+ if(local.root!==root||!local.clean)throw Error('Commit or review local changes before Git Pull. No files were changed.');
+ const ref='refs/heads/'+local.branch;
+ await run(root,['check-ref-format',ref]);
+ const origins=(await run(root,['remote','get-url','--all','origin'])).split('\n');
+ if(origins.length!==1||naming.githubUrl(origins[0],{origin:true}).name.toLowerCase()!==repo.name.toLowerCase())throw Error('Fetch origin does not match the selected repository.');
+ if(!await confirm('Git Pull '+repo.name+' · '+local.branch+'? Fast-forward only; local changes and divergent history are protected.'))return {cancelled:true};
+ const current=await verify(root,repo);
+ if(current.root!==root||!current.clean||current.sha!==local.sha||current.branch!==local.branch)throw Error('Checkout changed during confirmation. Refresh and retry.');
+ await run(root,['pull','--ff-only','--no-rebase','--no-autostash','--',repo.url,ref],token);
+ const updated=await verify(root,repo);
+ if(updated.root!==root||updated.branch!==local.branch)throw Error('Checkout changed during Git Pull.');
+ return {local:updated,changed:updated.sha!==local.sha};
 }
 function safeStaged(name){
  return !!name&&!/(?:^|\/)(?:\.git|\.atgv|node_modules|dist|coverage|\.env(?:\.[^/]*)?|\.npmrc|credentials\.json|id_rsa|id_ed25519)(?:\/|$)/i.test(name)&&!/\.(?:pem|key|p12|pfx|jks|keystore)$/i.test(name);
@@ -159,4 +191,4 @@ async function syncLogs({config,token,project,content,source,request,spaceProvid
   catch(err){if(!/HTTP (409|412)/.test(String(err.message))||attempt===2)throw err;}
  }
 }
-module.exports={target,projectFolders,selectProjectFolder,branchName,verifiedRoot,managedSource,stage,safeStaged,act,summarize,syncLogs};
+module.exports={target,projectFolders,selectProjectFolder,branchName,verifiedRoot,managedSource,fixedSource,pull,stage,safeStaged,act,summarize,syncLogs};
