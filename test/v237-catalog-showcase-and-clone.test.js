@@ -41,8 +41,8 @@ test('save stack automatically clones only a missing approved project repo into 
 test('AIA Qi docs never opens external URLs and Bootstrap does not inherit Qi guide',()=>{
  const part=host.slice(host.indexOf("case 'uxFrameworkOpenDocs':{"),host.indexOf("case 'uxPrototypeOpenBrowser':{"));
  assert.doesNotMatch(part,/design\.aia\.com/);assert.match(part,/uxFrameworkCatalogueLoaded/);assert.match(part,/designComponentCatalog/);assert.doesNotMatch(part,/createWebviewPanel/);
- assert.match(host,/sdlcCatalog\.designReference\(workspace,designFramework\)/);
- assert.match(host,/sdlcCatalog\.designComponentsReference\(workspace,designFramework\)/);
+ assert.match(host,/catalog\.designReference\(workspaceRoot,framework\)/);
+ assert.match(host,/catalog\.designComponentsReference\(workspaceRoot,framework\)/);
  assert.match(host,/architectRepository\.ensure/);
 });
 test('catalog v1.1.1 integrity check rejects missing declared Qi kit assets',()=>{

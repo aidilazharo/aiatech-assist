@@ -17,7 +17,7 @@ test('BR-first UI exposes approved BR selection, 8 stages, actions, code, tests 
  for(const tab of ['code','tests','logs'])assert.ok(source.includes('data-developer-br-tab="'+tab+'"'));
  assert.match(source,/id="developerManualTickets"/);
  assert.match(client,/brState\?\.brs/);
- assert.match(client,/send\('developerBrRun',\{brId:developerBrSelected\}\)/);
+ assert.match(client,/send\('developerBrRun',\{brId:developerBrSelected,fromInitial\}\)/);
  assert.match(client,/onDeveloperBrMessage\(msg\)/);
  assert.match(css,/developer-br-steps\{grid-template-columns:repeat\(8/);
 });

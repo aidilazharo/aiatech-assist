@@ -41,8 +41,8 @@ test('Save Stack persists server proof rather than setting Pending after healthy
 });
 test('framework picker is catalogue backed and both frameworks render in isolated VS Code webview',()=>{
  assert.match(code,/sdlcCatalog\.designFrameworks\(getWorkspace\(\)\?\.uri\.fsPath\)/);
- assert.match(code,/sdlcCatalog\.designReference\(workspace,designFramework\)/);
- assert.match(code,/sdlcCatalog\.designComponentsReference\(workspace,designFramework\)/);
+ assert.match(code,/catalog\.designReference\(workspaceRoot,framework\)/);
+ assert.match(code,/catalog\.designComponentsReference\(workspaceRoot,framework\)/);
  assert.doesNotMatch(code,/https:\/\/getbootstrap\.com\/docs\/5\.3\/components/);
  assert.match(code,/uxFrameworkCatalogueLoaded/);assert.doesNotMatch(code.slice(code.indexOf("case 'uxFrameworkOpenDocs':{"),code.indexOf("case 'uxPrototypeOpenBrowser':{")),/createWebviewPanel/);
  assert.match(ui,/renderUxFrameworkOptions\(m\.frameworks,m\.value\)/);

@@ -106,7 +106,8 @@ test('PM Assignee card, backend and complete roster requirement are wired',()=>{
  assert.match(host,/case 'pmJiraAssignableUsers':/);
  assert.match(host,/case 'pmJiraSetAssignee':/);
  assert.match(host,/pmJiraAssignment\.canAssign\(permissions\)/);
- assert.match(host,/myWorkPresence\.locate\(config,token,projectKey\)/);
+ assert.match(host,/myWorkPresence\.readRoster\(config,token,projectKey\)/);
+ assert.match(host,/let roster=found\.rows/);
  assert.match(host,/user\/assignable\/search\?issueKey=/);
  assert.match(host,/scope\?\.targets/);
 });

@@ -28,7 +28,7 @@ test('100% repository scan does not incorrectly indicate an application server s
  const result=drawRuntime({runtime:{checked:true,running:false},scan:{targets:[{relative:'ReactTS_Frontend'}]}});
  assert.equal(result.state,'stopped');
  assert.equal(result.title,'APPLICATION NOT RUNNING');
- assert.match(result.detail,/Scan complete, but NO server was started/);
+ assert.match(result.detail,/Scan complete.*Install & Run.*start the application/);
  assert.equal(result.previewEnabled,false);
 });
 test('pending VS Code confirmation clearly indicates that no start action has executed',()=>{

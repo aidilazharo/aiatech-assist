@@ -57,6 +57,6 @@ test('Developer UI displays active GREEN during repair and actionable Needs Atte
  assert.match(ui,/\['code','repair'\]\.includes\(msg\.stage\)\?'green'/);
  assert.match(ui,/developerBrStage==='needs-attention'/);
  assert.match(ui,/Auto-repair paused — review required/);
- assert.match(ui,/↻ Retry Development/);
+ assert.match(ui,/↻ Fix Failed Tests/);
  assert.match(host,/canRetry:attention\|\|run\.checksPassed===true/);
 });

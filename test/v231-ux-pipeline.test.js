@@ -12,7 +12,7 @@ const meta=(name='First Designer')=>({designer:name,aiModel:'Test model',sourceB
 async function withRoot(fn){const root=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-v231-'));try{return await fn(root);}finally{await fs.rm(root,{recursive:true,force:true});}}
 test('empty UI/UX design includes six real ordered stages',()=>withRoot(async(root)=>{
  const empty=await pipeline.read(root,'TC-392');assert.equal(empty.status,'not-started');assert.equal(empty.exists,false);assert.equal(empty.steps.length,6);
- assert.deepEqual(empty.steps,['Upload Design Reference (Optional)','User Flow','Wireframe','UI Mockup','Interactive Prototype','Developer Handoff']);
+ assert.deepEqual(empty.steps,['Upload Design Reference','User Flow','Wireframe','UI Mockup','Interactive Prototype','Developer Handoff']);
 }));
 test('generation creates local prototype, draft handoff and durable revision metadata',()=>withRoot(async(root)=>{
  const v1=await pipeline.generate(root,'TC-392',{flow,wireframe:sample,mockup:sample},'',meta());

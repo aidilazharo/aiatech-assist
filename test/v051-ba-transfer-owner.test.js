@@ -86,7 +86,9 @@ test('BR modal, host and role-aware transfer progress are wired',()=>{
  assert.match(host,/case 'baJiraTransferCandidates':/);
  assert.match(host,/case 'baJiraTransferOwner':/);
  assert.match(host,/MODIFY_REPORTER/);
- assert.match(host,/myWorkPresence\.extractRows/);
+ assert.match(host,/myWorkPresence\.readRoster\(config,token,projectKey\)/);
+ assert.match(host,/const rows=found\.rows/);
+ assert.match(host,/baBRTransfer\.candidates\(rows,root\.ownerId\)/);
  assert.match(host,/baBRTransfer\.transfer/);
  assert.match(host,/baJiraTransferCompleted/);
  assert.match(host,/reporter:accountId\?\{accountId\}:null/);

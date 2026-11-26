@@ -18,7 +18,7 @@ test('five BR panels start collapsed and reset on navigation without hiding unsa
 });
 test('roster search is outside add form and retains the DataTable filter handler',()=>{
  const html=read('src/lib/webview/dashboard-html.js'),ui=read('media/start.js'),dt=read('media/atgv-datatables.js'),css=read('media/my-work-users.css');
- assert.match(html,/Add Verified User<\/button><\/form><div id="overviewUserSearchHost"/);
+ assert.match(html,/Add User<\/button><\/form><div id="overviewUserSearchHost"/);
  assert.match(ui,/searchHost:\$\('overviewUserSearchHost'\)/);
  assert.match(dt,/options\.searchHost\.replaceChildren\(search\)/);
  assert.match(dt,/search\.addEventListener\('input'/);

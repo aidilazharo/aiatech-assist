@@ -38,7 +38,9 @@ test('PM modal has editable Assignee after Reporter and no implicit developer ta
  assert.match(ui,/send\('pmJiraAssignableUsers'/);
  assert.match(ui,/send\('pmJiraSetAssignee'/);
  assert.match(host,/ASSIGN_ISSUES/);
- assert.match(host,/myWorkPresence\.locate/);
+ assert.match(host,/myWorkPresence\.readRoster\(config,token,projectKey\)/);
+ assert.match(host,/let roster=found\.rows/);
+ assert.match(host,/row\.id===self\.accountId&&row\.roles\?\.includes\('Project Manager'\)/);
  assert.match(host,/user\/assignable\/search/);
  assert.match(host,/pmJiraAssignment\.change/);
 });

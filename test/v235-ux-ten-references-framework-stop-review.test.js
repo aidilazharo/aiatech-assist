@@ -17,7 +17,10 @@ test('ticket scoped design framework selection is persisted and affects generati
  assert.match(ui,/renderUxFrameworkOptions\(m\.frameworks,m\.value\)/);
  assert.match(host,/case 'uxFrameworkSave':/);assert.match(host,/workspaceState\.update\(uxFrameworkKey/);
  assert.match(host,/case 'uxFrameworkRead':/);
- assert.match(host,/Selected UI\/UX framework/);
+ assert.match(host,/availableFrameworks\.find\(item=>item\.id===designFramework\)/);
+ assert.match(host,/!selectedFramework\|\|designFramework!==String\(msg\.framework\|\|''\)/);
+ assert.match(host,/design-source-policy'\)\.requireReference/);
+ assert.match(host,/uxDesignPipeline\.flowPrompt\(ticket,approved,guide,referenceNotes,repositoryGuide\)/);
  assert.match(host,/designFramework,sourceStoryKey,repositorySource:roleRepository\.identity\(repositoryReference\)\}/);
  assert.match(host,/Design framework changed since generation/);
  assert.match(ui,/send\('uxFrameworkSave'/);

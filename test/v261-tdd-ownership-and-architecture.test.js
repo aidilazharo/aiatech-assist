@@ -60,7 +60,8 @@ test('the UI exposes explicit TDD phases, safe ownership toggle, categorized sch
  assert.doesNotMatch(screen,/id="developerBrAssign"|id="developerBrUnassign"/);
  assert.match(screen,/Unit Test/);
  assert.doesNotMatch(screen,/Generated code runs in an isolated Git worktree\. Jira completion/);
- assert.match(ui,/↻ Restart Development/);
+ assert.match(ui,/developerBrDone\?'Verify Delivery'/);
+ assert.match(ui,/developerBrServerRunning\?'▶ Start TDD'/);
  assert.match(ui,/new:'New'/);assert.match(ui,/updated:'Updated'/);assert.match(ui,/cancelled:'Cancelled'/);assert.match(ui,/'in-progress':'In Progress'/);
  assert.match(ui,/Database schema/);assert.match(ui,/API endpoints/);
  const action=host.slice(host.indexOf('async function runDeveloperBrAutomation('),host.indexOf('async function runDeveloperDeliveryChecks('));

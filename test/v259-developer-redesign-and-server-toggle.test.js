@@ -23,10 +23,13 @@ test('reference-aligned layout offers a eight-step TDD BR flow, grouped implemen
  assert.match(css,/prefers-reduced-motion:reduce/);
 });
 
-test('server control only launches the tested matching BR worktree and opens external browser after verification',()=>{
+test('server control launches only matching tested, checkpointed initial or permitted draft worktrees and opens browser after verification',()=>{
  assert.match(host,/case 'developerBrStartServer':/);
  assert.match(host,/prior\.brId!==String\(msg\.brId\|\|''\)/);
- assert.match(host,/if\(!prior\|\|prior\.projectId!==activeProject\.id.*!\(prior\.checksPassed\|\|prior\.previewOnly/);
+ assert.match(host,/if\(!prior\|\|prior\.projectId!==activeProject\.id.*!\(prior\.checksPassed\|\|prior\.initial\|\|prior\.previewOnly&&require\('\.\.\/\.\.\/developer-preview-mode'\)\.allowed/);
+ assert.match(host,/if\(prior\.initial\)\{await developerTdd\.verifyCheckpoint\(prior\.worktree,prior\.checkpoint\)/);
+ assert.match(host,/if\(approved\.approvedRevision!==prior\.revision\)/);
+ assert.match(host,/if\(approval\.sha!==prior\.approvalSha\)/);
  const start=host.indexOf("case 'developerBrStartServer':");
  const end=host.indexOf("case 'developerBrLogs':",start);
  const body=host.slice(start,end);

@@ -16,7 +16,7 @@ test('Developer title is hidden only for Developer role and toolbar tabs are com
   const label=name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
   assert.match(screen,new RegExp('title="'+label+'" aria-label="'+label+'"'));
  }
- assert.match(screen,/id="developerBrStart"[^>]*>▶ Start Development/);
+ assert.match(screen,/id="developerBrStart"[^>]*>▶ Initial Development/);
  assert.doesNotMatch(screen,/Generate, Test &amp; Run/);
 });
 test('Jira delivery review is not a visible accordion and requires explicit review modal confirmation',()=>{
@@ -27,12 +27,17 @@ test('Jira delivery review is not a visible accordion and requires explicit revi
  assert.match(ui,/if\(!\$\('developerDeliveryAcceptance'\)\.checked\)/);
  assert.match(ui,/accepted:true/);
 });
-test('Start Development changes to Stop while processing, then Restart Development once complete',()=>{
+test('Development action changes from initial implementation to runtime, TDD, repair and delivery verification',()=>{
  assert.match(ui,/processing\?'■ Stop Development'/);
- assert.match(ui,/developerBrCanRetry\|\|developerBrDone\?'↻ Restart Development'/);
+ assert.match(ui,/developerBrDone\?'Verify Delivery'/);
+ assert.match(ui,/developerBrStage==='needs-attention'\?'↻ Fix Failed Tests'/);
+ assert.match(ui,/developerBrServerRunning\?'▶ Start TDD'/);
+ assert.match(ui,/developerBrStage==='failed'\?'↻ Fix Runtime Issues':'▶ Run Application'/);
+ assert.match(ui,/const fromInitial=developerBrInitial&&developerBrInitialReady&&developerBrServerRunning/);
+ assert.match(ui,/send\('developerBrPreviewDraft',\{brId:developerBrSelected,initial:true\}\)/);
  assert.match(ui,/function stopDeveloperBr\(\)/);
  assert.match(ui,/if\(developerBrBusy\)\{stopDeveloperBr\(\);return;\}/);
- assert.match(ui,/send\('developerBrRun',\{brId:developerBrSelected\}\)/);
+ assert.match(ui,/send\('developerBrRun',\{brId:developerBrSelected,fromInitial\}\)/);
  assert.match(ui,/send\('developerBrStartServer',\{brId:developerBrSelected\}\)/);
 });
 test('premature normal API exit triggers a bounded runtime repair, never a false healthy status',()=>{
