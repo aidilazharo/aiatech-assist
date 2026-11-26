@@ -1394,7 +1394,7 @@ async function activateProject(id){
   const epoch=++activationEpoch;
   const project=await registry.read(id);
   const base=path.join(context.globalStorageUri.fsPath,'projects',sha(getWorkspace().uri.toString()).slice(0,16),project.id);
-  const nextStore=new KnowledgeStore(base);await nextStore.load();
+  const nextStore=new KnowledgeStore(base,{registry,projectId:project.id});await nextStore.load();
   try{const mem=new aiMemory.ProjectMemory(path.dirname(registry.fileFor(project.id)));mem.close();}catch(e){report('AI SQLite memory unavailable: '+e.message);}
   if(epoch!==activationEpoch)return project;
   activeProject=project;store=nextStore;
@@ -2258,6 +2258,7 @@ async function publishBlueprintState(){
   ]);
   await dashboard.webview.postMessage({type:'blueprintState',register:blueprints,assessment:deliveryBlueprint.assess(brs,designs,blueprints)});
 }
+const roleReadFlights=new Map();
 let presenceQueue=Promise.resolve();
 function enqueueRosterOperation(operation){const pending=presenceQueue.catch(()=>{}).then(operation);presenceQueue=pending.catch(()=>{});return pending;}
 // Only explicit Overview navigation can request first-time registration.
@@ -7461,18 +7462,38 @@ async function handleDashboardMessage(msg){
         break;
       }
       case 'roleJiraIssues':{
-        requireOpened();requireOnline();
-        const projectId=activeProject.id,requestId=msg.requestId;
+        requireOpened();
+        const projectId=activeProject.id,requestId=msg.requestId,epoch=activationEpoch;
         const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
         if(!token)throw Error('Connect Jira in Settings before loading project issues.');
         const projectKey=validProjectKey(config.get('jira.projectKey'));
+        // Cache is for display, scoped to the same project and credential.
+        // No credential or authorization header is persisted.
+        const binding=sha(JSON.stringify([baseAtlassian(config),projectKey,String(config.get('jira.email')||'').trim().toLowerCase(),String(config.get('confluence.baseUrl')||''),String(config.get('confluence.spaceKey')||''),String(config.get('confluence.spaceId')||''),token]));
+        const scope='role-jira-issues',flightKey=projectId+':'+epoch+':'+binding;
+        const sameRoleProject=()=>activeProject?.id===projectId&&activationEpoch===epoch;
+        let cached=null;
+        try{cached=connectedSync.readProjection(registry,projectId,{scope,binding});}
+        catch(error){report('Role SQLite cache unavailable: '+String(error.message||error));}
+        const postRole=async(value,cache=null)=>{
+         if(sameRoleProject())await dashboard?.webview.postMessage({type:'roleJiraIssues',projectId,requestId,...value,...(cache?{cached:true,cacheAge:cache.age}: {})});
+        };
+        if(cached&&(!msg.force||openingOffline)){
+         await postRole(cached.value,cached);
+         if(cached.fresh||openingOffline)break;
+        }
+        requireOnline();
+        if(!sameRoleProject())break;
+        let pending=roleReadFlights.get(flightKey);
+        if(!pending){
+         const read=async()=>{
         const auth={token,basicEmail:String(config.get('jira.email')||'').trim()};
         const self=await requestJson(`${baseAtlassian(config)}/rest/api/3/myself`,auth);
         if(!self?.accountId)throw Error('Jira account identity is unavailable.');
         let register=await brWorkflow.load(registry,projectId);
         const all=[],jiraSite=baseAtlassian(config);
         const result=await jiraProjectInventory.scanProject({config,token,projectKey,
-          shouldContinue:()=>activeProject?.id===projectId,
+          shouldContinue:()=>sameRoleProject(),
           onPage:async page=>{
             all.push(...page.issues);
             try{
@@ -7487,7 +7508,7 @@ async function handleDashboardMessage(msg){
           jiraLocalStore.finishScan(registry,projectId,{site:jiraSite,projectKey,count:result.count,completed:!result.truncated});
             connectedSync.checkpoint(registry,projectId,{provider:'jira',origin:jiraSite,scope:projectKey,count:result.count,complete:!result.truncated});
         }catch(error){report('Jira SQLite sync state unavailable: '+String(error.message||error));}
-        if(activeProject?.id!==projectId||result.cancelled)return;
+        if(!sameRoleProject()||result.cancelled)return;
         const inventory=require('../../role-jira-inventory');
         const warnings=[];
         if(all.some(issue=>String(issue.type).toLowerCase()==='epic')){
@@ -7500,12 +7521,12 @@ async function handleDashboardMessage(msg){
            const pulled=await vault.sync({mode:'pull'});
            warnings.push(...(pulled.conflicts||[]),...(pulled.skipped?[pulled.skipped]:[]));
            register=await brWorkflow.load(registry,projectId);
-           if(activeProject?.id!==projectId)break;
+           if(!sameRoleProject())return null;
            for(const recoveryRole of ['software-developer','ux-designer']){
             const known=new Set(inventory.enrich(all,register,self.accountId).filter(item=>item.mine&&item.taskRole===recoveryRole&&item.publishedSnapshotReady).map(item=>item.key));
             if(all.some(issue=>issue.assigneeId===self.accountId&&/^(task|subtask|sub-task|sub task|story|user story)$/i.test(issue.type)&&!known.has(issue.key))){
              const recovered=await confluenceBRRecovery.recoverAssigned({registry,projectId,config,token,issues:all,accountId:self.accountId,roleId:recoveryRole,
-              verify:(remote,p,live)=>verifyLinkedJiraIdentity(remote,config,p,live),shouldContinue:()=>activeProject?.id===projectId});
+              verify:(remote,p,live)=>verifyLinkedJiraIdentity(remote,config,p,live),shouldContinue:()=>sameRoleProject()});
              warnings.push(...recovered.warnings);
              register=await brWorkflow.load(registry,projectId);
             }
@@ -7514,7 +7535,7 @@ async function handleDashboardMessage(msg){
           finally{sourceVaultBusy=false;}
          }
         }
-        if(activeProject?.id!==projectId)break;
+        if(!sameRoleProject())return null;
         register=await brWorkflow.load(registry,projectId);
         const discoveryRegister=register;
         const projection=await refreshPublishedRoleRegister(projectId,{config,token,register,items:all,accountId:self.accountId,complete:!result.truncated&&!result.cancelled});
@@ -7526,21 +7547,35 @@ async function handleDashboardMessage(msg){
         try{
           const store=new brRoleOwnership.Store(config,token,projectKey);
           const state=await store.read();roleRecords=state.documents;
-          if(!result.truncated&&!result.cancelled&&activeProject?.id===projectId){
+          if(!result.truncated&&!result.cancelled&&sameRoleProject()){
             const permissions=await requestJson(jiraSite+'/rest/api/3/mypermissions?projectKey='+encodeURIComponent(projectKey)+'&permissions=ASSIGN_ISSUES',auth);
             if(pmJiraAssignment.canAssign(permissions)){
               const synced=await brRoleOwnership.sync({store,records:roleRecords,register,items:all,projectKey,
-                shouldContinue:()=>activeProject?.id===projectId,readIssue:key=>jiraReadIssue(config,token,key),
+                shouldContinue:()=>sameRoleProject(),readIssue:key=>jiraReadIssue(config,token,key),
                 setAssignee:(key,accountId)=>requestJson(jiraSite+'/rest/api/3/issue/'+encodeURIComponent(key)+'/assignee',{...auth,method:'PUT',data:{accountId}})});
               liveItems=all.map(row=>synced.changed.get(row.key)||row);warnings.push(...synced.warnings);
             }
           }
         }catch(error){warnings.push('Shared BR role ownership: '+String(error.message||error).slice(0,240));}
-        if(activeProject?.id!==projectId)break;
+        if(!sameRoleProject())return null;
         let items=inventory.enrich(liveItems,register,self.accountId,{projectKey,discoveryRegister,verifyMarker:(id,issue)=>issue.labels?.includes(jiraScopedMarker(discoveryRegister,config,id))||issue.labels?.includes(jiraMarker(config,id))||issue.labels?.includes(jiraMarker(config,id,projectId))});
         if(roleRecords)items=brRoleOwnership.overlay(items,roleRecords,self.accountId,enabledRoles,register);
-        await dashboard?.webview.postMessage({type:'roleJiraIssues',projectId,items,incomplete:!!result.truncated,requestId,
-         register,brSyncWarnings:warnings.slice(0,5)});break;
+          if(!sameRoleProject())return null;
+          const value={items,incomplete:!!result.truncated,register,brSyncWarnings:warnings.slice(0,5)};
+          if(!result.truncated&&!result.cancelled)try{
+           connectedSync.writeProjection(registry,projectId,{scope,binding,value});
+          }catch(error){report('Role SQLite cache save unavailable: '+String(error.message||error));}
+          return value;
+         };
+         pending=read().finally(()=>{if(roleReadFlights.get(flightKey)===pending)roleReadFlights.delete(flightKey);});
+         roleReadFlights.set(flightKey,pending);
+        }
+        try{const value=await pending;if(value)await postRole(value);}
+        catch(error){
+         if(!cached||msg.force)throw error;
+         report('Role refresh deferred; retained SQLite display: '+String(error.message||error));
+        }
+        break;
       }
       case 'roleJiraAssign':
       case 'roleJiraUnassign':{
@@ -12430,13 +12465,12 @@ async function refreshLiveRemoteData({reason='scheduled',force=false}={}){
  try{
   // Independently handle source failures; never clear the successfully indexed
   // local Jira or Confluence data just because the network is unavailable.
-  for(const [name,enabled,read] of [
+  await Promise.allSettled([
    ['Jira',sources.jira,()=>syncJira(target,{background:true})],
    ['Confluence',sources.confluence,()=>syncConfluence(target,{background:true})],
    ['GitHub',githubConfigured,()=>syncGithubMetadata(target)]
-  ]){
-   if(!enabled)continue;
-   if(!liveRefreshStillCurrent(target))return {skipped:'project-changed'};
+  ].map(async ([name,enabled,read])=>{
+    if(!enabled||!liveRefreshStillCurrent(target))return;
    try{results[name]=await read();}
    catch(error){errors[name]=String(error.message||error).slice(0,240);
     report('Live '+name+' refresh ('+reason+'): '+errors[name]);
@@ -12451,7 +12485,7 @@ async function refreshLiveRemoteData({reason='scheduled',force=false}={}){
       error:'Remote refresh failed; see live provider status.'});
     }catch(syncError){report('SQLite refresh failure receipt: '+String(syncError.message||syncError).slice(0,120));}
    }
-  }
+  }));
   if(!liveRefreshStillCurrent(target))return {skipped:'project-changed'};
   liveRemoteState={projectId,phase:Object.keys(errors).length?'partial':'ready',lastAttempt:started,
    lastSuccess:Object.keys(results).length?new Date().toISOString():liveRemoteState.lastSuccess||'',results,errors};
