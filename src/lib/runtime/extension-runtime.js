@@ -1165,18 +1165,33 @@ async function developerChatRepository(projectId,kind){
  developerMyWorkGit.target(kind);
  if(activeProject?.id!==projectId)throw Error('Active project changed.');
  const project=await registry.read(projectId),config=effectiveConfig(project);
- let root,repo;
- if(kind==='project'){
-  const owner=config.get('github.owner'),name=config.get('github.repo');
-  repo=repoSyncNaming.githubUrl('https://github.com/'+owner+'/'+name);
-  root=await architectRepository.resolve(context.workspaceState,projectId,developerGit,{projectRoot:aiRoot(),githubOwner:owner,githubRepo:name});
+ if(activeProject?.id!==projectId)throw Error('Active project changed.');
+ let root,repo,folder=null;
+ if(kind==='project'||kind.startsWith('project:')){
+  folder=await developerMyWorkGit.selectProjectFolder(aiRoot(),kind,[
+   context.workspaceState.get('atgvAssist.developerChat.selected.'+projectId),
+   context.workspaceState.get('atgvAssist.localRepo.'+projectId),
+   config.get('github.repo')
+  ]);
+  root=folder.root;
+  try{
+   const candidate=await developerGit.repository(root);
+   if(candidate.root!==root)throw Error('Checkout folder changed.');
+   repo=repoSyncNaming.githubUrl(candidate.remote,{origin:true});
+   const local=await developerMyWorkGit.verifiedRoot(root,repo);
+   if(local.root!==root)throw Error('Checkout folder changed.');
+   return {root,repo,local,project,folder};
+  }catch{
+   // Non-Git, detached, unborn or unverified origin folders are open-only.
+   return {root,repo:null,local:null,project,folder};
+  }
  }else{
   const layout=await idleImprovement.ensureLayout(getWorkspace()?.uri.fsPath);
   root=layout[kind];
   repo=repoSyncNaming.githubUrl(kind==='extension'?extensionSourceRepository:catalogConfig().repositoryUrl);
  }
  const local=await developerMyWorkGit.verifiedRoot(root,repo);
- return {root:local.root,repo,local,project};
+ return {root:local.root,repo,local,project,folder};
 }
 async function developerChatLogs(projectId){
  if(activeProject?.id!==projectId||openingOffline)return {available:false,priorities:[]};
@@ -1206,23 +1221,31 @@ async function developerChatGitAction(msg){
  if(msg.projectId!==projectId||msg.roleId!=='software-developer')return;
  if(!(await workState(registry,projectId)).roles.some(x=>x.id==='software-developer'))return;
  const kind=String(msg.repositoryTarget||''),requestId=Number(msg.requestId);
- const post=payload=>dashboard?.webview.postMessage({type:'developerChatGitState',projectId,roleId:'software-developer',repositoryTarget:kind,requestId,...payload});
+ let projectFolders;
+ const post=payload=>dashboard?.webview.postMessage({type:'developerChatGitState',projectId,roleId:'software-developer',repositoryTarget:kind,requestId,projectFolders,...payload});
  if(!Number.isSafeInteger(requestId)||requestId<1)return;
  if(developerChatGitBusy){await post({error:'Another repository action is in progress.'});return;}
  developerChatGitBusy=true;
  try{
-  const selected=await developerChatRepository(projectId,kind),key=developerChatKey(projectId,kind,selected.repo);
-  let state=context.workspaceState.get(key,{});
+  if(activeProject?.id!==projectId)throw Error('Active project changed.');
+  try{projectFolders=(await developerMyWorkGit.projectFolders(aiRoot())).map(({target,label})=>({target,label}));}
+  catch(error){if(kind==='project'||kind.startsWith('project:'))throw error;projectFolders=[];}
+  const selected=await developerChatRepository(projectId,kind),key=selected.repo?developerChatKey(projectId,selected.folder?.target||kind,selected.repo):'';
+  if(activeProject?.id!==projectId)throw Error('Active project changed.');
+  if(selected.folder&&msg.action==='status')await context.workspaceState.update('atgvAssist.developerChat.selected.'+projectId,selected.folder.target);
+  let state=key?context.workspaceState.get(key,{}):{};
   if(msg.action==='open-pr'){
-   if(!state.pr||state.branch!==selected.local.branch)throw Error('No pull request for this work branch.');
+   if(!selected.repo||!state.pr||state.branch!==selected.local?.branch)throw Error('No pull request for this work branch.');
    const url=require('../../repo-sync-github-api').safePrUrl(selected.repo,state.pr);
    await vscode.env.openExternal(vscode.Uri.parse(url));
   }else if(msg.action==='open-source'){
    if(activeProject?.id!==projectId)throw Error('Active project changed.');
    await vscode.commands.executeCommand('vscode.openFolder',vscode.Uri.file(selected.root),{forceNewWindow:true});
   }else if(msg.action==='open'){
+   if(activeProject?.id!==projectId)throw Error('Active project changed.');
    await vscode.commands.executeCommand('revealFileInOS',vscode.Uri.file(selected.root));
   }else if(msg.action&&msg.action!=='status'){
+   if(!selected.repo||!selected.local)throw Error('This folder does not have a verified GitHub checkout. Open it to configure Git first.');
    if(vscode.workspace.isTrusted===false||openingOffline)throw Error('Git writes require a trusted, online workspace.');
    if(developerBrRun||architectInstallAbort||idleImprovementBusy||selfImprovementManager?.busy)throw Error('Finish the active development or maintenance operation first.');
    let value='';
@@ -1231,14 +1254,16 @@ async function developerChatGitAction(msg){
     value=await uiInput({prompt,value:msg.action==='pr'?String(state.message||''):undefined,ignoreFocusOut:true});
     if(value===undefined){await post({cancelled:true});return;}
    }
-   const token=kind==='project'?await getGithubToken(selected.project,true):await githubIssueAccessToken({interactive:true})||(kind==='library'?await catalogToken(catalogConfig(),{interactive:true}):'');
+   const token=selected.folder?await getGithubToken(selected.project,true):await githubIssueAccessToken({interactive:true})||(kind==='library'?await catalogToken(catalogConfig(),{interactive:true}):'');
    if(!token)throw Error('Configure a GitHub credential with write and pull-request access.');
    state=await developerMyWorkGit.act({root:selected.root,repo:selected.repo,token,state,action:msg.action,value,confirm:async message=>activeProject?.id===projectId&&await uiWarning(message,{modal:true},'Continue')==='Continue'&&activeProject?.id===projectId});
    await context.workspaceState.update(key,state);
   }
-  const local=await developerMyWorkGit.verifiedRoot(selected.root,selected.repo);
   const logs=await developerChatLogs(projectId);
-  if(activeProject?.id===projectId)await post({repository:selected.repo.name,branch:local.branch,sha:local.sha,clean:local.clean,pr:state.branch===local.branch?state.pr||'':'',published:state.branch===local.branch&&state.published===true,...developerMyWorkGit.stage(state,local),logs});
+  if(activeProject?.id!==projectId)return;
+  if(!selected.repo){await post({repository:selected.folder.label,selectedTarget:selected.folder.target,gitReady:false,gitNotice:'Git not verified',step:'branch',percent:0,logs});return;}
+  const local=await developerMyWorkGit.verifiedRoot(selected.root,selected.repo);
+  if(activeProject?.id===projectId)await post({repository:selected.repo.name,selectedTarget:selected.folder?.target||kind,gitReady:true,branch:local.branch,sha:local.sha,clean:local.clean,pr:state.branch===local.branch?state.pr||'':'',published:state.branch===local.branch&&state.published===true,...developerMyWorkGit.stage(state,local),logs});
  }catch(error){if(activeProject?.id===projectId)await post({error:String(error.message||error).slice(0,260),logs:await developerChatLogs(projectId)});}
  finally{developerChatGitBusy=false;}
 }
@@ -11781,6 +11806,7 @@ async function handleDashboardMessage(msg){
               const shared=!!(activity?.confluenceAvailable||activity?.jiraAvailable);
               const target=await activeAiTarget();
               const selected=repositoryTarget?await developerChatRepository(projectId,repositoryTarget):null;
+              if(selected&&!selected.repo)throw Error('The selected folder has no verified Git checkout. Open Source Code to inspect or configure it first.');
               const logs=repositoryTarget?await developerChatLogs(projectId):null;
               if(rag.sources.length||shared||selected){
                 const consent=await askAiSendConsent('Send '+rag.sources.length+' RAG excerpts and '+(shared?'live shared project status':'no live project status')+(selected?', selected repository source excerpts and sanitized diagnostic priorities':'')+' to '+target.label+' for this read-only response?');

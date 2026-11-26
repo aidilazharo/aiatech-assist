@@ -1,12 +1,13 @@
-# ATGV AIATECH Assist v0.1.43
+# ATGV AIATECH Assist v0.1.44
 
 ## Changes
 
-- Add Open Source Code to Developer My Work for Extension, Library and Project repositories.
-- Open the verified selected local checkout in a separate VS Code window, preserving the ATGV window and current branch.
-- Retain Open Folder and existing Git workflow. No source modifications or Git writes are needed for opening a checkout.
-- Add regression coverage for selected repository routing, UI gating and new-window behavior.
+- Compact Developer My Work Git progress, source selector, actions and diagnostic status into one horizontally scrollable toolbar.
+- Discover actual active-project repository folders automatically and on refresh, and remember the selected folder per project.
+- Keep Extension and Library choices. Open non-Git folders without enabling Git writes, and validate selected repository identity before Git actions.
+- Isolate Git workflow state and AI chat history per selected project folder. Do not initialize or modify repositories during scanning.
+- Exclude symbolic links, hidden and dependency/generated folders from the scan.
 
 ## Validation
 
-- Modified JavaScript syntax checked; full regression and VSIX packaging not executed in this environment.
+- JavaScript syntax checked. Full regression and VSIX packaging not executed in this environment.

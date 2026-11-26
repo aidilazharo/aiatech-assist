@@ -23,7 +23,7 @@ async function ask({projectId,roleId,message,request,repositoryTarget='',clock=(
  if(!user||user.length>4000)throw Error('Chat message must contain 1–4000 characters.');
  const requestDay=resetExpired(clock());
  if(isIdentityQuestion(user))return identity(roleId);
- const id=key(projectId,roleId)+(roleId==='software-developer'&&['extension','library','project'].includes(repositoryTarget)?'\u0000'+repositoryTarget:'');
+ const id=key(projectId,roleId)+(roleId==='software-developer'&&(['extension','library','project'].includes(repositoryTarget)||/^project:[a-f0-9]{64}$/.test(repositoryTarget))?'\u0000'+repositoryTarget:'');
  if(busy.has(id))throw Error('A role AI reply is already being generated.');
  busy.add(id);
  try{

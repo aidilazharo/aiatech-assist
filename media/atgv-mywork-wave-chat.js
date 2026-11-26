@@ -18,44 +18,54 @@
   Math.round(v+(target[i]-v)*mix)).join(',')+','+alpha+')';
  let project='',role='',pendingId=0,sequence=0,pending=false;
  const repoPanel=get('developerChatRepoPanel'),repoSelect=get('developerChatRepoSelect'),repoNext=get('developerChatNext'),repoOpen=get('developerChatOpen'),repoOpenSource=get('developerChatOpenSource'),repoRefresh=get('developerChatRefresh'),repoPr=get('developerChatPr');
- let gitRequest=0,gitBusy=false,gitStep='branch',gitPr='',gitReady=false;
+ let gitRequest=0,gitBusy=false,gitStep='branch',gitPr='',gitReady=false,folderReady=false;
  const gitLabels={branch:'Create Branch',commit:'Commit Code',pr:'Create PR',publish:'Publish',done:'Published'};
  function gitControls(){
   if(!repoPanel)return;
   repoNext.disabled=gitBusy||!gitReady||gitStep==='done';
-  repoOpen.disabled=gitBusy||!gitReady;
-  repoOpenSource.disabled=gitBusy||!gitReady;
+  repoOpen.disabled=gitBusy||!folderReady;
+  repoOpenSource.disabled=gitBusy||!folderReady;
   repoRefresh.disabled=gitBusy;
   repoSelect.disabled=gitBusy||pending;
   repoNext.textContent=gitBusy?'Working…':gitLabels[gitStep]||gitLabels.branch;
-  repoPr.hidden=!gitPr;
+  repoPr.hidden=!gitPr;repoPr.disabled=gitBusy||!gitReady||!gitPr;
  }
  function requestGit(action='status'){
   if(!repoPanel||role!=='software-developer'||!project||gitBusy||typeof send!=='function')return;
   gitBusy=true;gitControls();
   send('developerChatGit',{projectId:project,roleId:role,repositoryTarget:repoSelect.value,requestId:++gitRequest,action});
  }
+ function updateRepoFolders(rows,selected){
+  if(!Array.isArray(rows))return;
+  for(const option of [...repoSelect.options])if(option.value.startsWith('project:'))option.remove();
+  const placeholder=[...repoSelect.options].find(x=>x.value==='project');
+  placeholder.textContent=rows.length?'Select project folder…':'No project folders found';
+  for(const row of rows){if(!/^project:[a-f0-9]{64}$/.test(row?.target)||typeof row.label!=='string')continue;const option=document.createElement('option');option.value=row.target;option.textContent=row.label;repoSelect.append(option);}
+  repoSelect.value=[...repoSelect.options].some(x=>x.value===selected)?selected:'project';
+ }
  function renderGit(msg){
   if(!repoPanel||msg.requestId!==gitRequest||msg.repositoryTarget!==repoSelect.value)return;
   gitBusy=false;
+  updateRepoFolders(msg.projectFolders,msg.selectedTarget||repoSelect.value);
   if(!msg.error&&!msg.cancelled){
-   gitReady=!!msg.repository;gitStep=gitLabels[msg.step]?msg.step:'branch';gitPr=String(msg.pr||'');
+   folderReady=!!msg.repository;gitReady=folderReady&&msg.gitReady!==false;gitStep=gitLabels[msg.step]?msg.step:'branch';gitPr=String(msg.pr||'');
    const percent=Math.max(0,Math.min(100,Number(msg.percent)||0));
    get('developerChatArc').setAttribute('stroke-dasharray',percent+' 100');
    get('developerChatPercent').textContent=percent+'%';
    const stages=['branch','commit','pr','publish'];
    const index=gitStep==='done'?4:stages.indexOf(gitStep);
    for(const el of repoPanel.querySelectorAll('[data-dev-chat-step]')){const i=stages.indexOf(el.dataset.devChatStep);el.classList.toggle('is-complete',i<index);el.classList.toggle('is-current',i===index);}
-   get('developerChatGitInfo').textContent=msg.repository+' · '+msg.branch+' · '+String(msg.sha||'').slice(0,8)+(msg.clean?'':' · Uncommitted changes')+(gitPr?' · PR #'+gitPr.split('/').pop():'');
-  }else if(msg.error){get('developerChatGitInfo').textContent=String(msg.error);if(!gitReady)gitPr='';}
+   get('developerChatGitInfo').textContent=msg.gitReady===false?msg.repository+' · '+(msg.gitNotice||'Git not configured'):msg.repository+' · '+msg.branch+' · '+String(msg.sha||'').slice(0,8)+(msg.clean?'':' · Uncommitted changes')+(gitPr?' · PR #'+gitPr.split('/').pop():'');
+  }else if(msg.error){get('developerChatGitInfo').textContent=String(msg.error);gitReady=false;folderReady=false;gitPr='';}
   const logs=msg.logs;
   if(logs)get('developerChatLogInfo').textContent=logs.available?(logs.priorities?.length?'Confluence · Today: '+logs.priorities.slice(0,3).map(x=>x.label+' ('+x.count+')').join(' · '):'Confluence · No matching diagnostic errors recorded.'):'Confluence diagnostic log unavailable.';
+  for(const id of ['developerChatGitInfo','developerChatLogInfo'])get(id).title=get(id).textContent;
   gitControls();
  }
  if(repoPanel){
-  repoSelect.addEventListener('change',()=>{gitReady=false;gitPr='';gitStep='branch';get('developerChatGitInfo').textContent='Checking repository…';get('developerChatArc').setAttribute('stroke-dasharray','0 100');get('developerChatPercent').textContent='0%';writer=null;queue.length=0;transcript.replaceChildren();greetingNode=addMessage('assistant','Reviewing the selected repository.');briefingNode=null;pendingId=++sequence;requestGit();});
+  repoSelect.addEventListener('change',()=>{gitReady=false;folderReady=false;gitPr='';gitStep='branch';get('developerChatGitInfo').textContent='Checking repository…';get('developerChatArc').setAttribute('stroke-dasharray','0 100');get('developerChatPercent').textContent='0%';writer=null;queue.length=0;transcript.replaceChildren();greetingNode=addMessage('assistant','Reviewing the selected repository.');briefingNode=null;pendingId=++sequence;requestGit();});
   repoNext.addEventListener('click',()=>requestGit(gitStep));repoOpen.addEventListener('click',()=>requestGit('open'));repoOpenSource.addEventListener('click',()=>requestGit('open-source'));repoRefresh.addEventListener('click',()=>requestGit());
-  repoPr.addEventListener('click',()=>{if(/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9][0-9]*$/.test(gitPr)&&typeof send==='function')send('developerChatGit',{projectId:project,roleId:role,repositoryTarget:repoSelect.value,requestId:++gitRequest,action:'open-pr'});});
+  repoPr.addEventListener('click',()=>{if(/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9][0-9]*$/.test(gitPr))requestGit('open-pr');});
   window.addEventListener('atgv:viewchange',()=>{if(role==='software-developer'&&!repoPanel.hidden&&!document.getElementById('myWorkView')?.classList.contains('hidden'))requestGit();});
  }
 
@@ -140,7 +150,7 @@
   const nextProject=String(snapshot.projectId||''),nextRole=String(snapshot.roleId||'');
   if(project!==nextProject||role!==nextRole){
    project=nextProject;role=nextRole;pendingId=++sequence;pending=false;
-   if(repoPanel){repoPanel.hidden=role!=='software-developer';gitBusy=false;gitReady=false;gitPr='';gitStep='branch';gitRequest++;if(!repoPanel.hidden){repoSelect.value='project';requestGit();}gitControls();}
+   if(repoPanel){repoPanel.hidden=role!=='software-developer';gitBusy=false;gitReady=false;folderReady=false;gitPr='';gitStep='branch';gitRequest++;if(!repoPanel.hidden){updateRepoFolders([],'project');repoSelect.value='project';requestGit();}gitControls();}
    // Keep the role context accessible without displaying an extra chat heading.
    input.setAttribute('aria-label','Message ATGV AI · '+String(snapshot.roleName||nextRole).slice(0,100));
    writer=null;queue.length=0;transcript.replaceChildren();input.value='';

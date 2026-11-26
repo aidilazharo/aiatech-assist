@@ -3,7 +3,30 @@ const path=require('node:path'),fs=require('node:fs/promises'),crypto=require('n
 const {execFile}=require('node:child_process'),{promisify}=require('node:util');
 const exec=promisify(execFile),naming=require('./repo-sync-pr'),api=require('./repo-sync-github-api'),gitRepo=require('./developer-git');
 const targets=['extension','library','project'];
-function target(value){if(!targets.includes(value))throw Error('Select a supported Developer repository.');return value;}
+function target(value){if(!targets.includes(value)&&!/^project:[a-f0-9]{64}$/.test(String(value)))throw Error('Select a supported Developer repository.');return value;}
+const folderTarget=label=>'project:'+crypto.createHash('sha256').update(label).digest('hex');
+async function projectFolders(projectRoot){
+ const root=await fs.realpath(projectRoot),parent=path.join(root,'repository');
+ const stat=await fs.lstat(parent).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
+ if(!stat)return [];
+ if(!stat.isDirectory()||stat.isSymbolicLink()||await fs.realpath(parent)!==parent)throw Error('Unsafe project repository parent.');
+ const entries=await fs.readdir(parent,{withFileTypes:true});
+ const folders=[];
+ if(entries.some(e=>e.name==='.git'))folders.push({target:folderTarget('.'),label:'repository',root:parent});
+ for(const entry of entries){
+  if(!entry.isDirectory()||entry.isSymbolicLink()||entry.name.startsWith('.')||/^(?:node_modules|dist|build|coverage|vendor|__pycache__)$/i.test(entry.name))continue;
+  const folder=path.join(parent,entry.name),st=await fs.lstat(folder).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
+  if(!st?.isDirectory()||st.isSymbolicLink()||await fs.realpath(folder).catch(e=>e.code==='ENOENT'?'':Promise.reject(e))!==folder)continue;
+  folders.push({target:folderTarget(entry.name),label:entry.name,root:folder});
+ }
+ return folders.sort((a,b)=>a.label.localeCompare(b.label));
+}
+async function selectProjectFolder(projectRoot,kind,preferred=[]){
+ const folders=await projectFolders(projectRoot);
+ const selected=kind==='project'?preferred.map(value=>folders.find(x=>x.target===value||x.root===value||x.label===value)).find(Boolean)||folders[0]:folders.find(x=>x.target===target(kind));
+ if(!selected)throw Error(kind==='project'?'No project repository folders found.':'Selected project folder is no longer available. Refresh the repository list.');
+ return selected;
+}
 function branchName(value){const name=String(value||'').trim();if(!/^(?:feat|fix|refactor|docs|test|chore|perf|build|ci|style)\/[a-z0-9][a-z0-9-]{1,75}$/.test(name))throw Error('Use a branch such as fix/runtime-startup or feat/customer-search.');return name;}
 async function git(root,args,token=''){
  try{const {stdout}=await exec('git',['-C',root,...args],{timeout:60000,maxBuffer:4*1024*1024,windowsHide:true,env:{...process.env,GIT_TERMINAL_PROMPT:'0',GCM_INTERACTIVE:'Never',...(token?naming.patEnvironment(token):{})}});return String(stdout||'').trim();}
@@ -108,4 +131,4 @@ async function syncLogs({config,token,project,content,source,request,spaceProvid
   catch(err){if(!/HTTP (409|412)/.test(String(err.message))||attempt===2)throw err;}
  }
 }
-module.exports={target,branchName,verifiedRoot,stage,safeStaged,act,summarize,syncLogs};
+module.exports={target,projectFolders,selectProjectFolder,branchName,verifiedRoot,stage,safeStaged,act,summarize,syncLogs};
