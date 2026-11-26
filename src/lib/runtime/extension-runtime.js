@@ -7485,6 +7485,12 @@ async function handleDashboardMessage(msg){
         requireOnline();
         if(!sameRoleProject())break;
         let pending=roleReadFlights.get(flightKey);
+        // Explicit refresh following a write must not reuse an older in-flight scan.
+        if(msg.force&&pending){
+         await pending.catch(()=>{});
+         if(!sameRoleProject())break;
+         pending=roleReadFlights.get(flightKey);
+        }
         if(!pending){
          const read=async()=>{
         const auth={token,basicEmail:String(config.get('jira.email')||'').trim()};
