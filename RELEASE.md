@@ -1,12 +1,12 @@
-# ATGV AIATECH Assist v0.1.41
+# ATGV AIATECH Assist v0.1.42
 
 ## Changes
 
-- Correct the remaining Developer server regression assertion to match normalized imports in the generated source-test index.
-- Scope assertions to the server startup handler and explicitly verify project, BR, worktree, initial checkpoint, preview permission, approval revisions and browser launch ordering.
-- Keep all regression tests and production safeguards unchanged.
+- Add a third Project Repository section to ATGV: Workspace with independent saved source and destination connections, destination folder and source review.
+- Reuse the guarded pull, study, push branch and create PR flow for project repositories.
+- Preserve credentials shared by any other profile when a connection is forgotten; protect official Extension and Library release distribution.
+- Add regression coverage for unique IDs, saved settings and shared credential protection.
 
 ## Validation
 
-- v0.1.40 macOS build: 2,734 passed, one failed, three skipped.
-- Corrected assertions checked against reconstructed current source; full regression and VSIX build not executed in this environment.
+- Source changes inspected through GitHub; full regression and VSIX packaging not executed in this environment.

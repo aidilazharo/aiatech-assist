@@ -22,9 +22,9 @@ const SAVED_URL_KEYS=Object.freeze({Source:'atgvAssist.repoSync.lastSourceUrl',D
 const SAVED_LIST_KEYS=Object.freeze({Source:'atgvAssist.repoSync.savedSourceUrls',Destination:'atgvAssist.repoSync.savedDestinationUrls'});
 const MAX_SAVED_REPOS=30;
 const SAVED_FOLDER_KEY='atgvAssist.repoSync.lastDestinationFolder';
-const PROFILES=Object.freeze(['extension','library']);
+const PROFILES=Object.freeze(['extension','library','project']);
 const LIBRARY_SOURCE='https://github.com/aidilazharo/tech-stacks-skills';
-const profileKey=(key,profile)=>profile==='library'?key+'.library':key;
+const profileKey=(key,profile)=>profile==='extension'?key:key+'.'+profile;
 async function managedCheckout(folder){
  if(await fs.realpath(folder)!==folder)throw Error('Selected folder changed. Choose it again.');
  const root=await fs.lstat(folder);
@@ -91,7 +91,7 @@ button{background:var(--vscode-button-background,#096db5);color:var(--vscode-but
 button.secondary{background:var(--vscode-button-secondaryBackground,#454c58);color:var(--vscode-button-secondaryForeground,#fff)}
 button:hover:not(:disabled){filter:brightness(1.1)}button:disabled{opacity:.52;cursor:not-allowed}
 .folder,.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-#destinationLabel,#library-destinationLabel{font-size:11px;font-weight:500;overflow-wrap:anywhere;min-width:0;flex:1}
+#destinationLabel,#library-destinationLabel,#project-destinationLabel{font-size:11px;font-weight:500;overflow-wrap:anywhere;min-width:0;flex:1}
 .actions{margin:19px 0 13px}.note{line-height:1.55}
 .connection-action{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
 .connection-status{font-size:12px;color:var(--vscode-descriptionForeground,#afb5bd)}
@@ -101,9 +101,9 @@ ol{line-height:1.85;padding-left:20px}
 .status{min-height:49px;border:1px solid var(--vscode-panel-border,#50535b);border-radius:6px;padding:13px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55}
 .status[data-state=success]{border-color:var(--vscode-testing-iconPassed,#3aaf80)}
 .status[data-state=error]{border-color:var(--vscode-errorForeground,#e4787d)}
-#reviewPanel[hidden],#library-reviewPanel[hidden]{display:none}
-#reviewPanel textarea,#library-reviewPanel textarea{resize:vertical;min-height:82px}
-#sourceAnalysis,#library-sourceAnalysis{white-space:pre-wrap;font-size:12px}
+#reviewPanel[hidden],#library-reviewPanel[hidden],#project-reviewPanel[hidden],#project-releaseQueueCard[hidden]{display:none}
+#reviewPanel textarea,#library-reviewPanel textarea,#project-reviewPanel textarea{resize:vertical;min-height:82px}
+#sourceAnalysis,#library-sourceAnalysis,#project-sourceAnalysis{white-space:pre-wrap;font-size:12px}
 .review-help{margin:8px 0 15px}
 .sync-profile{margin-bottom:28px}.sync-profile>h2{font-size:19px;margin:0 0 12px;padding-bottom:8px;border-bottom:1px solid var(--vscode-panel-border,#50535b)}
 @media(max-width:680px){.grid{grid-template-columns:1fr}.card.full{grid-column:auto}}
@@ -150,14 +150,14 @@ ol{line-height:1.85;padding-left:20px}
 <label for="reviewDescription">PR description (for pull requests)</label><textarea id="reviewDescription" rows="4" maxlength="4000"></textarea>
 <div class="actions"><button id="publishReviewed" type="button">Push & Create PR</button><button id="pushBranchOnly" type="button" class="secondary">Push Branch Only</button><button id="redoReview" type="button" class="secondary">Pull & Study Again</button></div>
 </section>
-<section class="card full"><h2>5. Release Synchronization</h2><p class="muted">The latest available verified stable release is copied independently of source version. Missing or invalid releases do not block source sync. Previous managed artifacts are retained when no valid replacement exists. Destination GitHub Actions remain disabled.</p><div id="releaseQueueStatus" class="status" role="status" aria-live="polite">No queued release.</div><div class="actions"><button id="checkReleaseSync" type="button" class="secondary">Check Release Status</button></div></section></div></form>
+<section class="card full" id="releaseQueueCard"><h2>5. Release Synchronization</h2><p class="muted">The latest available verified stable release is copied independently of source version. Missing or invalid releases do not block source sync. Previous managed artifacts are retained when no valid replacement exists. Destination GitHub Actions remain disabled.</p><div id="releaseQueueStatus" class="status" role="status" aria-live="polite">No queued release.</div><div class="actions"><button id="checkReleaseSync" type="button" class="secondary">Check Release Status</button></div></section></div></form>
 
 </main>
 <script nonce="__NONCE__">
 'use strict';
 const vscode=acquireVsCodeApi();
 function initProfile(profile){
-const get=id=>document.getElementById((profile==='library'?'library-':'')+id);
+const get=id=>document.getElementById((profile==='extension'?'':profile+'-')+id);
 const send=message=>vscode.postMessage({...message,profile});
 let folder='',busy=false,createdPr='',reviewReady=false,publishedRelease='';
 function invalidateReview(){
@@ -270,6 +270,7 @@ get('openPr').addEventListener('click',()=>{if(createdPr)send({command:'openCrea
 get('checkReleaseSync').addEventListener('click',()=>send({command:'checkReleaseSync'}));
 window.addEventListener('message',e=>{
  const data=e.data||{};
+ if(data.type==='releaseQueueStatus'&&profile==='project')return;
  if(data.type!=='releaseQueueStatus'&&(data.profile||'extension')!==profile)return;
  if(data.type==='repoSyncSavedList')showSavedRepos(data.kind,data.entries);
  if(data.type==='repoSyncSaved'){
@@ -343,13 +344,14 @@ window.addEventListener('message',e=>{
 buttons();
 send({command:'getRepoSyncSaved'});
 }
-initProfile('extension');initProfile('library');
+initProfile('extension');initProfile('library');initProfile('project');
 </script></body></html>`;
  const form=html.match(/<form id="repoSyncForm">[\s\S]*?<\/form>/)?.[0];
  if(!form)throw Error('Workspace sync form is unavailable.');
  const library=form.replace(/\b(id|for)="([^"]+)"/g,(_match,attr,id)=>attr+'="library-'+id+'"');
- const dual=html.replace(form,'<section class="sync-profile"><h2>ATGV Extension</h2>'+form+'</section><section class="sync-profile"><h2>SDLC Library</h2>'+library+'</section>');
- return dual.replaceAll('__CSP__',escapeHtml(csp).replaceAll('&#39;',"'")).replaceAll('__NONCE__',escapeHtml(nonce)).replaceAll('__VERSION__',escapeHtml(version));
+ const project=form.replace(/\b(id|for)="([^"]+)"/g,(_match,attr,id)=>attr+'="project-'+id+'"').replace('id="project-releaseQueueCard"','id="project-releaseQueueCard" hidden');
+ const profiles=html.replace(form,'<section class="sync-profile"><h2>ATGV Extension</h2>'+form+'</section><section class="sync-profile"><h2>SDLC Library</h2>'+library+'</section><section class="sync-profile"><h2>Project Repository</h2>'+project+'</section>');
+ return profiles.replaceAll('__CSP__',escapeHtml(csp).replaceAll('&#39;',"'")).replaceAll('__NONCE__',escapeHtml(nonce)).replaceAll('__VERSION__',escapeHtml(version));
 }
 function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null,workspaceRoot='',describePr=async()=>'',planSync=async()=>null,testConnection=repoCredentials.verifyConnection,onWorkflowEvent=async()=>null}={}){
  if(panel){panel.reveal();return panel;}
@@ -436,10 +438,12 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
   if(!secrets?.delete||!preferences?.update)
    throw Error('SecretStorage deletion and VS Code globalState are required to forget a repository.');
   // Fail closed on secret deletion; never pretend a saved credential was forgotten.
-  const other=profile==='library'?'extension':'library';
-  const otherList=preferences?.get?.(profileKey(SAVED_LIST_KEYS[kind],other),[]);
-  const otherLast=preferences?.get?.(profileKey(SAVED_URL_KEYS[kind],other),'');
-  if(![...(Array.isArray(otherList)?otherList:[]),otherLast].some(value=>safeStoredRepo(value)?.name.toLowerCase()===repo.name.toLowerCase()))await secrets.delete(patKey(kind,repo));
+  const usedElsewhere=PROFILES.filter(other=>other!==profile).some(other=>{
+   const otherList=preferences?.get?.(profileKey(SAVED_LIST_KEYS[kind],other),[]);
+   const otherLast=preferences?.get?.(profileKey(SAVED_URL_KEYS[kind],other),'');
+   return [...(Array.isArray(otherList)?otherList:[]),otherLast].some(value=>safeStoredRepo(value)?.name.toLowerCase()===repo.name.toLowerCase());
+  });
+  if(!usedElsewhere)await secrets.delete(patKey(kind,repo));
   const remaining=knownRepos(kind).filter(item=>item.name.toLowerCase()!==repo.name.toLowerCase());
   await preferences.update(listKeys[kind],remaining.map(item=>item.webUrl));
   const last=preferences?.get?.(urlKeys[kind],'');
@@ -523,6 +527,7 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
   }
   if(message.command==='openCreatedPr'){if(createdPr)await vscode.env.openExternal(vscode.Uri.parse(createdPr));return;}
   if(message.command==='checkReleaseSync'){
+   if(profile==='project')return;
    try{
     if(!releaseQueue)throw Error('Automatic release service is unavailable.');
     await releaseQueue.tick();
@@ -574,6 +579,7 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
     prDescription:message.prDescription}:null;
    if(reviewed)repoSync.validateReviewPresentation(reviewed,reviewed.sourceSha,{branchOnly});
    let distribution=false;try{releasePublisher.pairFor(source,destination);distribution=true;}catch{}
+   if(profile==='project'&&distribution)throw Error('Use the ATGV Extension or SDLC Library section for official release distribution.');
    const confirmAction=branchOnly?'Push Branch Only':isPublish?'Publish Reviewed PR':'Create Sync PR';
    const response=isPrepare?'Prepare Source Review':await vscode.window.showWarningMessage(
     'Source: '+source.name+' ('+(sourcePrNumber?'PR #'+sourcePrNumber:sourceBranch||'GitHub default branch (auto)')+')\nDestination: '+destination.name+' in '+selectedFolder+
