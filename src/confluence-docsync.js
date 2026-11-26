@@ -149,8 +149,10 @@ class DocumentSync {
                 prev.lastSynced = new Date().toISOString();
                 result.pushed.push(relative);
             }
-            else
+            else {
                 result.skipped.push(relative);
+                continue; // No mapping changed; avoid rewriting state on every unchanged page.
+            }
             await this.write(state);
         }
         return result;
