@@ -1,13 +1,14 @@
-# ATGV AIATECH Assist v0.1.45
+# ATGV AIATECH Assist v0.1.46
 
 ## Changes
 
-- Restore four visible Settings > Updates controls: Check Extension Updates, Pull Library Updates, GitHub Release Extension and GitHub Release Library.
-- Open the actual latest published versioned VSIX and Library source ZIP asset links, with the latest-release page as a safe fallback. Verified VSIX installation stays in the upgrade modal.
-- Re-offer newer verified Extension and Library updates on Start and explicit checks; deduplicate hourly notifications and avoid overlapping active update offers.
-- Start update checking after the webview handshake without waiting for the full dashboard snapshot.
-- Preserve version checks, trusted release sources, VSIX checksums, verified Library main pulls and no-downgrade safeguards.
+- Accept local-build tags bound to the exact source release commit.
+- For local builds, require the primary versioned artifact and either its checksum file or GitHub-published SHA-256 digest. Optional source ZIPs are verified when present; regular CI release requirements remain unchanged.
+- Copy and publish verified release artifacts independently of the copied code version after destination PR merge. Keep source provenance, protected repository pairs and no-downgrade checks.
+- Recognize local releases in the extension and Library updaters and release download links. Verify downloaded bytes before installation.
+- Check the durable release queue immediately after enqueue and continue hourly retry checks.
 
 ## Validation
 
-- JavaScript syntax and focused source checks performed. Full regression suite and VSIX packaging not executed here. Approved release repositories were not accessible via the current GitHub connection.
+- Verified the source v0.1.41 release metadata through GitHub; it contains a VSIX with a published SHA-256 digest.
+- Focused source checks; full regression and VSIX packaging not executed here.

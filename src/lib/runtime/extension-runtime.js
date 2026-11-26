@@ -637,7 +637,7 @@ async function openLatestReleaseFile(kind){
   const checked=library?await libraryReleaseUpdater.latestAcrossRepositories({request}):await releaseUpdater.latestAcrossRepositories({version:require('../../../package.json').version,includeCurrent:true,request});
   const latest=checked.latest,release=checked.release;
   const tag=String(latest?.tag||'');
-  const tagPattern=library?/^v?\d+\.\d+\.\d+(?:-source-build\.\d+)?$/:/^v?\d+\.\d+\.\d+(?:-build\.\d+)?$/;
+  const tagPattern=library?/^v?\d+\.\d+\.\d+(?:-source-build\.\d+|-local\.[a-f0-9]{7,40})?$/:/^v?\d+\.\d+\.\d+(?:-build\.\d+|-local\.[a-f0-9]{7,40})?$/;
   if(latest?.repository===repo&&tagPattern.test(tag)){
    url='https://github.com/'+repo+'/releases/tag/'+encodeURIComponent(tag);
    const filename=library?'tech-stacks-skills-'+latest.version+'-source.zip':'atgv-aiatech-assist-'+latest.version+'.vsix';

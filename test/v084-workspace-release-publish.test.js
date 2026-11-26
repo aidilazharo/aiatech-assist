@@ -31,15 +31,17 @@ test('Workspace exposes automatic release queue status',()=>{
  assert.match(source,/id="checkReleaseSync"/);assert.match(source,/releaseQueue\.enqueue/);assert.doesNotMatch(source,/id="releasePrNumber"/);
 });
 
-for(const mismatch of [false,true])test('publishes and resumes a verified merged release with independent code revision: '+mismatch,async()=>{
- const tag='v0.0.84-build.921',src='a'.repeat(40),merged='b'.repeat(40),st='c'.repeat(40),dt='d'.repeat(40);
+for(const mode of ['matching','independent','local'])test('publishes and resumes a verified merged release: '+mode,async()=>{
+ const mismatch=mode!=='matching',local=mode==='local';
+ const tag=local?'v0.0.84-local.aaaaaaaaaaaa':'v0.0.84-build.921',src='a'.repeat(40),merged='b'.repeat(40),st='c'.repeat(40),dt='d'.repeat(40);
  const gitBlob=bytes=>crypto.createHash('sha1').update('blob '+bytes.length+'\0').update(bytes).digest('hex');
  const digest=bytes=>'sha256:'+crypto.createHash('sha256').update(bytes).digest('hex');
  const files=new Map();
  for(const [name,checksum] of [['atgv-aiatech-assist-0.0.84.vsix','vsix.sha256'],['ATGV-AIATECH-Assist-v0.0.84-Source.zip','source.sha256']]){
-  const bytes=Buffer.from('binary:'+name);files.set(name,bytes);files.set(checksum,Buffer.from(digest(bytes).slice(7)+'  '+name+'\n'));
+  if(local&&name.endsWith('.zip'))continue;
+  const bytes=Buffer.from('binary:'+name);files.set(name,bytes);if(!local)files.set(checksum,Buffer.from(digest(bytes).slice(7)+'  '+name+'\n'));
  }
- files.set('vsix-size-report.json',Buffer.from('{"bytes":123}'));
+ if(!local)files.set('vsix-size-report.json',Buffer.from('{"bytes":123}'));
  const assets=[...files].map(([name,bytes],i)=>({id:i+1,name,size:bytes.length,digest:digest(bytes),state:'uploaded'}));
  const codeCommit=mismatch?'e'.repeat(40):src,codeVersion=mismatch?'0.0.95':'0.0.84';
  const manifest=Buffer.from(JSON.stringify({schema:1,sourceRepository:source.name,sourceBranch:'main',sourceCommit:codeCommit,codeVersion,releaseVersion:'0.0.84',releaseTag:tag,releaseTargetCommitish:src,matchesSourceCommit:!mismatch,assets}));
@@ -79,4 +81,16 @@ for(const mismatch of [false,true])test('publishes and resumes a verified merged
  assert.equal(creates,1);assert.equal(uploads,files.size);assert.equal(publishes,1);
  await publisher.publish(args);
  assert.equal(creates,1);assert.equal(uploads,files.size);assert.equal(publishes,1);
+});
+
+test('local build must bind tag and published digest to the exact source asset',()=>{
+ const tag='v0.1.41-local.4a9c252fe25f',sha='4a9c252fe25f'+'0'.repeat(28),name='atgv-aiatech-assist-0.1.41.vsix',bytes=Buffer.from('VSIX');
+ const asset={name,digest:'sha256:'+crypto.createHash('sha256').update(bytes).digest('hex')};
+ assert.deepEqual(publisher.requiredForRelease('extension',tag,[asset],sha),[[name,null]]);
+ assert.throws(()=>publisher.requiredForRelease('extension',tag,[asset],'a'.repeat(40)),/does not match/);
+ assert.throws(()=>publisher.requiredForRelease('extension',tag,[{name}],sha),/checksum or GitHub/);
+ assert.doesNotThrow(()=>publisher.verifyReleaseArtifact(bytes,null,name,asset));
+ assert.throws(()=>publisher.verifyReleaseArtifact(Buffer.from('tampered'),null,name,asset),/digest verification/);
+ assert.ok(publisher.compareTags('v0.1.42-local.aaaaaaaaaaaa',tag,'extension')>0);
+ assert.throws(()=>publisher.requiredForRelease('extension','v0.1.41-build.1',[asset],sha),/checksum/);
 });

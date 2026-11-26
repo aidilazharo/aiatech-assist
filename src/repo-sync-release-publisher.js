@@ -21,16 +21,36 @@ function pairFor(source,destination){
  return p;
 }
 function tagInfo(tag,kind){
+ const value=String(tag||'');
+ const local=/^v(\d+)\.(\d+)\.(\d+)-local\.([a-f0-9]{7,40})$/.exec(value);
  const re=kind==='extension'?/^v(\d+)\.(\d+)\.(\d+)-build\.(\d+)$/:/^v(\d+)\.(\d+)\.(\d+)-source-build\.(\d+)$/;
- const m=re.exec(String(tag||''));
- if(!m||m.slice(1).some(n=>!Number.isSafeInteger(Number(n))))throw Error('Select the exact published ATGV source release tag.');
- return {version:m.slice(1,4).map(Number).join('.'),key:m.slice(1).map(Number)};
+ const m=local||re.exec(value);
+ if(!m||m.slice(1,local?4:5).some(n=>!Number.isSafeInteger(Number(n))))throw Error('Select the exact published ATGV source release tag.');
+ return {version:m.slice(1,4).map(Number).join('.'),key:[...m.slice(1,4).map(Number),local?0:Number(m[4])],localCommit:local?local[4]:''};
 }
 function compare(a,b){for(let i=0;i<4;i++){if(a[i]!==b[i])return a[i]-b[i];}return 0;}
 function compareTags(a,b,kind){return compare(tagInfo(a,kind).key,tagInfo(b,kind).key);}
 function required(kind,version){return kind==='extension'?
  [[ 'atgv-aiatech-assist-'+version+'.vsix','vsix.sha256'],['ATGV-AIATECH-Assist-v'+version+'-Source.zip','source.sha256']]:
  [['tech-stacks-skills-'+version+'-source.zip','library-source.sha256']];}
+function requiredForRelease(kind,tag,assets,targetCommit){
+ const info=tagInfo(tag,kind);
+ if(info.localCommit&&(!SHA.test(String(targetCommit||''))||!targetCommit.startsWith(info.localCommit)))throw Error('Local build tag does not match the source release commit.');
+ const byName=new Map(assets.map(a=>[a.name,a]));
+ const pairs=required(kind,info.version);
+ return pairs.filter(([name],index)=>!info.localCommit||index===0||byName.has(name)).map(([name,checksum])=>{
+  const asset=byName.get(name);
+  if(!asset)throw Error('Missing required release asset: '+name);
+  if(byName.has(checksum))return [name,checksum];
+  if(info.localCommit&&/^sha256:[a-f0-9]{64}$/.test(String(asset.digest||'')))return [name,null];
+  throw Error('Missing required release checksum or GitHub SHA-256 digest: '+name);
+ });
+}
+function verifyReleaseArtifact(bytes,checksum,name,asset){
+ if(checksum)verifyChecksum(bytes,checksum,name);
+ else if(!/^sha256:[a-f0-9]{64}$/.test(String(asset?.digest||'')))throw Error('Missing published asset digest: '+name);
+ if(asset?.digest&&asset.digest!=='sha256:'+hex(bytes))throw Error('GitHub asset digest verification failed: '+name);
+}
 function verifyChecksum(bytes,checksum,name){
  const matches=checksum.toString('utf8').split(/\r?\n/).filter(line=>{
   const m=/^([a-f0-9]{64})\s+\*?([A-Za-z0-9._-]+)$/.exec(line.trim());
@@ -136,7 +156,7 @@ async function publish({source,destination,sourcePat,destPat,prNumber,tag,onProg
   byName.set(a.name,a);
  }
  if(assets.reduce((n,a)=>n+a.size,0)>80*1024*1024||new Set(manifestAssets.map(a=>a.name)).size!==assets.length)throw Error('Invalid merged release asset inventory.');
- for(const [name,checksum] of required(pair.kind,version))if(!byName.has(name)||!byName.has(checksum))throw Error('Missing required release asset or checksum: '+name);
+ const requirements=requiredForRelease(pair.kind,tag,assets,sourceCommit);
  const marker='ATGV-Sync: '+sourceCommit+' '+tag;
  const notes=marker+'\nDestination commit: '+merged+'\nReviewed PR: '+prUrl+(codeCommit!==sourceCommit?'\nArtifact source version: '+version+' @ '+sourceCommit+'\nCopied code version: '+codeVersion+' @ '+codeCommit+' (GitHub generated source archives describe the destination commit, not the older build).':'');
  async function findExisting(){
@@ -173,10 +193,10 @@ async function publish({source,destination,sourcePat,destPat,prNumber,tag,onProg
    const dest=path.join(temp,a.name);
    await download(source,sourcePat,a,dest);
    const bytes=await fs.readFile(dest);
-   if(bytes.length!==a.size||'sha256:'+hex(bytes)!==m.digest||mergedTree.get(prefix+a.name)?.sha!==blob(bytes)||current.get(prefix+a.name)?.sha!==blob(bytes))throw Error('Source artifact does not match merged Git bytes: '+a.name);
+   if(bytes.length!==a.size||'sha256:'+hex(bytes)!==m.digest||(a.digest&&a.digest!==m.digest)||mergedTree.get(prefix+a.name)?.sha!==blob(bytes)||current.get(prefix+a.name)?.sha!==blob(bytes))throw Error('Source artifact does not match merged Git bytes: '+a.name);
    buffers.set(a.name,bytes);
   }
-  for(const [name,checksum] of required(pair.kind,version))verifyChecksum(buffers.get(name),buffers.get(checksum),name);
+  for(const [name,checksum] of requirements)verifyReleaseArtifact(buffers.get(name),checksum?buffers.get(checksum):null,name,byName.get(name));
   let row=await findExisting();
   const existingTag=await tagCommit(destination,destPat,true);
   if(row&&!row.draft&&!row.prerelease&&row.published_at&&existingTag&&existingTag!==merged){
@@ -234,4 +254,4 @@ async function publish({source,destination,sourcePat,destPat,prNumber,tag,onProg
   return {url:expectedUrl,tag,version,assetCount:buffers.size,merged};
  }finally{await fs.rm(temp,{recursive:true,force:true});}
 }
-module.exports={publish,pairFor,tagInfo,compareTags,required,verifyChecksum,verifyProjection};
+module.exports={publish,pairFor,tagInfo,compareTags,required,requiredForRelease,verifyReleaseArtifact,verifyChecksum,verifyProjection};

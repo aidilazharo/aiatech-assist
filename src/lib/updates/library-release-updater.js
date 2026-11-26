@@ -13,7 +13,7 @@ const API_LATEST='https://api.github.com/repos/'+REPO+'/releases/latest';
 const API_LIST='https://api.github.com/repos/'+REPO+'/releases?per_page=30';
 const MAX_ZIP=80*1024*1024;
 function tagged(value){
- const match=/^v?(\d+\.\d+\.\d+)(?:-source-build\.(\d+))?$/.exec(String(value||''));
+ const match=/^v?(\d+\.\d+\.\d+)(?:-source-build\.(\d+)|-local\.[a-f0-9]{7,40})?$/.exec(String(value||''));
  return match?{version:match[1],build:Number(match[2]||0)}:null;
 }
 function trustedAsset(asset,name,repository=REPO){
@@ -31,7 +31,7 @@ function select(releases,repository=REPO){
   const filename='tech-stacks-skills-'+version.version+'-source.zip';
   const archive=(release.assets||[]).find(a=>trustedAsset(a,filename,repository));
   const checksum=(release.assets||[]).find(a=>trustedAsset(a,'library-source.sha256',repository));
-  if(archive&&checksum)candidates.push({...version,filename,archive,checksum,tag:release.tag_name,url:release.html_url,repository,publishedAt:release.published_at||''});
+  if(archive&&(checksum||(/-local\.[a-f0-9]{7,40}$/.test(release.tag_name)&&/^sha256:[a-f0-9]{64}$/.test(String(archive.digest||'')))))candidates.push({...version,filename,archive,checksum,tag:release.tag_name,url:release.html_url,repository,publishedAt:release.published_at||''});
  }
  candidates.sort((a,b)=>updater.compareVersion(b.version,a.version)||b.build-a.build);
  return candidates[0]||null;
@@ -69,19 +69,20 @@ async function latestAcrossRepositories({request=updater.getBytes}={}){
  return {release,latest:{version:newest.version,tag:newest.tag,url:newest.url,repository:newest.repository,publishedAt:newest.publishedAt,installable:!!release},errors};
 }
 async function downloadVerified(release,{directory,request=updater.getBytes}={}){
- if(!release||!directory||!RELEASE_REPOSITORIES.includes(release.repository)||!trustedAsset(release.archive,release.filename,release.repository)||!trustedAsset(release.checksum,'library-source.sha256',release.repository))
+ if(!release||!directory||!RELEASE_REPOSITORIES.includes(release.repository)||!trustedAsset(release.archive,release.filename,release.repository)||(!trustedAsset(release.checksum,'library-source.sha256',release.repository)&&!(/-local\.[a-f0-9]{7,40}$/.test(release.tag)&&/^sha256:[a-f0-9]{64}$/.test(String(release.archive.digest||'')))))
   throw Error('Untrusted SDLC Library release.');
  if(release.filename!=='tech-stacks-skills-'+release.version+'-source.zip')throw Error('Invalid Library archive filename.');
  const [zip,checksum]=await Promise.all([
   request(release.archive.url,{maxBytes:MAX_ZIP,accept:'application/octet-stream'}),
-  request(release.checksum.url,{maxBytes:10000,accept:'application/octet-stream'})
+  trustedAsset(release.checksum,'library-source.sha256',release.repository)?request(release.checksum.url,{maxBytes:10000,accept:'application/octet-stream'}):Promise.resolve(null)
  ]);
  if(zip.length!==release.archive.size)throw Error('Library archive size does not match release metadata.');
  const digest=crypto.createHash('sha256').update(zip).digest('hex');
- if(!checksum.toString('utf8').split(/\r?\n/).some(line=>{
+ if(checksum&&!checksum.toString('utf8').split(/\r?\n/).some(line=>{
   const match=/^([a-f0-9]{64})\s+\*?([^\s]+)$/.exec(line.trim());
   return match&&match[1]===digest&&path.posix.basename(match[2])===release.filename;
  }))throw Error('Library source ZIP SHA-256 checksum verification failed.');
+ if(release.archive.digest&&release.archive.digest!=='sha256:'+digest)throw Error('Library GitHub asset digest verification failed.');
  await fs.mkdir(directory,{recursive:true});
  const file=path.join(directory,release.filename);
  await fs.writeFile(file,zip,{mode:0o600,flag:'wx'});

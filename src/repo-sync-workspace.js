@@ -638,6 +638,7 @@ function open(vscode,{version='0.0.0',onLog=()=>{},secrets=null,preferences=null
      const prNumber=Number(new URL(createdPr).pathname.split('/').pop());
      await releaseQueue.enqueue({source,destination,prNumber,tag:outcome.releaseTag});
      releaseNotice='\nRelease queued for automatic publication after merge.';
+     void releaseQueue.tick().catch(error=>onLog('Workspace release queue: '+sanitize(error,[sourcePat,destPat])));
     }catch(error){releaseNotice='\nPR was created, but automatic release queue failed: '+sanitize(error,[sourcePat,destPat]);}
    }
    const summary=outcome.unchanged?outcome.message:

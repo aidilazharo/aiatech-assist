@@ -105,3 +105,24 @@ test('latest release links open verified versioned file URLs and safely fall bac
  library.release=null;await run('library');assert.equal(opened.at(-1),'https://github.com/'+lib+'/releases/tag/v2.0.0-source-build.3');
  releaseUpdater.latestAcrossRepositories=async()=>{throw Error('403');};await run('extension');assert.equal(opened.at(-1),'https://github.com/'+ext+'/releases/latest');
 });
+
+test('updater accepts local release with GitHub digest but not an unverified binary',()=>{
+ const repository=updater.REPO,tag='v0.1.41-local.4a9c252fe25f',name='atgv-aiatech-assist-0.1.41.vsix';
+ const asset={name,url:'https://api.github.com/repos/'+repository+'/releases/assets/1',size:8,digest:'sha256:'+'a'.repeat(64)};
+ const row={tag_name:tag,draft:false,html_url:'https://github.com/'+repository+'/releases/tag/'+tag,assets:[asset]};
+ assert.equal(updater.selectRelease([row],'0.1.40').tag,tag);
+ assert.equal(updater.selectRelease([row],'0.1.41'),null);
+ assert.equal(updater.selectRelease([{...row,assets:[{...asset,digest:''}]}],'0.1.40'),null);
+});
+test('local VSIX download verifies GitHub digest without separate checksum',async t=>{
+ const fsp=require('node:fs/promises'),os=require('node:os');
+ const directory=await fsp.mkdtemp(path.join(os.tmpdir(),'atgv-local-vsix-'));
+ t.after(()=>fsp.rm(directory,{recursive:true,force:true}));
+ const bytes=Buffer.from('local-vsix'),repository=updater.REPO,tag='v0.1.41-local.4a9c252fe25f',name='atgv-aiatech-assist-0.1.41.vsix';
+ const asset={name,url:'https://api.github.com/repos/'+repository+'/releases/assets/1',size:bytes.length,digest:'sha256:'+crypto.createHash('sha256').update(bytes).digest('hex')};
+ const row={tag_name:tag,html_url:'https://github.com/'+repository+'/releases/tag/'+tag,assets:[asset]};
+ const selected=updater.selectRelease([row],'0.1.40');
+ const file=await updater.downloadVerified(selected,{directory,request:async()=>bytes});
+ assert.deepEqual(await fsp.readFile(file),bytes);
+ await assert.rejects(updater.downloadVerified(selected,{directory,request:async()=>Buffer.alloc(bytes.length)}),/digest verification/);
+});

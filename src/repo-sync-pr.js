@@ -461,13 +461,10 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
    try{
     const publisher=require('./repo-sync-release-publisher');
     const kind=publisher.pairFor(source,destination).kind;
-    const info=publisher.tagInfo(release.tag,kind);
     if(!release.assets?.length||release.skippedAssetCount)throw Error('Incomplete release asset inventory');
-    requiredAssets=publisher.required(kind,info.version);
-    const names=new Set(release.assets.map(a=>a.name));
-    for(const [asset,checksum] of requiredAssets)if(!names.has(asset)||!names.has(checksum))throw Error('Missing required stable release artifact or checksum: '+asset);
+    requiredAssets=publisher.requiredForRelease(kind,release.tag,release.assets,release.targetCommitish);
     if(release.targetCommitish!==sha)releaseNotice='Release '+release.tag+' is independent of source '+facts.project.version+'; original provenance retained.';
-   }catch(error){release=null;releaseNotice='Release incomplete; source sync continues.';}
+   }catch(error){release=null;releaseNotice='Release incomplete; source sync continues. '+String(error.message||error).slice(0,200);}
   }
   if(releaseNotice)await notify('release',releaseNotice);
   if(!sourcePr||previewOnly){
@@ -579,8 +576,8 @@ async function sync({sourceUrl,destinationUrl='',destinationFolder,copyScope='.'
     verified.push(item);
    }
    if(distribution){
-    const {verifyChecksum}=require('./repo-sync-release-publisher');
-    for(const [asset,checksum] of requiredAssets)verifyChecksum(await fs.readFile(path.join(staging,asset)),await fs.readFile(path.join(staging,checksum)),asset);
+    const {verifyReleaseArtifact}=require('./repo-sync-release-publisher');
+    for(const [asset,checksum] of requiredAssets)verifyReleaseArtifact(await fs.readFile(path.join(staging,asset)),checksum?await fs.readFile(path.join(staging,checksum)):null,asset,release.assets.find(a=>a.name===asset));
    }
    if(verified.some(a=>a.name==='release.json'))throw Error('Reserved release manifest filename');
    if(distribution){

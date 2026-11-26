@@ -37,7 +37,7 @@ function releaseUrlForRepository(repositoryUrl){
 }
 const MAX_JSON=1024*1024,MAX_ASSET=80*1024*1024;
 function parseVersion(value){
- const match=/^v?(\d+)\.(\d+)\.(\d+)(?:-build\.(\d+))?$/.exec(String(value||'').trim());
+ const match=/^v?(\d+)\.(\d+)\.(\d+)(?:-build\.(\d+)|-local\.[a-f0-9]{7,40})?$/.exec(String(value||'').trim());
  return match?match.slice(1).map(n=>Number(n||0)):null;
 }
 function compareVersion(a,b){
@@ -64,7 +64,7 @@ function selectRelease(releases,currentVersion,repositoryUrl=DEFAULT_RELEASE_URL
   const name=`atgv-aiatech-assist-${version}.vsix`;
   const asset=(release.assets||[]).find(a=>validAsset(a,name,repository));
   const checksum=(release.assets||[]).find(a=>validAsset(a,'vsix.sha256',repository));
-  if(asset&&checksum)return {version,tag:release.tag_name,url:release.html_url,repository,releaseUrl,publishedAt:release.published_at||'',description:String(release.body||'').slice(0,1500),asset,checksum};
+  if(asset&&(checksum||(/-local\.[a-f0-9]{7,40}$/.test(release.tag_name)&&/^sha256:[a-f0-9]{64}$/.test(String(asset.digest||'')))))return {version,tag:release.tag_name,url:release.html_url,repository,releaseUrl,publishedAt:release.published_at||'',description:String(release.body||'').slice(0,1500),asset,checksum};
  }
  return null;
 }
@@ -152,15 +152,18 @@ async function downloadVerified(release,{directory,request=getBytes,onProgress=a
  const filename=`atgv-aiatech-assist-${release.version}.vsix`;
  const repo=parseRepositoryUrl(release.releaseUrl||DEFAULT_RELEASE_URL);
  if(release.repository&&release.repository!==repo.repository)throw Error('Release repository does not match its source.');
- if(!validAsset(release.asset,filename,repo.repository)||!validAsset(release.checksum,'vsix.sha256',repo.repository))throw Error('Release assets are not trusted GitHub API assets.');
+ const digest=String(release.asset?.digest||'');
+ const checksumValid=validAsset(release.checksum,'vsix.sha256',repo.repository);
+ if(!validAsset(release.asset,filename,repo.repository)||(!checksumValid&&!(/-local\.[a-f0-9]{7,40}$/.test(release.tag)&&/^sha256:[a-f0-9]{64}$/.test(digest))))throw Error('Release assets are not trusted GitHub API assets.');
  await onProgress('downloading');
  const [vsix,checksum]=await Promise.all([
   request(release.asset.url,{maxBytes:MAX_ASSET,accept:'application/octet-stream'}),
-  request(release.checksum.url,{maxBytes:10000,accept:'application/octet-stream'})
+  checksumValid?request(release.checksum.url,{maxBytes:10000,accept:'application/octet-stream'}):Promise.resolve(null)
  ]);
  if(vsix.length!==release.asset.size)throw Error('Downloaded VSIX size does not match the release metadata.');
  await onProgress('verifying');
- verifyChecksum(checksum,vsix,filename);
+ if(checksum)verifyChecksum(checksum,vsix,filename);
+ if(digest&&digest!=='sha256:'+crypto.createHash('sha256').update(vsix).digest('hex'))throw Error('VSIX GitHub asset digest verification failed; the upgrade was not installed.');
  await onProgress('staging');
  await fs.mkdir(directory,{recursive:true});
  const target=path.join(directory,filename);
