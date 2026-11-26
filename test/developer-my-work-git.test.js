@@ -80,3 +80,19 @@ test('Developer repository toolbar scans folders, preserves open-only access and
  assert.match(css,/\.developer-chat-repo-panel\{padding:6px 8px;overflow-x:auto/);
  assert.ok(chat.includes('/^project:[a-f0-9]{64}$/'));
 });
+
+test('dev-tools is a local Developer chat command and the live toolbar appears inside the transcript',()=>{
+ const fs=require('node:fs'),path=require('node:path'),root=path.join(__dirname,'..');
+ const client=fs.readFileSync(path.join(root,'media/atgv-mywork-wave-chat.js'),'utf8');
+ const html=fs.readFileSync(path.join(root,'src/lib/webview/dashboard-html.js'),'utf8');
+ const css=fs.readFileSync(path.join(root,'media/atgv-mywork-ai.css'),'utf8');
+ assert.match(html,/<div id="developerChatToolsHome" hidden>[\s\S]*?<div id="developerChatRepoPanel"[^>]*hidden>/);
+ assert.equal((html.match(/id="developerChatRepoPanel"/g)||[]).length,1);
+ assert.match(client,/toolsMessage\.appendChild\(repoPanel\);transcript\.appendChild\(toolsMessage\);repoPanel\.hidden=false/);
+ assert.match(client,/userText\.toLowerCase\(\)==='dev-tools'&&role==='software-developer'/);
+ const submit=client.slice(client.indexOf("form.addEventListener('submit'"),client.indexOf("input.addEventListener('keydown'"));
+ assert.ok(submit.indexOf('showDevTools();return;')<submit.indexOf("send('roleAiChat'"));
+ assert.match(client,/hideDevTools\(\);transcript\.replaceChildren\(\)/);
+ assert.match(client,/if\(repoPanel\)\{hideDevTools\(\);updateRepoFolders/);
+ assert.match(css,/\.developer-chat-tools-message/);
+});

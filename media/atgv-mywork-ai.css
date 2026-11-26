@@ -265,3 +265,8 @@ body.atgv-global-ai-active:not(.gate-mode) #topNotification #myWorkHeaderWave.my
 .developer-chat-git-actions button[hidden]{display:none!important}
 #developerChatGitInfo,#developerChatLogInfo{max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:none}
 .developer-chat-repo-panel>div:last-child{margin-top:0}
+
+/* Developer tools are a command response inside the scrolling conversation. */
+#developerChatToolsHome[hidden]{display:none!important}
+#atgvMyWorkAi .developer-chat-tools-message{min-width:0;width:100%;max-width:100%;padding:0;overflow:hidden}
+#atgvMyWorkAi .developer-chat-tools-message .developer-chat-repo-panel{max-width:100%;width:100%;box-sizing:border-box;border:0;overflow-x:auto}

@@ -19,6 +19,8 @@
  let project='',role='',pendingId=0,sequence=0,pending=false;
  const repoPanel=get('developerChatRepoPanel'),repoSelect=get('developerChatRepoSelect'),repoNext=get('developerChatNext'),repoOpen=get('developerChatOpen'),repoOpenSource=get('developerChatOpenSource'),repoRefresh=get('developerChatRefresh'),repoPr=get('developerChatPr');
  let gitRequest=0,gitBusy=false,gitStep='branch',gitPr='',gitReady=false,folderReady=false;
+ const repoHome=repoPanel?.parentElement;
+ let toolsMessage=null;
  const gitLabels={branch:'Create Branch',commit:'Commit Code',pr:'Create PR',publish:'Publish',done:'Published'};
  function gitControls(){
   if(!repoPanel)return;
@@ -30,8 +32,22 @@
   repoNext.textContent=gitBusy?'Working…':gitLabels[gitStep]||gitLabels.branch;
   repoPr.hidden=!gitPr;repoPr.disabled=gitBusy||!gitReady||!gitPr;
  }
+ function hideDevTools(){
+  if(!repoPanel)return;
+  repoPanel.hidden=true;repoHome?.appendChild(repoPanel);toolsMessage?.remove();toolsMessage=null;
+  gitRequest++;gitBusy=false;gitReady=false;folderReady=false;gitPr='';gitStep='branch';
+  gitControls();
+ }
+ function showDevTools(){
+  if(!repoPanel||role!=='software-developer')return;
+  if(toolsMessage){repoHome?.appendChild(repoPanel);toolsMessage.remove();}
+  toolsMessage=document.createElement('div');toolsMessage.className='atgv-mywork-ai-message assistant developer-chat-tools-message';
+  toolsMessage.appendChild(repoPanel);transcript.appendChild(toolsMessage);repoPanel.hidden=false;
+  gitControls();requestGit();
+  if(resultsViewport)resultsViewport.scrollTop=resultsViewport.scrollHeight;
+ }
  function requestGit(action='status'){
-  if(!repoPanel||role!=='software-developer'||!project||gitBusy||typeof send!=='function')return;
+  if(!repoPanel||repoPanel.hidden||role!=='software-developer'||!project||gitBusy||typeof send!=='function')return;
   gitBusy=true;gitControls();
   send('developerChatGit',{projectId:project,roleId:role,repositoryTarget:repoSelect.value,requestId:++gitRequest,action});
  }
@@ -44,7 +60,7 @@
   repoSelect.value=[...repoSelect.options].some(x=>x.value===selected)?selected:'project';
  }
  function renderGit(msg){
-  if(!repoPanel||msg.requestId!==gitRequest||msg.repositoryTarget!==repoSelect.value)return;
+  if(!repoPanel||repoPanel.hidden||msg.requestId!==gitRequest||msg.repositoryTarget!==repoSelect.value)return;
   gitBusy=false;
   updateRepoFolders(msg.projectFolders,msg.selectedTarget||repoSelect.value);
   if(!msg.error&&!msg.cancelled){
@@ -63,7 +79,7 @@
   gitControls();
  }
  if(repoPanel){
-  repoSelect.addEventListener('change',()=>{gitReady=false;folderReady=false;gitPr='';gitStep='branch';get('developerChatGitInfo').textContent='Checking repository…';get('developerChatArc').setAttribute('stroke-dasharray','0 100');get('developerChatPercent').textContent='0%';writer=null;queue.length=0;transcript.replaceChildren();greetingNode=addMessage('assistant','Reviewing the selected repository.');briefingNode=null;pendingId=++sequence;requestGit();});
+  repoSelect.addEventListener('change',()=>{gitReady=false;folderReady=false;gitPr='';gitStep='branch';get('developerChatGitInfo').textContent='Checking repository…';get('developerChatArc').setAttribute('stroke-dasharray','0 100');get('developerChatPercent').textContent='0%';requestGit();});
   repoNext.addEventListener('click',()=>requestGit(gitStep));repoOpen.addEventListener('click',()=>requestGit('open'));repoOpenSource.addEventListener('click',()=>requestGit('open-source'));repoRefresh.addEventListener('click',()=>requestGit());
   repoPr.addEventListener('click',()=>{if(/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9][0-9]*$/.test(gitPr))requestGit('open-pr');});
   window.addEventListener('atgv:viewchange',()=>{if(role==='software-developer'&&!repoPanel.hidden&&!document.getElementById('myWorkView')?.classList.contains('hidden'))requestGit();});
@@ -125,7 +141,7 @@
   pendingId=++sequence;pending=false;submittedText='';
   writer=null;queue.length=0;thinkingBefore=false;
   // Clear all displayed role AI messages; no previous-day dialogue remains.
-  transcript.replaceChildren();
+  hideDevTools();transcript.replaceChildren();
   greetingNode=null;briefingNode=null;lastBriefRequest=0;
   input.value='';status.textContent='';button.disabled=true;
   activity();
@@ -150,7 +166,7 @@
   const nextProject=String(snapshot.projectId||''),nextRole=String(snapshot.roleId||'');
   if(project!==nextProject||role!==nextRole){
    project=nextProject;role=nextRole;pendingId=++sequence;pending=false;
-   if(repoPanel){repoPanel.hidden=role!=='software-developer';gitBusy=false;gitReady=false;folderReady=false;gitPr='';gitStep='branch';gitRequest++;if(!repoPanel.hidden){updateRepoFolders([],'project');repoSelect.value='project';requestGit();}gitControls();}
+   if(repoPanel){hideDevTools();updateRepoFolders([],'project');repoSelect.value='project';gitControls();}
    // Keep the role context accessible without displaying an extra chat heading.
    input.setAttribute('aria-label','Message ATGV AI · '+String(snapshot.roleName||nextRole).slice(0,100));
    writer=null;queue.length=0;transcript.replaceChildren();input.value='';
@@ -193,6 +209,11 @@
   }
   const userText=input.value.trim();
   if(!userText||!project||!role||pending)return;
+  // Local developer command: render the actual tools inside the conversation.
+  // Do not send a roleAiChat message or invoke any Git mutation.
+  if(userText.toLowerCase()==='dev-tools'&&role==='software-developer'){
+   addMessage('user',userText);input.value='';setBusy(false);showDevTools();return;
+  }
   submittedText=userText;
   addMessage('user',userText);input.value='';setBusy(true);activity();
   pendingId=++sequence;

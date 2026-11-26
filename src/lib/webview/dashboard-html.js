@@ -31,7 +31,7 @@ function html(webview,{resumeLibrary=false}={}){
     subtask:"<path d=\"M5 5v7h4m-3-3 3 3-3 3M12 8h7v8h-7zM14 12l1 1 2-2\"/>"
   };
   const baHeaderIcon=(name,variant='')=>`<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${variant}>${baHeaderIcons[name]}</svg>`;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.1.49';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.1.50';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const uiConsistencyCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-consistency.css'));
@@ -378,6 +378,15 @@ function html(webview,{resumeLibrary=false}={}){
   </main>
   <main id="myWorkView" class="hidden work-container atgv-mywork-ai-page" aria-label="My Work AI assistant">
     <section id="atgvMyWorkAi" class="atgv-mywork-ai" aria-label="AI recommendations and chat for the selected My Work role" data-state="idle">
+      <div id="atgvMyWorkAiResults" class="atgv-mywork-ai-results" role="region" aria-label="AI suggestions and conversation">
+        <div id="atgvMyWorkAiContent" class="atgv-mywork-ai-content" hidden>
+          <h2 id="atgvMyWorkAiTitle" class="atgv-mywork-ai-title">AI · My Work</h2>
+          <p id="atgvMyWorkAiText" class="atgv-mywork-ai-text" role="status" aria-live="polite"></p>
+          <div id="atgvMyWorkAiActions" class="atgv-mywork-ai-actions" aria-label="Suggested next actions"></div>
+        </div>
+        <div id="atgvMyWorkAiConversation" class="atgv-mywork-ai-conversation" role="log" aria-label="Role AI conversation" aria-live="polite"></div>
+      </div>
+      <div id="developerChatToolsHome" hidden>
       <div id="developerChatRepoPanel" class="developer-chat-repo-panel" hidden>
         <div class="developer-chat-repo-top">
           <div class="developer-chat-ring"><svg width="76" height="76" viewBox="0 0 100 100" role="img" aria-label="Git workflow progress"><circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" stroke-width="8" opacity=".15"/><circle id="developerChatArc" cx="50" cy="50" r="40" pathLength="100" fill="none" stroke="currentColor" stroke-width="8" stroke-dasharray="0 100" stroke-linecap="round" transform="rotate(-90 50 50)"/><text id="developerChatPercent" x="50" y="55" text-anchor="middle" fill="currentColor" font-size="20" font-weight="600">0%</text></svg></div>
@@ -387,13 +396,6 @@ function html(webview,{resumeLibrary=false}={}){
           <div id="developerChatLogInfo" class="muted" role="status" aria-live="polite">Checking unified diagnostics in Confluence…</div></div>
         </div>
       </div>
-      <div id="atgvMyWorkAiResults" class="atgv-mywork-ai-results" role="region" aria-label="AI suggestions and conversation">
-        <div id="atgvMyWorkAiContent" class="atgv-mywork-ai-content" hidden>
-          <h2 id="atgvMyWorkAiTitle" class="atgv-mywork-ai-title">AI · My Work</h2>
-          <p id="atgvMyWorkAiText" class="atgv-mywork-ai-text" role="status" aria-live="polite"></p>
-          <div id="atgvMyWorkAiActions" class="atgv-mywork-ai-actions" aria-label="Suggested next actions"></div>
-        </div>
-        <div id="atgvMyWorkAiConversation" class="atgv-mywork-ai-conversation" role="log" aria-label="Role AI conversation" aria-live="polite"></div>
       </div>
       <form id="atgvMyWorkAiChatForm" class="atgv-mywork-ai-chat">
         <div class="atgv-mywork-ai-composer">

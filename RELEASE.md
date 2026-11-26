@@ -1,11 +1,11 @@
-# ATGV AIATECH Assist v0.1.49
+# ATGV AIATECH Assist v0.1.50
 
 ## Changes
 
-- Allow local Custom Stack scans and runs despite a different existing Git origin; preserve source and origin.
-- Keep remote operations protected by origin verification.
-- Replace folder Quick Pick with a radio-button modal. Explicit Scan Folder always offers selection, including a single available folder; remember the previous selection.
+- Move Developer repository tools into the My Work chat transcript, displayed only when the Developer submits `dev-tools`.
+- Preserve the existing repository selector, Git progress, actions and Confluence diagnostic status; keep one live toolbar and refresh on request.
+- Do not send the command to AI or automatically execute Git mutations. Keep chat history on repository changes; reset tools when the project/role or day changes.
 
 ## Validation
 
-- JavaScript syntax checked. Added regression tests for local origin mismatch and explicit folder selection. Full Windows tests and VSIX packaging not run.
+- JavaScript syntax checked and regression coverage added. Full VS Code runtime tests and local VSIX build not performed.
