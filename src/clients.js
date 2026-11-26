@@ -98,16 +98,23 @@ async function listConfluence(config, token, limit) {
     const auth = atlassianAuth(config, token);
     while (next && docs.length < limit) {
         const page = await requestJson(next, auth);
-        for (const item of page.results || []) {
-            if (docs.length >= limit)
-                break;
-            const p = await getConfluencePage(config, token, item.id);
+        const items = page.results || [];
+        // Bounded, ordered read batches: avoid one round trip per page in series.
+        for (let offset = 0; offset < items.length && docs.length < limit;) {
+            const batch = items.slice(offset, offset + Math.min(4, limit - docs.length));
+            offset += batch.length;
+            const pages = await Promise.allSettled(batch.map(item => getConfluencePage(config, token, item.id)));
+            const failure = pages.find(entry => entry.status === 'rejected');
+            if (failure) throw failure.reason; // Never publish an incomplete snapshot as successful.
+            for (let index = 0; index < batch.length; index++) {
+            const item = batch[index], p = pages[index].value;
             if (p.status && p.status !== 'current')
                 continue;
             const webPath = p._links?.webui;
             const url = webPath ? new URL(/^https?:\/\//.test(webPath) || webPath.startsWith('/wiki/') ? webPath : '/wiki/' + webPath.replace(/^\/+/, ''), site).toString() : `${site}/wiki/spaces/${encodeURIComponent(sp.key)}/pages/${p.id}`;
             docs.push({ id: `confluence:${site}:${p.id}`, provider: 'Confluence', remoteId: String(p.id), spaceId: String(sp.id), title: p.title || item.title,
                 url, version: Number(p.version?.number || 1), rawHtml: p.body?.storage?.value || '', text: htmlToText(p.body?.storage?.value || ''), updated: p.version?.createdAt || '' });
+            }
         }
         const link = page._links?.next;
         if (!link) {
@@ -244,10 +251,14 @@ async function listGithub(config, token, limit, maxFileBytes) {
     const tree = await githubGet(config, token, `${route}/git/trees/${encodeURIComponent(branch)}?recursive=1`);
     const items = (tree.tree || []).filter(f => f.type === 'blob' && /\.(md|mdx|txt|rst)$/i.test(f.path) && (!prefix || f.path.startsWith(prefix + '/') || f.path === prefix)).slice(0, limit);
     const docs = [];
-    for (const file of items) {
-        if (file.size > maxFileBytes)
-            continue;
-        const obj = await githubGet(config, token, `${route}/git/blobs/${encodeURIComponent(file.sha)}`);
+    const eligible = items.filter(file => !(file.size > maxFileBytes));
+    for (let offset = 0; offset < eligible.length; offset += 4) {
+        const batch = eligible.slice(offset, offset + 4);
+        const blobs = await Promise.allSettled(batch.map(file => githubGet(config, token, `${route}/git/blobs/${encodeURIComponent(file.sha)}`)));
+        const failure = blobs.find(entry => entry.status === 'rejected');
+        if (failure) throw failure.reason;
+        for (let index = 0; index < batch.length; index++) {
+        const file = batch[index], obj = blobs[index].value;
         if (obj.encoding !== 'base64')
             continue;
         const text = Buffer.from((obj.content || '').replace(/\s/g, ''), 'base64').toString('utf8');
@@ -256,6 +267,7 @@ async function listGithub(config, token, limit, maxFileBytes) {
         docs.push({ id: `github:${api}:${owner}/${repo}:${file.path}`, provider: 'GitHub', title: file.path,
             url: `https://${new URL(api).hostname === 'api.github.com' ? 'github.com' : new URL(api).hostname}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/blob/${branch.split('/').map(encodeURIComponent).join('/')}/${file.path.split('/').map(encodeURIComponent).join('/')}`,
             text, updated: '' });
+        }
     }
     return { docs, truncated: !!tree.truncated };
 }
