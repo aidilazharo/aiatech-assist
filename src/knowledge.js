@@ -8,7 +8,7 @@ const jiraStore=require('./jira-local-store');
 function openKnowledge(binding){
     if(!binding)return null;
     const store=jiraStore.open(binding.registry,binding.projectId);
-    if(!store)throw Error('Managed project SQLite unavailable.');
+    if(!store)return null; // Preserve standalone/legacy projects without an ATGV workspace marker.
     try{
         store.db.exec(`CREATE TABLE IF NOT EXISTS knowledge_cache_migrations (
             scope TEXT PRIMARY KEY, migrated_at TEXT NOT NULL);
