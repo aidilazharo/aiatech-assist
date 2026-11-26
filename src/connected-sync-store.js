@@ -165,6 +165,42 @@ function reportConflict(registry,projectId,{provider,origin,id,localRevision='',
   return {id:key};
  }finally{store.db.close();}
 }
+// Display snapshots are distinct from the remote revision ledger and never authorize writes.
+const MAX_PROJECTION_BYTES=32*1024*1024;
+const ROLE_CACHE_MS=30000;
+function projectionStore(registry,projectId){
+ const store=open(registry,projectId);if(!store)return null;
+ try{
+  store.db.exec(`CREATE TABLE IF NOT EXISTS connected_read_projections (
+   scope TEXT NOT NULL, binding TEXT NOT NULL, payload TEXT NOT NULL,
+   saved_at INTEGER NOT NULL, PRIMARY KEY(scope,binding));`);
+  return store;
+ }catch(error){store.db.close();throw error;}
+}
+function readProjection(registry,projectId,{scope,binding,now=Date.now()}){
+ scope=safeId(scope,'projection scope');
+ if(!SHA.test(binding))throw Error('Invalid projection binding.');
+ const store=projectionStore(registry,projectId);if(!store)return null;
+ try{
+  const row=store.db.prepare('SELECT payload,saved_at FROM connected_read_projections WHERE scope=? AND binding=?').get(scope,binding);
+  if(!row)return null;
+  const age=Math.max(0,now-row.saved_at);
+  return {value:JSON.parse(row.payload),savedAt:row.saved_at,age,fresh:now>=row.saved_at&&age<ROLE_CACHE_MS};
+ }finally{store.db.close();}
+}
+function writeProjection(registry,projectId,{scope,binding,value,now=Date.now()}){
+ scope=safeId(scope,'projection scope');
+ if(!SHA.test(binding)||!Number.isSafeInteger(now)||now<0)throw Error('Invalid projection binding or time.');
+ const payload=JSON.stringify(value);
+ if(typeof payload!=='string'||Buffer.byteLength(payload)>MAX_PROJECTION_BYTES)throw Error('Projection exceeds local cache limit.');
+ const store=projectionStore(registry,projectId);if(!store)return {legacy:true};
+ try{
+  store.db.prepare(`INSERT INTO connected_read_projections(scope,binding,payload,saved_at) VALUES(?,?,?,?)
+   ON CONFLICT(scope,binding) DO UPDATE SET payload=excluded.payload,saved_at=excluded.saved_at
+   WHERE excluded.saved_at>=connected_read_projections.saved_at`).run(scope,binding,payload,now);
+  return {recorded:true};
+ }finally{store.db.close();}
+}
 function snapshot(registry,projectId){
  const store=open(registry,projectId);
  if(!store)return {legacy:true,providers:[],conflicts:[],outbox:[]};
@@ -178,4 +214,4 @@ function snapshot(registry,projectId){
   return {providers,conflicts,outbox};
  }finally{store.db.close();}
 }
-module.exports={open,observeMany,checkpoint,queueApproved,reportConflict,snapshot,fingerprint,validateOrigin};
+module.exports={open,observeMany,checkpoint,queueApproved,reportConflict,snapshot,fingerprint,validateOrigin,readProjection,writeProjection,ROLE_CACHE_MS};
