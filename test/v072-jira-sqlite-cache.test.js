@@ -63,3 +63,13 @@ test('invalid Jira cache site and project identity fail closed',()=>fixture(asyn
  assert.throws(()=>cache.saveIssuePage(registry,projectId,{site,projectKey:'TC',issues:[issue('10001','OTHER-100')]}),/Cross-project/);
  assert.equal(cache.snapshot(registry,projectId,site,'TC').issues.length,0);
 }));
+
+test('late Jira refresh does not overwrite newer SQLite issue state',()=>fixture(async({registry,projectId})=>{
+ const fresh={...issue('10001','TC-100','Done'),updated:'2026-11-23T10:00:00.000+0000'};
+ const stale={...issue('10001','TC-100','To Do'),updated:'2026-11-23T09:00:00.000+0000'};
+ const save=row=>cache.saveIssuePage(registry,projectId,{site,projectKey:'TC',issues:[row]});
+ assert.equal(save(fresh).stored,1);
+ assert.equal(save(stale).stored,0);
+ assert.equal(save({...stale,updated:''}).stored,0);
+ assert.equal(cache.snapshot(registry,projectId,site,'TC').issues[0].status,'Done');
+}));
