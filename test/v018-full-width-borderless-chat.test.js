@@ -23,7 +23,7 @@ test('My Work uses a full-width and full-height borderless conversation pane',()
  assert.match(results,/overflow-y:auto/);
  assert.match(results,/max-width:none/);
  assert.match(results,/border:0!important/);
- assert.match(conversation,/flex:1 1 auto/);
+ assert.match(conversation,/flex:0 0 auto/);
  assert.match(conversation,/width:100%/);
  assert.match(conversation,/max-width:none/);
  assert.match(conversation,/border:0!important/);

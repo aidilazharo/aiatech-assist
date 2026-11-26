@@ -45,6 +45,7 @@
   toolsMessage.appendChild(repoPanel);transcript.appendChild(toolsMessage);repoPanel.hidden=false;
   gitControls();requestGit();
   if(resultsViewport)resultsViewport.scrollTop=resultsViewport.scrollHeight;
+  requestAnimationFrame(()=>{if(toolsMessage?.isConnected&&!repoPanel.hidden)toolsMessage.scrollIntoView({block:'nearest'});});
  }
  function requestGit(action='status'){
   if(!repoPanel||repoPanel.hidden||role!=='software-developer'||!project||gitBusy||typeof send!=='function')return;
@@ -211,7 +212,7 @@
   if(!userText||!project||!role||pending)return;
   // Local developer command: render the actual tools inside the conversation.
   // Do not send a roleAiChat message or invoke any Git mutation.
-  if(userText.toLowerCase()==='dev-tools'&&role==='software-developer'){
+  if(/^dev-tools?$/i.test(userText)&&role==='software-developer'){
    addMessage('user',userText);input.value='';setBusy(false);showDevTools();return;
   }
   submittedText=userText;

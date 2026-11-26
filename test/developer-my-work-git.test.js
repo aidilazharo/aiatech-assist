@@ -89,10 +89,24 @@ test('dev-tools is a local Developer chat command and the live toolbar appears i
  assert.match(html,/<div id="developerChatToolsHome" hidden>[\s\S]*?<div id="developerChatRepoPanel"[^>]*hidden>/);
  assert.equal((html.match(/id="developerChatRepoPanel"/g)||[]).length,1);
  assert.match(client,/toolsMessage\.appendChild\(repoPanel\);transcript\.appendChild\(toolsMessage\);repoPanel\.hidden=false/);
- assert.match(client,/userText\.toLowerCase\(\)==='dev-tools'&&role==='software-developer'/);
+ assert.ok(client.includes("/^dev-tools?$/i.test(userText)&&role==='software-developer'"));
  const submit=client.slice(client.indexOf("form.addEventListener('submit'"),client.indexOf("input.addEventListener('keydown'"));
  assert.ok(submit.indexOf('showDevTools();return;')<submit.indexOf("send('roleAiChat'"));
  assert.match(client,/hideDevTools\(\);transcript\.replaceChildren\(\)/);
  assert.match(client,/if\(repoPanel\)\{hideDevTools\(\);updateRepoFolders/);
  assert.match(css,/\.developer-chat-tools-message/);
+});
+
+test('developer toolbar cannot collapse in a long flex chat and both command spellings work',()=>{
+ const fs=require('node:fs'),path=require('node:path'),root=path.join(__dirname,'..');
+ const css=fs.readFileSync(path.join(root,'media/atgv-mywork-ai.css'),'utf8');
+ const client=fs.readFileSync(path.join(root,'media/atgv-mywork-wave-chat.js'),'utf8');
+ assert.match(css,/\.atgv-mywork-ai-conversation\{[\s\S]*?flex:0 0 auto/);
+ assert.match(css,/\.atgv-mywork-ai-conversation > \.atgv-mywork-ai-message\{flex:0 0 auto\}/);
+ assert.match(css,/\.developer-chat-tools-message\{flex:0 0 auto;min-height:50px;[^}]*overflow:visible/);
+ assert.match(css,/\.developer-chat-repo-panel:not\(\[hidden\]\)\{display:block!important;min-height:50px\}/);
+ assert.match(client,/toolsMessage\.scrollIntoView\(\{block:'nearest'\}\)/);
+ const command=/^dev-tools?$/i;
+ for(const value of ['dev-tool','dev-tools','DEV-TOOLS'])assert.ok(command.test(value));
+ assert.equal(command.test('describe dev-tools'),false);
 });

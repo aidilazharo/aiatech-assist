@@ -99,7 +99,7 @@ body.atgv-global-ai-active:not(.gate-mode) #appHeader .header-end{
 #atgvMyWorkAi textarea:focus-visible{outline:2px solid #ff8994!important;outline-offset:2px}
 #atgvMyWorkAi .atgv-mywork-ai-conversation{
   display:flex;flex-direction:column;align-items:stretch;gap:18px;
-  flex:1 1 auto;width:100%;min-width:0;max-width:none;min-height:0;
+  flex:0 0 auto;width:100%;min-width:0;max-width:none;min-height:0;
   margin:0;padding:0;overflow:visible;max-height:none;
   background:transparent;border:0!important;border-radius:0;box-shadow:none;
 }
@@ -268,5 +268,7 @@ body.atgv-global-ai-active:not(.gate-mode) #topNotification #myWorkHeaderWave.my
 
 /* Developer tools are a command response inside the scrolling conversation. */
 #developerChatToolsHome[hidden]{display:none!important}
-#atgvMyWorkAi .developer-chat-tools-message{min-width:0;width:100%;max-width:100%;padding:0;overflow:hidden}
+#atgvMyWorkAi .atgv-mywork-ai-conversation > .atgv-mywork-ai-message{flex:0 0 auto}
+#atgvMyWorkAi .developer-chat-tools-message{flex:0 0 auto;min-height:50px;min-width:0;width:100%;max-width:100%;padding:0;overflow:visible}
+#atgvMyWorkAi .developer-chat-tools-message .developer-chat-repo-panel:not([hidden]){display:block!important;min-height:50px}
 #atgvMyWorkAi .developer-chat-tools-message .developer-chat-repo-panel{max-width:100%;width:100%;box-sizing:border-box;border:0;overflow-x:auto}
