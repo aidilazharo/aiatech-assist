@@ -11,7 +11,7 @@ test('ten image references are allowed with safe limit and nine guided placehold
  assert.match(host,/maximum of ten design reference images/i);
  assert.doesNotMatch(ui,/No design reference uploaded\./);
 });
-test('ticket scoped design framework selection is persisted and affects generation prompts',()=>{
+test('BR scoped design framework selection is persisted and affects generation prompts',()=>{
  assert.match(host,/id="uxDesignFramework"/);
  assert.match(host,/sdlcCatalog\.designFrameworks\(getWorkspace\(\)\?\.uri\.fsPath\)/);
  assert.match(ui,/renderUxFrameworkOptions\(m\.frameworks,m\.value\)/);
@@ -19,9 +19,14 @@ test('ticket scoped design framework selection is persisted and affects generati
  assert.match(host,/case 'uxFrameworkRead':/);
  assert.match(host,/availableFrameworks\.find\(item=>item\.id===designFramework\)/);
  assert.match(host,/!selectedFramework\|\|designFramework!==String\(msg\.framework\|\|''\)/);
- assert.match(host,/design-source-policy'\)\.requireReference/);
+ const generation=host.slice(host.indexOf("case 'uxPipelineGenerate':"),host.indexOf("case 'uxPublishFrontend':"));
+ const approval=host.slice(host.indexOf("case 'uxPipelineDecide':"),host.indexOf("case 'uxPipelineDelete':"));
+ assert.match(generation,/design-source-policy'\)\.optionalReference/);
+ assert.match(approval,/design-source-policy'\)\.optionalReference/);
+ assert.doesNotMatch(generation,/design-source-policy'\)\.requireReference/);
+ assert.doesNotMatch(approval,/design-source-policy'\)\.requireReference/);
  assert.match(host,/uxDesignPipeline\.flowPrompt\(ticket,approved,guide,referenceNotes,repositoryGuide\)/);
- assert.match(host,/designFramework,sourceStoryKey,repositorySource:roleRepository\.identity\(repositoryReference\)\}/);
+ assert.match(generation,/designFramework,sourceStoryKey,sourceBrId:brScope\.brId,sourceTaskKeys:brScope\.scope\.entries\.map\(entry=>entry\.key\),repositorySource:roleRepository\.identity\(repositoryReference\)\}/);
  assert.match(host,/Design framework changed since generation/);
  assert.match(ui,/send\('uxFrameworkSave'/);
 });

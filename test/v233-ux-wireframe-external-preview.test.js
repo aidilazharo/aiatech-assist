@@ -32,7 +32,13 @@ test('workspace groups Jira and framework selectors ahead of generation with opt
  assert.ok(section.indexOf('id="uxSelectedTicket"')>toolbar);
  assert.ok(section.indexOf('id="uxSelectedTicket"')<section.indexOf('id="uxUploadReference"'));
  assert.ok(section.indexOf('id="uxGenerateUIUX"')<section.indexOf('id="uxUploadReference"'));
- assert.match(section,/<label for="uxSelectedTicket">Business Requirement \/ Jira Epic<\/label>/);
+ assert.match(section,/<label for="uxSelectedTicket">Business Requirement <button id="uxRoleJiraRefresh"/);
+ assert.match(section,/<select id="uxSelectedTicket" aria-label="Assigned Business Requirement">/);
+ assert.match(section,/Optional · up to 10 images/);
+ assert.doesNotMatch(section,/Required · up to 10 images/);
+ const selector=ui.slice(ui.indexOf('function renderUxTickets(rows){'),ui.indexOf('function loadUxDrafts(){'));
+ assert.match(selector,/option\.value=root\.key/);
+ assert.doesNotMatch(selector,/option\.value=item\.key|createElement\('optgroup'\)/);
  assert.match(section,/id="uxDesignFramework"/);
  assert.doesNotMatch(section,/Generate one complete, reviewable UI\/UX design for an assigned Jira ticket/);
  assert.match(css,/\.ux-design-heading/);assert.match(css,/\.ux-reference-thumb/);
