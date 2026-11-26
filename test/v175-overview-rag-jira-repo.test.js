@@ -56,7 +56,7 @@ test('All roles hide duplicate Jira inventory while Developer and UX retain scop
  assert.ok(refresh.indexOf("if($('roleJiraWork').hidden)")<refresh.indexOf('ATGVDataTables.mount(root,rows'));
  assert.match(ui,/\$\('developerTaskDashboard'\)\.classList\.toggle\('hidden',roleId!=='software-developer'\)/);
  assert.match(ui,/\$\('uxDesignWorkspace'\)\.classList\.toggle\('hidden',roleId!=='ux-designer'\)/);
- assert.match(ui,/send\('roleJiraIssues',\{roleId:selectedRole,requestId:\+\+roleJiraRequest\}\)/);
+ assert.match(ui,/send\('roleJiraIssues',\{roleId:selectedRole,requestId:\+\+roleJiraRequest,force:!!force\}\)/);
  assert.match(ui,/if\(selectedRole==='software-developer'\)showDeveloperAssignedTickets\(rows\)/);
  assert.match(ui,/if\(selectedRole==='ux-designer'\)renderUxTickets\(rows\)/);
  assert.match(ui,/ATGVDataTables\.mount\(root,rows/);
