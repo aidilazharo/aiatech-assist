@@ -266,24 +266,34 @@ document.body.appendChild($('hostDialog'));
 function hostDialogNext(){
  if(hostModalCurrent||!hostModalQueue.length)return;
  hostModalCurrent=hostModalQueue.shift();const req=hostModalCurrent;
- $('hostDialogTitle').textContent=req.dialogType==='confirm'?'Confirm action':req.dialogType==='select'?'Choose an option':'Enter information';
+ $('hostDialogTitle').textContent=req.dialogType==='confirm'?'Confirm action':req.dialogType==='select'?'Choose an option':req.dialogType==='radio'?'Select Repository Folder':'Enter information';
  $('hostDialogMessage').textContent=req.message;
  $('hostDialogViewDetails').classList.toggle('hidden',!req.hasDetails);
  $('hostDialogViewDetails').textContent=req.detailsLabel||'View Full Deletion Preview';
- const input=$('hostDialogInput');const showInput=req.dialogType!=='confirm';
+ const input=$('hostDialogInput');const showInput=req.dialogType==='input';
  input.classList.toggle('hidden',!showInput);$('hostDialogInputLabel').classList.toggle('hidden',!showInput);
  if(req.dialogType==='select'){input.value='';input.classList.add('hidden');const select=$('hostDialogSelect');select.replaceChildren();select.classList.remove('hidden');for(const [index,entry] of (req.items||[]).entries()){const option=document.createElement('option');option.value=String(index);option.textContent=typeof entry==='string'?entry:entry.label||String(entry);select.append(option);}}
- else {input.value=req.value||'';input.type=req.password?'password':'text';input.placeholder=req.placeholder||'';}
+ else if(req.dialogType==='radio'){
+  const group=$('hostDialogRadio');group.replaceChildren();group.classList.remove('hidden');
+  const items=req.items||[],selected=Math.max(0,items.findIndex(entry=>entry.selected));
+  for(const [index,entry] of items.entries()){
+   const label=document.createElement('label');label.className='atgv-folder-radio-row';
+   const radio=document.createElement('input');radio.type='radio';radio.name='hostDialogFolder';radio.value=String(index);radio.checked=index===selected;
+   const text=document.createElement('span'),name=document.createElement('strong'),detail=document.createElement('small');name.textContent=entry.label;detail.textContent=[entry.description,entry.detail].filter(Boolean).join(' · ');text.append(name,detail);label.append(radio,text);group.append(label);
+  }
+ }else {input.value=req.value||'';input.type=req.password?'password':'text';input.placeholder=req.placeholder||'';}
  $('hostDialogError').textContent='';$('hostDialogConfirm').textContent=req.confirm||'Confirm';
  $('hostDialog').classList.remove('hidden');$('hostDialog').setAttribute('aria-hidden','false');
- (req.dialogType==='input'?input: req.dialogType==='select'?$('hostDialogSelect'):$('hostDialogConfirm')).focus();
+ (req.dialogType==='input'?input: req.dialogType==='select'?$('hostDialogSelect'):req.dialogType==='radio'?($('hostDialogRadio').querySelector('input:checked')||$('hostDialogConfirm')):$('hostDialogConfirm')).focus();
 }
 function resolveHostDialog(accepted){
  const req=hostModalCurrent;if(!req)return;
  const input=$('hostDialogInput'),select=$('hostDialogSelect');
- let value=req.dialogType==='confirm'?(req.confirm||'Confirm'):req.dialogType==='input'?input.value:select?(req.items||[])[Number(select.value)]:undefined;
+ const radio=$('hostDialogRadio'),selected=radio.querySelector('input:checked');
+ let value=req.dialogType==='confirm'?(req.confirm||'Confirm'):req.dialogType==='input'?input.value:req.dialogType==='radio'?(selected?(req.items||[])[Number(selected.value)]:undefined):select?(req.items||[])[Number(select.value)]:undefined;
+ if(accepted&&req.dialogType==='radio'&&!value){$('hostDialogError').textContent='Select a repository folder.';return;}
  if(req.dialogType==='input'&&accepted&&req.password&&!String(value).trim()){$('hostDialogError').textContent='A value is required.';input.focus();return;}
- $('hostDialog').classList.add('hidden');$('hostDialog').setAttribute('aria-hidden','true');if(select){select.classList.add('hidden');select.replaceChildren();}input.value='';input.type='text';
+ $('hostDialog').classList.add('hidden');$('hostDialog').setAttribute('aria-hidden','true');if(select){select.classList.add('hidden');select.replaceChildren();}radio.classList.add('hidden');radio.replaceChildren();input.value='';input.type='text';
  hostModalCurrent=null;send('hostDialogResponse',{requestId:req.requestId,accepted,value:accepted?value:undefined});hostDialogNext();
 }
 $('hostDialogCancel').addEventListener('click',()=>resolveHostDialog(false));

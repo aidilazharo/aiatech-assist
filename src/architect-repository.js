@@ -25,7 +25,7 @@ async function resolve(state,projectId,developerGit,options={}){
     const root=await fs.realpath(options.projectRoot),relative=path.relative(root,repo.root);
     if(!relative||relative.startsWith('..')||path.isAbsolute(relative))throw Error('Repository is outside the project folder.');
    }
-   if(options.githubOwner&&options.githubRepo&&repo.remote&&
+   if(!options.allowLocalOrigin&&options.githubOwner&&options.githubRepo&&repo.remote&&
       !developerGit.matchesGithubRepo(repo.remote,options.githubOwner,options.githubRepo))
      throw Error('Local checkout has a different GitHub origin.');
    if(state.get(localKey)!==repo.root&&typeof state.update==='function')await state.update(localKey,repo.root);
@@ -91,7 +91,7 @@ async function chooseCustomFolder(state,projectId,options={}){
  const key='atgvAssist.selectedRepositoryFolder.'+projectId;
  const previous=state.get(key)||state.get('atgvAssist.localRepo.'+projectId);
  let selected;
- if(folders.length===1)selected=folders[0].root;
+ if(folders.length===1&&!options.forceChoose)selected=folders[0].root;
  else if(!options.forceChoose&&folders.some(x=>x.root===previous))selected=previous;
  else{
   if(typeof options.chooseFolder!=='function')throw Error('More than one project folder found. Select a repository folder.');
@@ -138,11 +138,12 @@ async function ensureCustom(state,projectId,developerGit,options={}){
     checked=await developerGit.configureOrigin(dest,owner,repoName);
     mode='initialized';
    }
-   if(!developerGit.matchesGithubRepo(checked.remote,owner,repoName))
-    throw Error('Repository folder has an unexpected GitHub origin. Existing files were preserved.');
+   const originMatches=developerGit.matchesGithubRepo(checked.remote,owner,repoName);
+   // Local execution may use existing source without rewriting or pulling its origin.
+   if(!originMatches)mode='local-origin-mismatch';
    // Opted-in bundled projects receive source and module archives from the
    // same origin branch. Pull only clean configured checkouts; never reset.
-   if(entries.length>1&&checked.clean&&checked.sha&&checked.branch===(options.githubBranch||'main')&&
+   if(originMatches&&entries.length>1&&checked.clean&&checked.sha&&checked.branch===(options.githubBranch||'main')&&
       !developerGit.localLogs?.()?.running){
     const policyPath=path.join(dest,'vendor','windows-x64','bundle-policy.json');
     const policy=await fs.readFile(policyPath,'utf8').then(JSON.parse,error=>{if(error.code==='ENOENT')return null;throw error;});
@@ -153,7 +154,7 @@ async function ensureCustom(state,projectId,developerGit,options={}){
      mode=result.updated?'pulled':'existing';
     }
    }
-   if(entries.length===1&&entries[0]==='.git'){
+   if(originMatches&&entries.length===1&&entries[0]==='.git'){
     if(!checked.sha&&checked.clean&&typeof developerGit.hydrateUnbornCheckout==='function'){
      checked=await developerGit.hydrateUnbornCheckout(dest,owner,repoName,options.githubBranch||checked.branch||'main',{token:options.token||''});
      mode=checked.sha?'pulled':'initialized';
@@ -184,14 +185,14 @@ async function ensureCustom(state,projectId,developerGit,options={}){
  }
  const relative=path.relative(root,checked.root);
  if(!relative||relative.startsWith('..')||path.isAbsolute(relative)||
-    !developerGit.matchesGithubRepo(checked.remote,owner,repoName)||
+    (mode!=='local-origin-mismatch'&&!developerGit.matchesGithubRepo(checked.remote,owner,repoName))||
     path.resolve(checked.root)!==path.resolve(dest))
   throw Error('The project checkout path or configured GitHub origin did not pass verification.');
  if(typeof state.update==='function'){
   await state.update('atgvAssist.localRepo.'+projectId,checked.root);
   await state.update('atgvAssist.bootstrapRepo.'+projectId,checked.root);
  }
- return {root:checked.root,branch:checked.branch,sha:checked.sha,mode};
+ return {root:checked.root,branch:checked.branch,sha:checked.sha,mode,originMatches:developerGit.matchesGithubRepo(checked.remote,owner,repoName)};
 }
 // A catalog stack starts in its own new project-local Git folder. Never clone or replace an existing application.
 async function ensureLocal(state,projectId,developerGit,{projectRoot,stackId,generation=0}={}){

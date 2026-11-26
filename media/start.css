@@ -3270,3 +3270,6 @@ body:not(.gate-mode) .app-layout{
 
 /* Developer stage-aware progress: one circular indicator, existing stage labels retained. */
 .developer-stage-ring{display:flex;align-items:center;gap:12px;margin:8px 0}.developer-stage-ring svg{flex:none}.developer-br-steps .developer-br-orbit{display:none!important}
+
+/* Single-choice project folder modal. */
+.atgv-host-modal .atgv-folder-radio-list{display:flex;flex-direction:column;gap:8px;max-height:45vh;overflow:auto;margin:12px 0}.atgv-host-modal .atgv-folder-radio-list.hidden{display:none}.atgv-host-modal .atgv-folder-radio-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--atgv-line);border-radius:6px;cursor:pointer}.atgv-host-modal .atgv-folder-radio-row:has(input:checked){border-color:var(--vscode-focusBorder)}.atgv-host-modal .atgv-folder-radio-row input[type=radio]{width:auto;flex:0 0 auto;margin:0;display:inline-block;accent-color:var(--vscode-button-background)}.atgv-folder-radio-row span{min-width:0;display:flex;flex-direction:column;gap:3px}.atgv-folder-radio-row small{color:var(--vscode-descriptionForeground);overflow-wrap:anywhere;font-size:11px}

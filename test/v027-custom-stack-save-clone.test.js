@@ -83,7 +83,7 @@ test('Git metadata without working-tree source uses a verified fast-forward pull
   assert.match(await fs.readFile(path.join(dest,'package.json'),'utf8'),/restored/);
  });
 });
-test('Populated non-Git folder, symlink, and mismatched origins fail safely',async()=>{
+test('Populated non-Git folder and symlink fail safely; mismatched origins are local only',async()=>{
  await fixture(async({root,state,driver,calls,dest})=>{
   await fs.mkdir(dest,{recursive:true});
   await fs.writeFile(path.join(dest,'notes.md'),'must survive');
@@ -101,7 +101,14 @@ test('Populated non-Git folder, symlink, and mismatched origins fail safely',asy
  await fixture(async({root,state,driver,calls,dest})=>{
   await fs.mkdir(path.join(dest,'.git'),{recursive:true});
   driver.matchesGithubRepo=()=>false;
-  await assert.rejects(ensureCustom(state,'demo',driver,opts(root)),/unexpected GitHub origin/);
+  await fs.writeFile(path.join(dest,'existing.txt'),'preserve source');
+  const result=await ensureCustom(state,'demo',driver,{...opts(root),pull:async()=>{throw Error('Must not pull mismatched origin');}});
+  assert.equal(result.mode,'local-origin-mismatch');
+  assert.equal(result.originMatches,false);
+  assert.equal(await fs.readFile(path.join(dest,'existing.txt'),'utf8'),'preserve source');
+  const {resolve}=require('../src/architect-repository');
+  await assert.rejects(resolve(state,'demo',driver,opts(root)),/different GitHub origin/);
+  assert.equal(await resolve(state,'demo',driver,{...opts(root),allowLocalOrigin:true}),dest);
   assert.equal(calls.length,0);
  });
 });

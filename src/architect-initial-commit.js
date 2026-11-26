@@ -26,11 +26,11 @@ async function readSafe(root,name){
  if(path.relative(root,await fs.realpath(current)).split(path.sep).join('/')!==name)return null;
  const bytes=await fs.readFile(current);return safeText(bytes)?bytes:null;
 }
-async function plan(root,{owner,name}={}){
+async function plan(root,{owner,name,allowLocalOrigin=false}={}){
  const repo=await driver.repository(root);
  if(repo.sha)throw Error('Git history already exists. No initial commit is required.');
  if(!repo.branch)throw Error('Select an initial Git branch first.');
- if(!owner||!name||!driver.matchesGithubRepo(repo.remote,owner,name))throw Error('The project repository origin must match the configured GitHub repository.');
+ if(!allowLocalOrigin&&(!owner||!name||!driver.matchesGithubRepo(repo.remote,owner,name)))throw Error('The project repository origin must match the configured GitHub repository.');
  if(entries(await git(repo.root,'ls-files','-z')).length)throw Error('The initial Git index already contains staged files. Review and commit them manually; ATGV will not change your staging.');
  const names=entries(await git(repo.root,'ls-files','--others','--exclude-standard','-z')).sort();
  if(names.length>10000)throw Error('Too many untracked files for automatic initial commit review. Review and commit manually.');
@@ -43,12 +43,12 @@ async function plan(root,{owner,name}={}){
  }
  if(!files.length)throw Error('No eligible source files were found for the initial commit. Review the repository manually.');
  const fingerprint=digest(JSON.stringify({root:repo.root,branch:repo.branch,remote:repo.remote,files,excluded}));
- return {root:repo.root,branch:repo.branch,files,excluded,fingerprint};
+ return {root:repo.root,branch:repo.branch,remote:repo.remote,files,excluded,fingerprint};
 }
 function reviewText(p){return ['# Review initial local Git commit','Repository: '+p.root,'Branch: '+p.branch,'No GitHub push. Review these files before approving; automated secret detection is not exhaustive.','','Files proposed for commit ('+p.files.length+'):',...p.files.map(x=>x.path),'','Excluded untracked files ('+p.excluded.length+'); ignored files are not listed:',...p.excluded.map(x=>JSON.stringify(x))].join('\n');}
-async function commit(root,review,{owner,name,signal}={}){
+async function commit(root,review,{owner,name,signal,allowLocalOrigin=false}={}){
  const checkStop=()=>{if(signal?.aborted)throw Error('Initial commit cancelled before committing.');};
- checkStop();const checked=await plan(root,{owner,name});checkStop();
+ checkStop();const checked=await plan(root,{owner,name,allowLocalOrigin});checkStop();
  if(checked.fingerprint!==review?.fingerprint)throw Error('Source files or repository changed during review. Rescan and approve again.');
  const expected=checked.files.map(x=>x.path).sort(),staged=new Set();
  const hooks=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-no-git-hooks-'));
@@ -78,7 +78,7 @@ async function commit(root,review,{owner,name,signal}={}){
    if(!bytes||digest(bytes)!==item.sha256||!safeText(blob))throw Error('A staged file changed or contains potentially sensitive content; no commit created.');
   }
   const latest=await driver.repository(checked.root);
-  if(latest.sha||latest.branch!==checked.branch||!driver.matchesGithubRepo(latest.remote,owner,name))throw Error('Git history, branch or origin changed during review.');
+  if(latest.sha||latest.branch!==checked.branch||latest.remote!==checked.remote||(!allowLocalOrigin&&!driver.matchesGithubRepo(latest.remote,owner,name)))throw Error('Git history, branch or origin changed during review.');
   checkStop();await git(checked.root,'-c','core.hooksPath='+hooks,'commit','-m','chore: initialize reviewed project source');
   const result=await driver.repository(checked.root);
   if(!/^[a-f0-9]{40,64}$/i.test(result.sha||''))throw Error('Initial commit could not be verified.');

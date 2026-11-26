@@ -23,3 +23,16 @@ test('Scan Folder remembers per-project selection, explicit scan permits changin
   await assert.rejects(repo.chooseCustomFolder(state,'two',{projectRoot:root}),/More than one/);
  }finally{await fs.rm(root,{recursive:true,force:true});}
 });
+
+test('explicit scan prompts even for one folder and rejects cancellation',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-single-folder-'));
+ try{
+  const dest=path.join(root,'repository','app');await fs.mkdir(dest,{recursive:true});
+  const map=new Map(),state={get:k=>map.get(k),update:async(k,v)=>map.set(k,v)};
+  let calls=0;
+  const result=await repo.chooseCustomFolder(state,'one',{projectRoot:root,forceChoose:true,chooseFolder:async folders=>{calls++;assert.equal(folders.length,1);return dest;}});
+  assert.equal(result,dest);assert.equal(calls,1);
+  await assert.rejects(repo.chooseCustomFolder(state,'one',{projectRoot:root,forceChoose:true,chooseFolder:async()=>undefined}),/cancelled/);
+  assert.equal(map.get('atgvAssist.selectedRepositoryFolder.one'),dest);
+ }finally{await fs.rm(root,{recursive:true,force:true});}
+});

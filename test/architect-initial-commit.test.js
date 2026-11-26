@@ -59,3 +59,12 @@ test('first-commit callback is protected by the running workflow cancellation st
  assert.equal(called,true);assert.equal(workflow.isPending(root),false);
  }finally{await fs.rm(root,{recursive:true,force:true});}
 });
+
+test('explicit local-only first commit permits differing origin without changing it',()=>fixture(async root=>{
+ const options={owner:'other',name:'app',allowLocalOrigin:true};
+ const p=await initial.plan(root,options);
+ assert.equal(p.remote,'https://github.com/acme/app.git');
+ const result=await initial.commit(root,p,options);
+ assert.match(result.sha,/^[a-f0-9]{40}$/);
+ assert.equal(git(root,'remote','get-url','origin'),'https://github.com/acme/app.git');
+}));
