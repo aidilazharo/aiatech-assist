@@ -64,12 +64,17 @@ function saveIssuePage(registry,projectId,{site,projectKey,issues}){
     project_key=excluded.project_key,parent_key=excluded.parent_key,
     parent_id=excluded.parent_id,status=excluded.status,jira_updated=excluded.jira_updated,
     payload=excluded.payload,seen_at=excluded.seen_at`);
+  const previous=store.db.prepare('SELECT jira_updated FROM jira_issues WHERE site=? AND jira_id=?');
   let stored=0;
   for(const row of issues){
    const jiraId=String(row?.id||'');
    if(!/^\d{1,30}$/.test(jiraId))continue; // Old fixtures may not provide a remote ID.
    const key=validIssueKey(row.key);
    if(key.split('-')[0]!==project)throw Error('Cross-project Jira issue cannot enter project cache.');
+   // A slow refresh must not overwrite a newer issue already saved by another screen.
+   const oldUpdated=Date.parse(previous.get(origin,jiraId)?.jira_updated||'');
+   const incomingUpdated=Date.parse(String(row.updated||''));
+   if(Number.isFinite(oldUpdated)&&(!Number.isFinite(incomingUpdated)||incomingUpdated<oldUpdated))continue;
    const payload=JSON.stringify(row);
    if(Buffer.byteLength(payload,'utf8')>40000)throw Error('Jira issue cache row is oversized.');
    put.run(origin,jiraId,key,project,String(row.parentKey||'').slice(0,80),
