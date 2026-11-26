@@ -24,16 +24,19 @@ test('reference-aligned layout offers a eight-step TDD BR flow, grouped implemen
 });
 
 test('server control launches only matching tested, checkpointed initial or permitted draft worktrees and opens browser after verification',()=>{
- assert.match(host,/case 'developerBrStartServer':/);
- assert.match(host,/prior\.brId!==String\(msg\.brId\|\|''\)/);
- assert.match(host,/if\(!prior\|\|prior\.projectId!==activeProject\.id.*!\(prior\.checksPassed\|\|prior\.initial\|\|prior\.previewOnly&&require\('\.\.\/\.\.\/developer-preview-mode'\)\.allowed/);
- assert.match(host,/if\(prior\.initial\)\{await developerTdd\.verifyCheckpoint\(prior\.worktree,prior\.checkpoint\)/);
- assert.match(host,/if\(approved\.approvedRevision!==prior\.revision\)/);
- assert.match(host,/if\(approval\.sha!==prior\.approvalSha\)/);
  const start=host.indexOf("case 'developerBrStartServer':");
  const end=host.indexOf("case 'developerBrLogs':",start);
+ assert.ok(start>=0&&end>start,'Server handler boundaries must exist');
  const body=host.slice(start,end);
- assert.ok(body.indexOf('await launchGeneratedBrServer(run,project,progress,check)')<body.indexOf('vscode.env.openExternal'));
+ // The generated compatibility index normalizes runtime requires to ./module.
+ assert.match(body,/if\(!prior\|\|prior\.projectId!==activeProject\.id\|\|prior\.brId!==String\(msg\.brId\|\|''\)\|\|!prior\.worktree\|\|!\(prior\.checksPassed\|\|prior\.initial\|\|prior\.previewOnly&&require\('\.\/developer-preview-mode'\)\.allowed\(await registry\.read\(activeProject\.id\)\)\)\)throw Error/);
+ assert.match(body,/if\(prior\.initial\)\{await developerTdd\.verifyCheckpoint\(prior\.worktree,prior\.checkpoint\)/);
+ assert.match(body,/if\(approved\.approvedRevision!==prior\.revision\)/);
+ assert.match(body,/if\(approval\.sha!==prior\.approvalSha\)/);
+ assert.match(body,/repo\.root!==await fs\.realpath\(prior\.worktree\)\|\|repo\.branch!==prior\.branch/);
+ const launch=body.indexOf('await launchGeneratedBrServer(run,project,progress,check)');
+ const browser=body.indexOf('vscode.env.openExternal');
+ assert.ok(launch>=0&&browser>launch,'Verified server launch must precede browser opening');
  assert.match(body,/msg\.command==='developerBrStartServer'/);
  assert.match(body,/type:'developerBrBrowserOpened'/);
  assert.match(host,/case 'developerBrStop'/);

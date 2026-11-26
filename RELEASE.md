@@ -1,11 +1,12 @@
-# ATGV AIATECH Assist v0.1.40
+# ATGV AIATECH Assist v0.1.41
 
 ## Changes
 
-- Align 15 outdated regression assertions with the stage-aware Developer lifecycle, mandatory design evidence and merged Confluence roster.
-- Preserve project/BR identity, initial checkpoint verification, optional draft consent, Jira role permissions and TDD gates.
-- Retain all tests; do not bypass regression or packaging checks.
+- Correct the remaining Developer server regression assertion to match normalized imports in the generated source-test index.
+- Scope assertions to the server startup handler and explicitly verify project, BR, worktree, initial checkpoint, preview permission, approval revisions and browser launch ordering.
+- Keep all regression tests and production safeguards unchanged.
 
 ## Validation
 
-- Updated assertions inspected against v0.1.39 source. Full regression and VSIX packaging must be verified by the release build; not executed in the connector environment.
+- v0.1.40 macOS build: 2,734 passed, one failed, three skipped.
+- Corrected assertions checked against reconstructed current source; full regression and VSIX build not executed in this environment.
