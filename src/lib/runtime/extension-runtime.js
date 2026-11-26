@@ -59,7 +59,7 @@ const brRoleOwnership=require('../../br-role-ownership');
 
 const livePublishedBR=require('../../live-published-br');
 const publishedMemory=new Map();
-async function refreshPublishedRoleRegister(projectId,{config,token,register,items,complete=true}={}){
+async function refreshPublishedRoleRegister(projectId,{config,token,register,items,complete=true,accountId=''}={}){
  if(activeProject?.id!==projectId||openingOffline)throw Error('Open the connected project before reading published BRs.');
  config=config||effectiveConfig(activeProject);token=token||await getAtlassianToken(activeProject);
  if(!token)throw Error('Connect Jira to read current published Business Requirements.');
@@ -73,7 +73,7 @@ async function refreshPublishedRoleRegister(projectId,{config,token,register,ite
  let previous=publishedMemory.get(memoryKey)||{};
  try{previous={...previous,...jiraLocalStore.publishedSnapshots(registry,projectId,{site,projectKey})};}catch(error){report('Published BR SQLite history unavailable: '+error.message);}
  const auth={token,basicEmail:String(config.get('jira.email')||'').trim()};
- const result=await livePublishedBR.collect({register,items,projectKey,previous,
+ const result=await livePublishedBR.collect({register,items,projectKey,previous,accountId,
   verifyMarker:(id,issue)=>issue.labels?.includes(jiraScopedMarker(register,config,id))||issue.labels?.includes(jiraMarker(config,id))||issue.labels?.includes(jiraMarker(config,id,projectId)),
   readIssue:key=>requestJson(site+'/rest/api/3/issue/'+encodeURIComponent(key)+'?fields=*all&expand=names',auth),
   shouldContinue:()=>activeProject?.id===projectId});
@@ -7014,7 +7014,7 @@ async function handleDashboardMessage(msg){
           if(prior.exists&&prior.status!=='rejected')throw Error('Preview or reject the current generated design before regenerating.');
           if(prior.revision!==String(msg.expectedRevision||''))throw Error('UI/UX generation status changed. Reload before regenerating.');
           const approved=designProposals.approvedInputs(await currentPublishedRoleRegister(projectId));
-          const reference=require('../../design-source-policy').requireReference(await uxDesignReferences.readBundle(root,key,{includePreview:true}));
+          const reference=require('../../design-source-policy').optionalReference(await uxDesignReferences.readBundle(root,key,{includePreview:true}));
           const repositoryReference=await committedRoleRepository(projectId,'ux-designer');
           const target=await activeAiTarget();
           const designFramework=context.workspaceState.get(uxFrameworkKey(projectId,key),'aia-qi');
@@ -7028,7 +7028,7 @@ async function handleDashboardMessage(msg){
           const existingProjectScreens=require('../../project-ux-prototype').combined(sharedManifest).screens.map(screen=>({name:screen.name,jiraKey:screen.jiraKey,storyKey:screen.storyKey}));
           const projectScreenGuide='Existing approved project screens (do not overwrite other tickets; align navigation and avoid duplicate screen names): '+JSON.stringify(existingProjectScreens).slice(0,7000)+'\nCurrent task must add only screens supported by its Jira Story and approved BR.';
           const uxRoleGuide=await roleSkillPrompt('ux-designer');
-          const guide=projectScreenGuide+'\n'+uxRoleGuide+'\n'+require('../../design-source-policy').RULE;
+          const guide=projectScreenGuide+'\n'+uxRoleGuide+'\n'+require('../../design-source-policy').RULE+'\nReference upload is optional. If none is provided, follow the committed repository and selected catalogue design system ('+designFramework+'), grounded in the verified Jira requirements. Do not invent an independent theme.';
           const repositoryGuide=roleRepository.guidance(repositoryReference);
           checkStop();
           const ticket={key,summary:issue.fields?.summary,description:textFromAdf(issue.fields?.description)};
@@ -7046,7 +7046,7 @@ async function handleDashboardMessage(msg){
           const visualNotes=await uxDesignReferences.visualContext(vscode,target,reference,{signal:run.controller.signal,verified:target.kind==='vscode'&&verifiedVisionModels.get(modelIdentity(target.model))?.status==='verified'});
           const referenceNotes=visualNotes+'\n'+uxDesignReferences.promptContext(reference);
           const progress=async(stage,message)=>{checkStop();await dashboard?.webview.postMessage({type:'uxPipelineWorking',projectId,key,stage,message,canStop:true});};
-          await progress(1,'User-uploaded design reference and committed project repository loaded.');
+          await progress(1,reference.exists?'User-uploaded design reference and committed project repository loaded.':'Optional reference skipped; committed project repository loaded.');
           await progress(2,'Generating user flow diagram…');
           const flowRaw=await aiAnswer(target,uxDesignPipeline.flowPrompt(ticket,approved,guide,referenceNotes,repositoryGuide),30000,{json:true,signal:run.controller.signal});
           checkStop();let flow;
@@ -7113,7 +7113,7 @@ async function handleDashboardMessage(msg){
         require('../../br-ownership').requireTask(roleRegister,issue,'ux-designer');
         if(record.sourceBRHash!==designProposals.approvedInputs(roleRegister).hash)throw Error('Published Business Requirements changed since design approval. Review and regenerate the design before publishing.');
         await dashboard?.webview.postMessage({type:'uxFrontendPublishProgress',projectId,key,message:'Generating frontend source from the approved UI/UX design…'});
-        const reference=require('../../design-source-policy').requireReference(await uxDesignReferences.readBundle(aiRoot(),key));
+        const reference=require('../../design-source-policy').optionalReference(await uxDesignReferences.readBundle(aiRoot(),key));
         if(reference.sha256!==record.designReferenceHash)throw Error('Design reference changed. Regenerate and approve before publishing.');
         if(!record.repositorySource?.sha)throw Error('Repository-grounded design required before publishing.');
         await requireSameRoleRepository(projectId,'ux-designer',record.repositorySource);
@@ -7201,7 +7201,7 @@ async function handleDashboardMessage(msg){
         if(String(issue.fields?.status?.statusCategory?.key||'').toLowerCase()==='done')throw Error('This Jira ticket is already Done. Reopen it in Jira before starting new design work.');
         const registered=await currentPublishedRoleRegister(activeProject.id),approved=designProposals.approvedInputs(registered);
         const prior=await uxTicketDesigns.read(aiRoot(),key,kind);
-        const reference=require('../../design-source-policy').requireReference(await uxDesignReferences.readBundle(aiRoot(),key,{includePreview:true}));
+        const reference=require('../../design-source-policy').optionalReference(await uxDesignReferences.readBundle(aiRoot(),key,{includePreview:true}));
         const repositoryProjectId=activeProject.id,repositoryReference=await committedRoleRepository(repositoryProjectId,'ux-designer');
         const target=await activeAiTarget();
         await dashboard?.webview.postMessage({type:'uxDesignWorking',projectId:activeProject.id,key,kind,message:'Generating '+uxTicketDesigns.KINDS[kind]+' with the selected AI service…'});
@@ -7469,7 +7469,8 @@ async function handleDashboardMessage(msg){
         }
         if(activeProject?.id!==projectId)break;
         register=await brWorkflow.load(registry,projectId);
-        const projection=await refreshPublishedRoleRegister(projectId,{config,token,register,items:all,complete:!result.truncated&&!result.cancelled});
+        const discoveryRegister=register;
+        const projection=await refreshPublishedRoleRegister(projectId,{config,token,register,items:all,accountId:self.accountId,complete:!result.truncated&&!result.cancelled});
         register=projection.register;warnings.unshift(...projection.warnings);
         try{jiraLocalStore.saveMappings(registry,projectId,{site:jiraSite,register});}
         catch(error){report('Jira SQLite mapping index unavailable: '+String(error.message||error));}
@@ -7489,7 +7490,7 @@ async function handleDashboardMessage(msg){
           }
         }catch(error){warnings.push('Shared BR role ownership: '+String(error.message||error).slice(0,240));}
         if(activeProject?.id!==projectId)break;
-        let items=inventory.enrich(liveItems,register,self.accountId,{projectKey,verifyMarker:(id,issue)=>issue.labels?.includes(jiraScopedMarker(register,config,id))||issue.labels?.includes(jiraMarker(config,id))});
+        let items=inventory.enrich(liveItems,register,self.accountId,{projectKey,discoveryRegister,verifyMarker:(id,issue)=>issue.labels?.includes(jiraScopedMarker(discoveryRegister,config,id))||issue.labels?.includes(jiraMarker(config,id))||issue.labels?.includes(jiraMarker(config,id,projectId))});
         if(roleRecords)items=brRoleOwnership.overlay(items,roleRecords,self.accountId,enabledRoles,register);
         await dashboard?.webview.postMessage({type:'roleJiraIssues',projectId,items,incomplete:!!result.truncated,requestId,
          register,brSyncWarnings:warnings.slice(0,5)});break;

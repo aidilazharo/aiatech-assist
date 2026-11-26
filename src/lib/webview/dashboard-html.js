@@ -31,7 +31,7 @@ function html(webview,{resumeLibrary=false}={}){
     subtask:"<path d=\"M5 5v7h4m-3-3 3 3-3 3M12 8h7v8h-7zM14 12l1 1 2-2\"/>"
   };
   const baHeaderIcon=(name,variant='')=>`<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${variant}>${baHeaderIcons[name]}</svg>`;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.1.57';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.1.58';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const uiConsistencyCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-consistency.css'));
@@ -772,7 +772,7 @@ function html(webview,{resumeLibrary=false}={}){
           <span id="developerBrStepVerify" class="developer-workflow-step developer-br-stage" role="listitem" data-number="9"><span class="developer-br-orbit" aria-hidden="true"></span><strong>Verify Server</strong><small>Not started</small></span>
         </div>
         <div class="developer-br-topbar">
-          <div class="developer-br-picker"><div class="developer-br-picker-row"><select id="developerBrSelect" aria-label="Select an approved Business Requirement"><option value="">Select approved BR…</option></select><span id="developerBrChangeBadge" class="developer-br-change-badge hidden" aria-live="polite"></span></div></div>
+          <div class="developer-br-picker"><div class="developer-br-picker-row"><select id="developerBrSelect" aria-label="Select an approved Business Requirement"><option value="">Select approved BR…</option></select><button id="developerRoleJiraRefresh" type="button" class="secondary" title="Refresh assigned Jira tasks" aria-label="Refresh assigned Jira tasks">↻</button><span id="developerBrChangeBadge" class="developer-br-change-badge hidden" aria-live="polite"></span></div></div>
           <div class="developer-br-actions"><button id="developerBrStart" type="button" disabled>▶ Initial Development</button><button id="developerBrPreviewDraft" type="button" class="secondary developer-br-icon-button" disabled aria-label="Preview Draft" title="Preview Draft — open an untested local application (tests skipped)"><svg aria-hidden="true" focusable="false" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.8"/></svg></button><button id="developerBrStop" type="button" class="secondary hidden" disabled aria-hidden="true" tabindex="-1">Stop Development</button></div>
         </div>
         <small id="developerBrRevision" class="muted developer-br-revision">Select the current approved revision.</small>
@@ -872,11 +872,11 @@ function html(webview,{resumeLibrary=false}={}){
         </div>
         <div class="ux-design-toolbar" aria-label="UI/UX design controls">
           <div class="ux-design-reference-row">
-            <div class="ux-design-field ux-design-ticket-field"><label for="uxSelectedTicket">Business Requirement / Jira Epic</label><select id="uxSelectedTicket" aria-label="Assigned Jira ticket"><option value="">Select an assigned Jira ticket</option></select></div>
+            <div class="ux-design-field ux-design-ticket-field"><label for="uxSelectedTicket">Assigned UI/UX Jira task <button id="uxRoleJiraRefresh" type="button" class="secondary" title="Refresh assigned Jira tasks" aria-label="Refresh assigned Jira tasks">↻</button></label><select id="uxSelectedTicket" aria-label="Assigned Jira ticket"><option value="">Select an assigned Jira ticket</option></select></div>
             <div class="ux-design-field ux-design-framework-field"><label for="uxDesignFramework">Design system</label><div class="ux-framework-picker"><select id="uxDesignFramework" aria-label="Design framework" disabled><option value="">Pull SDLC Catalog to load design frameworks</option></select><button id="uxFrameworkDocs" type="button" class="secondary icon-only ux-framework-docs" aria-label="Show selected design framework style guide in right pane" title="Show visual component style guide in right pane"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3h7v7 M10 14 21 3 M21 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6"/></svg></button><button id="uxFrameworkSync" type="button" class="secondary icon-only ux-framework-sync" aria-label="Refresh design systems from GitHub main" title="Pull latest design systems from the configured SDLC Catalog main branch">↻</button></div></div>
             <div class="ux-design-actions"><button type="button" id="uxGenerateUIUX" disabled>Generate UI/UX</button></div>
           </div>
-          <div class="ux-design-reference-controls"><div class="ux-reference-upload-group"><button type="button" id="uxUploadReference" class="secondary" disabled>Upload Design Reference</button></div><span id="uxReferenceInfo" class="muted" role="status" aria-live="polite"></span><span class="ux-design-optional-note muted">Required · up to 10 images</span></div>
+          <div class="ux-design-reference-controls"><div class="ux-reference-upload-group"><button type="button" id="uxUploadReference" class="secondary" disabled>Upload Design Reference</button></div><span id="uxReferenceInfo" class="muted" role="status" aria-live="polite"></span><span class="ux-design-optional-note muted">Optional · up to 10 images</span></div>
         </div>
         <div id="uxReferencePreview" class="ux-design-reference-preview hidden" aria-label="Uploaded design reference images"></div>
         <div class="ux-design-feedback-row"><p id="uxDesignStatus" class="muted" role="status" aria-live="polite">Choose a Jira ticket assigned to you to begin.</p><span id="uxDesignState" class="ux-design-state" role="status" aria-live="polite">Not started</span></div>

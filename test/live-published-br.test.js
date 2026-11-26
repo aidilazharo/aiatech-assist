@@ -41,3 +41,15 @@ test('verified Epic marker persists and unchanged approval evidence stays stable
  assert.equal(next.publishedAt,prior.publishedAt);
  assert.equal(live.project(register,[next]).brs[0].approvedAt,prior.publishedAt);
 });
+
+test('assigned BRs are prioritized when the published snapshot budget is limited',async()=>{
+ const f=fixture(),other=f.items.map(x=>({...x,key:x.key.replace('TC-','TC-1'),id:'1'+x.id,parentKey:x.parentKey?.replace('TC-','TC-1'),summary:x.key==='TC-1'?'BR-008: Other':x.summary}));
+ f.items[2].assigneeId='a';
+ const result=await live.collect({register,items:[...other,...f.items],projectKey:'TC',accountId:'a',maxIssues:5,verifyMarker:(_,x)=>x.labels.includes(mark),readIssue:async key=>f.issues.find(x=>x.key===key)});
+ assert.deepEqual(result.snapshots.map(x=>x.brId),['BR-007']);
+});
+test('explicit live role assignments remain visible without authorizing execution when mapping is missing',()=>{
+ const rows=require('../src/role-jira-inventory').enrich([{key:'TC-3',type:'Task',labels:['atgv-role-ux-designer'],assigneeId:'a'},{key:'TC-4',type:'Task',labels:['atgv-role-developer'],assigneeId:'a'},{key:'TC-5',type:'Task',labels:['atgv-role-ux-designer','atgv-role-software-developer'],assigneeId:'a'}],{brs:[],synced:{}},'a',{projectKey:'TC'});
+ assert.equal(rows[0].taskRole,'ux-designer');assert.equal(rows[1].taskRole,'software-developer');assert.equal(rows[2].taskRole,'');
+ assert.equal(rows[0].roleMappingVerified,false);assert.equal(rows[1].publishedSnapshotReady,false);
+});

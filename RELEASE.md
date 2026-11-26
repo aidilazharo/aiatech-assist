@@ -1,11 +1,5 @@
-# ATGV AIATECH Assist v0.1.57
+# ATGV AIATECH Assist v0.1.58
 
-## Changes
-
-- Align the legacy integrated handoff regression with the current Solution Architect approval contract: approve the saved revision without publishing or merging GitHub branches.
-- Preserve the existing approval gate and Developer readiness behavior.
-- Include the compact four-column Overview user roster, with wrapping Jira task chips.
-
-## Validation
-
-- Previous local v0.1.56 build reported one obsolete regression failure; newer approval readiness checks passed. Full v0.1.57 regression and VSIX packaging remain pending.
+- UI/UX references are optional; no-upload generation and approval use the committed repository and active design system. Validate any supplied reference and preserve the ten-image limit.
+- Prioritize live published BR snapshots for the signed-in Jira assignee, keep explicit role-labelled unresolved tasks visible without enabling execution, and provide direct refresh controls in UI/UX and Developer selectors.
+- Preserve project, role, approval and ownership verification. Full regression and VSIX packaging pending.

@@ -2803,9 +2803,9 @@ function renderUxProgress(){
   const step=document.createElement('div');step.className='ux-workflow-step';step.setAttribute('role','listitem');
   const ready=uxReadyForPreview();
   const complete=!(index===0&&!uxReferenceAvailable)&&( (ready&&(index<5||uxPipeline.status==='approved'))||(uxPipelineBusy&&index<uxPipelineStage-1) );
-  const running=uxPipelineBusy&&index===uxPipelineStage-1;
+  const running=uxPipelineBusy&&index===uxPipelineStage-1&&(index!==0||uxReferenceAvailable);
   const awaitingApproval=uxPipeline?.status==='review'&&index===5&&!uxPipelineBusy;
-  const optionalSkipped=false;
+  const optionalSkipped=index===0&&!uxReferenceAvailable;
   const starting=!uxPipelineBusy&&!ready&&(!uxPipeline||uxPipeline.status==='rejected')&&index===1;
   step.classList.toggle('complete',complete);
   step.classList.toggle('running',running);
@@ -3000,7 +3000,7 @@ function renderUxActions(){
  const button=$('uxGenerateUIUX');
  button.textContent=uxPipelineBusy?(uxPipelineStopping?'Stopping UI/UX…':'Stop UI/UX'):(uxReadyForPreview()?'Preview UI/UX':'Generate UI/UX');
  button.classList.toggle('ux-stop-action',uxPipelineBusy);
- button.disabled=!uxSelectedKey||(!uxPipelineBusy&&!uxReadyForPreview()&&(!uxFramework||!uxReferenceAvailable))||(uxPipelineBusy&&(!uxCanStop||uxPipelineStopping));
+ button.disabled=!uxSelectedKey||(!uxPipelineBusy&&!uxReadyForPreview()&&!uxFramework)||(uxPipelineBusy&&(!uxCanStop||uxPipelineStopping));
  $('uxDeleteEntireDesign').disabled=!uxSelectedKey||uxPipelineBusy||!uxPipeline?.exists;
  $('uxPreviewDeleteEntireDesign').disabled=!uxSelectedKey||uxPipelineBusy||!uxPipeline?.exists;
  $('uxUploadReference').disabled=!uxSelectedKey||uxPipelineBusy;
@@ -3018,9 +3018,9 @@ function renderUxTickets(rows){
  for(const item of mine){
   const id=item.brId||'Unresolved BR',br=(roleBrState?.brs||[]).find(b=>b.id===id);
   if(!groups.has(id)){const group=document.createElement('optgroup');group.label=id+(br?' · '+String(br.approvedContent?.title||br.title||''):'');picker.append(group);groups.set(id,group);}
-  const option=document.createElement('option');option.value=item.key;option.textContent=item.key+' · '+(item.summary||'Jira issue')+(item.roleMappingVerified===false?' · BR mapping recovery required':'');option.disabled=item.roleMappingVerified===false;groups.get(id).append(option);
+  const option=document.createElement('option');option.value=item.key;option.textContent=item.key+' · '+(item.summary||'Jira issue')+(item.roleMappingVerified===false||item.publishedSnapshotReady===false?' · BR mapping recovery required':'');option.disabled=item.roleMappingVerified===false||item.publishedSnapshotReady===false;groups.get(id).append(option);
  }
- const ready=mine.filter(item=>item.roleMappingVerified!==false);uxSelectedKey=ready.some(item=>item.key===previous)?previous:ready[0]?.key||'';picker.value=uxSelectedKey;
+ const ready=mine.filter(item=>item.roleMappingVerified!==false&&item.publishedSnapshotReady!==false);uxSelectedKey=ready.some(item=>item.key===previous)?previous:ready[0]?.key||'';picker.value=uxSelectedKey;
  if(!uxSelectedKey){uxPipeline=null;uxDrafts={wireframe:null,mockup:null};setUxStatus(developerBrSyncWarnings.length?developerBrSyncWarnings.join(' · '):mine.length?'Assigned UI/UX tasks found. Refresh Jira to verify the latest published BR.':'Assign an entire BR to begin designing the full application.');$('uxDesignVersionInfo').replaceChildren();$('uxReferenceInfo').textContent='';$('uxReferencePreview').replaceChildren();$('uxReferencePreview').classList.add('hidden');$('uxDesignFramework').value=uxFramework||'';showUxBuilder();renderUxActions();send('uxFrameworkRead',{key:''});return;}
  if(previous!==uxSelectedKey){uxPipeline=null;uxReferenceAvailable=false;uxDrafts={wireframe:null,mockup:null};uxFramework='';$('uxDesignFramework').value=uxFramework;showUxBuilder();}
  renderUxActions();loadUxDrafts();
@@ -3223,7 +3223,7 @@ $('uxGenerateUIUX').addEventListener('click',()=>{
   uxPipelineStopping=true;renderUxActions();setUxStatus('Stopping UI/UX generation…');send('uxPipelineStop',{key:uxSelectedKey});return;
  }
  if(uxReadyForPreview()){openUxPipelinePreview();return;}
- if(!uxReferenceAvailable){setUxStatus('Upload a design reference before generating UI/UX.');return;}
+ if(!uxFramework){setUxStatus('Select an available design system before generating UI/UX.');return;}
  uxPipelineBusy=true;uxPipelineStopping=false;uxCanStop=true;uxPipelineStage=1;renderUxActions();setUxStatus('Preparing full UI/UX design for '+uxSelectedKey+'…');
  send('uxPipelineGenerate',{key:uxSelectedKey,expectedRevision:uxPipeline?.revision||'',framework:uxFramework});
 });
@@ -3556,7 +3556,7 @@ function updateDeveloperBrChangeBadge(br){
  badge.setAttribute('aria-label',label?'Business Requirement status: '+label:'');
 }
 function developerEligibleBRs(register,assigned){
- const ids=new Set((assigned||[]).filter(item=>item.mine&&item.taskRole==='software-developer'&&!item.brRoot).map(item=>item.brId));
+ const ids=new Set((assigned||[]).filter(item=>item.mine&&item.taskRole==='software-developer'&&!item.brRoot&&item.roleMappingVerified!==false).map(item=>item.brId));
  return (register?.brs||[]).filter(br=>ids.has(br.id)&&br.approvedContent&&br.approvedRevision&&((assigned||[]).some(item=>item.brId===br.id&&item.mine&&item.taskRole==='software-developer'&&item.publishedApproval&&item.publishedSnapshotReady&&item.roleMappingVerified)||br.status==='approved'&&!br.needsRefresh&&!br.externalReviewRequired&&!br.roleReviewRequired&&!br.dependencyReviewRequired));
 }
 function renderDeveloperBrChoices(){
@@ -3566,7 +3566,7 @@ function renderDeveloperBrChoices(){
  const eligible=developerEligibleBRs(roleBrState||brState,currentInventory?developerAssignedMine:[]);
  const waiting=currentInventory?roleJiraItems.filter(item=>item.brRoot&&item.roleScopes?.['software-developer']?.mine&&!eligible.some(br=>br.id===item.brId)):[];
  const missing=currentInventory&&roleJiraItems.some(item=>item.mine&&/^(task|subtask|sub-task|sub task)$/i.test(item.type||item.issueType||'')&&!item.taskRole);
- const unresolved=currentInventory?developerAssignedMine.filter(item=>item.brId&&!eligible.some(br=>br.id===item.brId)):[];
+ const unresolved=currentInventory?developerAssignedMine.filter(item=>!eligible.some(br=>br.id===item.brId)):[];
  const emptyText=!currentInventory?'Refresh Jira tasks to load assigned BRs':missing||developerAssignedMine.length?'Assigned tasks found — recovering published BR snapshot':'No approved BR assigned to you';
  const previous=developerBrSelected;
  select.replaceChildren();
@@ -3577,7 +3577,7 @@ function renderDeveloperBrChoices(){
   option.disabled=status==='cancelled';select.append(option);
  }
  for(const item of waiting){const option=document.createElement('option');option.value='waiting:'+item.brId;option.textContent=item.brId+' · BR assigned — waiting for eligible development tasks';option.disabled=true;select.append(option);}
- for(const id of new Set(unresolved.map(item=>item.brId))){const option=document.createElement('option');option.value='unresolved:'+id;option.textContent=id+' · Published Jira assignment — source snapshot or mapping required';option.disabled=true;select.append(option);}
+ for(const id of new Set(unresolved.map(item=>item.brId||item.key))){const option=document.createElement('option');option.value='unresolved:'+id;option.textContent=id+' · Published Jira assignment — source snapshot or mapping required';option.disabled=true;select.append(option);}
  developerBrSelected=eligible.some(br=>br.id===previous)?previous:'';
  select.value=developerBrSelected;
  const chosen=eligible.find(x=>x.id===developerBrSelected);
@@ -4074,6 +4074,7 @@ function renderRoleJiraIssues(items,incomplete=false){
  ],{label:'Jira issues for '+visibleRoleLabel(roleData.roles.find(r=>r.id===selectedRole)||{label:'My Work'}),pageSize:5,sortKey:'key',pinFirst:selectedRole==='ux-designer'?(item=>item.mine):undefined,onRowClick:item=>openJiraIssueModal(item.key)});
 }
 $('roleJiraRefresh').addEventListener('click',()=>loadRoleJiraIssues(true));
+for(const id of ['uxRoleJiraRefresh','developerRoleJiraRefresh'])$(id).addEventListener('click',()=>loadRoleJiraIssues(true));
 let assignedJiraProject='',assignedJiraLoaded=false,assignedJiraLoading=false;
 function loadAssignedJiraTasks(force=false){
  if(!activeId||assignedJiraLoading||!$('devAssignedJiraList'))return;

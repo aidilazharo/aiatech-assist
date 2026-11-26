@@ -62,7 +62,7 @@ function enrich(issues,register,accountId,options={}){
   for(const entry of scope.entries)mapped.set(entry.key,br.id);
  }
  const published=new Map(),ambiguous=new Set();
- for(const root of publishedRoots(issues,register,options)){
+ for(const root of publishedRoots(issues,options.discoveryRegister||register,options)){
   for(const key of root.keys){
    if(published.has(key)&&published.get(key).key!==root.key)ambiguous.add(key);
    else published.set(key,root);
@@ -74,10 +74,11 @@ function enrich(issues,register,accountId,options={}){
   const brId=mapped.get(issue.key)||mapped.get(issue.parentKey)||publishedBR?.id||'';
   const br=register?.brs?.find(row=>row.id===brId);
   const snapshotReady=!!br?.approvedContent&&!!br.approvedRevision&&(ownership.publishedSnapshot(register,br)||(br.status==='approved'&&!br.needsRefresh&&!br.externalReviewRequired&&!br.roleReviewRequired&&!br.dependencyReviewRequired));
-  const labels=[...new Set((issue.labels||[]).filter(x=>typeof x==='string'&&x.startsWith('atgv-role-')).map(x=>x.slice(10)))];
+  const labels=[...new Set((issue.labels||[]).filter(x=>typeof x==='string'&&/^atgv-role-/i.test(x)).map(x=>require('./jira-role-routing').normalizeRole(x.slice(10))))];
   // Live labels on a verified published tree allow discovery, not execution
   // or bulk assignment before canonical mappings have been recovered.
-  const discoveredRole=publishedBR&&!taskRoles.has(issue.key)&&/^(task|subtask|sub-task|sub task)$/i.test(issue.type)&&labels.length===1&&Object.hasOwn(ROLES,labels[0])?labels[0]:'';
+  const inProject=!!options.projectKey&&issue.key?.startsWith(String(options.projectKey).toUpperCase()+'-');
+  const discoveredRole=(publishedBR||inProject&&issue.assigneeId===accountId&&!!accountId)&&!taskRoles.has(issue.key)&&/^(task|subtask|sub-task|sub task|story|user story|feature)$/i.test(issue.type)&&labels.length===1&&Object.hasOwn(ROLES,labels[0])?labels[0]:'';
   const assigneeId=String(issue.assigneeId||'');
   return {...issue,issueType:issue.type||'Unknown',brId,brStatus:publishedBR?'Approved & Published':brStatuses.get(brId)||'',publishedApproval:!!publishedBR,publishedRootKey:publishedBR?.key||'',brRoot:!!root,
    descendantCount:root?.descendantCount||0,roleScopes:root?.roleScopes||{},taskRole:taskRoles.get(issue.key)||discoveredRole,roleMappingVerified:taskRoles.has(issue.key),publishedSnapshotReady:snapshotReady,

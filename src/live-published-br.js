@@ -107,8 +107,11 @@ function makeSnapshot({root,register,items,issues,projectKey,previous,verifyMark
  const verifiedAt=new Date().toISOString();
  return {brId:root.id,epic:root.key,issueId:epic.id,fingerprint,revision,verifiedAt,publishedAt:previousSame?(previous.publishedAt||previous.verifiedAt):verifiedAt,content,evidence,synced};
 }
-async function collect({register,items,projectKey,verifyMarker,readIssue,previous={},shouldContinue=()=>true,maxIssues=350}){
+async function collect({register,items,projectKey,verifyMarker,readIssue,previous={},shouldContinue=()=>true,maxIssues=350,accountId=''}){
  const roots=publishedRoots(items,register,{projectKey,verifyMarker}),snapshots=[],warnings=[];
+ const assigned=new Set(accountId?items.filter(item=>item.assigneeId===accountId&&/^(task|subtask|sub-task|sub task|story|user story|feature)$/i.test(item.type)).map(item=>item.key):[]);
+ // Recover the current user's assigned BRs before spending the bounded scan on unrelated work.
+ roots.sort((a,b)=>Number(b.keys.some(key=>assigned.has(key)))-Number(a.keys.some(key=>assigned.has(key))));
  const counts=new Map();for(const r of roots)counts.set(r.id,(counts.get(r.id)||0)+1);
  let budget=maxIssues;
  for(const root of roots){

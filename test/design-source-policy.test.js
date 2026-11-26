@@ -9,6 +9,11 @@ test('visual design requires readable user-uploaded evidence',()=>{
  assert.throws(()=>policy.requireReference({exists:true,sha256:'abc'}),/no readable design evidence/);
  assert.equal(policy.requireReference({exists:true,sha256:'abc',imageCount:1}).imageCount,1);
 });
+test('UI/UX may skip optional references but validates uploads when present',()=>{
+ assert.deepEqual(policy.optionalReference({exists:false}),{exists:false,sha256:'',images:[],imageCount:0});
+ assert.throws(()=>policy.optionalReference({exists:true,sha256:'abc'}),/no readable design evidence/);
+ assert.equal(policy.optionalReference({exists:true,sha256:'abc',imageCount:1}).sha256,'abc');
+});
 test('design policy forbids independent themes and blocks unsupported UI file changes',()=>{
  const guide=policy.guide('Project CSS evidence','Uploaded screenshot observations');
  assert.match(guide,/Never invent your own visual design/);

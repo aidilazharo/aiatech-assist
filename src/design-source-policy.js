@@ -6,6 +6,10 @@ function requireReference(reference){
  if(!reference.imageCount&&!String(reference.referenceText||reference.notes||'').trim())throw Error('The uploaded reference has no readable design evidence. Upload an image or text design specification.');
  return reference;
 }
+function optionalReference(reference){
+ if(!reference?.exists)return {exists:false,sha256:'',images:[],imageCount:0};
+ return requireReference(reference);
+}
 function guide(repositoryGuide,referenceGuide){
  return RULE+'\nPROJECT REPOSITORY DESIGN EVIDENCE:\n'+String(repositoryGuide||'')+'\nUSER-UPLOADED DESIGN EVIDENCE:\n'+String(referenceGuide||'No linked uploaded reference. Do not create or change visual design without one.');
 }
@@ -18,4 +22,4 @@ function guardVisualFiles(files,context){
  if(visual.length)throw Error('User-uploaded design reference required before modifying UI files: '+visual.slice(0,5).map(x=>x.path).join(', ')+'. Backend-only work can continue without changing UI.');
  return true;
 }
-module.exports={RULE,requireReference,guide,guardVisualFiles};
+module.exports={RULE,requireReference,optionalReference,guide,guardVisualFiles};
