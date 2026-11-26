@@ -29,6 +29,7 @@
   repoOpenSource.disabled=gitBusy||!folderReady;
   repoRefresh.disabled=gitBusy;
   repoSelect.disabled=gitBusy||pending;
+  repoNext.title=gitReady?'':get('developerChatGitInfo').title||'Git checkout not verified';
   repoNext.textContent=gitBusy?'Working…':gitLabels[gitStep]||gitLabels.branch;
   repoPr.hidden=!gitPr;repoPr.disabled=gitBusy||!gitReady||!gitPr;
  }
@@ -45,11 +46,11 @@
   toolsMessage.appendChild(repoPanel);transcript.appendChild(toolsMessage);repoPanel.hidden=false;
   gitControls();requestGit();
   if(resultsViewport)resultsViewport.scrollTop=resultsViewport.scrollHeight;
-  requestAnimationFrame(()=>{if(toolsMessage?.isConnected&&!repoPanel.hidden)toolsMessage.scrollIntoView({block:'nearest'});});
+  requestAnimationFrame(()=>{if(toolsMessage?.isConnected&&!repoPanel.hidden)toolsMessage.scrollIntoView({block:'nearest',inline:'nearest'});});
  }
  function requestGit(action='status'){
   if(!repoPanel||repoPanel.hidden||role!=='software-developer'||!project||gitBusy||typeof send!=='function')return;
-  gitBusy=true;gitControls();
+  gitBusy=true;if(action==='status'){const info=get('developerChatGitInfo');info.textContent='Checking…';info.dataset.state='pending';info.title='Checking selected source folder';}gitControls();
   send('developerChatGit',{projectId:project,roleId:role,repositoryTarget:repoSelect.value,requestId:++gitRequest,action});
  }
  function updateRepoFolders(rows,selected){
@@ -65,22 +66,23 @@
   gitBusy=false;
   updateRepoFolders(msg.projectFolders,msg.selectedTarget||repoSelect.value);
   if(!msg.error&&!msg.cancelled){
-   folderReady=!!msg.repository;gitReady=folderReady&&msg.gitReady!==false;gitStep=gitLabels[msg.step]?msg.step:'branch';gitPr=String(msg.pr||'');
+   folderReady=msg.folderReady===true||!!msg.repository;gitReady=folderReady&&msg.gitReady===true;gitStep=gitLabels[msg.step]?msg.step:'branch';gitPr=String(msg.pr||'');
    const percent=Math.max(0,Math.min(100,Number(msg.percent)||0));
    get('developerChatArc').setAttribute('stroke-dasharray',percent+' 100');
    get('developerChatPercent').textContent=percent+'%';
-   const stages=['branch','commit','pr','publish'];
-   const index=gitStep==='done'?4:stages.indexOf(gitStep);
-   for(const el of repoPanel.querySelectorAll('[data-dev-chat-step]')){const i=stages.indexOf(el.dataset.devChatStep);el.classList.toggle('is-complete',i<index);el.classList.toggle('is-current',i===index);}
-   get('developerChatGitInfo').textContent=msg.gitReady===false?msg.repository+' · '+(msg.gitNotice||'Git not configured'):msg.repository+' · '+msg.branch+' · '+String(msg.sha||'').slice(0,8)+(msg.clean?'':' · Uncommitted changes')+(gitPr?' · PR #'+gitPr.split('/').pop():'');
-  }else if(msg.error){get('developerChatGitInfo').textContent=String(msg.error);gitReady=false;folderReady=false;gitPr='';}
-  const logs=msg.logs;
-  if(logs)get('developerChatLogInfo').textContent=logs.available?(logs.priorities?.length?'Confluence · Today: '+logs.priorities.slice(0,3).map(x=>x.label+' ('+x.count+')').join(' · '):'Confluence · No matching diagnostic errors recorded.'):'Confluence diagnostic log unavailable.';
-  for(const id of ['developerChatGitInfo','developerChatLogInfo'])get(id).title=get(id).textContent;
+   const info=get('developerChatGitInfo');
+   info.textContent=gitReady?'Ready':folderReady?'Git not ready':'Folder unavailable';
+   info.dataset.state=gitReady?'ready':'warning';
+   info.title=gitReady?msg.repository+' · '+msg.branch+' · '+String(msg.sha||'').slice(0,8)+(msg.clean?'':' · Uncommitted changes')+(gitPr?' · PR #'+gitPr.split('/').pop():''):String(msg.gitNotice||'No verified Git checkout');
+  }else if(msg.error){
+   const info=get('developerChatGitInfo');
+   folderReady=msg.folderReady===true;gitReady=false;gitPr='';
+   info.textContent=folderReady?'Git not ready':'Folder unavailable';info.dataset.state='warning';info.title=String(msg.error);
+  }
   gitControls();
  }
  if(repoPanel){
-  repoSelect.addEventListener('change',()=>{gitReady=false;folderReady=false;gitPr='';gitStep='branch';get('developerChatGitInfo').textContent='Checking repository…';get('developerChatArc').setAttribute('stroke-dasharray','0 100');get('developerChatPercent').textContent='0%';requestGit();});
+  repoSelect.addEventListener('change',()=>{gitReady=false;folderReady=false;gitPr='';gitStep='branch';get('developerChatGitInfo').textContent='Checking…';get('developerChatArc').setAttribute('stroke-dasharray','0 100');get('developerChatPercent').textContent='0%';requestGit();});
   repoNext.addEventListener('click',()=>requestGit(gitStep));repoOpen.addEventListener('click',()=>requestGit('open'));repoOpenSource.addEventListener('click',()=>requestGit('open-source'));repoRefresh.addEventListener('click',()=>requestGit());
   repoPr.addEventListener('click',()=>{if(/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9][0-9]*$/.test(gitPr))requestGit('open-pr');});
   window.addEventListener('atgv:viewchange',()=>{if(role==='software-developer'&&!repoPanel.hidden&&!document.getElementById('myWorkView')?.classList.contains('hidden'))requestGit();});

@@ -1,12 +1,12 @@
-# ATGV AIATECH Assist v0.1.51
+# ATGV AIATECH Assist v0.1.52
 
-## Fixes
+## Changes
 
-- Prevent Developer chat tools from shrinking to zero height in a long conversation.
-- Keep all messages at natural height in the existing scroll viewport.
-- Accept both `dev-tool` and `dev-tools` locally; scroll the live toolbar into view.
+- Simplify dev-tools: short repository labels, compact status, Git progress and actionable buttons only. Wrap controls on narrow screens without clipping.
+- Keep Open Source Code and Open Folder available for verified existing source directories even without Git. Resolve a unique matching nested managed checkout, without adopting an enclosing or wrong-origin repository.
+- Keep Git writes gated on verified checkout identity; preserve full error and branch details in tooltips.
+- Move diagnostic synchronization off the toolbar's critical path; daily brief retains diagnostic priorities.
 
 ## Validation
 
-- Chromium layout reproduction: previous toolbar wrapper height 0px; fixed height 50px using representative markup and stylesheet rules.
-- JavaScript syntax checked; regression assertions added. Full VS Code runtime and release packaging not run.
+- JavaScript syntax checked and regression tests added. Full extension regression, VS Code visual verification and VSIX build not run.

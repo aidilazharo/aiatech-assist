@@ -36,7 +36,7 @@ test('Developer source button uses the selected verified checkout in a separate 
  assert.ok(start>=0&&end>start);
  const handler=host.slice(start,end);
  assert.match(handler,/msg\.projectId!==projectId\|\|msg\.roleId!=='software-developer'/);
- assert.match(handler,/const selected=await developerChatRepository\(projectId,kind\)/);
+ assert.match(handler,/selected=await developerChatRepository\(projectId,kind\)/);
  const open=handler.match(/else if\(msg\.action==='open-source'\)\{([\s\S]*?)\n  \}else if/);
  assert.ok(open);
  assert.match(open[1],/activeProject\?\.id!==projectId/);
@@ -63,7 +63,7 @@ test('project folder scan lists real immediate folders and rejects arbitrary or 
  await assert.rejects(selectProjectFolder(root,rows[0].target),/no longer available/);
 });
 
-test('Developer repository toolbar scans folders, preserves open-only access and does not wrap',()=>{
+test('Developer repository toolbar scans folders, preserves open-only access and responds to narrow widths',()=>{
  const fs=require('node:fs'),path=require('node:path'),root=path.join(__dirname,'..');
  const host=fs.readFileSync(path.join(root,'src/lib/runtime/extension-runtime.js'),'utf8');
  const client=fs.readFileSync(path.join(root,'media/atgv-mywork-wave-chat.js'),'utf8');
@@ -71,13 +71,13 @@ test('Developer repository toolbar scans folders, preserves open-only access and
  const chat=fs.readFileSync(path.join(root,'src/my-work-role-chat.js'),'utf8');
  assert.match(host,/developerMyWorkGit\.projectFolders\(aiRoot\(\)\)/);
  assert.match(host,/developerMyWorkGit\.selectProjectFolder\(aiRoot\(\),kind/);
- assert.match(host,/selectedTarget:selected\.folder\.target,gitReady:false/);
+ assert.match(host,/selectedTarget:selected\.folder\?\.target\|\|kind,folderReady:true,gitReady:false/);
  assert.match(host,/if\(!selected\.repo\|\|!selected\.local\)throw Error/);
  assert.match(client,/updateRepoFolders\(msg\.projectFolders,msg\.selectedTarget/);
  assert.match(client,/repoNext\.disabled=gitBusy\|\|!gitReady/);
  assert.match(client,/repoOpenSource\.disabled=gitBusy\|\|!folderReady/);
- assert.match(css,/\.developer-chat-repo-top\{display:flex;align-items:center;flex-wrap:nowrap/);
- assert.match(css,/\.developer-chat-repo-panel\{padding:6px 8px;overflow-x:auto/);
+ assert.match(css,/#atgvMyWorkAi \.developer-chat-repo-top\{width:100%;min-width:0;flex-wrap:wrap/);
+ assert.match(css,/\.developer-chat-repo-panel:not\(\[hidden\]\)\{position:relative;pointer-events:auto;overflow:visible/);
  assert.ok(chat.includes('/^project:[a-f0-9]{64}$/'));
 });
 
@@ -105,8 +105,36 @@ test('developer toolbar cannot collapse in a long flex chat and both command spe
  assert.match(css,/\.atgv-mywork-ai-conversation > \.atgv-mywork-ai-message\{flex:0 0 auto\}/);
  assert.match(css,/\.developer-chat-tools-message\{flex:0 0 auto;min-height:50px;[^}]*overflow:visible/);
  assert.match(css,/\.developer-chat-repo-panel:not\(\[hidden\]\)\{display:block!important;min-height:50px\}/);
- assert.match(client,/toolsMessage\.scrollIntoView\(\{block:'nearest'\}\)/);
+ assert.match(client,/toolsMessage\.scrollIntoView\(\{block:'nearest',inline:'nearest'\}\)/);
  const command=/^dev-tools?$/i;
  for(const value of ['dev-tool','dev-tools','DEV-TOOLS'])assert.ok(command.test(value));
  assert.equal(command.test('describe dev-tools'),false);
+});
+
+test('managed source folders remain openable without Git and only one matching nested checkout is adopted',async t=>{
+ const fs=require('node:fs/promises'),os=require('node:os'),path=require('node:path');
+ const {managedSource}=require('../src/developer-my-work-git');
+ const root=await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(),'atgv-managed-source-')));
+ t.after(()=>fs.rm(root,{recursive:true,force:true}));
+ const expected={name:'owner/repo'},valid=new Set();
+ const verify=async candidate=>{if(!valid.has(candidate))throw Error('not verified');return {root:candidate,branch:'main',sha:'abc'};};
+ const empty=await managedSource(root,expected,{verify});assert.equal(empty.root,root);assert.equal(empty.repo,null);
+ const child=path.join(root,'repo');await fs.mkdir(path.join(child,'.git'),{recursive:true});valid.add(child);
+ assert.equal((await managedSource(root,expected,{verify})).root,child);
+ const second=path.join(root,'other');await fs.mkdir(path.join(second,'.git'),{recursive:true});valid.add(second);
+ assert.equal((await managedSource(root,expected,{verify})).repo,null);
+ valid.clear();valid.add(root);assert.equal((await managedSource(root,expected,{verify})).root,root);
+ const parent=path.dirname(root);const enclosing=await managedSource(root,expected,{verify:async()=>({root:parent})});assert.equal(enclosing.repo,null);
+});
+test('Git failures retain verified folder opening and toolbar omits duplicate stages and diagnostics',()=>{
+ const fs=require('node:fs'),path=require('node:path'),root=path.join(__dirname,'..');
+ const client=fs.readFileSync(path.join(root,'media/atgv-mywork-wave-chat.js'),'utf8');
+ const host=fs.readFileSync(path.join(root,'src/lib/runtime/extension-runtime.js'),'utf8');
+ const html=fs.readFileSync(path.join(root,'src/lib/webview/dashboard-html.js'),'utf8');
+ assert.match(host,/developerMyWorkGit\.managedSource\(root,repo\)/);
+ assert.match(host,/folderReady:!!selected\?\.root,gitReady:false/);
+ assert.match(client,/folderReady=msg\.folderReady===true;gitReady=false/);
+ assert.match(client,/repoOpen\.disabled=gitBusy\|\|!folderReady/);
+ assert.doesNotMatch(html,/id="developerChatLogInfo"|data-dev-chat-step=/);
+ assert.match(client,/info\.textContent=gitReady\?'Ready':folderReady\?'Git not ready'/);
 });

@@ -1209,8 +1209,8 @@ async function developerChatRepository(projectId,kind){
   root=layout[kind];
   repo=repoSyncNaming.githubUrl(kind==='extension'?extensionSourceRepository:catalogConfig().repositoryUrl);
  }
- const local=await developerMyWorkGit.verifiedRoot(root,repo);
- return {root:local.root,repo,local,project,folder};
+ const managed=await developerMyWorkGit.managedSource(root,repo);
+ return {...managed,project,folder};
 }
 async function developerChatLogs(projectId){
  if(activeProject?.id!==projectId||openingOffline)return {available:false,priorities:[]};
@@ -1240,7 +1240,7 @@ async function developerChatGitAction(msg){
  if(msg.projectId!==projectId||msg.roleId!=='software-developer')return;
  if(!(await workState(registry,projectId)).roles.some(x=>x.id==='software-developer'))return;
  const kind=String(msg.repositoryTarget||''),requestId=Number(msg.requestId);
- let projectFolders;
+ let projectFolders,selected;
  const post=payload=>dashboard?.webview.postMessage({type:'developerChatGitState',projectId,roleId:'software-developer',repositoryTarget:kind,requestId,projectFolders,...payload});
  if(!Number.isSafeInteger(requestId)||requestId<1)return;
  if(developerChatGitBusy){await post({error:'Another repository action is in progress.'});return;}
@@ -1249,7 +1249,8 @@ async function developerChatGitAction(msg){
   if(activeProject?.id!==projectId)throw Error('Active project changed.');
   try{projectFolders=(await developerMyWorkGit.projectFolders(aiRoot())).map(({target,label})=>({target,label}));}
   catch(error){if(kind==='project'||kind.startsWith('project:'))throw error;projectFolders=[];}
-  const selected=await developerChatRepository(projectId,kind),key=selected.repo?developerChatKey(projectId,selected.folder?.target||kind,selected.repo):'';
+  selected=await developerChatRepository(projectId,kind);
+  const key=selected.repo?developerChatKey(projectId,selected.folder?.target||kind,selected.repo):'';
   if(activeProject?.id!==projectId)throw Error('Active project changed.');
   if(selected.folder&&msg.action==='status')await context.workspaceState.update('atgvAssist.developerChat.selected.'+projectId,selected.folder.target);
   let state=key?context.workspaceState.get(key,{}):{};
@@ -1278,12 +1279,13 @@ async function developerChatGitAction(msg){
    state=await developerMyWorkGit.act({root:selected.root,repo:selected.repo,token,state,action:msg.action,value,confirm:async message=>activeProject?.id===projectId&&await uiWarning(message,{modal:true},'Continue')==='Continue'&&activeProject?.id===projectId});
    await context.workspaceState.update(key,state);
   }
-  const logs=await developerChatLogs(projectId);
+  // Diagnostics remain in the daily brief; their network latency must not lock the toolbar.
+  if(msg.action==='status')void developerChatLogs(projectId).catch(error=>report('Developer diagnostics: '+error.message));
   if(activeProject?.id!==projectId)return;
-  if(!selected.repo){await post({repository:selected.folder.label,selectedTarget:selected.folder.target,gitReady:false,gitNotice:'Git not verified',step:'branch',percent:0,logs});return;}
+  if(!selected.repo){await post({repository:selected.folder?.label||(kind==='extension'?'Extension':'Library'),selectedTarget:selected.folder?.target||kind,folderReady:true,gitReady:false,gitNotice:selected.gitNotice||'Git not verified. Open the source folder to configure it.',step:'branch',percent:0});return;}
   const local=await developerMyWorkGit.verifiedRoot(selected.root,selected.repo);
-  if(activeProject?.id===projectId)await post({repository:selected.repo.name,selectedTarget:selected.folder?.target||kind,gitReady:true,branch:local.branch,sha:local.sha,clean:local.clean,pr:state.branch===local.branch?state.pr||'':'',published:state.branch===local.branch&&state.published===true,...developerMyWorkGit.stage(state,local),logs});
- }catch(error){if(activeProject?.id===projectId)await post({error:String(error.message||error).slice(0,260),logs:await developerChatLogs(projectId)});}
+  if(activeProject?.id===projectId)await post({repository:selected.repo.name,selectedTarget:selected.folder?.target||kind,folderReady:true,gitReady:true,branch:local.branch,sha:local.sha,clean:local.clean,pr:state.branch===local.branch?state.pr||'':'',published:state.branch===local.branch&&state.published===true,...developerMyWorkGit.stage(state,local)});
+ }catch(error){if(activeProject?.id===projectId)await post({error:String(error.message||error).slice(0,260),folderReady:!!selected?.root,gitReady:false});}
  finally{developerChatGitBusy=false;}
 }
 

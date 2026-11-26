@@ -40,6 +40,34 @@ async function verifiedRoot(root,expected){
  if(push.split('\n').length!==1||naming.githubUrl(push,{origin:true}).name.toLowerCase()!==expected.name.toLowerCase())throw Error('Push origin differs from selected repository.');
  return local;
 }
+// Managed source directories can be empty, contain a direct checkout, or contain
+// a clone in an immediate child. Never adopt a surrounding workspace's Git root.
+async function managedSource(root,expected,{verify=verifiedRoot}={}){
+ const stat=await fs.lstat(root);
+ if(!stat.isDirectory()||stat.isSymbolicLink())throw Error('Unsafe managed source folder.');
+ const canonical=await fs.realpath(root);
+ const check=async candidate=>{
+  try{
+   const local=await verify(candidate,expected);
+   return path.resolve(local.root)===path.resolve(candidate)?local:null;
+  }catch{return null;}
+ };
+ const direct=await check(canonical);
+ if(direct)return {root:direct.root,repo:expected,local:direct};
+ const entries=await fs.readdir(canonical,{withFileTypes:true});
+ const matches=[];
+ for(const entry of entries.filter(e=>e.isDirectory()&&!e.isSymbolicLink()&&!e.name.startsWith('.')&&!/^(node_modules|dist|build|vendor|coverage)$/i.test(e.name)).slice(0,100)){
+  const child=path.join(canonical,entry.name);
+  const st=await fs.lstat(child).catch(()=>null);
+  if(!st?.isDirectory()||st.isSymbolicLink()||await fs.realpath(child).catch(()=>null)!==child)continue;
+  const marker=await fs.lstat(path.join(child,'.git')).catch(()=>null);
+  if(!marker||marker.isSymbolicLink())continue;
+  const local=await check(child);
+  if(local)matches.push(local);
+ }
+ if(matches.length===1)return {root:matches[0].root,repo:expected,local:matches[0]};
+ return {root:canonical,repo:null,local:null,gitNotice:matches.length>1?'Multiple matching checkouts; open the folder and select one.':'No verified Git checkout. Open the folder to inspect or clone the configured source.'};
+}
 function safeStaged(name){
  return !!name&&!/(?:^|\/)(?:\.git|\.atgv|node_modules|dist|coverage|\.env(?:\.[^/]*)?|\.npmrc|credentials\.json|id_rsa|id_ed25519)(?:\/|$)/i.test(name)&&!/\.(?:pem|key|p12|pfx|jks|keystore)$/i.test(name);
 }
@@ -131,4 +159,4 @@ async function syncLogs({config,token,project,content,source,request,spaceProvid
   catch(err){if(!/HTTP (409|412)/.test(String(err.message))||attempt===2)throw err;}
  }
 }
-module.exports={target,projectFolders,selectProjectFolder,branchName,verifiedRoot,stage,safeStaged,act,summarize,syncLogs};
+module.exports={target,projectFolders,selectProjectFolder,branchName,verifiedRoot,managedSource,stage,safeStaged,act,summarize,syncLogs};
