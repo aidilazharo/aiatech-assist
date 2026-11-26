@@ -4003,7 +4003,7 @@ function loadRoleJiraIssues(force=false){
  if(!force&&same&&roleJiraLoaded)return;
  if(!same){roleBrState=null;roleJiraItems=[];developerAssignedMine=[];}
  roleJiraProject=activeId;roleJiraRole=selectedRole;roleJiraLoaded=false;roleJiraLoading=true;
- $('roleJiraStatus').textContent='Retrieving live Jira issues…';send('roleJiraIssues',{roleId:selectedRole,requestId:++roleJiraRequest});
+ $('roleJiraStatus').textContent='Loading Jira issues…';send('roleJiraIssues',{roleId:selectedRole,requestId:++roleJiraRequest,force:!!force});
 }
 function jiraIssueLinkedBr(item){
  const approved=id=>(brState?.brs||[]).some(br=>br.id===id&&br.status==='approved'&&!br.needsRefresh);
@@ -9048,7 +9048,7 @@ window.addEventListener('message',event=>{
  }
  if(msg.type==='roleJiraIssueDetails'&&msg.key===jiraModalKey&&msg.requestId===jiraModalRequest){renderJiraIssueModal(msg.value);}
  if(msg.type==='roleJiraIssueDetailsError'&&msg.key===jiraModalKey&&msg.requestId===jiraModalRequest){$('jiraIssueModalReload').disabled=false;$('jiraIssueModalBody').textContent='Unable to load Jira ticket: '+(msg.message||'Retry or check Jira permissions.');$('jiraIssueModalSubtitle').textContent='Request failed';}
- if(msg.type==='roleJiraIssues'&&msg.projectId===activeId&&msg.requestId===roleJiraRequest){roleJiraLoading=false;roleJiraLoaded=true;if(msg.register){roleBrState=msg.register;developerBrSyncWarnings=msg.brSyncWarnings||[];}renderRoleJiraIssues(msg.items,msg.incomplete);if(roleJiraRefreshAfterSave){roleJiraRefreshAfterSave=false;loadRoleJiraIssues(true);}}
+ if(msg.type==='roleJiraIssues'&&msg.projectId===activeId&&msg.requestId===roleJiraRequest){roleJiraLoading=false;roleJiraLoaded=true;if(msg.register){roleBrState=msg.register;developerBrSyncWarnings=msg.brSyncWarnings||[];}renderRoleJiraIssues(msg.items,msg.incomplete);if(msg.cached)$('roleJiraStatus').textContent='Cached SQLite data · '+Math.floor((Number(msg.cacheAge)||0)/1000)+'s since sync · '+$('roleJiraStatus').textContent;if(roleJiraRefreshAfterSave){roleJiraRefreshAfterSave=false;loadRoleJiraIssues(true);}}
  if(msg.type==='developerTaskDetail'&&msg.projectId===activeId)renderDeveloperTaskDetail(msg.value);
  if(msg.type==='developerArtifactLoaded'&&msg.projectId===activeId)renderDeveloperArtifact(msg.value);
  if(msg.type==='developerDeliveryCancelled'&&msg.projectId===activeId){developerDeliveryBusy=false;$('developerDeliveryVerify').disabled=false;$('developerDeliveryRunChecks').disabled=false;$('developerDeliveryComplete').disabled=true;developerDeliveryProof=null;if(developerStageEvidence.key===developerSelectedTicket){developerStageEvidence.verified=false;renderDeveloperWorkflowSteps();}$('developerDeliveryStatus').textContent='Cancelled. No remote changes were made by this action.';}
