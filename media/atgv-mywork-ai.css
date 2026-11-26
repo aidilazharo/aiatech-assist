@@ -250,3 +250,6 @@ body.atgv-global-ai-active:not(.gate-mode) #topNotification #myWorkHeaderWave.my
  #atgvMyWorkAi .atgv-mywork-ai-task-card{align-items:stretch;flex-direction:column}
  #atgvMyWorkAi button.atgv-mywork-ai-task-open{align-self:flex-start}
 }
+
+/* Developer My Work: compact repository and Git workflow bar. */
+.developer-chat-repo-panel[hidden]{display:none!important}.developer-chat-repo-panel{padding:10px 14px;border-bottom:1px solid var(--vscode-panel-border);flex:none}.developer-chat-repo-top{display:flex;gap:12px;align-items:center}.developer-chat-ring{flex:none;color:var(--vscode-focusBorder)}.developer-chat-repo-info{flex:1;min-width:0;display:grid;gap:7px}.developer-chat-repo-info select{max-width:100%;width:100%}.developer-chat-git-steps,.developer-chat-git-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.developer-chat-git-steps span{font-size:11px;opacity:.55}.developer-chat-git-steps span.is-complete{color:var(--vscode-testing-iconPassed,#16a34a);opacity:1}.developer-chat-git-steps span.is-current{opacity:1;font-weight:600;text-decoration:underline}.developer-chat-git-actions button{min-height:27px}.developer-chat-repo-panel .muted{font-size:11px;overflow-wrap:anywhere}.developer-chat-repo-panel>div:last-child{margin-top:6px}

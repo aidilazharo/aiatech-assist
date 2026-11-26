@@ -17,13 +17,13 @@ function resetExpired(now=new Date()){
  }
  return activeDay;
 }
-async function ask({projectId,roleId,message,request,clock=()=>new Date()}){
+async function ask({projectId,roleId,message,request,repositoryTarget='',clock=()=>new Date()}){
  if(!ROLES[roleId])throw Error('Unsupported My Work role.');
  const user=String(message==null?'':message).trim();
  if(!user||user.length>4000)throw Error('Chat message must contain 1–4000 characters.');
  const requestDay=resetExpired(clock());
  if(isIdentityQuestion(user))return identity(roleId);
- const id=key(projectId,roleId);
+ const id=key(projectId,roleId)+(roleId==='software-developer'&&['extension','library','project'].includes(repositoryTarget)?'\u0000'+repositoryTarget:'');
  if(busy.has(id))throw Error('A role AI reply is already being generated.');
  busy.add(id);
  try{

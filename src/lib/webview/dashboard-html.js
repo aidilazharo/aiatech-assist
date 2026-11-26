@@ -378,6 +378,15 @@ function html(webview,{resumeLibrary=false}={}){
   </main>
   <main id="myWorkView" class="hidden work-container atgv-mywork-ai-page" aria-label="My Work AI assistant">
     <section id="atgvMyWorkAi" class="atgv-mywork-ai" aria-label="AI recommendations and chat for the selected My Work role" data-state="idle">
+      <div id="developerChatRepoPanel" class="developer-chat-repo-panel" hidden>
+        <div class="developer-chat-repo-top">
+          <div class="developer-chat-ring"><svg width="76" height="76" viewBox="0 0 100 100" role="img" aria-label="Git workflow progress"><circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" stroke-width="8" opacity=".15"/><circle id="developerChatArc" cx="50" cy="50" r="40" pathLength="100" fill="none" stroke="currentColor" stroke-width="8" stroke-dasharray="0 100" stroke-linecap="round" transform="rotate(-90 50 50)"/><text id="developerChatPercent" x="50" y="55" text-anchor="middle" fill="currentColor" font-size="20" font-weight="600">0%</text></svg></div>
+          <div class="developer-chat-repo-info"><select id="developerChatRepoSelect" aria-label="Developer source repository"><option value="extension">Extension source code · src/extension</option><option value="library">Library source code · src/library</option><option value="project" selected>Project source code · projects/project-name/project-repo</option></select>
+            <div class="developer-chat-git-steps" aria-label="Git workflow"><span data-dev-chat-step="branch">Create Branch</span><span data-dev-chat-step="commit">Commit Code</span><span data-dev-chat-step="pr">Create PR</span><span data-dev-chat-step="publish">Publish</span></div>
+            <div id="developerChatGitInfo" class="muted" role="status" aria-live="polite">Select repository</div><div class="developer-chat-git-actions"><button type="button" id="developerChatNext" disabled>Create Branch</button><button type="button" id="developerChatOpen" class="secondary" disabled>Open Folder</button><button type="button" id="developerChatRefresh" class="secondary" aria-label="Refresh Git status">↻</button><button type="button" id="developerChatPr" class="secondary" hidden>Open PR</button></div>
+          </div>
+        </div><div id="developerChatLogInfo" class="muted" role="status" aria-live="polite">Checking unified diagnostics in Confluence…</div>
+      </div>
       <div id="atgvMyWorkAiResults" class="atgv-mywork-ai-results" role="region" aria-label="AI suggestions and conversation">
         <div id="atgvMyWorkAiContent" class="atgv-mywork-ai-content" hidden>
           <h2 id="atgvMyWorkAiTitle" class="atgv-mywork-ai-title">AI · My Work</h2>
