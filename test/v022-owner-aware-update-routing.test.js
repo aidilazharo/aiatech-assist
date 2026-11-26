@@ -46,7 +46,9 @@ test('update check and UI distinguish selected source from a stale public mirror
  assert.match(host,/libraryRepositoryUrl:routes\?\.librarySource/);
  assert.match(host,/extensionReleaseRepositoryUrl:startupSetup\.RELEASES\.extension/);
  assert.match(host,/libraryReleaseRepositoryUrl:startupSetup\.RELEASES\.library/);
- assert.match(host,/if\(force&&!catalogBusy\)await catalogCheck\(\{interactive:false\}\)/);
+ assert.match(host,/if\(force&&!extensionOnly&&!catalogBusy\)await catalogCheck\(\{interactive:false\}\)/);
+ assert.match(host,/!extensionOnly&&\(force\|\|config\.autoCheckLibrary\)/);
+ assert.match(ui,/send\('checkSoftwareUpdates',\{extensionOnly:true\}\)/);
  assert.match(host,/libraryReleaseAvailable=!!libraryRelease&&libraryUpdateVersion\.compareInstalledRelease/);
  assert.doesNotMatch(host,/catalogRemote=\{repository:libraryLatest\.repository/);
  assert.match(ui,/const mirrorBehind=/);

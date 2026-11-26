@@ -59,12 +59,15 @@ test('invalid multi-key save cannot partially mutate SQLite',()=>fixture(async r
  await assert.rejects(store.save(root,{[store.KEYS.extension]:{...config,jira:{...config.jira,projectKey:'NEW'}},[store.KEYS.onboarding]:'bad'}),/boolean/);
  assert.equal(store.hydrate(root,{})[store.KEYS.extension].jira.projectKey,'TC');
 }));
-test('Start, Settings and Library share persistence while duplicated controls are hidden',async()=>{
+test('Start, Settings and Library share persistence with visible Library updates and hidden duplicate AI key control',async()=>{
  const base=path.join(__dirname,'..');
  const [host,html]=await Promise.all(['src/lib/runtime/extension-runtime.js','src/lib/webview/dashboard-html.js'].map(p=>fs.readFile(path.join(base,p),'utf8')));
  assert.match(host,/sharedConnectionSettings\.hydrate\(ws\.uri\.fsPath,legacy\)/);
  assert.match(host,/persistConnectionSettings\(\{extension:settings,library:libraryConf\}\)/);
  assert.match(host,/persistConnectionSettings\(\{extension:next,setupComplete:false\}\)/);
  assert.match(html,/id="startupConnectionForm"/);assert.match(html,/id="settingsJiraGroup"/);assert.match(html,/id="settingsGithubGroup"/);
- assert.match(html,/id="pullLibraryFiles"[^>]*hidden/);assert.match(html,/id="knowledgeApiKey"[^>]*hidden/);
+ const pull=html.match(/<button\b[^>]*id="pullLibraryFiles"[^>]*>Pull Library Updates<\/button>/)?.[0];
+ assert.ok(pull,'Library update action must be present');
+ assert.doesNotMatch(pull,/\b(?:hidden|disabled|aria-hidden)\b/);
+ assert.match(html,/id="knowledgeApiKey"[^>]*hidden/);
 });
