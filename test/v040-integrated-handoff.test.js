@@ -22,10 +22,14 @@ test('role task labels protect claim, while legacy unlabeled issues remain eligi
  assert.equal(role.storyKey({fields:{parent:{key:'TC-390'}}}),'TC-390');
  assert.equal(role.storyKey({fields:{parent:{key:'TC-120'}}},'Jira parent Story: TC-390'),'TC-390');
 });
-test('solution architect approval publishes pinned GitHub branch',()=>{
- assert.match(h,/case 'architectApproveStack':\{/);
- assert.match(h,/publishApprovedStack\(\{root,stackId:proof\.stackId/);
- assert.match(h,/remoteVerified:true/);
+test('solution architect approval records the saved revision without publishing to GitHub',()=>{
+ const start=h.indexOf("case 'architectApproveStack':{"),end=h.indexOf("case 'devCopilotArtifacts':{",start);
+ assert.ok(start>=0&&end>start,'Locate the architect approval handler');
+ const code=h.slice(start,end);
+ assert.match(code,/gate\.approval\(project,repo,actor\)/);
+ assert.match(code,/techStackApproval:\{\.\.\.proof,\.\.\.remote\}/);
+ assert.match(code,/No GitHub push or merge will occur/);
+ assert.doesNotMatch(code,/publishApprovedStack|remotePushed!==true/);
 });
 test('UI/UX uses one Generate & Publish UI/UX Code action for the full validated handoff',()=>{
  assert.match(h,/id="uxPublishFrontend"[^>]*>Generate &amp; Publish UI\/UX Code<\/button>/);
