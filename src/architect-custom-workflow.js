@@ -62,7 +62,7 @@ async function verifyMock(url,driver,root,relative,state){
  throw Error('The mock service did not pass localhost health verification.');
 }
 async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgress=async()=>{},
- driver=developer,stack=custom,repairs=repair,dependencies=dependency,onAiReview=null,fullStack=fullstack,fullStackMode='auto',prepareBaseline=null}={}){
+ driver=developer,stack=custom,repairs=repair,dependencies=dependency,onAiReview=null,fullStack=fullstack,fullStackMode='auto',prepareBaseline=null,onRuntimeMissing=null}={}){
  const key=path.resolve(root);
  if(running.has(key))throw Error('Custom Stack Install & Run is already in progress.');
  const state={controller:new AbortController(),started:false};
@@ -113,6 +113,18 @@ async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgr
   // the detected frontend root, never the NestJS health endpoint.
   const selectedUrl=relative===chosen.relative&&previewUrl?stack.loopbackPreview(previewUrl):null;
   const url=selectedUrl&&new URL(selectedUrl).pathname==='/'&&new URL(selectedUrl).port===new URL(chosen.previewUrl).port?selectedUrl:stack.loopbackPreview(chosen.previewUrl);
+  if(preserveCheckout&&bundlePolicy.applications?.includes(chosen.relative)){
+   const runtime=require('./platform-process'),options={cwd:path.join(key,chosen.relative),signal:state.controller.signal,onProgress:message=>report(12,1,message)};
+   await report(11,1,'Checking Windows x64 Node.js 24 runtime before installing modules…');
+   try{await runtime.resolveWindowsNode24(options);}
+   catch(error){
+    cancelled(state);
+    if(error.code!=='ATGV_NODE24_REQUIRED'||typeof onRuntimeMissing!=='function')throw error;
+    if(!await onRuntimeMissing(error,options))throw error;
+    cancelled(state);
+    await runtime.resolveWindowsNode24(options);
+   }
+  }
   const analysis=await repairs.analyse(key,inspection);
   if(typeof onAiReview==='function'){
    await report(17,1,'1/6 AI reviewing application architecture and blockers (advisory only)…',true);
@@ -151,9 +163,9 @@ async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgr
   const inspected=await driver.inspectScripts(key);
   const dependencyTarget=inspected.targets.find(x=>x.relative===chosen.relative&&x.kind===chosen.kind);
   if(!dependencyTarget)throw Error('Application target changed after creating the local fix branch.');
-  await dependencies.ensureForTarget(key,dependencyTarget,{signal:state.controller.signal,
+  const frontendVerification=await dependencies.ensureForTarget(key,dependencyTarget,{signal:state.controller.signal,
    onProgress:async message=>{cancelled(state);await report(61,4,message);}});
-  if(runMode==='live'||(preserveCheckout&&fullStackPair)){
+  if(runMode==='live'){
    try{
     const backendTarget=inspected.targets.find(x=>x.relative===fullStackPair.backend.relative&&x.kind===fullStackPair.backend.kind);
     if(!backendTarget)throw Error('NestJS backend disappeared during install.');
@@ -161,11 +173,12 @@ async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgr
      onProgress:async message=>{cancelled(state);await report(67,4,'Backend: '+message);}});
    }catch(error){
     cancelled(state);
-    if(preserveCheckout||fullStackMode!=='auto')throw error;
+    if(fullStackMode!=='auto')throw error;
     runMode='preview';backendFallback=true;
     await report(69,4,'Real backend dependencies were unavailable. Continuing with Vite frontend and clearly marked synthetic API; no real database claim.');
    }
   }
+  if(runMode==='preview'&&fullStackPair)await report(72,4,'Mock API selected; real NestJS backend dependencies and database startup skipped.');
   cancelled(state);
   await report(76,5,runMode==='live'?'5/6 Starting real NestJS API and Vite frontend…':'5/6 Launching Vite frontend with isolated mock API/database fixtures…');
   let result;
@@ -184,7 +197,7 @@ async function installAndRun(root,{expectedSha='',relative,previewUrl='',onProgr
    }
   }
   if(runMode==='preview'){
-   result=await stack.run(key,{sha:after.sha,relative:chosen.relative,previewUrl:url,mock:true,mockDatabase:true,driver,
+   result=await stack.run(key,{sha:after.sha,relative:chosen.relative,previewUrl:url,mock:true,mockDatabase:true,driver,dependenciesVerified:frontendVerification?.verified===true,
     onProgress:async message=>{cancelled(state);await report(84,5,message);}});
    state.started=true;
   }

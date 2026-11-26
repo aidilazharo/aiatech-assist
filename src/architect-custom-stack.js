@@ -68,7 +68,7 @@ async function scan(root,{driver=developer,fsApi=fs}={}){
  return {root:found.repo.root,sha:String(found.repo.sha||''),branch:String(found.repo.branch||''),clean:found.repo.clean===true,
   targets:entries,recognized:entries.length,ready:entries.some(entry=>entry.runnable)};
 }
-async function run(root,{sha,relative='',previewUrl,mock=false,mockDatabase=false,onProgress=async()=>{},driver=developer,helper=dependencies,bootstrapApi=bootstrap,httpRequest=fetch}={}){
+async function run(root,{sha,relative='',previewUrl,mock=false,mockDatabase=false,dependenciesVerified=false,onProgress=async()=>{},driver=developer,helper=dependencies,bootstrapApi=bootstrap,httpRequest=fetch}={}){
  const check=await scan(root,{driver});
  if(!/^[a-f0-9]{40}$/.test(String(sha||''))||check.sha!==sha)throw Error('Project Git revision changed after the scan. Scan the Custom Stack again.');
  const selected=check.targets.find(t=>t.relative===relative);
@@ -83,8 +83,10 @@ async function run(root,{sha,relative='',previewUrl,mock=false,mockDatabase=fals
  if(inspection.repo.sha!==sha)throw Error('Git revision changed while preparing the custom application.');
  const target=inspection.targets.find(t=>t.relative===selected.relative&&t.kind===selected.kind);
  if(!target)throw Error('Selected custom application is no longer available.');
- await onProgress('Checking existing dependencies for '+(selected.relative||'repository root')+'…');
- await helper.ensureForTarget(root,target,{onProgress});
+ if(!dependenciesVerified){
+  await onProgress('Checking existing dependencies for '+(selected.relative||'repository root')+'…');
+  await helper.ensureForTarget(root,target,{onProgress});
+ }
  await onProgress('Starting '+selected.framework+' from '+(selected.relative||'repository root')+'…');
  let started=false;
  try{

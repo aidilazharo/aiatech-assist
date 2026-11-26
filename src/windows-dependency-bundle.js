@@ -6,7 +6,7 @@ const path=require('node:path');
 const crypto=require('node:crypto');
 const {execFile}=require('node:child_process');
 const {promisify}=require('node:util');
-const {nodeExecutable}=require('./platform-process');
+const {resolveWindowsNode24}=require('./platform-process');
 const execute=promisify(execFile);
 const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
 const fingerprint=async file=>hash(JSON.stringify(JSON.parse(await fs.readFile(file,'utf8'))));
@@ -43,9 +43,7 @@ async function regular(file){
 }
 async function readJson(file){await regular(file);return JSON.parse(await fs.readFile(file,'utf8'));}
 async function restore(cwd,dir,entry,app,policy,{runner,onProgress,signal,force,checkExisting}){
- const node=nodeExecutable();
- const probe=await runner(node,['-p','process.platform+" "+process.arch+" "+process.versions.node'],{cwd,signal,windowsHide:true,timeout:10000});
- if(!new RegExp('^win32 x64 '+policy.nodeMajor+'\\.').test(String(probe.stdout||'').trim()))throw Error('ATGV Windows bundle requires Windows x64 Node.js '+policy.nodeMajor+' on PATH.');
+ const node=await resolveWindowsNode24({cwd,runner,signal,onProgress});
  if(!entry||!hex(entry.archiveSha256)||!Array.isArray(entry.chunks)||entry.chunks.length<1||entry.chunks.length>64)throw Error('Windows dependency bundle missing or invalid for '+app+'. Pull a published bundle from main.');
  if(entry.packageSha256!==await fingerprint(path.join(cwd,'package.json'))||entry.lockSha256!==await fingerprint(path.join(cwd,'package-lock.json')))throw Error('Windows bundle does not match '+app+' manifests. Pull an updated bundle; npm installation is disabled.');
  const nm=path.join(cwd,'node_modules'),marker=path.join(nm,'.atgv-bundle.json');

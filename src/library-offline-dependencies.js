@@ -5,7 +5,7 @@ const path=require('node:path');
 const crypto=require('node:crypto');
 const {execFile}=require('node:child_process');
 const {promisify}=require('node:util');
-const {nodeExecutable}=require('./platform-process');
+const {resolveWindowsNode24}=require('./platform-process');
 const exec=promisify(execFile);
 const ids={react:'npm',angular:'npm',nestjs:'npm',dotnet:'dotnet','spring-boot':'maven'};
 const files={react:['package.json','package-lock.json'],angular:['package.json','package-lock.json'],nestjs:['package.json','package-lock.json'],dotnet:['Api.csproj','tests/Atgv.Tests/Atgv.Tests.csproj'],'spring-boot':['pom.xml']};
@@ -42,9 +42,7 @@ async function locate(root,cwd,{platform=process.platform,arch=process.arch}={})
  return {id,kind:ids[id],folder,manifest};
 }
 async function restoreNpm(pack,cwd,{runner=exec,signal,checkExisting=null,force=false}={}){
- const node=nodeExecutable();
- const {stdout}=await runner(node,['-p','process.platform+" "+process.arch+" "+process.versions.node'],{cwd,windowsHide:true,timeout:10000,signal});
- if(!/^win32 x64 24\./.test(String(stdout).trim()))throw Error('Offline Library npm stacks require Windows x64 Node.js 24.');
+ const node=await resolveWindowsNode24({cwd,runner,signal});
  const source=path.join(pack.folder,'node_modules'),nm=path.join(cwd,'node_modules');
  const previous=await fs.lstat(nm).catch(e=>{if(e.code==='ENOENT')return null;throw e;});
  if(previous&&(!previous.isDirectory()||previous.isSymbolicLink()))throw Error('Unsafe existing node_modules.');

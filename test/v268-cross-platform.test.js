@@ -62,3 +62,31 @@ test('Background AI service uses the installed external Node runtime',async()=>{
  const value=await nodeRuntime(process.execPath);
  assert.equal(path.resolve(value),path.resolve(process.execPath));
 });
+
+test('Node 24 resolver searches beyond incompatible first PATH entry and pairs npm with selected runtime',async()=>{
+ const {resolveWindowsNode24}=require('../src/platform-process');
+ const first='C:\\old',second='C:\\Program Files\\nodejs',env={Path:first,ProgramW6432:'C:\\Program Files',npm_execpath:'C:\\old\\npm-cli.js'};
+ const probes=[];
+ const selected=await resolveWindowsNode24({platform:'win32',env,executable:()=>true,exists:()=>true,runner:async node=>{probes.push(node);return {stdout:node.startsWith(first)?'win32 x64 22.9.0':'win32 x64 24.13.0'};}});
+ assert.equal(selected,path.win32.join(second,'node.exe'));assert.equal(probes.length,2);
+ assert.equal(env.Path.split(';')[0],second);
+ const npm=npmCommand(['ls'],{platform:'win32',env,exists:()=>true});
+ assert.equal(npm.bin,selected);assert.equal(npm.args[0],path.win32.join(second,'node_modules','npm','bin','npm-cli.js'));
+});
+test('Node recovery rejects wrong architecture, missing npm, and cancelled installations',async()=>{
+ const {resolveWindowsNode24,installWindowsNode24}=require('../src/platform-process');
+ const opts={platform:'win32',env:{Path:'C:\\node'},executable:()=>true,runner:async()=>({stdout:'win32 arm64 24.13.0'})};
+ await assert.rejects(resolveWindowsNode24(opts),/arm64 24.13.0/);
+ await assert.rejects(resolveWindowsNode24({...opts,runner:async()=>({stdout:'win32 x64 24.13.0'}),exists:()=>false}),/npm missing/);
+ const controller=new AbortController();controller.abort();
+ await assert.rejects(installWindowsNode24({signal:controller.signal,runner:async()=>{throw Error('must not run');}}),/cancelled/);
+});
+test('approved Windows install chooses only exact 24.x release and x64 architecture',async()=>{
+ const {installWindowsNode24,selectNode24Version}=require('../src/platform-process');
+ assert.equal(selectNode24Version('26.0.0\n24.9.0\n24.10.1\n22.0.0'),'24.10.1');
+ assert.equal(selectNode24Version('26.0.0\n24.0.0-rc.1'),'');
+ const commands=[];
+ assert.equal(await installWindowsNode24({runner:async(bin,args)=>{commands.push([bin,args]);return {stdout:'26.1.0\n24.10.1\n24.9.0'};}}),'24.10.1');
+ assert.equal(commands.length,2);assert.equal(commands[1][0],'winget');
+ assert.ok(commands[1][1].includes('24.10.1'));assert.ok(commands[1][1].includes('x64'));
+});

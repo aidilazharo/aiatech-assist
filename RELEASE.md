@@ -1,13 +1,12 @@
-# ATGV AIATECH Assist v0.1.54
+# ATGV AIATECH Assist v0.1.55
 
 ## Changes
 
-- Enable Approve for Developers after saving a catalog technology stack without GitHub publication, tests or server verification as prerequisites.
-- Record local approval of the exact saved Git revision, without automatically pushing a GitHub branch or merging.
-- Remove remote publication from the required readiness checklist; keep manual Publish to GitHub available.
-- Evaluate server verification independently from GitHub publication and tests.
-- Preserve remote revision verification when publishing frontend code. Custom Stack mock handoff rules remain unchanged.
+- Detect compatible Windows x64 Node.js 24 with npm across PATH, standard installation locations and approved portable ATGV_NODE24_HOME. Report actual detected versions and select the compatible runtime for the extension process only.
+- Check bundled Custom Stack runtime before AI and dependency installation. With explicit user confirmation, Windows Package Manager can install an exact 24.x x64 release and retry verification. Corporate installation restrictions remain in force.
+- Apply runtime detection to both Windows project and Library npm bundle restoration.
+- Skip real NestJS dependency installation in Mock API mode; reuse verified frontend dependency checks during launch.
 
 ## Validation
 
-- JavaScript syntax checked and regression assertions updated. Full regression, VS Code runtime testing and VSIX packaging not run.
+- Syntax checked, regression cases added. Full Windows runtime, actual package-manager installation, extension test suite and VSIX build not performed.

@@ -68,6 +68,7 @@ test('Install & Run performs ordered scan, local commit, dependency check and ve
    actions.push('preview');
    assert.equal(options.mock,true);
    assert.equal(options.mockDatabase,true);
+   assert.equal(options.dependenciesVerified,true);
    running=true;
    return {running:true,url:options.previewUrl,mockPreview:true,mockDatabase:true};
   }
@@ -132,4 +133,20 @@ test('Consolidated UI keeps only one visible Install & Run execution control',as
  assert.match(ui,/send\('architectCustomInstallRun'/);
  assert.match(host,/case 'architectCustomInstallRun':\{/);
  assert.match(host,/workflow\.cancel\(root\)/);
+});
+
+test('Mock mode never installs paired backend dependencies and passes verified frontend to startup',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-mock-deps-'));
+ const sha='a'.repeat(40),frontend={relative:'ReactTS_Frontend',kind:'npm',role:'frontend',runnable:true,mockable:true,previewUrl:'http://127.0.0.1:5173/'},backend={relative:'NestJS_Backend',kind:'npm',role:'backend',runnable:true};
+ let running=false;const installed=[],progress=[];
+ try{
+  const result=await workflow.installAndRun(root,{expectedSha:sha,relative:frontend.relative,fullStackMode:'preview',
+   driver:{localLogs:()=>({running}),inspectScripts:async()=>({targets:[frontend,backend]}),stopLocal:async()=>{running=false;}},
+   stack:{scan:async()=>({root,sha,branch:'main',clean:false,targets:[frontend,backend]}),loopbackPreview:custom.loopbackPreview,run:async(_root,options)=>{assert.equal(options.dependenciesVerified,true);assert.equal(options.mock,true);running=true;return {running:true,mockPreview:true,mockDatabase:true};}},
+   repairs:{analyse:async()=>({}),branches:async()=>({})},
+   dependencies:{ensureForTarget:async(_root,target)=>{installed.push(target.relative);return {verified:true};}},
+   fullStack:{detectPair:()=>({frontend,backend}),hasEnvironment:async()=>false,modeForPair:()=> 'preview',run:async()=>{throw Error('Must not start real API');}},
+   onProgress:async entry=>progress.push(entry.message)});
+  assert.equal(result.mode,'preview');assert.deepEqual(installed,[frontend.relative]);assert.ok(progress.some(s=>s.includes('real NestJS backend dependencies')));
+ }finally{await fs.rm(root,{recursive:true,force:true});}
 });

@@ -8016,6 +8016,14 @@ async function handleDashboardMessage(msg){
             expectedSha:inspected.sha,prepareBaseline,
             relative:typeof msg.relative==='string'?msg.relative:undefined,
             previewUrl:String(msg.previewUrl||''),fullStackMode,
+            onRuntimeMissing:async(error,options)=>{
+              await recordStackActivity(projectId,'Install & Run / Node.js runtime',error.message);
+              const action='Install Node.js 24 x64';
+              const answer=await uiWarning(error.message+'\n\nIf permitted by company IT, install the latest available 24.x x64 release through Windows Package Manager? Existing project modules are preserved. If blocked, obtain the approved offline installer or configure ATGV_NODE24_HOME.',{modal:true},action);
+              if(answer!==action||options.signal?.aborted||activeProject?.id!==projectId)return false;
+              await require('../../platform-process').installWindowsNode24(options);
+              return true;
+            },
             onAiReview:async (verified,report)=>{
               const model=await activeAiTarget();
               const evidence=JSON.stringify({
