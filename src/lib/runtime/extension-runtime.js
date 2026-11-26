@@ -1217,6 +1217,9 @@ async function developerChatGitAction(msg){
    if(!state.pr||state.branch!==selected.local.branch)throw Error('No pull request for this work branch.');
    const url=require('../../repo-sync-github-api').safePrUrl(selected.repo,state.pr);
    await vscode.env.openExternal(vscode.Uri.parse(url));
+  }else if(msg.action==='open-source'){
+   if(activeProject?.id!==projectId)throw Error('Active project changed.');
+   await vscode.commands.executeCommand('vscode.openFolder',vscode.Uri.file(selected.root),{forceNewWindow:true});
   }else if(msg.action==='open'){
    await vscode.commands.executeCommand('revealFileInOS',vscode.Uri.file(selected.root));
   }else if(msg.action&&msg.action!=='status'){

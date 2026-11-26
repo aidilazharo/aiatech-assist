@@ -17,13 +17,14 @@
  const blendedRGBA=(target,mix,alpha)=>'rgba('+redRGB.map((v,i)=>
   Math.round(v+(target[i]-v)*mix)).join(',')+','+alpha+')';
  let project='',role='',pendingId=0,sequence=0,pending=false;
- const repoPanel=get('developerChatRepoPanel'),repoSelect=get('developerChatRepoSelect'),repoNext=get('developerChatNext'),repoOpen=get('developerChatOpen'),repoRefresh=get('developerChatRefresh'),repoPr=get('developerChatPr');
+ const repoPanel=get('developerChatRepoPanel'),repoSelect=get('developerChatRepoSelect'),repoNext=get('developerChatNext'),repoOpen=get('developerChatOpen'),repoOpenSource=get('developerChatOpenSource'),repoRefresh=get('developerChatRefresh'),repoPr=get('developerChatPr');
  let gitRequest=0,gitBusy=false,gitStep='branch',gitPr='',gitReady=false;
  const gitLabels={branch:'Create Branch',commit:'Commit Code',pr:'Create PR',publish:'Publish',done:'Published'};
  function gitControls(){
   if(!repoPanel)return;
   repoNext.disabled=gitBusy||!gitReady||gitStep==='done';
   repoOpen.disabled=gitBusy||!gitReady;
+  repoOpenSource.disabled=gitBusy||!gitReady;
   repoRefresh.disabled=gitBusy;
   repoSelect.disabled=gitBusy||pending;
   repoNext.textContent=gitBusy?'Working…':gitLabels[gitStep]||gitLabels.branch;
@@ -53,7 +54,7 @@
  }
  if(repoPanel){
   repoSelect.addEventListener('change',()=>{gitReady=false;gitPr='';gitStep='branch';get('developerChatGitInfo').textContent='Checking repository…';get('developerChatArc').setAttribute('stroke-dasharray','0 100');get('developerChatPercent').textContent='0%';writer=null;queue.length=0;transcript.replaceChildren();greetingNode=addMessage('assistant','Reviewing the selected repository.');briefingNode=null;pendingId=++sequence;requestGit();});
-  repoNext.addEventListener('click',()=>requestGit(gitStep));repoOpen.addEventListener('click',()=>requestGit('open'));repoRefresh.addEventListener('click',()=>requestGit());
+  repoNext.addEventListener('click',()=>requestGit(gitStep));repoOpen.addEventListener('click',()=>requestGit('open'));repoOpenSource.addEventListener('click',()=>requestGit('open-source'));repoRefresh.addEventListener('click',()=>requestGit());
   repoPr.addEventListener('click',()=>{if(/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9][0-9]*$/.test(gitPr)&&typeof send==='function')send('developerChatGit',{projectId:project,roleId:role,repositoryTarget:repoSelect.value,requestId:++gitRequest,action:'open-pr'});});
   window.addEventListener('atgv:viewchange',()=>{if(role==='software-developer'&&!repoPanel.hidden&&!document.getElementById('myWorkView')?.classList.contains('hidden'))requestGit();});
  }
