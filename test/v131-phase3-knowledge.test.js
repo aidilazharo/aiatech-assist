@@ -10,6 +10,9 @@ test('Phase 3 knowledge indexes latest approved BR and approved role revision, e
   await repo.approveDocument(registry,'sample','project-manager','plan',{actor:'reviewer',reviewerRole:'project-manager',expectedDigest:repo.sha(text)});
   const docs=await collectProjectKnowledge(dir);
   assert.equal(docs.length,2);assert.ok(docs.some(x=>x.id==='sample:br:BR-001'&&x.revision===1));assert.ok(docs.some(x=>x.id==='sample:role:project-manager/plan'&&x.approval));assert.ok(!docs.some(x=>x.text.includes('Private draft')));
+  const withDiagnostics=await collectProjectKnowledge(dir,{includeDiagnostics:true});
+  assert.equal(withDiagnostics.length,3);assert.ok(withDiagnostics.at(-1).diagnostic);assert.equal(withDiagnostics.at(-1).approval,null);assert.match(withDiagnostics.at(-1).text,/Logs and drafts are not business rules/);
+  const limited=await collectProjectKnowledge(dir,{includeDiagnostics:true,limit:2});assert.equal(limited.length,2);assert.ok(!limited.some(x=>x.diagnostic));
  }finally{await fs.rm(root,{recursive:true,force:true});}
 });
 test('Phase 3 knowledge rejects silent inclusion when canonical index is invalid',async()=>{const root=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-index-'));try{await fs.mkdir(path.join(root,'sdlc'));await fs.writeFile(path.join(root,'sdlc','unified-documents.json'),'{invalid');await assert.rejects(collectProjectKnowledge(root),/Unexpected token|Expected property/);}finally{await fs.rm(root,{recursive:true,force:true});}});

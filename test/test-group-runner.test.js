@@ -43,3 +43,9 @@ test('failed group diagnostics retain test name, error and stack without large a
  assert.doesNotMatch(details,/actual:|another success|x{100}/);
  assert.equal(failureDetails('ok 1 - success').length,0);
 });
+
+test('multiline TAP diagnostics include actual message and stack without treating source dump as YAML fields',()=>{
+ const output=['not ok 1 - broken assertion','  ---','  location: test/example.test.js:12:1','  error: |-','    Expected values to be strictly equal:','    3 !== 2','    Input:','    source excerpt','    error: unrelated source code','  code: ERR_ASSERTION','  actual: |-','    error: huge source dump','  stack: |-','    at TestContext.<anonymous> (test/example.test.js:28:9)','  ...'].join('\n');
+ const details=failureDetails(output).join('\n');
+ assert.match(details,/Expected values to be strictly equal/);assert.match(details,/3 !== 2/);assert.match(details,/example\.test\.js:28:9/);assert.doesNotMatch(details,/unrelated source code|huge source dump/);
+});

@@ -4,7 +4,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const extensions = new Set(['.md', '.mdx', '.txt', '.rst']);
 const ignored = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', '.venv', '.next']);
-async function collectProjectKnowledge(projectRoot, { limit = 100, maxBytes = 262144 } = {}) {
+async function collectProjectKnowledge(projectRoot, { limit = 100, maxBytes = 262144, includeDiagnostics = false } = {}) {
     const root = path.resolve(projectRoot);
     const docs = [];
     let canonical = null;
@@ -20,8 +20,6 @@ async function collectProjectKnowledge(projectRoot, { limit = 100, maxBytes = 26
     // Refresh from canonical state, not from stale recovery copies.
     const projectArtifacts=require('./project-artifacts');
     if(canonical)await projectArtifacts.indexCanonical(root,canonical).catch(()=>{});
-    const artifactContext=await projectArtifacts.contextDocument(root).catch(()=>null);
-    if(artifactContext&&limit>0&&Buffer.byteLength(artifactContext.text)<=maxBytes)docs.push(artifactContext);
     const approvedPaths = new Map();
     if (canonical)
         for (const doc of Object.values(canonical.documents)) {
@@ -120,6 +118,12 @@ async function collectProjectKnowledge(projectRoot, { limit = 100, maxBytes = 26
             if (e.code !== 'ENOENT')
                 throw e;
         }
+    }
+    // Explicit opt-in only: do not mix draft/diagnostic metadata into the
+    // default approved-document index or displace verified documents.
+    if(includeDiagnostics&&docs.length<limit){
+        const context=await projectArtifacts.contextDocument(root).catch(()=>null);
+        if(context&&Buffer.byteLength(context.text)<=maxBytes)docs.push({...context,diagnostic:true,approval:null});
     }
     return docs;
 }

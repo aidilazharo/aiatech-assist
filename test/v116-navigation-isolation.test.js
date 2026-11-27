@@ -56,8 +56,8 @@ test('setView hides every non-selected page including SDLC Readiness, and keeps 
   vm.runInContext('let view="flow";\n'+functionCode+'\nthis.switchView=setView;this.getView=()=>view;',context);
   for(const current of allViews){
     context.switchView(current);
-    assert.equal(pages.filter(p=>!p.hidden).length,1,'exactly one visible page at '+current);
-    assert.equal(pages.find(p=>!p.hidden).id,current==='discovery'?'workView':viewId(current));
+    const visible=pages.filter(p=>!p.hidden).map(p=>p.id);
+    assert.deepEqual(visible,current==='project'?['settingsView','projectView']:[current==='discovery'?'workView':viewId(current)],'only intended settings sections or single workflow at '+current);
     assert.equal(discovery.hidden,current!=='discovery');
     assert.equal(context.getView(),current);
     assert.equal(pane.scrollTop,0);

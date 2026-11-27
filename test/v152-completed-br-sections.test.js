@@ -33,7 +33,7 @@ test('repeated ID retains distinct historical snapshots and missing IDs never me
 });
 test('completed history renders BR sections with source, Jira, related documents and discovery inside the individual BR',()=>{
  assert.match(host,/media','completed-br-history\.js/);
- assert.match(host,/<script src="\$\{completedBrHistoryJs\}"><\/script><script src="\$\{baJiraEpicsJs\}"><\/script><script src="\$\{overviewSdlcJs\}"><\/script><script src="\$\{js\}"><\/script>/);
+ assert.match(host,/<script src="\$\{completedBrHistoryJs\}"><\/script><script src="\$\{baJiraEpicsJs\}"><\/script><script src="\$\{overviewSdlcJs\}"><\/script><script src="\$\{recoveryControllerJs\}"><\/script><script src="\$\{uxRecoveryJs\}"><\/script><script src="\$\{developerRecoveryJs\}"><\/script><script src="\$\{js\}"><\/script>/);
  assert.match(ui,/ATGVCompletedBRHistory\.group\(records\)/);
  assert.match(ui,/const details=document\.createElement\('details'\);details\.className='ba-completed-br-section'/);
  assert.match(ui,/heading\.append\(brElement\('strong','ba-completed-br-title',group\.title\)\)/);

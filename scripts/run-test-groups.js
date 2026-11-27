@@ -63,20 +63,30 @@ function summary(output){
 // parent release log so a single uploaded build log is sufficient for triage.
 function failureDetails(output){
  const lines=output.split(/\r?\n/),details=[];
- let active=false,stack=false,count=0;
- const clean=value=>String(value).replace(/[\x00-\x08\x0b-\x1f\x7f]/g,'').replace(/(Bearer\s+|Basic\s+)[A-Za-z0-9+/_=.-]+/gi,'$1[redacted]').replace(/\b(?:ghp_|github_pat_|sk-)[A-Za-z0-9_-]+/g,'[redacted]').slice(0,700);
+ let active=false,indent='',block='',count=0,stackCount=0;
+ const clean=value=>String(value).replace(/[\x00-\x08\x0b-\x1f\x7f]/g,'').replace(/(Bearer\s+|Basic\s+)[A-Za-z0-9+/_=.-]+/gi,'$1[redacted]').replace(/\b(?:ghp_|github_pat_|sk-|ATATT)[A-Za-z0-9_-]+/g,'[redacted]').replace(/((?:password|secret|api[_-]?key|access[_-]?token|authorization)\s*[:=]\s*)[^\s,;]+/gi,'$1[redacted]').slice(0,700);
  for(const line of lines){
-  if(/^\s*not ok \d+\b/.test(line)){
-   active=true;stack=false;count=0;details.push(clean(line.trim()));continue;
-  }
-  if(/^\s*(?:ok \d+\b|# Subtest:|\.\.\.\s*$)/.test(line)){active=false;stack=false;}
+  const test=/^(\s*)not ok \d+\b/.exec(line);
+  if(test){active=true;indent=test[1]+'  ';block='';count=0;stackCount=0;details.push(clean(line.trim()));continue;}
   if(!active)continue;
-  if(/^\s*(?:location|failureType|error|code|name):/.test(line)){details.push('  '+clean(line.trim()));stack=false;}
-  else if(/^\s*stack:/.test(line))stack=true;
-  else if(stack&&/^\s*at\s/.test(line)&&count++<5)details.push('  '+clean(line.trim()));
-  else if(/^\s*(?:expected|actual|operator):/.test(line))stack=false;
+  const own=line.startsWith(indent)&&!/\s/.test(line[indent.length]||' ');
+  const field=own&&/^([A-Za-z][A-Za-z0-9]*):\s*(.*)$/.exec(line.slice(indent.length));
+  if(own&&line.slice(indent.length)==='...'){active=false;block='';continue;}
+  if(!line.startsWith(indent)&&/^\s*(?:ok \d+\b|# Subtest:|# tests\b)/.test(line)){active=false;continue;}
+  if(field){
+   const [,key,value]=field;block='';
+   if(['location','failureType','error','code','name','operator'].includes(key)){
+    details.push('  '+clean(key+': '+value));
+    if(key==='error'&&/^[|>][-+]?$/.test(value)){block='error';count=0;}
+   }else if(key==='stack'){block='stack';stackCount=0;if(value&&!/^[|>][-+]?$/.test(value))details.push('  '+clean(value));}
+   continue;
+  }
+  if(!line.startsWith(indent+'  '))continue;
+  const value=line.trim();
+  if(block==='error'&&value&&count<4){details.push('    '+clean(value));count++;}
+  if(block==='stack'&&/^(?:at\s|Error:|AssertionError)/.test(value)&&stackCount++<6)details.push('    '+clean(value));
  }
- return details.slice(0,400);
+ return details.slice(0,500);
 }
 function runChild(args,log){
  const fd=fs.openSync(log,'w');

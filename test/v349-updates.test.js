@@ -51,11 +51,11 @@ test('settings and runtime expose dual update checks, safe prompts and verified 
   assert.match(runtime,/sdlcCatalog\.syncGitWorkspace/);
 });
 
-test('Section 8 contains exactly four visible update buttons, with independent release links',()=>{
+test('Updates contains exactly four visible update buttons, with independent release links',()=>{
  const html=read('src/lib/webview/dashboard-html.js'),ui=read('media/start.js'),host=read('src/lib/runtime/extension-runtime.js');
  const section=html.slice(html.indexOf('id="settingsSoftwareUpdateGroup"'),html.indexOf('id="projectView"'));
  const buttons=[...section.matchAll(/<button[^>]*>([^<]+)<\/button>/g)].map(x=>x[1]);
- assert.deepEqual(buttons,['Check Extension Updates','Pull Library Updates','GitHub Release Extension','GitHub Release Library']);
+ assert.deepEqual(buttons,['Check Extension Updates','Pull Library Updates','Extension Release','Library Release']);
  assert.doesNotMatch(section,/<button[^>]*(?:hidden|disabled)[^>]*>/);
  assert.match(ui,/send\('checkSoftwareUpdates',\{extensionOnly:true\}\)/);
  assert.match(host,/case 'viewExtensionRelease':\{\s*await openLatestReleaseFile\('extension'\)/);

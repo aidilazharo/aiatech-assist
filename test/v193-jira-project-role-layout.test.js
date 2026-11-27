@@ -8,7 +8,8 @@ const read=relative=>fs.readFileSync(path.join(root,relative),'utf8');
 
 test('Jira Project Key field is wired into test, save, and refresh without changing project-scoped values',()=>{
  const host=read('test/generated/extension-source.txt'),ui=read('media/start.js'),cfg=read('src/projects.js');
- assert.match(host,/field\('jiraProjectKey','Jira Project Key'/);
+ assert.match(host,/field\('jiraProjectKey','Default Project Key'/);
+ assert.match(host,/field\('jira\.projectKey','Jira Project Key'/);
  assert.match(host,/projectKey:String\(msg\.settings\?\.jira\?\.projectKey\|\|''\)\.trim\(\)/);
  assert.match(host,/rest\/api\/3\/project\/\$\{encodeURIComponent\(fields\.projectKey\)\}/);
  assert.match(ui,/field\('jiraProjectKey',extensionSettings\.jira\?\.projectKey\|\|''\)/);

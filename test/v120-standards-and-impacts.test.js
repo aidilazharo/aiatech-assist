@@ -55,7 +55,7 @@ test('workspace navigation targets unique main pages and rejects nonexistent rou
  const ids=[...host.matchAll(/<main id="([^"]+)"/g)].map(x=>x[1]);
  assert.ok(ids.length>=5);assert.equal(new Set(ids).size,ids.length);
  assert.match(client,/if\(!target\|\|!pages\.includes\(target\)\)/);
- assert.match(client,/for\(const page of pages\)page\.classList\.toggle\('hidden',page!==target\)/);
+ assert.match(client,/for\(const page of pages\)page\.classList\.toggle\('hidden',page!==target&&!\(next==='project'&&page\.id==='settingsView'\)\)/);
 });
 
 test('current BA milestone does not repeat its own primary Open action or duplicate All filter',()=>{
