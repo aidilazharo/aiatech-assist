@@ -57,3 +57,22 @@ test('startup mapping renderer switches project scope, preserves selections and 
  projects.splice(1);page.render();assert.equal(node('startupMappingProject').value,'a');assert.equal(node('overviewJiraProjectKey').textContent,'AA');
  projects.splice(0);page.render();assert.equal(node('overviewJiraProjectKey').textContent,'Not selected');assert.equal(node('overviewJiraInventory').disabled,true);
 });
+
+test('all token help entries show an internal modal and only explicit Open Website dispatches an allowlisted provider',()=>{
+ const start=ui.indexOf('const tokenHelpLinks=Object.freeze('),end=ui.indexOf("for(const [id,provider] of [['guideJiraTokenLink'",start);
+ assert.ok(start>=0&&end>start);
+ const nodes=new Map(),sent=[];let restored=0;
+ const node=id=>{if(!nodes.has(id))nodes.set(id,{open:false,events:{},value:'',textContent:'',focus(){},select(){},showModal(){this.open=true;},close(){this.open=false;},addEventListener(name,handler){this.events[name]=handler;}});return nodes.get(id);};
+ const document={body:{appendChild(){}},activeElement:{isConnected:true,focus(){restored++;}}};
+ const page=new Function('$','document','navigator','send',ui.slice(start,end)+';return {open:openTokenHelpModal};')(node,document,{},(type,payload)=>sent.push({type,...payload}));
+ page.open('jira');assert.equal(node('tokenHelpModal').open,true);assert.equal(sent.length,0);
+ assert.equal(node('tokenHelpUrl').value,'https://id.atlassian.com/manage-profile/security/api-tokens');
+ node('tokenHelpCancel').events.click();assert.equal(node('tokenHelpModal').open,false);assert.equal(sent.length,0);assert.equal(restored,1);
+ page.open('github');assert.equal(node('tokenHelpUrl').value,'https://github.com/settings/personal-access-tokens');
+ node('tokenHelpOpen').events.click();assert.deepEqual(sent,[{type:'guideTokenLink',provider:'github'}]);assert.equal(node('tokenHelpModal').open,false);
+ page.open('constructor');assert.equal(node('tokenHelpModal').open,false);
+ page.open('confluence');node('tokenHelpModal').events.cancel({preventDefault(){}});assert.equal(sent.length,1);assert.equal(node('tokenHelpModal').open,false);
+ assert.match(html,/<dialog id="tokenHelpModal"[^>]*aria-labelledby="tokenHelpTitle"/);
+ assert.match(ui,/startupGithubTokenInfo','github'\]\]\)\$\(id\)\.addEventListener\('click',\(\)=>openTokenHelpModal\(provider\)\)/);
+ const guide=read('media/user-guide-controller.js');assert.match(guide,/guideStepTokenLink[^\n]*openTokenHelpModal\(provider\)/);
+});

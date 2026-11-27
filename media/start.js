@@ -771,7 +771,54 @@ function renderGateResults(){
 
 }
 $('gateOpenFolder').addEventListener('click',()=>send('openWorkspaceFolder'));
-for(const [id,provider] of [['guideJiraTokenLink','jira'],['guideConfluenceTokenLink','confluence'],['guideGithubTokenLink','github'],['startupAtlassianTokenInfo','jira'],['startupGithubTokenInfo','github']])$(id).addEventListener('click',()=>send('guideTokenLink',{provider}));
+
+const tokenHelpLinks=Object.freeze({
+ jira:{title:'Atlassian API token',url:'https://id.atlassian.com/manage-profile/security/api-tokens'},
+ confluence:{title:'Atlassian API token',url:'https://id.atlassian.com/manage-profile/security/api-tokens'},
+ github:{title:'GitHub personal access token',url:'https://github.com/settings/personal-access-tokens'}
+});
+let tokenHelpProvider='',tokenHelpPriorFocus=null;
+function openTokenHelpModal(provider){
+ if(!Object.hasOwn(tokenHelpLinks,provider))return;
+ const modal=$('tokenHelpModal'),link=tokenHelpLinks[provider];
+ if(!modal.open)tokenHelpPriorFocus=document.activeElement;
+ tokenHelpProvider=provider;
+ $('tokenHelpTitle').textContent=link.title;
+ $('tokenHelpUrl').value=link.url;
+ $('tokenHelpStatus').textContent='';
+ if(!modal.open)modal.showModal();
+ $('tokenHelpCancel').focus();
+}
+function closeTokenHelpModal(){
+ const modal=$('tokenHelpModal');
+ if(modal.open)modal.close();
+ tokenHelpProvider='';
+ if(tokenHelpPriorFocus?.isConnected)tokenHelpPriorFocus.focus();
+ tokenHelpPriorFocus=null;
+}
+document.body.appendChild($('tokenHelpModal'));
+$('tokenHelpCancel').addEventListener('click',closeTokenHelpModal);
+$('tokenHelpModal').addEventListener('cancel',event=>{event.preventDefault();closeTokenHelpModal();});
+$('tokenHelpModal').addEventListener('keydown',event=>{if(event.key==='Escape')event.stopPropagation();});
+$('tokenHelpOpen').addEventListener('click',()=>{
+ const provider=tokenHelpProvider;if(!Object.hasOwn(tokenHelpLinks,provider))return;
+ closeTokenHelpModal();
+ // The host resolves the allowlisted provider URL; VS Code retains its own trusted-domain policy.
+ send('guideTokenLink',{provider});
+});
+$('tokenHelpCopy').addEventListener('click',async()=>{
+ const provider=tokenHelpProvider;if(!Object.hasOwn(tokenHelpLinks,provider))return;
+ const url=tokenHelpLinks[provider].url;
+ try{
+  await navigator.clipboard.writeText(url);
+  if(tokenHelpProvider===provider)$('tokenHelpStatus').textContent='Link copied.';
+ }catch{
+  if(tokenHelpProvider!==provider)return;
+  $('tokenHelpUrl').focus();$('tokenHelpUrl').select();
+  $('tokenHelpStatus').textContent='Press Ctrl+C or Cmd+C to copy the selected link.';
+ }
+});
+for(const [id,provider] of [['guideJiraTokenLink','jira'],['guideConfluenceTokenLink','confluence'],['guideGithubTokenLink','github'],['startupAtlassianTokenInfo','jira'],['startupGithubTokenInfo','github']])$(id).addEventListener('click',()=>openTokenHelpModal(provider));
 $('gateManual').addEventListener('click',()=>openProject());
 $('gateSkip').addEventListener('click',()=>{
  if(gateBusy||!workspaceFolderAvailable)return;

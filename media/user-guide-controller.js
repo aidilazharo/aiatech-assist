@@ -123,7 +123,7 @@
  $('guideMenuClose').addEventListener('click',closeMenu);
  menu.addEventListener('click',event=>{if(event.target===menu)closeMenu();});
  $('guideMenuStart').addEventListener('click',()=>start(selectedTour));
- $('guideStepTokenLink').addEventListener('click',()=>{const provider=$('guideStepTokenLink').dataset.provider;if(['jira','confluence','github'].includes(provider))send('guideTokenLink',{provider});});
+ $('guideStepTokenLink').addEventListener('click',()=>{const provider=$('guideStepTokenLink').dataset.provider;if(['jira','confluence','github'].includes(provider))openTokenHelpModal(provider);});
  $('guideClose').addEventListener('click',()=>closeTour(false));
  $('guideSkip').addEventListener('click',()=>closeTour(false,true));
  $('guideBack').addEventListener('click',previous);$('guideNext').addEventListener('click',next);

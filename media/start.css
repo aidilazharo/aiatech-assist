@@ -3298,3 +3298,12 @@ body:not(.gate-mode) #appHeader.app-header{position:relative;border-bottom:3px s
 #appHeader #atgvHeaderSyncFill{display:block;width:0;height:100%;background:#d31145;transition:width .18s linear}
 @media(prefers-reduced-motion:reduce){#appHeader #atgvHeaderSyncFill{transition:none}}
 @media(max-width:640px){#startupConnectionForm .overview-connections-grid{grid-template-columns:1fr}}
+
+/* Token help always opens an ATGV modal before requesting external navigation. */
+#tokenHelpModal{width:min(520px,calc(100vw - 32px));max-height:calc(100vh - 32px);margin:auto;padding:20px;overflow:auto;color:var(--vscode-foreground);background:var(--vscode-editor-background);border:1px solid var(--atgv-line);border-radius:10px;box-shadow:0 18px 42px rgba(0,0,0,.38)}
+#tokenHelpModal::backdrop{background:rgba(7,10,16,.68)}
+#tokenHelpModal h2{margin:0 0 8px}
+#tokenHelpModal label{display:block;margin-top:14px}
+#tokenHelpUrl{width:100%;min-width:0}
+#tokenHelpStatus{min-height:1.4em;margin:6px 0;color:var(--vscode-descriptionForeground)}
+#tokenHelpModal .actions{justify-content:flex-end;flex-wrap:wrap;margin-top:12px}
