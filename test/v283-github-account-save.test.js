@@ -57,7 +57,7 @@ test('GitHub can store a verified account PAT without choosing a repository, and
   const settingsKey=scopedSettingsKey(folder,'atgvAssist.extensionSettings');
   assert.ok(globalState.has(settingsKey),'settings are persisted for the current workspace');
   assert.equal(globalState.has('atgvAssist.extensionSettings'),false,'account settings must not leak to global storage');
-  assert.equal(normalizeExtensionSettings(globalState.get(settingsKey)).github.repo,'');
+  assert.equal(normalizeExtensionSettings(globalState.get(settingsKey)).github.repo,undefined,'account-only settings omit the optional repository field');
   const saved=messages.find(m=>m.type==='settingsSaved'&&m.section==='github');
   assert.match(saved.message,/credentials saved/);
   assert.ok(!messages.some(m=>m.type==='notice'&&/GitHub account.*saved/.test(m.message)),'saving does not duplicate the inline status');
