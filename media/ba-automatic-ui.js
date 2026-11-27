@@ -446,7 +446,15 @@
    baAutoHistory:brs.length?ratio(published.size,brs.length):groups.length?100:0
   };
  }
- function renderSectionProgress(id,percent,status){
+ // The repair message names the CURRENT pass, not a completed pass.
+ function aiRepairProgress(message){
+  const match=/\bAI repair\s+(\d+)\s*\/\s*(\d+)\s*:/i.exec(String(message||''));
+  if(!match)return null;
+  const current=Number(match[1]),total=Number(match[2]);
+  if(!Number.isSafeInteger(current)||!Number.isSafeInteger(total)||total<1||current<1||current>total)return null;
+  return Math.floor(100*(current-1)/total);
+ }
+ function renderSectionProgress(id,percent,status,repair=false){
   const badgeNode=get(id+'Badge');
   let wrap=get(id+'Progress');
   // Completed sections keep only their status badge; recreate progress if reopened.
@@ -462,9 +470,10 @@
    wrap.append(track,label);badgeNode.before(wrap);
   }
   const track=wrap.firstElementChild,label=wrap.lastElementChild;
-  track.value=percent;
+  if(percent===null)track.removeAttribute('value');else track.value=percent;
+  track.setAttribute('aria-label',repair?'Resolve with AI progress':badgeNode.parentElement.querySelector('strong')?.textContent?.trim()+' progress');
   track.style.accentColor=status==='needs-attention'?'var(--vscode-charts-orange,#ffbd6f)':percent===100?'var(--vscode-charts-green,#7fdeb5)':'var(--vscode-charts-blue,#72baff)';
-  label.textContent=percent+'%';
+  label.textContent=percent===null?'…':percent+'%';
  }
  function renderReadyPanels(phase){
   const sourceReady=!!source()?.digest;
@@ -505,10 +514,11 @@
   const progress=sectionProgress({register:brState,brs:requirements(),rows:rowsForTable(),
    preview:state?.preview,groups:completedGroups,statuses:Object.fromEntries(panels),unsaved:dirty(),discoveryFilled:discoveryDirty?currentDiscoveryReadiness().filled:undefined});
   for(const [id,status] of panels){
-   setReadyPanel(id,status);
-   const displayStatus=id==='baAutoHistory'&&progress[id]<100&&status==='completed'?'in-progress':status;
+   const repairing=id==='baAutoRequirements'&&aiResolve.running;
+   const displayStatus=repairing?'in-progress':id==='baAutoHistory'&&progress[id]<100&&status==='completed'?'in-progress':status;
+   setReadyPanel(id,displayStatus);
    badge(id+'Badge',displayStatus);
-   renderSectionProgress(id,progress[id],displayStatus);
+   renderSectionProgress(id,repairing?aiRepairProgress(aiResolve.message):progress[id],displayStatus,repairing);
   }
  }
 
@@ -516,7 +526,7 @@
   placeSkill();
   const showingBusinessRequirements=selectedRole==='business-analyst'&&['baOverview','discovery'].includes(view);
   const aiWorking=showingBusinessRequirements&&(
-   state?.projectId===activeId&&['running','publishing'].includes(state?.phase)||discoveryImportBusy);
+   state?.projectId===activeId&&['running','publishing'].includes(state?.phase)||aiResolve.running||discoveryImportBusy);
   // Show the header waveform throughout the BA workflow; run stronger CMYK
   // waves only during real AI activity, never solely because the page is open.
   document.body.classList.toggle('atgv-ba-ai-active',showingBusinessRequirements);
@@ -735,8 +745,8 @@
    return;
   }
   if(m.projectId===activeId&&m.type==='baAutoResolveProgress'){
-   aiResolve.running=true;aiResolve.stopping=false;
-   aiResolve.message=String(m.message||'AI is repairing source-backed quality findings…');
+   aiResolve.running=true;
+   if(!aiResolve.stopping)aiResolve.message=String(m.message||'AI is repairing source-backed quality findings…');
    render();return;
   }
   if(m.projectId===activeId&&m.type==='baAutoResolveResult'){
