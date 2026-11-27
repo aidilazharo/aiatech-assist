@@ -25,7 +25,7 @@ async function ensure(root,roles=[]){
  root=path.resolve(root);const parent=await stat(root);
  if(!parent?.isDirectory()||parent.isSymbolicLink())throw Error('Verified project directory required.');
  const base=path.join(root,'artifacts');await normalDir(base);
- for(const folder of ['logs','roles','context'])await normalDir(path.join(base,folder));
+ for(const folder of ['logs','roles','context','content'])await normalDir(path.join(base,folder));
  for(const role of new Set([...ROLES,...roles.map(roleId)]))await normalDir(path.join(base,'roles',role));
  const ignore=path.join(base,'.gitignore');
  if(!await stat(ignore))await fs.writeFile(ignore,'*\n!.gitignore\n',{flag:'wx',mode:0o600}).catch(e=>{if(e.code!=='EEXIST')throw e;});
@@ -127,7 +127,9 @@ async function contextDocument(root){
  const canonical=await readJson(base,'context/artifact-index.json').catch(()=>null);
  const jobs=await readJson(base,'logs/workflow-jobs.json').catch(()=>null);
  const hub=await readJson(base,'context/unified-snapshot.json',4*1024*1024).catch(()=>null);
+ const contents=await readJson(base,'content/current/manifest.json',4*1024*1024).catch(()=>null);
  const entries=[];
+ if(contents?.projectId===projectId)for(const f of (contents.files||[]).slice(0,35))entries.push('Local content '+clean(f.kind,40)+' | '+clean(f.role,70)+' | '+clean(relative(f.source),180)+' | '+clean(relative(f.path),220));
  for(const row of (canonical?.records||[]).slice(0,80))entries.push('Artifact '+clean(row.role,70)+' | '+clean(row.title,150)+' | '+clean(row.status,40)+' | revision '+clean(row.revision,40)+' | '+clean(relative(row.path),200));
  if(hub?.projectId===projectId)for(const f of (hub.files||[]).slice(0,30))entries.push('Snapshot reference '+clean(f.role,70)+' | '+clean(relative(f.path),200)+' | '+clean(f.status,40));
  if(jobs?.projectId===projectId)for(const j of (jobs.records||[]).filter(j=>['failed','interrupted','reconcile-required'].includes(j.status)).slice(0,15))entries.push('Workflow diagnostic '+clean(j.role,70)+' | '+clean(j.command,90)+' | '+clean(j.status,40)+' | '+clean(j.error,300));

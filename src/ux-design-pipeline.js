@@ -82,6 +82,7 @@ async function generate(root,key,payload,expectedRevision='',metadata={}){
   await checkPath(root,snapshot);
   await fs.writeFile(snapshot,JSON.stringify(record,null,2)+'\n',{encoding:'utf8',flag:'wx',mode:0o600});
   await atomicSave(file,record);
+  await require('./project-artifact-content').refreshSafe(root);
   return read(root,k);
  });
 }
@@ -99,6 +100,7 @@ async function decide(root,key,decision,expectedRevision,actor,reason=''){
   record.status=decision;record.reviewedAt=new Date().toISOString();record.reviewedBy=reviewer;record.reviewReason=clamp(reason,3000);
   record.handoff={...record.handoff,status:decision==='approved'?'approved-ready-for-developer-handoff':'rejected-not-for-developer-use'};
   await atomicSave(file,record);
+  await require('./project-artifact-content').refreshSafe(root);
   return read(root,k);
  });
 }

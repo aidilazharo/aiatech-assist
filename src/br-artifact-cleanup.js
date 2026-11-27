@@ -69,6 +69,7 @@ async function cleanup(root,{keys=[]}={}){
   const result=await projectUX.retract(basedir,key);
   if(result.changed)removed.push('project-prototype:'+key);
  }
+ await require('./project-artifact-content').refreshSafe(basedir);
  return {removed,keys:unique};
 }
 module.exports={ownership,cleanup,safeRemoveTree};

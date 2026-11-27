@@ -31,6 +31,7 @@ async function erase(root,key,expectedRevision){
   // Deleting named generated assets only avoids removing reference images,
   // design framework selection, and unrelated developer evidence.
   for(const target of files)await fs.unlink(target);
+  await require('./project-artifact-content').refreshSafe(root);
   return {value:await pipeline.read(root,id),deletedFiles:files.length,referenceImagesPreserved:true};
  });
 }

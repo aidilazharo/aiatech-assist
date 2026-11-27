@@ -63,6 +63,7 @@ async function save(root,key,kind,proposal,expectedRevision,metadata={}){
    await fs.writeFile(temporary,JSON.stringify(record,null,2)+'\n',{encoding:'utf8',flag:'wx',mode:0o600});
    await checkPath(root,file);await fs.rename(temporary,file);
   }finally{await fs.rm(temporary,{force:true}).catch(()=>{});}
+  await require('./project-artifact-content').refreshSafe(root);
   return read(root,k,t);
  });
 }

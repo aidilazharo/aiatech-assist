@@ -63,6 +63,7 @@ async function save(root,key,name,bytes,notes='',actor=''){
    await fs.writeFile(tmpMeta,JSON.stringify(record,null,2)+'\n',{flag:'wx',mode:0o600});await fs.rename(tmpMeta,meta);
    if(prior.exists&&prior.filename!==filename){const old=path.join(dir,prior.filename);await checkPath(root,old);await fs.rm(old,{force:true});}
   }finally{await fs.rm(temporary,{force:true}).catch(()=>{});await fs.rm(tmpMeta,{force:true}).catch(()=>{});}
+  await require('./project-artifact-content').refreshSafe(root);
   return read(root,k,{includePreview:true});
  });
 }
@@ -120,6 +121,7 @@ async function addImage(root,key,name,bytes,notes='',actor=''){
   const record={id,filename:id,originalName,mime,bytes:bytes.length,sha256,notes:String(notes||'').slice(0,2000),actor:String(actor||'').slice(0,140),updatedAt:new Date().toISOString()};
   try{await writeGalleryIndex(indexFile,k,[...existing.map(({preview,...item})=>item),record]);}catch(err){await fs.rm(imageFile,{force:true}).catch(()=>{});throw err;}
  });
+ await require('./project-artifact-content').refreshSafe(root);
  return readBundle(root,k,{includePreview:true});
 }
 async function deleteImage(root,key,imageId){
@@ -142,6 +144,7 @@ async function deleteImage(root,key,imageId){
    const file=path.join(baseDir(root,k),item.filename);await checkPath(root,file);await fs.rm(file,{force:true});
   });
  }
+ await require('./project-artifact-content').refreshSafe(root);
  return readBundle(root,k,{includePreview:true});
 }
 function promptContext(reference){

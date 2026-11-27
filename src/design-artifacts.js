@@ -222,6 +222,7 @@ async function exportToProject(registry, id, item, approvedHash, { allowDraft = 
     finally {
         await fs.rm(tmp, { recursive: true, force: true });
     }
+    await require('./project-artifact-content').refreshSafe(root);
     return { directory: dest, files: Object.keys(files), manifest };
 }
 async function deleteExportedRevision(registry, id, item) {
@@ -264,6 +265,7 @@ async function deleteExportedRevision(registry, id, item) {
     for (const name of names)
         await fs.unlink(path.join(dest, name));
     await fs.rmdir(dest);
+    await require('./project-artifact-content').refreshSafe(root);
     return { deleted: true };
 }
 module.exports = { outputFiles, sqlType, schemaSql, erd, openapi, screenHtml, prototypeHtml, checkReady, exportToProject, deleteExportedRevision };

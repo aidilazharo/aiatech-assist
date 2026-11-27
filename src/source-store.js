@@ -51,6 +51,7 @@ async function store(registry, id, document, originalPath, { expectedByteDigest 
             await fs.rm(tmp, { force: true });
         }
     }
+    await require('./project-artifact-content').refreshSafe(path.dirname(registry.fileFor(id)));
     return storedName;
 }
 async function read(registry, id, entry) {
@@ -111,6 +112,7 @@ async function removeStored(registry, id, entry) {
         await workingBr.removeForSource(registry, id, entry.digest);
         await brTxt.removeForSource(registry, id, entry.digest);
         await mappingCheckpoint.remove(registry, id, entry.digest);
+        await require('./project-artifact-content').refreshSafe(path.dirname(registry.fileFor(id)));
         return { deleted: false };
     }
     if (!stat.isFile() || stat.isSymbolicLink())
@@ -119,6 +121,7 @@ async function removeStored(registry, id, entry) {
     await workingBr.removeForSource(registry, id, entry.digest);
     await brTxt.removeForSource(registry, id, entry.digest);
     await mappingCheckpoint.remove(registry, id, entry.digest);
+    await require('./project-artifact-content').refreshSafe(path.dirname(registry.fileFor(id)));
     return { deleted: true };
 }
 module.exports = { sourceDirectory, store, read, originalBytes, removeStored };

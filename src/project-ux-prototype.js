@@ -83,6 +83,7 @@ async function update(root,record){
   // rebuilds HTML from the manifest, instead of trusting possibly stale HTML.
   await atomicText(p.html,render(next));
   await atomicText(p.manifest,JSON.stringify(next,null,2)+'\n');
+  await require('./project-artifact-content').refreshSafe(root);
   return {path:path.relative(root,p.html).replaceAll('\\','/'),...combined(next)};
  });
 }
@@ -95,6 +96,7 @@ async function retract(root,key){
   if(Object.keys(next.tickets).length)await atomicText(p.html,render(next));
   else await fs.rm(p.html,{force:true});
   await atomicText(p.manifest,JSON.stringify(next,null,2)+'\n');
+  await require('./project-artifact-content').refreshSafe(root);
   return {changed:true,...combined(next)};
  });
 }
@@ -134,6 +136,7 @@ async function openable(root,record){
   const file=path.join(p.dir,'preview-'+safeKey(record.key)+'.html');
   await checkPath(root,file);await fs.mkdir(p.dir,{recursive:true});await checkPath(root,file);
   await atomicText(file,render(data,{draft:record}));
+  await require('./project-artifact-content').refreshSafe(root);
   return {file,scope:'project-preview',screens:combined(data,{draft:record}).screenCount};
  }
  if(record?.status==='approved'&&!data.tickets[safeKey(record.key)]){
@@ -145,6 +148,7 @@ async function openable(root,record){
  const current=await load(root);
  if(!Object.keys(current.tickets).length)throw Error('The project has no approved prototype screens.');
  await atomicText(p.html,render(current));
+ await require('./project-artifact-content').refreshSafe(root);
  return {file:p.html,scope:'project-approved',screens:combined(current).screenCount};
 }
 module.exports={folder,paths,slug,contribution,combined,load,render,update,retract,openable,reconcileExisting};

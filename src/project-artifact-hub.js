@@ -116,6 +116,7 @@ async function syncProject({registry,projectId,project,register,readJiraIssue,st
    try{await fs.rename(staging,current);}catch(error){if(old)await fs.rename(backup,current);throw error;}
    if(old)await fs.rm(backup,{recursive:true,force:true});
    await require('./project-artifacts').indexHub(root,manifest).catch(()=>{});
+   await require('./project-artifact-content').refreshSafe(root);
    return {root:hub,current,manifest};
   }finally{await fs.rm(staging,{recursive:true,force:true}).catch(()=>{});}
  });
