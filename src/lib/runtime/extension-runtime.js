@@ -632,7 +632,7 @@ function updatePreferences(){
  };
 }
 function updateStatus(){return {settings:updatePreferences(),installedVersion:require('../../../package.json').version,
- latest:extensionRelease?{version:extensionRelease.version,tag:extensionRelease.tag,url:extensionRelease.url}:null,
+ latest:extensionRelease?{version:extensionRelease.version,tag:extensionRelease.tag,url:extensionRelease.url,sameVersion:!!extensionRelease.sameVersion}:null,
  extensionLatest,
  extensionLastCheck:extensionUpdateChecked,extensionError:extensionUpdateError,
  libraryLastCheck:catalogLastCheck,libraryError:libraryUpdateError,
@@ -706,11 +706,19 @@ async function performVerifiedExtensionInstall(operation){
   let vsix;
   try{vsix=await download(operation.release);}
   catch(error){
-   if(!librarySourceFallback.accessFailure(error))throw error;
+   // Same-version updates are bound to the exact inspected package identity.
+   if(operation.release.sameVersion||!librarySourceFallback.accessFailure(error))throw error;
    await postExtensionInstallProgress(operation,'downloading','Checking alternative package…','The selected package is unavailable. Verifying another package for the same version.');
    const alternative=await releaseUpdater.latestAcrossRepositories({version:operation.release.version,exactVersion:operation.release.version,excludeRepository:operation.release.repository,includeCurrent:true,verifyAccess:true,request});
    if(!alternative.release)throw error;
    vsix=await download(alternative.release);operation.release=alternative.release;
+  }
+  if(operation.release.sameVersion){
+   const identity=require('../updates/extension-build-identity');
+   const manifest=require('../../../package.json');
+   const actual=identity.identity(identity.readManifest(await fs.readFile(vsix)),manifest.version);
+   const expected=operation.release.buildIdentity;
+   if(!actual||actual.contentSha256!==expected?.contentSha256||actual.builtAt!==expected?.builtAt||!identity.newerBuild(identity.identity(manifest,manifest.version),actual))throw Error('The verified build changed or is not newer. Check for updates again.');
   }
   await postExtensionInstallProgress(operation,'installing','Installing extension…','VS Code is installing the verified package. Keep this dialog open.');
   await vscode.commands.executeCommand('workbench.extensions.installExtension',vscode.Uri.file(vsix));
@@ -736,7 +744,7 @@ async function performVerifiedExtensionInstall(operation){
  }
 }
 async function offerBrandedExtensionUpgrade(release){
- if(!dashboard)return vscode.window.showInformationMessage('ATGV v'+release.version+' is available. Install upgrade?',{modal:true},'Install Upgrade','Later');
+ if(!dashboard)return vscode.window.showInformationMessage('ATGV v'+release.version+(release.sameVersion?' has an updated build. Install update?':' is available. Install upgrade?'),{modal:true},'Install Upgrade','Later');
  const requestId=crypto.randomUUID();
  return new Promise(resolve=>{
   // Do not time out a still-visible offer: otherwise Install can become inert
@@ -746,7 +754,7 @@ async function offerBrandedExtensionUpgrade(release){
   pendingExtensionUpgradeOffers.set(requestId,{resolve,timer});
   Promise.resolve(dashboard.webview.postMessage({type:'extensionUpgradeOffer',requestId,
     currentVersion:require('../../../package.json').version,version:release.version,
-    publishedAt:release.publishedAt})).then(success=>{
+    publishedAt:release.publishedAt,sameVersion:!!release.sameVersion})).then(success=>{
       if(!success){const entry=pendingExtensionUpgradeOffers.get(requestId);if(entry){clearTimeout(entry.timer);pendingExtensionUpgradeOffers.delete(requestId);resolve({action:'Later',requestId});}}
     }).catch(()=>{clearTimeout(timer);pendingExtensionUpgradeOffers.delete(requestId);resolve({action:'Later',requestId});});
  });
@@ -754,7 +762,7 @@ async function offerBrandedExtensionUpgrade(release){
 async function promptExtensionRelease(release,{force=false}={}){
  if(!updatePreferences().promptForUpdates||!release||pendingExtensionUpgradeOffers.size||activeExtensionUpgradeInstall)return;
  const key='atgvAssist.updates.promptedRelease';
- const promptId=(release.repository||releaseUpdater.REPO)+'|'+(release.tag||'');
+ const promptId=(release.repository||releaseUpdater.REPO)+'|'+(release.tag||'')+'|'+(release.buildIdentity?.contentSha256||release.asset?.digest||release.asset?.url||'');
  if(!force&&context.globalState.get(key)===promptId)return;
  await context.globalState.update(key,promptId);
  const selected=await offerBrandedExtensionUpgrade(release);
@@ -769,12 +777,19 @@ async function promptExtensionRelease(release,{force=false}={}){
 }
 async function checkExtensionRelease({prompt=false,interactive=false,forcePrompt=false}={}){
  try{
-  const installed=require('../../../package.json').version;
+  const manifest=require('../../../package.json'),installed=manifest.version;
+  const buildIdentity=require('../updates/extension-build-identity');
   const request=releaseUpdater.authorizedRequest(await githubIssueAccessToken());
   const checked=await releaseUpdater.latestAcrossRepositories({version:installed,includeCurrent:true,request,verifyAccess:true});
   const result=checked.release;extensionReleaseWarnings=checked.errors;
-  
-  extensionLatest=checked.latest;extensionRelease=result&&releaseUpdater.compareVersion(result.version,installed)>0?result:null;extensionUpdateError='';extensionUpdateChecked=new Date().toISOString();
+  extensionLatest=checked.latest;extensionRelease=null;
+  const comparison=result?releaseUpdater.compareVersion(result.version,installed):null;
+  if(comparison>0)extensionRelease=result;
+  else if(comparison===0&&buildIdentity.identity(manifest,installed)){
+   const remote=await releaseUpdater.inspectReleaseBuild(result,{request});
+   if(buildIdentity.newerBuild(buildIdentity.identity(manifest,installed),remote))extensionRelease={...result,sameVersion:true,buildIdentity:remote};
+  }
+  extensionUpdateError='';extensionUpdateChecked=new Date().toISOString();
   if(prompt&&extensionRelease)await promptExtensionRelease(extensionRelease,{force:forcePrompt});
   return extensionRelease;
  }catch(error){extensionLatest=null;extensionRelease=null;extensionUpdateError=librarySourceFallback.safeMessage(error);report('GitHub extension release check: '+error.message);if(interactive)throw Error(extensionUpdateError);return null;}

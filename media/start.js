@@ -5487,7 +5487,7 @@ function renderSoftwareUpdates(data,force=false){
  $('softwareExtensionStatus').textContent=data.extensionError?`Extension: ${data.extensionError}`:
   publicBehind?`Installed extension v${version} · release repository is behind (v${latestVersion}). No downgrade available${checked}`:
   latestVersion&&!data.extensionLatest?.installable&&!data.latest?`Published release v${latestVersion}: verified VSIX or checksum not available.`:
-  data.latest?`Extension v${data.latest.version} available (installed v${version}). Release: ${data.latest.tag}.`:
+  data.latest?(data.latest.sameVersion?`Updated build of v${version} available.`:`Extension v${data.latest.version} available (installed v${version}).`):
   data.extensionLastCheck?`Installed extension v${version}${latestVersion?' · latest published release v'+latestVersion:' · no published release found'}${checked}`:
   `Installed extension: v${version}; not checked yet.`;
  const installedLibrary=data.libraryInstalledVersion||catalogState?.installed?.version||'';
@@ -10262,7 +10262,7 @@ window.addEventListener('message',event=>{
  renderExtensionUpgradeInstallState('ready');
  $('extensionUpgradeCurrent').textContent='v'+String(message.currentVersion||'?');
  $('extensionUpgradeNext').textContent='v'+String(message.version||'?');
- $('extensionUpgradeDescription').textContent='ATGV v'+String(message.version||'?')+' is available.';
+ $('extensionUpgradeDescription').textContent='ATGV v'+String(message.version||'?')+(message.sameVersion?' has an updated build.':' is available.');
  const modal=$('extensionUpgradeModal');modal.classList.remove('hidden');modal.setAttribute('aria-hidden','false');
  $('extensionUpgradeInstall').focus();
 });

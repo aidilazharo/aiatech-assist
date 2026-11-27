@@ -85,7 +85,8 @@ test('startup and manual prompts override dismissal without bypassing version ve
  calls.length=0;
  await fn({prompt:true});
  assert.deepEqual(calls,['extension-check','library-check',['extension-prompt',false],['library-prompt',false]]);
- assert.match(host,/compareVersion\(result\.version,installed\)>0\?result:null/);
+ assert.match(host,/const comparison=result\?releaseUpdater\.compareVersion\(result\.version,installed\):null/);
+ assert.match(host,/buildIdentity\.newerBuild\(buildIdentity\.identity\(manifest,installed\),remote\)/);
  assert.match(host,/if\(!comparison\.available\|\|!updatePreferences\(\)\.promptForUpdates/);
 });
 

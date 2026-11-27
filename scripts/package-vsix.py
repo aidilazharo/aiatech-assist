@@ -1,6 +1,7 @@
 from pathlib import Path
 from xml.sax.saxutils import escape, quoteattr
 import json, zipfile, re, subprocess, tempfile, hashlib
+from datetime import datetime, timezone
 
 root=Path(__file__).resolve().parent.parent
 pkg=json.loads((root/'package.json').read_text())
@@ -100,11 +101,22 @@ with tempfile.TemporaryDirectory(prefix='atgv-vsix-stage-') as staging:
             raise SystemExit('Symlink cannot be packaged: '+name)
         if name in modified and not (stage/name).is_file():
             raise SystemExit('Optimized VSIX asset missing: '+name)
+    # Hash the exact staged payload, excluding the generated build stamp itself.
+    # Stable for identical content even if compression or ZIP timestamps change.
+    fingerprint=hashlib.sha256()
+    for name in sorted(files):
+        data=(stage/name if name in modified else root/name).read_bytes()
+        fingerprint.update(name.encode('utf-8')+b'\0'+hashlib.sha256(data).digest())
+    packaged_manifest=dict(pkg)
+    packaged_manifest['atgvBuild']={'schema':1,'contentSha256':fingerprint.hexdigest(),'builtAt':datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00','Z')}
     with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as z:
         z.writestr('[Content_Types].xml',types)
         z.writestr('extension.vsixmanifest',xml)
         for name in files:
-            z.write(stage/name if name in modified else root/name,'extension/'+name)
+            if name=='package.json':
+                z.writestr('extension/package.json',json.dumps(packaged_manifest,ensure_ascii=False,indent=2)+'\n')
+            else:
+                z.write(stage/name if name in modified else root/name,'extension/'+name)
 
     # If the standard ZIP is over budget, use an optional locally installed
     # Zopfli optimizer for lossless DEFLATE of large members. No network calls.

@@ -8,6 +8,7 @@ const crypto=require('node:crypto');
 const fs=require('node:fs/promises');
 const path=require('node:path');
 const {URL}=require('node:url');
+const buildIdentity=require('./extension-build-identity');
 
 const REPO='aiamalaysia/my-fow-technology-app-techassists-dev-sdlc';
 // Fixed release sources; never derive these from the project or logged-in owner.
@@ -49,6 +50,12 @@ function validAsset(asset,name,repository=REPO){
     typeof asset.url==='string'&&new URL(asset.url).hostname==='api.github.com'&&
     asset.url.startsWith(`https://api.github.com/repos/${repository}/releases/assets/`);
 }
+// A local commit-tagged build can be newer than a numbered CI build. Prefer
+// actual asset update/publication timestamps; use numeric tags only as fallback.
+function releaseTime(row){
+ const asset=(row?.assets||[]).find(a=>/^atgv-aiatech-assist-.*\.vsix$/.test(a.name||''));
+ return Math.max(Date.parse(row?.published_at)||0,Date.parse(asset?.updated_at)||0,Date.parse(asset?.created_at)||0);
+}
 function selectRelease(releases,currentVersion,repositoryUrl=DEFAULT_RELEASE_URL,{includeCurrent=false}={}){
  const {repository,url:releaseUrl}=parseRepositoryUrl(repositoryUrl);
  if(!Array.isArray(releases))throw Error('Invalid GitHub Releases response.');
@@ -56,8 +63,9 @@ function selectRelease(releases,currentVersion,repositoryUrl=DEFAULT_RELEASE_URL
   .filter(r=>typeof r.html_url==='string'&&r.html_url.startsWith(`https://github.com/${repository}/releases/tag/`))
   .sort((a,b)=>{
    const x=parseVersion(a.tag_name),y=parseVersion(b.tag_name);
-   for(let i=0;i<4;i++)if(x[i]!==y[i])return y[i]-x[i];
-   return 0;
+   for(let i=0;i<3;i++)if(x[i]!==y[i])return y[i]-x[i];
+   const stamp=releaseTime(b)-releaseTime(a);
+   return stamp||y[3]-x[3];
   });
  for(const release of candidates){
   const version=parseVersion(release.tag_name).slice(0,3).join('.');
@@ -144,7 +152,7 @@ async function latestAcrossRepositories({version,request=getBytes,includeCurrent
    found.push({version:parsed.slice(0,3).join('.'),build:parsed[3],tag:row.tag_name,url:row.html_url,repository:repo.repository,publishedAt:row.published_at||'',row,releaseUrl:repo.url});
   }
  }
- found.sort((a,b)=>compareVersion(b.version,a.version)||b.build-a.build||((Date.parse(b.publishedAt)||0)-(Date.parse(a.publishedAt)||0))||RELEASE_REPOSITORIES.indexOf(a.repository)-RELEASE_REPOSITORIES.indexOf(b.repository));
+ found.sort((a,b)=>compareVersion(b.version,a.version)||releaseTime(b.row)-releaseTime(a.row)||b.build-a.build||RELEASE_REPOSITORIES.indexOf(a.repository)-RELEASE_REPOSITORIES.indexOf(b.repository));
  const newest=found[0];
  if(!newest)return {release:null,latest:null,errors};
  let release=selectRelease([newest.row],version,newest.releaseUrl,{includeCurrent});
@@ -171,8 +179,8 @@ function verifyChecksum(checksumBytes,assetBytes,filename){
  if(!matching)throw Error('VSIX checksum verification failed; the upgrade was not installed.');
  return digest;
 }
-async function downloadVerified(release,{directory,request=getBytes,onProgress=async()=>{}}={}){
- if(!release||!directory)throw Error('Verified release and local staging directory required.');
+async function verifiedBytes(release,{request=getBytes,onProgress=async()=>{}}={}){
+ if(!release)throw Error('Verified release required.');
  const filename=`atgv-aiatech-assist-${release.version}.vsix`;
  const repo=parseRepositoryUrl(release.releaseUrl||DEFAULT_RELEASE_URL);
  if(release.repository&&release.repository!==repo.repository)throw Error('Release repository does not match its source.');
@@ -188,6 +196,23 @@ async function downloadVerified(release,{directory,request=getBytes,onProgress=a
  await onProgress('verifying');
  if(checksum)verifyChecksum(checksum,vsix,filename);
  if(digest&&digest!=='sha256:'+crypto.createHash('sha256').update(vsix).digest('hex'))throw Error('VSIX GitHub asset digest verification failed; the upgrade was not installed.');
+ return vsix;
+}
+// Only cached after a full checksum-verified download. GitHub digest changes
+// on replaced assets; absent digest means reverify, never trust a reused tag.
+const inspectedBuilds=new Map();
+async function inspectReleaseBuild(release,{request=getBytes}={}){
+ const key=String(release.asset?.digest||'');
+ if(/^sha256:[a-f0-9]{64}$/.test(key)&&inspectedBuilds.has(key))return inspectedBuilds.get(key);
+ const bytes=await verifiedBytes(release,{request});
+ const build=buildIdentity.identity(buildIdentity.readManifest(bytes),release.version);
+ if(/^sha256:[a-f0-9]{64}$/.test(key)){if(inspectedBuilds.size>=8)inspectedBuilds.delete(inspectedBuilds.keys().next().value);inspectedBuilds.set(key,build);}
+ return build;
+}
+async function downloadVerified(release,{directory,request=getBytes,onProgress=async()=>{}}={}){
+ if(!directory)throw Error('Verified release and local staging directory required.');
+ const filename=`atgv-aiatech-assist-${release.version}.vsix`;
+ const vsix=await verifiedBytes(release,{request,onProgress});
  await onProgress('staging');
  await fs.mkdir(directory,{recursive:true});
  const target=path.join(directory,filename);
@@ -227,4 +252,4 @@ function authorizedRequest(token,request=getBytes){return async(url,options={})=
   return request(url,{...options,token:''});
  }
 };}
-module.exports={assertReleaseAccessible,authorizedRequest,REPO,RELEASE_REPOSITORIES,API,DEFAULT_RELEASE_URL,PINNED_RELEASE_URL,parseRepositoryUrl,releaseUrlForRepository,parseVersion,compareVersion,selectRelease,verifyChecksum,latestRelease,latestAcrossRepositories,downloadVerified,getBytes};
+module.exports={inspectReleaseBuild,assertReleaseAccessible,authorizedRequest,REPO,RELEASE_REPOSITORIES,API,DEFAULT_RELEASE_URL,PINNED_RELEASE_URL,parseRepositoryUrl,releaseUrlForRepository,parseVersion,compareVersion,selectRelease,verifyChecksum,latestRelease,latestAcrossRepositories,downloadVerified,getBytes};

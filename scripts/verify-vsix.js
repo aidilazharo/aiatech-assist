@@ -17,6 +17,7 @@ async function main() {
         assert.equal(extract.status, 0, extract.stderr || 'Failed to extract VSIX');
         const root = path.join(temp, 'extension');
         const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+        assert.ok(require('../src/lib/updates/extension-build-identity').identity(manifest,pkg.version),'VSIX must contain a valid build identity');
         assert.ok(!fs.existsSync(path.join(root,'.memory')), 'Source-only .memory must not be included in VSIX');
         const runtimePolicy=require(path.join(root,'src','version-policy.js'));
         assert.equal(runtimePolicy.nextVersion('0.0.1'),'0.0.2','Runtime version-policy must not depend on excluded .memory');
