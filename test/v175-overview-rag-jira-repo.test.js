@@ -71,7 +71,12 @@ test('All roles hide duplicate Jira inventory while Developer and UX retain scop
  assert.match(host,/scope.rootKey/);
  const scan=host.slice(host.indexOf("case 'roleJiraIssues':"),host.indexOf("case 'roleJiraAssign':"));
  assert.match(scan,/const projectId=activeProject\.id,requestId=msg\.requestId/);
- assert.match(scan,/if\(activeProject\?\.id!==projectId\)break;/);
- assert.match(scan,/type:'roleJiraIssues',projectId,items,incomplete:!!result\.truncated,requestId/);
+ assert.match(scan,/const sameRoleProject=\(\)=>activeProject\?\.id===projectId&&activationEpoch===epoch;/);
+ assert.match(scan,/if\(!sameRoleProject\(\)\)break;/);
+ assert.match(scan,/shouldContinue:\(\)=>sameRoleProject\(\)/);
+ assert.match(scan,/if\(!sameRoleProject\(\)\|\|result\.cancelled\)return;/);
+ assert.match(scan,/const value=\{items,incomplete:!!result\.truncated,register,brSyncWarnings:/);
+ assert.match(scan,/if\(sameRoleProject\(\)\)await dashboard\?\.webview\.postMessage\(\{type:'roleJiraIssues',projectId,requestId,\.\.\.value,/);
+ assert.match(scan,/await postRole\(cached\.value,cached\)/);
  assert.match(ui,/msg\.projectId===activeId&&msg\.requestId===roleJiraRequest/);
 });
