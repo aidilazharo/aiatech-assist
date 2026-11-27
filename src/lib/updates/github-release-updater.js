@@ -202,11 +202,13 @@ async function verifiedBytes(release,{request=getBytes,onProgress=async()=>{}}={
 // on replaced assets; absent digest means reverify, never trust a reused tag.
 const inspectedBuilds=new Map();
 async function inspectReleaseBuild(release,{request=getBytes}={}){
- const key=String(release.asset?.digest||'');
- if(/^sha256:[a-f0-9]{64}$/.test(key)&&inspectedBuilds.has(key))return inspectedBuilds.get(key);
+ const digest=String(release.asset?.digest||'');
+ const key=release.repository+'|'+release.version+'|'+release.asset?.url+'|'+digest;
+ const cacheable=/^sha256:[a-f0-9]{64}$/.test(digest);
+ if(cacheable&&inspectedBuilds.has(key))return inspectedBuilds.get(key);
  const bytes=await verifiedBytes(release,{request});
  const build=buildIdentity.identity(buildIdentity.readManifest(bytes),release.version);
- if(/^sha256:[a-f0-9]{64}$/.test(key)){if(inspectedBuilds.size>=8)inspectedBuilds.delete(inspectedBuilds.keys().next().value);inspectedBuilds.set(key,build);}
+ if(cacheable){if(inspectedBuilds.size>=8)inspectedBuilds.delete(inspectedBuilds.keys().next().value);inspectedBuilds.set(key,build);}
  return build;
 }
 async function downloadVerified(release,{directory,request=getBytes,onProgress=async()=>{}}={}){

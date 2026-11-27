@@ -23,7 +23,7 @@ test('same-version build requires newer timestamp and different payload, not jus
 test('bounded VSIX manifest parser reads packaged build and rejects malformed archives',()=>{
  assert.deepEqual(identity.readManifest(zip(manifest(next))),manifest(next));
  assert.throws(()=>identity.readManifest(Buffer.from('PKbad')),/Invalid VSIX/);
- const malformed=zip(manifest(next));malformed.writeUInt32LE(0xffffffff,22);assert.deepEqual(identity.readManifest(malformed),manifest(next)); // central directory owns bounded size
+ const malformed=zip(manifest(next));malformed.writeUInt32LE(0xffffffff,22);assert.throws(()=>identity.readManifest(malformed),/Inconsistent VSIX manifest headers/);
  const broken=zip(manifest(next));broken[broken.length-22]=0;assert.throws(()=>identity.readManifest(broken),/ZIP directory/);
 });
 test('verified same-version build inspection rejects checksum mismatch and selects new local tags',async()=>{
