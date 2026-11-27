@@ -886,7 +886,10 @@ function renderTechStacks(){
     button.addEventListener('click',()=>{selectedTechStackId=stack.id;renderTechStacks();});root.append(button);
   }
 }
-function openProject(id=null,source=null){
+function projectSettingsSignature(project){
+ return JSON.stringify(project?[project.id,project.name,project.techStackId,project.schedule,project.settings]:null);
+}
+function openProject(id=null,source=null,{refresh=false}={}){
   editingId=id;const p=projects.find(x=>x.id===id);selectedTechStackId=p?.techStackId||'';renderTechStacks();
   field('name',p?.name||source?.name||'');field('id',p?.id||'');$('id').readOnly=!!p;
   field('projectStartDate',p?.schedule?.startDate||'');field('projectEndDate',p?.schedule?.endDate||'');
@@ -914,9 +917,10 @@ function openProject(id=null,source=null){
   const activeScope=!!p&&p.id===activeId&&workspaceOpened;
   $('projectScopedOptions').classList.toggle('hidden',!activeScope);
   $('projectScopeLabel').textContent=p?'Scope: '+p.name:'Scope: New project';
-  collapseProjectSettings();
+  if(!refresh)collapseProjectSettings();
   $('projectView').dataset.loadedFor=p?.id||'';
-  setView('project');
+  $('projectView').dataset.savedSignature=projectSettingsSignature(p);
+  if(!refresh)setView('project');
 }
 function readProjectForm(){
   const projectRepoUrl=$('projectGithubRepositoryUrl').value.trim();
@@ -1161,8 +1165,14 @@ function updateState(msg){
   renderRoleWork();renderDocumentGroups();renderOperationDocuments();renderKnowledgeState(msg.summary||{});renderLiveRemoteState(msg.liveRemote);renderOverviewConnections(msg.projectConnections);renderOverviewRoles(msg.summary||{});ensureBAJiraInventory();ensurePMJiraInventory();
 
   if(editingId&&!projects.some(p=>p.id===editingId)){editingId=null;navigate('overview');}
-  if(view==='project'&&editingId&&document.activeElement?.closest('form')!==$('projectForm')&&!document.activeElement?.closest('#projectScopedOptions'))openProject(editingId);
-  else if(view==='project')renderTechStacks();
+  // Repeated status/connection updates must not collapse the combined settings
+  // or reset project fields while the user is editing a different accordion.
+  if(view==='project'){
+    const persisted=projects.find(p=>p.id===editingId),focused=document.activeElement;
+    if(persisted&&$('projectView').dataset.savedSignature!==projectSettingsSignature(persisted)&&
+       !focused?.closest('#projectView')&&!focused?.closest('#settingsView'))openProject(editingId,null,{refresh:true});
+    else renderTechStacks();
+  }
   if(opening.phase==='open'){
     if(!workspaceOpened){workspaceOpened=true;gateBusy=false;gateError='';document.body.classList.remove('gate-mode');renderSidebarRole();navigate('sdlc-roles');}
     if(restoreLibraryAfterVendorSync&&workspaceOpened){restoreLibraryAfterVendorSync=false;if(canUseLibraryStudio())navigate('library');}
@@ -1271,7 +1281,7 @@ function navigate(destination){
     renderRoleTimeline();ensurePMJiraInventory(true);ensureBAJiraInventory(true);send('roleHandoffOwners');requestRoleConnectionAccess();renderRoleCredentialBanner();return;
   }
   if(destination==='overview'){setView('landing');$('overviewGanttDetails').open=false;send('loadPlanning');send('myWorkRosterRefresh',{projectId:activeId,roleId:selectedRole,overviewClicked:true});return;}
-  if(destination==='settings'){$('settingsBack').textContent=workspaceOpened?'← Back to Workspace':'← Back to Projects';collapseExtensionSettings();if(workspaceOpened&&activeId){if(view!=='project'||editingId!==activeId)openProject(activeId);else setView('project');send('devRepositoryStatus');}else setView('settings');updateExtensionSettingBadges();return;}
+  if(destination==='settings'){$('settingsBack').textContent=workspaceOpened?'← Back to Workspace':'← Back to Projects';collapseExtensionSettings();if(workspaceOpened&&activeId&&projectId!=='library-recovery'){if(view!=='project'||editingId!==activeId)openProject(activeId);else setView('project');send('devRepositoryStatus');}else setView('settings');updateExtensionSettingBadges();return;}
   if(destination==='library'){setView('library');window.atgvLibraryStudio?.refresh();return;}
   if(destination==='documents'){setView('documents');renderDocumentGroups();return;}
   if(destination==='knowledge'){setView('knowledge');send('refreshConnectedSources');return;}
@@ -10066,7 +10076,7 @@ document.body.appendChild($('requiredLibraryModal'));
 $('requiredLibraryModal').addEventListener('cancel',event=>event.preventDefault());
 $('requiredLibrarySettings').addEventListener('click',()=>{
  if(requiredLibraryPulling)return;
- requiredLibraryRecovering=true;$('requiredLibraryModal').close();navigate('settings');
+ requiredLibraryRecovering=true;$('requiredLibraryModal').close();navigate('settings','library-recovery');
 });
 $('requiredLibraryPull').addEventListener('click',()=>{
  if(!libraryGateRequired()||requiredLibraryPulling||catalogState?.busy)return;

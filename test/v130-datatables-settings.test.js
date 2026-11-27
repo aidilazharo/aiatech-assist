@@ -27,7 +27,7 @@ test('Extension and Project Settings retain independent save scopes inside one c
  assert.match(html,/data-nav="settings" id="navSettings"[^<]*>.*?Settings<\/button>/);
  assert.doesNotMatch(extension+project,/class="settings-page-tabs"|role="tablist" aria-label="Settings scope"/);
  assert.match(js,/next==='project'&&page\.id==='settingsView'/);
- assert.match(js,/workspaceOpened&&activeId\)\{if\(view!=='project'\|\|editingId!==activeId\)openProject\(activeId\)/);
+ assert.match(js,/workspaceOpened&&activeId&&projectId!=='library-recovery'\)\{if\(view!=='project'\|\|editingId!==activeId\)openProject\(activeId\)/);
  assert.match(extension,/id="catalogPull"[^>]*hidden/);
  assert.match(project,/id="guideConfluenceTokenLink"[^>]*tabindex="-1"/);
  assert.match(js,/destination==='project-settings'\|\|destination==='tech'\?'settings'/);
@@ -52,4 +52,28 @@ test('data-table supports searching sorting numeric Jira keys and paging without
 test('Jira published, preview, overview and My Work use DataTables',()=>{
  for(const pattern of [/ATGVDataTables\.mount\(root,rows/,/ATGVDataTables\.mount\(box,/,/ATGVDataTables\.mount\(list,/,/ATGVDataTables\.mount\(root,tableRows/])assert.match(js,pattern);
  assert.match(html,/atgv-datatables\.js/);
+});
+
+test('mandatory Library recovery opens extension settings only, without exposing project work',()=>{
+ assert.match(js,/requiredLibraryRecovering=true;\$\('requiredLibraryModal'\)\.close\(\);navigate\('settings','library-recovery'\)/);
+ const begin=js.indexOf("if(destination==='settings'){"),end=js.indexOf("\n  if(destination==='library')",begin);
+ assert.ok(begin>=0&&end>begin);
+ const route=js.slice(begin,end),calls=[];
+ const invoke=new Function('destination','projectId','workspaceOpened','activeId','view','editingId','$','collapseExtensionSettings','openProject','setView','updateExtensionSettingBadges','send',route);
+ const run=(intent,opened=true)=>invoke('settings',intent,opened,'p','work','p',()=>({}),()=>{},id=>calls.push('project:'+id),v=>calls.push('view:'+v),()=>{},()=>{});
+ run('library-recovery');assert.deepEqual(calls,['view:settings']);
+ calls.length=0;run('');assert.deepEqual(calls,['project:p']);
+ calls.length=0;run('',false);assert.deepEqual(calls,['view:settings']);
+});
+test('routine host updates retain expanded settings and in-progress form edits',()=>{
+ const begin=js.indexOf('function projectSettingsSignature('),end=js.indexOf('function openProject(',begin);
+ const signature=new Function(js.slice(begin,end)+'return projectSettingsSignature;')();
+ const p={id:'p',name:'Project',settings:{jira:{projectKey:'TC'}}};
+ assert.equal(signature(p),signature({...p}));
+ assert.notEqual(signature(p),signature({...p,settings:{jira:{projectKey:'NEW'}}}));
+ assert.match(js,/if\(!refresh\)collapseProjectSettings\(\)/);
+ assert.match(js,/if\(!refresh\)setView\('project'\)/);
+ assert.match(js,/dataset\.savedSignature!==projectSettingsSignature\(persisted\)/);
+ assert.match(js,/!focused\?\.closest\('#projectView'\)&&!focused\?\.closest\('#settingsView'\)/);
+ assert.match(js,/openProject\(editingId,null,\{refresh:true\}\)/);
 });
