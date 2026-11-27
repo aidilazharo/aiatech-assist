@@ -7,6 +7,9 @@ const ignored = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', '.
 async function collectProjectKnowledge(projectRoot, { limit = 100, maxBytes = 262144 } = {}) {
     const root = path.resolve(projectRoot);
     const docs = [];
+    // Bounded project-local diagnostic context; never promotes drafts to approved.
+    const artifactContext=await require('./project-artifacts').contextDocument(root).catch(()=>null);
+    if(artifactContext&&limit>0&&Buffer.byteLength(artifactContext.text)<=maxBytes)docs.push(artifactContext);
     let canonical = null;
     try {
         canonical = JSON.parse(await fs.readFile(path.join(root, 'sdlc', 'unified-documents.json'), 'utf8'));

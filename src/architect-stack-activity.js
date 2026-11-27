@@ -36,6 +36,7 @@ async function persist(root,id,stage,message){
  const tmp=file+'.'+crypto.randomUUID()+'.tmp';
  try{await fs.writeFile(tmp,content,{flag:'wx',mode:0o600});await fs.rename(tmp,file);}
  finally{await fs.rm(tmp,{force:true}).catch(()=>{});}
+ await require('./project-artifacts').appendDiagnostic(root,id,'solution-architect',{stage,action:'stack-activity',status:/error|fail|blocked/i.test(String(stage))?'failed':'info',details:message}).catch(()=>{});
  return {events:content.split('\n').filter(Boolean).length};
 }
 function append(root,id,stage,message){

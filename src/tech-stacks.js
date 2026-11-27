@@ -215,6 +215,7 @@ async function scaffoldProject(workspace, project) {
             throw new Error('ATGV project folder must be a real directory.');
     }
     await fs.mkdir(base, { recursive: true });
+    await require('./project-artifacts').ensure(base);
     // Runtime progress stays project-specific; process and role definitions live
     // in the versioned Library. Existing project YAML files are never deleted.
     for(const name of ['sdlc','sdlc/processes','sdlc/roles','sdlc/workflows'])

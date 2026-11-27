@@ -793,6 +793,7 @@ async function appendRepairEvent(base,projectId,brId,event){
  await fs.mkdir(path.dirname(output),{recursive:true,mode:0o700});
  const line=JSON.stringify(safeRepairEvent({...event,brId}))+'\n';
  await fs.appendFile(output,line,{encoding:'utf8',mode:0o600});
+ await require('./project-artifacts').appendDiagnostic(base,projectId,'software-developer',{stage:event.phase,action:'tdd-repair',status:event.outcome,key:brId,details:event.message}).catch(()=>{});
  return output;
 }
 async function saveRecord(base,record){

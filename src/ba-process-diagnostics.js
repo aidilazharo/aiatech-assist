@@ -39,6 +39,7 @@ async function save(base,projectId,item){
   }
   await fs.writeFile(file,kept.join('\n')+'\n',{mode:0o600});
  }
+ await require('./project-artifacts').appendDiagnostic(base,projectId,'business-analyst',entry(item)).catch(()=>{});
 }
 function append(base,projectId,item){
  const job=writes.catch(()=>{}).then(()=>save(base,projectId,item));

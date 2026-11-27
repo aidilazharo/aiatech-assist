@@ -138,7 +138,10 @@ class DurableWorkflowEngine{
   if(this.closing)return Promise.reject(Error('Workflow journal is closing for workspace replacement.'));
   const op=this.pending.catch(()=>{}).then(async()=>{
    await this.init();const jobs=await this.readUnsafe(projectId),result=await change(jobs);
-   if(result?.changed)await this.writeUnsafe(projectId,jobs);
+   if(result?.changed){
+    await this.writeUnsafe(projectId,jobs);
+    await require('./project-artifacts').mirrorJobs(this.root,projectId,jobs).catch(()=>{});
+   }
    return result?.value;
   });
   this.pending=op.catch(()=>{});return op;

@@ -420,6 +420,8 @@ class ProjectRegistry {
         if (item.id !== id || ![1, 2, 3, 4].includes(item.schema))
             throw new Error(`Invalid project settings for ${id}.`);
         normalizeProjectInput(item, item);
+        // Lazily initialize existing managed projects as they are opened.
+        await require('./project-artifacts').ensure(path.dirname(file));
         return item;
     }
     async create(input) {
@@ -440,6 +442,7 @@ class ProjectRegistry {
             await fs.rmdir(dir).catch(() => { });
             throw e;
         }
+        await require('./project-artifacts').ensure(dir);
         return item;
     }
     async update(id, input) {

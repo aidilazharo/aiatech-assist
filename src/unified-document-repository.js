@@ -51,6 +51,8 @@ async function write(registry, id, expected, change) {
         finally {
             await fs.rm(tmp, { force: true });
         }
+        // The local context index is derived, not a second source of truth.
+        await require('./project-artifacts').indexCanonical(root,next).catch(()=>{});
         return { state: next, result };
     });
 }

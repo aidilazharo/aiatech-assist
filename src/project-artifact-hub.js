@@ -115,6 +115,7 @@ async function syncProject({registry,projectId,project,register,readJiraIssue,st
    const old=await checkNoSymlink(current);if(old){if(!old.isDirectory())throw Error('Invalid existing unified artifact folder.');await fs.rename(current,backup);}
    try{await fs.rename(staging,current);}catch(error){if(old)await fs.rename(backup,current);throw error;}
    if(old)await fs.rm(backup,{recursive:true,force:true});
+   await require('./project-artifacts').indexHub(root,manifest).catch(()=>{});
    return {root:hub,current,manifest};
   }finally{await fs.rm(staging,{recursive:true,force:true}).catch(()=>{});}
  });
