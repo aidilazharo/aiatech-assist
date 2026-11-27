@@ -44,10 +44,13 @@ test('Pull Library uses verified Git main and cannot activate obsolete ZIP archi
  assert.match(pull,/active\.version!==remote\.version\|\|active\.sha!==remote\.sha/);
  assert.doesNotMatch(pull,/importZip|inspectZip|downloadVerified\(release/);
 });
-test('the update modal makes differing build numbers visible to the user',()=>{
+test('the update modal displays semantic versions without build suffixes',()=>{
  const ui=read('media/start.js');
- assert.match(ui,/message\.installedTag/);
- assert.match(ui,/message\.remoteTag/);
- assert.match(ui,/installedBuild\?' · build '/);
- assert.match(ui,/latestBuild\?' · build '/);
+ const start=ui.indexOf("if(message.type!=='libraryUpdateOffer'");
+ const end=ui.indexOf('let displayedExtensionUpgrade=null;',start);
+ assert.ok(start>=0&&end>start);
+ const modal=ui.slice(start,end);
+ assert.ok(modal.includes("installed?'v'+installed:'Not installed'"));
+ assert.ok(modal.includes("latest?'v'+latest:'Version unavailable'"));
+ assert.doesNotMatch(modal,/ · build |installedBuild|latestBuild/);
 });
