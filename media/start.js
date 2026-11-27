@@ -1471,7 +1471,7 @@ function closeProjectConnectionModal(){
  $('projectConnectionTest').disabled=false;$('projectConnectionKey').disabled=false;$('projectConnectionSave').disabled=true;
  if(mappingPreviousFocus?.isConnected)mappingPreviousFocus.focus();
 }
-function openProjectConnectionModal(kind){
+function openProjectConnectionModal(kind,proposedKey){
  const projectId=activeId||startupMappingProjectId;
  if(!projectId||!['jira','confluence'].includes(kind)||(!activeId&&!startupConnectionVerified))return;
  mappingPreviousFocus=document.activeElement;mappingModalKind=kind;mappingModalProjectId=projectId;
@@ -1481,13 +1481,26 @@ function openProjectConnectionModal(kind){
  $('projectConnectionKeyLabel').textContent=jira?'Jira Project Key':'Confluence Space Key';
  $('projectConnectionKey').placeholder=jira?'e.g. TC':'e.g. TCC';
  $('projectConnectionModalDescription').textContent=jira?'Verify Browse Projects and Create Issues before saving.':'Verify space access and Create Page permission before saving.';
- $('projectConnectionKey').value=record.key||'';
+ $('projectConnectionKey').value=proposedKey??(record.key||'');
  mappingBusy=false;invalidateMappingTest();
  $('projectConnectionModal').classList.remove('hidden');$('projectConnectionModal').setAttribute('aria-hidden','false');
  $('projectConnectionKey').focus();
 }
-$('overviewJiraMappingStatus').addEventListener('click',()=>openProjectConnectionModal('jira'));
-$('overviewConfluenceMappingStatus').addEventListener('click',()=>openProjectConnectionModal('confluence'));
+// A changed field proposes a mapping; only the existing verified modal can save it.
+function editStartupMapping(input,kind){
+ const key=input.value.trim().toUpperCase(),saved=input.dataset.savedKey||'';
+ input.value=saved;
+ if(input.disabled||!startupMappingProjectId||input.dataset.projectId!==startupMappingProjectId||key===saved)return;
+ openProjectConnectionModal(kind,key);
+}
+for(const [id,kind] of [['overviewJiraProjectKey','jira'],['overviewConfluenceSpaceKey','confluence']]){
+ const input=$(id);
+ input.addEventListener('change',()=>editStartupMapping(input,kind));
+ input.addEventListener('keydown',event=>{
+  if(event.key==='Enter'){event.preventDefault();editStartupMapping(input,kind);}
+  if(event.key==='Escape'){event.preventDefault();input.value=input.dataset.savedKey||'';}
+ });
+}
 // A single project-scoped Jira scan powers Overview and Business Analyst My Work.
 // Both views share the same effective Jira project mapping and nextPageToken pagination.
 let jiraInventoryRequest=0,jiraInventoryProject='',jiraInventoryItems=[],jiraInventoryPage=0,jiraInventoryRunning=false,jiraInventoryLoaded=false,jiraInventoryKey='',jiraInventoryError='',jiraInventoryTruncated=false,jiraInventoryViewerId='',jiraInventoryLastChecked=0;
@@ -2243,26 +2256,18 @@ function renderStartupMappings(){
  startupMappingProjectId=projects.some(p=>p.id===activeId)?activeId:projects.length===1?projects[0].id:'';
  const data=startupProjectMappings[startupMappingProjectId]||{};
  const jira=data?.jira||{},space=data?.confluence||{};
- const configured=record=>record.source==='project'||record.source==='extension';
- const status=(id,record)=>{
-  const el=$(id),ready=configured(record);
-  el.textContent='Project setting';el.title=!ready?'Configure and test this destination':record.source==='extension'?'Override inherited default for this project':'Edit project mapping after permission check';
-  el.classList.toggle('needs-mapping',!ready);el.disabled=!startupMappingProjectId||!startupConnectionVerified;
+ const renderKey=(id,record)=>{
+  const input=$(id),saved=record.key||'';
+  const enabled=!!startupMappingProjectId&&startupConnectionVerified;
+  const sameScope=input.dataset.projectId===startupMappingProjectId;
+  // Do not overwrite an in-progress edit on an unrelated state refresh.
+  if(!sameScope||input.dataset.savedKey!==saved||!enabled||document.activeElement!==input)input.value=saved;
+  input.dataset.projectId=startupMappingProjectId;input.dataset.savedKey=saved;
+  input.disabled=!enabled;
+  input.title=enabled?'Edit key, then press Enter or leave the field to verify and save':'Select a project and verify connections before editing';
  };
- status('overviewJiraMappingStatus',jira);
- status('overviewConfluenceMappingStatus',space);
- $('overviewJiraProjectKey').textContent=jira.key||'Not selected';
- $('overviewConfluenceSpaceKey').textContent=space.key||'Not selected';
- const jiraDetails=[];
- if(jira.key)jiraDetails.push('Project key: '+jira.key);
- if(jira.site)jiraDetails.push('Site: '+jira.site);
- $('overviewJiraProjectInfo').textContent=jiraDetails.join(' · ')||'Select a Jira project in Project Settings.';
- const spaceDetails=[];
- if(space.name)spaceDetails.push(space.name);
- if(space.key)spaceDetails.push('Space key: '+space.key);
- if(space.spaceId)spaceDetails.push('Space ID: '+space.spaceId);
- if(space.site)spaceDetails.push('Site: '+space.site);
- $('overviewConfluenceSpaceInfo').textContent=spaceDetails.join(' · ')||'Select a Confluence space in Project Settings.';
+ renderKey('overviewJiraProjectKey',jira);
+ renderKey('overviewConfluenceSpaceKey',space);
  $('overviewJiraInventory').disabled=!startupMappingProjectId||!startupConnectionVerified||!jira.key;
 }
 

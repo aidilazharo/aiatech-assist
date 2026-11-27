@@ -45,17 +45,17 @@ test('startup mapping renderer switches project scope, preserves selections and 
  const projects=[{id:'a',name:'Project A'},{id:'b',name:'Project B'}];
  const mappings={a:{jira:{key:'AA',source:'project'},confluence:{key:'AC',source:'project'}},b:{jira:{key:'BB',source:'extension'},confluence:{key:'BC',source:'project'}}};
  const page=create(node,doc,projects,mappings);
- page.render();assert.equal(node('overviewJiraProjectKey').textContent,'Not selected');
+ page.render();assert.equal(node('overviewJiraProjectKey').value,'');
 
  page.select('a');page.render();
- assert.equal(node('overviewJiraProjectKey').textContent,'AA');assert.equal(node('overviewConfluenceSpaceKey').textContent,'AC');
- assert.equal(node('overviewJiraMappingStatus').disabled,true);assert.equal(node('overviewJiraInventory').disabled,true);
- page.verify(true);page.render();assert.equal(node('overviewJiraMappingStatus').disabled,false);assert.equal(node('overviewJiraInventory').disabled,false);
+ assert.equal(node('overviewJiraProjectKey').value,'AA');assert.equal(node('overviewConfluenceSpaceKey').value,'AC');
+ assert.equal(node('overviewJiraProjectKey').disabled,true);assert.equal(node('overviewJiraInventory').disabled,true);
+ page.verify(true);page.render();assert.equal(node('overviewJiraProjectKey').disabled,false);assert.equal(node('overviewJiraInventory').disabled,false);
  page.select('b');page.render();
- assert.equal(node('overviewJiraProjectKey').textContent,'BB');assert.equal(node('overviewConfluenceSpaceKey').textContent,'BC');
+ assert.equal(node('overviewJiraProjectKey').value,'BB');assert.equal(node('overviewConfluenceSpaceKey').value,'BC');
 
- projects.splice(1);page.render();assert.equal(node('overviewJiraProjectKey').textContent,'AA');
- projects.splice(0);page.render();assert.equal(node('overviewJiraProjectKey').textContent,'Not selected');assert.equal(node('overviewJiraInventory').disabled,true);
+ projects.splice(1);page.render();assert.equal(node('overviewJiraProjectKey').value,'AA');
+ projects.splice(0);page.render();assert.equal(node('overviewJiraProjectKey').value,'');assert.equal(node('overviewJiraInventory').disabled,true);
 });
 
 test('guide token help uses a modal without raw URLs; startup icons open official sites directly',()=>{
@@ -103,8 +103,11 @@ test('startup mappings use exact key labels without a project dropdown',()=>{
  const start=html.indexOf('id="startupConnectionForm"'),end=html.indexOf('</form>',start);
  assert.ok(start>=0&&end>start);
  const form=html.slice(start,end);
- assert.match(form,/<span>JIRA Project Key<\/span>/);
- assert.match(form,/<span>Confluence Space Key<\/span>/);
+ assert.match(form,/<label for="overviewJiraProjectKey">JIRA Project Key<\/label>/);
+ assert.match(form,/<label for="overviewConfluenceSpaceKey">Confluence Space Key<\/label>/);
+ assert.match(form,/<input type="text" id="overviewJiraProjectKey"/);
+ assert.match(form,/<input type="text" id="overviewConfluenceSpaceKey"/);
+ assert.doesNotMatch(form,/>Project mappings<|>Project setting<|id="overview(?:Jira|Confluence)MappingStatus"/);
  assert.doesNotMatch(form,/<select\b|id="startupMappingProject"/);
  assert.doesNotMatch(html,/id="tokenHelpUrl"|>Official website</);
 });
@@ -118,4 +121,15 @@ test('startup token icons dispatch only the allowlisted provider, without a URL 
  assert.deepEqual(sent,[{type:'guideTokenLink',provider:'jira'},{type:'guideTokenLink',provider:'github'}]);
  assert.deepEqual(modals,[]);
  handlers.guideJiraTokenLink();assert.deepEqual(modals,['jira']);
+});
+
+test('edited startup key opens verified modal without saving unverified data',()=>{
+ const a=ui.indexOf('function editStartupMapping('),b=ui.indexOf('for(const [id,kind]',a);
+ const opened=[];
+ const edit=new Function('startupMappingProjectId','openProjectConnectionModal',ui.slice(a,b)+';return editStartupMapping;')('p',(...args)=>opened.push(args));
+ const input={value:' new ',dataset:{savedKey:'OLD',projectId:'p'},disabled:false};
+ edit(input,'jira');assert.equal(input.value,'OLD');assert.deepEqual(opened,[['jira','NEW']]);
+ input.value='OLD';edit(input,'jira');assert.equal(opened.length,1);
+ input.dataset.projectId='other';input.value='WRONG';edit(input,'jira');assert.equal(opened.length,1);
+ input.dataset.projectId='p';input.disabled=true;input.value='DENIED';edit(input,'jira');assert.equal(opened.length,1);
 });

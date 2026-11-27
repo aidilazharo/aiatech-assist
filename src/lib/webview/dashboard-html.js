@@ -198,20 +198,16 @@ function html(webview,{resumeLibrary=false}={}){
        <div class="field"><label for="startupProjectRepository">Project Repository</label><input type="text" id="startupProjectRepository" placeholder="my-fow-technology-app-techassists" required><small class="muted" id="startupProjectRepositoryPreview" hidden></small></div>
        <div class="field"><label for="startupGithubToken">GitHub personal access token</label><div class="startup-token-input"><input type="password" id="startupGithubToken" autocomplete="new-password" placeholder="Enter PAT or retain securely saved token"><button type="button" class="startup-token-info" id="startupGithubTokenInfo" title="Create GitHub personal access token" aria-label="Create GitHub personal access token"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 10.5v6M12 7.5h.01"/></svg></button></div><button type="button" id="startupEditConnections" class="secondary hidden" aria-label="Edit Atlassian and GitHub connections">Edit</button></div>
       </div>
-      <div class="startup-project-mappings"><div class="startup-mapping-heading"><strong>Project mappings</strong></div>
-    <div class="overview-connections-grid overview-connections-flat" role="group" aria-label="Jira project and Confluence space">
-        <div class="overview-connection-card" id="overviewJiraConnection">
-          <div class="overview-connection-top"><span>JIRA Project Key</span><button type="button" id="overviewJiraMappingStatus" class="overview-mapping-status overview-mapping-action" aria-label="Edit Jira Project Key">Project setting</button></div>
-          <strong id="overviewJiraProjectKey">Not selected</strong>
-          <small id="overviewJiraProjectInfo">Select a Jira project in Project Settings.</small>
+      <div class="startup-project-mappings form-grid" role="group" aria-label="Project connection keys">
+        <div class="field" id="overviewJiraConnection">
+          <label for="overviewJiraProjectKey">JIRA Project Key</label>
+          <input type="text" id="overviewJiraProjectKey" maxlength="40" placeholder="e.g. TC" autocomplete="off" spellcheck="false" disabled>
           <div class="overview-inventory-action"><button type="button" id="overviewJiraInventory" class="secondary">Search All Jira Items</button></div>
         </div>
-        <div class="overview-connection-card" id="overviewConfluenceConnection">
-          <div class="overview-connection-top"><span>Confluence Space Key</span><button type="button" id="overviewConfluenceMappingStatus" class="overview-mapping-status overview-mapping-action" aria-label="Edit Confluence Space Key">Project setting</button></div>
-          <strong id="overviewConfluenceSpaceKey">Not selected</strong>
-          <small id="overviewConfluenceSpaceInfo">Select a Confluence space in Project Settings.</small>
+        <div class="field" id="overviewConfluenceConnection">
+          <label for="overviewConfluenceSpaceKey">Confluence Space Key</label>
+          <input type="text" id="overviewConfluenceSpaceKey" maxlength="40" placeholder="e.g. TCC" autocomplete="off" spellcheck="false" disabled>
         </div>
-    </div>
       </div>
       <div class="atgv-startup-actions"><button type="submit" id="startupTestConnections">Test &amp; Save Connections</button><button type="button" id="startupTestSavedConnections" class="secondary hidden">Test Connections</button><span id="startupConnectionMessage" role="status" aria-live="polite">Enter your accounts, then test the connections.</span></div>
       <div id="startupConnectionProgress" class="atgv-connection-progress" aria-label="Sequential connection checks" role="group" aria-live="polite"></div>

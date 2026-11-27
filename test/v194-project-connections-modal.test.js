@@ -9,11 +9,12 @@ const host=fs.readFileSync(path.join(base,'test/generated/extension-source.txt')
 const ui=fs.readFileSync(path.join(base,'media/start.js'),'utf8');
 const config={get:key=>({'jira.baseUrl':'https://example.atlassian.net','jira.email':'developer@example.org','confluence.baseUrl':'https://example.atlassian.net/wiki'})[key]||''};
 
-test('project modal is accessible and opens from each Project setting control',()=>{
- for(const id of ['overviewJiraMappingStatus','overviewConfluenceMappingStatus','projectConnectionKey','projectConnectionTest','projectConnectionSave','projectConnectionModal'])assert.match(host,new RegExp(`id="${id}"`));
+test('project modal is accessible and opens from edited project key fields',()=>{
+ for(const id of ['overviewJiraProjectKey','overviewConfluenceSpaceKey','projectConnectionKey','projectConnectionTest','projectConnectionSave','projectConnectionModal'])assert.match(host,new RegExp(`id="${id}"`));
  assert.match(host,/role="dialog" aria-modal="true" aria-labelledby="projectConnectionModalTitle"/);
- assert.match(ui,/openProjectConnectionModal\('jira'\)/);
- assert.match(ui,/openProjectConnectionModal\('confluence'\)/);
+ assert.match(ui,/overviewJiraProjectKey','jira'/);
+ assert.match(ui,/overviewConfluenceSpaceKey','confluence'/);
+ assert.match(ui,/openProjectConnectionModal\(kind,key\)/);
  assert.match(ui,/invalidateMappingTest\(\)/);
  assert.match(ui,/send\('testProjectConnectionMapping'/);
  assert.match(ui,/send\('saveProjectConnectionMapping'/);

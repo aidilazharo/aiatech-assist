@@ -46,7 +46,7 @@ test('Overview without a selected project cannot show stale Jira/Confluence dest
   assert.equal(result.jira.source, 'none');
 });
 
-test('Startup connections render selected-project mappings from refreshed state via textContent', () => {
+test('Startup connections render selected-project mappings from refreshed state via editable input values', () => {
   const extension = fs.readFileSync(path.join(root, 'test/generated/extension-source.txt'), 'utf8');
   const webview = fs.readFileSync(path.join(root, 'media/start.js'), 'utf8');
   assert.match(extension, /mappingView\(openingFlow\.phase==='open'\?activeProject:null/);
@@ -61,6 +61,7 @@ test('Startup connections render selected-project mappings from refreshed state 
   assert.match(extension, /id="overviewJiraProjectKey"/);
   assert.match(extension, /id="overviewConfluenceSpaceKey"/);
   assert.match(webview, /renderOverviewConnections\(msg\.projectConnections\)/);
-  assert.match(webview, /\$\('overviewJiraProjectKey'\)\.textContent=/);
-  assert.match(webview, /\$\('overviewConfluenceSpaceKey'\)\.textContent=/);
+  assert.match(webview, /renderKey\('overviewJiraProjectKey',jira\)/);
+  assert.match(webview, /renderKey\('overviewConfluenceSpaceKey',space\)/);
+  assert.match(webview,/input\.value=saved/);
 });
