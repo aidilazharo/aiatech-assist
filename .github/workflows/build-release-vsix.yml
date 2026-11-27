@@ -207,11 +207,11 @@ jobs:
           if ! gh release view "$tag" >/dev/null 2>&1; then
             gh release create "$tag" "dist/${FILE}" "dist/vsix.sha256" "dist/vsix-size-report.json" "dist/vsix-size-report.md" "dist/${SOURCE_FILE}" "dist/source.sha256" \
               --target "$SOURCE_SHA" \
-              --title "ATGV v${VERSION} (build ${BUILD_NUMBER})" \
+              --title "ATGV v${VERSION}" \
               --notes "Automated main-branch VSIX build. Source commit: ${SOURCE_SHA}. Regression suite and package verification passed." \
               --latest
           else
             gh release upload "$tag" "dist/${FILE}" "dist/vsix.sha256" "dist/vsix-size-report.json" "dist/vsix-size-report.md" "dist/${SOURCE_FILE}" "dist/source.sha256" --clobber
-            gh release edit "$tag" --draft=false --prerelease=false
+            gh release edit "$tag" --title "ATGV v${VERSION}" --draft=false --prerelease=false --latest
           fi
           echo "GitHub release: $tag" >> "$GITHUB_STEP_SUMMARY"
