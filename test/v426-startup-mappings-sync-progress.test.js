@@ -58,7 +58,7 @@ test('startup mapping renderer switches project scope, preserves selections and 
  projects.splice(0);page.render();assert.equal(node('overviewJiraProjectKey').textContent,'Not selected');assert.equal(node('overviewJiraInventory').disabled,true);
 });
 
-test('all token help entries show an internal modal and only explicit Open Website dispatches an allowlisted provider',()=>{
+test('guide token help uses a modal without raw URLs; startup icons open official sites directly',()=>{
  const start=ui.indexOf('const tokenHelpLinks=Object.freeze('),end=ui.indexOf("for(const [id,provider] of [['guideJiraTokenLink'",start);
  assert.ok(start>=0&&end>start);
  const nodes=new Map(),sent=[];let restored=0;
@@ -73,7 +73,7 @@ test('all token help entries show an internal modal and only explicit Open Websi
  page.open('constructor');assert.equal(node('tokenHelpModal').open,false);
  page.open('confluence');node('tokenHelpModal').events.cancel({preventDefault(){}});assert.equal(sent.length,1);assert.equal(node('tokenHelpModal').open,false);
  assert.match(html,/<dialog id="tokenHelpModal"[^>]*aria-labelledby="tokenHelpTitle"/);
- assert.match(ui,/startupGithubTokenInfo','github'\]\]\)\$\(id\)\.addEventListener\('click',\(\)=>openTokenHelpModal\(provider\)\)/);
+ assert.match(ui,/startupGithubTokenInfo','github'\]\]\)\$\(id\)\.addEventListener\('click',\(\)=>send\('guideTokenLink',\{provider\}\)\)/);
  const guide=read('media/user-guide-controller.js');assert.match(guide,/guideStepTokenLink[^\n]*openTokenHelpModal\(provider\)/);
 });
 
@@ -97,4 +97,25 @@ test('page changes request fresh local Library verification and host validates a
  assert.match(host,/const manifest=await sdlcCatalog\.activeManifest\(workspace\)/);
  assert.match(host,/manifest\?\.version===active\.version/);
  assert.match(host,/!await verifiedActiveLibrary\(workspace,active\)/);
+});
+
+test('startup mappings use exact key labels without a project dropdown',()=>{
+ const start=html.indexOf('id="startupConnectionForm"'),end=html.indexOf('</form>',start);
+ assert.ok(start>=0&&end>start);
+ const form=html.slice(start,end);
+ assert.match(form,/<span>JIRA Project Key<\/span>/);
+ assert.match(form,/<span>Confluence Space Key<\/span>/);
+ assert.doesNotMatch(form,/<select\b|id="startupMappingProject"/);
+ assert.doesNotMatch(html,/id="tokenHelpUrl"|>Official website</);
+});
+test('startup token icons dispatch only the allowlisted provider, without a URL modal',()=>{
+ const begin=ui.indexOf('for(const [id,provider] of [[\'guideJiraTokenLink\'');
+ const end=ui.indexOf("$(\'gateSkip\').addEventListener",begin);
+ assert.ok(begin>=0&&end>begin);
+ const handlers={},sent=[],modals=[];
+ new Function('$','send','openTokenHelpModal',ui.slice(begin,end))(id=>({addEventListener:(_,handler)=>handlers[id]=handler}),(type,data)=>sent.push({type,...data}),provider=>modals.push(provider));
+ handlers.startupAtlassianTokenInfo();handlers.startupGithubTokenInfo();
+ assert.deepEqual(sent,[{type:'guideTokenLink',provider:'jira'},{type:'guideTokenLink',provider:'github'}]);
+ assert.deepEqual(modals,[]);
+ handlers.guideJiraTokenLink();assert.deepEqual(modals,['jira']);
 });

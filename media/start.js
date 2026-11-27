@@ -818,7 +818,9 @@ $('tokenHelpCopy').addEventListener('click',async()=>{
   $('tokenHelpStatus').textContent='Unable to copy. Use Open Website instead.';
  }
 });
-for(const [id,provider] of [['guideJiraTokenLink','jira'],['guideConfluenceTokenLink','confluence'],['guideGithubTokenLink','github'],['startupAtlassianTokenInfo','jira'],['startupGithubTokenInfo','github']])$(id).addEventListener('click',()=>openTokenHelpModal(provider));
+for(const [id,provider] of [['guideJiraTokenLink','jira'],['guideConfluenceTokenLink','confluence'],['guideGithubTokenLink','github']])$(id).addEventListener('click',()=>openTokenHelpModal(provider));
+// Startup token icons open only the host-allowlisted provider website; no URL preview.
+for(const [id,provider] of [['startupAtlassianTokenInfo','jira'],['startupGithubTokenInfo','github']])$(id).addEventListener('click',()=>send('guideTokenLink',{provider}));
 
 $('gateSkip').addEventListener('click',()=>{
  if(gateBusy||!workspaceFolderAvailable)return;
