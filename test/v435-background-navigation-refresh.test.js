@@ -45,7 +45,7 @@ test('project switch is rejected during in-progress AI mapping to preserve authe
  assert.ok(back.indexOf('hasActiveProjectProcess')<back.indexOf('openingFlow.reset()'));
 });
 test('closing Jira inventory modal does not cancel running scan',()=>{
- const first=ui.indexOf('function closeJiraInventory()'),end=ui.indexOf("$('overviewJiraInventory').addEventListener",first);
+ const first=ui.indexOf('function closeJiraInventory()'),end=ui.indexOf("$('jiraInventoryClose').addEventListener",first);
  const code=ui.slice(first,end);
  assert.doesNotMatch(code,/cancelProjectJiraInventory|jiraInventoryRequest\+\+/);
 });

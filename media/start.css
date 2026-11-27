@@ -1785,7 +1785,7 @@ button:focus-visible{outline:2px solid var(--vscode-focusBorder,#649ed2);outline
 #startupConnectionForm .atgv-startup-connection-grid .field{min-width:0;gap:3px;}
 #startupConnectionForm .atgv-startup-connection-grid label{margin:0;font-size:11px;}
 #startupConnectionForm .atgv-startup-connection-grid input{min-width:0;max-width:100%;height:34px;min-height:34px;padding:6px 9px;font-size:12px;}
-#startupEditConnections{align-self:flex-end;margin-top:4px;padding:4px 10px;font-size:11px;}
+#startupEditConnections{align-self:center;padding:4px 10px;font-size:11px;}
 #startupConnectionChecks{display:contents;}
 #startupConnectionForm .atgv-startup-actions{margin-top:14px;}
 @media(max-width:740px){#startupConnectionForm .atgv-startup-connection-grid{grid-template-columns:minmax(0,1fr);gap:10px;}#startupConnectionForm{padding:16px;}}
@@ -3281,10 +3281,10 @@ body:not(.gate-mode) .app-layout{
 #startupConnectionForm .startup-token-info{position:absolute;right:5px;top:50%;transform:translateY(-50%);display:grid;place-items:center;width:30px;height:28px;min-width:0;padding:0;background:transparent!important;color:var(--vscode-textLink-foreground,#58a6ff);border:0}
 #startupConnectionForm .startup-token-info svg{width:17px;height:17px}
 #startupConnectionForm .startup-token-info:focus-visible{outline:2px solid var(--vscode-focusBorder)}
-#startupConnectionForm .startup-project-mappings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px;margin:14px 0;align-items:start}
-#startupConnectionForm .startup-project-mappings input{width:100%;max-width:240px}
-@media(max-width:560px){#startupConnectionForm .startup-project-mappings{grid-template-columns:1fr}}
-#startupConnectionForm .overview-inventory-action{margin-top:4px}
+#startupConnectionForm .startup-project-mappings{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px 14px;margin:0;align-items:start}
+#startupConnectionForm .startup-project-mappings input{width:100%;max-width:100%}
+@media(max-width:740px){#startupConnectionForm .startup-project-mappings{grid-template-columns:minmax(0,1fr);gap:10px}}
+
 #gateFinder .gate-project-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 12px}
 #gateFinder .gate-project-toolbar h2{margin:0}
 body:not(.gate-mode) #appHeader.app-header{position:relative;border-bottom:3px solid #fff!important;overflow:visible!important}

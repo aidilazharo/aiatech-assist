@@ -49,13 +49,13 @@ test('startup mapping renderer switches project scope, preserves selections and 
 
  page.select('a');page.render();
  assert.equal(node('overviewJiraProjectKey').value,'AA');assert.equal(node('overviewConfluenceSpaceKey').value,'AC');
- assert.equal(node('overviewJiraProjectKey').disabled,true);assert.equal(node('overviewJiraInventory').disabled,true);
- page.verify(true);page.render();assert.equal(node('overviewJiraProjectKey').disabled,false);assert.equal(node('overviewJiraInventory').disabled,false);
+ assert.equal(node('overviewJiraProjectKey').disabled,true);assert.equal(node('overviewConfluenceSpaceKey').disabled,true);
+ page.verify(true);page.render();assert.equal(node('overviewJiraProjectKey').disabled,false);assert.equal(node('overviewConfluenceSpaceKey').disabled,false);
  page.select('b');page.render();
  assert.equal(node('overviewJiraProjectKey').value,'BB');assert.equal(node('overviewConfluenceSpaceKey').value,'BC');
 
  projects.splice(1);page.render();assert.equal(node('overviewJiraProjectKey').value,'AA');
- projects.splice(0);page.render();assert.equal(node('overviewJiraProjectKey').value,'');assert.equal(node('overviewJiraInventory').disabled,true);
+ projects.splice(0);page.render();assert.equal(node('overviewJiraProjectKey').value,'');assert.equal(node('overviewConfluenceSpaceKey').disabled,true);
 });
 
 test('guide token help uses a modal without raw URLs; startup icons open official sites directly',()=>{
@@ -107,6 +107,9 @@ test('startup mappings use exact key labels without a project dropdown',()=>{
  assert.match(form,/<label for="overviewConfluenceSpaceKey">Confluence Space Key<\/label>/);
  assert.match(form,/<input type="text" id="overviewJiraProjectKey"/);
  assert.match(form,/<input type="text" id="overviewConfluenceSpaceKey"/);
+ assert.doesNotMatch(form,/Search All Jira Items|id="overviewJiraInventory"/);
+ assert.doesNotMatch(ui,/\$\('overviewJiraInventory'\)/);
+ assert.match(form,/id="startupProjectRepository"[\s\S]*?id="startupGithubToken"[\s\S]*?class="startup-project-mappings form-grid"[\s\S]*?id="overviewJiraProjectKey"[\s\S]*?id="overviewConfluenceSpaceKey"[\s\S]*?class="atgv-startup-actions"/);
  assert.doesNotMatch(form,/>Project mappings<|>Project setting<|id="overview(?:Jira|Confluence)MappingStatus"/);
  assert.doesNotMatch(form,/<select\b|id="startupMappingProject"/);
  assert.doesNotMatch(html,/id="tokenHelpUrl"|>Official website</);

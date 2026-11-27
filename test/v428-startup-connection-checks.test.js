@@ -50,9 +50,9 @@ function pageFixture(){
 }
 const config={required:true,verified:true,saved:{jiraUrl:'https://example.atlassian.net',email:'person@example.com',githubUrl:'https://github.com/aiamalaysia',projectRepository:'my-fow-technology-app-techassists'},defaults:setup.DEFAULTS};
 test('Verified connection settings expose a manual read-only test',()=>{
- const field=html.match(/<div class="field"><label for="startupGithubToken">[\s\S]*?<\/button><\/div><button[^>]*id="startupEditConnections"[^>]*>Edit<\/button><\/div>/)?.[0]||'';
+ const field=html.match(/<div class="field"><label for="startupGithubToken">[\s\S]*?<\/button><\/div><\/div>/)?.[0]||'';
  assert.match(field,/<div class="startup-token-input"><input[^>]*id="startupGithubToken"[^>]*><button[^>]*id="startupGithubTokenInfo"/);
- assert.match(field,/<\/div><button[^>]*id="startupEditConnections"/);
+ assert.match(html,/<div class="atgv-startup-actions">[^\n]*id="startupEditConnections"/);
  assert.match(html,/<div class="startup-token-input"><input[^>]*id="startupAtlassianToken"[^>]*><button[^>]*id="startupAtlassianTokenInfo"/);
  const {node,sent,page}=pageFixture();
  page.renderStartupConfig(config);

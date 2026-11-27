@@ -2028,9 +2028,9 @@ function closeJiraInventory(){
  $('jiraInventoryModal').classList.add('hidden');$('jiraInventoryModal').setAttribute('aria-hidden','true');
  // Jira inventory scans remain active in the host even when the modal closes.
  // Keep request IDs and partial pages so returning to the page resumes live data.
- $('overviewJiraInventory').focus();
+ const returnFocus=$('overviewJiraProjectKey');
+ if(returnFocus&&!returnFocus.disabled&&returnFocus.getClientRects().length)returnFocus.focus();
 }
-$('overviewJiraInventory').addEventListener('click',()=>{if(activeId)openJiraInventory();else if(startupMappingProjectId&&startupConnectionVerified)send('openStartupJiraItems',{projectId:startupMappingProjectId});});
 $('jiraInventoryClose').addEventListener('click',closeJiraInventory);
 $('jiraInventoryModal').addEventListener('click',event=>{if(event.target===$('jiraInventoryModal'))closeJiraInventory();});
 $('jiraInventoryModal').addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();closeJiraInventory();}});
@@ -2277,7 +2277,6 @@ function renderStartupMappings(){
  };
  renderKey('overviewJiraProjectKey',jira);
  renderKey('overviewConfluenceSpaceKey',space);
- $('overviewJiraInventory').disabled=!startupMappingProjectId||!startupConnectionVerified||!jira.key;
 }
 
 function renderOverviewSdlcPhases(){

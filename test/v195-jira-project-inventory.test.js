@@ -40,8 +40,9 @@ test('search detects repeated nextPageToken and respects cancellation and item l
  assert.equal(capped.truncated,true);
 });
 
-test('Overview exposes Jira inventory, creator columns and host-side project scoping',()=>{
- for(const id of ['overviewJiraInventory','jiraInventoryModal','jiraInventoryRows','jiraInventoryFilter','jiraInventoryStatus','jiraInventoryRefresh'])assert.ok(host.includes('id="'+id+'"'),id);
+test('Jira inventory retains creator columns and host-side project scoping without a startup search button',()=>{
+ for(const id of ['jiraInventoryModal','jiraInventoryRows','jiraInventoryFilter','jiraInventoryStatus','jiraInventoryRefresh'])assert.ok(host.includes('id="'+id+'"'),id);
+ assert.doesNotMatch(host,/id="overviewJiraInventory"/);
  assert.match(ui,/send\('searchProjectJiraInventory'/);
  assert.match(host,/case 'searchProjectJiraInventory':/);
  assert.match(host,/validProjectKey\(config\.get\('jira\.projectKey'\)\)/);
