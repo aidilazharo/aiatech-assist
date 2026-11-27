@@ -6,6 +6,7 @@
 <title>ATGV — Engineering Review</title>
 <style>
 :root{color-scheme:light dark;--accent:#d31145;--muted:#707780;--line:#8884;--panel:#8881}*{box-sizing:border-box}body{font:15px/1.55 system-ui,sans-serif;max-width:1080px;margin:auto;padding:32px 20px}header{border-top:4px solid var(--accent);padding-top:18px;margin-bottom:28px}h1{font-size:clamp(24px,5vw,36px);margin:0}h2{font-size:19px;margin:26px 0 10px}p{margin:8px 0}small,.muted{color:var(--muted)}a{color:inherit;text-decoration-color:var(--accent);text-underline-offset:3px}.meta{display:flex;flex-wrap:wrap;gap:12px 24px;margin-top:12px}.panel{border:1px solid var(--line);border-radius:8px;padding:16px;background:var(--panel)}table{border-collapse:collapse;width:100%;text-align:left}th,td{padding:12px 10px;border-bottom:1px solid var(--line);vertical-align:top}th{font-size:13px}td:first-child{white-space:nowrap}td:last-child{overflow-wrap:anywhere}.scroll{overflow-x:auto}.tag{font-size:12px;font-weight:600}.open{color:#b45309}@media(prefers-color-scheme:dark){.open{color:#fbbf24}}footer{border-top:1px solid var(--line);margin-top:30px;padding-top:12px}
+.review-day{border:1px solid var(--line);border-radius:8px;margin:8px 0;overflow:hidden}.review-day summary{cursor:pointer;padding:13px 16px;font-weight:600;background:var(--panel);list-style-position:inside}.review-day summary:focus-visible{outline:2px solid var(--accent);outline-offset:-3px}.day-today{font-size:12px;color:var(--accent);margin-left:8px}.day-count{float:right;font-size:12px;font-weight:400;color:var(--muted);margin-left:10px}.review-day .scroll{padding:0 8px}.review-day .empty-day{padding:12px 16px}.review-day:not([open]) .day-today:empty{display:none}
 </style>
 </head>
 <body>
@@ -17,13 +18,23 @@
 </header>
 <main>
 <section aria-labelledby="status"><h2 id="status">Latest verified workflow</h2><div class="panel"><p><strong>Regression suite failed</strong> — 2,775 passed, 1 failed, 2 skipped (2,778 total). Packaging and release were skipped.</p><p>Source: <a href="https://github.com/aidilazharo/aiatech-assist/actions/runs/45809105804">Workflow #45809105804</a>, commit <a href="https://github.com/aidilazharo/aiatech-assist/commit/b1b510847b24ae452f085eb9f7257bfdf9217723">b1b5108</a>.</p><small>Historical result; all three new SQLite-specific tests passed. New test-only correction committed; Workflow <a href="https://github.com/aidilazharo/aiatech-assist/actions/runs/45919721703">#45919721703</a>: in_progress. No runtime release version change.</small></div></section>
-<section aria-labelledby="activity"><h2 id="activity">Seven-day activity</h2><p class="muted">Seeded with verified findings from the preceding code review. Future cycles add dated entries and prune resolved history outside the seven-day window.</p><div class="scroll"><table><thead><tr><th scope="col">Date (MYT)</th><th scope="col">Category</th><th scope="col">Item / evidence</th></tr></thead><tbody id="activity-rows">
+<section aria-labelledby="activity"><h2 id="activity">Seven-day activity</h2><p class="muted">Today is expanded by default. Select a previous date to view its activity and releases.</p><div id="activity-days">
+<details class="review-day" data-date="2026-11-27" open>
+<summary><time datetime="2026-11-27">27 Nov 2026</time><span class="day-today">Today</span><span class="day-count">2 items</span></summary>
+<div class="scroll"><table><thead><tr><th scope="col">Date (MYT)</th><th scope="col">Category</th><th scope="col">Item / evidence</th></tr></thead><tbody class="activity-rows">
 <tr><td>27 Nov 2026, 09:00</td><td>Updated / error fix</td><td>Replaced two obsolete role inventory assertions with seven checks for project and activation epoch, scan cancellation, guarded message delivery, cached response and response payload. All seven matched the actual failing-run source excerpt; full regression suite and VSIX not yet verified. Commit <a href="https://github.com/aidilazharo/aiatech-assist/commit/f97617b9d36a0927c34a34d2318fd491cd370c56">f97617b</a>. Workflow <a href="https://github.com/aidilazharo/aiatech-assist/actions/runs/45919721703">#45919721703</a>: in_progress.</td></tr>
 <tr><td>27 Nov 2026</td><td>Added</td><td>Initialize this engineering report at <code>pages/index.html</code>.</td></tr>
+</tbody></table></div>
+</details>
+<details class="review-day" data-date="2026-11-26">
+<summary><time datetime="2026-11-26">26 Nov 2026</time><span class="day-today"></span><span class="day-count">3 items</span></summary>
+<div class="scroll"><table><thead><tr><th scope="col">Date (MYT)</th><th scope="col">Category</th><th scope="col">Item / evidence</th></tr></thead><tbody class="activity-rows">
 <tr><td>26 Nov 2026</td><td>Updated</td><td>SQLite knowledge migration, cached role views and concurrent provider refresh. <a href="https://github.com/aidilazharo/aiatech-assist/commit/1752d75fefde513c00eec405a5aae42855eae183">Runtime commit</a>.</td></tr>
 <tr><td>26 Nov 2026</td><td>Added</td><td>SQLite regression coverage. <a href="https://github.com/aidilazharo/aiatech-assist/commit/b1b510847b24ae452f085eb9f7257bfdf9217723">Test commit</a>.</td></tr>
 <tr><td>26 Nov 2026</td><td>Error found</td><td>Legacy assertion in <code>test/v175-overview-rag-jira-repo.test.js</code> still expects the previous project guard; the next assertion also expects the old response structure.</td></tr>
-</tbody></table></div><p class="muted">No verified deletion entries recorded yet. Error-fix code is committed; CI verification remains pending.</p></section>
+</tbody></table></div>
+</details>
+</div><p class="muted">No verified deletion entries recorded yet. Error-fix code is committed; CI verification remains pending.</p></section>
 <section aria-labelledby="issues"><h2 id="issues">Unresolved issues</h2><div class="scroll"><table><thead><tr><th scope="col">ID</th><th scope="col">Status</th><th scope="col">Issue / next action</th></tr></thead><tbody id="unresolved-rows">
 <tr><td>CI-001</td><td class="tag open">Open</td><td>Assertion correction committed (<a href="https://github.com/aidilazharo/aiatech-assist/commit/f97617b9d36a0927c34a34d2318fd491cd370c56">f97617b</a>); retain as unresolved until full regression and release verification pass. Workflow <a href="https://github.com/aidilazharo/aiatech-assist/actions/runs/45919721703">#45919721703</a>: in_progress.</td></tr>
 <tr><td>SYNC-001</td><td class="tag open">Open</td><td>Complete persistent, remotely validated write queue and incremental synchronization.</td></tr>
@@ -32,4 +43,34 @@
 </tbody></table></div></section>
 </main>
 <footer class="muted">Unresolved items remain listed until verified resolution. No credentials, internal logs or personal information should be published here.</footer>
+<script>
+(function(){
+  'use strict';
+  const container=document.getElementById('activity-days');
+  if(!container)return;
+  const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kuala_Lumpur',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+  const datePart=type=>parts.find(part=>part.type===type).value;
+  const today=datePart('year')+'-'+datePart('month')+'-'+datePart('day');
+  const sections=Array.from(container.querySelectorAll('details.review-day[data-date]'));
+  let hasToday=false;
+  for(const section of sections){
+    const current=section.dataset.date===today;
+    section.open=current;
+    const badge=section.querySelector('.day-today');
+    if(badge)badge.textContent=current?'Today':'';
+    if(current)hasToday=true;
+  }
+  if(!hasToday){
+    const section=document.createElement('details');
+    section.className='review-day';section.dataset.date=today;section.open=true;
+    const summary=document.createElement('summary');
+    const time=document.createElement('time');
+    time.dateTime=today;time.textContent=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kuala_Lumpur',day:'numeric',month:'short',year:'numeric'}).format(new Date());
+    const label=document.createElement('span');label.className='day-today';label.textContent='Today';
+    const count=document.createElement('span');count.className='day-count';count.textContent='0 items';
+    const message=document.createElement('p');message.className='empty-day muted';message.textContent='No review activity recorded today yet.';
+    summary.append(time,label,count);section.append(summary,message);container.prepend(section);
+  }
+})();
+</script>
 </body></html>
