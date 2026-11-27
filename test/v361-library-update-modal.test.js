@@ -9,7 +9,7 @@ test('SDLC Library update offers use the same ATGV branded modal as extension up
  const html=read('src/lib/webview/dashboard-html.js');
  const js=read('media/start.js');
  const runtime=read('src/lib/runtime/extension-runtime.js');
- for(const id of ['libraryUpdateModal','libraryUpdateTitle','libraryUpdateDescription','libraryUpdateCurrent','libraryUpdateNext','libraryUpdateSource','libraryUpdateLater','libraryUpdatePull'])
+ for(const id of ['libraryUpdateModal','libraryUpdateTitle','libraryUpdateDescription','libraryUpdateCurrent','libraryUpdateNext','libraryUpdateLater','libraryUpdatePull'])
   assert.ok(html.includes('id="'+id+'"'),id);
  assert.match(html,/id="libraryUpdateModal" class="modal-overlay hidden"/);
  assert.match(html,/atgv-upgrade-brand/);

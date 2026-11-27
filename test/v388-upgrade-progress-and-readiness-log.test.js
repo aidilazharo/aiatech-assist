@@ -49,7 +49,7 @@ test('Upgrade modal stays open throughout installation and only closes after a h
  assert.equal(x.sent.at(-1).action,'Install Upgrade');
  assert.equal(x.node('extensionUpgradeModal').classList.contains('hidden'),false);
  assert.equal(x.node('extensionUpgradeProgress').classList.contains('hidden'),false);
- for(const button of ['extensionUpgradeLater','extensionUpgradeView','extensionUpgradeInstall'])
+ for(const button of ['extensionUpgradeLater','extensionUpgradeInstall'])
   assert.equal(x.node(button).disabled,true,button);
  let prevented=false;
  x.node('extensionUpgradeModal').listeners.keydown({key:'Escape',preventDefault(){prevented=true;}});
@@ -145,4 +145,11 @@ test('Readiness diagnostic download sits at the left of the startup navigation r
  assert.match(css,/\.atgv-startup-footer #startupUnifiedLog,\.atgv-startup-footer #startupPrevious\{grid-column:1/);
  assert.match(ui,/for\(const id of \['startupUnifiedLog','gateUnifiedLog'\]\)/);
  assert.match(host,/case 'startupExportUnifiedLog':/);
+});
+
+test('update modals do not expose release repositories or release links',()=>{
+ for(const id of ['extensionUpgradeSource','extensionUpgradeView','libraryUpdateSource']){
+  assert.ok(!html.includes('id="'+id+'"'),id);
+  assert.ok(!ui.includes("$('"+id+"')"),id);
+ }
 });

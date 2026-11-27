@@ -9936,8 +9936,6 @@ window.addEventListener('message',event=>{
  const sameVersion=!!installed&&installed===latest;
  $('libraryUpdateDescription').textContent=latest?(sameVersion?'A newer verified SDLC Library build is available for this version.':'A newer verified SDLC Library release is available.'):'The remote SDLC Library version could not be verified.';
  if(message.installedVersionWarning)$('libraryUpdateDescription').textContent+=' '+String(message.installedVersionWarning);
- $('libraryUpdateSource').textContent='GitHub: '+String(message.repository||'tech-stacks-skills')+(message.publishedAt?' · Published '+new Date(message.publishedAt).toLocaleString():'');
- $('libraryUpdateDescription').textContent+=' Pull Library verifies and updates the configured GitHub main branch.';
  const modal=$('libraryUpdateModal');modal.classList.remove('hidden');modal.setAttribute('aria-hidden','false');
  $('libraryUpdatePull').focus();
 });
@@ -9954,7 +9952,6 @@ function renderExtensionUpgradeInstallState(state,title='',description=''){
  if(title)$('extensionUpgradeProgressTitle').textContent=String(title).slice(0,180);
  if(description)$('extensionUpgradeProgressMessage').textContent=String(description).slice(0,700);
  $('extensionUpgradeLater').disabled=busy;
- $('extensionUpgradeView').disabled=busy;
  const install=$('extensionUpgradeInstall');
  install.disabled=busy;
  install.textContent=busy?'Installing…':failed?'Retry Install':'Install Upgrade';
@@ -9976,7 +9973,6 @@ function startExtensionUpgradeInstall(){
  else send('extensionUpgradeDecision',{requestId,action:'Install Upgrade'});
 }
 $('extensionUpgradeLater').addEventListener('click',()=>closeExtensionUpgrade('Later'));
-$('extensionUpgradeView').addEventListener('click',()=>closeExtensionUpgrade('View Release'));
 $('extensionUpgradeInstall').addEventListener('click',startExtensionUpgradeInstall);
 $('extensionUpgradeModal').addEventListener('keydown',event=>{
  if(extensionUpgradeInstallState==='installing'){
@@ -9987,7 +9983,7 @@ $('extensionUpgradeModal').addEventListener('keydown',event=>{
  }
  if(event.key==='Escape'){event.preventDefault();closeExtensionUpgrade('Later');return;}
  if(event.key==='Tab'){
-  const controls=['extensionUpgradeLater','extensionUpgradeView','extensionUpgradeInstall'].map($).filter(node=>!node.disabled);
+  const controls=['extensionUpgradeLater','extensionUpgradeInstall'].map($).filter(node=>!node.disabled);
   const first=controls[0],last=controls.at(-1);
   if(!first||!last)return;
   if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
@@ -10020,8 +10016,7 @@ window.addEventListener('message',event=>{
  renderExtensionUpgradeInstallState('ready');
  $('extensionUpgradeCurrent').textContent='v'+String(message.currentVersion||'?');
  $('extensionUpgradeNext').textContent='v'+String(message.version||'?');
- $('extensionUpgradeDescription').textContent='ATGV v'+String(message.version||'?')+' is available. Review and install the verified extension release when ready.';
- $('extensionUpgradeSource').textContent='GitHub: '+String(message.repository||'')+' · '+String(message.tag||'')+(message.publishedAt?' · Published '+new Date(message.publishedAt).toLocaleString():'');
+ $('extensionUpgradeDescription').textContent='ATGV v'+String(message.version||'?')+' is available.';
  const modal=$('extensionUpgradeModal');modal.classList.remove('hidden');modal.setAttribute('aria-hidden','false');
  $('extensionUpgradeInstall').focus();
 });

@@ -31,7 +31,7 @@ function html(webview,{resumeLibrary=false}={}){
     subtask:"<path d=\"M5 5v7h4m-3-3 3 3-3 3M12 8h7v8h-7zM14 12l1 1 2-2\"/>"
   };
   const baHeaderIcon=(name,variant='')=>`<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${variant}>${baHeaderIcons[name]}</svg>`;
-  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.1.65';
+  const extensionVersion=typeof require==='function'?require('../../../package.json').atgvDisplayVersion :'0.1.66';
   const css=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','start.css'));
   const uiThemeCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-ui-theme.css'));
   const uiConsistencyCss=webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,'media','atgv-consistency.css'));
@@ -99,15 +99,15 @@ function html(webview,{resumeLibrary=false}={}){
   <div id="extensionUpgradeModal" class="modal-overlay hidden" aria-hidden="true"><div class="modal-card atgv-upgrade-modal" role="dialog" aria-modal="true" aria-labelledby="extensionUpgradeTitle" aria-describedby="extensionUpgradeDescription">
     <div class="atgv-upgrade-brand"><img src="${brand}" alt="ATGV AIATECH Assist logo"><div><strong>AIATECH ASSIST</strong><span>SECURE EXTENSION UPDATE</span></div></div>
     <span class="atgv-upgrade-kicker">UPDATE AVAILABLE</span><h2 id="extensionUpgradeTitle">A new version is ready</h2>
-    <p id="extensionUpgradeDescription">Upgrade ATGV using the verified GitHub release.</p>
+    <p id="extensionUpgradeDescription">Install the new version of ATGV?</p>
     <div class="atgv-upgrade-versions"><div><small>INSTALLED</small><strong id="extensionUpgradeCurrent">—</strong></div><span aria-hidden="true">→</span><div><small>AVAILABLE</small><strong id="extensionUpgradeNext">—</strong></div></div>
-    <p id="extensionUpgradeSource" class="muted"></p><p class="atgv-upgrade-assurance">Verified release asset and SHA-256 checksum. Installation requires your confirmation.</p>
+    
     <div id="extensionUpgradeProgress" class="atgv-upgrade-progress hidden" role="status" aria-live="polite" aria-atomic="true" tabindex="-1">
       <div class="atgv-upgrade-progress-track" aria-hidden="true"><span class="atgv-upgrade-progress-indicator"></span></div>
       <strong id="extensionUpgradeProgressTitle">Preparing verified extension update…</strong>
       <p id="extensionUpgradeProgressMessage">Installation status will appear here.</p>
     </div>
-    <div class="atgv-upgrade-actions"><button type="button" id="extensionUpgradeLater" class="secondary">Later</button><button type="button" id="extensionUpgradeView" class="secondary">View Release</button><button type="button" id="extensionUpgradeInstall">Install Upgrade</button></div>
+    <div class="atgv-upgrade-actions"><button type="button" id="extensionUpgradeLater" class="secondary">Later</button><button type="button" id="extensionUpgradeInstall">Install Upgrade</button></div>
   </div></div>
   <div id="startupStackModal" class="modal-overlay hidden" aria-hidden="true"><div class="modal-card startup-stack-modal-card" role="dialog" aria-modal="true" aria-labelledby="startupStackModalTitle" aria-describedby="startupStackModalDescription">
     <div class="startup-stack-modal-header"><div><h2 id="startupStackModalTitle">Technology stack requirements</h2><p id="startupStackModalDescription" class="muted">Host tools and project modules for the selected stack</p></div><button type="button" id="startupStackModalClose" class="secondary" aria-label="Close stack requirements">Close</button></div>
@@ -131,13 +131,13 @@ function html(webview,{resumeLibrary=false}={}){
   <div id="libraryUpdateModal" class="modal-overlay hidden" aria-hidden="true"><div class="modal-card atgv-upgrade-modal" role="dialog" aria-modal="true" aria-labelledby="libraryUpdateTitle" aria-describedby="libraryUpdateDescription">
     <div class="atgv-upgrade-brand"><img src="${brand}" alt="ATGV AIATECH Assist logo"><div><strong>AIATECH ASSIST</strong><span>VERIFIED SDLC LIBRARY UPDATE</span></div></div>
     <span class="atgv-upgrade-kicker">UPDATE AVAILABLE</span><h2 id="libraryUpdateTitle">An SDLC Library update is ready</h2>
-    <p id="libraryUpdateDescription">Download the latest verified catalog from GitHub main.</p>
+    <p id="libraryUpdateDescription">Update the SDLC Library?</p>
     <div class="atgv-upgrade-versions"><div><small>INSTALLED IN THIS WORKSPACE</small><strong id="libraryUpdateCurrent">—</strong></div><span aria-hidden="true">→</span><div><small>LATEST LIBRARY VERSION</small><strong id="libraryUpdateNext">—</strong></div></div>
-    <p id="libraryUpdateSource" class="muted"></p><p class="atgv-upgrade-assurance">The catalog will be downloaded and verified. Active project files stay unchanged; installation requires your confirmation.</p>
+    
     <div id="libraryUpdateProgress" class="atgv-upgrade-progress atgv-library-update-progress hidden" role="status" aria-live="polite" aria-atomic="true" tabindex="-1">
       <div class="atgv-library-update-heading"><strong id="libraryUpdateProgressTitle">Preparing the SDLC Library update…</strong><span id="libraryUpdateProgressPercent">0%</span></div>
       <div id="libraryUpdateProgressBar" class="atgv-library-update-track" role="progressbar" aria-label="Library update steps completed" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="libraryUpdateProgressIndicator" class="atgv-library-update-indicator"></span></div>
-      <p id="libraryUpdateProgressMessage">The current GitHub pull and verification stage will appear here.</p>
+      <p id="libraryUpdateProgressMessage">Update progress will appear here.</p>
     </div>
     <div class="atgv-upgrade-actions"><button type="button" id="libraryUpdateLater" class="secondary">Later</button><button type="button" id="libraryUpdatePull">Pull Library</button></div>
   </div></div>

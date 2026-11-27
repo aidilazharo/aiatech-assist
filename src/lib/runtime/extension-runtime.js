@@ -703,8 +703,7 @@ async function performVerifiedExtensionInstall(operation){
   await postExtensionInstallProgress(operation,'failed','Installation failed',safeMessage+' You can retry without closing this dialog.');
   if(!operation.requestId||!dashboard){
    activeExtensionUpgradeInstall=null;
-   const answer=await vscode.window.showErrorMessage('Automatic ATGV upgrade failed: '+safeMessage,'View Release');
-   if(answer==='View Release')await vscode.env.openExternal(vscode.Uri.parse(operation.release.url));
+   await vscode.window.showErrorMessage('ATGV upgrade failed: '+safeMessage);
   }
  }finally{
   operation.running=false;
@@ -717,7 +716,7 @@ async function performVerifiedExtensionInstall(operation){
  }
 }
 async function offerBrandedExtensionUpgrade(release){
- if(!dashboard)return vscode.window.showInformationMessage('ATGV v'+release.version+' is available. Install the verified GitHub release?',{modal:true},'Install Upgrade','View Release','Later');
+ if(!dashboard)return vscode.window.showInformationMessage('ATGV v'+release.version+' is available. Install upgrade?',{modal:true},'Install Upgrade','Later');
  const requestId=crypto.randomUUID();
  return new Promise(resolve=>{
   // Do not time out a still-visible offer: otherwise Install can become inert
@@ -727,7 +726,7 @@ async function offerBrandedExtensionUpgrade(release){
   pendingExtensionUpgradeOffers.set(requestId,{resolve,timer});
   Promise.resolve(dashboard.webview.postMessage({type:'extensionUpgradeOffer',requestId,
     currentVersion:require('../../../package.json').version,version:release.version,
-    repository:release.repository||releaseUpdater.REPO,tag:release.tag,url:release.url,publishedAt:release.publishedAt})).then(success=>{
+    publishedAt:release.publishedAt})).then(success=>{
       if(!success){const entry=pendingExtensionUpgradeOffers.get(requestId);if(entry){clearTimeout(entry.timer);pendingExtensionUpgradeOffers.delete(requestId);resolve({action:'Later',requestId});}}
     }).catch(()=>{clearTimeout(timer);pendingExtensionUpgradeOffers.delete(requestId);resolve({action:'Later',requestId});});
  });
@@ -786,7 +785,7 @@ async function offerBrandedPrerequisiteInstall(plan){
 async function offerBrandedLibraryUpdate({repository,installedVersion,remoteVersion,installedTag='',remoteTag='',installedVersionWarning='',publishedAt=''}){
  const comparison=libraryUpdateVersion.compareInstalledRelease({version:installedVersion,releaseTag:installedTag},{version:remoteVersion,tag:remoteTag});
  if(!comparison.available)throw Error('The remote library version is not newer than the installed library.');
- const message='SDLC Library v'+comparison.remote+(remoteTag?' ('+remoteTag+')':'')+' is available from '+repository+' '+(comparison.installed?'(installed v'+comparison.installed+')':'(not yet installed)')+'. Download the verified catalog? Active project files remain unchanged.';
+ const message='SDLC Library v'+comparison.remote+(remoteTag?' ('+remoteTag+')':'')+' is available '+(comparison.installed?'(installed v'+comparison.installed+')':'(not yet installed)')+'. Download the verified catalog? Active project files remain unchanged.';
  if(!dashboard)return vscode.window.showInformationMessage(message,{modal:true},'Pull Library','Later');
  const requestId=crypto.randomUUID();
  return new Promise(resolve=>{
@@ -803,7 +802,7 @@ async function offerBrandedLibraryUpdate({repository,installedVersion,remoteVers
   timer.unref?.();
   pendingLibraryUpdateOffers.set(requestId,{resolve,timer});
   Promise.resolve(dashboard.webview.postMessage({type:'libraryUpdateOffer',requestId,
-   repository,installedVersion:comparison.installed,remoteVersion:comparison.remote,installedTag,remoteTag,installedVersionWarning,publishedAt}))
+   installedVersion:comparison.installed,remoteVersion:comparison.remote,installedTag,remoteTag,installedVersionWarning,publishedAt}))
    .then(ok=>{
     if(!ok){const entry=pendingLibraryUpdateOffers.get(requestId);
      if(entry){clearTimeout(entry.timer);pendingLibraryUpdateOffers.delete(requestId);resolve('Later');}}
