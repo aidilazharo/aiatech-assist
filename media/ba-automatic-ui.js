@@ -414,6 +414,56 @@
  function canPublishPrepared(phase,unsaved,completed=false){
   return (phase==='ready'&&currentJiraPreview()||completed)&&!['running','publishing'].includes(phase)&&!unsaved&&!busy()&&!baBusyTask;
  }
+ // Percentages describe verified section evidence, never elapsed time.
+ function sectionProgress({register,brs,rows,preview,groups,statuses,unsaved,discoveryUnsaved}){
+  const ratio=(done,total)=>total>0?Math.min(100,Math.max(0,Math.floor(100*done/total))):0;
+  const settle=(id,value)=>['ready','completed'].includes(statuses[id])?100:
+   statuses[id]==='not-started'?0:Math.min(99,value);
+  const sources=(register.sourceDocuments||[]).filter(doc=>doc?.digest);
+  const mapped=new Set(register.mappingCompleted?.sourceDigests||register.mappingCompleted?.digests||[]);
+  const sourceDone=sources.filter(doc=>mapped.has(doc.digest)).length;
+  const answers=Object.values(register.discoveryAnswers||{}).filter(value=>typeof value==='string'&&value.trim()).length;
+  const excluded=new Set((register.baDraftQuality?.excluded||[]).map(row=>row.id));
+  const stale=br=>br.needsRefresh||br.externalReviewRequired||br.roleReviewRequired||br.dependencyReviewRequired;
+  const clean=brs.filter(br=>!excluded.has(br.id)&&!stale(br)).length;
+  const items=rows.filter(row=>row.category!=='br');
+  const conflicts=[...new Set([...(preview?.conflicts||[]),...(preview?.reopenSkipped||[]).map(row=>row.message||row.key||'Status reset unavailable')].map(String))];
+  const blocked=new Set();let unmatched=0;
+  for(const conflict of conflicts){
+   const matches=items.filter(row=>row.path&&(conflict===row.path||conflict.startsWith(row.path+':')||conflict.startsWith(row.path+' ')));
+   if(matches.length)matches.forEach(row=>blocked.add(row.path));else unmatched++;
+  }
+  const published=new Set(groups.filter(group=>group.snapshots.some(({br})=>{
+   const current=brs.find(item=>item.id===group.id);
+   return !!current&&!stale(current)&&['approved','published','completed'].includes(String(current.status||'').toLowerCase())&&
+    Number(br.approvedRevision||0)===Number(current.approvedRevision||0)&&!!(br.jiraKey||br.jiraIssues?.some(issue=>issue.key));
+  })).map(group=>group.id));
+  return {
+   baAutoSource:settle('baAutoSource',ratio(sources.length+sourceDone,sources.length*2)),
+   baAutoDiscovery:settle('baAutoDiscovery',ratio(Math.min(12,answers),13)),
+   baAutoRequirements:settle('baAutoRequirements',ratio(clean,brs.length+(unsaved?1:0))),
+   baAutoJira:settle('baAutoJira',ratio(items.length-blocked.size,items.length+unmatched+(unsaved?1:0))),
+   baAutoHistory:brs.length?ratio(published.size,brs.length):groups.length?100:0
+  };
+ }
+ function renderSectionProgress(id,percent,status){
+  const badgeNode=get(id+'Badge');
+  let wrap=get(id+'Progress');
+  if(!wrap){
+   wrap=document.createElement('span');wrap.id=id+'Progress';wrap.className='ba-auto-section-progress';
+   Object.assign(wrap.style,{display:'inline-flex',alignItems:'center',gap:'8px',flex:'1 1 90px',minWidth:'48px',marginInline:'8px'});
+   const track=document.createElement('progress');track.max=100;
+   track.setAttribute('aria-label',badgeNode.parentElement.querySelector('strong')?.textContent?.trim()+' progress');
+   Object.assign(track.style,{flex:'1 1 0',width:'100%',minWidth:'20px',height:'6px'});
+   const label=document.createElement('span');label.setAttribute('aria-hidden','true');
+   Object.assign(label.style,{fontSize:'11px',fontVariantNumeric:'tabular-nums',minWidth:'34px',textAlign:'right'});
+   wrap.append(track,label);badgeNode.before(wrap);
+  }
+  const track=wrap.firstElementChild,label=wrap.lastElementChild;
+  track.value=percent;
+  track.style.accentColor=status==='needs-attention'?'var(--vscode-charts-orange,#ffbd6f)':percent===100?'var(--vscode-charts-green,#7fdeb5)':'var(--vscode-charts-blue,#72baff)';
+  label.textContent=percent+'%';
+ }
  function renderReadyPanels(phase){
   const sourceReady=!!source()?.digest;
   const discoveryReady=!!brState?.discoveryRevision&&!!brState?.mappingCompleted&&!discoveryDirty;
@@ -446,12 +496,16 @@
   const jiraStatus=(state?.preview?.conflicts?.length||(state?.preview?.reopenSkipped||state?.reopenSkipped||[]).length)?'needs-attention':phase==='published'?'completed':
    phaseRunning?'in-progress':phase==='ready'&&previewCurrent&&!dirty()?'ready':jiraReady?'in-progress':'not-started';
   const historyStatus=completedReady?'completed':'not-started';
-  for(const [id,status] of [
+  const panels=[
    ['baAutoSource',sourceStatus],['baAutoDiscovery',discoveryStatus],
    ['baAutoRequirements',requirementsStatus],['baAutoJira',jiraStatus],
-   ['baAutoHistory',historyStatus]]){
+   ['baAutoHistory',historyStatus]];
+  const progress=sectionProgress({register:brState,brs:requirements(),rows:rowsForTable(),
+   preview:state?.preview,groups:completedGroups,statuses:Object.fromEntries(panels),unsaved:dirty(),discoveryUnsaved:discoveryDirty});
+  for(const [id,status] of panels){
    setReadyPanel(id,status);
    badge(id+'Badge',status);
+   renderSectionProgress(id,progress[id],status);
   }
  }
 
