@@ -168,7 +168,7 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
     await until(()=>messages.slice(beforeRestart).some(m=>m.type==='state'&&m.opening?.phase==='search'));
     assert.equal(lastState()?.opening?.phase,'search','Restart must show project selection when setup is incomplete');
     assert.equal(lastState()?.activeId,null,'Incomplete setup must not re-open a project automatically');
-    assert.ok(messages.some(m=>m.type==='startupScan'&&/Choose a project/.test(m.message)));
+    assert.ok(messages.slice(beforeRestart).some(m=>m.type==='state'&&m.opening?.phase==='search'&&m.activeId===null),'Restart publishes an unselected project gate');
     handler({command:'openingBack'});
     await until(()=>lastState()?.opening?.phase==='search');
     handler({command:'create',project:makeProject('claims','CLM')});

@@ -51,7 +51,7 @@ test('Library header shows one active version while Settings retains available v
 test('startup version polling is read-only, Pull Catalog remains pinned and failures visible',()=>{
  const begin=source.indexOf('async function catalogCheck('),end=source.indexOf('function scheduleCatalogChecks()',begin);
  const check=source.slice(begin,end);
- assert.match(check,/remoteVersion\(config,token\)/);
+ assert.match(check,/resolveLibrarySource\(config,\{interactive\}\)/);
  assert.doesNotMatch(check,/syncGitWorkspace\(/);
  const status=source.slice(source.indexOf('async function catalogUiState('),begin);
  assert.doesNotMatch(status,/sdlcCatalog\.cached\(/);

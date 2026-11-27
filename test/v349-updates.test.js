@@ -145,17 +145,17 @@ test('Library offer preflight validates the configured Git source with its own c
  const host=read('src/lib/runtime/extension-runtime.js');
  const source=host.slice(host.indexOf('async function checkLibraryRelease('),host.indexOf('async function checkSoftwareUpdates('));
  const calls=[];
- const run=new Function('calls','sourceStatus',sourcePrelude()+source+';return checkLibraryRelease;');
- function sourcePrelude(){return "let catalogBusy=false,libraryRelease=null,libraryLatest=null,libraryReleaseWarnings=[],libraryReleaseAvailable=false,catalogLastCheck='',catalogLastError='',libraryUpdateError=''; const release={version:'0.0.12'};const libraryReleaseUpdater={latestAcrossRepositories:async()=>({release,latest:release,errors:[]})};const releaseUpdater={authorizedRequest:()=>null,assertReleaseAccessible:async()=>calls.push('asset')};const githubIssueAccessToken=async()=>'';const catalogUiState=async()=>({installed:{}});const libraryUpdateVersion={compareInstalledRelease:()=>({available:true})};const catalogConfig=()=>({repositoryUrl:'configured'});const catalogToken=async(config,options)=>{if(options.interactive!==false)throw Error('interactive');calls.push('credentials');return 'configured-token';};const sdlcCatalog={remoteVersion:async(config,token)=>{calls.push(config.repositoryUrl+':'+token);if(sourceStatus instanceof Error)throw sourceStatus;return sourceStatus;}};const promptLibraryRelease=async()=>calls.push('offer');const report=()=>{};const publishUpdateStatus=async()=>{};";}
+ const run=new Function('calls','sourceStatus','librarySourceFallback',sourcePrelude()+source+';return checkLibraryRelease;');
+ function sourcePrelude(){return "let catalogBusy=false,libraryRelease=null,libraryLatest=null,libraryReleaseWarnings=[],libraryReleaseAvailable=false,catalogLastCheck='',catalogLastError='',libraryUpdateError=''; const release={version:'0.0.12'};const libraryReleaseUpdater={latestAcrossRepositories:async()=>({release,latest:release,errors:[]})};const releaseUpdater={authorizedRequest:()=>null,assertReleaseAccessible:async()=>calls.push('asset')};const githubIssueAccessToken=async()=>'';const catalogUiState=async()=>({installed:{}});const libraryUpdateVersion={compareInstalledRelease:()=>({available:true})};const catalogConfig=()=>({repositoryUrl:'configured'});const catalogToken=async(config,options)=>{if(options.interactive!==false)throw Error('interactive');calls.push('credentials');return 'configured-token';};const sdlcCatalog={remoteVersion:async(config,token)=>{calls.push(config.repositoryUrl+':'+token);if(sourceStatus instanceof Error)throw sourceStatus;return sourceStatus;}};const resolveLibrarySource=async(config,{interactive=false}={})=>librarySourceFallback.resolve(config,{tokenFor:c=>catalogToken(c,{interactive}),remoteVersion:sdlcCatalog.remoteVersion});const promptLibraryRelease=async()=>calls.push('offer');const report=()=>{};const publishUpdateStatus=async()=>{};";}
  for(const status of [403,404]){
   calls.length=0;
-  assert.equal(await run(calls,Error('HTTP '+status))({prompt:true}),null);
+  assert.equal(await run(calls,Error('HTTP '+status),require('../src/lib/updates/library-source-fallback'))({prompt:true}),null);
   assert.deepEqual(calls,['credentials','configured:configured-token']);
  }
  calls.length=0;
- assert.equal(await run(calls,{sha:'abc',version:'0.0.11'})({prompt:true}),null);
+ assert.equal(await run(calls,{sha:'abc',version:'0.0.11'},require('../src/lib/updates/library-source-fallback'))({prompt:true}),null);
  assert.deepEqual(calls,['credentials','configured:configured-token']);
  calls.length=0;
- assert.equal(await run(calls,{sha:'abc',version:'0.0.12'})({prompt:true}),'0.0.12');
+ assert.equal(await run(calls,{sha:'abc',version:'0.0.12'},require('../src/lib/updates/library-source-fallback'))({prompt:true}),'0.0.12');
  assert.deepEqual(calls,['credentials','configured:configured-token','asset','offer']);
 });

@@ -43,7 +43,7 @@ test('My Work shows a catalog driven acronym dropdown, not a static Skill badge'
  ctx.catalogState.roleSkillOptions['solution-architect']=[{id:'sa.standard',source:'roles/solution-architect/SKILL.md',label:'sa.standard',default:true}];
  vm.runInNewContext('renderRoleSkillHeader()',ctx);assert.equal(select.value,'sa.standard');assert.equal(select.disabled,false);
  assert.equal(vm.runInNewContext("catalogRoleAcronym('ux-designer')",ctx),'UX');
- assert.match(ui,/catalogState=state;\s*renderRoleSkillHeader\(\)/);
+ assert.match(ui,/catalogState=state;\s*if\(typeof syncRequiredLibraryGate==='function'\)queueMicrotask\(syncRequiredLibraryGate\);\s*renderRoleSkillHeader\(\)/);
  assert.match(ui,/send\('selectRoleSkill',\{roleId:selectedRole,skillId:select.value\}\)/);
 });
 test('My Work has acronym and select at the far right without the visible word Skill',()=>{

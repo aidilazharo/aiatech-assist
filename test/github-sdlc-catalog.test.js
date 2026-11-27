@@ -141,7 +141,7 @@ test('webview includes independent global catalog settings, controls and update 
  const script=await fs.readFile(path.join(__dirname,'..','media','start.js'),'utf8');
  for(const id of ['sdlcCatalogSection','catalogRepoUrl','catalogRef','catalogAuth','catalogAutoCheck','catalogTest','catalogPull','catalogCheck'])assert.ok(html.includes(`id="${id}"`),`Missing ${id}`);
  for(const action of ['catalogSave','catalogTest','catalogPull','catalogCheck'])assert.ok(script.includes(`send('${action}'`));
- assert.ok(html.includes('GitHub Library'));assert.ok(html.includes('The Library tracks the approved GitHub main branch.'));
+ assert.ok(html.includes('GitHub Library'));assert.match(html,/id="catalogRef" type="hidden" value="main"/);
 });
 
 test('supports catalog.yaml with simple roles and technology-stack identifiers',()=>{

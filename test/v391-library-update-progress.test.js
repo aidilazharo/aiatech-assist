@@ -29,9 +29,10 @@ function fixture(){
  const start=ui.indexOf('let displayedLibraryUpdate=null,libraryUpdatePriorFocus=null');
  const end=ui.indexOf('let displayedExtensionUpgrade=null;',start);
  assert.ok(start>=0&&end>start);
- const run=new Function('$','send','window','document',ui.slice(start,end));
- run(node,(command,options)=>messages.push({command,...options}),win,doc);
- return {node,messages,emit:data=>listener({data}),click:id=>node(id).listeners.click(),
+ const gateCalls=[],catalogState={activeVerified:true};
+ const run=new Function('$','send','window','document','catalogState','syncRequiredLibraryGate',ui.slice(start,end));
+ run(node,(command,options)=>messages.push({command,...options}),win,doc,catalogState,()=>gateCalls.push('required'));
+ return {node,messages,catalogState,gateCalls,emit:data=>listener({data}),click:id=>node(id).listeners.click(),
   key:(id,key)=>{let prevented=false;node(id).listeners.keydown({key,preventDefault(){prevented=true;}});return prevented;}};
 }
 test('The branded update modal includes an accessible milestone progress bar',()=>{
@@ -103,7 +104,7 @@ test('Host progress reflects actual pull and verification milestones before comp
  const from=host.indexOf("case 'catalogPull':{"),to=host.indexOf("case 'openingSelect':{",from);
  assert.ok(from>=0&&to>from);
  const segment=host.slice(from,to);
- for(const key of ['catalogPullProgress','libraryUpdateProgress','sdlcCatalog.remoteVersion',
+ for(const key of ['catalogPullProgress','libraryUpdateProgress','resolveLibrarySource',
   'sdlcCatalog.syncGitWorkspace','refreshDashboard',
   "progress('completed',100","progress('failed',completedStage"])
   assert.ok(segment.includes(key),key);
@@ -115,4 +116,12 @@ test('Host progress reflects actual pull and verification milestones before comp
  assert.match(host,/case 'libraryUpdateRetry':/);
  assert.match(host,/activeLibraryUpdatePullRequestId===msg.requestId/);
  assert.match(ui,/m.type==='catalogPullProgress'/);
+});
+
+test('Missing verified Library delegates optional offers to the required update gate',()=>{
+ const x=fixture();x.catalogState.activeVerified=false;
+ x.emit({type:'libraryUpdateOffer',requestId:'required',remoteVersion:'1.1.15'});
+ assert.equal(x.node('libraryUpdateModal').classList.contains('hidden'),true);
+ assert.deepEqual(x.messages,[{command:'libraryUpdateDecision',requestId:'required',action:'Later'}]);
+ assert.deepEqual(x.gateCalls,['required']);
 });

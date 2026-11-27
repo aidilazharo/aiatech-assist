@@ -31,12 +31,12 @@ test('GitHub library updates compare validated SemVer, never commit SHA',()=>{
   {installed:'v1.1.12',remote:'v1.1.15',message:'A newer verified SDLC Library version is available.'});
 });
 test('pinned GitHub VERSION is checked for all update polls, including non-ZIP checkouts',()=>{
- assert.match(source,/const info=await sdlcCatalog\.remoteVersion\(config,token\)/);
+ assert.match(source,/const \{remote:info\}=await resolveLibrarySource\(config,\{interactive\}\)/);
  assert.doesNotMatch(source,/const info=currentZip\?await sdlcCatalog\.remoteVersion/);
  assert.match(source,/libraryUpdateVersion\.compareInstalledRelease\(installedCatalog,libraryRelease\)/);
  assert.match(source,/installedVersion:comparison\.installed,\s*remoteVersion:comparison\.remote/);
  assert.match(source,/libraryLatest:libraryLatest\?\.version\|\|''/);
- assert.match(source,/catalogRemote=null;catalogLastError=error\.message/);
+ assert.match(source,/catalogRemote=null;catalogLastError=librarySourceFallback\.safeMessage\(error\)/);
 });
 test('available version and update modal are strictly versions, no SHA as a version',()=>{
  const block=ui.slice(ui.indexOf("if(message.type!=='libraryUpdateOffer'"),ui.indexOf("let displayedExtensionUpgrade=null"));

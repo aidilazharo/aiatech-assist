@@ -39,7 +39,7 @@ test('startup and explicit checks re-offer newer releases while hourly checks de
 test('Pull Library uses verified Git main and cannot activate obsolete ZIP archives',()=>{
  const host=read('src/lib/runtime/extension-runtime.js');
  const pull=host.slice(host.indexOf("case 'catalogPull':{"),host.indexOf("case 'openingSelect':{"));
- assert.match(pull,/sdlcCatalog\.remoteVersion\(config,token\)/);
+ assert.match(pull,/resolveLibrarySource\(config,\{interactive:true,onFallback:/);
  assert.match(pull,/sdlcCatalog\.syncGitWorkspace\(config,token,workspace/);
  assert.match(pull,/active\.version!==remote\.version\|\|active\.sha!==remote\.sha/);
  assert.doesNotMatch(pull,/importZip|inspectZip|downloadVerified\(release/);
