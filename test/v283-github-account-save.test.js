@@ -6,6 +6,7 @@ const os=require('node:os');
 const path=require('node:path');
 const Module=require('node:module');
 const {normalizeExtensionSettings}=require('../src/projects');
+const {scopedSettingsKey}=require('../src/workspace-memory');
 const read=file=>require('node:fs').readFileSync(path.join(__dirname,'..',file),'utf8');
 async function until(fn){for(let i=0;i<350;i++){if(fn())return;await new Promise(resolve=>setTimeout(resolve,10));}throw Error('Timed out waiting for GitHub test or save');}
 
@@ -53,7 +54,10 @@ test('GitHub can store a verified account PAT without choosing a repository, and
   handler({command:'saveGithub',settings:{owner:'',repo:'',branch:''}});
   await until(()=>messages.some(m=>m.type==='settingsSaved'&&m.section==='github'));
   assert.ok([...secrets.values()].some(v=>JSON.parse(v).token==='ghp-account'));
-  assert.ok(globalState.has('atgvAssist.extensionSettings'));
+  const settingsKey=scopedSettingsKey(folder,'atgvAssist.extensionSettings');
+  assert.ok(globalState.has(settingsKey),'settings are persisted for the current workspace');
+  assert.equal(globalState.has('atgvAssist.extensionSettings'),false,'account settings must not leak to global storage');
+  assert.equal(normalizeExtensionSettings(globalState.get(settingsKey)).github.repo,'');
   const saved=messages.find(m=>m.type==='settingsSaved'&&m.section==='github');
   assert.match(saved.message,/credentials saved/);
   assert.ok(!messages.some(m=>m.type==='notice'&&/GitHub account.*saved/.test(m.message)),'saving does not duplicate the inline status');

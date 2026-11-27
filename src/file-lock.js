@@ -2,11 +2,22 @@
 const fs = require('node:fs/promises');
 const crypto = require('node:crypto');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+// Windows can report EPERM/EBUSY/EACCES while another handle is closing.
+const transient = e => ['EPERM', 'EBUSY', 'EACCES'].includes(e?.code);
+async function retryFilesystem(fn) {
+    for (let attempt = 0; ; attempt++) {
+        try { return await fn(); }
+        catch (e) {
+            if (!transient(e) || attempt >= 7) throw e;
+            await delay(25 + attempt * 25);
+        }
+    }
+}
 async function lockFile(file) {
     const name = file + '.lock', token = crypto.randomUUID();
     for (let attempt = 0; attempt < 16; attempt++) {
         try {
-            const handle = await fs.open(name, 'wx', 0o600);
+            const handle = await retryFilesystem(() => fs.open(name, 'wx', 0o600));
             try {
                 await handle.writeFile(JSON.stringify({ pid: process.pid, token, created: Date.now() }));
             }
@@ -15,10 +26,12 @@ async function lockFile(file) {
             }
             return async () => {
                 try {
-                    const current = JSON.parse(await fs.readFile(name, 'utf8'));
-                    if (current.token !== token)
-                        throw Error('Lock ownership changed.');
-                    await fs.rm(name);
+                    await retryFilesystem(async () => {
+                        const current = JSON.parse(await fs.readFile(name, 'utf8'));
+                        if (current.token !== token)
+                            throw Error('Lock ownership changed.');
+                        await fs.rm(name);
+                    });
                 }
                 catch (e) {
                     if (e.code !== 'ENOENT')
@@ -29,12 +42,12 @@ async function lockFile(file) {
         catch (e) {
             if (e.code !== 'EEXIST')
                 throw e;
-            const st = await fs.lstat(name).catch(err => err.code === 'ENOENT' ? null : Promise.reject(err));
+            const st = await retryFilesystem(() => fs.lstat(name)).catch(err => err.code === 'ENOENT' ? null : Promise.reject(err));
             if (!st)
                 continue;
             if (!st.isFile() || st.isSymbolicLink())
                 throw Error('Unsafe lock path.');
-            const value = await fs.readFile(name, 'utf8').then(JSON.parse).catch(() => null);
+            const value = await retryFilesystem(() => fs.readFile(name, 'utf8')).then(JSON.parse).catch(err => { if (err instanceof SyntaxError || err.code === 'ENOENT') return null; throw err; });
             const age = Date.now() - (value?.created || st.mtimeMs);
             let alive = false;
             if (Number.isInteger(value?.pid) && value.pid > 0) {
@@ -48,9 +61,11 @@ async function lockFile(file) {
                 }
             }
             if (age > 60000 && !alive) {
-                const current = await fs.lstat(name).catch(() => null);
-                if (current && current.ino === st.ino && current.mtimeMs === st.mtimeMs)
-                    await fs.rm(name, { force: true });
+                await retryFilesystem(async () => {
+                    const current = await fs.lstat(name).catch(err => err.code === 'ENOENT' ? null : Promise.reject(err));
+                    if (current && current.isFile() && !current.isSymbolicLink() && current.ino === st.ino && current.mtimeMs === st.mtimeMs)
+                        await fs.rm(name, { force: true });
+                });
                 continue;
             }
             if (attempt === 15)
