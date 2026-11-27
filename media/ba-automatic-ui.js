@@ -449,6 +449,8 @@
  function renderSectionProgress(id,percent,status){
   const badgeNode=get(id+'Badge');
   let wrap=get(id+'Progress');
+  // Completed sections keep only their status badge; recreate progress if reopened.
+  if(percent>=100){wrap?.remove();return;}
   if(!wrap){
    wrap=document.createElement('span');wrap.id=id+'Progress';wrap.className='ba-auto-section-progress';
    Object.assign(wrap.style,{display:'inline-flex',alignItems:'center',gap:'8px',flex:'1 1 90px',minWidth:'48px',marginInline:'8px'});
