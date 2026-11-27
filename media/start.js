@@ -3415,6 +3415,8 @@ window.addEventListener('message',event=>{
 
 // BR-first autonomous Developer workflow. Jira issue linkage is derived from the selected BR.
 let developerBrProjectId='',developerBrSelected='',developerBrBusy=false,developerBrStage='idle',developerBrDone=false,developerBrTab='logs',developerBrRecovery=null,developerBrPreviewOnly=false;
+const developerRecoveryController=window.ATGVRecoveryController?.create({maxStagnant:2,maxActions:8});
+let developerRecoveryJob=null,developerRecoveryTimer=null;
 // A draft uses only its actual preview phases. TDD, unit-test and build circles must never be reported as passed.
 const developerBrDraftPhases=['analyze','plan','local','verify'];
 let developerBrDraftPhase='analyze',developerBrDraftReady=false,developerBrInitial=false,developerBrInitialReady=false;
@@ -3569,6 +3571,7 @@ function setCurrentDeveloperJira({jiraKey='',criterionId='',epicJiraKey=''}={}){
 }
 $('developerBrCurrentJira').addEventListener('click',()=>{if(developerBrJiraKey)openJiraIssueModal(developerBrJiraKey);});
 function resetDeveloperBr(stage='idle'){
+ finishDeveloperRecovery(true,'Development context reset.');
  developerBrJiraKey='';developerBrJiraCriterion='';developerBrEpicKey='';setCurrentDeveloperJira();
  developerBrRecovery=null;developerBrPreviewOnly=false;$('developerBrRecoveryHistory').textContent='No repair attempts recorded.';developerBrDraftPhase='analyze';developerBrDraftReady=false;developerBrInitial=false;developerBrInitialReady=false;
  updateDeveloperIssueStats(null);
@@ -3728,8 +3731,51 @@ $('developerBrSelect').addEventListener('change',()=>{
  resetDeveloperBr();developerBrTab='logs';renderDeveloperBrChoices();if(developerBrSelected){send('developerBrLogs',{brId:developerBrSelected});send('developerBrRecoveryInfo',{brId:developerBrSelected});}
  if(typeof renderWorkspaceBreadcrumbs==='function')renderWorkspaceBreadcrumbs();
 });
+function developerRecoveryContext(){
+ const br=developerEligibleBRs(roleBrState||brState,developerAssignedMine).find(item=>item.id===developerBrSelected);
+ const owned=roleJiraLoaded&&roleJiraProject===activeId&&roleJiraRole==='software-developer'&&roleJiraItems.some(item=>item.brRoot&&item.brId===developerBrSelected&&item.roleScopes?.['software-developer']?.mine&&item.roleScopes['software-developer'].count>0);
+ return {project:activeId,br:developerBrSelected,revision:br?.approvedRevision,eligible:!!br&&!!owned&&selectedRole==='software-developer'&&view==='work'&&!developerBrPreviewOnly&&!developerArtifactDirty};
+}
+function developerRecoveryScope(job){return JSON.stringify([job.project,job.br,job.revision]);}
+function clearDeveloperRecoveryTimer(){if(developerRecoveryTimer!==null){clearTimeout(developerRecoveryTimer);developerRecoveryTimer=null;}}
+function finishDeveloperRecovery(paused=false,reason=''){
+ const job=developerRecoveryJob;if(!job)return;
+ clearDeveloperRecoveryTimer();const scope=developerRecoveryScope(job);
+ developerRecoveryController?.finish(scope,{failed:paused,reason});
+ if(!paused)developerRecoveryController?.complete(scope);
+ developerRecoveryJob=null;
+}
+function startDeveloperRecoverySession(){
+ if(!developerRecoveryController||!window.ATGVDeveloperRecovery)return;
+ const context=developerRecoveryContext();if(!context.eligible)return;
+ const job={...context,phase:'running',stage:'',error:'',attempt:0};
+ developerRecoveryController.resume(developerRecoveryScope(job));developerRecoveryJob=job;
+}
+function scheduleDeveloperRecovery(info){
+ const job=developerRecoveryJob;if(!job||job.phase!=='checking')return;
+ clearDeveloperRecoveryTimer();
+ const proof=window.ATGVDeveloperRecovery.evidence(info,job,developerRecoveryContext());
+ if(!proof){finishDeveloperRecovery(true,'No verified automatic recovery path.');developerBrBusy=false;return;}
+ if(!developerRecoveryController.begin(developerRecoveryScope(job),proof)){
+  finishDeveloperRecovery(true,'Repeated unsuccessful recovery.');developerBrBusy=false;$('developerBrStatus').textContent='Auto-repair paused — review required. No sufficient verified progress; review repair history.';return;
+ }
+ job.phase='waiting';developerBrBusy=true;developerBrDone=false;
+ $('developerBrStatus').textContent='AI recovery · '+info.criterion+' · Resuming verified TDD checkpoint…';renderDeveloperBrStages();
+ developerRecoveryTimer=setTimeout(()=>{
+  developerRecoveryTimer=null;
+  if(developerRecoveryJob!==job)return;
+  if(!window.ATGVDeveloperRecovery.sameScope(job,developerRecoveryContext())||developerBrStopping){
+   finishDeveloperRecovery(true,'Project, assignment, or BR revision changed.');developerBrBusy=false;renderDeveloperBrStages();return;
+  }
+  job.phase='running';job.attempt++;developerBrStage='analyze';
+  $('developerBrStatus').textContent='AI recovery '+job.attempt+' · Rechecking locked tests and resuming '+info.criterion+'…';
+  renderDeveloperBrStages();send('developerBrRun',{brId:job.br,fromInitial:false});
+ },Math.min(10000,2000*Math.pow(2,Math.min(job.attempt,2))));
+}
 function stopDeveloperBr(){
  if(developerBrStopping||!developerBrSelected||!(developerBrBusy||developerBrServerRunning||developerBrServerBusy))return;
+ if(developerRecoveryJob&&['waiting','checking'].includes(developerRecoveryJob.phase)){finishDeveloperRecovery(true,'Stopped by developer.');developerBrBusy=false;developerBrStage='needs-attention';$('developerBrStatus').textContent='AI recovery stopped. Verified checkpoint retained.';renderDeveloperBrStages();return;}
+ finishDeveloperRecovery(true,'Stopped by developer.');
  developerBrStopping=true;
  $('developerBrStatus').textContent='Stopping development and the generated application server…';
  renderDeveloperBrStages();send('developerBrStop',{brId:developerBrSelected});
@@ -3752,7 +3798,7 @@ $('developerBrStart').addEventListener('click',()=>{
  const fromInitial=developerBrInitial&&developerBrInitialReady&&developerBrServerRunning;
  const tdd=fromInitial||developerBrPreviewOnly&&developerBrDraftReady||!developerBrPreviewOnly&&(['needs-attention','failed','stopped'].includes(developerBrStage)||developerBrRecovery?.available);
  resetDeveloperBr('analyze');developerBrBusy=true;developerBrStage='analyze';
- if(tdd){$('developerBrStatus').textContent='Checking approved BR and starting TDD…';renderDeveloperBrStages();send('developerBrRun',{brId:developerBrSelected,fromInitial});}
+ if(tdd){startDeveloperRecoverySession();$('developerBrStatus').textContent='Checking approved BR and starting TDD…';renderDeveloperBrStages();send('developerBrRun',{brId:developerBrSelected,fromInitial});}
  else{developerBrInitial=true;developerBrPreviewOnly=true;$('developerBrStatus').textContent='Implementing initial development without tests or production build…';renderDeveloperBrStages();send('developerBrPreviewDraft',{brId:developerBrSelected,initial:true});}
 });
 $('developerBrStop').addEventListener('click',stopDeveloperBr);
@@ -3801,6 +3847,7 @@ function onDeveloperBrMessage(msg){
   $('developerBrRecoveryHistory').textContent=show?((info.events||[]).map(row=>`${row.at||''} · ${row.criterion||''} · ${row.phase||''} · ${row.outcome||''} · attempt ${row.attempt||0} · ${row.model||'auto'}
 ${row.message||''}`).join('\n\n')||info.lastError||'No repair attempts recorded.'):'No repair attempts recorded.';
   if(show&&info.available&&!developerBrPreviewOnly&&!developerBrBusy&&!developerBrDone){developerBrStage='needs-attention';developerBrFailedAt='green';$('developerBrStatus').textContent='Recovery ready: '+info.criterion+'. '+(info.lastError?'Last failure: '+String(info.lastError).slice(0,220):'Verified source and repair history preserved.');}
+  if(developerRecoveryJob?.phase==='checking')scheduleDeveloperRecovery(info);
   renderDeveloperBrStages();return true;
  }
  if(msg.type==='developerBrAssignmentResult'){
@@ -3825,7 +3872,7 @@ ${row.message||''}`).join('\n\n')||info.lastError||'No repair attempts recorded.
    developerBrStage=phase;
   }else developerBrStage=msg.stage==='test'?'tests':['code','repair'].includes(msg.stage)?'green':msg.stage==='complete'?'verify':msg.stage;
   developerBrDone=msg.stage==='complete'&&!developerBrPreviewOnly;
-  if(msg.stage==='complete'){developerBrStopping=false;developerBrServerRunning=true;developerBrServerBusy=false;}
+  if(msg.stage==='complete'){finishDeveloperRecovery();developerBrStopping=false;developerBrServerRunning=true;developerBrServerBusy=false;}
   if(msg.branch)developerBrBranch=msg.branch;
   if(msg.worktree)developerBrWorktree=msg.worktree;
   if(Array.isArray(msg.files))developerBrFiles=msg.files;
@@ -3854,10 +3901,21 @@ ${row.message||''}`).join('\n\n')||info.lastError||'No repair attempts recorded.
   if(msg.canRetry===true)developerBrCanRetry=true;
   $('developerBrStatus').textContent=(msg.stage==='needs-attention'?'Auto-repair paused — review required':msg.stage==='stopped'?'Generation stopped':'Generation failed')+': '+String(msg.message||'Unknown error');
   developerBrActivity.push((msg.stage==='needs-attention'?'NEEDS ATTENTION':'ERROR')+' · '+String(msg.message||''));
+  if(developerRecoveryJob){
+   const job=developerRecoveryJob;
+   if(!developerBrPreviewOnly&&job.phase==='running'&&msg.stage!=='stopped'&&window.ATGVDeveloperRecovery.sameScope(job,developerRecoveryContext())){
+    developerRecoveryController.finish(developerRecoveryScope(job));job.stage=developerBrStage;job.error=String(msg.message||'');job.phase='checking';
+    // Hold the stop control while the host reads persisted recovery evidence.
+    developerBrBusy=true;
+    clearDeveloperRecoveryTimer();developerRecoveryTimer=setTimeout(()=>{if(developerRecoveryJob===job&&job.phase==='checking'){finishDeveloperRecovery(true,'Recovery evidence timed out.');developerBrBusy=false;renderDeveloperBrStages();$('developerBrStatus').textContent='Auto-repair paused — recovery evidence unavailable.';}},15000);
+   }else finishDeveloperRecovery(true,'Operation stopped or context changed.');
+  }
   if(developerBrSelected&&!developerBrPreviewOnly)send('developerBrRecoveryInfo',{brId:developerBrSelected});
  }else if(msg.type==='developerBrCancelled'){
+  finishDeveloperRecovery(true,'Cancelled by developer.');
   developerBrStopping=false;developerBrBusy=false;developerBrServerBusy=false;developerBrStage='idle';if(developerBrPreviewOnly)developerBrDraftReady=false;$('developerBrStatus').textContent=msg.message||'Cancelled.';
  }else if(msg.type==='developerBrStopped'){
+  finishDeveloperRecovery(true,'Stopped by developer.');
   developerBrStopping=!!msg.pending;developerBrUrl='';developerBrDone=false;developerBrBusy=!!msg.pending;developerBrServerRunning=false;developerBrServerBusy=false;developerBrCanRetry=developerBrCanRetry||developerBrEvidence.length>0;
   if(developerBrPreviewOnly){developerBrDraftReady=false;developerBrDraftPhase='local';}
   if(developerBrCanRetry&&!msg.pending)developerBrStage='server-stopped';
@@ -3891,6 +3949,7 @@ ${row.message||''}`).join('\n\n')||info.lastError||'No repair attempts recorded.
   if(msg.opened===false)$('developerBrStatus').textContent='Local server is running, but the external browser did not open. Use Open Browser to retry.';
   else developerBrActivity.push(new Date().toLocaleTimeString()+' · External browser opened for '+String(msg.url||'local application'));
  }else if(msg.type==='developerBrActionError'){
+  finishDeveloperRecovery(true,'Server action failed.');
   developerBrStopping=false;developerBrServerBusy=false;developerBrBusy=false;developerBrServerRunning=false;developerBrDone=false;
   developerBrStage=developerBrCanRetry?'server-stopped':'failed';
   $('developerBrStatus').textContent='Server action failed: '+String(msg.message||'Review Server Logs.');
