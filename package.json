@@ -196,7 +196,7 @@
     "terser": "5.31.6"
   },
   "scripts": {
-    "test": "node scripts/generate-source-test-index.js && node --require ./test/local-network-only.js --test test/*.test.js",
+    "test": "node scripts/run-test-groups.js",
     "ui:generate": "node scripts/generate-ui-theme.js",
     "ui:check": "node scripts/generate-ui-theme.js --check",
     "platform:check": "node scripts/check-platform.js",
@@ -205,7 +205,19 @@
     "vendor:offline": "node scripts/vendor-offline.js",
     "vendor:local": "node scripts/vendor-local-launcher.js",
     "service:start": "node service/server.js",
-    "service:user": "node scripts/create-service-user.js"
+    "service:user": "node scripts/create-service-user.js",
+    "test:all": "node scripts/run-test-groups.js all",
+    "test:audit": "node scripts/run-test-groups.js --audit",
+    "test:smoke": "node scripts/run-test-groups.js smoke",
+    "test:unit": "node scripts/run-test-groups.js unit",
+    "test:ui": "node scripts/run-test-groups.js ui",
+    "test:integration": "node scripts/run-test-groups.js integration",
+    "test:security": "node scripts/run-test-groups.js security",
+    "test:e2e": "node scripts/run-test-groups.js e2e",
+    "test:performance": "node scripts/run-test-groups.js performance",
+    "test:platform": "node scripts/run-test-groups.js platform",
+    "test:recovery": "node scripts/run-test-groups.js recovery",
+    "test:regression": "node scripts/run-test-groups.js regression"
   },
   "capabilities": {
     "untrustedWorkspaces": {
