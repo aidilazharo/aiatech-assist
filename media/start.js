@@ -987,7 +987,7 @@ function renderCatalog(state,{forceFields=false}={}){
  $('catalogToken').placeholder=state.credentialSaved?'Token saved securely; leave blank to retain':'Read-only token with Contents: Read';
  const installed=state.installed;settingsCatalogInstalled=installed||null;updateExtensionSettingBadges();
  $('catalogInstalled').textContent=installed?
-  `Installed SDLC Catalogue v${installed.version} · Git SHA ${String(installed.sha||'').slice(0,12)} · ${installed.repository||'GitHub'}`:'No downloaded catalogue yet.';
+  `Installed SDLC Catalogue v${installed.version}`:'No downloaded catalogue yet.';
  const counts=$('catalogContents');counts.replaceChildren();
  for(const [label,value] of [['Role skills',installed?.roleCount],['Tech stacks',installed?.stackCount],['Workflows',installed?.workflows],['Templates',installed?.templates]]){
   const span=document.createElement('span');span.textContent=`${label}: ${value??'—'}`;counts.append(span);
@@ -5388,7 +5388,7 @@ $('pullLibraryFiles').addEventListener('click',()=>{
  if(softwareLibraryPulling||!!catalogBusyUI||!!catalogState?.busy)return;
  renderSoftwareLibraryPullProgress({stage:'running',percent:0,
   title:'Checking selected GitHub Library source…',
-  message:'Verifying the selected organization’s Library main branch first, using the fixed ATGV release sources for update discovery. No downgrades.'});
+  message:'Verifying the latest available Library. No downgrades.'});
  send('catalogPull');
 });
 $('viewExtensionRelease').addEventListener('click',()=>send('viewExtensionRelease'));

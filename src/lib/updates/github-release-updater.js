@@ -131,7 +131,7 @@ async function latestRelease({version,repositoryUrl=DEFAULT_RELEASE_URL,request=
  const {repo,releases}=await fetchReleaseList({repositoryUrl,request});
  return selectRelease(releases,version,repo.url,{includeCurrent});
 }
-async function latestAcrossRepositories({version,request=getBytes,includeCurrent=true}={}){
+async function latestAcrossRepositories({version,request=getBytes,includeCurrent=true,verifyAccess=false,exactVersion='',excludeRepository=''}={}){
  const results=await Promise.allSettled(RELEASE_REPOSITORIES.map(repository=>fetchReleaseList({repositoryUrl:`https://github.com/${repository}/releases/latest`,request})));
  const errors=results.flatMap((result,index)=>result.status==='rejected'?[RELEASE_REPOSITORIES[index]+': '+String(result.reason?.message||result.reason)]:[]);
  if(errors.length===results.length)throw Error('Cannot check ATGV extension releases: '+errors.join('; '));
@@ -147,8 +147,19 @@ async function latestAcrossRepositories({version,request=getBytes,includeCurrent
  found.sort((a,b)=>compareVersion(b.version,a.version)||b.build-a.build||((Date.parse(b.publishedAt)||0)-(Date.parse(a.publishedAt)||0))||RELEASE_REPOSITORIES.indexOf(a.repository)-RELEASE_REPOSITORIES.indexOf(b.repository));
  const newest=found[0];
  if(!newest)return {release:null,latest:null,errors};
- const release=selectRelease([newest.row],version,newest.releaseUrl,{includeCurrent});
- return {release,latest:{version:newest.version,tag:newest.tag,url:newest.url,repository:newest.repository,publishedAt:newest.publishedAt,installable:!!release},errors};
+ let release=selectRelease([newest.row],version,newest.releaseUrl,{includeCurrent});
+ if(verifyAccess){
+  release=null;const seen=new Set();
+  for(const candidate of found){
+   if(compareVersion(candidate.version,version)<0||(exactVersion&&candidate.version!==exactVersion)||candidate.repository===excludeRepository)continue;
+   const key=candidate.repository+'|'+candidate.tag;if(seen.has(key))continue;seen.add(key);
+   const next=selectRelease([candidate.row],version,candidate.releaseUrl,{includeCurrent});
+   if(!next)continue;
+   try{await assertReleaseAccessible(next,{request});release=next;break;}
+   catch{errors.push('A release package is unavailable.');}
+  }
+ }
+ return {release,latest:{version:newest.version,tag:newest.tag,url:newest.url,repository:newest.repository,publishedAt:newest.publishedAt,installable:!!release&&release.repository===newest.repository&&release.tag===newest.tag},errors};
 }
 function verifyChecksum(checksumBytes,assetBytes,filename){
  const lines=checksumBytes.toString('utf8').split(/\r?\n/);
@@ -207,5 +218,13 @@ async function assertReleaseAccessible(release,{request=getBytes}={}){
  }))throw Error('Release checksum file is invalid.');
  return true;
 }
-function authorizedRequest(token){return (url,options={})=>getBytes(url,{...options,token});}
+function authorizedRequest(token,request=getBytes){return async(url,options={})=>{
+ try{return await request(url,{...options,token});}
+ catch(error){
+  const u=new URL(url);
+  const publicRelease=u.hostname==='api.github.com'&&['aidilazharo/aiatech-assist','aidilazharo/tech-stacks-skills'].some(repo=>u.pathname==='/repos/'+repo+'/releases'||u.pathname.startsWith('/repos/'+repo+'/releases/'));
+  if(!token||!publicRelease||!require('./library-source-fallback').accessFailure(error))throw error;
+  return request(url,{...options,token:''});
+ }
+};}
 module.exports={assertReleaseAccessible,authorizedRequest,REPO,RELEASE_REPOSITORIES,API,DEFAULT_RELEASE_URL,PINNED_RELEASE_URL,parseRepositoryUrl,releaseUrlForRepository,parseVersion,compareVersion,selectRelease,verifyChecksum,latestRelease,latestAcrossRepositories,downloadVerified,getBytes};

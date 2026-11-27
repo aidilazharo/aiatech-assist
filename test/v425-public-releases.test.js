@@ -95,3 +95,34 @@ test('newer development release wins and an unavailable mirror does not block ch
  assert.equal(extension.release.repository,'aidilazharo/aiatech-assist');assert.equal(extension.latest.publishedAt,'2026-11-27T01:00:00Z');assert.equal(extension.errors.length,1);
  assert.equal(library.release.repository,'aidilazharo/tech-stacks-skills');assert.equal(library.errors.length,1);
 });
+
+test('extension preflight falls back when the highest candidate is inaccessible, never below installed version',async()=>{
+ const other='aidilazharo/aiatech-assist',mirror=ext.REPO;
+ const rows={
+  [mirror]:[release(mirror,'v0.4.26',['atgv-aiatech-assist-0.4.26.vsix','vsix.sha256'])],
+  [other]:[release(other,'v0.4.25',['atgv-aiatech-assist-0.4.25.vsix','vsix.sha256'])]
+ };
+ const request=async(url,options)=>{
+  const repository=url.match(/repos\/([^/]+\/[^/]+)\/releases/)[1];
+  if(url.includes('/assets/')){
+   if(repository===mirror)throw Error('HTTP 404');
+   return url.endsWith('/1')?Buffer.from([80,75,3,4]):Buffer.from('a'.repeat(64)+'  atgv-aiatech-assist-0.4.25.vsix\n');
+  }
+  if(url.endsWith('/latest'))throw Error('No stable release');
+  return Buffer.from(JSON.stringify(rows[repository]));
+ };
+ const result=await ext.latestAcrossRepositories({version:'0.4.24',request,verifyAccess:true});
+ assert.equal(result.latest.version,'0.4.26');assert.equal(result.latest.installable,false);
+ assert.equal(result.release.repository,other);assert.equal(result.release.version,'0.4.25');
+ const blocked=await ext.latestAcrossRepositories({version:'0.4.26',request,verifyAccess:true});
+ assert.equal(blocked.release,null);
+ const exact=await ext.latestAcrossRepositories({version:'0.4.25',exactVersion:'0.4.25',excludeRepository:mirror,request,verifyAccess:true});
+ assert.equal(exact.release.repository,other);
+});
+test('public release API retries anonymously on access failure only for the allowlisted public sources',async()=>{
+ const calls=[];
+ const request=ext.authorizedRequest('secret',async(url,options)=>{calls.push([url,options.token]);if(options.token)throw Error('HTTP 404');return Buffer.from('ok');});
+ const pub='https://api.github.com/repos/aidilazharo/aiatech-assist/releases/latest',priv='https://api.github.com/repos/'+ext.REPO+'/releases/latest';
+ await request(pub);await assert.rejects(request(priv),/HTTP 404/);
+ assert.deepEqual(calls,[[pub,'secret'],[pub,''],[priv,'secret']]);
+});

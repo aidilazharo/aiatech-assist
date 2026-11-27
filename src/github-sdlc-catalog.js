@@ -641,7 +641,7 @@ async function recoverStagedGitCatalog(root, remoteUrl, repository, git) {
 // preserve the WHOLE checkout (including its .git history and untracked files)
 // before activating a clean verified main. No stash, reset --hard or deletion of
 // the user's checkout is performed. Backups are outside the active catalog.
-async function preserveDirtyGitCatalog({workspace,root,target,remoteUrl,repository,git,token,originalSha,options={}}) {
+async function preserveDirtyGitCatalog({workspace,root,target,remoteUrl,repository,git,token,originalSha,options={},originalRemoteUrl=remoteUrl,sourceSwitch=false}) {
     const report=async(percent,title,message)=>{
         if(typeof options.onProgress==='function'){
             // A disposed webview must never make an otherwise verified library
@@ -673,12 +673,12 @@ async function preserveDirtyGitCatalog({workspace,root,target,remoteUrl,reposito
         const current=await fs.lstat(target);
         if(!current.isDirectory()||current.isSymbolicLink())
             throw Error('The original Library folder changed while the new catalog was prepared.');
-        if(!sameGitRemote(await git(target,['remote','get-url','origin']),remoteUrl)||
+        if(!sameGitRemote(await git(target,['remote','get-url','origin']),originalRemoteUrl)||
            await git(target,['branch','--show-current'])!=='main'||
            await git(target,['rev-parse','HEAD'])!==originalSha)
             throw Error('The original catalog revision or branch changed during download. Retry the update.');
         const status=await git(target,['status','--porcelain','--untracked-files=all']);
-        if(!status)throw Error('The original catalog no longer has local changes. Retry the normal fast-forward pull.');
+        if(!status&&!sourceSwitch)throw Error('The original catalog no longer has local changes. Retry the normal fast-forward pull.');
         await report(60,'Preserving local catalog changes','Moving the entire modified checkout to a private, separate backup folder.');
         if(!existingBackupRoot)await fs.mkdir(backupRoot,{mode:0o700});
         const backupStat=await fs.lstat(backupRoot);
@@ -765,8 +765,18 @@ async function syncGitCatalogCheckout(workspace, remoteUrl, repository, token=''
         }
         if (!existing.isDirectory() || existing.isSymbolicLink()) throw Error('Existing library is not a safe directory.');
         const origin = await git(target, ['remote', 'get-url', 'origin']);
-        if (!sameGitRemote(origin, remoteUrl))
+        if (!sameGitRemote(origin, remoteUrl)) {
+            // Only the approved mirror-to-public fallback may switch origins. Keep the entire old checkout, including local edits and Git history.
+            const fallback=require('./lib/updates/library-source-fallback');
+            if(options.allowApprovedFallback===true&&options.expectedSha&&sameGitRemote(origin,fallback.PRIMARY)&&sameGitRemote(remoteUrl,fallback.FALLBACK)){
+                const saved=await gitInstalled(workspace,{repositoryUrl:fallback.PRIMARY});
+                const branch=await git(target,['branch','--show-current']);
+                const originalSha=await git(target,['rev-parse','HEAD']);
+                if(!saved?.checkout||saved.sha!==originalSha||branch!=='main')throw Error('Original Library checkout could not be verified. No files changed.');
+                return preserveDirtyGitCatalog({workspace,root,target,remoteUrl,repository,git,token,originalSha,options,originalRemoteUrl:origin,sourceSwitch:true});
+            }
             throw Error('Library remote does not match the configured GitHub repository. No files changed.');
+        }
         const branch = await git(target, ['branch', '--show-current']);
         if (branch !== 'main') throw Error('Library must remain on the main branch. No files changed.');
         const dirty = await git(target, ['status', '--porcelain', '--untracked-files=all']);

@@ -30,9 +30,9 @@ test('runtime uses chosen GitHub source main and never attributes one organizati
  const end=host.indexOf("case 'openingSelect':{",start);
  assert.ok(start>0&&end>start);
  const pull=host.slice(start,end);
- assert.match(pull,/const config=catalogConfig\(\)/);
- assert.match(pull,/sdlcCatalog\.remoteVersion\(config,token\)/);
- assert.match(pull,/sdlcCatalog\.syncGitWorkspace\(config,token,workspace,context\.globalStorageUri\.fsPath,\{expectedSha:remote\.sha\}\)/);
+ assert.match(pull,/let config=catalogConfig\(\)/);
+ assert.match(pull,/resolveLibrarySource\(config,/);
+ assert.match(pull,/sdlcCatalog\.syncGitWorkspace\(config,token,workspace,context\.globalStorageUri\.fsPath,\{expectedSha:remote\.sha,allowApprovedFallback:resolved\.fallback\}\)/);
  assert.match(pull,/libraryUpdateVersion\.compareInstalledRemote\(installed\.version,remote\.version\)/);
  assert.doesNotMatch(pull,/libraryUpdateVersion\.compareInstalledRelease\(installed,release\)/);
  assert.doesNotMatch(pull,/config\.repositoryUrl!==startupSetup\.SOURCE_REPOS\.aidilazharo\.library/);
