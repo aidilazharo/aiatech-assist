@@ -7,6 +7,7 @@
 <style>
 :root{color-scheme:light dark;--accent:#d31145;--muted:#707780;--line:#8884;--panel:#8881}*{box-sizing:border-box}body{font:15px/1.55 system-ui,sans-serif;max-width:1080px;margin:auto;padding:32px 20px}header{border-top:4px solid var(--accent);padding-top:18px;margin-bottom:28px}h1{font-size:clamp(24px,5vw,36px);margin:0}h2{font-size:19px;margin:26px 0 10px}p{margin:8px 0}small,.muted{color:var(--muted)}a{color:inherit;text-decoration-color:var(--accent);text-underline-offset:3px}.meta{display:flex;flex-wrap:wrap;gap:12px 24px;margin-top:12px}.panel{border:1px solid var(--line);border-radius:8px;padding:16px;background:var(--panel)}table{border-collapse:collapse;width:100%;text-align:left}th,td{padding:12px 10px;border-bottom:1px solid var(--line);vertical-align:top}th{font-size:13px}td:first-child{white-space:nowrap}td:last-child{overflow-wrap:anywhere}.scroll{overflow-x:auto}.tag{font-size:12px;font-weight:600}.open{color:#b45309}@media(prefers-color-scheme:dark){.open{color:#fbbf24}}footer{border-top:1px solid var(--line);margin-top:30px;padding-top:12px}
 .review-day{border:1px solid var(--line);border-radius:8px;margin:8px 0;overflow:hidden}.review-day summary{cursor:pointer;padding:13px 16px;font-weight:600;background:var(--panel);list-style-position:inside}.review-day summary:focus-visible{outline:2px solid var(--accent);outline-offset:-3px}.day-today{font-size:12px;color:var(--accent);margin-left:8px}.day-count{float:right;font-size:12px;font-weight:400;color:var(--muted);margin-left:10px}.review-day .scroll{padding:0 8px}.review-day .empty-day{padding:12px 16px}.review-day:not([open]) .day-today:empty{display:none}
+.release-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.release-heading button{font:inherit;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:inherit;padding:6px 12px;cursor:pointer}.release-heading button:disabled{opacity:.5;cursor:wait}#latest-release-rows td{white-space:normal;overflow-wrap:anywhere}
 </style>
 </head>
 <body>
@@ -17,6 +18,14 @@
 <div class="meta"><span><strong>Reporting timezone:</strong> MYT (UTC+8)</span><span><strong>Branch:</strong> main</span><span><strong>Initialized:</strong> 27 November 2026</span></div>
 </header>
 <main>
+<section aria-labelledby="latest-releases"><div class="release-heading"><h2 id="latest-releases">Latest releases</h2><button type="button" id="refresh-releases">Refresh</button></div>
+<p class="muted">Live GitHub release metadata, independently checked for each fixed repository. Published timestamps are in MYT; prereleases are labeled separately. Private repositories may require authorized GitHub access.</p>
+<div class="scroll"><table><thead><tr><th scope="col">Repository</th><th scope="col">Latest version / status</th><th scope="col">Published (MYT)</th><th scope="col">Last checked (MYT)</th></tr></thead><tbody id="latest-release-rows">
+<tr data-repository="aidilazharo/aiatech-assist"><td><strong>ATGV Extension</strong><br><a href="https://github.com/aidilazharo/aiatech-assist/releases/latest">Latest release</a></td><td><span class="release-version"><a href="https://github.com/aidilazharo/aiatech-assist/releases/tag/v0.1.63-local.e54d7999b40a">v0.1.63-local.e54d7999b40a</a></span><br><small class="release-status">Published release</small></td><td class="release-published"><time datetime="2026-11-26T08:48:14Z">26 Nov 2026, 16:48:14 MYT</time></td><td class="release-checked"><time datetime="2026-11-27T04:32:19Z">27 Nov 2026, 12:32:19 MYT</time></td></tr>
+<tr data-repository="aidilazharo/tech-stacks-skills"><td><strong>ATGV Library</strong><br><a href="https://github.com/aidilazharo/tech-stacks-skills/releases/latest">Latest release</a></td><td><span class="release-version"><a href="https://github.com/aidilazharo/tech-stacks-skills/releases/tag/v0.0.11-source-build.53">v0.0.11-source-build.53</a></span><br><small class="release-status">Prerelease only — no stable latest release</small></td><td class="release-published"><time datetime="2026-11-25T23:10:30Z">26 Nov 2026, 07:10:30 MYT</time></td><td class="release-checked"><time datetime="2026-11-27T04:32:19Z">27 Nov 2026, 12:32:19 MYT</time></td></tr>
+<tr data-repository="aiamalaysia/my-fow-technology-app-techassists-dev-sdlc"><td><strong>ATGV Extension (AIA)</strong><br><a href="https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc/releases/latest">Latest release</a></td><td><span class="release-version">Not verified</span><br><small class="release-status">Not accessible or no release (HTTP 404)</small></td><td class="release-published">—</td><td class="release-checked"><time datetime="2026-11-27T04:32:19Z">27 Nov 2026, 12:32:19 MYT</time></td></tr>
+<tr data-repository="aiamalaysia/my-fow-technology-app-techassists-enterprise-skills"><td><strong>ATGV Library (AIA)</strong><br><a href="https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills/releases/latest">Latest release</a></td><td><span class="release-version">Not verified</span><br><small class="release-status">Not accessible or no release (HTTP 404)</small></td><td class="release-published">—</td><td class="release-checked"><time datetime="2026-11-27T04:32:19Z">27 Nov 2026, 12:32:19 MYT</time></td></tr>
+</tbody></table></div><p id="release-refresh-status" class="muted" role="status">Snapshot from GitHub release check.</p></section>
 <section aria-labelledby="status"><h2 id="status">Latest verified workflow</h2><div class="panel"><p><strong>Regression suite failed</strong> — 2,775 passed, 1 failed, 2 skipped (2,778 total). Packaging and release were skipped.</p><p>Source: <a href="https://github.com/aidilazharo/aiatech-assist/actions/runs/45809105804">Workflow #45809105804</a>, commit <a href="https://github.com/aidilazharo/aiatech-assist/commit/b1b510847b24ae452f085eb9f7257bfdf9217723">b1b5108</a>.</p><small>Historical result; all three new SQLite-specific tests passed. New test-only correction committed; Workflow <a href="https://github.com/aidilazharo/aiatech-assist/actions/runs/45919721703">#45919721703</a>: in_progress. No runtime release version change.</small></div></section>
 <section aria-labelledby="activity"><h2 id="activity">Seven-day activity</h2><p class="muted">Today is expanded by default. Select a previous date to view its activity and releases.</p><div id="activity-days">
 <details class="review-day" data-date="2026-11-27" open>
@@ -73,6 +82,50 @@
     const message=document.createElement('p');message.className='empty-day muted';message.textContent='No review activity recorded today yet.';
     summary.append(time,label,count);section.append(summary,message);container.prepend(section);
   }
+})();
+</script>
+<script>
+(function(){
+ 'use strict';
+ const targets=Object.freeze([
+  'aidilazharo/aiatech-assist',
+  'aidilazharo/tech-stacks-skills',
+  'aiamalaysia/my-fow-technology-app-techassists-dev-sdlc',
+  'aiamalaysia/my-fow-technology-app-techassists-enterprise-skills'
+ ]);
+ const button=document.getElementById('refresh-releases'), status=document.getElementById('release-refresh-status');
+ const format=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kuala_Lumpur',dateStyle:'medium',timeStyle:'medium',hour12:false});
+ function time(cell,value){const d=new Date(value);if(!value||!Number.isFinite(d.getTime())){cell.textContent='—';return;}const t=document.createElement('time');t.dateTime=d.toISOString();t.textContent=format.format(d)+' MYT';cell.replaceChildren(t);}
+ function valid(r){return r&&!r.draft&&typeof r.tag_name==='string'&&r.published_at&&Number.isFinite(Date.parse(r.published_at));}
+ async function check(repo){
+  const row=document.querySelector('[data-repository="'+repo+'"]');
+  if(!row)return;
+  const version=row.querySelector('.release-version'), state=row.querySelector('.release-status');
+  const published=row.querySelector('.release-published'),checked=row.querySelector('.release-checked');
+  const api='https://api.github.com/repos/'+repo+'/releases';
+  const options={cache:'no-store',credentials:'omit',headers:{Accept:'application/vnd.github+json'},signal:AbortSignal.timeout(12000)};
+  try{
+   let response=await fetch(api+'/latest',options),release;
+   if(response.ok){release=await response.json();if(!valid(release)||release.prerelease)throw Error('Unexpected latest release metadata');}
+   else if(response.status===404){
+    response=await fetch(api+'?per_page=100',options);
+    if(!response.ok)throw Error('HTTP '+response.status);
+    const list=await response.json();
+    if(!Array.isArray(list))throw Error('Unexpected release list');
+    const candidates=list.filter(valid).sort((a,b)=>Date.parse(b.published_at)-Date.parse(a.published_at));
+    release=candidates.find(r=>!r.prerelease)||candidates[0];
+    if(!release){version.textContent='No published release';state.textContent='No release available';time(published,null);return;}
+   }else throw Error('HTTP '+response.status);
+   const link=document.createElement('a');link.href='https://github.com/'+repo+'/releases/tag/'+encodeURIComponent(release.tag_name);link.textContent=release.tag_name;
+   version.replaceChildren(link);state.textContent=release.prerelease?'Prerelease only — no stable latest release':'Published release';time(published,release.published_at);
+  }catch(error){
+   state.textContent='Live check unavailable — last known data, if any ('+(String(error.message).match(/^HTTP \d{3}$/)?error.message:'network or API error')+')';
+  }finally{time(checked,new Date());}
+ }
+ let busy=false;
+ async function refresh(){if(busy)return;busy=true;button.disabled=true;status.textContent='Checking four GitHub repositories…';try{await Promise.all(targets.map(check));status.textContent='Release check completed. Unavailable rows retain their last known data.';}finally{busy=false;button.disabled=false;}}
+ button.addEventListener('click',refresh);
+ refresh();setInterval(refresh,300000);
 })();
 </script>
 </body></html>
