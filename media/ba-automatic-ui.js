@@ -415,14 +415,14 @@
   return (phase==='ready'&&currentJiraPreview()||completed)&&!['running','publishing'].includes(phase)&&!unsaved&&!busy()&&!baBusyTask;
  }
  // Percentages describe verified section evidence, never elapsed time.
- function sectionProgress({register,brs,rows,preview,groups,statuses,unsaved,discoveryUnsaved}){
+ function sectionProgress({register,brs,rows,preview,groups,statuses,unsaved,discoveryFilled}){
   const ratio=(done,total)=>total>0?Math.min(100,Math.max(0,Math.floor(100*done/total))):0;
   const settle=(id,value)=>['ready','completed'].includes(statuses[id])?100:
    statuses[id]==='not-started'?0:Math.min(99,value);
   const sources=(register.sourceDocuments||[]).filter(doc=>doc?.digest);
   const mapped=new Set(register.mappingCompleted?.sourceDigests||register.mappingCompleted?.digests||[]);
   const sourceDone=sources.filter(doc=>mapped.has(doc.digest)).length;
-  const answers=Object.values(register.discoveryAnswers||{}).filter(value=>typeof value==='string'&&value.trim()).length;
+  const answers=Number.isFinite(discoveryFilled)?discoveryFilled:Object.values(register.discoveryAnswers||{}).filter(value=>typeof value==='string'&&value.trim()).length;
   const excluded=new Set((register.baDraftQuality?.excluded||[]).map(row=>row.id));
   const stale=br=>br.needsRefresh||br.externalReviewRequired||br.roleReviewRequired||br.dependencyReviewRequired;
   const clean=brs.filter(br=>!excluded.has(br.id)&&!stale(br)).length;
@@ -501,11 +501,12 @@
    ['baAutoRequirements',requirementsStatus],['baAutoJira',jiraStatus],
    ['baAutoHistory',historyStatus]];
   const progress=sectionProgress({register:brState,brs:requirements(),rows:rowsForTable(),
-   preview:state?.preview,groups:completedGroups,statuses:Object.fromEntries(panels),unsaved:dirty(),discoveryUnsaved:discoveryDirty});
+   preview:state?.preview,groups:completedGroups,statuses:Object.fromEntries(panels),unsaved:dirty(),discoveryFilled:discoveryDirty?currentDiscoveryReadiness().filled:undefined});
   for(const [id,status] of panels){
    setReadyPanel(id,status);
-   badge(id+'Badge',status);
-   renderSectionProgress(id,progress[id],status);
+   const displayStatus=id==='baAutoHistory'&&progress[id]<100&&status==='completed'?'in-progress':status;
+   badge(id+'Badge',displayStatus);
+   renderSectionProgress(id,progress[id],displayStatus);
   }
  }
 
@@ -682,6 +683,7 @@
   invoke('librarySync',{fromBAQuill:true,query:'',category:'All',scope:'user'});
  });
  input.addEventListener('input',render);
+ get('discoveryForm').addEventListener('input',()=>{if(active()&&brState)renderReadyPanels(state?.phase||'idle');});
  get('baAutoArtifactSave').addEventListener('click',()=>{
   if(get('baAutoArtifactSave').disabled||!artifactContext)return;
   get('baAutoArtifactSave').disabled=true;
