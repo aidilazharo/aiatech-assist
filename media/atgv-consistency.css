@@ -515,3 +515,44 @@ body:not(.gate-mode) #topNotification .top-notification-actions button{
  font-family:var(--vscode-font-family,inherit);font-size:12px;line-height:1.6
 }
 #knowledgeView #connectedSyncRefresh{justify-self:start}
+
+/* Compact Settings inputs, scoped to the extension and project settings views.
+   Long URLs and tokens still scroll inside their native inputs. */
+:is(#settingsView,#projectView) .form-grid{
+ display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));
+ max-width:840px;gap:10px 14px;align-items:start;
+}
+:is(#settingsView,#projectView) .form-grid>.field.full{
+ grid-column:auto;
+}
+:is(#settingsView,#projectView) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]),select,textarea){
+ box-sizing:border-box;width:100%;max-width:360px;min-width:0;
+}
+:is(#settingsView,#projectView) :is(input[type="url"],input[type="password"]){
+ max-width:420px;
+}
+:is(#settingsView,#projectView) :is(input[type="date"],input[type="number"]){
+ max-width:168px;
+}
+#settingsView #jiraProjectKey,#projectView [id="jira.projectKey"],#projectView [id="confluence.spaceKey"]{
+ max-width:140px;
+}
+:is(#settingsView,#projectView) :is(.field,.coordination-provider,.ai-service-fields>label){
+ min-width:0;
+}
+#settingsView .github-settings-toolbar{
+ flex-wrap:wrap;align-items:flex-end;max-width:100%;gap:10px;
+}
+#settingsView .github-settings-toolbar :is(.github-settings-owner,.github-settings-repository,.github-settings-token){
+ flex:0 1 240px;min-width:0;max-width:100%;
+}
+#settingsView .github-settings-toolbar :is(.github-settings-repository,.github-settings-token){
+ flex-basis:300px;
+}
+#projectView .ai-service-fields{max-width:840px}
+#projectView .gate-search-bar{max-width:520px}
+#projectView #settingsScheduleGroup .section-title{justify-content:flex-start}
+@media(max-width:560px){
+ :is(#settingsView,#projectView) .form-grid{grid-template-columns:1fr}
+ #settingsView .github-settings-toolbar :is(.github-settings-owner,.github-settings-repository,.github-settings-token){flex:1 1 100%}
+}
