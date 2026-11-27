@@ -3308,3 +3308,26 @@ body:not(.gate-mode) #appHeader.app-header{position:relative;border-bottom:3px s
 #requiredLibraryModal::backdrop{background:rgba(7,10,16,.82)}
 #requiredLibraryModal .actions{justify-content:flex-end;flex-wrap:wrap}
 #requiredLibraryStatus{overflow-wrap:anywhere}
+
+/* Unified compact Settings: one heading, one scroll, independent save scopes. */
+:is(#settingsView,#projectView).unified-settings-view{max-width:1120px;width:100%;margin:0 auto;padding-bottom:0}
+#projectView.unified-settings-view{margin-top:12px}
+:is(#settingsView,#projectView) .settings-group-label{margin:12px 0 5px;font-size:10px;letter-spacing:.06em}
+:is(#settingsView,#projectView) .ext-settings-accordion,#projectView .project-settings-panel{margin:5px 0;border-radius:6px}
+:is(#settingsView,#projectView) .ext-settings-accordion>summary,#projectView .project-settings-panel>.project-settings-panel-summary{min-height:34px;padding:6px 10px;font-size:12px;line-height:1.3}
+:is(#settingsView,#projectView) .ext-settings-content,#projectView .project-settings-panel-body{padding:8px 10px}
+:is(#settingsView,#projectView) .form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px 10px;align-items:end}
+:is(#settingsView,#projectView) .field{margin:0;min-width:0}
+:is(#settingsView,#projectView) label{font-size:11px;line-height:1.3}
+:is(#settingsView,#projectView) :is(input:not([type=checkbox]):not([type=radio]):not([type=hidden]),select){box-sizing:border-box;width:100%;min-width:0;min-height:28px;height:28px;font-size:12px;padding:3px 7px;margin:3px 0 0}
+:is(#settingsView,#projectView) textarea{font-size:12px;padding:5px 7px;min-height:48px}
+:is(#settingsView,#projectView) button:not(.guide-icon-button){min-height:28px;padding:4px 9px;font-size:11px;line-height:1.3}
+:is(#settingsView,#projectView) .actions{gap:6px;margin:7px 0}
+:is(#settingsView,#projectView) .project-settings-heading{font-size:12px;margin:10px 0 5px}
+#settingsView #githubForm .github-settings-toolbar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 10px;overflow:visible;padding:0}
+#settingsView #githubForm .github-settings-toolbar>button{min-height:28px;height:28px;justify-self:start;padding:4px 9px}
+#settingsView #githubForm .github-settings-toolbar input:not([type=hidden]){min-height:28px;height:28px}
+.settings-inline-defaults>summary{cursor:pointer;font-size:11px;padding:4px 0}
+:is(#settingsView,#projectView) [hidden]{display:none!important}
+@media(max-width:850px){:is(#settingsView,#projectView) .form-grid,#settingsView #githubForm .github-settings-toolbar{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:540px){:is(#settingsView,#projectView) .form-grid,#settingsView #githubForm .github-settings-toolbar,#settingsView #extensionForm > .form-grid{grid-template-columns:minmax(0,1fr)}}

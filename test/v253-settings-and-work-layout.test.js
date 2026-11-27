@@ -18,7 +18,7 @@ test('v0.2.57 Project Settings main section is a closed-by-default expandable pa
   assert.match(html,/<span id="formTitle">Project Settings<\/span><\/summary>/);
   assert.match(html,/<div class="project-settings-panel-body">[\s\S]*?<form id="projectForm">/);
   assert.match(script,/function collapseProjectSettings\(\)\{const panel=\$\('projectSettingsPanel'\);if\(panel\)panel\.open=false/);
-  assert.match(script,/if\(returnToOpenProjectTab\)\{setView\('project'\);collapseProjectSettings\(\);\}/);
+  assert.match(script,/if\(returnToOpenProjectTab\)\{setView\('project'\);\}/);
 });
 
 test('v0.2.57 removes old progress panel for Solution Architect and Developer without removing project stack work',()=>{

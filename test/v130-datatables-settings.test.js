@@ -8,7 +8,7 @@ const html=fs.readFileSync(path.join(root,'test/generated/extension-source.txt')
 const js=fs.readFileSync(path.join(root,'media/start.js'),'utf8');
 const css=fs.readFileSync(path.join(root,'media/start.css'),'utf8');
 const table=require('../media/atgv-datatables.js');
-test('Extension and Project Settings retain independent save scopes inside one tabbed Settings menu',()=>{
+test('Extension and Project Settings retain independent save scopes inside one compact Settings screen',()=>{
  const extension=html.slice(html.indexOf('<main id="settingsView"'),html.indexOf('<main id="projectView"'));
  const project=html.slice(html.indexOf('<main id="projectView"'),html.indexOf('<main id="workView"'));
  for(const name of ['Jira','Github','Catalog','Coordination','Ai','Rag','LocalBackup','SoftwareUpdate']){
@@ -25,10 +25,11 @@ test('Extension and Project Settings retain independent save scopes inside one t
  assert.match(html,/data-nav="settings" id="navSettings"/);
  assert.doesNotMatch(html,/data-nav="project-settings" id="navProjectSettings"/);
  assert.match(html,/data-nav="settings" id="navSettings"[^<]*>.*?Settings<\/button>/);
- assert.match(extension,/id="settingsExtensionTab"[^>]+aria-selected="true"/);
- assert.match(extension,/id="extensionToProjectSettings"[^>]+aria-selected="false"/);
- assert.match(project,/id="projectToExtensionSettings"[^>]+aria-selected="false"/);
- assert.match(project,/id="projectSettingsTab"[^>]+aria-selected="true"/);
+ assert.doesNotMatch(extension+project,/class="settings-page-tabs"|role="tablist" aria-label="Settings scope"/);
+ assert.match(js,/next==='project'&&page\.id==='settingsView'/);
+ assert.match(js,/workspaceOpened&&activeId\)\{if\(view!=='project'\|\|editingId!==activeId\)openProject\(activeId\)/);
+ assert.match(extension,/id="catalogPull"[^>]*hidden/);
+ assert.match(project,/id="guideConfluenceTokenLink"[^>]*tabindex="-1"/);
  assert.match(js,/destination==='project-settings'\|\|destination==='tech'\?'settings'/);
  assert.match(js,/function collapseExtensionSettings\(\)/);
  assert.match(js,/function collapseProjectSettings\(\)/);
@@ -36,7 +37,7 @@ test('Extension and Project Settings retain independent save scopes inside one t
  assert.match(css,/ext-settings-badge\[data-state="ready"\]/);
 });
 test('existing save and test controls retain identity across both settings pages',()=>{
- for(const id of ['extensionForm','settingsSpaceSearch','settingsSpaceQuery','githubForm','githubRepositoryUrl','testGithub','catalogForm','aiProviderTest','coordinationProvider','roleSettingsForm','aiServiceSave','extensionToProjectSettings','projectToExtensionSettings'])assert.ok(html.includes('id="'+id+'"'),id);
+ for(const id of ['extensionForm','settingsSpaceSearch','settingsSpaceQuery','githubForm','githubRepositoryUrl','testGithub','catalogForm','aiProviderTest','coordinationProvider','roleSettingsForm','aiServiceSave','projectForm','save','pullLibraryFiles'])assert.ok(html.includes('id="'+id+'"'),id);
  assert.doesNotMatch(js,/\$\('settingsProject'\)/);
  assert.match(js,/Choosing a space edits only the visible project's unsaved form/);
  assert.match(js,/Save Project Settings to apply this space/);

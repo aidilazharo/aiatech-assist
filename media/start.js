@@ -661,7 +661,9 @@ function setView(next){
   // the hidden workflow panel. Close it whenever the user leaves the BA overview.
   if(view==='baOverview'&&next!=='baOverview'&&typeof baRequirementModalTarget!=='undefined'&&baRequirementModalTarget)
     closeBARequirementModal(false);
-  for(const page of pages)page.classList.toggle('hidden',page!==target);
+  // Both settings scopes share one scrollable screen. Project-only forms are
+  // included only for the explicit project route, not before workspace opening.
+  for(const page of pages)page.classList.toggle('hidden',page!==target&&!(next==='project'&&page.id==='settingsView'));
   if(next==='myWork')target.querySelector?.('.atgv-page-feedback')?.remove();
   // The BA workflow and project inventory are separate views in the role workspace.
   $('discoveryView').classList.toggle('hidden',next!=='discovery');
@@ -903,9 +905,9 @@ function openProject(id=null,source=null){
   $('projectGithubRepositoryUrl').value=read('github.owner')&&read('github.repo')?'https://github.com/'+read('github.owner')+'/'+read('github.repo'):'';
                                                                               
   if(p?.settings?.atlassian){field('jira.baseUrl',p.settings.atlassian.baseUrl||'');field('jira.email',p.settings.atlassian.email||'');}
-  $('formTitle').textContent=p?'Project Settings: '+p.name:'New Project';
+  $('formTitle').textContent=p?p.name:'New Project';
   $('folderNote').textContent=p?`projects/${p.id}/atgv.project.json`:'Creates projects/<project-id>/atgv.project.json';
-  $('save').textContent=p?'Save project settings':'Create project';
+  $('save').textContent=p?'Save Project':'Create project';
   $('showFolder').disabled=!p;
   $('connectionActions').classList.toggle('hidden',!p);
   // Avoid displaying roles and automation for another active project while editing.
@@ -1027,7 +1029,7 @@ function updateExtensionSettingBadges(){
  optional('settingsRagGroup',!!$('aiProviderChoice')?.value);
  optional('settingsServiceGroup',settingsServiceReady&&$('aiServiceEnabled').checked);
  optional('settingsScheduleGroup',!!(activeId&&timelineData?.tasks?.length));
- // Project Settings has a dedicated page. Technology stack is shown on that page.
+ // Project settings share the same screen; project scope remains independently saved.
 }
 
 let roleConnectionAccessState=null,roleConnectionRequestedAt=0,roleConnectionRequestedKey='';
@@ -1103,7 +1105,6 @@ function updateState(msg){
   }
   renderProjectSwitch();
   
-  $('extensionToProjectSettings').disabled=!(activeId&&workspaceOpened);
   const model=msg.modelStatus||{name:'LLM',state:'inactive',message:'Not active'};
   const badge=$('headerModel');
   badge.classList.remove('ready','error','inactive');
@@ -1147,7 +1148,6 @@ function updateState(msg){
     showGithubRepoPreview();
   }
   $('settingsBack').textContent=workspaceOpened?'← Back to Workspace':'← Back to Projects';
-  $('extensionToProjectSettings').disabled=!(activeId&&workspaceOpened);
   const projectConfig=projects.find(p=>p.id===activeId)?.settings;
   const hasSpace=!!projectConfig?.confluence?.spaceKey;
   const hasJira=!!projectConfig?.jira?.projectKey;
@@ -1164,7 +1164,7 @@ function updateState(msg){
   if(view==='project'&&editingId&&document.activeElement?.closest('form')!==$('projectForm')&&!document.activeElement?.closest('#projectScopedOptions'))openProject(editingId);
   else if(view==='project')renderTechStacks();
   if(opening.phase==='open'){
-    if(!workspaceOpened){workspaceOpened=true;gateBusy=false;gateError='';document.body.classList.remove('gate-mode');$('extensionToProjectSettings').disabled=!activeId;renderSidebarRole();navigate('sdlc-roles');}
+    if(!workspaceOpened){workspaceOpened=true;gateBusy=false;gateError='';document.body.classList.remove('gate-mode');renderSidebarRole();navigate('sdlc-roles');}
     if(restoreLibraryAfterVendorSync&&workspaceOpened){restoreLibraryAfterVendorSync=false;if(canUseLibraryStudio())navigate('library');}
   }else if(view!=='settings'&&view!=='project'){
     // Do not reset gateBusy on every background dashboard update. A refresh
@@ -1226,7 +1226,7 @@ function syncSdlcWorkspaceShell(next){
 }
 function navigate(destination){
   const projectId=arguments[1]||'';
-  if(roleSettingsDirty&&view==='project'&&destination!=='project-settings'&&destination!=='tech'){status('Save project role settings before leaving Project Settings.',true);return;}
+  if(roleSettingsDirty&&view==='project'&&destination!=='settings'&&destination!=='project-settings'&&destination!=='tech'){status('Save project role settings before leaving Project Settings.',true);return;}
   if(view==='discovery'&&discoveryDirty){status('Save your discovery answers before leaving this screen.',true);return;}
   if(view==='discovery'&&destination!=='discovery'&&window.ATGVBusinessRequirements?.dirty()){status('Save your Business Requirements edits before leaving this screen.',true);return;}
   if(roleTimelineDirty&&destination!==selectedRole&&destination!=='sdlc-roles'){if($('sidebarRole'))$('sidebarRole').value=selectedRole;status('Save this role timeline before leaving.',true);return;}
@@ -1271,7 +1271,7 @@ function navigate(destination){
     renderRoleTimeline();ensurePMJiraInventory(true);ensureBAJiraInventory(true);send('roleHandoffOwners');requestRoleConnectionAccess();renderRoleCredentialBanner();return;
   }
   if(destination==='overview'){setView('landing');$('overviewGanttDetails').open=false;send('loadPlanning');send('myWorkRosterRefresh',{projectId:activeId,roleId:selectedRole,overviewClicked:true});return;}
-  if(destination==='settings'){$('settingsBack').textContent=workspaceOpened?'← Back to Workspace':'← Back to Projects';collapseExtensionSettings();setView('settings');updateExtensionSettingBadges();if(workspaceOpened)send('devRepositoryStatus');return;}
+  if(destination==='settings'){$('settingsBack').textContent=workspaceOpened?'← Back to Workspace':'← Back to Projects';collapseExtensionSettings();if(workspaceOpened&&activeId){if(view!=='project'||editingId!==activeId)openProject(activeId);else setView('project');send('devRepositoryStatus');}else setView('settings');updateExtensionSettingBadges();return;}
   if(destination==='library'){setView('library');window.atgvLibraryStudio?.refresh();return;}
   if(destination==='documents'){setView('documents');renderDocumentGroups();return;}
   if(destination==='knowledge'){setView('knowledge');send('refreshConnectedSources');return;}
@@ -1287,14 +1287,13 @@ function navigate(destination){
   if(destination==='flow'){setView('flow');renderFlow();return;}
   if(destination==='operations'){setView('operations');opsOwnerLoaded=false;renderOperationDocuments();send('refreshOwners');return;}
   if(destination==='project-settings'||destination==='tech'){
-    // Tab switches retain unsaved project input values; navigating to another
-    // project still initializes the form from that project's persisted scope.
-    const returnToOpenProjectTab=destination==='project-settings'&&view==='settings'&&
+    // Both settings entry points use the same screen and retain unsaved input.
+    const returnToOpenProjectTab=view==='project'&&
       !!activeId&&editingId===activeId&&$('projectView').dataset.loadedFor===activeId;
-    if(returnToOpenProjectTab){setView('project');collapseProjectSettings();}
+    if(returnToOpenProjectTab){setView('project');}
     else openProject(activeId||null);
     selectedNav='settings';
-    if(destination==='tech')requestAnimationFrame(()=>$('techStackGrid').scrollIntoView({block:'start',behavior:'smooth'}));
+    if(destination==='tech'){ $('projectSettingsPanel').open=true;requestAnimationFrame(()=>$('techStackGrid').scrollIntoView({block:'start',behavior:'smooth'})); }
     return;
   }
 }
@@ -5539,21 +5538,6 @@ $('settingsSpaceSearch').addEventListener('click',()=>{
 });
 $('settingsSpaceQuery').addEventListener('input',()=>{settingsSearchId=null;$('settingsSpaces').replaceChildren();$('settingsSpaceMessage').textContent='Enter a space name or key to search.';});
 $('settingsSpaceQuery').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('settingsSpaceSearch').click();}});
-$('settingsExtensionTab').addEventListener('click',()=>{});
-$('extensionToProjectSettings').addEventListener('click',()=>{if(workspaceOpened&&activeId)navigate('project-settings');else status('Open a project to edit Project Settings.',true);});
-$('projectSettingsTab').addEventListener('click',()=>{});
-// Standard keyboard navigation between the two scoped Settings tabs.
-for(const id of ['settingsExtensionTab','extensionToProjectSettings','projectToExtensionSettings','projectSettingsTab']){
-  $(id).addEventListener('keydown',event=>{
-    if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
-    event.preventDefault();
-    const toProject=event.key==='End'||(['ArrowLeft','ArrowRight'].includes(event.key)&&['settingsExtensionTab','projectToExtensionSettings'].includes(id));
-    if(toProject&&(!workspaceOpened||!activeId))return;
-    navigate(toProject?'project-settings':'settings');
-    requestAnimationFrame(()=>$((toProject?'projectSettingsTab':'settingsExtensionTab')).focus());
-  });
-}
-$('projectToExtensionSettings').addEventListener('click',()=>navigate('settings'));
 function renderProjectSwitch(){
  const select=$('sidebarSwitchProject');
  const signature=JSON.stringify(projects.map(p=>[p.id,p.name]));
