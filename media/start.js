@@ -3072,6 +3072,7 @@ function dispatchUxGeneration(job){
  return true;
 }
 function scheduleUxRecovery(job,message){
+ if(!job||uxRecoveryJob!==job)return;
  const scope=uxRecoveryScope(job);uxRecovery?.finish(scope);
  job.phase='waiting';uxPipelineBusy=true;uxCanStop=true;uxPipelineStopping=false;
  renderUxActions();setUxStatus('AI recovery · '+String(message).slice(0,180)+' · Checking saved design before retry…');
@@ -3321,6 +3322,7 @@ $('uxPublishFrontend').addEventListener('click',()=>{if(uxPipeline?.status!=='ap
 $('uxOpenPrototypeBrowser').addEventListener('click',()=>{if(!uxReadyForPreview()||uxPipelineBusy)return;$('uxOpenPrototypeBrowser').disabled=true;$('uxPrototypeBrowserStatus').textContent='Opening the local interactive prototype in your browser…';send('uxPrototypeOpenBrowser',{key:uxSelectedKey,expectedRevision:uxPipeline.revision});});
 $('uxGenerateUIUX').addEventListener('click',()=>{
  if(!uxSelectedKey)return;
+ if(uxRecoveryJob&&(uxRecoveryJob.project!==activeId||uxRecoveryJob.key!==uxSelectedKey)){setUxStatus('A previous design operation is still running. Wait for its result before starting another.');return;}
  if(uxPipelineBusy){
   if(uxPipelineStopping||!uxCanStop)return;
   if(uxRecoveryJob&&['waiting','reconciling'].includes(uxRecoveryJob.phase)){finishUxRecovery('Stopped by designer.',true);uxPipelineBusy=false;renderUxActions();setUxStatus('AI recovery stopped.');return;}
@@ -3355,6 +3357,11 @@ $('uxCancelDisapproval').addEventListener('click',()=>{
 });
 window.addEventListener('message',event=>{
  const m=event.data||{};
+ // Settle an old in-flight operation without applying its result to another project.
+ if(uxRecoveryJob&&m.projectId===uxRecoveryJob.project&&m.projectId!==activeId&&(!m.key||m.key===uxRecoveryJob.key)&&
+   (m.type==='uxPipelineStopped'||m.type==='uxPipelineLoaded'&&m.generated||m.type==='uxDesignError')){
+  finishUxRecovery('Previous project operation ended.',m.type!=='uxPipelineLoaded');uxPipelineBusy=false;
+ }
  // Ignore old project completion events for the visible workflow; cancel any queued retry when leaving scope.
  if(uxRecoveryJob&&!window.ATGVUxRecovery.sameScope(uxRecoveryJob,uxRecoveryContext())&&['waiting','reconciling'].includes(uxRecoveryJob.phase)){finishUxRecovery('Recovery paused: project or assignment changed.',true);uxPipelineBusy=false;}
  if(m.projectId!==activeId)return;
@@ -3392,6 +3399,7 @@ window.addEventListener('message',event=>{
  if(m.type==='uxPrototypeBrowserOpened'&&m.key===uxSelectedKey){$('uxOpenPrototypeBrowser').disabled=false;$('uxPrototypeBrowserStatus').textContent='Interactive prototype opened in your external browser.';}
  if(m.type==='uxDesignError'&&selectedRole==='ux-designer'){
   const job=uxRecoveryJob;
+  if(job&&m.key&&m.key!==job.key)return;
   if(job&&job.project===activeId&&job.key===uxSelectedKey&&(!m.key||m.key===job.key)){
    const retry=job.phase==='generating'&&!uxPipelineStopping&&!uxFrontendPublishing&&window.ATGVUxRecovery.sameScope(job,uxRecoveryContext())&&window.ATGVUxRecovery.classify(m.message)==='retry'&&job.attempt<6;
    if(retry){scheduleUxRecovery(job,m.message);return;}
