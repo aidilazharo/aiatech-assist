@@ -33,8 +33,21 @@ test('journal mirror is scoped to verified workspace and removes common credenti
  const log=await fs.readFile(path.join(root,'artifacts','logs','software-developer.json'),'utf8');assert.doesNotMatch(log,/secret123/);
  assert.match((await artifacts.contextDocument(root)).text,/developerBrRun/);
 });
-test('unsafe artifact symlink is rejected',async t=>{
+test('unsafe artifact directory replacement is rejected',async t=>{
  const {root}=await fixture(t);await fs.writeFile(path.join(root,'not-a-folder'),'x');
  await fs.rename(path.join(root,'not-a-folder'),path.join(root,'artifacts'));
  await assert.rejects(artifacts.ensure(root),/Unsafe project artifact directory/);
+});
+
+test('approved reference copy requires matching source digest and preserves canonical file',async t=>{
+ const {root}=await fixture(t),crypto=require('node:crypto'),source='Approved behavior: create a name.\nBearer SECRET01234';
+ await fs.mkdir(path.join(root,'documents'));await fs.writeFile(path.join(root,'documents','design.md'),source);
+ const digest=crypto.createHash('sha256').update(source).digest('hex');
+ const records=await artifacts.indexCanonical(root,{revision:4,documents:{approved:{id:'approved',roleId:'ux-designer',title:'Design',path:'documents/design.md',status:'approved',digest,approval:{digest}},draft:{id:'draft',roleId:'ux-designer',path:'documents/design.md',status:'draft',digest}}});
+ assert.ok(records[0].referenceCopy);assert.equal(records[1].referenceCopy,undefined);
+ const copy=JSON.parse(await fs.readFile(path.join(root,'artifacts',records[0].referenceCopy),'utf8'));
+ assert.equal(copy.sourceDigest,digest);assert.doesNotMatch(copy.text,/SECRET01234/);assert.equal(await fs.readFile(path.join(root,'documents','design.md'),'utf8'),source);
+ await fs.writeFile(path.join(root,'documents','design.md'),'changed');
+ const updated=await artifacts.indexCanonical(root,{revision:5,documents:{approved:{id:'approved',roleId:'ux-designer',path:'documents/design.md',status:'approved',digest,approval:{digest}}}});
+ assert.equal(updated[0].referenceCopy,undefined);
 });

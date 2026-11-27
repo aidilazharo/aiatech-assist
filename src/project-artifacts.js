@@ -8,9 +8,9 @@ const {withLock}=require('./file-lock');
 const {safe}=require('./lib/startup-diagnostics');
 const ROLE=/^[a-z][a-z0-9-]{0,70}$/;
 const PROJECT=/^[a-z][a-z0-9-]{0,48}$/;
-const ROLES=['business-analyst','project-manager','solution-architect','ux-designer','software-developer','qa-engineer','uat-tester','product-owner','security-engineer','data-engineer','technical-writer','release-manager','operations-support','technical-lead','business-owner','ai-ml-engineer','compliance-officer','shared'];
+const ROLES=['business-analyst','project-manager','solution-architect','ux-designer','software-developer','qa-engineer','uat-tester','product-owner','security-engineer','data-engineer','technical-writer','release-manager','operations-support','technical-lead','scrum-master','business-owner','ai-ml-engineer','compliance-officer','shared'];
 const aliases={'ba':'business-analyst','ui-ux-designer':'ux-designer','ui/ux designer':'ux-designer','developer':'software-developer','solution architect':'solution-architect','project manager':'project-manager','workspace':'shared','setup':'shared','atgv':'shared'};
-const roleId=value=>{const key=String(value||'shared').toLowerCase();return aliases[key]||(ROLE.test(key)?key:'shared');};
+const roleId=value=>{const key=String(value||'shared').toLowerCase();return Object.hasOwn(aliases,key)?aliases[key]:(ROLE.test(key)?key:'shared');};
 const sha=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 const clean=(value,max=400)=>safe(String(value??'').replace(/-----BEGIN [^-]*PRIVATE KEY-----[\s\S]*?-----END [^-]*PRIVATE KEY-----/g,'[REDACTED PRIVATE KEY]').replace(/\bsk-[A-Za-z0-9_-]{12,}\b/g,'[REDACTED]')).replace(/[\r\n\t]+/g,' ').slice(0,max);
 const stat=file=>fs.lstat(file).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
@@ -52,6 +52,7 @@ async function readJson(base,rel,max=2*1024*1024){
 async function locateProject(storage,projectId){
  if(!path.isAbsolute(String(storage||''))||!PROJECT.test(String(projectId||'')))return null;
  let cursor=path.resolve(storage);
+ const real=await fs.realpath(cursor).catch(()=>null);if(!real||path.relative(cursor,real)!=='')return null;
  for(let i=0;i<12;i++){
   const metadata=path.join(cursor,'.atgv'),ms=await stat(metadata);
   if(ms?.isDirectory()&&!ms.isSymbolicLink()){
@@ -70,6 +71,21 @@ async function locateProject(storage,projectId){
  }
  return null;
 }
+// Copy only digest-verified approved, bounded text. Binary and draft originals
+// remain linked in their canonical stores. These are redacted reference copies.
+async function snapshotApproved(root,base,row){
+ if(!row.approvalRecorded||!row.path||!/^(?:documents|approved-brs)\//.test(row.path)||!/\.(?:md|txt|rst|mdx)$/i.test(row.path))return;
+ let file=root;const parts=row.path.split('/');
+ for(let i=0;i<parts.length;i++){
+  file=path.join(file,parts[i]);const st=await stat(file);
+  if(!st||st.isSymbolicLink()||(i<parts.length-1?!st.isDirectory():!st.isFile()||st.nlink>1||st.size>262144))return;
+ }
+ const text=await fs.readFile(file,'utf8');if(sha(text)!==row.sha256)return;
+ const destination='roles/'+row.role+'/approved/'+sha(row.id).slice(0,24)+'-'+row.sha256+'.json';
+ const existing=await readJson(base,destination).catch(()=>null);
+ if(!existing||existing.sourceDigest!==row.sha256)await atomic(base,destination,{schema:1,id:row.id,role:row.role,source:row.path,sourceDigest:row.sha256,revision:row.revision,kind:'redacted-approved-reference',text:safe(text)});
+ row.referenceCopy=destination;
+}
 async function indexCanonical(root,state){
  const records=Object.values(state?.documents||{}).slice(0,2000).map(doc=>{
   const digest=/^[a-f0-9]{64}$/i.test(doc.digest||'')?doc.digest:'';
@@ -77,10 +93,11 @@ async function indexCanonical(root,state){
   return {id:clean(doc.id,180),role:roleId(doc.roleId|| (doc.kind==='br'?'business-analyst':doc.kind==='design'?'ux-designer':'shared')),kind:clean(doc.kind,60),title:clean(doc.title,180),path:doc.external?'':relative(doc.path),status,revision:doc.contentRevision||0,sha256:digest,approvalRecorded:status==='approved'&&!!digest&&doc.approval?.digest===digest,sourceRefs:(Array.isArray(doc.sourceRefs)?doc.sourceRefs:[]).slice(0,30).map(ref=>({id:clean(ref.id,100),revision:clean(ref.revision,40)}))};
  });
  const base=await ensure(root,records.map(row=>row.role));
+ for(const row of records)await snapshotApproved(root,base,row);
  for(const role of new Set([...ROLES,...records.map(row=>row.role)])){
   await atomic(base,'roles/'+role+'/index.json',{schema:1,role,canonicalRevision:state.revision||0,artifacts:records.filter(row=>row.role===role)});
  }
- await atomic(base,'context/artifact-index.json',{schema:1,canonicalRevision:state.revision||0,records,note:'References only. Recheck canonical approval and digest before use.'});
+ await atomic(base,'context/artifact-index.json',{schema:1,canonicalRevision:state.revision||0,records,note:'Canonical references and redacted approved-text copies. Recheck canonical approval and digest before use.'});
  return records;
 }
 async function indexHub(root,manifest){
@@ -109,8 +126,10 @@ async function contextDocument(root){
  const base=await ensure(root),projectId=path.basename(root);
  const canonical=await readJson(base,'context/artifact-index.json').catch(()=>null);
  const jobs=await readJson(base,'logs/workflow-jobs.json').catch(()=>null);
+ const hub=await readJson(base,'context/unified-snapshot.json',4*1024*1024).catch(()=>null);
  const entries=[];
  for(const row of (canonical?.records||[]).slice(0,80))entries.push('Artifact '+clean(row.role,70)+' | '+clean(row.title,150)+' | '+clean(row.status,40)+' | revision '+clean(row.revision,40)+' | '+clean(relative(row.path),200));
+ if(hub?.projectId===projectId)for(const f of (hub.files||[]).slice(0,30))entries.push('Snapshot reference '+clean(f.role,70)+' | '+clean(relative(f.path),200)+' | '+clean(f.status,40));
  if(jobs?.projectId===projectId)for(const j of (jobs.records||[]).filter(j=>['failed','interrupted','reconcile-required'].includes(j.status)).slice(0,15))entries.push('Workflow diagnostic '+clean(j.role,70)+' | '+clean(j.command,90)+' | '+clean(j.status,40)+' | '+clean(j.error,300));
  for(const role of ['business-analyst','solution-architect','software-developer']){
   const log=await readJson(base,'logs/'+role+'.json').catch(()=>null);

@@ -7,9 +7,6 @@ const ignored = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', '.
 async function collectProjectKnowledge(projectRoot, { limit = 100, maxBytes = 262144 } = {}) {
     const root = path.resolve(projectRoot);
     const docs = [];
-    // Bounded project-local diagnostic context; never promotes drafts to approved.
-    const artifactContext=await require('./project-artifacts').contextDocument(root).catch(()=>null);
-    if(artifactContext&&limit>0&&Buffer.byteLength(artifactContext.text)<=maxBytes)docs.push(artifactContext);
     let canonical = null;
     try {
         canonical = JSON.parse(await fs.readFile(path.join(root, 'sdlc', 'unified-documents.json'), 'utf8'));
@@ -20,6 +17,11 @@ async function collectProjectKnowledge(projectRoot, { limit = 100, maxBytes = 26
         if (e.code !== 'ENOENT')
             throw e;
     }
+    // Refresh from canonical state, not from stale recovery copies.
+    const projectArtifacts=require('./project-artifacts');
+    if(canonical)await projectArtifacts.indexCanonical(root,canonical).catch(()=>{});
+    const artifactContext=await projectArtifacts.contextDocument(root).catch(()=>null);
+    if(artifactContext&&limit>0&&Buffer.byteLength(artifactContext.text)<=maxBytes)docs.push(artifactContext);
     const approvedPaths = new Map();
     if (canonical)
         for (const doc of Object.values(canonical.documents)) {
