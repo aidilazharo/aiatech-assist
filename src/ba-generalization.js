@@ -33,6 +33,7 @@ const PRINCIPLES=Object.freeze([
  'Improve clarity, completeness, consistency, testability and traceability before showing the proposed result.',
  'Never fabricate source facts, budgets, thresholds, access rules, legal compliance or approvals.',
  'When evidence is missing, suggest a provisional option or explicit decision instead of silently inventing policy.',
+ 'During recovery, prefer the narrowest evidence-backed generalization: retain mandatory controls and measurable outcomes, separate shared behavior from conditional rules, and flag any unresolved material decision for human confirmation. Never remove a constraint just to pass validation.',
  'Regeneration preserves original source, history, existing IDs and published Jira records.',
  'Only an approved requirement and separately reviewed Jira plan may advance to final publication.'
 ]);

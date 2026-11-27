@@ -20,6 +20,8 @@
 
  let state=null,requestedProject='',artifactProject='',jiraView='list',jiraTab='all',tableKey='',brKey='',kind='iso',sourceDigest='',artifactContext=null,request=0;
  let aiResolve={running:false,message:'',stopping:false};
+ const recovery=window.ATGVRecoveryController?.create();
+ let recoveryTimer=null,recoveryAction=null;
  let jiraFieldView=null,jiraFieldDirty=false,jiraFieldLoading=false,jiraFieldRequest=0;
  const collapsed=new Set();
  const input=get('baAutoArtifactText'),quillMount=get('baAutoQuillEditor');
@@ -203,8 +205,10 @@
   const blocker=aiResolve.running?'AI repair is running.':busy()||baBusyTask||discoveryImportBusy?'Finish the current BR operation first.':dirty()?'Save your edits before AI repair.':!baCanEdit('ba-discovery')||baOwnerState?.cached||baOwnerState?.scope==='local'?'Connect to Jira and Confluence to verify ownership.':!eligible.length?'No affected draft is owned by you. Request transfer or ask its owner to resolve it.':'';
   action.disabled=!!blocker;
   action.title=blocker||'Use AI to repair '+eligible.length+' owned draft(s). Previous approvals and Jira unchanged.';
-  stop.hidden=!aiResolve.running;stop.disabled=aiResolve.stopping;
-  get('baAutoResolveStatus').textContent=aiResolve.running?aiResolve.message:[findings.length?findings.length+' requirement(s) need a source-backed correction; '+eligible.length+' owned by you.':'',blocker,aiResolve.message].filter(Boolean).join(' ');
+  const recoveryState=recovery?.get(activeId);
+  action.textContent=recoveryState?.paused?'Resume AI':'Resolve with AI';
+  stop.hidden=!aiResolve.running&&(!recovery||!findings.length||!!recoveryState?.paused);stop.disabled=aiResolve.stopping;
+  get('baAutoResolveStatus').textContent=aiResolve.running?aiResolve.message:recoveryState?.paused?recoveryState.reason:[findings.length?findings.length+' requirement(s) need a source-backed correction; '+eligible.length+' owned by you.':'',blocker,aiResolve.message].filter(Boolean).join(' ');
  }
  function renderRequirements(){
   const brs=requirements();
@@ -425,7 +429,7 @@
   const answers=Number.isFinite(discoveryFilled)?discoveryFilled:Object.values(register.discoveryAnswers||{}).filter(value=>typeof value==='string'&&value.trim()).length;
   const excluded=new Set((register.baDraftQuality?.excluded||[]).map(row=>row.id));
   const stale=br=>br.needsRefresh||br.externalReviewRequired||br.roleReviewRequired||br.dependencyReviewRequired;
-  const clean=brs.filter(br=>!excluded.has(br.id)&&!stale(br)).length;
+  const clean=brs.filter(br=>!excluded.has(br.id)).length; // Draft quality is distinct from approval freshness.
   const items=rows.filter(row=>row.category!=='br');
   const conflicts=[...new Set([...(preview?.conflicts||[]),...(preview?.reopenSkipped||[]).map(row=>row.message||row.key||'Status reset unavailable')].map(String))];
   const blocked=new Set();let unmatched=0;
@@ -518,7 +522,7 @@
    const displayStatus=repairing?'in-progress':id==='baAutoHistory'&&progress[id]<100&&status==='completed'?'in-progress':status;
    setReadyPanel(id,displayStatus);
    badge(id+'Badge',displayStatus);
-   renderSectionProgress(id,repairing?aiRepairProgress(aiResolve.message):progress[id],displayStatus,repairing);
+   renderSectionProgress(id,repairing?Math.min(99,Math.max(progress[id],aiRepairProgress(aiResolve.message)??0)):progress[id],displayStatus,repairing);
   }
  }
 
@@ -590,6 +594,7 @@
   renderBACompletedRecords();
   renderReadyPanels(phase);
   renderArtifacts();renderRequirements();renderJira();
+  scheduleRecovery();
  }
 
 
@@ -705,22 +710,71 @@
   get('baAutoArtifactStatus').textContent='Saving document…';
   invoke('baSaveArtifact',{kind,digest:sourceDigest,requestId:++request,revision:artifactContext.revision,text});
  });
- get('baAutoResolveAttention').addEventListener('click',()=>{
-  if(get('baAutoResolveAttention').disabled)return;
+ // The existing host validates ownership and source evidence and logs each repair.
+ // Observe verified workflow snapshots; never use log text as executable instructions.
+ function recoveryEvidence(){
+  if(!active()||!activeId||!brState||state?.projectId!==activeId||!source()?.digest||
+   !brState.discoveryRevision||!brState.mappingCompleted||dirty()||busy()||baBusyTask||discoveryImportBusy||
+   !baCanEdit('ba-discovery')||baOwnerState?.cached||baOwnerState?.scope==='local')return null;
+  if(!['ready','draft','published'].includes(state.phase))return null;
+  const findings=(brState.baDraftQuality?.excluded||[]).filter(row=>requirements().some(br=>br.id===row.id));
+  const eligible=findings.filter(row=>requirements().some(br=>br.id===row.id&&br.status==='draft'&&baCanEdit('ba-br-'+br.id)));
+  if(eligible.length)return {eligible:true,action:'repair',remaining:findings.length,fingerprint:JSON.stringify(eligible.map(row=>[row.id,row.field,row.reason]).sort())};
+  if(findings.length)return null;
+  // A stale preview can be refreshed, but do not guess missing SDLC roles,
+  // resolve permission conflicts, or repeat an already-current conflicting plan.
+  if(requirements().length&&!sharedReadOnly()&&!currentJiraPreview()&&
+    (!state.preview||state.preview.revision!==brState.revision)&&!get('baAutoRefresh').disabled)
+   return {eligible:true,action:'preview',remaining:1,fingerprint:String(brState.revision)};
+  if(currentJiraPreview())recovery?.complete(activeId);
+  return null;
+ }
+ function startAttentionRepair(){
+  if(get('baAutoResolveAttention').disabled)return false;
   aiResolve={running:true,message:'AI is reviewing the exact quality findings and verified source evidence…',stopping:false};
-  get('baAutoRequirements').open=true;
   render();
   invoke('baAutoResolveAttention',{revision:brState.revision});
+  return true;
+ }
+ function scheduleRecovery(){
+  if(!recovery||recoveryTimer!==null||!active()||!activeId||recovery.get(activeId).paused)return;
+  const project=activeId;
+  recoveryTimer=setTimeout(()=>{
+   recoveryTimer=null;
+   if(project!==activeId||!active())return;
+   const evidence=recoveryEvidence();
+   if(!evidence)return;
+   if(!recovery.begin(project,evidence)){
+    if(recovery.get(project).paused)render();
+    return;
+   }
+   recoveryAction={project,action:evidence.action};
+   if(evidence.action==='repair'){
+    if(!startAttentionRepair()){recovery.finish(project,{failed:true,reason:'AI recovery paused: repair no longer eligible.'});recoveryAction=null;render();}
+   }else invoke('baRefreshArtifacts');
+  },900);
+ }
+ get('baAutoResolveAttention').addEventListener('click',()=>{
+  if(get('baAutoResolveAttention').disabled)return;
+  if(recovery){
+   recovery.resume(activeId);
+   const evidence=recoveryEvidence();
+   if(evidence?.action==='repair'&&recovery.begin(activeId,evidence))recoveryAction={project:activeId,action:'repair'};
+  }
+  get('baAutoRequirements').open=true;startAttentionRepair();
  });
  get('baAutoResolveStop').addEventListener('click',()=>{
-  if(!aiResolve.running||aiResolve.stopping)return;
-  aiResolve.stopping=true;
-  aiResolve.message='Stopping AI repair without publishing to Jira…';
-  invoke('baStopAttentionResolve');
+  if(aiResolve.stopping)return;
+  recovery?.pause(activeId);
+  if(aiResolve.running){
+   aiResolve.stopping=true;
+   aiResolve.message='Stopping AI repair without publishing to Jira…';
+   invoke('baStopAttentionResolve');
+  }
   render();
  });
  get('baAutoRefresh').addEventListener('click',()=>{if(!sharedReadOnly()&&!get('baAutoRefresh').disabled)invoke('baRefreshArtifacts');});
- get('baAutoStop').addEventListener('click',()=>invoke('baStopPreparation'));
+ get('baAutoStop').addEventListener('click',()=>{recovery?.pause(activeId);invoke('baStopPreparation');});
  get('baAutoPublish').addEventListener('click',()=>{
   if(sharedReadOnly()||get('baAutoPublish').disabled)return;
    get('baAutoPublish').disabled=true;
@@ -728,7 +782,7 @@
  });
 
  window.addEventListener('atgv:viewchange',()=>{
-  if(!active()){requestedProject='';if(!dirty())resetWorkflowPanels();}
+  if(!active()){if(recoveryTimer!==null){clearTimeout(recoveryTimer);recoveryTimer=null;}requestedProject='';if(!dirty())resetWorkflowPanels();}
   render();
  });
  window.addEventListener('message',({data:m})=>{
@@ -749,6 +803,9 @@
    if(!aiResolve.stopping)aiResolve.message=String(m.message||'AI is repairing source-backed quality findings…');
    render();return;
   }
+  if(m.type==='baAutoResolveResult'&&recoveryAction?.project===m.projectId&&recoveryAction.action==='repair'){
+   recovery?.finish(m.projectId,{cancelled:recovery.get(m.projectId).paused||m.cancelled===true,failed:!!m.error,reason:m.error?'AI recovery failed; download the troubleshooting log.':undefined});recoveryAction=null;
+  }
   if(m.projectId===activeId&&m.type==='baAutoResolveResult'){
    aiResolve.running=false;aiResolve.stopping=false;
    aiResolve.message=String(m.message||'AI repair finished. Review the updated quality findings.');
@@ -757,6 +814,9 @@
   if(m.type==='baPreparation'&&m.state?.projectId===activeId){
    const previous=state?.phase;
    state=m.state;
+   if(recoveryAction?.project===activeId&&recoveryAction.action==='preview'&&previous==='running'&&state.phase!=='running'){
+    recovery?.finish(activeId,{failed:!!state.error,reason:state.error?'Jira preview recovery failed; review the troubleshooting log.':undefined});recoveryAction=null;
+   }
    if(state.preview){
     brPlanRevision=state.preview.revision;
     jiraPreviewIssueTypes=state.preview.issueTypes;
