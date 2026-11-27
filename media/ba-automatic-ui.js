@@ -29,7 +29,7 @@
  const quillHelp=get('baAutoQuillHelp'),quillRetry=get('baAutoQuillRetry'),quillFallback=get('baAutoQuillFallback'),quillActions=get('baAutoQuillActions');
 
  const active=()=>view==='discovery'&&selectedRole==='business-analyst';
- const busy=()=>aiResolve.running||state?.phase==='running'||state?.phase==='publishing';
+ const busy=()=>aiResolve.running||state?.phase==='running'||state?.phase==='publishing'||recoveryAction?.project===activeId;
  function stageSummary(){
   const current=state?.projectId===activeId?state:null;
   const phase=current?.phase||'idle';
@@ -541,7 +541,7 @@
   if(!source()&&sourceDigest)state=null;
   if(requestedProject!==activeId){
    if(!dirty())resetWorkflowPanels();
-   requestedProject=activeId;state=null;collapsed.clear();brKey='';tableKey='';aiResolve={running:false,message:'',stopping:false};
+   requestedProject=activeId;state=null;collapsed.clear();brKey='';tableKey='';aiResolve={running:recoveryAction?.project===activeId&&recoveryAction.action==='repair',message:'',stopping:false};
    invoke('baPreparationState');
   }
   const baNew=get('baNewRequirement');
@@ -713,7 +713,7 @@
  // The existing host validates ownership and source evidence and logs each repair.
  // Observe verified workflow snapshots; never use log text as executable instructions.
  function recoveryEvidence(){
-  if(!active()||!activeId||!brState||state?.projectId!==activeId||!source()?.digest||
+  if(recoveryAction||!active()||!activeId||!brState||state?.projectId!==activeId||!source()?.digest||
    !brState.discoveryRevision||!brState.mappingCompleted||dirty()||busy()||baBusyTask||discoveryImportBusy||
    !baCanEdit('ba-discovery')||baOwnerState?.cached||baOwnerState?.scope==='local')return null;
   if(!['ready','draft','published'].includes(state.phase))return null;
@@ -751,11 +751,11 @@
    recoveryAction={project,action:evidence.action};
    if(evidence.action==='repair'){
     if(!startAttentionRepair()){recovery.finish(project,{failed:true,reason:'AI recovery paused: repair no longer eligible.'});recoveryAction=null;render();}
-   }else invoke('baRefreshArtifacts');
+   }else{invoke('baRefreshArtifacts');render();}
   },900);
  }
  get('baAutoResolveAttention').addEventListener('click',()=>{
-  if(get('baAutoResolveAttention').disabled)return;
+  if(get('baAutoResolveAttention').disabled||recoveryAction)return;
   if(recovery){
    recovery.resume(activeId);
    const evidence=recoveryEvidence();
@@ -773,7 +773,7 @@
   }
   render();
  });
- get('baAutoRefresh').addEventListener('click',()=>{if(!sharedReadOnly()&&!get('baAutoRefresh').disabled)invoke('baRefreshArtifacts');});
+ get('baAutoRefresh').addEventListener('click',()=>{if(!sharedReadOnly()&&!get('baAutoRefresh').disabled&&!recoveryAction){recovery?.resume(activeId);invoke('baRefreshArtifacts');}});
  get('baAutoStop').addEventListener('click',()=>{recovery?.pause(activeId);invoke('baStopPreparation');});
  get('baAutoPublish').addEventListener('click',()=>{
   if(sharedReadOnly()||get('baAutoPublish').disabled)return;
@@ -811,12 +811,16 @@
    aiResolve.message=String(m.message||'AI repair finished. Review the updated quality findings.');
    render();return;
   }
+  if(m.type==='baPreparation'&&m.state?.projectId===recoveryAction?.project&&recoveryAction?.action==='preview'){
+   if(m.state.phase==='running')recoveryAction.seenRunning=true;
+   else if(recoveryAction.seenRunning||m.state.error){
+    const project=recoveryAction.project;
+    recovery?.finish(project,{failed:!!m.state.error,cancelled:recovery.get(project).paused,reason:m.state.error?'Jira preview recovery failed; review the troubleshooting log.':undefined});recoveryAction=null;
+   }
+  }
   if(m.type==='baPreparation'&&m.state?.projectId===activeId){
    const previous=state?.phase;
    state=m.state;
-   if(recoveryAction?.project===activeId&&recoveryAction.action==='preview'&&previous==='running'&&state.phase!=='running'){
-    recovery?.finish(activeId,{failed:!!state.error,reason:state.error?'Jira preview recovery failed; review the troubleshooting log.':undefined});recoveryAction=null;
-   }
    if(state.preview){
     brPlanRevision=state.preview.revision;
     jiraPreviewIssueTypes=state.preview.issueTypes;
