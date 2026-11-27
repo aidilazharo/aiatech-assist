@@ -38,7 +38,7 @@ test('roles are consolidated to one left navigation item and moved into the cont
 });
 
 test('ATGV Start is a search gate; full SDLC shell is only visible after verified open',()=>{
-  for(const id of ['gateView','gateFinder','gateProjectsHeading','gateManual','gateLocal','gateOpeningError','gateRecovery'])
+  for(const id of ['gateView','gateFinder','gateProjectsHeading','gateLocal','gateOpeningError','gateRecovery'])
     assert.match(html,new RegExp('id="'+id+'"'));
   assert.match(html,/<body class="gate-mode">/);
   assert.doesNotMatch(html,/id="gateSettings"/);

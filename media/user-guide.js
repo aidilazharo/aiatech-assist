@@ -4,7 +4,7 @@
  const guides={
   opening:{label:'Open a Project',description:'Find and open your ATGV workspace.',steps:[
    s('search','Find an ATGV project','Review the Projects list populated by the workspace scan. Select Next to reach Projects after connection setup.','#gateProjectsHeading','opening'),
-   s('results','Choose a project','Choose an existing project or select New Project to configure a new workspace.','#gateLocal','opening'),
+   s('results','Choose a project','Choose an existing project or import a detected project folder.','#gateLocal','opening'),
    s('open','Open the workspace','Click Open Project on a project row to open it directly; no second confirmation screen appears.','#gateFinder','opening')
   ]},
   workspace:{label:'Workspace Essentials',description:'Navigate projects, roles, documents, and help.',steps:[
@@ -16,7 +16,7 @@
   ]},
   'start-settings':{label:'Start & Settings',description:'Use the start screen and settings to connect tools and configure roles.',steps:[
    s('gate-settings','Open connection setup','Use the connection setup below to configure Jira, Confluence, GitHub, and the SDLC Library before opening a project.','#startupConnectionForm','opening'),
-   s('search','Choose a project','Select Next to view detected workspace projects, or use New Project to configure a new workspace.','#gateProjectsHeading','opening'),
+   s('search','Choose a project','Select Next to view detected workspace projects.','#gateProjectsHeading','opening'),
    s('role-settings','Manage enabled roles','Enable or disable SDLC roles for the selected project in Project Settings.','#roleSettingsSection','project-settings'),
    s('project-tools','Open project and tech stack settings','Select the technology stack and repository for the current project.','#techStackGrid','project-settings')
   ]},

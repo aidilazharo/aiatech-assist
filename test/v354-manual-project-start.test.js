@@ -29,7 +29,7 @@ test('project rows launch without duplicate project-selection confirmation',()=>
   assert.equal((html.match(new RegExp('id="'+id+'"','g'))||[]).length,1);
  assert.ok(js.includes("gateOpeningError').textContent=gateError"));
  assert.ok(js.includes("gateRecovery').classList.toggle('hidden',!gateOfflineAvailable)"));
- assert.equal((html.match(/id="gateManual"/g)||[]).length,1);
+ assert.doesNotMatch(html,/id="gateManual"/);
  assert.ok(js.includes("gateWorkspaceSection').classList.toggle('hidden',!others.length&&!!recentProjects.length)"));
 });
 
@@ -55,7 +55,7 @@ test('ATGV start keeps manual discovery available until the webview is ready',as
  env.webviewCoreReady=true;
  await env.finishManualProjectDiscovery(11);
  assert.equal(env.startupScan.status,'complete');
- assert.match(env.startupScan.message,/Choose a project/);
+ assert.equal(env.startupScan.message,'');
  assert.equal(env.activeProject,null);
  assert.deepEqual(messages.map(m=>m.type),['startupSavedFields','startupScan','refresh']);
 });

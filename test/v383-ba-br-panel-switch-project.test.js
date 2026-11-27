@@ -25,5 +25,7 @@ test('BR-panel Jira-only Epic cards keep View Jira but no Switch Project action'
 
 test('project switching stays available in the main navigation',()=>{
  assert.match(html,/id="sidebarSwitchProject"/);
- assert.match(ui,/\$\('sidebarSwitchProject'\)\.addEventListener\('click',\(\)=>navigate\('projects'\)\)/);
+ assert.match(html,/<select id="sidebarSwitchProject"/);
+ assert.match(ui,/\$\('sidebarSwitchProject'\)\.addEventListener\('change'/);
+ assert.match(ui,/navigate\('projects',id\)/);
 });

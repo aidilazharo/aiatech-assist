@@ -384,7 +384,7 @@ function renderWorkspaceSearch(scan){
  $('workspaceSearchTrack').setAttribute('aria-valuenow',String(percent));
  $('workspaceSearchTitle').textContent=percent<35?'Searching current folder…':percent<90?'Loading project…':'Preparing workspace…';
  $('workspaceSearchMessage').textContent=scan?.message||'Checking for registered ATGV project files…';
- if(!busy&&scan?.message&&view==='gate')$('gateSearchMessage').textContent=scan.message;
+ if(!busy&&view==='gate')$('gateSearchMessage').textContent=scan?.message||'';
 }
 const read=id=>$(id).value.trim();
 const topNoticeQueue=[];
@@ -732,6 +732,7 @@ function renderGate(){
   $('gateSkip').classList.toggle('hidden',!skipAllowed);
   $('gateSkip').disabled=!skipAllowed||gateBusy||!workspaceFolderAvailable;
   renderGateResults();
+  if(typeof syncRequiredLibraryGate==='function')queueMicrotask(syncRequiredLibraryGate);
 }
 function gateProjectRow(root,project,{recent=false}={}){
   const row=document.createElement('div');row.className='gate-result gate-project-card';
@@ -752,7 +753,7 @@ function renderGateResults(){
   const local=$('gateLocal');local.replaceChildren();
   const others=all.filter(p=>!recentIds.includes(p.id));
   $('gateWorkspaceSection').classList.toggle('hidden',!others.length&&!!recentProjects.length);
-  if(!others.length&&!recentProjects.length){const p=document.createElement('p');p.className='muted';p.textContent='No saved projects. Select New Project to create one.';local.append(p);}
+  if(!others.length&&!recentProjects.length){const p=document.createElement('p');p.className='muted';p.textContent='No saved projects.';local.append(p);}
   for(const p of others)gateProjectRow(local,p);
   const unregistered=$('gateUnmanaged');unregistered.replaceChildren();
   const candidates=unmanagedFolders;
@@ -784,7 +785,7 @@ function openTokenHelpModal(provider){
  if(!modal.open)tokenHelpPriorFocus=document.activeElement;
  tokenHelpProvider=provider;
  $('tokenHelpTitle').textContent=link.title;
- $('tokenHelpUrl').value=link.url;
+
  $('tokenHelpStatus').textContent='';
  if(!modal.open)modal.showModal();
  $('tokenHelpCancel').focus();
@@ -814,12 +815,11 @@ $('tokenHelpCopy').addEventListener('click',async()=>{
   if(tokenHelpProvider===provider)$('tokenHelpStatus').textContent='Link copied.';
  }catch{
   if(tokenHelpProvider!==provider)return;
-  $('tokenHelpUrl').focus();$('tokenHelpUrl').select();
-  $('tokenHelpStatus').textContent='Press Ctrl+C or Cmd+C to copy the selected link.';
+  $('tokenHelpStatus').textContent='Unable to copy. Use Open Website instead.';
  }
 });
 for(const [id,provider] of [['guideJiraTokenLink','jira'],['guideConfluenceTokenLink','confluence'],['guideGithubTokenLink','github'],['startupAtlassianTokenInfo','jira'],['startupGithubTokenInfo','github']])$(id).addEventListener('click',()=>openTokenHelpModal(provider));
-$('gateManual').addEventListener('click',()=>openProject());
+
 $('gateSkip').addEventListener('click',()=>{
  if(gateBusy||!workspaceFolderAvailable)return;
  gateBusy=true;gateError='';gateOfflineAvailable=false;
@@ -975,6 +975,7 @@ window.addEventListener('resize',fitBrandVersionLines);
 function renderCatalog(state,{forceFields=false}={}){
  if(!state)return;
  catalogState=state;
+ if(typeof syncRequiredLibraryGate==='function')queueMicrotask(syncRequiredLibraryGate);
  renderRoleSkillHeader();
  updateBrandLibraryVersion(state);
  const form=$('catalogForm');if(!form)return;
@@ -1077,8 +1078,9 @@ function collapseProjectSettings(){const panel=$('projectSettingsPanel');if(pane
 function updateState(msg){
   if(activeId!==msg.activeId){mappingResumeAvailable=false;mappingRetryAvailable=false;if(baRequirementModalTarget)closeBARequirementModal(false);brDeletionBusy=false;hideBRDeletionProgress();roleJiraRequest++;baResumeCardReady=baHasRecoverableBR(msg.brState);baViewedStep=null;baPreflightInfo=null;mappingFailurePhase='';if(pmJiraTableInstance){pmJiraTableInstance.destroy?.();pmJiraTableInstance=null;} jiraInventoryRequest++;jiraInventoryLastChecked=0;jiraInventoryRunning=false;jiraInventoryLoaded=false;jiraInventoryError="";jiraInventoryItems=[];jiraInventoryProject="";jiraInventoryKey="";jiraInventoryViewerId="";aiChangeResolutionView.receive({type:'aiChangeResolution/state',cases:[]});baShowChangeProposal=false;restoredMappingEpoch=null;discoveryImportProposal=null;discoveryImportQueue=[];brState=msg.brState||null;reviewStageState=null;reviewApplyRetry=null;reviewApplyRetryAvailable=false;deliveryInfo=null;deliveryDraftDirty=false;deliveryState={items:[]};sourceSelectedDigests=new Set(Array.isArray(msg.baSelectedSources)?msg.baSelectedSources:[]);opsOwnerDocs=[];opsOwnerLoaded=false;opsOwnerMe=null;opsOwnerBusy=false;handoffOwnerBusy=null;baOwnerState=null;selectedHandoffBrId=null;handoffOwnership={me:null,documents:[],scope:null};}
   workspaceFolderAvailable=!!msg.workspace;
+  if(msg.catalog?.startupProceedApproved===true)startupWizardCompletedThisSession=true;
   $('gateFolderAlert').classList.toggle('hidden',workspaceFolderAvailable);
-  $('gateManual').disabled=!workspaceFolderAvailable;
+
   if(!aiProviderLoaded){aiProviderLoaded=true;send('getAiProviderState');}
   projects=msg.projects||[];activeId=msg.activeId||null;healthData=msg.health||null;usedRoleIds=new Set(msg.usedRoles||[]);designState=msg.designState||null;approvedDesignHash=msg.approvedDesignHash||'';blueprintRegistry=msg.blueprintRegister||null;blueprintAssessment=msg.blueprintAssessment||null;extensionSettings=msg.extensionSettings||{};updateHeaderUserName(extensionSettings.jira?.email||extensionSettings.atlassian?.email||msg.startupSetup?.saved?.email);techStacks=msg.techStacks||[];renderCatalog(msg.catalog);jiraBrowseBaseUrl=msg.jiraBrowseBaseUrl||'';
   recentIds=msg.recentProjects||[];projectReadiness=msg.projectReadiness||{};unmanagedFolders=msg.unmanagedFolders||[];
@@ -1097,7 +1099,7 @@ function updateState(msg){
     $('coordinationHint').textContent=provider==='jira-confluence'?'Jira verifies the user; Confluence stores shared ownership and approval decisions.':provider==='service'?'Use the optional standalone ATGV Coordination Service.':'Local-only assignments are not shared with other ATGV users.';
     $('opsService').classList.toggle('hidden',provider!=='service');
   }
-  $('sidebarSwitchProject').textContent=(projects.find(p=>p.id===activeId)?.name||'Choose Project')+' ▾';
+  renderProjectSwitch();
   
   $('extensionToProjectSettings').disabled=!(activeId&&workspaceOpened);
   const model=msg.modelStatus||{name:'LLM',state:'inactive',message:'Not active'};
@@ -1221,6 +1223,7 @@ function syncSdlcWorkspaceShell(next){
  }
 }
 function navigate(destination){
+  const projectId=arguments[1]||'';
   if(roleSettingsDirty&&view==='project'&&destination!=='project-settings'&&destination!=='tech'){status('Save project role settings before leaving Project Settings.',true);return;}
   if(view==='discovery'&&discoveryDirty){status('Save your discovery answers before leaving this screen.',true);return;}
   if(view==='discovery'&&destination!=='discovery'&&window.ATGVBusinessRequirements?.dirty()){status('Save your Business Requirements edits before leaving this screen.',true);return;}
@@ -1234,6 +1237,7 @@ function navigate(destination){
     return;
   }
   if(destination==='projects'){
+    if(workspaceOpened&&projectId&&projects.some(p=>p.id===projectId)){if(gateBusy)return;showGate();launchFromGate({projectId});return;}
     if(workspaceOpened){send('openingBack');return;}
     showGate();return;
   }
@@ -2231,11 +2235,10 @@ function renderOverviewConnections(data){
  renderStartupMappings();
 }
 function renderStartupMappings(){
- const select=$('startupMappingProject');if(!select)return;
- if(!projects.some(p=>p.id===startupMappingProjectId))startupMappingProjectId=projects.length===1?projects[0].id:'';
- const signature=JSON.stringify(projects.map(p=>[p.id,p.name]));
- if(select.dataset.options!==signature){select.replaceChildren();const prompt=document.createElement('option');prompt.value='';prompt.textContent=projects.length?'Select a project':'No saved projects';select.append(prompt);for(const p of projects){const option=document.createElement('option');option.value=p.id;option.textContent=p.name;select.append(option);}select.dataset.options=signature;}
- select.value=startupMappingProjectId;select.disabled=!projects.length;
+ if(!$('overviewJiraProjectKey'))return;
+ // Before opening a project, show only an unambiguous saved project.
+ // Do not guess which project's remote settings should be edited.
+ startupMappingProjectId=projects.some(p=>p.id===activeId)?activeId:projects.length===1?projects[0].id:'';
  const data=startupProjectMappings[startupMappingProjectId]||{};
  const jira=data?.jira||{},space=data?.confluence||{};
  const configured=record=>record.source==='project'||record.source==='extension';
@@ -2260,7 +2263,7 @@ function renderStartupMappings(){
  $('overviewConfluenceSpaceInfo').textContent=spaceDetails.join(' · ')||'Select a Confluence space in Project Settings.';
  $('overviewJiraInventory').disabled=!startupMappingProjectId||!startupConnectionVerified||!jira.key;
 }
-$('startupMappingProject').addEventListener('change',()=>{startupMappingProjectId=$('startupMappingProject').value;renderStartupMappings();});
+
 function renderOverviewSdlcPhases(){
  const container=$('overviewPhaseCircles');
  if(!container)return;
@@ -5416,7 +5419,22 @@ for(const id of ['settingsExtensionTab','extensionToProjectSettings','projectToE
   });
 }
 $('projectToExtensionSettings').addEventListener('click',()=>navigate('settings'));
-$('sidebarSwitchProject').addEventListener('click',()=>navigate('projects'));
+function renderProjectSwitch(){
+ const select=$('sidebarSwitchProject');
+ const signature=JSON.stringify(projects.map(p=>[p.id,p.name]));
+ if(select.dataset.options!==signature){
+  select.replaceChildren();
+  const prompt=document.createElement('option');prompt.value='';prompt.textContent='Choose project';prompt.disabled=true;select.append(prompt);
+  for(const p of projects){const option=document.createElement('option');option.value=p.id;option.textContent=p.name;select.append(option);}
+  select.dataset.options=signature;
+ }
+ select.value=activeId||'';select.disabled=gateBusy||projects.length===0;
+}
+$('sidebarSwitchProject').addEventListener('change',()=>{
+ const id=$('sidebarSwitchProject').value;
+ $('sidebarSwitchProject').value=activeId||'';
+ if(id&&id!==activeId&&projects.some(p=>p.id===id))navigate('projects',id);
+});
 
 function setGithubBranch(){field('githubBranch','main');}
 function showGithubRepoPreview(){
@@ -9499,6 +9517,7 @@ function showStartupStep(required){
  $('startupSetup').classList.toggle('hidden',!required);
  $('gateFinder').classList.toggle('hidden',required);
  if(required)renderStartupPage();
+ if(typeof syncRequiredLibraryGate==='function')queueMicrotask(syncRequiredLibraryGate);
 }
 function requestStartupReadiness(){
  if(startupPrereqRequested)return;
@@ -9906,6 +9925,54 @@ window.addEventListener('message',event=>{
  $('startupPrerequisiteInstall').focus();
 });
 
+// Missing or invalid Library is a blocking prerequisite, not an optional update.
+let requiredLibraryPulling=false,requiredLibraryRecovering=false,requiredLibraryError='',libraryGateCheckSequence=0;
+function libraryGateRequired(){
+ return !!workspaceFolderAvailable&&!!catalogState&&catalogState.activeVerified!==true&&
+  (workspaceOpened||!startupSetupRequired);
+}
+function syncRequiredLibraryGate(){
+ const modal=$('requiredLibraryModal');
+ if(!modal)return;
+ const required=libraryGateRequired();
+ if(!required){if(modal.open)modal.close();requiredLibraryRecovering=false;requiredLibraryError='';return;}
+ if(view==='settings'&&requiredLibraryRecovering){if(modal.open)modal.close();return;}
+ if(!modal.open)modal.showModal();
+ $('requiredLibraryPull').disabled=requiredLibraryPulling||!!catalogState?.busy;
+ $('requiredLibrarySettings').disabled=requiredLibraryPulling;
+ $('requiredLibraryPull').textContent=requiredLibraryPulling?'Updating…':requiredLibraryError?'Retry Update':'Update Library';
+ if(!requiredLibraryPulling)$('requiredLibraryStatus').textContent=requiredLibraryError;
+}
+document.body.appendChild($('requiredLibraryModal'));
+$('requiredLibraryModal').addEventListener('cancel',event=>event.preventDefault());
+$('requiredLibrarySettings').addEventListener('click',()=>{
+ if(requiredLibraryPulling)return;
+ requiredLibraryRecovering=true;$('requiredLibraryModal').close();navigate('settings');
+});
+$('requiredLibraryPull').addEventListener('click',()=>{
+ if(!libraryGateRequired()||requiredLibraryPulling||catalogState?.busy)return;
+ requiredLibraryPulling=true;requiredLibraryError='';
+ $('requiredLibraryStatus').textContent='Verifying GitHub Library source…';syncRequiredLibraryGate();
+ send('catalogPull',{requiredLibrary:true});
+});
+window.addEventListener('atgv:viewchange',()=>{
+ if(view!=='settings')requiredLibraryRecovering=false;
+ syncRequiredLibraryGate();
+ if(workspaceFolderAvailable&&(workspaceOpened||!startupSetupRequired)&&!requiredLibraryPulling)
+  send('libraryGateCheck',{requestId:++libraryGateCheckSequence});
+});
+window.addEventListener('message',event=>{
+ const m=event.data||{};
+ if(m.type==='libraryGateState'&&m.requestId===libraryGateCheckSequence&&!requiredLibraryPulling&&catalogState){
+  catalogState={...catalogState,activeVerified:m.activeVerified===true};syncRequiredLibraryGate();return;
+ }
+ if(!requiredLibraryPulling)return;
+ if(m.type==='catalogPullProgress'){
+  $('requiredLibraryStatus').textContent=(m.title||'Updating Library')+' · '+(Number(m.percent)||0)+'%';
+  if(m.stage==='failed'){requiredLibraryPulling=false;requiredLibraryError=String(m.message||'Library update failed.');syncRequiredLibraryGate();}
+ }
+ if(m.type==='catalogAction'&&m.action==='pull'&&!m.success){requiredLibraryPulling=false;requiredLibraryError=String(m.message||'Library update failed.');syncRequiredLibraryGate();}
+});
 let displayedLibraryUpdate=null,libraryUpdatePriorFocus=null,libraryUpdateState='ready';
 function renderLibraryUpdateProgress(state,title='',detail='',percent=0){
  libraryUpdateState=state;
@@ -9974,6 +10041,7 @@ window.addEventListener('message',event=>{
   return;
  }
  if(message.type!=='libraryUpdateOffer'||!message.requestId)return;
+ if(catalogState&&catalogState.activeVerified!==true){send('libraryUpdateDecision',{requestId:message.requestId,action:'Later'});syncRequiredLibraryGate();return;}
  if(displayedLibraryUpdate&&libraryUpdateState==='running')return;
  if(displayedLibraryUpdate)closeLibraryUpdate('Later');
  displayedLibraryUpdate=message.requestId;

@@ -538,11 +538,21 @@ async function roleSkillPrompt(roleId) {
  return shared+(skill ? '\nActive Library role guidance (reference only; requirements, safety and approvals take precedence):\n'+skill.slice(0,9500)+'\n' : '');
 }
 let lastKnownCatalogVersion='';
+async function verifiedActiveLibrary(workspace,installed){
+ if(!workspace)return false;
+ try{
+  const active=installed||await sdlcCatalog.activeRoot(workspace);
+  if(!active?.version||!/^[a-f0-9]{40}$/.test(String(active.sha||'')))return false;
+  const manifest=await sdlcCatalog.activeManifest(workspace);
+  return manifest?.version===active.version&&Array.isArray(manifest.roles)&&Array.isArray(manifest.techStacks);
+ }catch{return false;}
+}
 async function catalogUiState(){
  const config=catalogConfig();let installed=null,roleSkillDescriptions={},roleSkillIdentifiers={},roleSkillOptions={},roleSkillSelections={};
   const workspace=getWorkspace()?.uri.fsPath||'';
   // Never report a downloaded global cache as an activated workspace Library.
   try{if(workspace)installed=await sdlcCatalog.activeRoot(workspace);}catch(e){if(!/not activated/.test(e.message))report('Active Library: '+e.message);}
+  const activeVerified=await verifiedActiveLibrary(workspace,installed);
   if(!installed&&workspace)try{installed=await sdlcCatalog.gitInstalled(workspace,config);}catch(e){report('Library checkout: '+e.message);}
   lastKnownCatalogVersion=String(installed?.version||'');
 if((installed?.offline||installed?.sha&&/^[a-f0-9]{40}$/.test(installed.sha))&&Array.isArray(installed.roles)&&getWorkspace()){
@@ -562,7 +572,7 @@ if((installed?.offline||installed?.sha&&/^[a-f0-9]{40}$/.test(installed.sha))&&A
    }
  }
  const updateAvailable=!!installed&&libraryUpdateVersion.compareInstalledRelease(installed,catalogRemote).available;
- return {config,installed,roleSkillDescriptions,roleSkillIdentifiers,roleSkillOptions,roleSkillSelections,remote:catalogRemote,updateAvailable,lastCheck:catalogLastCheck,error:catalogLastError,busy:catalogBusy,credentialSaved:!!(await context.secrets.get('atgvAssist.sdlcCatalogToken')),readOnly:true};
+ return {config,installed,activeVerified,startupProceedApproved:startupSessionProceedApproved,roleSkillDescriptions,roleSkillIdentifiers,roleSkillOptions,roleSkillSelections,remote:catalogRemote,updateAvailable,lastCheck:catalogLastCheck,error:catalogLastError,busy:catalogBusy,credentialSaved:!!(await context.secrets.get('atgvAssist.sdlcCatalogToken')),readOnly:true};
 }
 async function catalogCheck({interactive=false}={}){
  if(catalogBusy)return;
@@ -2330,7 +2340,7 @@ async function focusAtgvWorkspace(){
 }
 async function finishManualProjectDiscovery(sequence){
  if(sequence!==startupSequence||!webviewCoreReady)return;
- startupScan={status:'complete',percent:100,message:'Review technology stack prerequisites and test Jira, Confluence and GitHub connections first. Choose a project only after setup is verified.'};
+ startupScan={status:'complete',percent:100,message:''};
  // Hydrate saved (non-secret) fields before heavier dashboard state is loaded.
  await dashboard?.webview.postMessage({type:'startupSavedFields',saved:typeof startupSavedConnectionFields==='function'?startupSavedConnectionFields():{}});
  await dashboard?.webview.postMessage({type:'startupScan',...startupScan});
@@ -6839,6 +6849,11 @@ async function handleDashboardMessage(msg){
          await finishManualProjectDiscovery(startupSequence);
          break;
        }
+       case 'libraryGateCheck':{
+        const workspace=getWorkspace()?.uri.fsPath;
+        const activeVerified=await verifiedActiveLibrary(workspace);
+        await dashboard?.webview.postMessage({type:'libraryGateState',requestId:msg.requestId,activeVerified});break;
+       }
        case 'viewNavigateRefresh':{
         requireOpened();
         if(msg.projectId!==activeProject?.id||!webviewCoreReady)break;
@@ -10315,8 +10330,11 @@ async function handleDashboardMessage(msg){
           if(!remote?.sha||!remote?.version)
             throw Error('Cannot verify the GitHub Library main branch. Update your GitHub credentials in Settings, then retry Pull Library.');
           catalogRemote={repository:remote.repository,version:remote.version,sha:remote.sha};
+          const verified=await verifiedActiveLibrary(workspace,installed);
           const newer=!installed||libraryUpdateVersion.compareInstalledRemote(installed.version,remote.version).available;
-          if(!newer){
+          const repairSameVersion=msg.requiredLibrary===true&&!verified&&installed?.version===remote.version;
+          if(!newer&&!repairSameVersion){
+            if(!verified)throw Error('The active Library is invalid and the configured source does not provide an equal or newer verified version. Check Library settings.');
             const message='Active GitHub Library v'+installed.version+' is equal to or newer than '+config.repositoryUrl+' main v'+remote.version+'. No downgrade was performed.';
             await dashboard?.webview.postMessage({type:'catalogAction',action:'pull',success:true,message});
             await progress('completed',100,'SDLC Library up to date',message);
@@ -10325,7 +10343,7 @@ async function handleDashboardMessage(msg){
           await progress('running',55,'Pulling verified Library main','Cloning or fast-forwarding the selected source after verifying its commit and manifest.');
           const pulled=await sdlcCatalog.syncGitWorkspace(config,token,workspace,context.globalStorageUri.fsPath,{expectedSha:remote.sha});
           const active=await sdlcCatalog.activeRoot(workspace);
-          if(active.version!==remote.version||active.sha!==remote.sha)
+          if(active.version!==remote.version||active.sha!==remote.sha||!await verifiedActiveLibrary(workspace,active))
             throw Error('Pulled Library does not match the verified main commit. Review local changes.');
           await persistConnectionSettings({library:config});
           await prepareVendorAssets({syncIfMissing:false});
@@ -10338,12 +10356,15 @@ async function handleDashboardMessage(msg){
           await progress('running',95,'Refreshing workspace','Applying verified GitHub Library skills and technology stacks.');
           await refreshDashboard();
           await progress('completed',100,'SDLC Library update complete',message);
-          if(installedVendorAssets&&dashboard&&webviewVendorDir!==installedVendorAssets.dir){
+          if(dashboard){
+            const vendorChanged=!!installedVendorAssets&&webviewVendorDir!==installedVendorAssets.dir;
             vendorBootRecoveryCount=0;vendorWebviewReady=false;webviewCoreReady=false;
-            dashboard.webview.options={...dashboard.webview.options,localResourceRoots:[
-              vscode.Uri.joinPath(context.extensionUri,'media'),vscode.Uri.file(installedVendorAssets.dir)]};
-            dashboard.webview.html=html(dashboard.webview,{resumeLibrary:true});
-            webviewVendorDir=installedVendorAssets.dir;
+            if(installedVendorAssets){
+              dashboard.webview.options={...dashboard.webview.options,localResourceRoots:[
+                vscode.Uri.joinPath(context.extensionUri,'media'),vscode.Uri.file(installedVendorAssets.dir)]};
+              webviewVendorDir=installedVendorAssets.dir;
+            }
+            dashboard.webview.html=html(dashboard.webview,{resumeLibrary:vendorChanged&&!msg.requiredLibrary});
           }
           activeLibraryUpdatePullRequestId=null;
         }catch(error){

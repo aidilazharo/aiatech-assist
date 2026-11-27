@@ -3307,3 +3307,10 @@ body:not(.gate-mode) #appHeader.app-header{position:relative;border-bottom:3px s
 #tokenHelpUrl{width:100%;min-width:0}
 #tokenHelpStatus{min-height:1.4em;margin:6px 0;color:var(--vscode-descriptionForeground)}
 #tokenHelpModal .actions{justify-content:flex-end;flex-wrap:wrap;margin-top:12px}
+
+/* Project dropdown and blocking Library prerequisite. */
+#sidebarSwitchProject{width:100%;min-width:0;text-overflow:ellipsis;cursor:pointer;padding-right:22px}
+#requiredLibraryModal{width:min(520px,calc(100vw - 32px));max-height:calc(100vh - 32px);margin:auto;padding:20px;overflow:auto;color:var(--vscode-foreground);background:var(--vscode-editor-background);border:1px solid var(--atgv-line);border-radius:10px}
+#requiredLibraryModal::backdrop{background:rgba(7,10,16,.82)}
+#requiredLibraryModal .actions{justify-content:flex-end;flex-wrap:wrap}
+#requiredLibraryStatus{overflow-wrap:anywhere}
