@@ -19,6 +19,7 @@ const {initializeWorkspaceFolders,installationSignature,lifecycleAction}=require
 const catalogVendorLibraries=require('../../catalog-vendor-libraries');
 const libraryUpdateVersion=require('../../library-update-version');
 const liveRemoteRefresh=require('../../live-remote-refresh');
+const checkNetworkHealth=require('../../network-health').createMonitor();
 const repoSyncWorkspace=require('../../repo-sync-workspace');
 const atgvAiChat=require('../../atgv-ai-chat');
 const myWorkRoleChat=require('../../my-work-role-chat');
@@ -6848,6 +6849,13 @@ async function handleDashboardMessage(msg){
          }
          await finishManualProjectDiscovery(startupSequence);
          break;
+       }
+       case 'networkHealthCheck':{
+        if(!Number.isSafeInteger(msg.requestId)||msg.requestId<1)break;
+        const panel=dashboard;
+        const health=await checkNetworkHealth();
+        if(panel&&dashboard===panel)await panel.webview.postMessage({type:'networkHealthState',requestId:msg.requestId,state:health.state});
+        break;
        }
        case 'libraryGateCheck':{
         const workspace=getWorkspace()?.uri.fsPath;

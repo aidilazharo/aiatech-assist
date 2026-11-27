@@ -10138,3 +10138,44 @@ window.addEventListener('message',event=>{
  const modal=$('extensionUpgradeModal');modal.classList.remove('hidden');modal.setAttribute('aria-hidden','false');
  $('extensionUpgradeInstall').focus();
 });
+
+// Network notifications are advisory: they never cancel work or alter permissions.
+let networkHealthRequest=0,networkHealthLastState='',networkHealthRemoteState='unknown';
+function networkHealthState(remote,browserOnline,connection){
+ if(browserOnline===false)return 'offline';
+ if(remote==='unreachable'||remote==='degraded')return remote;
+ const speed=Number(connection?.downlink),rtt=Number(connection?.rtt);
+ if(remote==='slow'||['slow-2g','2g'].includes(connection?.effectiveType)||
+   (Number.isFinite(speed)&&speed>0&&speed<1)||(Number.isFinite(rtt)&&rtt>=1500))return 'slow';
+ return remote==='online'?'online':'unknown';
+}
+function publishNetworkHealth(){
+ const state=networkHealthState(networkHealthRemoteState,navigator.onLine,navigator.connection);
+ if(state==='unknown'||state===networkHealthLastState)return;
+ const previous=networkHealthLastState;networkHealthLastState=state;
+ const messages={
+  offline:'You are offline. Information updates may be delayed until your internet connection is restored.',
+  unreachable:'ATGV cannot reach its online services. Check your internet connection or network restrictions. Information updates may be delayed.',
+  slow:'Your internet connection appears to be very slow. Please expect delays in information updates.',
+  degraded:'Some online services are responding slowly or are unreachable. Please expect delays in information updates.'
+ };
+ if(messages[state])notifyTop(messages[state],{error:state==='offline'||state==='unreachable',persistent:true});
+ else if(previous&&previous!=='online')notifyTop('Connection recovered. Information updates can resume.',{success:true,persistent:true});
+}
+function requestNetworkHealth(){
+ if(document.hidden)return;
+ publishNetworkHealth();
+ if(navigator.onLine!==false)send('networkHealthCheck',{requestId:++networkHealthRequest});
+}
+window.addEventListener('message',event=>{
+ const m=event.data||{};
+ if(m.type!=='networkHealthState'||m.requestId!==networkHealthRequest)return;
+ if(!['online','slow','degraded','unreachable'].includes(m.state))return;
+ networkHealthRemoteState=m.state;publishNetworkHealth();
+});
+window.addEventListener('offline',()=>{networkHealthRequest++;networkHealthRemoteState='unknown';publishNetworkHealth();});
+window.addEventListener('online',()=>{networkHealthRemoteState='unknown';requestNetworkHealth();});
+navigator.connection?.addEventListener?.('change',requestNetworkHealth);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)requestNetworkHealth();});
+setInterval(requestNetworkHealth,60000);
+requestNetworkHealth();
