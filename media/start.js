@@ -2852,6 +2852,8 @@ $('jiraIssueModalClose').addEventListener('click',closeJiraIssueModal);$('jiraIs
 // One ticket-scoped six-stage UI/UX workflow. All review actions stay local.
 let uxSelectedKey='',uxDrafts={wireframe:null,mockup:null},uxPipeline=null,uxPipelineBusy=false,uxPipelineStage=0,uxPendingOpenKey='',uxReferenceAvailable=false,uxPipelineStopping=false,uxCanStop=true,uxFramework='',uxFrameworks=[];
 let uxFrontendPublishing=false;
+const uxRecovery=window.ATGVRecoveryController?.create({maxStagnant:2,maxActions:6});
+let uxRecoveryJob=null,uxRecoveryTimer=null;
 const UX_STAGES=['Upload Design Reference','User Flow','Wireframe','UI Mockup','Interactive Prototype','Developer Handoff'];
 const uxReadyForPreview=()=>!!uxPipeline?.exists&&['review','approved'].includes(uxPipeline.status);
 function setUxStatus(message){const status=$('uxDesignStatus');status.textContent=String(message||'');status.classList.toggle('hidden',!status.textContent);}
@@ -3047,11 +3049,47 @@ function setUxRejectFeedback(open){
  $('uxRejectDesign').textContent=open?'Confirm Disapproval':'Disapprove Design';
  if(!open)$('uxRejectReason').value='';
 }
+function uxRecoveryContext(){
+ return {project:activeId,key:uxSelectedKey,framework:uxFramework,eligible:!!activeId&&!!uxSelectedKey&&!!uxFramework&&selectedRole==='ux-designer'&&view==='work'&&roleJiraLoaded&&roleJiraProject===activeId&&roleJiraRole==='ux-designer'&&Array.from($('uxSelectedTicket').options).some(option=>option.value===uxSelectedKey&&!option.disabled)};
+}
+function uxRecoveryScope(job){return JSON.stringify([job.project,job.key,job.framework]);}
+function clearUxRecoveryTimer(){if(uxRecoveryTimer!==null){clearTimeout(uxRecoveryTimer);uxRecoveryTimer=null;}}
+function finishUxRecovery(reason='',paused=false){
+ const job=uxRecoveryJob;if(!job)return;
+ clearUxRecoveryTimer();const scope=uxRecoveryScope(job);
+ uxRecovery?.finish(scope,{failed:paused,reason});
+ if(!paused)uxRecovery?.complete(scope);
+ uxRecoveryJob=null;
+}
+function dispatchUxGeneration(job){
+ if(!window.ATGVUxRecovery.sameScope(job,uxRecoveryContext())){finishUxRecovery('Recovery paused: assignment or design context changed.',true);return false;}
+ if(uxRecovery&&!uxRecovery.begin(uxRecoveryScope(job),{eligible:true,action:'generate',remaining:7-Math.max(1,job.furthest||1),fingerprint:job.revision||'new'})){
+  finishUxRecovery('AI recovery paused: repeated failure without sufficient progress. Review the error and retry.',true);return false;
+ }
+ job.phase='generating';job.attempt++;uxPipelineBusy=true;uxPipelineStopping=false;uxCanStop=true;uxPipelineStage=1;
+ renderUxActions();setUxStatus((job.attempt>1?'AI recovery '+job.attempt+' · ':'')+'Preparing full UI/UX design for '+uxSelectedKey+'…');
+ send('uxPipelineGenerate',{key:job.key,expectedRevision:job.revision,framework:job.framework});
+ return true;
+}
+function scheduleUxRecovery(job,message){
+ const scope=uxRecoveryScope(job);uxRecovery?.finish(scope);
+ job.phase='waiting';uxPipelineBusy=true;uxCanStop=true;uxPipelineStopping=false;
+ renderUxActions();setUxStatus('AI recovery · '+String(message).slice(0,180)+' · Checking saved design before retry…');
+ clearUxRecoveryTimer();
+ uxRecoveryTimer=setTimeout(()=>{
+  uxRecoveryTimer=null;
+  if(uxRecoveryJob!==job||!window.ATGVUxRecovery.sameScope(job,uxRecoveryContext())){if(uxRecoveryJob===job){finishUxRecovery('Recovery paused: project or assignment changed.',true);uxPipelineBusy=false;renderUxActions();}return;}
+  job.phase='reconciling';
+  // A generation may have committed despite an error. Re-read before retry.
+  send('uxPipelineRead',{key:job.key});
+  uxRecoveryTimer=setTimeout(()=>{if(uxRecoveryJob===job&&job.phase==='reconciling'){finishUxRecovery('Saved design verification timed out.',true);uxPipelineBusy=false;renderUxActions();setUxStatus('AI recovery paused: saved design verification timed out.');}},15000);
+ },Math.min(10000,1000*Math.pow(2,Math.min(job.attempt,3))));
+}
 function renderUxActions(){
  const state=$('uxDesignState');
  if(state){
   const status=uxPipelineBusy?'generating':uxPipeline?.status||'not-started';
-  const text={generating:uxPipelineStopping?'Stopping':'Generating',review:'Awaiting approval',approved:'Approved',rejected:'Disapproved','not-started':uxSelectedKey?'Ready to generate':'Not started'};
+  const text={generating:uxPipelineStopping?'Stopping':uxRecoveryJob?.phase==='waiting'||uxRecoveryJob?.phase==='reconciling'?'AI recovering':'Generating',review:'Awaiting approval',approved:'Approved',rejected:'Disapproved','not-started':uxSelectedKey?'Ready to generate':'Not started'};
   state.textContent=text[status]||'Not started';
   state.dataset.status=status;
  }
@@ -3285,12 +3323,16 @@ $('uxGenerateUIUX').addEventListener('click',()=>{
  if(!uxSelectedKey)return;
  if(uxPipelineBusy){
   if(uxPipelineStopping||!uxCanStop)return;
+  if(uxRecoveryJob&&['waiting','reconciling'].includes(uxRecoveryJob.phase)){finishUxRecovery('Stopped by designer.',true);uxPipelineBusy=false;renderUxActions();setUxStatus('AI recovery stopped.');return;}
   uxPipelineStopping=true;renderUxActions();setUxStatus('Stopping UI/UX generation…');send('uxPipelineStop',{key:uxSelectedKey});return;
  }
  if(uxReadyForPreview()){openUxPipelinePreview();return;}
  if(!uxFramework){setUxStatus('Select an available design system before generating UI/UX.');return;}
- uxPipelineBusy=true;uxPipelineStopping=false;uxCanStop=true;uxPipelineStage=1;renderUxActions();setUxStatus('Preparing full UI/UX design for '+uxSelectedKey+'…');
- send('uxPipelineGenerate',{key:uxSelectedKey,expectedRevision:uxPipeline?.revision||'',framework:uxFramework});
+ const context=uxRecoveryContext();
+ if(!context.eligible||!window.ATGVUxRecovery){setUxStatus('Refresh verified UI/UX assignments before generating.');return;}
+ const job={...context,revision:uxPipeline?.revision||'',attempt:0,furthest:1,phase:'starting'};
+ uxRecovery?.resume(uxRecoveryScope(job));uxRecoveryJob=job;
+ if(!dispatchUxGeneration(job)){uxPipelineBusy=false;renderUxActions();}
 });
 $('uxBackToBuilder').addEventListener('click',()=>{if(view==='uxPreview')navigate('sdlc-roles');showUxBuilder();});
 $('uxApproveDesign').addEventListener('click',()=>{
@@ -3312,7 +3354,10 @@ $('uxCancelDisapproval').addEventListener('click',()=>{
  $('uxPreviewReviewState').textContent='';$('uxPreviewReviewState').classList.add('hidden');$('uxRejectDesign').focus();
 });
 window.addEventListener('message',event=>{
- const m=event.data||{};if(m.projectId!==activeId)return;
+ const m=event.data||{};
+ // Ignore old project completion events for the visible workflow; cancel any queued retry when leaving scope.
+ if(uxRecoveryJob&&!window.ATGVUxRecovery.sameScope(uxRecoveryJob,uxRecoveryContext())&&['waiting','reconciling'].includes(uxRecoveryJob.phase)){finishUxRecovery('Recovery paused: project or assignment changed.',true);uxPipelineBusy=false;}
+ if(m.projectId!==activeId)return;
  if(m.type==='uxFrameworkLoaded'&&m.key===uxSelectedKey){renderUxFrameworkOptions(m.frameworks,m.value);renderUxFrameworkAvailability(m);$('uxFrameworkSync').disabled=false;$('uxFrameworkReactivate').disabled=false;renderUxActions();if(!uxFramework)setUxStatus(m.error||'No activated design framework. Pull and activate the SDLC Catalog in Settings.');}
  if(m.type==='uxFrameworkCatalogChanged'){renderUxFrameworkOptions(m.frameworks,uxFramework);renderUxFrameworkAvailability(m);$('uxFrameworkSync').disabled=false;renderUxActions();}
  if(m.type==='uxFrameworkCatalogRefreshError'){$('uxFrameworkSync').disabled=false;const info=$('uxFrameworkSource');info.textContent='Catalog update unavailable: '+String(m.message||'Check your GitHub connection.').slice(0,320)+' · Using local design systems.';}
@@ -3322,10 +3367,20 @@ window.addEventListener('message',event=>{
  if(m.type==='uxDesignLoaded'&&m.value?.key===uxSelectedKey){uxDrafts[m.value.kind]=m.value;if(view==='uxPreview'){renderUxVisuals('uxWireframePreviews','wireframe');renderUxVisuals('uxMockupPreviews','mockup');}}
  if(m.type==='uxPipelineDeleted'&&m.key===uxSelectedKey){uxPipeline=m.value;uxDrafts={wireframe:null,mockup:null};uxPipelineBusy=false;uxPipelineStopping=false;uxPipelineStage=0;showUxBuilder();renderUxActions();renderUxVersionInfo();$('uxDeleteDesignStatus').textContent='Design deleted. Reference images retained. Select Generate UI/UX to regenerate.';setUxStatus('Design deleted from this ticket. Ready to regenerate.');return;}
  if(m.type==='uxPipelineDeleteCancelled'&&m.key===uxSelectedKey){uxPipelineBusy=false;renderUxActions();$('uxDeleteDesignStatus').textContent='Design deletion cancelled.';return;}
- if(m.type==='uxPipelineWorking'&&m.key===uxSelectedKey){uxPipelineBusy=true;uxPipelineStage=Math.max(1,Math.min(6,m.stage||1));uxCanStop=m.canStop!==false;if(!uxPipelineStopping)setUxStatus(m.message||'Generating UI/UX…');renderUxActions();}
+ if(m.type==='uxPipelineWorking'&&m.key===uxSelectedKey){if(uxRecoveryJob?.project===activeId&&uxRecoveryJob.key===m.key)uxRecoveryJob.furthest=Math.max(uxRecoveryJob.furthest,Number(m.stage)||1);uxPipelineBusy=true;uxPipelineStage=Math.max(1,Math.min(6,m.stage||1));uxCanStop=m.canStop!==false;if(!uxPipelineStopping)setUxStatus(m.message||'Generating UI/UX…');renderUxActions();}
  if(m.type==='uxPipelineStopping'&&m.key===uxSelectedKey){uxPipelineStopping=true;renderUxActions();}
- if(m.type==='uxPipelineStopped'&&m.key===uxSelectedKey){uxPipelineBusy=false;uxPipelineStopping=false;uxCanStop=true;uxPipelineStage=0;setUxStatus('UI/UX generation stopped. No new design was saved.');renderUxActions();}
+ if(m.type==='uxPipelineStopped'&&m.key===uxSelectedKey){finishUxRecovery('Stopped by designer.',true);uxPipelineBusy=false;uxPipelineStopping=false;uxCanStop=true;uxPipelineStage=0;setUxStatus('UI/UX generation stopped. No new design was saved.');renderUxActions();}
  if(m.type==='uxPipelineLoaded'&&m.key===uxSelectedKey){
+  if(uxRecoveryJob?.project===activeId&&uxRecoveryJob.key===m.key){
+   const job=uxRecoveryJob;
+   if(job.phase==='reconciling'){
+    clearUxRecoveryTimer();const result=window.ATGVUxRecovery.reconcile(job,m.value);
+    if(result==='retry'){uxPipeline=m.value;if(!dispatchUxGeneration(job)){uxPipelineBusy=false;renderUxActions();setUxStatus('AI recovery paused: repeated failure or changed assignment.');}return;}
+    if(result==='blocked'){finishUxRecovery('Saved design revision changed.',true);uxPipeline=m.value;uxPipelineBusy=false;renderUxActions();renderUxVersionInfo();setUxStatus('AI recovery paused: saved design changed. Review before regenerating.');return;}
+    finishUxRecovery();
+   }else if(m.generated){finishUxRecovery();}
+   else if(job.phase==='generating'||job.phase==='waiting')return;
+  }
   uxPipeline=m.value;uxPipelineBusy=false;uxPipelineStopping=false;uxCanStop=true;uxPipelineStage=0;renderUxActions();renderUxVersionInfo();
   setUxStatus(m.generated?'UI/UX v'+uxPipeline.revisionNumber+' generated. Select Preview UI/UX to review and approve.':m.reviewed?'UI/UX review decision recorded.':uxPipeline?.status==='rejected'?'Design disapproved. Generate UI/UX to create a new version.':'');
   if(m.reviewed){if(uxPipeline.status==='rejected')showUxBuilder();else openUxPipelinePreview();}
@@ -3336,6 +3391,12 @@ window.addEventListener('message',event=>{
  if(m.type==='uxFrontendPublished'&&m.key===uxSelectedKey){uxFrontendPublishing=false;$('uxPublishFrontend').disabled=false;const message='Generated and published '+m.storyKey+' frontend on '+m.branch+' @ '+m.sha.slice(0,12)+'. Developer branch ready.';setUxStatus(message);$('uxPreviewReviewState').textContent=message;$('uxPreviewReviewState').classList.remove('hidden');}
  if(m.type==='uxPrototypeBrowserOpened'&&m.key===uxSelectedKey){$('uxOpenPrototypeBrowser').disabled=false;$('uxPrototypeBrowserStatus').textContent='Interactive prototype opened in your external browser.';}
  if(m.type==='uxDesignError'&&selectedRole==='ux-designer'){
+  const job=uxRecoveryJob;
+  if(job&&job.project===activeId&&job.key===uxSelectedKey&&(!m.key||m.key===job.key)){
+   const retry=job.phase==='generating'&&!uxPipelineStopping&&!uxFrontendPublishing&&window.ATGVUxRecovery.sameScope(job,uxRecoveryContext())&&window.ATGVUxRecovery.classify(m.message)==='retry'&&job.attempt<6;
+   if(retry){scheduleUxRecovery(job,m.message);return;}
+   finishUxRecovery('AI recovery paused: '+String(m.message||'Review diagnostics.').slice(0,180),true);
+  }
   uxPipelineBusy=false;uxPipelineStopping=false;uxCanStop=true;uxPipelineStage=0;renderUxActions();
   $('uxApproveDesign').disabled=false;$('uxRejectDesign').disabled=false;$('uxCancelDisapproval').disabled=false;
   setUxStatus('UI/UX action failed: '+String(m.message||'Check the Jira and AI settings.'));
