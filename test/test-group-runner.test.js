@@ -4,7 +4,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const os=require('node:os');
-const {groups,classify,inventory,audit,summary}=require('../scripts/run-test-groups');
+const {groups,classify,inventory,audit,summary,failureDetails}=require('../scripts/run-test-groups');
 test('group inventory covers every existing test file exactly once',()=>{
  const dir=__dirname,expected=fs.readdirSync(dir,{withFileTypes:true}).filter(x=>x.isFile()&&x.name.endsWith('.test.js')).map(x=>x.name).sort();
  const actual=Object.values(inventory(dir)).flat().sort();
@@ -32,4 +32,14 @@ test('audit identifies duplicate sources and repeated titles without changing fi
 test('TAP summaries expose failures and incomplete runner output',()=>{
  assert.deepEqual(summary('# tests 4\n# pass 2\n# fail 1\n# cancelled 0\n# skipped 1\n# todo 0\n'),{tests:4,pass:2,fail:1,cancelled:0,skipped:1,todo:0});
  assert.equal(summary('crashed').tests,null);
+});
+
+test('failed group diagnostics retain test name, error and stack without large assertion dumps',()=>{
+ const output=['ok 1 - success','not ok 2 - failed case','  ---','  location: test/example.test.js:1:1','  error: bad input','  code: ERR_ASSERTION','  actual: '+('x'.repeat(5000)),'  stack: |-','    at TestContext.<anonymous> (test/example.test.js:1:1)','  ...','ok 3 - another success'].join('\n');
+ const details=failureDetails(output).join('\n');
+ assert.match(details,/not ok 2 - failed case/);
+ assert.match(details,/error: bad input/);
+ assert.match(details,/at TestContext/);
+ assert.doesNotMatch(details,/actual:|another success|x{100}/);
+ assert.equal(failureDetails('ok 1 - success').length,0);
 });

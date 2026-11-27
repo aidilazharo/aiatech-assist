@@ -59,6 +59,25 @@ function summary(output){
  const read=key=>{const matches=[...output.matchAll(new RegExp('^# '+key+' (\\d+)\\s*$','gm'))];return matches.length?Number(matches[matches.length-1][1]):null;};
  return {tests:read('tests'),pass:read('pass'),fail:read('fail'),cancelled:read('cancelled'),skipped:read('skipped'),todo:read('todo')};
 }
+// Keep normal runs concise, but surface actionable failure diagnostics in the
+// parent release log so a single uploaded build log is sufficient for triage.
+function failureDetails(output){
+ const lines=output.split(/\r?\n/),details=[];
+ let active=false,stack=false,count=0;
+ const clean=value=>String(value).replace(/[\x00-\x08\x0b-\x1f\x7f]/g,'').replace(/(Bearer\s+|Basic\s+)[A-Za-z0-9+/_=.-]+/gi,'$1[redacted]').replace(/\b(?:ghp_|github_pat_|sk-)[A-Za-z0-9_-]+/g,'[redacted]').slice(0,700);
+ for(const line of lines){
+  if(/^\s*not ok \d+\b/.test(line)){
+   active=true;stack=false;count=0;details.push(clean(line.trim()));continue;
+  }
+  if(/^\s*(?:ok \d+\b|# Subtest:|\.\.\.\s*$)/.test(line)){active=false;stack=false;}
+  if(!active)continue;
+  if(/^\s*(?:location|failureType|error|code|name):/.test(line)){details.push('  '+clean(line.trim()));stack=false;}
+  else if(/^\s*stack:/.test(line))stack=true;
+  else if(stack&&/^\s*at\s/.test(line)&&count++<5)details.push('  '+clean(line.trim()));
+  else if(/^\s*(?:expected|actual|operator):/.test(line))stack=false;
+ }
+ return details.slice(0,400);
+}
 function runChild(args,log){
  const fd=fs.openSync(log,'w');
  try{
@@ -98,10 +117,10 @@ function main(args=process.argv.slice(2)){
   console.log(label+' ('+entries.length+' files) ...');
   const started=Date.now(),log=path.join(logDir,key+'.log');
   const ok=runChild(['--require','./test/local-network-only.js','--test','--test-reporter=tap',...entries.map(name=>'test/'+name)],log);
-  const stats=summary(fs.readFileSync(log,'utf8'));
+  const output=fs.readFileSync(log,'utf8'),stats=summary(output);
   const complete=Object.values(stats).every(Number.isInteger);
   const passed=ok&&complete&&stats.fail===0&&stats.cancelled===0&&stats.tests>0;
-  if(!passed)failed++;
+  if(!passed){failed++;for(const detail of failureDetails(output))console.error(detail);}
   if(complete)for(const key of Object.keys(totals))totals[key]+=stats[key];
   console.log(label+': '+(passed?'PASS':'FAIL')+(complete?' | '+stats.pass+' passed, '+stats.fail+' failed, '+stats.skipped+' skipped, '+stats.cancelled+' cancelled, '+stats.todo+' todo':' | incomplete runner output')+' | '+((Date.now()-started)/1000).toFixed(1)+'s');
  }
@@ -111,4 +130,4 @@ function main(args=process.argv.slice(2)){
  return failed?1:0;
 }
 if(require.main===module)process.exitCode=main();
-module.exports={groups,classify,inventory,audit,summary};
+module.exports={groups,classify,inventory,audit,summary,failureDetails};
