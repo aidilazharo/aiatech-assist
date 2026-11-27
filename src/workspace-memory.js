@@ -104,70 +104,131 @@ function projectDatabasePath(projectRoot){
  indexProjectMemory(loc.workspace,loc.projectId,target);
  return target;
 }
+// Before initialization, use only a folder-specific SecretStorage slot.
+// Never import unbound legacy credentials: their original owner is unknown.
+const digest=value=>crypto.createHash('sha256').update(String(value)).digest('hex');
+function workspaceScope(workspace){
+ return workspace?digest(path.resolve(workspace)):null;
+}
+function pendingSecretName(workspace,name){
+ const scope=workspaceScope(workspace);
+ if(!scope)throw Error('Open an ATGV workspace folder before saving credentials.');
+ return 'atgvAssist.memory.pending.'+scope+'.'+digest(name);
+}
+const SCOPED_SETTINGS=new Set([
+ 'atgvAssist.extensionSettings','atgvAssist.sdlcCatalog','atgvAssist.startupSetup.completed',
+ 'atgvAssist.serviceUrl','atgvAssist.coordinationProvider','atgvAssist.localMemberId'
+]);
+function scopedSettingsKey(workspace,name){
+ return 'atgvAssist.workspaceSettings.'+workspaceScope(workspace)+'.'+name;
+}
+function workspaceSettingsBridge({state,workspaceRoot}){
+ return {
+  get(name,fallback){
+   if(!SCOPED_SETTINGS.has(name))return state.get(name,fallback)??fallback;
+   const ws=workspaceRoot();
+   return ws?(state.get(scopedSettingsKey(ws,name))??fallback):fallback;
+  },
+  async update(name,value){
+   if(!SCOPED_SETTINGS.has(name))return state.update(name,value);
+   const ws=workspaceRoot();
+   if(!ws)throw Error('Open an ATGV workspace folder before saving connection settings.');
+   return state.update(scopedSettingsKey(ws,name),value);
+  },
+  keys(){return typeof state.keys==='function'?state.keys():[];}
+ };
+}
 function secretStorageBridge({secrets,workspaceRoot}={}){
  if(!secrets||typeof secrets.get!=='function'||typeof secrets.store!=='function'||typeof workspaceRoot!=='function')throw Error('SecretStorage and workspace resolver required.');
- function dbForWorkspace(){
-  const ws=workspaceRoot();
+ function dbForWorkspace(ws){
   if(!ws)return null;
   try{
    const folder=memoryDirectory(ws);
    const Database=databaseSync(),dbFile=path.join(folder,'credentials.sqlite');
    safeSqliteFile(dbFile);
    const db=new Database(dbFile);
-   db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=8000; CREATE TABLE IF NOT EXISTS credentials (id TEXT PRIMARY KEY, nonce BLOB NOT NULL, ciphertext BLOB NOT NULL, tag BLOB NOT NULL, updated TEXT NOT NULL);');
-   try{fs.chmodSync(dbFile,0o600);}catch{}
-   return {db,ws:path.resolve(ws)};
+   try{
+    db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=8000; CREATE TABLE IF NOT EXISTS credentials (id TEXT PRIMARY KEY, nonce BLOB NOT NULL, ciphertext BLOB NOT NULL, tag BLOB NOT NULL, updated TEXT NOT NULL);');
+    try{fs.chmodSync(dbFile,0o600);}catch{}
+    return db;
+   }catch(error){db.close();throw error;}
   }catch(e){
-   if(/Initialize ATGV workspace|workspace marker required|requires Node\.js/.test(e.message))return null;
+   if(/Initialize ATGV workspace|workspace marker required/.test(e.message))return null;
    throw e;
   }
  }
- const digest=(key)=>crypto.createHash('sha256').update(String(key)).digest('hex');
- const keyName=ws=>KEY_PREFIX+digest(ws);
+ const keyName=ws=>KEY_PREFIX+workspaceScope(ws);
+ // Serialize first key creation across VS Code extension hosts with an
+ // exclusive directory lock. Never overwrite an existing key or vault.
  async function master(ws,create){
   let raw=await secrets.get(keyName(ws));
-  if(!raw&&create){raw=crypto.randomBytes(32).toString('base64');await secrets.store(keyName(ws),raw);}
+  if(!raw&&create){
+   const lock=path.join(memoryDirectory(ws),'credentials-key.lock');
+   const deadline=Date.now()+8000;
+   while(true){
+    try{fs.mkdirSync(lock,{mode:0o700});break;}
+    catch(error){
+     if(error.code!=='EEXIST')throw error;
+     if(Date.now()>=deadline)throw Error('Credential vault key initialization is busy. Retry or inspect the workspace lock.');
+     await new Promise(resolve=>setTimeout(resolve,50));
+    }
+   }
+   try{
+    raw=await secrets.get(keyName(ws));
+    if(!raw){
+     const db=dbForWorkspace(ws);
+     try{if(db.prepare('SELECT 1 FROM credentials LIMIT 1').get())throw Error('Encrypted credentials cannot be opened because the VS Code SecretStorage key is missing.');}
+     finally{db.close();}
+     raw=crypto.randomBytes(32).toString('base64');await secrets.store(keyName(ws),raw);
+    }
+   }finally{fs.rmdirSync(lock);}
+  }
   if(!raw)return null;
   const key=Buffer.from(raw,'base64');
   if(key.length!==32)throw Error('Credential vault encryption key is invalid.');
   return key;
  }
+ async function write(ws,db,name,value){
+  const id=digest(name),key=await master(ws,true),nonce=crypto.randomBytes(12);
+  const enc=crypto.createCipheriv('aes-256-gcm',key,nonce);
+  enc.setAAD(Buffer.from(id));
+  const cipher=Buffer.concat([enc.update(Buffer.from(value,'utf8')),enc.final()]);
+  db.prepare('INSERT INTO credentials(id,nonce,ciphertext,tag,updated) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET nonce=excluded.nonce,ciphertext=excluded.ciphertext,tag=excluded.tag,updated=excluded.updated').run(id,nonce,cipher,enc.getAuthTag(),new Date().toISOString());
+ }
  return {
   async get(name){
-   const state=dbForWorkspace();
-   if(!state)return secrets.get(name);
+   const ws=workspaceRoot();if(!ws)return undefined;
+   const pending=pendingSecretName(ws,name),db=dbForWorkspace(ws);
+   if(!db)return secrets.get(pending);
    try{
-    const id=digest(name),row=state.db.prepare('SELECT nonce,ciphertext,tag FROM credentials WHERE id=?').get(id);
+    const id=digest(name),row=db.prepare('SELECT nonce,ciphertext,tag FROM credentials WHERE id=?').get(id);
     if(row){
-     const key=await master(state.ws,false);
+     const key=await master(ws,false);
      if(!key)throw Error('Encrypted credentials cannot be opened because the VS Code SecretStorage key is missing.');
      const dec=crypto.createDecipheriv('aes-256-gcm',key,row.nonce);
      dec.setAAD(Buffer.from(id));dec.setAuthTag(row.tag);
      return Buffer.concat([dec.update(row.ciphertext),dec.final()]).toString('utf8');
     }
-   }finally{state.db.close();}
-   const legacy=await secrets.get(name);
-   if(legacy!==undefined){await this.store(name,legacy);await secrets.delete?.(name);}
-   return legacy;
+    const staged=await secrets.get(pending);
+    if(staged!==undefined){
+     await write(ws,db,name,staged);await secrets.delete?.(pending);
+    }
+    return staged;
+   }finally{db.close();}
   },
   async store(name,value){
    if(typeof value!=='string')throw Error('Credential value must be a string.');
-   const state=dbForWorkspace();
-   if(!state)return secrets.store(name,value);
-   try{
-    const id=digest(name),key=await master(state.ws,true),nonce=crypto.randomBytes(12);
-    const enc=crypto.createCipheriv('aes-256-gcm',key,nonce);
-    enc.setAAD(Buffer.from(id));
-    const cipher=Buffer.concat([enc.update(Buffer.from(value,'utf8')),enc.final()]);
-    state.db.prepare('INSERT INTO credentials(id,nonce,ciphertext,tag,updated) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET nonce=excluded.nonce,ciphertext=excluded.ciphertext,tag=excluded.tag,updated=excluded.updated').run(id,nonce,cipher,enc.getAuthTag(),new Date().toISOString());
-   }finally{state.db.close();}
-   await secrets.delete?.(name);
+   const ws=workspaceRoot(),pending=pendingSecretName(ws,name),db=dbForWorkspace(ws);
+   if(!db)return secrets.store(pending,value);
+   try{await write(ws,db,name,value);}finally{db.close();}
+   await secrets.delete?.(pending);
   },
   async delete(name){
-   const state=dbForWorkspace();
-   if(state){try{state.db.prepare('DELETE FROM credentials WHERE id=?').run(digest(name));}finally{state.db.close();}}
-   await secrets.delete?.(name);
+   const ws=workspaceRoot();if(!ws)return;
+   const db=dbForWorkspace(ws);
+   if(db){try{db.prepare('DELETE FROM credentials WHERE id=?').run(digest(name));}finally{db.close();}}
+   await secrets.delete?.(pendingSecretName(ws,name));
   }
  };
 }
-module.exports={memoryDirectory,extensionMemoryPath,indexProjectMemory,projectLocation,projectDatabasePath,sqliteSnapshot,secretStorageBridge,databaseSync};
+module.exports={memoryDirectory,extensionMemoryPath,indexProjectMemory,projectLocation,projectDatabasePath,sqliteSnapshot,secretStorageBridge,databaseSync,workspaceSettingsBridge,scopedSettingsKey,pendingSecretName};

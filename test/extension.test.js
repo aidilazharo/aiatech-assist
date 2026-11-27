@@ -15,6 +15,8 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
   assert.equal(manifest.contributes.views,undefined);
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-vscode-host-'));
   const commands=new Map(),secrets=new Map(),workspaceState=new Map(),globalState=new Map(),messages=[];
+  const {scopedSettingsKey,pendingSecretName}=require('../src/workspace-memory');
+  const setting=name=>scopedSettingsKey(root,name),pending=name=>pendingSecretName(root,name);
   const lastState=()=>messages.filter(m=>m.type==='state').at(-1);
   let handler,panel,answer='first-secret',confirmation='Continue to RESET';
   const uri=p=>({fsPath:p,toString:()=>`file://${p}`});
@@ -82,20 +84,20 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
                                                                         
     handler({command:'saveExtension',settings:{jira:{baseUrl:'https://aia.atlassian.net',email:'somebody@aia.com'}}});
     await until(()=>messages.some(m=>m.type==='notice'&&m.error&&/Test Jira Connection/.test(m.message)));
-    assert.equal(globalState.has('atgvAssist.extensionSettings'),false);
+    assert.equal(globalState.has(setting('atgvAssist.extensionSettings')),false);
     handler({command:'testExtensionJira',requestId:1,settings:{jira:{baseUrl:'https://aia.atlassian.net',email:'somebody@aia.com'}},token:'first-secret'});
     await until(()=>messages.some(m=>m.type==='connectionTestResult'&&m.section==='jira'&&m.success));
-    assert.equal(globalState.has('atgvAssist.extensionSettings'),false);
+    assert.equal(globalState.has(setting('atgvAssist.extensionSettings')),false);
     assert.equal(secrets.size,0);
                                                            
     handler({command:'saveExtension',settings:{jira:{baseUrl:'https://aia.atlassian.net',email:'different@aia.com'}}});
     await until(()=>messages.some(m=>m.type==='notice'&&m.error&&/current settings/.test(m.message)));
-    assert.equal(globalState.has('atgvAssist.extensionSettings'),false);
+    assert.equal(globalState.has(setting('atgvAssist.extensionSettings')),false);
     handler({command:'saveExtension',settings:{jira:{baseUrl:'https://aia.atlassian.net',email:'somebody@aia.com'}}});
-    await until(()=>globalState.has('atgvAssist.extensionSettings'));
+    await until(()=>globalState.has(setting('atgvAssist.extensionSettings')));
     await until(()=>secrets.size===1);
     assert.equal(JSON.parse([...secrets.values()][0]).token,'first-secret');
-    assert.equal(globalState.get('atgvAssist.extensionSettings').jira.baseUrl,'https://aia.atlassian.net');
+    assert.equal(globalState.get(setting('atgvAssist.extensionSettings')).jira.baseUrl,'https://aia.atlassian.net');
     assert.equal(messages.filter(m=>m.type==='discovered').length,0,'Saving Jira must not auto-fetch spaces');
     assert.equal(apiRequests.length,1,'Only connection-test request is sent before user searches');
     handler({command:'discover',query:'',origin:'settings'});
@@ -111,19 +113,19 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
                                                                                    
     handler({command:'testExtensionGithub',requestId:2,settings:{owner:'aia-org',repo:'https://github.com/aia-org/shared-docs'},token:'github-personal'});
     await until(()=>messages.some(m=>m.type==='connectionTestResult'&&m.section==='github'&&m.success));
-    assert.equal(globalState.get('atgvAssist.extensionSettings').github?.repo,undefined);
+    assert.equal(globalState.get(setting('atgvAssist.extensionSettings')).github?.repo,undefined);
     handler({command:'saveGithub',settings:{owner:'aia-org',repo:'shared-docs'}});
-    await until(()=>globalState.get('atgvAssist.extensionSettings')?.github?.repo==='shared-docs');
-    await until(()=>secrets.has('atgvAssist.extension.githubToken')&&secrets.has('atgvAssist.sdlcCatalogToken'));
-    assert.equal(JSON.parse(secrets.get('atgvAssist.extension.githubToken')).token,'github-personal');
-    assert.equal(secrets.get('atgvAssist.sdlcCatalogToken'),'github-personal');
+    await until(()=>globalState.get(setting('atgvAssist.extensionSettings'))?.github?.repo==='shared-docs');
+    await until(()=>secrets.has(pending('atgvAssist.extension.githubToken'))&&secrets.has(pending('atgvAssist.sdlcCatalogToken')));
+    assert.equal(JSON.parse(secrets.get(pending('atgvAssist.extension.githubToken'))).token,'github-personal');
+    assert.equal(secrets.get(pending('atgvAssist.sdlcCatalogToken')),'github-personal');
     handler({command:'listExtensionGithubRepositories',requestId:31,owner:'aia-org'});
     await until(()=>messages.some(m=>m.type==='githubRepositoriesResult'&&m.requestId===31));
     const repos=messages.find(m=>m.type==='githubRepositoriesResult'&&m.requestId===31);
     assert.equal(repos.success,true);
     assert.deepEqual(repos.repositories.map(r=>r.fullName),['aia-org/shared-docs']);
     assert.equal(repos.repositories[0].private,true);
-    assert.equal(globalState.get('atgvAssist.extensionSettings').github.repo,'shared-docs','Listing repositories must never modify saved settings');
+    assert.equal(globalState.get(setting('atgvAssist.extensionSettings')).github.repo,'shared-docs','Listing repositories must never modify saved settings');
     handler({command:'listExtensionGithubRepositories',requestId:32,owner:'bad/name'});
     await until(()=>messages.some(m=>m.type==='githubRepositoriesResult'&&m.requestId===32));
     assert.equal(messages.find(m=>m.type==='githubRepositoriesResult'&&m.requestId===32).success,false);
@@ -150,7 +152,7 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
     assert.equal(workspaceState.get('atgvAssist.activeProject'),'finance-knowledge');
     assert.deepEqual(workspaceState.get('atgvAssist.recentProjects'),['finance-knowledge']);
                                                                                         
-    globalState.set('atgvAssist.startupSetup.completed',true); // Existing verified users skip first-run setup.
+    globalState.set(setting('atgvAssist.startupSetup.completed'),true); // Existing verified users skip first-run setup.
     await commands.get('atgvAssist.start')({skipReload:true});
     handler({command:'openingAuto',projectId:'finance-knowledge'});
     await until(()=>messages.some(m=>m.type==='openingProgress'&&m.stage==='done'));
@@ -193,7 +195,7 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
                                                                         
                                                                              
     handler({command:'setCoordinationProvider',provider:'local'});
-    await until(()=>globalState.get('atgvAssist.coordinationProvider')==='local');
+    await until(()=>globalState.get(setting('atgvAssist.coordinationProvider'))==='local');
     handler({command:'getDocumentOwnership',roleId:'business-analyst',taskId:'requirements'});
     await until(()=>messages.some(m=>m.type==='documentOwnership'&&m.documentId==='business-analyst--requirements'));
     const firstOwner=messages.filter(m=>m.type==='documentOwnership').at(-1);
@@ -205,8 +207,8 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
     assert.equal(claim.owner.ownerId,'first-secret');assert.equal(claim.owner.isMe,true);
     assert.equal(JSON.parse(await fs.readFile(path.join(root,'projects','claims','sdlc','local-ownership.json'),'utf8')).documents['claims/business-analyst--requirements'].ownerId,'first-secret');
     handler({command:'catalogSave',config:{repositoryUrl:'https://github.com/aia/catalog',ref:'main',authentication:'public',autoCheck:false}});
-    await until(()=>globalState.has('atgvAssist.sdlcCatalog'));
-    assert.equal(globalState.get('atgvAssist.sdlcCatalog').repositoryUrl,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills');
+    await until(()=>globalState.has(setting('atgvAssist.sdlcCatalog')));
+    assert.equal(globalState.get(setting('atgvAssist.sdlcCatalog')).repositoryUrl,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills');
     await until(()=>messages.some(m=>m.type==='catalogState'&&m.catalog?.config?.repositoryUrl==='https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills'));
     handler({command:'createJiraTicket',summary:'Must not create'});
     await until(()=>messages.some(m=>m.type==='notice'&&m.error&&/Jira writes require approved BRs/.test(m.message)));
@@ -225,10 +227,10 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
     assert.ok(apiRequests.some(req=>req.url.endsWith('/rest/api/3/project/FIN')),'Jira project key should be verified by read-only lookup');
     handler({command:'saveExtension',settings:{jira:{baseUrl:'https://aia.atlassian.net',email:'somebody@aia.com',projectKey:'NOT_FIN'}}});
     await until(()=>messages.some(m=>m.type==='notice'&&m.error&&/current settings/.test(m.message)));
-    assert.equal(globalState.get('atgvAssist.extensionSettings').jira.projectKey,undefined,'Unverified Jira key must not be saved');
+    assert.equal(globalState.get(setting('atgvAssist.extensionSettings')).jira.projectKey,undefined,'Unverified Jira key must not be saved');
     const settingsSavedBefore=messages.filter(m=>m.type==='settingsSaved'&&m.section==='jira').length;
     handler({command:'saveExtension',settings:{jira:{baseUrl:'https://aia.atlassian.net',email:'somebody@aia.com',projectKey:'fin'}}});
-    await until(()=>globalState.get('atgvAssist.extensionSettings')?.jira?.projectKey==='FIN');
+    await until(()=>globalState.get(setting('atgvAssist.extensionSettings'))?.jira?.projectKey==='FIN');
     await until(()=>messages.filter(m=>m.type==='settingsSaved'&&m.section==='jira').length>settingsSavedBefore);
     const oldProject=JSON.parse(await fs.readFile(path.join(root,'projects','claims','atgv.project.json'),'utf8'));
     assert.equal(oldProject.settings.jira.projectKey,'CLM','Changing default Jira project must not remap existing projects');
@@ -273,10 +275,10 @@ test('ATGV lifecycle commands and project dashboard save defaults and overrides'
     assert.equal([...secrets.values()].some(value=>String(value).includes('first-secret')||String(value).includes('github-personal')),false,
       'No unencrypted credential remains in SecretStorage once migrated');
     assert.ok(await fs.stat(path.join(root,'.atgv','memory','credentials.sqlite')));
-    assert.equal(globalState.get('atgvAssist.extensionSettings').github.repo,'shared-docs');
-    assert.equal(globalState.get('atgvAssist.extensionSettings').jira.projectKey,'FIN');
-    assert.equal(globalState.get('atgvAssist.sdlcCatalog').repositoryUrl,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills');
-    assert.equal(globalState.get('atgvAssist.coordinationProvider'),'local');
+    assert.equal(globalState.get(setting('atgvAssist.extensionSettings')).github.repo,'shared-docs');
+    assert.equal(globalState.get(setting('atgvAssist.extensionSettings')).jira.projectKey,'FIN');
+    assert.equal(globalState.get(setting('atgvAssist.sdlcCatalog')).repositoryUrl,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills');
+    assert.equal(globalState.get(setting('atgvAssist.coordinationProvider')),'local');
     assert.deepEqual((await fs.readFile(path.join(root,'projects','claims','atgv.project.json'),'utf8').then(JSON.parse)).settings.jira.projectKey,'CLM');
     assert.equal(workspaceState.has('atgvAssist.activeProject'),false);
   }finally{try{await ext?.deactivate();}finally{Module._load=orig;global.fetch=originalFetch;resetGit.cloneConfigured=originalClone;resetCatalog.syncGitWorkspace=originalCatalogSync;releaseUpdater.latestRelease=originalReleaseLookup;libraryUpdater.latest=originalLibraryLookup;await fs.rm(root,{recursive:true,force:true,maxRetries:5,retryDelay:100});}}

@@ -438,7 +438,7 @@ async function catalogToken(config,{interactive=false,enteredToken=''}={}){
     if(!token)throw Error('Configure a read-only GitHub token before testing or pulling the Library.');
     return token;
   }
-  const session=await vscode.authentication.getSession('github',['repo'],{createIfNone:interactive});
+  const session=await workspaceGithubSession(interactive);
   if(!session?.accessToken)throw Error('Sign in to GitHub using VS Code, or choose a read-only personal access token.');
   return session.accessToken;
 }
@@ -655,7 +655,7 @@ async function githubIssueAccessToken({interactive=false}={}){
   const saved=await readToken(globalSecretKey('github'),identity);
   if(saved)return saved;
  }catch{ /* Account token may be absent. */ }
- try{return (await vscode.authentication.getSession('github',['repo'],interactive?{createIfNone:true}:{silent:true}))?.accessToken||'';}
+ try{return (await workspaceGithubSession(interactive))?.accessToken||'';}
  catch{return '';}
 }
 // Only the host can confirm that VSIX download, checksum and VS Code install succeeded.
@@ -993,6 +993,22 @@ function current(){
   if(!activeProject||!store)throw new Error('No active ATGV project. Run "ATGV: Start" and create or select a project.');
   return {project:activeProject,store,config:effectiveConfig(activeProject)};
 }
+// VS Code's authentication provider is shared across windows. A workspace
+// must explicitly authorize a session before background access can use it.
+async function workspaceGithubSession(interactive=false){
+ const root=getWorkspace()?.uri.fsPath;
+ if(!root)return undefined;
+ const bindingKey='atgvAssist.github.workspaceSession';
+ const saved=await context.secrets.get(bindingKey);
+ if(getWorkspace()?.uri.fsPath!==root)return undefined;
+ if(!saved&&!interactive)return undefined;
+ const session=await vscode.authentication.getSession('github',['repo'],interactive?{createIfNone:true}:{silent:true});
+ if(getWorkspace()?.uri.fsPath!==root||!session?.id||!session?.account?.id)return undefined;
+ const identity=JSON.stringify({sessionId:session.id,accountId:session.account.id});
+ if(!interactive)return identity===saved?session:undefined;
+ await context.secrets.store(bindingKey,identity);
+ return session;
+}
 const workspaceHash=()=>sha(getWorkspace().uri.toString()).slice(0,16);
 const secretKey=(project,kind)=>`atgvAssist.project.${workspaceHash()}.${project.id}.${kind}Token`;
 const globalSecretKey=(kind)=>`atgvAssist.extension.${kind}Token`;
@@ -1044,7 +1060,7 @@ async function getGithubToken(project,interactive=false){
     if(method==='pat')return undefined;
   }
   if(config.get('github.apiUrl')!=='https://api.github.com')throw new Error('GitHub Enterprise requires a project token.');
-  try{return (await vscode.authentication.getSession('github',['repo'],interactive?{createIfNone:true}:{silent:true}))?.accessToken;}
+  try{return (await workspaceGithubSession(interactive))?.accessToken;}
   catch(e){report('GitHub authentication: '+e.message);return undefined;}
 }
 async function setSecret(kind,scope='project'){
@@ -1143,16 +1159,17 @@ async function initialize(){
   if(ownershipRetryTimer){clearInterval(ownershipRetryTimer);ownershipRetryTimer=null;}ownershipOfflineUntil=0;
   if(aiServiceTimer){clearInterval(aiServiceTimer);aiServiceTimer=null;}if(autoSyncTimer){clearInterval(autoSyncTimer);autoSyncTimer=null;}if(sourceVaultTimer){clearInterval(sourceVaultTimer);sourceVaultTimer=null;}if(jiraMonitorTimer){clearInterval(jiraMonitorTimer);jiraMonitorTimer=null;}
   if(liveRemoteTimer){clearInterval(liveRemoteTimer);liveRemoteTimer=null;}
-  approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;++activationEpoch;activeProject=undefined;store=undefined;pendingTests={jira:null,github:null};verifiedConnections.clear();extensionSettings=normalizeExtensionSettings(context.globalState.get('atgvAssist.extensionSettings',{}));
+  approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;++activationEpoch;activeProject=undefined;store=undefined;pendingTests={jira:null,github:null};verifiedConnections.clear();startupSessionVerified=false;startupVerifiedSignature='';extensionSettings=normalizeExtensionSettings({});
   await context.secrets.delete(LEGACY_RELEASE_DOWNLOAD_PAT_SECRET).catch(error=>report('Could not remove obsolete release credential: '+error.message));
   workspaceOverridePath=null;
   const actualFolder=vscode.workspace.workspaceFolders?.[0];
   if(actualFolder){const located=await workspaceForFolder(actualFolder.uri.fsPath);if(located.source==='project-folder')workspaceOverridePath=located.root;}
   const ws=getWorkspace();registry=ws?new ProjectRegistry(ws.uri.fsPath):undefined;
+  extensionSettings=normalizeExtensionSettings(context.globalState.get('atgvAssist.extensionSettings',{}));
   if(registry){
     await registry.list();
     // SQLite is authoritative once the workspace has an ATGV marker.
-    // Migrate legacy globalState settings and retain a compatibility mirror.
+    // Only migrate folder-bound setup settings; never read another folder's defaults.
     const keys=sharedConnectionSettings.KEYS;
     const legacy={
       [keys.extension]:context.globalState.get(keys.extension,{}),
@@ -2190,7 +2207,7 @@ async function dashboardState(){
 
   let jiraTokenSaved=false,githubTokenSaved=false;
   try{jiraTokenSaved=!!await readToken(globalSecretKey('atlassian'),globalCredentialEndpoint('atlassian'));}catch{}
-  try{githubTokenSaved=extensionSettings.github?.authentication==='vscode'?!!(await vscode.authentication.getSession('github',['repo'],{silent:true}))?.accessToken:!!await readToken(globalSecretKey('github'),globalCredentialEndpoint('github'));}catch{}
+  try{githubTokenSaved=extensionSettings.github?.authentication==='vscode'?!!(await workspaceGithubSession(false))?.accessToken:!!await readToken(globalSecretKey('github'),globalCredentialEndpoint('github'));}catch{}
   let techStacks;try{techStacks=await listStacks(getWorkspace()?.uri.fsPath);}catch(e){report('GitHub catalog tech stack: '+e.message);techStacks=[];}
   // Repair any interrupted cross-file BR restart *before* exposing stale
   // discovery data to the webview. Failure is non-destructive and retryable.
@@ -2487,7 +2504,7 @@ async function testExtensionGithub(msg){
   let token;
   if(fields.authentication==='vscode'){
     if(identity.endpoint!=='https://api.github.com')throw Error('VS Code GitHub sign-in is supported for github.com; use a PAT for GitHub Enterprise.');
-    const session=await vscode.authentication.getSession('github',['repo'],{createIfNone:true});
+    const session=await workspaceGithubSession(true);
     token=session?.accessToken;if(!token)throw Error('GitHub sign-in was cancelled or unavailable.');
   }else token=enteredToken||await readToken(globalSecretKey('github'),identity);
   // Do not treat a token-only connection as a request to clear it. Users must
@@ -9840,7 +9857,7 @@ async function handleDashboardMessage(msg){
         if(!verified||!fieldsEqual(verified.fields,fields))
           throw new Error('Test GitHub Connection with the current settings before saving.');
         if(fields.authentication==='vscode'){
-          const session=await vscode.authentication.getSession('github',['repo'],{silent:true});
+          const session=await workspaceGithubSession(false);
           const account=await githubCredentials.account(verified.identity.endpoint,session?.accessToken,requestJson);
           if(account.login!==verified.identity.login)throw Error('GitHub sign-in account changed. Test the connection again.');
         }
@@ -9870,7 +9887,7 @@ async function handleDashboardMessage(msg){
             const exists=await fs.lstat(dest).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
             let checkout;
             if(exists){if(!exists.isDirectory()||exists.isSymbolicLink())throw Error('Existing checkout path is not a safe directory.');checkout=await developerGit.repository(dest);if(!developerGit.matchesGithubRepo(checkout.remote,fields.owner,fields.repo))throw Error('Existing checkout uses a different GitHub origin; not modified.');}
-            else checkout=await developerGit.cloneConfigured(resolvedParent,fields.owner,fields.repo,fields.branch,{token:fields.authentication==='vscode'?(await vscode.authentication.getSession('github',['repo'],{silent:true}))?.accessToken:await readToken(globalSecretKey('github'),verified.identity)});
+            else checkout=await developerGit.cloneConfigured(resolvedParent,fields.owner,fields.repo,fields.branch,{token:fields.authentication==='vscode'?(await workspaceGithubSession(false))?.accessToken:await readToken(globalSecretKey('github'),verified.identity)});
             if(!insideFolder(checkout.root,resolvedProject))throw Error('Checkout resolves outside project.');
             await context.workspaceState.update('atgvAssist.localRepo.'+activeProject.id,checkout.root);
             await context.workspaceState.update('atgvAssist.bootstrapRepo.'+activeProject.id,checkout.root);
@@ -10190,7 +10207,7 @@ async function handleDashboardMessage(msg){
           libraryStudio.validateBody(item.path,item.content);
           const consent=await uiWarning('Create a new GitHub branch and draft pull request for '+item.path+'?\n\nThis uploads the selected local resource and does not modify main. GitHub Actions and maintainer approval remain required.',{modal:true},'Create Draft PR');
           if(!consent){await dashboard?.webview.postMessage({type:'libraryAction',message:'Contribution cancelled. No GitHub changes made.'});break;}
-          const session=await vscode.authentication.getSession('github',['repo'],{createIfNone:true});
+          const session=await workspaceGithubSession(true);
           if(!session?.accessToken)throw Error('Sign in to GitHub with repository write access. Read-only Catalog tokens are never reused for publishing.');
           const pr=await libraryStudio.githubPullRequest({repositoryUrl:catalogConfig().repositoryUrl,relative:item.path,content:item.content,baseHash:item.baseHash||item.sharedHash,token:session.accessToken,title:'SDLC library: '+item.path});
           await dashboard?.webview.postMessage({type:'libraryAction',success:true,message:pr.message,url:pr.url,number:pr.number,branch:pr.branch});
@@ -12853,6 +12870,7 @@ function activate(ctx){
   // The AI service is never given the decryption key or unscoped credentials.
   const vault=workspaceMemory.secretStorageBridge({secrets:ctx.secrets,workspaceRoot:()=>getWorkspace()?.uri.fsPath||''});
   context=Object.create(ctx);Object.defineProperty(context,'secrets',{value:vault,enumerable:true});
+  Object.defineProperty(context,'globalState',{value:workspaceMemory.workspaceSettingsBridge({state:ctx.globalState,workspaceRoot:()=>getWorkspace()?.uri.fsPath||''}),enumerable:true});
   output=vscode.window.createOutputChannel('ATGV AIATECH Assist');
   selfImprovementManager=new SelfImprovement({root:ctx.globalStorageUri.fsPath,askCopilot:options=>copilotRepairSdk.analyze(ctx.globalStorageUri.fsPath,options)});
   ctx.subscriptions.push(output);

@@ -5,7 +5,7 @@ Start and Settings use the same connection configuration database at <workspace>
 - Non-secret Jira, Confluence and GitHub connection defaults, Library configuration and startup-completed status are persisted in SQLite.
 - Provider tokens and API keys remain AES-256-GCM encrypted in credentials.sqlite, not the settings database.
 - Settings save actions still require a successful connection test; failed tests do not persist changes.
-- Existing globalState values migrate to SQLite on the first initialization. SQLite then becomes authoritative; globalState remains a non-secret compatibility mirror.
+- Only folder-scoped setup defaults migrate to SQLite on first initialization. SQLite is authoritative; the folder-scoped compatibility mirror never reads unbound global connection defaults.
 - Start can test connections before a workspace has been initialized without creating folders or databases.
 - Project-specific Jira keys, Confluence spaces and source checkouts remain independent in projects/<id>.
 - Jira project mappings can be saved with verified Browse Projects access only; publishing still requires Create Issues permission.

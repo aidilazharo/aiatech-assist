@@ -1,5 +1,6 @@
-# ATGV AIATECH Assist v0.1.63
+# ATGV AIATECH Assist v0.1.64
 
-- Initial Development captures eligible modified and untracked project source into a local commit in the isolated BR branch without changing the original checkout or index. Exclude sensitive/runtime/generated files and automatic deletions; retain original files. Scan the captured commit and carry it into the TDD baseline.
-- Keep BR dropdown, Jira refresh, development action and preview control in one compact toolbar with matching heights.
-- Full regression and VSIX packaging pending.
+- Isolate credentials, connection defaults and startup verification by local ATGV workspace, including first-time setup before SQLite initialization.
+- Prevent automatic reuse of unbound legacy tokens and unbound VS Code GitHub authentication sessions. Existing encrypted workspace credentials remain supported.
+- Add regression coverage for two folders sharing one OS account and for same-folder staged credential migration.
+- Full regression suite and VSIX packaging pending CI verification.

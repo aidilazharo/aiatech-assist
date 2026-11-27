@@ -56,12 +56,13 @@ test('vault writes AES-256-GCM ciphertext and shares credentials across extensio
  finally{db.close();}
  await vault.delete(key);assert.equal(await vault.get(key),undefined);
 }));
-test('legacy SecretStorage tokens migrate on first read to the encrypted SQLite vault',()=>fixture(async({workspace,memdir})=>{
- const key='atgvAssist.project.test.githubToken',token='legacy-useful-secret-302190',values=new Map([[key,token]]);
+test('only same-folder staged credentials migrate on first read; unbound legacy credentials are ignored',()=>fixture(async({workspace,memdir})=>{
+ const key='atgvAssist.project.test.githubToken',token='legacy-useful-secret-302190',values=new Map([[key,'unbound-legacy'],[memory.pendingSecretName(workspace,key),token]]);
  const secrets={get:async k=>values.get(k),store:async(k,v)=>values.set(k,v),delete:async k=>values.delete(k)};
  const vault=memory.secretStorageBridge({secrets,workspaceRoot:()=>workspace});
  assert.equal(await vault.get(key),token);
- assert.equal(values.has(key),false,'legacy plaintext credential removed after successful encryption');
+ assert.equal(values.get(key),'unbound-legacy','unbound legacy credential is not read or removed');
+ assert.equal(values.has(memory.pendingSecretName(workspace,key)),false,'scoped staged credential removed after successful encryption');
  assert.equal(await vault.get(key),token);
  await fs.stat(path.join(memdir,'credentials.sqlite'));
 }));
@@ -72,3 +73,28 @@ test('SQLite snapshot preserves database records and never overwrites an existin
  assert.equal(memory.sqliteSnapshot(source,dest),false);
  const cloned=new DatabaseSync(dest);try{assert.deepEqual(JSON.parse(cloned.prepare('SELECT value FROM agent_memory WHERE key=?').get('opt-in').value),{enabled:true});}finally{cloned.close();}
 }));
+
+test('two folders on the same computer isolate pending and encrypted credentials and defaults',()=>fixture(async({workspace:a})=>fixture(async({workspace:b})=>{
+ const values=new Map([['atgvAssist.extension.atlassianToken','legacy-global']]),settings=new Map([['atgvAssist.extensionSettings',{jira:{email:'legacy@example.com'}}],['atgvAssist.startupSetup.completed',true]]);
+ const secrets={get:async k=>values.get(k),store:async(k,v)=>values.set(k,v),delete:async k=>values.delete(k)};
+ const state={get:k=>settings.get(k),update:async(k,v)=>settings.set(k,v)};
+ const key='atgvAssist.extension.atlassianToken';
+ const A=memory.secretStorageBridge({secrets,workspaceRoot:()=>a}),B=memory.secretStorageBridge({secrets,workspaceRoot:()=>b});
+ const sa=memory.workspaceSettingsBridge({state,workspaceRoot:()=>a}),sb=memory.workspaceSettingsBridge({state,workspaceRoot:()=>b});
+ assert.equal(await A.get(key),undefined);assert.equal(await B.get(key),undefined);
+ assert.deepEqual(sa.get('atgvAssist.extensionSettings',{}),{});assert.equal(sb.get('atgvAssist.startupSetup.completed',false),false);
+ await sa.update('atgvAssist.extensionSettings',{jira:{email:'a@example.com'}});await sa.update('atgvAssist.startupSetup.completed',true);
+ await sb.update('atgvAssist.extensionSettings',{jira:{email:'b@example.com'}});
+ assert.equal(sa.get('atgvAssist.extensionSettings').jira.email,'a@example.com');assert.equal(sb.get('atgvAssist.extensionSettings').jira.email,'b@example.com');
+ assert.equal(sb.get('atgvAssist.startupSetup.completed',false),false);
+ await Promise.all([A.store(key,'token-a'),B.store(key,'token-b')]);
+ assert.equal(await A.get(key),'token-a');assert.equal(await B.get(key),'token-b');
+ await A.delete(key);assert.equal(await A.get(key),undefined);assert.equal(await B.get(key),'token-b');assert.equal(values.get(key),'legacy-global');
+ const fresh=await fs.mkdtemp(path.join(os.tmpdir(),'atgv-fresh-folder-'));
+ try{
+  const C=memory.secretStorageBridge({secrets,workspaceRoot:()=>fresh});
+  assert.equal(await C.get(key),undefined);await C.store(key,'token-c');assert.equal(await C.get(key),'token-c');assert.equal(await B.get(key),'token-b');
+  await fs.mkdir(path.join(fresh,'.atgv'));await fs.writeFile(path.join(fresh,'.atgv','atgv.workspace.json'),JSON.stringify({managedBy:'aia-my.atgv-aiatech-assist'}));
+  assert.equal(await C.get(key),'token-c');assert.equal(values.has(memory.pendingSecretName(fresh,key)),false);
+ }finally{await fs.rm(fresh,{recursive:true,force:true});}
+})));

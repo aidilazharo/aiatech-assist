@@ -12,7 +12,7 @@
 
 **Credential security:** Only ciphertext is written to SQLite. The 256-bit encryption key stays in VS Code SecretStorage, scoped to the workspace. No API keys, passwords, GitHub PATs or Jira tokens are placed in AI prompts, project notes, the GitHub Library or the extension AI database. Extension and project callers use the same authenticated vault interface. The unattended AI service does not gain direct access to the decryption key; it continues to use approved credential delivery (environment/secure provider settings), not arbitrary credential-store reads.
 
-**Migration:** Existing `projects/<id>/knowledge/ai-memory.sqlite` databases are migrated by verified SQLite snapshot to `.atgv/memory/ai-memory-<id>.sqlite` on first access. The original is archived under `memory/legacy-backups` if it is safe to move; active WAL databases are left untouched for later review. Old workflow journal files in VS Code global storage are copied by verified snapshot. Previous SecretStorage token values migrate to encrypted vault entries on first read and are removed from the previous store after encryption succeeds.
+**Migration:** Existing `projects/<id>/knowledge/ai-memory.sqlite` databases are migrated by verified SQLite snapshot to `.atgv/memory/ai-memory-<id>.sqlite` on first access. The original is archived under `memory/legacy-backups` if it is safe to move; active WAL databases are left untouched for later review. Old workflow journal files in VS Code global storage are copied by verified snapshot. Only tokens staged in a folder-specific SecretStorage slot migrate on first read. Unbound legacy tokens are never inherited by a new folder; re-enter and validate them if necessary.
 
 **Reset:** Local Reset preserves `credentials.sqlite` using a verified SQLite snapshot in the staged workspace, and clears project-specific runtime history as described by Reset. Full destructive reset requires its separate confirmation. Do not delete `memory/` manually. Backing up `credentials.sqlite` without its VS Code SecretStorage key will *not* make the credentials decryptable on another computer.
 
@@ -38,3 +38,7 @@ refreshes do not erase the last successful checkpoint or approved BR/Jira links.
 
 The Knowledge & RAG page displays an expandable SQLite sync status report and
 offers a manual read-only check of all configured connections.
+
+## Workspace account isolation (v0.1.64)
+
+Each local workspace has independent encrypted credentials and folder-scoped connection defaults. Different folders on one computer can connect to the same remote project under different identities. No ATGV account picker is required. An uninitialized folder stages tokens only in its own OS-protected SecretStorage slot, migrating them into its SQLite vault after initialization. Previously encrypted vaults retain their existing path-bound key. Unbound legacy credentials are not migrated automatically. Folder scoping prevents accidental reuse, not access by another person with the same OS login; use separate OS accounts for a strong security boundary.
