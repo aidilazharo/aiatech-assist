@@ -11,11 +11,11 @@ const host=read('src/lib/runtime/extension-runtime.js');
 const extension=require('../src/lib/updates/github-release-updater');
 const library=require('../src/lib/updates/library-release-updater');
 
-test('release discovery queries AIA Malaysia repositories only',()=>{
- assert.deepEqual(extension.RELEASE_REPOSITORIES,['aiamalaysia/my-fow-technology-app-techassists-dev-sdlc']);
- assert.deepEqual(library.RELEASE_REPOSITORIES,['aiamalaysia/my-fow-technology-app-techassists-enterprise-skills']);
- assert.ok(!extension.RELEASE_REPOSITORIES.includes('aidilazharo/aiatech-assist'));
- assert.ok(!library.RELEASE_REPOSITORIES.includes('aidilazharo/tech-stacks-skills'));
+test('release discovery queries four fixed repositories',()=>{
+ assert.deepEqual(extension.RELEASE_REPOSITORIES,['aiamalaysia/my-fow-technology-app-techassists-dev-sdlc','aidilazharo/aiatech-assist']);
+ assert.deepEqual(library.RELEASE_REPOSITORIES,['aiamalaysia/my-fow-technology-app-techassists-enterprise-skills','aidilazharo/tech-stacks-skills']);
+ assert.ok(extension.RELEASE_REPOSITORIES.includes('aidilazharo/aiatech-assist'));
+ assert.ok(library.RELEASE_REPOSITORIES.includes('aidilazharo/tech-stacks-skills'));
  assert.equal(extension.PINNED_RELEASE_URL,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-dev-sdlc/releases/latest');
  assert.equal(library.LATEST_URL,'https://github.com/aiamalaysia/my-fow-technology-app-techassists-enterprise-skills/releases/latest');
 });

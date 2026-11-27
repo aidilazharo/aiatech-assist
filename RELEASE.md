@@ -1,6 +1,6 @@
-# ATGV AIATECH Assist v0.1.64
+# ATGV AIATECH Assist v0.1.65
 
-- Isolate credentials, connection defaults and startup verification by local ATGV workspace, including first-time setup before SQLite initialization.
-- Prevent automatic reuse of unbound legacy tokens and unbound VS Code GitHub authentication sessions. Existing encrypted workspace credentials remain supported.
-- Add regression coverage for two folders sharing one OS account and for same-folder staged credential migration.
-- Full regression suite and VSIX packaging pending CI verification.
+- Check both fixed extension release repositories and both fixed SDLC Library release repositories.
+- Preserve verified upgrade consent, source-aware release download links and no-downgrade behavior; display publication timestamps and partial-source warnings.
+- SDLC Library pull retains the verified configured main-branch workflow.
+- Regression and VSIX packaging pending execution.

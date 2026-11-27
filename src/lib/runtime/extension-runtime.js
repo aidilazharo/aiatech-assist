@@ -622,7 +622,7 @@ function updateStatus(){return {settings:updatePreferences(),installedVersion:re
  extensionLatest,
  extensionLastCheck:extensionUpdateChecked,extensionError:extensionUpdateError,
  libraryLastCheck:catalogLastCheck,libraryError:libraryUpdateError,
- libraryLatest:libraryLatest?.version||'',libraryLatestAvailable:libraryReleaseAvailable,
+ libraryLatest:libraryLatest?.version||'',libraryReleaseMetadata:libraryLatest,libraryLatestAvailable:libraryReleaseAvailable,
  libraryInstalledVersion:lastKnownCatalogVersion,
  librarySourceVersion:catalogRemote?.sha?String(catalogRemote.version||''):'',
  libraryLatestSha:catalogRemote?.sha||'',busy:softwareCheckBusy,extensionReleaseWarnings,libraryReleaseWarnings};}
@@ -630,7 +630,9 @@ async function publishUpdateStatus(){
  await dashboard?.webview.postMessage({type:'softwareUpdateState',value:updateStatus()});
 }
 async function openLatestReleaseFile(kind){
- const library=kind==='library',repo=library?libraryReleaseUpdater.REPO:releaseUpdater.REPO;
+ const library=kind==='library';
+ const updater=library?libraryReleaseUpdater:releaseUpdater;
+ let repo=updater.REPO;
  let url='https://github.com/'+repo+'/releases/latest';
  try{
   const request=releaseUpdater.authorizedRequest(await githubIssueAccessToken());
@@ -638,7 +640,8 @@ async function openLatestReleaseFile(kind){
   const latest=checked.latest,release=checked.release;
   const tag=String(latest?.tag||'');
   const tagPattern=library?/^v?\d+\.\d+\.\d+(?:-source-build\.\d+|-local\.[a-f0-9]{7,40})?$/:/^v?\d+\.\d+\.\d+(?:-build\.\d+|-local\.[a-f0-9]{7,40})?$/;
-  if(latest?.repository===repo&&tagPattern.test(tag)){
+  if((updater.RELEASE_REPOSITORIES||[repo]).includes(latest?.repository)&&tagPattern.test(tag)){
+   repo=latest.repository;
    url='https://github.com/'+repo+'/releases/tag/'+encodeURIComponent(tag);
    const filename=library?'tech-stacks-skills-'+latest.version+'-source.zip':'atgv-aiatech-assist-'+latest.version+'.vsix';
    const asset=library?release?.archive:release?.asset;
@@ -724,7 +727,7 @@ async function offerBrandedExtensionUpgrade(release){
   pendingExtensionUpgradeOffers.set(requestId,{resolve,timer});
   Promise.resolve(dashboard.webview.postMessage({type:'extensionUpgradeOffer',requestId,
     currentVersion:require('../../../package.json').version,version:release.version,
-    repository:release.repository||releaseUpdater.REPO,tag:release.tag,url:release.url})).then(success=>{
+    repository:release.repository||releaseUpdater.REPO,tag:release.tag,url:release.url,publishedAt:release.publishedAt})).then(success=>{
       if(!success){const entry=pendingExtensionUpgradeOffers.get(requestId);if(entry){clearTimeout(entry.timer);pendingExtensionUpgradeOffers.delete(requestId);resolve({action:'Later',requestId});}}
     }).catch(()=>{clearTimeout(timer);pendingExtensionUpgradeOffers.delete(requestId);resolve({action:'Later',requestId});});
  });
@@ -780,7 +783,7 @@ async function offerBrandedPrerequisiteInstall(plan){
  });
 }
 
-async function offerBrandedLibraryUpdate({repository,installedVersion,remoteVersion,installedTag='',remoteTag='',installedVersionWarning=''}){
+async function offerBrandedLibraryUpdate({repository,installedVersion,remoteVersion,installedTag='',remoteTag='',installedVersionWarning='',publishedAt=''}){
  const comparison=libraryUpdateVersion.compareInstalledRelease({version:installedVersion,releaseTag:installedTag},{version:remoteVersion,tag:remoteTag});
  if(!comparison.available)throw Error('The remote library version is not newer than the installed library.');
  const message='SDLC Library v'+comparison.remote+(remoteTag?' ('+remoteTag+')':'')+' is available from '+repository+' '+(comparison.installed?'(installed v'+comparison.installed+')':'(not yet installed)')+'. Download the verified catalog? Active project files remain unchanged.';
@@ -800,7 +803,7 @@ async function offerBrandedLibraryUpdate({repository,installedVersion,remoteVers
   timer.unref?.();
   pendingLibraryUpdateOffers.set(requestId,{resolve,timer});
   Promise.resolve(dashboard.webview.postMessage({type:'libraryUpdateOffer',requestId,
-   repository,installedVersion:comparison.installed,remoteVersion:comparison.remote,installedTag,remoteTag,installedVersionWarning}))
+   repository,installedVersion:comparison.installed,remoteVersion:comparison.remote,installedTag,remoteTag,installedVersionWarning,publishedAt}))
    .then(ok=>{
     if(!ok){const entry=pendingLibraryUpdateOffers.get(requestId);
      if(entry){clearTimeout(entry.timer);pendingLibraryUpdateOffers.delete(requestId);resolve('Later');}}
@@ -819,7 +822,7 @@ async function promptLibraryRelease(release,{force=false}={}){
  if(!force&&context.globalState.get(key)===promptId)return;
  await context.globalState.update(key,promptId);
  const answer=await offerBrandedLibraryUpdate({repository:release.repository||'tech-stacks-skills',installedVersion:comparison.installed,
-  remoteVersion:comparison.remote,installedTag:installedCatalog.releaseTag||'',remoteTag:release.tag||'',installedVersionWarning:installedCatalog.versionWarning||''});
+  remoteVersion:comparison.remote,installedTag:installedCatalog.releaseTag||'',remoteTag:release.tag||'',installedVersionWarning:installedCatalog.versionWarning||'',publishedAt:release.publishedAt||''});
  if(answer==='Pull Library'&&!dashboard){
   if(!getWorkspace())await uiInformation('Open an ATGV workspace to update the SDLC Library.');
   else await handleDashboardMessage({command:'catalogPull'});
@@ -830,7 +833,7 @@ async function checkLibraryRelease({prompt=false,interactive=false,forcePrompt=f
   if(catalogBusy){libraryRelease=null;libraryUpdateError='Library update check is waiting for another catalog operation.';return null;}
   const checked=await libraryReleaseUpdater.latestAcrossRepositories({request:releaseUpdater.authorizedRequest(await githubIssueAccessToken())});
   libraryRelease=checked.release;libraryLatest=checked.latest;libraryReleaseWarnings=checked.errors;
-  if(!libraryLatest)throw Error('No AIA Malaysia Library release was found.');
+  if(!libraryLatest)throw Error('No ATGV Library release was found.');
   // A distribution mirror is not a main-branch source. Never replace the
   // verified catalogue commit/version with a mirror's older release tag.
   catalogLastCheck=new Date().toISOString();catalogLastError='';libraryUpdateError='';

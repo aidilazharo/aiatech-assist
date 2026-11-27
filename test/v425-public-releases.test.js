@@ -14,7 +14,7 @@ function apiRequest(repositories,calls){return async(url,options)=>{
  if(repositories[repo] instanceof Error)throw repositories[repo];
  return Buffer.from(JSON.stringify(repositories[repo]||[]));
 };}
-test('extension and Library update checks select only the configured AIA Malaysia repository',async()=>{
+test('extension and Library update checks compare both fixed repositories',async()=>{
  const calls=[];
  const repos={
   'aidilazharo/aiatech-assist':[release('aidilazharo/aiatech-assist','v0.4.24-build.1',['atgv-aiatech-assist-0.4.24.vsix','vsix.sha256'])],
@@ -29,15 +29,15 @@ test('extension and Library update checks select only the configured AIA Malaysi
  assert.equal(library.latest.version,'1.1.18');assert.equal(library.release.repository,'aiamalaysia/my-fow-technology-app-techassists-enterprise-skills');
  assert.ok(calls.some(url=>url.includes('aiamalaysia/my-fow-technology-app-techassists-dev-sdlc'))&&calls.some(url=>url.includes('aiamalaysia/my-fow-technology-app-techassists-enterprise-skills')));
 });
-test('only approved AIA Malaysia repositories are queried, never development repositories',async()=>{
+test('all four fixed repositories are queried, including development repositories',async()=>{
  const calls=[];
  const extension=await ext.latestAcrossRepositories({version:'0.4.20',request:apiRequest({'aiamalaysia/my-fow-technology-app-techassists-dev-sdlc':[release('aiamalaysia/my-fow-technology-app-techassists-dev-sdlc','v0.4.25-build.2',['atgv-aiatech-assist-0.4.25.vsix','vsix.sha256'])]},calls)});
  const library=await lib.latestAcrossRepositories({request:apiRequest({'aiamalaysia/my-fow-technology-app-techassists-enterprise-skills':[release('aiamalaysia/my-fow-technology-app-techassists-enterprise-skills','v1.1.18-source-build.2',['tech-stacks-skills-1.1.18-source.zip','library-source.sha256'])]},calls)});
- assert.deepEqual(ext.RELEASE_REPOSITORIES,['aiamalaysia/my-fow-technology-app-techassists-dev-sdlc']);
- assert.deepEqual(lib.RELEASE_REPOSITORIES,['aiamalaysia/my-fow-technology-app-techassists-enterprise-skills']);
+ assert.deepEqual(ext.RELEASE_REPOSITORIES,['aiamalaysia/my-fow-technology-app-techassists-dev-sdlc','aidilazharo/aiatech-assist']);
+ assert.deepEqual(lib.RELEASE_REPOSITORIES,['aiamalaysia/my-fow-technology-app-techassists-enterprise-skills','aidilazharo/tech-stacks-skills']);
  assert.equal(extension.release.repository,'aiamalaysia/my-fow-technology-app-techassists-dev-sdlc');
  assert.equal(library.release.repository,'aiamalaysia/my-fow-technology-app-techassists-enterprise-skills');
- assert.ok(calls.every(url=>!url.includes('/aiatech-assist/')&&!url.includes('/tech-stacks-skills/')));
+ for(const repository of [...ext.RELEASE_REPOSITORIES,...lib.RELEASE_REPOSITORIES])assert.ok(calls.includes('https://api.github.com/repos/'+repository+'/releases/latest'),repository);
 });
 test('a newer release without a verified package is shown but cannot silently downgrade installation',async()=>{
  const repos={'aidilazharo/aiatech-assist':[release('aidilazharo/aiatech-assist','v0.4.24-build.1',['atgv-aiatech-assist-0.4.24.vsix','vsix.sha256'])],
@@ -84,4 +84,14 @@ test('saved GitHub credential is scoped to approved release API paths and never 
  await request('https://api.github.com/repos/'+lib.REPO+'/releases/latest');
  await request('https://api.github.com/repos/unrelated/example/releases');
  assert.deepEqual(seen.map(x=>x.authorization),['Bearer test-token',undefined,'Bearer test-token',undefined]);
+});
+
+test('newer development release wins and an unavailable mirror does not block checks',async()=>{
+ const calls=[];
+ const repos={'aidilazharo/aiatech-assist':[release('aidilazharo/aiatech-assist','v0.4.26',['atgv-aiatech-assist-0.4.26.vsix','vsix.sha256'],'2026-11-27T01:00:00Z')], [ext.REPO]:Error('mirror offline'), 'aidilazharo/tech-stacks-skills':[release('aidilazharo/tech-stacks-skills','v1.2.0',['tech-stacks-skills-1.2.0-source.zip','library-source.sha256'])],[lib.REPO]:Error('mirror offline')};
+ const request=apiRequest(repos,calls);
+ const extension=await ext.latestAcrossRepositories({version:'0.4.25',request});
+ const library=await lib.latestAcrossRepositories({request});
+ assert.equal(extension.release.repository,'aidilazharo/aiatech-assist');assert.equal(extension.latest.publishedAt,'2026-11-27T01:00:00Z');assert.equal(extension.errors.length,1);
+ assert.equal(library.release.repository,'aidilazharo/tech-stacks-skills');assert.equal(library.errors.length,1);
 });

@@ -5304,6 +5304,11 @@ function renderSoftwareUpdates(data,force=false){
   installedLibrary&&mirrorLibrary&&compareSemver(mirrorLibrary,installedLibrary)===0?`Active Library v${installedLibrary} matches the verified published release. Check selected source main for updates.`:
   data.libraryLatest?`Library published release: v${mirrorLibrary}${data.libraryLatestAvailable?'. Pull Library Updates to check source main first and install only a newer verified version.':'; verified ZIP or checksum is unavailable or the installed Library is newer.'}`:
   `Library: no published release yet. Check selected GitHub source main for updates.`;
+ const publishedLabel=metadata=>metadata?.publishedAt?' · Published '+new Date(metadata.publishedAt).toLocaleString():'';
+ $('softwareExtensionStatus').textContent+=publishedLabel(data.extensionLatest);
+ $('softwareLibraryStatus').textContent+=publishedLabel(data.libraryReleaseMetadata);
+ if(data.extensionReleaseWarnings?.length)$('softwareExtensionStatus').textContent+=' · Some sources unavailable.';
+ if(data.libraryReleaseWarnings?.length)$('softwareLibraryStatus').textContent+=' · Some sources unavailable.';
  $('viewExtensionRelease').disabled=false;
  $('viewLibraryRelease').disabled=false;
  $('checkSoftwareUpdates').disabled=!!data.busy;
@@ -5315,14 +5320,14 @@ window.addEventListener('message',event=>{
  if(m.type==='softwareUpdateState')renderSoftwareUpdates(m.value);
 });
 $('checkSoftwareUpdates').addEventListener('click',()=>{
- $('softwareExtensionStatus').textContent='Checking AIA Malaysia extension releases…';
+ $('softwareExtensionStatus').textContent='Checking both ATGV extension release repositories…';
  send('checkSoftwareUpdates',{extensionOnly:true});
 });
 $('pullLibraryFiles').addEventListener('click',()=>{
  if(softwareLibraryPulling||!!catalogBusyUI||!!catalogState?.busy)return;
  renderSoftwareLibraryPullProgress({stage:'running',percent:0,
   title:'Checking selected GitHub Library source…',
-  message:'Verifying the selected organization’s Library main branch first, then checking the AIA Malaysia release repository. No downgrades.'});
+  message:'Verifying the selected organization’s Library main branch first, using the fixed ATGV release sources for update discovery. No downgrades.'});
  send('catalogPull');
 });
 $('viewExtensionRelease').addEventListener('click',()=>send('viewExtensionRelease'));
@@ -9931,7 +9936,8 @@ window.addEventListener('message',event=>{
  const sameVersion=!!installed&&installed===latest;
  $('libraryUpdateDescription').textContent=latest?(sameVersion?'A newer verified SDLC Library build is available for this version.':'A newer verified SDLC Library release is available.'):'The remote SDLC Library version could not be verified.';
  if(message.installedVersionWarning)$('libraryUpdateDescription').textContent+=' '+String(message.installedVersionWarning);
- $('libraryUpdateSource').textContent='GitHub: '+String(message.repository||'tech-stacks-skills');
+ $('libraryUpdateSource').textContent='GitHub: '+String(message.repository||'tech-stacks-skills')+(message.publishedAt?' · Published '+new Date(message.publishedAt).toLocaleString():'');
+ $('libraryUpdateDescription').textContent+=' Pull Library verifies and updates the configured GitHub main branch.';
  const modal=$('libraryUpdateModal');modal.classList.remove('hidden');modal.setAttribute('aria-hidden','false');
  $('libraryUpdatePull').focus();
 });
@@ -10015,7 +10021,7 @@ window.addEventListener('message',event=>{
  $('extensionUpgradeCurrent').textContent='v'+String(message.currentVersion||'?');
  $('extensionUpgradeNext').textContent='v'+String(message.version||'?');
  $('extensionUpgradeDescription').textContent='ATGV v'+String(message.version||'?')+' is available. Review and install the verified extension release when ready.';
- $('extensionUpgradeSource').textContent='GitHub: '+String(message.repository||'')+' · '+String(message.tag||'');
+ $('extensionUpgradeSource').textContent='GitHub: '+String(message.repository||'')+' · '+String(message.tag||'')+(message.publishedAt?' · Published '+new Date(message.publishedAt).toLocaleString():'');
  const modal=$('extensionUpgradeModal');modal.classList.remove('hidden');modal.setAttribute('aria-hidden','false');
  $('extensionUpgradeInstall').focus();
 });

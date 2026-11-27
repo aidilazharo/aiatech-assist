@@ -10,8 +10,8 @@ const path=require('node:path');
 const {URL}=require('node:url');
 
 const REPO='aiamalaysia/my-fow-technology-app-techassists-dev-sdlc';
-// Release discovery is pinned to the AIA Malaysia distribution source.
-const RELEASE_REPOSITORIES=Object.freeze([REPO]);
+// Fixed release sources; never derive these from the project or logged-in owner.
+const RELEASE_REPOSITORIES=Object.freeze([REPO,'aidilazharo/aiatech-assist']);
 const DEFAULT_RELEASE_URL=`https://github.com/${REPO}/releases`;
 const API=`https://api.github.com/repos/${REPO}/releases?per_page=30`;
 const PINNED_RELEASE_URL=`https://github.com/${REPO}/releases/latest`;
@@ -79,7 +79,7 @@ function getBytes(url,{maxBytes=MAX_JSON,accept='application/vnd.github+json',re
   let u;try{u=validUrl(url);}catch(e){reject(e);return;}
   const headers={'User-Agent':'atgv-aiatech-assist-updater','Accept':accept,'X-GitHub-Api-Version':'2022-11-28'};
   // Send existing credentials only to approved GitHub repository release APIs.
-  const allowed=[REPO,'aiamalaysia/my-fow-technology-app-techassists-enterprise-skills'];
+  const allowed=[...RELEASE_REPOSITORIES,'aiamalaysia/my-fow-technology-app-techassists-enterprise-skills','aidilazharo/tech-stacks-skills'];
   if(token&&u.hostname==='api.github.com'&&allowed.some(repo=>u.pathname==='/repos/'+repo+'/releases'||u.pathname.startsWith('/repos/'+repo+'/releases/')))headers.Authorization='Bearer '+token;
   const request=https.get(u,{headers,timeout:15000},response=>{
    const status=response.statusCode||0;
@@ -121,7 +121,7 @@ async function latestRelease({version,repositoryUrl=DEFAULT_RELEASE_URL,request=
 async function latestAcrossRepositories({version,request=getBytes,includeCurrent=true}={}){
  const results=await Promise.allSettled(RELEASE_REPOSITORIES.map(repository=>fetchReleaseList({repositoryUrl:`https://github.com/${repository}/releases/latest`,request})));
  const errors=results.flatMap((result,index)=>result.status==='rejected'?[RELEASE_REPOSITORIES[index]+': '+String(result.reason?.message||result.reason)]:[]);
- if(errors.length===results.length)throw Error('Cannot check AIA extension releases: '+errors.join('; '));
+ if(errors.length===results.length)throw Error('Cannot check ATGV extension releases: '+errors.join('; '));
  const found=[];
  for(const result of results.filter(x=>x.status==='fulfilled')){
   const {repo,releases}=result.value;
