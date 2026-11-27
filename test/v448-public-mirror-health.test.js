@@ -24,8 +24,8 @@ test('a stale public mirror is labeled behind and must not offer a downgrade',()
  assert.match(client,/release repository is behind/);
  assert.match(client,/No downgrade available/);
 });
-test('release discovery still uses only the approved AIA Malaysia VSIX repository',()=>{
- assert.deepEqual(updater.RELEASE_REPOSITORIES,['aiamalaysia/my-fow-technology-app-techassists-dev-sdlc']);
+test('release discovery uses both fixed approved VSIX repositories',()=>{
+ assert.deepEqual(updater.RELEASE_REPOSITORIES,['aiamalaysia/my-fow-technology-app-techassists-dev-sdlc','aidilazharo/aiatech-assist']);
  const pkg=require('../package.json');
  assert.match(pkg.version,/^\d+\.\d+\.\d+$/);
  assert.equal(pkg.atgvDisplayVersion,pkg.version);
