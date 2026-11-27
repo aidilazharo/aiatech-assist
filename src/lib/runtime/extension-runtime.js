@@ -632,24 +632,24 @@ async function publishUpdateStatus(){
 async function openLatestReleaseFile(kind){
  const library=kind==='library';
  const updater=library?libraryReleaseUpdater:releaseUpdater;
- let repo=updater.REPO;
- let url='https://github.com/'+repo+'/releases/latest';
  try{
   const request=releaseUpdater.authorizedRequest(await githubIssueAccessToken());
   const checked=library?await libraryReleaseUpdater.latestAcrossRepositories({request}):await releaseUpdater.latestAcrossRepositories({version:require('../../../package.json').version,includeCurrent:true,request});
-  const latest=checked.latest,release=checked.release;
-  const tag=String(latest?.tag||'');
+  const release=checked.release;
+  if(!release)throw Error('No accessible release package.');
+  const repo=release.repository,tag=String(release.tag||'');
   const tagPattern=library?/^v?\d+\.\d+\.\d+(?:-source-build\.\d+|-local\.[a-f0-9]{7,40})?$/:/^v?\d+\.\d+\.\d+(?:-build\.\d+|-local\.[a-f0-9]{7,40})?$/;
-  if((updater.RELEASE_REPOSITORIES||[repo]).includes(latest?.repository)&&tagPattern.test(tag)){
-   repo=latest.repository;
-   url='https://github.com/'+repo+'/releases/tag/'+encodeURIComponent(tag);
-   const filename=library?'tech-stacks-skills-'+latest.version+'-source.zip':'atgv-aiatech-assist-'+latest.version+'.vsix';
-   const asset=library?release?.archive:release?.asset;
-   if(release?.repository===repo&&release.tag===tag&&release.version===latest.version&&/^\d+\.\d+\.\d+$/.test(latest.version)&&asset?.name===filename)
-    url='https://github.com/'+repo+'/releases/download/'+encodeURIComponent(tag)+'/'+encodeURIComponent(filename);
-  }
- }catch(error){report('Latest '+kind+' release link unavailable: '+String(error.message||error).slice(0,240));}
- await vscode.env.openExternal(vscode.Uri.parse(url));
+  if(!(updater.RELEASE_REPOSITORIES||[updater.REPO]).includes(repo)||!tagPattern.test(tag)||!/^\d+\.\d+\.\d+$/.test(release.version))throw Error('Unverified release source.');
+  await releaseUpdater.assertReleaseAccessible(release,{request});
+  const filename=library?'tech-stacks-skills-'+release.version+'-source.zip':'atgv-aiatech-assist-'+release.version+'.vsix';
+  const asset=library?release.archive:release.asset;
+  if(asset?.name!==filename)throw Error('Unverified release filename.');
+  const url='https://github.com/'+repo+'/releases/download/'+encodeURIComponent(tag)+'/'+encodeURIComponent(filename);
+  await vscode.env.openExternal(vscode.Uri.parse(url));
+ }catch(error){
+  report('Latest '+kind+' release link unavailable: '+String(error.message||error).slice(0,240));
+  await vscode.window.showInformationMessage('No accessible ATGV '+kind+' release file is available. Check GitHub access in Settings and retry.');
+ }
 }
 // Project GitHub actions continue to use their independent account identity.
 async function githubIssueAccessToken({interactive=false}={}){
@@ -750,8 +750,10 @@ async function promptExtensionRelease(release,{force=false}={}){
 async function checkExtensionRelease({prompt=false,interactive=false,forcePrompt=false}={}){
  try{
   const installed=require('../../../package.json').version;
-  const checked=await releaseUpdater.latestAcrossRepositories({version:installed,includeCurrent:true,request:releaseUpdater.authorizedRequest(await githubIssueAccessToken())});
+  const request=releaseUpdater.authorizedRequest(await githubIssueAccessToken());
+  const checked=await releaseUpdater.latestAcrossRepositories({version:installed,includeCurrent:true,request});
   const result=checked.release;extensionReleaseWarnings=checked.errors;
+  if(result&&releaseUpdater.compareVersion(result.version,installed)>0)await releaseUpdater.assertReleaseAccessible(result,{request});
   extensionLatest=checked.latest;extensionRelease=result&&releaseUpdater.compareVersion(result.version,installed)>0?result:null;extensionUpdateError='';extensionUpdateChecked=new Date().toISOString();
   if(prompt&&extensionRelease)await promptExtensionRelease(extensionRelease,{force:forcePrompt});
   return extensionRelease;
@@ -785,7 +787,7 @@ async function offerBrandedPrerequisiteInstall(plan){
 async function offerBrandedLibraryUpdate({repository,installedVersion,remoteVersion,installedTag='',remoteTag='',installedVersionWarning='',publishedAt=''}){
  const comparison=libraryUpdateVersion.compareInstalledRelease({version:installedVersion,releaseTag:installedTag},{version:remoteVersion,tag:remoteTag});
  if(!comparison.available)throw Error('The remote library version is not newer than the installed library.');
- const message='SDLC Library v'+comparison.remote+(remoteTag?' ('+remoteTag+')':'')+' is available '+(comparison.installed?'(installed v'+comparison.installed+')':'(not yet installed)')+'. Download the verified catalog? Active project files remain unchanged.';
+ const message='SDLC Library v'+comparison.remote+' is available '+(comparison.installed?'(installed v'+comparison.installed+')':'(not yet installed)')+'. Download the verified catalog? Active project files remain unchanged.';
  if(!dashboard)return vscode.window.showInformationMessage(message,{modal:true},'Pull Library','Later');
  const requestId=crypto.randomUUID();
  return new Promise(resolve=>{
@@ -830,7 +832,8 @@ async function promptLibraryRelease(release,{force=false}={}){
 async function checkLibraryRelease({prompt=false,interactive=false,forcePrompt=false}={}){
  try{
   if(catalogBusy){libraryRelease=null;libraryUpdateError='Library update check is waiting for another catalog operation.';return null;}
-  const checked=await libraryReleaseUpdater.latestAcrossRepositories({request:releaseUpdater.authorizedRequest(await githubIssueAccessToken())});
+  const request=releaseUpdater.authorizedRequest(await githubIssueAccessToken());
+  const checked=await libraryReleaseUpdater.latestAcrossRepositories({request});
   libraryRelease=checked.release;libraryLatest=checked.latest;libraryReleaseWarnings=checked.errors;
   if(!libraryLatest)throw Error('No ATGV Library release was found.');
   // A distribution mirror is not a main-branch source. Never replace the
@@ -839,6 +842,13 @@ async function checkLibraryRelease({prompt=false,interactive=false,forcePrompt=f
   const installedCatalog=(await catalogUiState()).installed||{};
   libraryReleaseAvailable=!!libraryRelease&&libraryUpdateVersion.compareInstalledRelease(installedCatalog,libraryRelease).available;
   if(!libraryReleaseAvailable)return null;
+  // The Pull action uses the configured Git source, not necessarily the release repository.
+  // Verify the exact same source and credential silently before showing an offer.
+  const config=catalogConfig();
+  const token=await catalogToken(config,{interactive:false});
+  const source=await sdlcCatalog.remoteVersion(config,token);
+  if(!source?.sha||source.version!==libraryRelease.version)throw Error('Library update unavailable: configured main does not match the published release version.');
+  await releaseUpdater.assertReleaseAccessible(libraryRelease,{request});
   const remote=libraryRelease.version;
   if(prompt)await promptLibraryRelease(libraryRelease,{force:forcePrompt});
   return remote;

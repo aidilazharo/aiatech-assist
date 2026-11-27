@@ -9929,10 +9929,10 @@ window.addEventListener('message',event=>{
  renderLibraryUpdateProgress('ready');
  const installed=String(message.installedVersion||'');
  const installedBuild=String(message.installedTag||'').match(/-source-build\.(\d+)$/);
- $('libraryUpdateCurrent').textContent=installed?'v'+installed+(installedBuild?' · build '+installedBuild[1]:''):'Not installed';
+ $('libraryUpdateCurrent').textContent=installed?'v'+installed:'Not installed';
  const latest=String(message.remoteVersion||'');
  const latestBuild=String(message.remoteTag||'').match(/-source-build\.(\d+)$/);
- $('libraryUpdateNext').textContent=latest?'v'+latest+(latestBuild?' · build '+latestBuild[1]:''):'Version unavailable';
+ $('libraryUpdateNext').textContent=latest?'v'+latest:'Version unavailable';
  const sameVersion=!!installed&&installed===latest;
  $('libraryUpdateDescription').textContent=latest?(sameVersion?'A newer verified SDLC Library build is available for this version.':'A newer verified SDLC Library release is available.'):'The remote SDLC Library version could not be verified.';
  if(message.installedVersionWarning)$('libraryUpdateDescription').textContent+=' '+String(message.installedVersionWarning);

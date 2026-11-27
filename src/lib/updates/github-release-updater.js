@@ -74,21 +74,34 @@ function validUrl(url){
  if(parsed.username||parsed.password)throw Error('Credentials in update URLs are not allowed.');
  return parsed;
 }
-function getBytes(url,{maxBytes=MAX_JSON,accept='application/vnd.github+json',redirects=3,token=''}={}){
+function getBytes(url,{maxBytes=MAX_JSON,accept='application/vnd.github+json',redirects=3,token='',probe=false}={}){
  return new Promise((resolve,reject)=>{
   let u;try{u=validUrl(url);}catch(e){reject(e);return;}
   const headers={'User-Agent':'atgv-aiatech-assist-updater','Accept':accept,'X-GitHub-Api-Version':'2022-11-28'};
   // Send existing credentials only to approved GitHub repository release APIs.
   const allowed=[...RELEASE_REPOSITORIES,'aiamalaysia/my-fow-technology-app-techassists-enterprise-skills','aidilazharo/tech-stacks-skills'];
   if(token&&u.hostname==='api.github.com'&&allowed.some(repo=>u.pathname==='/repos/'+repo+'/releases'||u.pathname.startsWith('/repos/'+repo+'/releases/')))headers.Authorization='Bearer '+token;
+  if(probe)headers.Range='bytes=0-3';
   const request=https.get(u,{headers,timeout:15000},response=>{
    const status=response.statusCode||0;
    if([301,302,303,307,308].includes(status)&&response.headers.location){
     response.resume();if(redirects<1){reject(Error('Too many GitHub redirects.'));return;}
     const next=new URL(response.headers.location,u).toString();
-    getBytes(next,{maxBytes,accept,redirects:redirects-1,token}).then(resolve,reject);return;
+    getBytes(next,{maxBytes,accept,redirects:redirects-1,token,probe}).then(resolve,reject);return;
    }
-   if(status!==200){response.resume();reject(Error(`GitHub release request returned HTTP ${status}.`));return;}
+   if(status!==200&&!(probe&&status===206)){response.resume();reject(Error(`GitHub release request returned HTTP ${status}.`));return;}
+   if(probe){
+    // A real GET (not metadata or HEAD) follows GitHub's asset redirects.
+    // Stop after four bytes even if the server ignores Range.
+    let prefix=Buffer.alloc(0);
+    response.on('error',reject);
+    response.on('data',chunk=>{
+     prefix=Buffer.concat([prefix,chunk.subarray(0,4-prefix.length)]);
+     if(prefix.length===4){resolve(prefix);response.destroy();}
+    });
+    response.on('end',()=>{if(prefix.length<4)reject(Error('GitHub release asset is empty or truncated.'));});
+    return;
+   }
    const chunks=[];let length=0;
    response.on('data',chunk=>{length+=chunk.length;if(length>maxBytes){response.destroy(Error('GitHub update download exceeds size limit.'));return;}chunks.push(chunk);});
    response.on('error',reject);response.on('end',()=>resolve(Buffer.concat(chunks)));
@@ -170,5 +183,29 @@ async function downloadVerified(release,{directory,request=getBytes,onProgress=a
  await fs.writeFile(target+'.part',vsix,{mode:0o600});await fs.rename(target+'.part',target);
  return target;
 }
+// A release listing is not proof that the actual binary or checksum is accessible.
+async function assertReleaseAccessible(release,{request=getBytes}={}){
+ const asset=release?.asset||release?.archive;
+ const filename=asset?.name;
+ const repository=release?.repository;
+ const library=!!release?.archive;
+ const expected=library?'tech-stacks-skills-'+release?.version+'-source.zip':'atgv-aiatech-assist-'+release?.version+'.vsix';
+ const checksumName=library?'library-source.sha256':'vsix.sha256';
+ const allowed=library?['aiamalaysia/my-fow-technology-app-techassists-enterprise-skills','aidilazharo/tech-stacks-skills']:RELEASE_REPOSITORIES;
+ const trusted=(a,name)=>!!a&&validAsset(a,name,repository)&&/^https:\/\/api\.github\.com\/repos\/[^/]+\/[^/]+\/releases\/assets\/\d+$/.test(a.url);
+ if(!allowed.includes(repository)||filename!==expected||!trusted(asset,expected))throw Error('Release package is not verified.');
+ const checksum=release.checksum;
+ if(!trusted(checksum,checksumName)&&!(/^sha256:[a-f0-9]{64}$/.test(String(asset.digest||''))&&/-local\.[a-f0-9]{7,40}$/.test(release.tag)))throw Error('Release checksum is not verified.');
+ const [prefix,proof]=await Promise.all([
+  request(asset.url,{accept:'application/octet-stream',maxBytes:4,probe:true}),
+  checksum?request(checksum.url,{accept:'application/octet-stream',maxBytes:10000}):Promise.resolve(null)
+ ]);
+ if(prefix.length<4||prefix[0]!==0x50||prefix[1]!==0x4b||prefix[2]!==3||prefix[3]!==4)throw Error('GitHub did not return a ZIP package.');
+ if(proof&&!proof.toString('utf8').split(/\r?\n/).some(line=>{
+  const match=/^([a-f0-9]{64})\s+\*?([^\s]+)$/.exec(line.trim());
+  return match&&path.posix.basename(match[2])===expected&&(!asset.digest||asset.digest==='sha256:'+match[1]);
+ }))throw Error('Release checksum file is invalid.');
+ return true;
+}
 function authorizedRequest(token){return (url,options={})=>getBytes(url,{...options,token});}
-module.exports={authorizedRequest,REPO,RELEASE_REPOSITORIES,API,DEFAULT_RELEASE_URL,PINNED_RELEASE_URL,parseRepositoryUrl,releaseUrlForRepository,parseVersion,compareVersion,selectRelease,verifyChecksum,latestRelease,latestAcrossRepositories,downloadVerified,getBytes};
+module.exports={assertReleaseAccessible,authorizedRequest,REPO,RELEASE_REPOSITORIES,API,DEFAULT_RELEASE_URL,PINNED_RELEASE_URL,parseRepositoryUrl,releaseUrlForRepository,parseVersion,compareVersion,selectRelease,verifyChecksum,latestRelease,latestAcrossRepositories,downloadVerified,getBytes};

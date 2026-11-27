@@ -89,21 +89,22 @@ test('startup and manual prompts override dismissal without bypassing version ve
  assert.match(host,/if\(!comparison\.available\|\|!updatePreferences\(\)\.promptForUpdates/);
 });
 
-test('latest release links open verified versioned file URLs and safely fall back to latest release page',async()=>{
+test('latest release links open only accessible versioned files, never unchecked fallback URLs',async()=>{
  const host=read('src/lib/runtime/extension-runtime.js');
  const source=host.slice(host.indexOf('async function openLatestReleaseFile('),host.indexOf('// Project GitHub actions continue',host.indexOf('async function openLatestReleaseFile(')));
  const opened=[],ext='aiamalaysia/my-fow-technology-app-techassists-dev-sdlc',lib='aiamalaysia/my-fow-technology-app-techassists-enterprise-skills';
  const mk=(repository,tag,assetKey,name)=>{const latest={repository,tag,version:'2.0.0'};return {latest,release:{...latest,[assetKey]:{name}}};};
  const extension=mk(ext,'v2.0.0-build.2','asset','atgv-aiatech-assist-2.0.0.vsix');
  const library=mk(lib,'v2.0.0-source-build.3','archive','tech-stacks-skills-2.0.0-source.zip');
- const releaseUpdater={REPO:ext,authorizedRequest:()=>null,latestAcrossRepositories:async()=>extension};
+ const releaseUpdater={REPO:ext,authorizedRequest:()=>null,assertReleaseAccessible:async()=>true,latestAcrossRepositories:async()=>extension};
  const libraryReleaseUpdater={REPO:lib,latestAcrossRepositories:async()=>library};
- const vscode={Uri:{parse:x=>x},env:{openExternal:async url=>opened.push(url)}};
+ const notices=[];const vscode={Uri:{parse:x=>x},env:{openExternal:async url=>opened.push(url)},window:{showInformationMessage:async msg=>notices.push(msg)}};
  const run=new Function('releaseUpdater','libraryReleaseUpdater','vscode','githubIssueAccessToken','report','require',source+';return openLatestReleaseFile;')(releaseUpdater,libraryReleaseUpdater,vscode,async()=>'',()=>{},()=>({version:'1.0.0'}));
  await run('extension');await run('library');
  assert.deepEqual(opened,['https://github.com/'+ext+'/releases/download/v2.0.0-build.2/atgv-aiatech-assist-2.0.0.vsix','https://github.com/'+lib+'/releases/download/v2.0.0-source-build.3/tech-stacks-skills-2.0.0-source.zip']);
- library.release=null;await run('library');assert.equal(opened.at(-1),'https://github.com/'+lib+'/releases/tag/v2.0.0-source-build.3');
- releaseUpdater.latestAcrossRepositories=async()=>{throw Error('403');};await run('extension');assert.equal(opened.at(-1),'https://github.com/'+ext+'/releases/latest');
+ library.release=null;await run('library');assert.equal(opened.length,2);
+ releaseUpdater.latestAcrossRepositories=async()=>{throw Error('403');};await run('extension');assert.equal(opened.length,2);
+ releaseUpdater.latestAcrossRepositories=async()=>extension;releaseUpdater.assertReleaseAccessible=async()=>{throw Error('404');};await run('extension');assert.equal(opened.length,2);assert.equal(notices.length,3);
 });
 
 test('updater accepts local release with GitHub digest but not an unverified binary',()=>{
@@ -125,4 +126,36 @@ test('local VSIX download verifies GitHub digest without separate checksum',asyn
  const file=await updater.downloadVerified(selected,{directory,request:async()=>bytes});
  assert.deepEqual(await fsp.readFile(file),bytes);
  await assert.rejects(updater.downloadVerified(selected,{directory,request:async()=>Buffer.alloc(bytes.length)}),/digest verification/);
+});
+
+test('release preflight rejects 403/404, HTML/JSON and missing checksums before an update offer',async()=>{
+ const r=updater.selectRelease([release('0.3.49',7)],'0.3.48');
+ const prefix=Buffer.from([80,75,3,4]);
+ const checksum=Buffer.from('a'.repeat(64)+'  '+r.asset.name+'\n');
+ const request=async(url,options)=>{if(url===r.asset.url){assert.equal(options.probe,true);return prefix;}return checksum;};
+ assert.equal(await updater.assertReleaseAccessible(r,{request}),true);
+ for(const status of [403,404]){
+  await assert.rejects(updater.assertReleaseAccessible(r,{request:async(url,options)=>{if(url===r.asset.url)throw Error('HTTP '+status);return request(url,options);}}),new RegExp(String(status)));
+  await assert.rejects(updater.assertReleaseAccessible(r,{request:async(url,options)=>{if(url===r.checksum.url)throw Error('HTTP '+status);return request(url,options);}}),new RegExp(String(status)));
+ }
+ await assert.rejects(updater.assertReleaseAccessible(r,{request:async(url)=>url===r.asset.url?Buffer.from('{"id'):checksum}),/ZIP package/);
+ await assert.rejects(updater.assertReleaseAccessible(r,{request:async(url)=>url===r.asset.url?prefix:Buffer.from('not a checksum')}),/checksum file/);
+});
+test('Library offer preflight validates the configured Git source with its own credentials and rejects inaccessible source',async()=>{
+ const host=read('src/lib/runtime/extension-runtime.js');
+ const source=host.slice(host.indexOf('async function checkLibraryRelease('),host.indexOf('async function checkSoftwareUpdates('));
+ const calls=[];
+ const run=new Function('calls','sourceStatus',sourcePrelude()+source+';return checkLibraryRelease;');
+ function sourcePrelude(){return "let catalogBusy=false,libraryRelease=null,libraryLatest=null,libraryReleaseWarnings=[],libraryReleaseAvailable=false,catalogLastCheck='',catalogLastError='',libraryUpdateError=''; const release={version:'0.0.12'};const libraryReleaseUpdater={latestAcrossRepositories:async()=>({release,latest:release,errors:[]})};const releaseUpdater={authorizedRequest:()=>null,assertReleaseAccessible:async()=>calls.push('asset')};const githubIssueAccessToken=async()=>'';const catalogUiState=async()=>({installed:{}});const libraryUpdateVersion={compareInstalledRelease:()=>({available:true})};const catalogConfig=()=>({repositoryUrl:'configured'});const catalogToken=async(config,options)=>{if(options.interactive!==false)throw Error('interactive');calls.push('credentials');return 'configured-token';};const sdlcCatalog={remoteVersion:async(config,token)=>{calls.push(config.repositoryUrl+':'+token);if(sourceStatus instanceof Error)throw sourceStatus;return sourceStatus;}};const promptLibraryRelease=async()=>calls.push('offer');const report=()=>{};const publishUpdateStatus=async()=>{};";}
+ for(const status of [403,404]){
+  calls.length=0;
+  assert.equal(await run(calls,Error('HTTP '+status))({prompt:true}),null);
+  assert.deepEqual(calls,['credentials','configured:configured-token']);
+ }
+ calls.length=0;
+ assert.equal(await run(calls,{sha:'abc',version:'0.0.11'})({prompt:true}),null);
+ assert.deepEqual(calls,['credentials','configured:configured-token']);
+ calls.length=0;
+ assert.equal(await run(calls,{sha:'abc',version:'0.0.12'})({prompt:true}),'0.0.12');
+ assert.deepEqual(calls,['credentials','configured:configured-token','asset','offer']);
 });
