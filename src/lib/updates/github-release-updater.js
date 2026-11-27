@@ -194,8 +194,8 @@ async function assertReleaseAccessible(release,{request=getBytes}={}){
  const allowed=library?['aiamalaysia/my-fow-technology-app-techassists-enterprise-skills','aidilazharo/tech-stacks-skills']:RELEASE_REPOSITORIES;
  const trusted=(a,name)=>!!a&&validAsset(a,name,repository)&&/^https:\/\/api\.github\.com\/repos\/[^/]+\/[^/]+\/releases\/assets\/\d+$/.test(a.url);
  if(!allowed.includes(repository)||filename!==expected||!trusted(asset,expected))throw Error('Release package is not verified.');
- const checksum=release.checksum;
- if(!trusted(checksum,checksumName)&&!(/^sha256:[a-f0-9]{64}$/.test(String(asset.digest||''))&&/-local\.[a-f0-9]{7,40}$/.test(release.tag)))throw Error('Release checksum is not verified.');
+ const checksum=trusted(release.checksum,checksumName)?release.checksum:null;
+ if(!checksum&&!(/^sha256:[a-f0-9]{64}$/.test(String(asset.digest||''))&&/-local\.[a-f0-9]{7,40}$/.test(release.tag)))throw Error('Release checksum is not verified.');
  const [prefix,proof]=await Promise.all([
   request(asset.url,{accept:'application/octet-stream',maxBytes:4,probe:true}),
   checksum?request(checksum.url,{accept:'application/octet-stream',maxBytes:10000}):Promise.resolve(null)
