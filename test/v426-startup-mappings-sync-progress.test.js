@@ -27,3 +27,33 @@ test('header sync progress reflects verified Jira and Confluence results only',(
  verify({projectId:'p',phase:'offline',results:{Jira:1,Confluence:0}},0);
  verify({projectId:'other',phase:'ready',results:{Jira:1,Confluence:1}},0);
 });
+
+test('startup mapping renderer switches project scope, preserves selections and disables unverified actions',()=>{
+ const a=ui.indexOf('function renderStartupMappings(){'),b=ui.indexOf("$('startupMappingProject').addEventListener",a);
+ assert.ok(a>=0&&b>a);
+ const nodes=new Map();
+ const node=id=>{
+  if(!nodes.has(id))nodes.set(id,{dataset:{},children:[],value:'',textContent:'',disabled:false,classList:{toggle(){}},replaceChildren(){this.children=[];},append(...items){this.children.push(...items);}});
+  return nodes.get(id);
+ };
+ const doc={createElement:()=>({value:'',textContent:''})};
+ const create=new Function('$','document','projects','startupProjectMappings',`
+ let startupMappingProjectId='',startupConnectionVerified=false;
+ ${ui.slice(a,b)}
+ return {render:renderStartupMappings,select:id=>startupMappingProjectId=id,verify:v=>startupConnectionVerified=v};
+ `);
+ const projects=[{id:'a',name:'Project A'},{id:'b',name:'Project B'}];
+ const mappings={a:{jira:{key:'AA',source:'project'},confluence:{key:'AC',source:'project'}},b:{jira:{key:'BB',source:'extension'},confluence:{key:'BC',source:'project'}}};
+ const page=create(node,doc,projects,mappings);
+ page.render();assert.equal(node('overviewJiraProjectKey').textContent,'Not selected');
+ assert.equal(node('startupMappingProject').children.length,3);
+ page.select('a');page.render();
+ assert.equal(node('overviewJiraProjectKey').textContent,'AA');assert.equal(node('overviewConfluenceSpaceKey').textContent,'AC');
+ assert.equal(node('overviewJiraMappingStatus').disabled,true);assert.equal(node('overviewJiraInventory').disabled,true);
+ page.verify(true);page.render();assert.equal(node('overviewJiraMappingStatus').disabled,false);assert.equal(node('overviewJiraInventory').disabled,false);
+ page.select('b');page.render();
+ assert.equal(node('startupMappingProject').value,'b');assert.equal(node('overviewJiraProjectKey').textContent,'BB');assert.equal(node('overviewConfluenceSpaceKey').textContent,'BC');
+ assert.equal(node('startupMappingProject').children.length,3);
+ projects.splice(1);page.render();assert.equal(node('startupMappingProject').value,'a');assert.equal(node('overviewJiraProjectKey').textContent,'AA');
+ projects.splice(0);page.render();assert.equal(node('overviewJiraProjectKey').textContent,'Not selected');assert.equal(node('overviewJiraInventory').disabled,true);
+});

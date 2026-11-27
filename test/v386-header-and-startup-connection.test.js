@@ -36,6 +36,7 @@ function createPageHarness(){
   "const startupFieldMap={jiraUrl:'startupJiraUrl',email:'startupEmail',githubUrl:'startupGithubUrl',projectRepository:'startupProjectRepository'};",
   "let startupSetupRequired=true,startupPage=1,startupVerifying=false,startupInstallingModule='',startupScanComplete=true,startupConnectionVerified=true,startupConnectionEditSnapshot=null,startupOpenStackId='',startupCopilotModalOpen=false;",
   "let startupProceedMode='',startupConnectionCheckPending=false,startupConnectionHealthError=false;",
+  'function renderStartupMappings(){}', // separately exercised by the startup mapping regression test
   ui.slice(start,end),
   ui.slice(invalidateStart,invalidateEnd),
   'return {renderStartupPage,invalidateStartupConnection,setVerifying:v=>startupVerifying=v,setVerified:v=>startupConnectionVerified=v};'

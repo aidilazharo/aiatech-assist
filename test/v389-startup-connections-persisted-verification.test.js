@@ -112,6 +112,7 @@ function webviewFixture(startPage=0){
   "let startupSetupRequired=true,startupPage="+startPage+",startupVerifying=false,startupInstallingModule='',startupConnectionVerified=false,startupConnectionEditSnapshot=null,startupScanComplete=true,startupFormInitialized=false,startupReturnToConnections=false,startupPrereqRequested=false,startupOpenStackId='',startupCopilotModalOpen=false; let gateBusy=false,gateError='',workspaceOpened=false,opening={phase:'search'};",
   "let startupProceedMode='',startupConnectionHealthError=false,startupConnectionCheckPending=false; function resetStartupConnectionChecks(){}",
   'function updateStartupRepositoryPreview(){}',
+  'function renderStartupMappings(){}', // separately exercised by the startup mapping regression test
   ui.slice(a,z),
   "return {renderStartupConfig,renderStartupPage,getPage:()=>startupPage,isVerified:()=>startupConnectionVerified,setOpening:p=>opening={phase:p},setGateBusy:v=>gateBusy=v,setGateError:v=>gateError=v};"
  ].join('\n');
@@ -123,7 +124,7 @@ test('Verified settings still open the prerequisite page first and retain locked
  client.renderStartupConfig({required:true,verified:true,saved:setup.DEFAULTS,defaults:setup.DEFAULTS});
  assert.equal(client.isVerified(),true);
  assert.equal(client.getPage(),0,'ATGV: Start must not skip Technology stack prerequisites');
- assert.equal(find('startupProceed').textContent,'Next: Search Project →');
+ assert.equal(find('startupProceed').textContent,'Next: Projects →');
  assert.equal(find('startupProceed').disabled,false);
  assert.equal(find('startupPrevious').disabled,true,'Previous is unavailable on the first screen');
  assert.equal(find('startupComputerCard').classList.contains('hidden'),false);
@@ -136,7 +137,7 @@ test('Verified settings still open the prerequisite page first and retain locked
   assert.equal(find(id).disabled,true,id);
  assert.match(find('startupConnectionMessage').textContent,/already verified and saved/);
 });
-test('Unverified settings keep Test & Save available and Search Project unavailable',()=>{
+test('Unverified settings keep Test & Save available and connection fields editable',()=>{
  const {find,client}=webviewFixture();
  client.renderStartupConfig({required:true,verified:false,saved:setup.DEFAULTS,defaults:setup.DEFAULTS});
  assert.equal(client.isVerified(),false);

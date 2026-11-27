@@ -46,10 +46,18 @@ test('Overview without a selected project cannot show stale Jira/Confluence dest
   assert.equal(result.jira.source, 'none');
 });
 
-test('Overview renders both mappings from refreshed state via textContent, never interpolated HTML', () => {
+test('Startup connections render selected-project mappings from refreshed state via textContent', () => {
   const extension = fs.readFileSync(path.join(root, 'test/generated/extension-source.txt'), 'utf8');
   const webview = fs.readFileSync(path.join(root, 'media/start.js'), 'utf8');
-  assert.match(extension, /overviewConnections\(openingFlow\.phase==='open'\?activeProject:null/);
+  assert.match(extension, /mappingView\(openingFlow\.phase==='open'\?activeProject:null/);
+  assert.match(extension, /startupProjectMappings=Object\.fromEntries\(projects\.map\(project=>\[project\.id,mappingView\(project,extensionSettings,cfg\(\)\)\]\)\)/);
+  assert.match(webview, /startupProjectMappings=msg\.startupProjectMappings\|\|\{\}/);
+  const form=extension.indexOf('id="startupConnectionForm"');
+  const end=extension.indexOf('</form>',form);
+  for(const id of ['overviewJiraProjectKey','overviewConfluenceSpaceKey']){
+    const offset=extension.indexOf('id="'+id+'"');
+    assert.ok(form>=0&&offset>form&&offset<end,id+' belongs to startup connections');
+  }
   assert.match(extension, /id="overviewJiraProjectKey"/);
   assert.match(extension, /id="overviewConfluenceSpaceKey"/);
   assert.match(webview, /renderOverviewConnections\(msg\.projectConnections\)/);

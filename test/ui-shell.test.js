@@ -58,13 +58,14 @@ test('ATGV Start is a search gate; full SDLC shell is only visible after verifie
   assert.match(css,/\.gate-progress\{/);
 });
 
-test('Start and Settings only search Confluence when users explicitly request it',()=>{
+test('Start lists projects without a search input; Settings searches Confluence on request',()=>{
   assert.doesNotMatch(html,/id="(?:gateSearch|gateQuery)"/);
   assert.match(html,/id="settingsSpaceQuery"/);
   assert.match(html,/id="settingsSpaceSearch"/);
   assert.doesNotMatch(html,/id="reloadSpaces"/);
   assert.doesNotMatch(source,/await discoverSpaces\(''\)/);
-  assert.match(script,/send\('discover',\{query:q,origin:'gate',requestId\}\)/);
+  assert.doesNotMatch(script,/send\('discover',\{[^}]*origin:'gate'/);
+  assert.match(html,/id="gateProjectsHeading"[^>]*>Projects</);
   assert.match(script,/send\('discover',\{query,origin:'settings',requestId\}\)/);
   assert.match(source,/if\(term\.length<2\|\|term\.length>120\)/);
 });

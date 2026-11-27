@@ -34,6 +34,7 @@ function pageFixture(){
   "let startupProceedMode='',startupStackData=null,gateBusy=false,gateError='',workspaceOpened=false,opening={phase:'search'};",
   segment('function startupRing(', 'function updateStartupStackProgress('),
   segment('function startupPayload(){','function renderStartupPermissionRows('),
+  'function renderStartupMappings(){}', // separately exercised by the startup mapping regression test
   segment('function renderStartupPage(){','function renderStartupStackReadiness('),
   segment('function invalidateStartupConnection(){',"for(const id of Object.values(startupFieldMap))"),
   segment("$('startupConnectionForm').addEventListener('submit'", "$('startupProceed').addEventListener('click'"),
@@ -49,8 +50,10 @@ function pageFixture(){
 }
 const config={required:true,verified:true,saved:{jiraUrl:'https://example.atlassian.net',email:'person@example.com',githubUrl:'https://github.com/aiamalaysia',projectRepository:'my-fow-technology-app-techassists'},defaults:setup.DEFAULTS};
 test('Verified connection settings expose a manual read-only test',()=>{
- const token=html.indexOf('id="startupGithubToken"'),button=html.indexOf('id="startupEditConnections"');
- assert.ok(token>0&&button>token&&button<html.indexOf('</div>',token));
+ const field=html.match(/<div class="field"><label for="startupGithubToken">[\s\S]*?<\/button><\/div><button[^>]*id="startupEditConnections"[^>]*>Edit<\/button><\/div>/)?.[0]||'';
+ assert.match(field,/<div class="startup-token-input"><input[^>]*id="startupGithubToken"[^>]*><button[^>]*id="startupGithubTokenInfo"/);
+ assert.match(field,/<\/div><button[^>]*id="startupEditConnections"/);
+ assert.match(html,/<div class="startup-token-input"><input[^>]*id="startupAtlassianToken"[^>]*><button[^>]*id="startupAtlassianTokenInfo"/);
  const {node,sent,page}=pageFixture();
  page.renderStartupConfig(config);
  assert.equal(sent.length,0,'saved checks are only run on request');
