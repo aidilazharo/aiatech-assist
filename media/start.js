@@ -1146,18 +1146,31 @@ function syncSdlcWorkspaceShell(next){
  const shell=$('sdlcWorkspaceShell');
  if(!shell)return;
  const active=SDLC_WORKSPACE_VIEWS.has(next);
+ // Reparent the single navigation to the current page heading; listeners and
+ // tab IDs are preserved, and there is no separate workspace card.
+ const focused=shell.ownerDocument?.activeElement;
+ const restoreFocus=focused&&shell.contains(focused);
+ const titleRow=active?$(next+'SdlcTitleRow'):null;
+ if(titleRow&&shell.parentElement!==titleRow)titleRow.appendChild(shell);
  shell.classList.toggle('hidden',!active);
  shell.setAttribute('aria-hidden',String(!active));
  const overview=$('sdlcWorkspaceOverview');
  if(overview){
   overview.classList.toggle('current',next==='flow');
   overview.setAttribute('aria-pressed',String(next==='flow'));
+  overview.hidden=next==='flow';
  }
  for(const tab of shell.querySelectorAll('[data-sdlc-tab]')){
   const chosen=active&&tab.dataset.sdlcTab===next;
   tab.classList.toggle('current',chosen);
   tab.setAttribute('aria-selected',String(chosen));
   tab.tabIndex=chosen||active&&next==='flow'&&tab.dataset.sdlcTab==='documents'?0:-1;
+ }
+ if(active&&restoreFocus){
+  if(focused===overview&&next==='flow'){
+   const heading=titleRow?.querySelector('h1');
+   if(heading){heading.tabIndex=-1;heading.focus();}
+  }else focused.focus();
  }
 }
 function navigate(destination){

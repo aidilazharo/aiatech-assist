@@ -2409,52 +2409,42 @@ body:not(.gate-mode) .app-header .brand-identity .brand-versions{
 #discoveryView details#baSourcePreflight .ba-source-preflight-body{padding-top:12px}
 #discoveryView details#baSourcePreflight .ba-source-preflight-header{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
 
-/* v0.0.35 - one SDLC Workspace in the sidebar, four internal workflow tabs. */
+/* SDLC title-row navigation: no separate card or duplicated heading. */
+.atgv-sdlc-title-row{
+ display:flex;align-items:center;justify-content:space-between;gap:10px 16px;
+ flex-wrap:wrap;margin:0 0 12px;min-width:0;
+}
+.atgv-sdlc-title-row > h1{margin:0;flex:0 1 auto;min-width:0}
 body:not(.gate-mode) #sdlcWorkspaceShell.atgv-sdlc-workspace-shell{
-  box-sizing:border-box;width:calc(100% - 32px);max-width:1200px;
-  margin:16px auto 4px;padding:15px 18px;
-  background:var(--vscode-editorWidget-background,#161a21);
-  border:1px solid var(--vscode-panel-border,#323a46);
-  border-radius:10px;flex:0 0 auto;
+ display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:7px;
+ margin:0 0 0 auto;padding:0;background:transparent;border:0;
+ border-radius:0;min-width:0;max-width:100%;flex:0 1 auto;
 }
-#sdlcWorkspaceShell.hidden{display:none!important}
-#sdlcWorkspaceShell .atgv-sdlc-workspace-heading{
-  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin:0 0 12px;
-}
-#sdlcWorkspaceShell .atgv-sdlc-workspace-heading h2{
-  margin:0;font-size:16px;line-height:1.4;color:var(--vscode-foreground,#f4f6fa);
-}
-#sdlcWorkspaceShell button.atgv-sdlc-workspace-overview{
-  border-radius:7px;min-height:32px;font-size:12px;padding:5px 12px;
-}
-#sdlcWorkspaceShell button.atgv-sdlc-workspace-overview.current{
-  border-color:var(--vscode-focusBorder,#4089ca);
-  background:var(--vscode-list-activeSelectionBackground,#153c58);
-  color:var(--vscode-list-activeSelectionForeground,#f7fbff);
-}
+#sdlcWorkspaceShell.hidden,#sdlcWorkspaceShell [hidden]{display:none!important}
 #sdlcWorkspaceShell .atgv-sdlc-workspace-tabs{
-  display:flex;flex-wrap:wrap;gap:7px;align-items:center;
+ display:flex;flex-wrap:wrap;gap:7px;align-items:center;justify-content:flex-end;
 }
+#sdlcWorkspaceShell button.atgv-sdlc-workspace-overview,
 #sdlcWorkspaceShell .atgv-sdlc-workspace-tabs button[role="tab"]{
-  appearance:none;cursor:pointer;min-height:32px;border-radius:17px;padding:5px 13px;
-  border:1px solid var(--vscode-panel-border,#414852);
-  background:transparent;color:var(--vscode-foreground,#e5e9ee);
-  font-size:12px;font-weight:600;box-shadow:none;
+ appearance:none;cursor:pointer;min-height:32px;border-radius:17px;padding:5px 13px;
+ border:1px solid var(--vscode-panel-border,#414852);
+ background:transparent;color:var(--vscode-foreground,#e5e9ee);
+ font-size:12px;font-weight:600;box-shadow:none;white-space:nowrap;
 }
 #sdlcWorkspaceShell .atgv-sdlc-workspace-tabs button[aria-selected="true"]{
-  background:var(--vscode-list-activeSelectionBackground,#14436a);
-  border-color:var(--vscode-focusBorder,#5494ca);
-  color:var(--vscode-list-activeSelectionForeground,#fff);
+ background:var(--vscode-list-activeSelectionBackground,#14436a);
+ border-color:var(--vscode-focusBorder,#5494ca);
+ color:var(--vscode-list-activeSelectionForeground,#fff);
 }
-#sdlcWorkspaceShell .atgv-sdlc-workspace-tabs button:focus-visible,
-#sdlcWorkspaceShell .atgv-sdlc-workspace-overview:focus-visible{
-  outline:2px solid var(--vscode-focusBorder,#77b7ed);outline-offset:2px;
+#sdlcWorkspaceShell button:focus-visible{
+ outline:2px solid var(--vscode-focusBorder,#77b7ed);outline-offset:2px;
 }
 @media(max-width:620px){
  body:not(.gate-mode) #sdlcWorkspaceShell.atgv-sdlc-workspace-shell{
-  width:calc(100% - 16px);margin:9px auto 4px;padding:11px;
+  margin-left:0;justify-content:flex-start;
  }
- #sdlcWorkspaceShell .atgv-sdlc-workspace-tabs{gap:6px}
+ #sdlcWorkspaceShell .atgv-sdlc-workspace-tabs{gap:6px;justify-content:flex-start}
+ #sdlcWorkspaceShell button.atgv-sdlc-workspace-overview,
  #sdlcWorkspaceShell .atgv-sdlc-workspace-tabs button[role="tab"]{padding:5px 10px}
 }
 

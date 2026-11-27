@@ -7,6 +7,7 @@ const read=file=>fs.readFileSync(path.join(__dirname,'..',file),'utf8');
 const html=read('src/lib/webview/dashboard-html.js');
 const ui=read('media/start.js');
 const css=read('media/atgv-mywork-ai.css');
+const pageCss=read('media/start.css');
 
 function widget(id){
  const attrs={},classes=new Set(['hidden']);
@@ -26,8 +27,14 @@ test('sidebar has one SDLC Workspace and no Role Workspace or individual SDLC ca
  assert.match(left,/data-nav="library" id="navLibraryStudio" hidden/);
 });
 test('SDLC Workspace four tabs and readiness button route to existing pages',()=>{
- const shell=html.slice(html.indexOf('<section id="sdlcWorkspaceShell"'),html.indexOf('</section>',html.indexOf('<section id="sdlcWorkspaceShell"'))+10);
+ const shell=html.slice(html.indexOf('<nav id="sdlcWorkspaceShell"'),html.indexOf('</nav>',html.indexOf('<nav id="sdlcWorkspaceShell"'))+6);
  assert.match(shell,/id="sdlcWorkspaceOverview"/);
+ assert.doesNotMatch(shell,/<h2|<section/);
+ for(const view of ['flow','documents','planning','knowledge','operations']){
+  assert.match(html,new RegExp('id="'+view+'SdlcTitleRow"><h1>'));
+ }
+ assert.match(pageCss,/\.atgv-sdlc-title-row\{\s*display:flex;align-items:center/);
+ assert.match(pageCss,/#sdlcWorkspaceShell\.atgv-sdlc-workspace-shell\{[^}]*background:transparent;border:0/);
  assert.match(shell,/role="tablist" aria-label="SDLC Workspace sections"/);
  const tabs=[...shell.matchAll(/data-sdlc-tab="([^"]+)"[^>]+aria-controls="([^"]+)"[^>]+aria-selected="false"/g)];
  assert.deepEqual(tabs.map(x=>x[1]),['documents','planning','knowledge','operations']);
@@ -48,17 +55,20 @@ test('tab shell visibility, pressed state and roving tab focus update without re
   const tab=widget('tab-'+id);tab.dataset.sdlcTab=id;return tab;
  });
  shell.querySelectorAll=()=>tabs;
- const $=id=>id==='sdlcWorkspaceShell'?shell:id==='sdlcWorkspaceOverview'?overview:null;
+ const rows=Object.fromEntries(['flow','documents','planning','knowledge','operations'].map(view=>[view+'SdlcTitleRow',{appendChild(node){node.parentElement=this;}}]));
+ const $=id=>id==='sdlcWorkspaceShell'?shell:id==='sdlcWorkspaceOverview'?overview:rows[id]||null;
  const sync=new Function('$',fragment+'return syncSdlcWorkspaceShell;')($);
  sync('myWork');
  assert.ok(shell.classes.has('hidden'));assert.equal(shell.attrs['aria-hidden'],'true');
  sync('flow');
  assert.ok(!shell.classes.has('hidden'));assert.equal(overview.attrs['aria-pressed'],'true');
+ assert.equal(shell.parentElement,rows.flowSdlcTitleRow);assert.equal(overview.hidden,true);
  assert.deepEqual(tabs.map(tab=>tab.attrs['aria-selected']),['false','false','false','false']);
  assert.deepEqual(tabs.map(tab=>tab.tabIndex),[0,-1,-1,-1]);
  for(const selected of ['documents','planning','knowledge','operations']){
   sync(selected);
   assert.equal(overview.attrs['aria-pressed'],'false');
+  assert.equal(overview.hidden,false);assert.equal(shell.parentElement,rows[selected+'SdlcTitleRow']);
   assert.deepEqual(tabs.filter(tab=>tab.attrs['aria-selected']==='true').map(tab=>tab.dataset.sdlcTab),[selected]);
   assert.deepEqual(tabs.filter(tab=>tab.tabIndex===0).map(tab=>tab.dataset.sdlcTab),[selected]);
  }
