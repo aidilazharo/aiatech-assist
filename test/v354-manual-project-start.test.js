@@ -64,7 +64,7 @@ test('manual project opening remains available without automatic Start-screen lo
  const js=read('media/start.js');
  const runtime=read('src/lib/runtime/extension-runtime.js');
  assert.match(js,/action\.addEventListener\('click',\(\)=>launchFromGate\(\{projectId:project\.id\}\)\)/);
- assert.ok(js.includes("button.addEventListener('click',()=>launchFromGate({spaceId:sp.id}))"));
+ assert.doesNotMatch(js,/\$\('gateSearch'\)\.addEventListener/);
  assert.match(runtime,/case 'openingAuto':\{/);
  assert.match(runtime,/if\(msg\.autoResume===true\)throw Error\('Automatic sign-in is disabled/);
  assert.doesNotMatch(js,/launchFromGate\(\{projectId,autoResume:true\}\)/);

@@ -38,7 +38,7 @@ test('roles are consolidated to one left navigation item and moved into the cont
 });
 
 test('ATGV Start is a search gate; full SDLC shell is only visible after verified open',()=>{
-  for(const id of ['gateView','gateFinder','gateQuery','gateSearch','gateLocal','gateRemote','gateOpeningError','gateRecovery'])
+  for(const id of ['gateView','gateFinder','gateProjectsHeading','gateManual','gateLocal','gateOpeningError','gateRecovery'])
     assert.match(html,new RegExp('id="'+id+'"'));
   assert.match(html,/<body class="gate-mode">/);
   assert.doesNotMatch(html,/id="gateSettings"/);
@@ -59,7 +59,7 @@ test('ATGV Start is a search gate; full SDLC shell is only visible after verifie
 });
 
 test('Start and Settings only search Confluence when users explicitly request it',()=>{
-  assert.match(html,/id="gateSearch"/);
+  assert.doesNotMatch(html,/id="(?:gateSearch|gateQuery)"/);
   assert.match(html,/id="settingsSpaceQuery"/);
   assert.match(html,/id="settingsSpaceSearch"/);
   assert.doesNotMatch(html,/id="reloadSpaces"/);
@@ -71,7 +71,7 @@ test('Start and Settings only search Confluence when users explicitly request it
 
 test('0.00.19 limits space results and discards stale query responses',()=>{
   assert.match(script,/spaces=\(m\.spaces\|\|\[\]\)\.slice\(0,10\)/);
-  assert.match(script,/m\.requestId!==gateSearchId/);
+  assert.doesNotMatch(script,/m\.requestId!==gateSearchId/);
   assert.match(script,/m\.requestId!==settingsSearchId/);
   assert.match(html,/id="gateSearchMessage"/);
   assert.match(source,/discoverConfluenceSpaces\(conf,token,term,10,\{onDiagnostic:/);

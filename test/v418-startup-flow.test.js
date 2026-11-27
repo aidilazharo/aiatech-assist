@@ -37,7 +37,7 @@ test('verified startup waits for a manual Next click and never auto-logs in',()=
  x.api.receive({type:'startupProceedResult',success:true,projectId:'p1'});
  assert.deepEqual(x.screens,[true,true,false]);
  assert.deepEqual(x.opened,[],'even a response containing projectId must not auto-open');
- assert.equal(x.element('gateQuery').focused,true);
+ assert.equal(x.element('gateProjectsHeading').focused,true);
 });
 test('manual Next enters project search without choosing a remembered project',()=>{
  const x=fixture();x.api.renderStartupConfig(verified);

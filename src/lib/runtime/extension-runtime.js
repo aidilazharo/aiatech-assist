@@ -2252,7 +2252,9 @@ async function dashboardState(){
   const serviceConfigured=!!(serviceUrl&&await context.secrets.get('atgvAssist.serviceToken'));
   let links={};if(openingFlow.phase==='open'&&activeProject){links=await loadRemoteLinks();}
   const modelStatus=await currentModelStatus();
-  const projectConnections=require('../../overview-connections').overviewConnections(openingFlow.phase==='open'?activeProject:null,extensionSettings,cfg());
+  const mappingView=require('../../overview-connections').overviewConnections;
+  const projectConnections=mappingView(openingFlow.phase==='open'?activeProject:null,extensionSettings,cfg());
+  const startupProjectMappings=Object.fromEntries(projects.map(project=>[project.id,mappingView(project,extensionSettings,cfg())]));
   const roleSettings=openingFlow.phase==='open'&&activeProject?await getRoleSettings(registry,activeProject.id):null;
   const timeline=openingFlow.phase==='open'&&activeProject?await readTimeline(registry,activeProject.id):null;
   const aiService=openingFlow.phase==='open'&&activeProject?await aiStatus():null;
@@ -2278,7 +2280,7 @@ async function dashboardState(){
   }
   const roleSteps=activeProject&&openingFlow.phase==='open'?await roleStepEngine.overview(registry,activeProject.id,currentWork.roles):{scopeId:'project',roles:[]};
   const consolidatedSdlc=activeProject&&openingFlow.phase==='open'?await roleStepEngine.consolidated(registry,activeProject.id,currentWork.roles):{roles:[],scopes:0,verifiedEvidence:0,outputs:0};
-  return {architectErrorLogCount:activeProject?.id?architectErrorLogs.count(activeProject.id):0,projectConnections,emptyWorkspace:emptyWorkspace&&!unmanagedFolders.length,guideAutoShown,baMappingResumeAvailable,baSelectedSources,delivery,unifiedRepository,usedRoles,designState,approvedDesignHash,blueprintRegister,blueprintAssessment,health,aiService,unmanagedFolders,brState,exportRecoveryFailures:exportRecovery?.failures||[],jiraBrowseBaseUrl,roleSettings,timeline,modelStatus,recentProjects,projectReadiness,openingOffline,startupScan,startupSetup:await startupStatus(),serviceConfigured,serviceUrl,coordinationProvider:coordinationProvider(),remoteLinks:links,liveRemote:activeProject?.id===liveRemoteState.projectId?liveRemoteState:null,autoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.autoSync.'+activeProject.id,false)),jiraAutoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.jiraAutoSync.'+activeProject.id,false)),discovery:discoveryState,flow:flowState,type:'state',projects,techStacks,activeId:openingFlow.phase==='open'?activeProject?.id||null:null,opening:openingFlow.snapshot(),summary:openingFlow.phase==='open'?store?.summary()||{documents:0,chunks:0}:{documents:0,chunks:0},workspace:getWorkspace()?.uri.fsPath||null,extensionSettings,jiraTokenSaved,githubTokenSaved,catalog:await catalogUiState(),updates:updateStatus(),work:currentWork,roleSteps,consolidatedSdlc};
+  return {architectErrorLogCount:activeProject?.id?architectErrorLogs.count(activeProject.id):0,projectConnections,startupProjectMappings,emptyWorkspace:emptyWorkspace&&!unmanagedFolders.length,guideAutoShown,baMappingResumeAvailable,baSelectedSources,delivery,unifiedRepository,usedRoles,designState,approvedDesignHash,blueprintRegister,blueprintAssessment,health,aiService,unmanagedFolders,brState,exportRecoveryFailures:exportRecovery?.failures||[],jiraBrowseBaseUrl,roleSettings,timeline,modelStatus,recentProjects,projectReadiness,openingOffline,startupScan,startupSetup:await startupStatus(),serviceConfigured,serviceUrl,coordinationProvider:coordinationProvider(),remoteLinks:links,liveRemote:activeProject?.id===liveRemoteState.projectId?liveRemoteState:null,autoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.autoSync.'+activeProject.id,false)),jiraAutoSync:!!(activeProject&&context.workspaceState.get('atgvAssist.jiraAutoSync.'+activeProject.id,false)),discovery:discoveryState,flow:flowState,type:'state',projects,techStacks,activeId:openingFlow.phase==='open'?activeProject?.id||null:null,opening:openingFlow.snapshot(),summary:openingFlow.phase==='open'?store?.summary()||{documents:0,chunks:0}:{documents:0,chunks:0},workspace:getWorkspace()?.uri.fsPath||null,extensionSettings,jiraTokenSaved,githubTokenSaved,catalog:await catalogUiState(),updates:updateStatus(),work:currentWork,roleSteps,consolidatedSdlc};
 }
 async function publishBlueprintState(){
   if(!dashboard||!activeProject)return;
@@ -2436,23 +2438,31 @@ function projectMappingProof(project,kind,key,token){
     site:config.get('jira.baseUrl'),email:config.get('jira.email'),
     confluence:config.get('confluence.baseUrl'),tokenDigest:sha(token)}));
 }
+async function projectMappingTarget(msg){
+  if(openingFlow.phase==='open'){
+    requireOpened();requireOnline();
+    if(msg.projectId!==activeProject?.id)throw Error('Active project changed. Reopen Project Connections.');
+    return activeProject;
+  }
+  if(openingFlow.phase!=='search'||openingLocked||activeProject||!registry||!vscode.workspace.isTrusted)throw Error('Return to the connections screen before changing mappings.');
+  if(!await storedStartupVerification())throw Error('Verify Atlassian and GitHub connections before changing a project mapping.');
+  return registry.read(msg.projectId);
+}
 async function testProjectMapping(msg){
-  requireOpened();requireOnline();
-  const project=activeProject;
-  if(msg.projectId!==project.id)throw Error('Active project changed. Reopen Project Connections.');
+  const generation=openingGeneration,epoch=activationEpoch,projectRegistry=registry;
+  const project=await projectMappingTarget(msg);
   const kind=String(msg.kind||''),key=normalizeMapping(kind,msg.key);
   pendingProjectMappingTests.delete(kind);
   const config=effectiveConfig(project),token=await getAtlassianToken(project);
   const outcome=await validateProjectConnection({kind,key,config,token});
-  if(activeProject?.id!==project.id)throw Error('Project changed during permission testing. Retry.');
+  if(generation!==openingGeneration||epoch!==activationEpoch||projectRegistry!==registry||(activeProject&&activeProject.id!==project.id))throw Error('Project changed during permission testing. Retry.');
   const proof=projectMappingProof(project,kind,key,token);
   pendingProjectMappingTests.set(kind,{projectId:project.id,key,proof,outcome,requestId:msg.requestId});
   return {...outcome,projectId:project.id,requestId:msg.requestId};
 }
 async function saveProjectMapping(msg){
-  requireOpened();requireOnline();
-  const project=activeProject,kind=String(msg.kind||''),key=normalizeMapping(kind,msg.key);
-  if(msg.projectId!==project.id)throw Error('Active project changed. No mapping saved.');
+  const generation=openingGeneration,epoch=activationEpoch,projectRegistry=registry;
+  const project=await projectMappingTarget(msg),kind=String(msg.kind||''),key=normalizeMapping(kind,msg.key);
   const tested=pendingProjectMappingTests.get(kind);
   if(!tested||tested.projectId!==project.id||tested.key!==key||tested.requestId!==msg.requestId)throw Error('Test permissions for this exact key before saving.');
   const token=await getAtlassianToken(project);
@@ -2471,8 +2481,9 @@ async function saveProjectMapping(msg){
   const settings={...latest.settings};
   if(kind==='jira')settings.jira={...settings.jira,projectKey:key};
   else {const oldKey=String(effectiveConfig(latest).get('confluence.spaceKey')||'').trim().toUpperCase();settings.confluence={...settings.confluence,spaceKey:key,spaceId:tested.outcome.id,spaceName:tested.outcome.name,...(oldKey!==key?{parentPageId:''}:{})};}
+  if(generation!==openingGeneration||epoch!==activationEpoch||projectRegistry!==registry||(activeProject&&activeProject.id!==project.id))throw Error('Project changed. No mapping saved.');
   const updated=await registry.update(project.id,{...latest,settings});
-  activeProject=updated;
+  if(activeProject?.id===updated.id&&epoch===activationEpoch)activeProject=updated;
   pendingProjectMappingTests.clear();
   approvedJiraPreviewRevision=null;approvedJiraPreviewBinding=null;
   return {kind,key,projectId:updated.id,message:`${kind==='jira'?'Jira project':'Confluence space'} ${key} saved for ${updated.name}.`};
@@ -9804,6 +9815,13 @@ async function handleDashboardMessage(msg){
         break;
       }
       case 'cancelProjectJiraInventory':{jiraInventoryCurrentRequest=null;pmLatestSnapshot=null;break;}
+      case 'openStartupJiraItems':{
+        const project=await projectMappingTarget(msg),config=effectiveConfig(project),token=await getAtlassianToken(project);
+        const key=normalizeMapping('jira',config.get('jira.projectKey'));
+        await validateProjectConnection({kind:'jira',key,config,token});
+        const url=baseAtlassian(config)+'/issues/?jql='+encodeURIComponent('project = '+key);
+        await vscode.env.openExternal(vscode.Uri.parse(url));break;
+      }
       case 'testProjectConnectionMapping':{
         try{const result=await testProjectMapping(msg);await dashboard?.webview.postMessage({type:'projectConnectionTestResult',success:true,...result});}
         catch(error){pendingProjectMappingTests.delete(String(msg.kind||''));await dashboard?.webview.postMessage({type:'projectConnectionTestResult',success:false,kind:msg.kind,projectId:msg.projectId,requestId:msg.requestId,message:error.message});}
@@ -12495,7 +12513,7 @@ async function refreshLiveRemoteData({reason='scheduled',force=false}={}){
  }
  liveRemoteBusy=true;
  const started=new Date().toISOString(),results={},errors={};
- liveRemoteState={...liveRemoteState,projectId,phase:'running',lastAttempt:started};
+ liveRemoteState={...liveRemoteState,projectId,phase:'running',lastAttempt:started,results:{},errors:{}};
  await dashboard?.webview.postMessage({type:'liveRemoteState',value:liveRemoteState});
  try{
   // Independently handle source failures; never clear the successfully indexed
@@ -12519,6 +12537,11 @@ async function refreshLiveRemoteData({reason='scheduled',force=false}={}){
      connectedSync.checkpoint(registry,projectId,{provider,origin,scope,
       error:'Remote refresh failed; see live provider status.'});
     }catch(syncError){report('SQLite refresh failure receipt: '+String(syncError.message||syncError).slice(0,120));}
+   }finally{
+    if(liveRefreshStillCurrent(target)){
+     liveRemoteState={...liveRemoteState,results:{...results},errors:{...errors}};
+     await dashboard?.webview.postMessage({type:'liveRemoteState',value:liveRemoteState});
+    }
    }
   }));
   if(!liveRefreshStillCurrent(target))return {skipped:'project-changed'};

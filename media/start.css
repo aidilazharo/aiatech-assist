@@ -3284,3 +3284,27 @@ body:not(.gate-mode) .app-layout{
 #workView.role-software-developer .developer-br-actions button{width:auto;min-height:36px;padding:6px 10px;flex-shrink:0;white-space:nowrap}
 #workView.role-software-developer .developer-br-actions #developerBrPreviewDraft,#workView.role-software-developer .developer-br-actions #developerRoleJiraRefresh{box-sizing:border-box;width:36px;min-width:36px;max-width:36px;height:36px;min-height:36px;flex:0 0 36px;padding:0;display:inline-flex;align-items:center;justify-content:center}
 @container(max-width:420px){#workView.role-software-developer .developer-br-topbar{grid-template-columns:minmax(100px,1fr) auto}}
+
+/* Startup connection mappings and real Jira/Confluence sync milestones. */
+#startupConnectionForm .startup-token-input{position:relative;min-width:0;width:100%}
+#startupConnectionForm .startup-token-input input{box-sizing:border-box;width:100%;padding-right:40px!important}
+#startupConnectionForm .startup-token-info{position:absolute;right:5px;top:50%;transform:translateY(-50%);display:grid;place-items:center;width:30px;height:28px;min-width:0;padding:0;background:transparent!important;color:var(--vscode-textLink-foreground,#58a6ff);border:0}
+#startupConnectionForm .startup-token-info svg{width:17px;height:17px}
+#startupConnectionForm .startup-token-info:focus-visible{outline:2px solid var(--vscode-focusBorder)}
+#startupConnectionForm .startup-project-mappings{margin:14px 0}
+#startupConnectionForm .startup-mapping-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+#startupConnectionForm .startup-mapping-heading select{max-width:65%;min-width:0}
+#startupConnectionForm .overview-connections-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:0}
+#startupConnectionForm .overview-connection-card{min-width:0;border:1px solid var(--atgv-line);border-radius:8px;padding:12px;background:var(--vscode-editor-background);display:flex;flex-direction:column;gap:5px}
+#startupConnectionForm .overview-connection-top{display:flex;align-items:center;justify-content:space-between;gap:6px}
+#startupConnectionForm .overview-connection-top>span{font-size:10px;font-weight:700}
+#startupConnectionForm .overview-mapping-action{font-size:11px;padding:4px 7px}
+#startupConnectionForm .overview-connection-card small{overflow-wrap:anywhere}
+#startupConnectionForm .overview-inventory-action{margin-top:4px}
+#gateFinder .gate-project-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 12px}
+#gateFinder .gate-project-toolbar h2{margin:0}
+body:not(.gate-mode) #appHeader.app-header{position:relative;border-bottom:3px solid #fff!important;overflow:visible!important}
+#appHeader .atgv-header-sync{position:absolute;left:0;right:0;bottom:-3px;height:3px;background:#fff;z-index:25;overflow:hidden}
+#appHeader #atgvHeaderSyncFill{display:block;width:0;height:100%;background:#d31145;transition:width .18s linear}
+@media(prefers-reduced-motion:reduce){#appHeader #atgvHeaderSyncFill{transition:none}}
+@media(max-width:640px){#startupConnectionForm .overview-connections-grid{grid-template-columns:1fr}}

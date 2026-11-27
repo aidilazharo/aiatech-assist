@@ -246,7 +246,7 @@ let mappingRunPhase='',mappingRetryAvailable=false,mappingFailureMessage='',mapp
 let mappingResumeAvailable=false;
 let aiProposalSelected=null,aiServiceLastProject=null;
 let deliveryState={items:[]},deliveryInfo=null,deliveryDraftDirty=false,deliveryBusy=false,deliveryTab='editor';
-let spaceSearchSequence=0,gateSearchId=null,settingsSearchId=null,gateSearched=false,modelPickerChoice='',modelPickerCurrent='',modelPickerData=null,modelPickerSaving=false;
+let spaceSearchSequence=0,settingsSearchId=null,modelPickerChoice='',modelPickerCurrent='',modelPickerData=null,modelPickerSaving=false;
 let activeDoc=null,quill=null,docDirty=false,docMode='quill',docComplex=false,docSaving=false,docBackTo='work',documentOwner=null,documentOwnerScope='local',documentOwnerMe=null,documentOwnerCached=false,activeDiagram=null,diagramCanvas=null,diagramDirty=false,diagramSaving=false;
 const send=(command,extra={})=>vscode.postMessage({command,...extra});
 for(const id of ['reportIssue','gateReportIssue'])$(id)?.addEventListener('click',()=>send('openIssueReport',{screen:id==='gateReportIssue'?'start':typeof view==='string'?view:''}));
@@ -744,8 +744,7 @@ function gateProjectRow(root,project,{recent=false}={}){
   row.append(text,action);root.append(row);
 }
 function renderGateResults(){
-  const q=read('gateQuery').replace(/\s+/g,' ').toLocaleLowerCase();
-  const all=projects.filter(p=>[p.name,p.id,p.settings?.confluence?.spaceKey||'',p.settings?.jira?.projectKey||''].some(x=>x.toLowerCase().includes(q)));
+  const all=projects;
   const recent=$('gateRecent');recent.replaceChildren();
   const recentProjects=recentIds.map(id=>all.find(p=>p.id===id)).filter(Boolean);
   $('gateRecentSection').classList.toggle('hidden',recentProjects.length===0);
@@ -753,10 +752,10 @@ function renderGateResults(){
   const local=$('gateLocal');local.replaceChildren();
   const others=all.filter(p=>!recentIds.includes(p.id));
   $('gateWorkspaceSection').classList.toggle('hidden',!others.length&&!!recentProjects.length);
-  if(!others.length&&!recentProjects.length){const p=document.createElement('p');p.className='muted';p.textContent=q?'No matching local projects. Search Confluence to discover more.':'No saved projects. Search Confluence or create a project.';local.append(p);}
+  if(!others.length&&!recentProjects.length){const p=document.createElement('p');p.className='muted';p.textContent='No saved projects. Select New Project to create one.';local.append(p);}
   for(const p of others)gateProjectRow(local,p);
   const unregistered=$('gateUnmanaged');unregistered.replaceChildren();
-  const candidates=unmanagedFolders.filter(item=>[item.folder,item.id,item.name].some(value=>value.toLowerCase().includes(q)));
+  const candidates=unmanagedFolders;
   $('gateUnmanagedSection').classList.toggle('hidden',!candidates.length);
   for(const item of candidates){
     const row=document.createElement('div');row.className='gate-result gate-project-card';
@@ -769,33 +768,10 @@ function renderGateResults(){
     action.addEventListener('click',()=>send('importProjectFolder',{folder:item.folder}));
     row.append(info,action);unregistered.append(row);
   }
-  const remote=$('gateRemote');remote.replaceChildren();
-  const matched=spaces.filter(sp=>!all.some(p=>p.settings?.confluence?.spaceId===sp.id||(p.settings?.confluence?.spaceKey===sp.key&&p.settings?.confluence?.baseUrl===sp.baseUrl))).slice(0,10);
-  $('gateRemoteSection').classList.toggle('hidden',!matched.length);
-  $('gateResultsCount').textContent=`${matched.length} spaces`;
-  for(const sp of matched){
-    const row=document.createElement('div');row.className='gate-result';
-    const text=document.createElement('div');text.className='gate-result-title';
-    const title=document.createElement('strong');title.textContent=sp.name;
-    const meta=document.createElement('small');meta.textContent=sp.key;
-    text.append(title,meta);
-    const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='Set Up & Open';
-    button.disabled=gateBusy;button.addEventListener('click',()=>launchFromGate({spaceId:sp.id}));
-    row.append(text,button);remote.append(row);
-  }
+
 }
 $('gateOpenFolder').addEventListener('click',()=>send('openWorkspaceFolder'));
-for(const [id,provider] of [['guideJiraTokenLink','jira'],['guideConfluenceTokenLink','confluence'],['guideGithubTokenLink','github']])$(id).addEventListener('click',()=>send('guideTokenLink',{provider}));
-$('gateSearch').addEventListener('click',()=>{
-  if(gateBusy)return;
-  const q=read('gateQuery');renderGateResults();
-  if(q.length<2){status('Enter at least 2 characters to search Confluence spaces.',true);return;}
-  const requestId=++spaceSearchSequence;gateSearchId=requestId;gateSearched=true;spaces=[];$('gateSearchMessage').textContent='';renderGateResults();
-  $('gateProgress').classList.remove('hidden');$('gateProgressText').textContent='Searching Confluence…';
-  send('discover',{query:q,origin:'gate',requestId});
-});
-$('gateQuery').addEventListener('input',()=>{gateSearchId=null;spaces=[];gateSearched=false;$('gateSearchMessage').textContent='';renderGateResults();});
-$('gateQuery').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('gateSearch').click();}});
+for(const [id,provider] of [['guideJiraTokenLink','jira'],['guideConfluenceTokenLink','confluence'],['guideGithubTokenLink','github'],['startupAtlassianTokenInfo','jira'],['startupGithubTokenInfo','github']])$(id).addEventListener('click',()=>send('guideTokenLink',{provider}));
 $('gateManual').addEventListener('click',()=>openProject());
 $('gateSkip').addEventListener('click',()=>{
  if(gateBusy||!workspaceFolderAvailable)return;
@@ -1056,11 +1032,10 @@ function updateState(msg){
   workspaceFolderAvailable=!!msg.workspace;
   $('gateFolderAlert').classList.toggle('hidden',workspaceFolderAvailable);
   $('gateManual').disabled=!workspaceFolderAvailable;
-  $('gateSearch').disabled=!workspaceFolderAvailable;
-  $('gateQuery').disabled=!workspaceFolderAvailable;
   if(!aiProviderLoaded){aiProviderLoaded=true;send('getAiProviderState');}
   projects=msg.projects||[];activeId=msg.activeId||null;healthData=msg.health||null;usedRoleIds=new Set(msg.usedRoles||[]);designState=msg.designState||null;approvedDesignHash=msg.approvedDesignHash||'';blueprintRegistry=msg.blueprintRegister||null;blueprintAssessment=msg.blueprintAssessment||null;extensionSettings=msg.extensionSettings||{};updateHeaderUserName(extensionSettings.jira?.email||extensionSettings.atlassian?.email||msg.startupSetup?.saved?.email);techStacks=msg.techStacks||[];renderCatalog(msg.catalog);jiraBrowseBaseUrl=msg.jiraBrowseBaseUrl||'';
   recentIds=msg.recentProjects||[];projectReadiness=msg.projectReadiness||{};unmanagedFolders=msg.unmanagedFolders||[];
+  startupProjectMappings=msg.startupProjectMappings||{};
    architectErrorLogProjectId=msg.activeId||'';architectErrorLogCount=Number(msg.architectErrorLogCount)||0;
   if(msg.aiService)renderAIService(msg.aiService);
   renderWorkspaceSearch(msg.startupScan);
@@ -1413,6 +1388,7 @@ function renderOverviewJira(){
  ],{label:'Overview Jira issues',sortKey:'key',pageSize:5});
 }
 let projectConnectionsSnapshot={jira:{},confluence:{}};
+let startupProjectMappings={},startupMappingProjectId='';
 let mappingModalKind='',mappingModalProjectId='',mappingRequestSerial=0,mappingVerified=null,mappingBusy=false,mappingPreviousFocus=null;
 function mappingModalStatus(message,failed=false){
  const node=$('projectConnectionTestStatus');node.textContent=String(message||'');
@@ -1430,9 +1406,10 @@ function closeProjectConnectionModal(){
  if(mappingPreviousFocus?.isConnected)mappingPreviousFocus.focus();
 }
 function openProjectConnectionModal(kind){
- if(!activeId||!['jira','confluence'].includes(kind))return;
- mappingPreviousFocus=document.activeElement;mappingModalKind=kind;mappingModalProjectId=activeId;
- const record=projectConnectionsSnapshot[kind]||{};
+ const projectId=activeId||startupMappingProjectId;
+ if(!projectId||!['jira','confluence'].includes(kind)||(!activeId&&!startupConnectionVerified))return;
+ mappingPreviousFocus=document.activeElement;mappingModalKind=kind;mappingModalProjectId=projectId;
+ const record=(activeId?projectConnectionsSnapshot:startupProjectMappings[projectId])?.[kind]||{};
  const jira=kind==='jira';
  $('projectConnectionModalTitle').textContent=jira?'Jira Project Settings':'Confluence Space Settings';
  $('projectConnectionKeyLabel').textContent=jira?'Jira Project Key':'Confluence Space Key';
@@ -1965,7 +1942,7 @@ function closeJiraInventory(){
  // Keep request IDs and partial pages so returning to the page resumes live data.
  $('overviewJiraInventory').focus();
 }
-$('overviewJiraInventory').addEventListener('click',openJiraInventory);
+$('overviewJiraInventory').addEventListener('click',()=>{if(activeId)openJiraInventory();else if(startupMappingProjectId&&startupConnectionVerified)send('openStartupJiraItems',{projectId:startupMappingProjectId});});
 $('jiraInventoryClose').addEventListener('click',closeJiraInventory);
 $('jiraInventoryModal').addEventListener('click',event=>{if(event.target===$('jiraInventoryModal'))closeJiraInventory();});
 $('jiraInventoryModal').addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();closeJiraInventory();}});
@@ -2191,12 +2168,21 @@ function renderOverviewConnections(data){
  if(activeId&&lastRosterProject!==activeId){lastRosterProject=activeId;send('myWorkRosterRefresh',{projectId:activeId,roleId:selectedRole});}
  if(!activeId)lastRosterProject='';
  projectConnectionsSnapshot=data||{jira:{},confluence:{}};
+ renderStartupMappings();
+}
+function renderStartupMappings(){
+ const select=$('startupMappingProject');if(!select)return;
+ if(!projects.some(p=>p.id===startupMappingProjectId))startupMappingProjectId=projects.length===1?projects[0].id:'';
+ const signature=JSON.stringify(projects.map(p=>[p.id,p.name]));
+ if(select.dataset.options!==signature){select.replaceChildren();const prompt=document.createElement('option');prompt.value='';prompt.textContent=projects.length?'Select a project':'No saved projects';select.append(prompt);for(const p of projects){const option=document.createElement('option');option.value=p.id;option.textContent=p.name;select.append(option);}select.dataset.options=signature;}
+ select.value=startupMappingProjectId;select.disabled=!projects.length;
+ const data=startupProjectMappings[startupMappingProjectId]||{};
  const jira=data?.jira||{},space=data?.confluence||{};
  const configured=record=>record.source==='project'||record.source==='extension';
  const status=(id,record)=>{
   const el=$(id),ready=configured(record);
   el.textContent='Project setting';el.title=!ready?'Configure and test this destination':record.source==='extension'?'Override inherited default for this project':'Edit project mapping after permission check';
-  el.classList.toggle('needs-mapping',!ready);
+  el.classList.toggle('needs-mapping',!ready);el.disabled=!startupMappingProjectId||!startupConnectionVerified;
  };
  status('overviewJiraMappingStatus',jira);
  status('overviewConfluenceMappingStatus',space);
@@ -2212,7 +2198,9 @@ function renderOverviewConnections(data){
  if(space.spaceId)spaceDetails.push('Space ID: '+space.spaceId);
  if(space.site)spaceDetails.push('Site: '+space.site);
  $('overviewConfluenceSpaceInfo').textContent=spaceDetails.join(' · ')||'Select a Confluence space in Project Settings.';
+ $('overviewJiraInventory').disabled=!startupMappingProjectId||!startupConnectionVerified||!jira.key;
 }
+$('startupMappingProject').addEventListener('change',()=>{startupMappingProjectId=$('startupMappingProject').value;renderStartupMappings();});
 function renderOverviewSdlcPhases(){
  const container=$('overviewPhaseCircles');
  if(!container)return;
@@ -4512,7 +4500,17 @@ function renderConnectedSyncState(message){
 window.addEventListener('message',({data})=>{
  if(data?.type==='connectedSyncState')renderConnectedSyncState(data);
 });
+function renderHeaderSync(value){
+ const track=$('atgvHeaderSync'),fill=$('atgvHeaderSyncFill');if(!track||!fill)return;
+ const state=value&&value.projectId===activeId?value:null;
+ const providers=['Jira','Confluence'];
+ const done=state&&state.phase!=='offline'?providers.filter(name=>Object.prototype.hasOwnProperty.call(state.results||{},name)&&!Object.prototype.hasOwnProperty.call(state.errors||{},name)).length:0;
+ const percent=done*50;
+ const label=!state?'Waiting for Jira and Confluence synchronization':state.phase==='offline'?'Offline — Jira and Confluence synchronization paused':providers.map(name=>Object.prototype.hasOwnProperty.call(state.errors||{},name)?name+': failed':Object.prototype.hasOwnProperty.call(state.results||{},name)?name+': synchronized':name+': '+(state.phase==='running'?'waiting':'not synchronized')).join(' · ');
+ fill.style.width=percent+'%';track.setAttribute('aria-valuenow',String(percent));track.setAttribute('aria-valuetext',label);track.title=label;track.dataset.phase=state?.phase||'idle';
+}
 function renderLiveRemoteState(value){
+ renderHeaderSync(value);
  if(!value||value.projectId!==activeId)return;
  const node=$('knowledgeSyncStatus');if(!node)return;
  if(value.phase==='running'){node.textContent='Fetching Jira and Confluence data plus GitHub metadata…';return;}
@@ -8220,7 +8218,7 @@ window.addEventListener('message',event=>{
     $('docSave').disabled=true;$('docEditorStatus').textContent='Saved · '+new Date().toLocaleTimeString();
   }
   if(m.type==='startupScan')renderWorkspaceSearch(m);
-  if(m.type==='openingStart'){gateError='';gateOfflineAvailable=false;spaces=[];jiraProjects=[];gateSearchId=null;settingsSearchId=null;gateSearched=false;$('gateSearchMessage').textContent='';showGate();status('');}
+  if(m.type==='openingStart'){gateError='';gateOfflineAvailable=false;spaces=[];jiraProjects=[];settingsSearchId=null;$('gateSearchMessage').textContent='';showGate();status('');}
   if(m.type==='openingProgress'){gateOpeningPercent(m.percent,m.message);$('gateProgress').classList.toggle('hidden',m.stage==='done');}
   if(m.type==='openingError'){gateBusy=false;gateError=m.message||'Could not open project.';gateOfflineAvailable=!!m.canOffline;gateOpeningPercent(0,'Project opening failed: '+gateError);renderGate();}
   if(m.type==='navigationRefreshState'&&m.projectId===activeId&&m.requestId===navigationRefreshRequestId){
@@ -8262,17 +8260,10 @@ window.addEventListener('message',event=>{
     if(m.error&&view==='landing'){$('overviewKnowledgeStatus').textContent=m.message||'Project knowledge request failed.';$('overviewKnowledgeSync').disabled=!activeId;}
     if(m.error&&sourceRemoving){sourceRemoving=false;renderSourceDocuments();}status(m.message,!!m.error);if(m.error&&view==='discovery'&&discoveryDirty){discoveryAutosaving=false;discoveryAutosaveSnapshot=null;$('discoverySave').disabled=!baCanEdit('ba-discovery');$('baDiscoverySaveStatus').textContent='Save not completed: '+String(m.message||'Unknown error').slice(0,250)+' · Retry manually';}if(m.error&&view==='documentEditor'&&docDirty){docSaving=false;$('docSave').disabled=false;$('docEditorStatus').textContent=m.message;}if(m.error&&gateBusy){gateBusy=false;gateError=m.message;renderGate();}}
   if(m.type==='discovered'){
-    if(m.origin==='settings'){if(m.requestId!==settingsSearchId||read('settingsSpaceQuery').replace(/\s+/g,' ').toLocaleLowerCase()!==String(m.query).toLocaleLowerCase())return;}
-    else if(m.requestId!==gateSearchId||read('gateQuery').replace(/\s+/g,' ').toLocaleLowerCase()!==String(m.query).toLocaleLowerCase())return;
-    $('gateProgress').classList.add('hidden');spaces=(m.spaces||[]).slice(0,10);jiraProjects=m.projects||[];
-    if(m.origin==='settings'){
-      $('settingsSpaceMessage').textContent=`${spaces.length} matching spaces`;
-      renderDiscovered();
-    } else {
-      $('gateSearchMessage').textContent=spaces.length?`${spaces.length} matching Confluence space${spaces.length===1?'':'s'}`:'No matching Confluence spaces found.';
-      renderGateResults();
-    }
-    if(m.warning)status(m.warning,true);
+    if(m.origin!=='settings'||m.requestId!==settingsSearchId||read('settingsSpaceQuery').replace(/\s+/g,' ').toLocaleLowerCase()!==String(m.query).toLocaleLowerCase())return;
+    spaces=(m.spaces||[]).slice(0,10);jiraProjects=m.projects||[];
+    $('settingsSpaceMessage').textContent=spaces.length+' matching spaces';
+    renderDiscovered();if(m.warning)status(m.warning,true);
   }
   if(m.type==='catalogState'){const previous=catalogState?.installed?.sha;renderCatalog(m.catalog);if(m.catalog?.installed?.sha!==previous&&activeId)send('uxFrameworkRead',{key:uxSelectedKey||''});}
   if(m.type==='catalogPullProgress'){
@@ -8331,7 +8322,7 @@ window.addEventListener('message',event=>{
       // Keep the verified GitHub repository URL visible after saving.
       showGithubRepoPreview();
     }
-    if(m.section==='jira'){spaces=[];jiraProjects=[];settingsSearchId=null;gateSearchId=null;$('settingsSpaces').replaceChildren();$('settingsSpaceMessage').textContent='Enter a space name or key to search.';}
+    if(m.section==='jira'){spaces=[];jiraProjects=[];settingsSearchId=null;$('settingsSpaces').replaceChildren();$('settingsSpaceMessage').textContent='Enter a space name or key to search.';}
   }
   if(m.type==='settingsSaveResult'&&m.section==='github'){
     $('githubTestStatus').textContent=m.message||'GitHub settings could not be saved.';
@@ -9433,12 +9424,13 @@ function renderStartupPage(){
  $('startupUnifiedLog').classList.toggle('hidden',startupPage!==0);
  $('startupPrevious').disabled=startupPage===0||busy||!!startupInstallingModule;
  $('startupProceed').disabled=busy||!!startupInstallingModule;
- $('startupProceed').textContent=startupPage===0&&!startupConnectionVerified?'Next →':'Next: Search Project →';
- $('startupProceedInfo').textContent=startupProceedMode?'Opening project search…':
+ $('startupProceed').textContent=startupPage===0&&!startupConnectionVerified?'Next →':'Next: Projects →';
+ renderStartupMappings();
+ $('startupProceedInfo').textContent=startupProceedMode?'Loading projects…':
   startupPage===0?(startupScanComplete?'Review available modules, then select Next.':'Checking computer prerequisites…'):
   startupConnectionCheckPending?'Testing saved connections…':
   startupConnectionHealthError&&startupConnectionVerified?'GitHub checks need attention (optional). Select Next to continue.':
-  startupConnectionVerified?'Connections verified. Select Next to search projects.':'Verify connections or select Next to continue with restricted remote actions.';
+  startupConnectionVerified?'Connections verified. Select Next to view projects.':'Verify connections or select Next to continue with restricted remote actions.';
 }
 function showStartupStep(required){
  if(!required&&startupOpenStackId)closeStartupStackModal();
@@ -9803,7 +9795,7 @@ window.addEventListener('message',event=>{
    if(typeof startupWizardCompletedThisSession!=='undefined')startupWizardCompletedThisSession=true;
    startupReturnToConnections=false;showStartupStep(false);
    // Never choose or open a remembered project on behalf of the user.
-   $('gateQuery').focus();
+   $('gateProjectsHeading').focus();
   }else{
    if(message.verified===false){startupConnectionVerified=false;startupPage=1;}
    showStartupStep(true);
