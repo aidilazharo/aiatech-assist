@@ -9,8 +9,14 @@ const {safe}=require('./lib/startup-diagnostics');
 const ROLE=/^[a-z][a-z0-9-]{0,70}$/;
 const PROJECT=/^[a-z][a-z0-9-]{0,48}$/;
 const ROLES=['business-analyst','project-manager','solution-architect','ux-designer','software-developer','qa-engineer','uat-tester','product-owner','security-engineer','data-engineer','technical-writer','release-manager','operations-support','technical-lead','scrum-master','business-owner','ai-ml-engineer','compliance-officer','shared'];
-const aliases={'ba':'business-analyst','ui-ux-designer':'ux-designer','ui/ux designer':'ux-designer','developer':'software-developer','solution architect':'solution-architect','project manager':'project-manager','workspace':'shared','setup':'shared','atgv':'shared'};
-const roleId=value=>{const key=String(value||'shared').toLowerCase();return Object.hasOwn(aliases,key)?aliases[key]:(ROLE.test(key)?key:'shared');};
+const aliases={'ba':'business-analyst','ui-ux-designer':'ux-designer','ui/ux designer':'ux-designer','developer':'software-developer','solution architect':'solution-architect','project manager':'project-manager','data engineer / dba':'data-engineer','operations / support':'operations-support','release / devops':'release-manager','business owner / approver':'business-owner','ai / ml engineer':'ai-ml-engineer','compliance / risk officer':'compliance-officer','workspace':'shared','setup':'shared','atgv':'shared'};
+function roleId(value){
+ const key=String(value||'shared').trim().toLowerCase();
+ if(Object.hasOwn(aliases,key))return aliases[key];
+ const canonical=key.replace(/\s+/g,'-');
+ if(ROLES.includes(canonical))return canonical;
+ return ROLE.test(key)?key:'shared';
+}
 const sha=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 const clean=(value,max=400)=>safe(String(value??'').replace(/-----BEGIN [^-]*PRIVATE KEY-----[\s\S]*?-----END [^-]*PRIVATE KEY-----/g,'[REDACTED PRIVATE KEY]').replace(/\bsk-[A-Za-z0-9_-]{12,}\b/g,'[REDACTED]')).replace(/[\r\n\t]+/g,' ').slice(0,max);
 const stat=file=>fs.lstat(file).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));

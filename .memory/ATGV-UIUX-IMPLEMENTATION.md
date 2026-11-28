@@ -68,3 +68,13 @@ Baseline: `d26dcc7543348aae7cf9941c44768b7d544ce89c` (extension 0.1.66). 2026-11
 - Commit SHA: see commit introducing this execution entry.
 - Blockers: git ls-remote fails DNS for github.com in execution environment. No full checkout, integration/E2E, screenshots, packaging, or release. Library and mirrors unchanged; version unchanged.
 - Items 02 and 03 remain In progress; 05 remains Implemented — verification pending. Next: inspect actual role AI diagnostic context wiring and durable recovery/resume integration (01–04, 10), then BA completeness/revision gates (06–08). No other items marked complete.
+
+### Execution 2 continued — role diagnostic identity
+
+- Previous verified push: `0e81dac47aec05e9d683135b2c7bad8a640601b6`.
+- Item 02: inspected existing `diagnosticContext` and `test/role-ai-diagnostic-context.test.js`. The project-local diagnostic gateway already exists; no duplicate framework introduced.
+- Root cause: display names such as UAT Tester and Business Analyst fell back to shared because only a subset of aliases was recognized; this lost role attribution and preferred-role ordering.
+- Implemented canonical normalization for all 18 configured display names, preserving custom role slugs and existing shared aliases. No permission policy changed; historical shared logs are not reattributed.
+- Modified: `src/project-artifacts.js`, `test/role-diagnostic-identity.test.js`, this tracker.
+- Tests: 2 passed, 0 failed (Node 22.16.0, exact roleId and constants in isolated harness; test blob `a502b04f14da5f1c958c8aa54ac61b5ea5fba7a0`). Execution 2 focused total: 10 passed, 0 failed. Full diagnostic file IO and provider/role end-to-end remain unverified.
+- Commit SHA: see commit introducing this entry. Items 02/03 remain In progress, 05 remains Implemented — verification pending, 37 other items Pending. 0/40 fully verified. Next: full checkout and validate actual role-provider wiring, persistent recovery checkpoints and BR evidence gates.
