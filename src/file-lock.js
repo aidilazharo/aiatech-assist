@@ -81,4 +81,25 @@ async function withLock(file, fn) { const unlock = await lockFile(file); try {
 finally {
     await unlock();
 } }
-module.exports = { withLock, lockFile };
+// Windows scanners and editors can temporarily deny replacing a file. Keep
+// the original intact and retry the same atomic rename, never unlink it.
+async function replaceFileWithRetry(from,to,{
+    rename=fs.rename,check=async()=>{},wait=delay,
+    delays=[50,100,200,400,800,1200,1600,2000,2500]
+}={}) {
+    for(let attempt=0;;attempt++){
+        // A revision change, unsafe path or other validation failure is not
+        // a transient file lock. Revalidate under the caller's lock each time.
+        await check();
+        try { return await rename(from,to); }
+        catch(error){
+            if(!transient(error))throw error;
+            if(attempt>=delays.length){
+                const failure=new Error('Local file is locked or not writable ('+error.code+'). Automatic save retries exhausted; the existing file was preserved. Close other applications using the file or check folder permissions, then refresh.',{cause:error});
+                failure.code=error.code;throw failure;
+            }
+            await wait(delays[attempt]);
+        }
+    }
+}
+module.exports = { withLock, lockFile, replaceFileWithRetry, retryFilesystem };
