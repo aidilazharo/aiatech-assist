@@ -623,3 +623,85 @@ body:is(.vscode-high-contrast,.vscode-high-contrast-light) :is(.ba-auto-badge,.a
 @media(prefers-reduced-motion:reduce){
  #discoveryView .ba-auto-steps *,#workView .developer-br-steps *,#landingView .overview-phase-ring,#appHeader .atgv-header-sync *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 }
+
+/* UX audit: use shared focus, responsive actions and compact status feedback.
+   Keep permissions and approval conditions in the workflow controllers. */
+#discoveryView .discovery-workflow .workflow-step:focus-visible,
+#planningView .design-milestone-list .atgv-milestone:focus-visible,
+#workView .role-circle-step:focus-visible {
+  outline:2px solid var(--atgv-consistency-focus)!important;
+  outline-offset:3px!important;
+}
+#discoveryView .ba-auto-artifact[data-status="needs-attention"] > summary {
+  border-inline-start:3px solid var(--atgv-consistency-warning);
+}
+#discoveryView #baAutoPublish:disabled {
+  cursor:not-allowed;
+}
+#discoveryView #baAutoStatus {
+  overflow-wrap:anywhere;
+  white-space:normal;
+}
+#workView .developer-stage-ring {
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:6px 10px;
+  padding:0;
+  margin:4px 0 8px;
+  border:0;
+  background:transparent;
+  min-width:0;
+}
+#workView .developer-stage-ring > strong,
+#workView .developer-stage-ring > span {
+  font-size:12px;
+  line-height:1.4;
+  overflow-wrap:anywhere;
+}
+#workView .developer-stage-ring svg {display:none}
+#workView #developerBrRingPercent {font-weight:600}
+#workView.role-software-developer .developer-br-topbar {
+  min-width:0;
+  overflow:visible;
+}
+#workView.role-software-developer .developer-br-actions {
+  min-width:0;
+  flex-wrap:wrap;
+}
+#workView.role-software-developer .developer-br-actions button {
+  max-width:100%;
+}
+#workView .atgv-developer-action-reason {
+  grid-column:1/-1;
+  color:var(--vscode-descriptionForeground);
+  font-size:12px;
+  line-height:1.4;
+  margin:0;
+  overflow-wrap:anywhere;
+}
+#workView .atgv-developer-action-reason[hidden] {display:none!important}
+@media(max-width:700px) {
+  #workView.role-software-developer .developer-br-topbar {
+    grid-template-columns:minmax(0,1fr);
+  }
+  #workView.role-software-developer .developer-br-actions {
+    justify-content:flex-start;
+  }
+  #discoveryView .ba-auto-actions {
+    position:static;
+    flex-wrap:wrap;
+  }
+  #discoveryView .atgv-ba-action-feedback {
+    flex-basis:100%;
+  }
+}
+@media(prefers-reduced-motion:reduce) {
+  #workView .developer-stage-ring *,
+  #discoveryView .discovery-workflow *,
+  #planningView .design-milestone-list * {
+    animation:none!important;
+    transition:none!important;
+    scroll-behavior:auto!important;
+  }
+}
