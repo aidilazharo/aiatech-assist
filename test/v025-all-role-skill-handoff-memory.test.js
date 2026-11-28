@@ -69,7 +69,7 @@ test('cross-role switch requires a user-clickable event, enabled role verificati
  const ui=read('media/atgv-mywork-wave-chat.js');
  const host=read('src/lib/runtime/extension-runtime.js');
  const nav=read('media/start.js');
- assert.match(host,/myWorkRoleSkillRouter\.route\(roleId,msg\.message\)/);
+ assert.match(host,/myWorkRoleSkillRouter\.route\(roleId,msg\.message,role\)/);
  assert.match(host,/getRoleSettings\(registry,projectId\)/);
  assert.match(host,/suggestedRoleEnabled:allowed/);
  assert.match(ui,/atgv:mywork-switch-role/);
