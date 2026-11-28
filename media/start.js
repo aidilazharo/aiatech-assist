@@ -63,7 +63,16 @@ $('atgvJobsClose').addEventListener('click',()=>atgvJobsModal(false));
 $('atgvJobsRefresh').addEventListener('click',()=>send('getWorkflowJobs'));
 $('atgvJobsFilter').addEventListener('change',()=>renderAtgvJobs(atgvJobItems,atgvJobProject));
 $('atgvJobsDialog').addEventListener('click',event=>{if(event.target===$('atgvJobsDialog'))atgvJobsModal(false);});
-document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('atgvJobsDialog').classList.contains('hidden')){event.preventDefault();atgvJobsModal(false);}});
+document.addEventListener('keydown',event=>{
+ const dialog=$('atgvJobsDialog');if(dialog.classList.contains('hidden'))return;
+ if(event.key==='Escape'){event.preventDefault();atgvJobsModal(false);return;}
+ if(event.key!=='Tab')return;
+ const focusable=[...dialog.querySelectorAll('button:not(:disabled),select:not(:disabled),summary,a[href],input:not(:disabled)')].filter(node=>node.getClientRects().length);
+ const first=focusable[0],last=focusable.at(-1);
+ if(!first)return;
+ if(event.shiftKey&&(document.activeElement===first||!dialog.contains(document.activeElement))){event.preventDefault();last.focus();}
+ else if(!event.shiftKey&&(document.activeElement===last||!dialog.contains(document.activeElement))){event.preventDefault();first.focus();}
+});
 window.addEventListener('message',event=>{
  const msg=event.data||{};
  if(msg.type==='atgvWorkflowJobs'){
@@ -1360,7 +1369,7 @@ function applyRoleNavigationTheme(roleId){
  const sum=[...String(roleId||'')].reduce((n,c)=>n+c.charCodeAt(0),0);
  const colors=roleNavColors[roleId]||fallback[sum%fallback.length];
  const nav=document.querySelector('.sidebar');if(!nav)return;
- nav.style.setProperty('--role-pane-bg','#000000');nav.style.setProperty('--role-nav-accent',colors[1]);
+ nav.style.setProperty('--role-pane-bg','var(--vscode-sideBar-background,var(--vscode-editor-background))');nav.style.setProperty('--role-nav-accent','var(--vscode-focusBorder,'+colors[1]+')');
 }
 function visibleRoles(){const enabled=new Set(roleSettings.enabled||[]),order=roleSettings.order||[];return (roleData.roles||[]).filter(role=>enabled.has(role.id)).sort((a,b)=>{const ai=order.indexOf(a.id),bi=order.indexOf(b.id);return (ai<0?999:ai)-(bi<0?999:bi);});}
 function visibleRoleLabel(role){return role.id==='ux-designer'?'UI/UX Designer':role.label;}
