@@ -556,3 +556,70 @@ body:not(.gate-mode) #topNotification .top-notification-actions button{
  :is(#settingsView,#projectView) .form-grid{grid-template-columns:1fr}
  #settingsView .github-settings-toolbar :is(.github-settings-owner,.github-settings-repository,.github-settings-token){flex:1 1 100%}
 }
+
+
+/* Compact shared workspace design. Theme tokens retain native VS Code contrast.
+   No action, readiness condition, or role permission is changed here. */
+:root{
+ --atgv-consistency-radius-sm:4px;
+ --atgv-consistency-radius:6px;
+ --atgv-consistency-section-gap:10px;
+ --atgv-consistency-control-height:32px;
+ --atgv-status-running:var(--vscode-progressBar-background,var(--vscode-charts-blue,#4795d6));
+ --atgv-status-complete:var(--vscode-testing-iconPassed,var(--vscode-charts-green,#65a875));
+ --atgv-status-attention:var(--vscode-editorWarning-foreground,#c98827);
+ --atgv-status-failed:var(--vscode-errorForeground,#d44848);
+ --atgv-status-pending:var(--vscode-descriptionForeground);
+}
+#discoveryView .ba-auto-badge[data-state="ready"],
+#discoveryView .ba-auto-badge[data-state="completed"]{color:var(--atgv-status-complete)!important;border-color:currentColor!important}
+#discoveryView .ba-auto-badge[data-state="in-progress"]{color:var(--atgv-status-running)!important;border-color:currentColor!important}
+#discoveryView .ba-auto-badge[data-state="needs-attention"]{color:var(--atgv-status-attention)!important;border-color:currentColor!important}
+#discoveryView .ba-auto-badge[data-state="failed"]{color:var(--atgv-status-failed)!important;border-color:currentColor!important}
+#discoveryView.ba-automatic-view .ba-auto-artifacts{--atgv-ba-section-gap:8px}
+#discoveryView.ba-automatic-view .ba-auto-artifacts>.ba-auto-artifact>summary{min-height:44px;padding:9px 12px;gap:8px}
+#discoveryView .ba-auto-section-progress{min-width:52px;flex:1 1 80px}
+#discoveryView .ba-auto-actions{position:sticky;bottom:0;z-index:5;display:flex;gap:8px;align-items:center;justify-content:space-between;background:var(--vscode-editor-background);border-top:1px solid var(--atgv-consistency-border);padding:10px 0;margin-top:8px}
+#discoveryView .ba-auto-actions .stack{flex:0 0 auto;align-items:center;justify-content:flex-end;margin-left:auto}
+#discoveryView .atgv-ba-action-feedback{min-width:0;flex:1 1 250px;display:grid;gap:4px}
+#discoveryView #baAutoStatus{margin:0;overflow-wrap:anywhere;line-height:1.45}
+.atgv-live-publish{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--atgv-consistency-muted);font-variant-numeric:tabular-nums}
+.atgv-live-publish progress{width:auto;flex:1;min-width:60px;height:6px;accent-color:var(--atgv-status-running)}
+.atgv-live-publish[hidden],.atgv-technical-details[hidden]{display:none!important}
+.atgv-technical-details{margin:3px 0!important;font-size:12px;min-width:0}
+.atgv-technical-details>summary{cursor:pointer;color:var(--vscode-textLink-foreground);padding:3px 0}
+.atgv-technical-details pre{margin:6px 0;padding:8px;max-height:160px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--vscode-editorWidget-background,var(--vscode-editor-background));color:var(--vscode-foreground);border:1px solid var(--atgv-consistency-border);border-radius:4px}
+#atgvJobsDialog .atgv-jobs-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#atgvJobsFilter{width:auto;max-width:100%;min-height:32px}
+#atgvJobsDialog .atgv-jobs-row{padding:10px 12px;border-radius:6px;min-width:0}
+#atgvJobsDialog .atgv-jobs-row-heading{gap:8px;flex-wrap:wrap}
+#atgvJobsDialog .atgv-job-state[data-status="running"],#atgvJobsDialog .atgv-job-state[data-status="queued"]{color:var(--atgv-status-running)}
+#atgvJobsDialog .atgv-job-state[data-status="failed"],#atgvJobsDialog .atgv-job-state[data-status="interrupted"]{color:var(--atgv-status-failed)}
+#atgvJobsDialog .atgv-job-state[data-status="reconcile-required"]{color:var(--atgv-status-attention)}
+#atgvJobsDialog .atgv-job-state[data-status="completed"],#atgvJobsDialog .atgv-job-state[data-status="succeeded"]{color:var(--atgv-status-complete)}
+#landingView .overview-phase-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,130px),1fr));gap:8px}
+#landingView .overview-phase{align-items:stretch;text-align:left;padding:8px;gap:6px;min-width:0;border:1px solid var(--atgv-consistency-border);border-radius:6px;background:var(--vscode-editor-background)}
+#landingView .overview-phase-ring.overview-phase-linear{display:flex;align-items:center;justify-content:flex-end;isolation:auto;position:relative;width:100%;height:24px;flex:0 0 24px;border-radius:0;background:none}
+#landingView .overview-phase-ring.overview-phase-linear::before{content:'';position:absolute;inset:auto 0 0;height:4px;z-index:auto;border-radius:3px;background:linear-gradient(to right,var(--phase-color) 0% var(--phase-percent),var(--atgv-consistency-border) var(--phase-percent) 100%)}
+#landingView .overview-phase-linear .overview-phase-value{font-size:12px;font-variant-numeric:tabular-nums;align-self:flex-start}
+#landingView .overview-phase-label{font-size:12px}
+#workView .developer-stage-ring{gap:8px;margin:4px 0 12px;flex-wrap:wrap}
+#workView #developerBrRingPercent{margin-inline-start:auto;font-variant-numeric:tabular-nums}
+#workView.role-software-developer .developer-br-topbar{overflow:visible;grid-template-columns:minmax(0,1fr) auto;gap:8px}
+#workView.role-software-developer .developer-br-actions button{min-height:32px}
+#workView .developer-br-steps{overflow-x:auto;overscroll-behavior-inline:contain}
+:is(#settingsView,#projectView) .form-grid{max-width:none;gap:8px 12px}
+:is(#settingsView,#projectView) :is(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=hidden]),select){max-width:100%;min-height:30px}
+:is(#settingsView,#projectView) .ext-settings-accordion>summary{min-height:36px}
+body:not(.gate-mode) .sidebar .nav-item[aria-current="page"]{background:var(--vscode-list-activeSelectionBackground);color:var(--vscode-list-activeSelectionForeground)}
+body:not(.gate-mode) .sidebar .nav-item:focus-visible{outline:2px solid var(--atgv-consistency-focus);outline-offset:-2px}
+@media(max-width:700px){
+ #workView.role-software-developer .developer-br-topbar{grid-template-columns:minmax(0,1fr)}
+ #workView.role-software-developer .developer-br-actions{flex-wrap:wrap;justify-content:flex-start}
+ #discoveryView .ba-auto-actions .stack{flex:1 1 100%;justify-content:flex-end}
+ #discoveryView .ba-auto-section-progress{flex-basis:60px}
+}
+body:is(.vscode-high-contrast,.vscode-high-contrast-light) :is(.ba-auto-badge,.atgv-job-state,.overview-phase,.atgv-technical-details pre){border:1px solid var(--vscode-contrastBorder,var(--vscode-foreground))!important}
+@media(prefers-reduced-motion:reduce){
+ #discoveryView .ba-auto-steps *,#workView .developer-br-steps *,#landingView .overview-phase-ring,#appHeader .atgv-header-sync *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+}
