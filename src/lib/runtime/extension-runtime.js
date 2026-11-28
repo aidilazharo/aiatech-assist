@@ -5134,7 +5134,7 @@ async function syncApprovedBRs(expectedRevision,automatic=null){
  const pinnedProject=automatic?.projectId;
  const assertProject=()=>{if(pinnedProject&&activeProject?.id!==pinnedProject)throw Error('Project changed during Jira publish. Reopen the original project to resume.');};
  const publishProgress=async (phase,message,extra={})=>{
-  await dashboard?.webview.postMessage({type:'brJiraPublishProgress',phase,message,confirmed,total,...extra});
+  await dashboard?.webview.postMessage({type:'brJiraPublishProgress',projectId:pinnedProject||activeProject?.id,phase,message,confirmed,total,...extra});
  };
  try{
   const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
