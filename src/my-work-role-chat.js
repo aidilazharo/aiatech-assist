@@ -1,5 +1,5 @@
 'use strict';
-const {ROLES,isIdentityQuestion,identity,buildPrompt}=require('./my-work-role-prompts');
+const {roleProfile,isIdentityQuestion,identity,buildPrompt}=require('./my-work-role-prompts');
 // Role histories are memory-only, project/role isolated, and expire at the
 // workstation's local midnight. No chat transcript is copied to SQLite/RAG.
 const sessions=new Map(),busy=new Set();
@@ -17,18 +17,18 @@ function resetExpired(now=new Date()){
  }
  return activeDay;
 }
-async function ask({projectId,roleId,message,request,repositoryTarget='',clock=()=>new Date()}){
- if(!ROLES[roleId])throw Error('Unsupported My Work role.');
+async function ask({projectId,roleId,message,request,projectRole,repositoryTarget='',clock=()=>new Date()}){
+ if(!roleProfile(roleId,projectRole))throw Error('Unsupported My Work role.');
  const user=String(message==null?'':message).trim();
  if(!user||user.length>4000)throw Error('Chat message must contain 1–4000 characters.');
  const requestDay=resetExpired(clock());
- if(isIdentityQuestion(user))return identity(roleId);
+ if(isIdentityQuestion(user))return identity(roleId,projectRole);
  const id=key(projectId,roleId)+(roleId==='software-developer'&&(['extension','library','project'].includes(repositoryTarget)||/^project:[a-f0-9]{64}$/.test(repositoryTarget))?'\u0000'+repositoryTarget:'');
  if(busy.has(id))throw Error('A role AI reply is already being generated.');
  busy.add(id);
  try{
   const history=sessions.get(id)||[];
-  const prompt=buildPrompt(roleId,user,{projectId,history});
+  const prompt=buildPrompt(roleId,user,{projectId,history,projectRole});
   const answer=String(await request(prompt)||'').trim().slice(0,7000);
   if(!answer)throw Error('AI provider returned no response.');
   // Never revive a history from the previous calendar day after a slow request.

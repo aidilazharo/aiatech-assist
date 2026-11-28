@@ -3,7 +3,7 @@
 // host. This is advisory routing; it never changes role assignments or
 // initiates work. Keep the classifier deliberately conservative: a PM asking
 // about design dependencies is NOT the same as requesting a design artifact.
-const {ROLES}=require('./my-work-role-prompts');
+const {ROLES,roleProfile}=require('./my-work-role-prompts');
 const ACTION=/\b(?:create|make|design|draft|generate|build|produce|draw|write|implement|develop|sketch|prepare|render|prototype|code|edit|revise|redesign|modify|update|fix|compose|deliver|give me|show me|how (?:do|can|should) (?:i|we) (?:create|make|design|draft|build|write|implement|develop))\b/i;
 const QUESTION=/\b(?:what (?:is|are)|why|explain|compare|review (?:the |our )?(?:impact|risk|dependency|progress)|how (?:does|will)|who (?:owns|is responsible)|status of|should (?:the |our )?team)\b/i;
 const DOMAIN=[
@@ -62,8 +62,9 @@ const DOMAIN=[
   /\b(?:compliance\s+(?:audit\s+checklist|assessment|evidence\s+matrix)|regulatory\s+(?:compliance\s+matrix|gap\s+assessment)|policy\s+compliance\s+checklist)\b/i
  ],reason:'regulatory evidence and compliance assessments belong to Compliance Officer'}
 ];
-function route(currentRoleId,message){
- if(!ROLES[currentRoleId])throw Error('Unknown active SDLC role.');
+function route(currentRoleId,message,projectRole){
+ const currentRole=roleProfile(currentRoleId,projectRole);
+ if(!currentRole)throw Error('Unknown active SDLC role.');
  const input=String(message||'').trim().slice(0,4000);
  if(!input||!ACTION.test(input))return null;
  // A request to review a specialist's design or dependency is not an
@@ -80,13 +81,13 @@ function route(currentRoleId,message){
  if(target.id===currentRoleId)return null;
  if(QUESTION.test(input)&&!/\b(?:create|make|design|draft|generate|build|produce|draw|write|implement|develop|sketch|prepare|render|prototype|code|edit|revise|redesign|modify|update|fix|compose)\b/i.test(input))
   return null;
- return {currentRoleId,targetRoleId:target.id,targetRoleName:ROLES[target.id].name,
+ return {currentRoleId,...(!Object.hasOwn(ROLES,currentRoleId)?{currentRoleName:currentRole.name}:{}),targetRoleId:target.id,targetRoleName:ROLES[target.id].name,
   reason:target.reason};
 }
 function response(match){
  if(!match)return '';
  return 'This request is a '+match.targetRoleName+' task: '+match.reason+
-  '. You are currently chatting as '+ROLES[match.currentRoleId].name+
+  '. You are currently chatting as '+(ROLES[match.currentRoleId]?.name||match.currentRoleName||'the selected role')+
   '. Please switch to the '+match.targetRoleName+' role to create or modify this deliverable.'+
   ' I will keep the current role unchanged until you choose to switch.';
 }
