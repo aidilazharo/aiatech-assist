@@ -3,11 +3,11 @@
    Loaded last so all SDLC role workspaces inherit one accessible visual
    language. This stylesheet changes presentation, not workflow permissions. */
 :root{
-  --atgv-consistency-radius-sm:6px;
-  --atgv-consistency-radius:9px;
+  --atgv-consistency-radius-sm:var(--atgv-ui-control-radius);
+  --atgv-consistency-radius:var(--atgv-ui-card-radius);
   --atgv-consistency-radius-lg:12px;
-  --atgv-consistency-control-height:36px;
-  --atgv-consistency-section-gap:12px;
+  --atgv-consistency-control-height:var(--atgv-ui-control-height);
+  --atgv-consistency-section-gap:var(--atgv-ui-section-gap);
   --atgv-consistency-surface:var(--vscode-editorWidget-background,var(--vscode-sideBar-background,#202329));
   --atgv-consistency-border:var(--vscode-panel-border,#414957);
   --atgv-consistency-muted:var(--vscode-descriptionForeground,#a5afbb);
@@ -486,7 +486,7 @@ body:not(.gate-mode) #topNotification .top-notification-actions button{
  display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px
 }
 #discoveryView .ba-auto-requirements-actions button{
- min-height:36px;border-radius:var(--atgv-consistency-radius-sm);font-weight:600
+ min-height:var(--atgv-consistency-control-height);border-radius:var(--atgv-consistency-radius-sm);font-weight:600
 }
 @media(max-width:620px){
  #discoveryView.ba-automatic-view .ba-auto-artifacts > .ba-auto-artifact > summary{padding:12px}
@@ -561,10 +561,10 @@ body:not(.gate-mode) #topNotification .top-notification-actions button{
 /* Compact shared workspace design. Theme tokens retain native VS Code contrast.
    No action, readiness condition, or role permission is changed here. */
 :root{
- --atgv-consistency-radius-sm:4px;
- --atgv-consistency-radius:6px;
- --atgv-consistency-section-gap:10px;
- --atgv-consistency-control-height:32px;
+
+
+
+
  --atgv-status-running:var(--vscode-progressBar-background,var(--vscode-charts-blue,#4795d6));
  --atgv-status-complete:var(--vscode-testing-iconPassed,var(--vscode-charts-green,#65a875));
  --atgv-status-attention:var(--vscode-editorWarning-foreground,#c98827);
@@ -597,7 +597,7 @@ body:not(.gate-mode) #topNotification .top-notification-actions button{
 #atgvJobsDialog .atgv-job-state[data-status="failed"],#atgvJobsDialog .atgv-job-state[data-status="interrupted"]{color:var(--atgv-status-failed)}
 #atgvJobsDialog .atgv-job-state[data-status="reconcile-required"]{color:var(--atgv-status-attention)}
 #atgvJobsDialog .atgv-job-state[data-status="completed"],#atgvJobsDialog .atgv-job-state[data-status="succeeded"]{color:var(--atgv-status-complete)}
-#landingView .overview-phase-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,130px),1fr));gap:8px}
+
 #landingView .overview-phase{align-items:stretch;text-align:left;padding:8px;gap:6px;min-width:0;border:1px solid var(--atgv-consistency-border);border-radius:6px;background:var(--vscode-editor-background)}
 #landingView .overview-phase-ring.overview-phase-linear{display:flex;align-items:center;justify-content:flex-end;isolation:auto;position:relative;width:100%;height:24px;flex:0 0 24px;border-radius:0;background:none}
 #landingView .overview-phase-ring.overview-phase-linear::before{content:'';position:absolute;inset:auto 0 0;height:4px;z-index:auto;border-radius:3px;background:linear-gradient(to right,var(--phase-color) 0% var(--phase-percent),var(--atgv-consistency-border) var(--phase-percent) 100%)}
@@ -609,7 +609,7 @@ body:not(.gate-mode) #topNotification .top-notification-actions button{
 #workView.role-software-developer .developer-br-actions button{min-height:32px}
 #workView .developer-br-steps{overflow-x:auto;overscroll-behavior-inline:contain}
 :is(#settingsView,#projectView) .form-grid{max-width:none;gap:8px 12px}
-:is(#settingsView,#projectView) :is(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=hidden]),select){max-width:100%;min-height:30px}
+:is(#settingsView,#projectView) :is(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=hidden]),select){max-width:100%;min-height:var(--atgv-consistency-control-height)}
 :is(#settingsView,#projectView) .ext-settings-accordion>summary{min-height:36px}
 body:not(.gate-mode) .sidebar .nav-item[aria-current="page"]{background:var(--vscode-list-activeSelectionBackground);color:var(--vscode-list-activeSelectionForeground)}
 body:not(.gate-mode) .sidebar .nav-item:focus-visible{outline:2px solid var(--atgv-consistency-focus);outline-offset:-2px}

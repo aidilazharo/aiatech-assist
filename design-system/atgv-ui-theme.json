@@ -37,8 +37,10 @@
   },
   "spacing": {
     "unitPx": 4,
-    "controlHeightPx": 34,
-    "cardRadiusPx": 8
+    "controlHeightPx": 32,
+    "cardRadiusPx": 6,
+    "controlRadiusPx": 4,
+    "sectionGapPx": 16
   },
   "progress": {
     "circleDiameterPx": 46,
@@ -65,7 +67,7 @@
     "respectsVSCodeTheme": true,
     "reducedMotionSupported": true,
     "progressAriaRequired": true,
-    "minimumTouchTargetPx": 34,
+    "minimumTouchTargetPx": 32,
     "rules": [
       "Only active or current stages animate; finished and inactive stages remain still",
       "Do not claim a phase completed without corresponding verified task state",

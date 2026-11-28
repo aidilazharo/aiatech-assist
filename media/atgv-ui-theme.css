@@ -24,7 +24,10 @@
   --atgv-ui-ring-track: 5px;
   --atgv-ui-transition: 240ms;
   --atgv-ui-pulse-duration: 1700ms;
-  --atgv-ui-card-radius: 8px;
+  --atgv-ui-card-radius: 6px;
+  --atgv-ui-control-height: 32px;
+  --atgv-ui-control-radius: 4px;
+  --atgv-ui-section-gap: 16px;
 }
 /* Shared typography, independent of selected SDLC role and current VS Code theme. */
 body {font-family:var(--atgv-ui-font);font-size:var(--atgv-ui-body);line-height:1.5;color:var(--atgv-ui-text)}
@@ -36,15 +39,15 @@ main h3, #landingView h3, #workView h3, #planningView h3, #discoveryView h3, #pr
 #landingView .overview-phase-label,#roleStepButtons .role-circle-step-title,#discoveryView .milestone-label,#planningView .milestone-label,#workView .developer-br-stage strong {font-size:var(--atgv-ui-label)!important;font-weight:600;line-height:1.35}
 #landingView .overview-phase-count,#workView .developer-br-stage small,#roleStepButtons .role-circle-step-count {font-size:var(--atgv-ui-caption)!important;line-height:1.35;color:var(--atgv-ui-muted)}
 /* One standard circular progress diameter and border for Overview, BA, UI/UX, Role, Developer. */
-#landingView .overview-phase-ring,#roleStepButtons .role-circle-step-marker,#discoveryView .discovery-workflow .workflow-step .milestone-circle,#planningView .design-milestone-list .atgv-milestone .milestone-circle {
+#landingView .overview-phase-ring:not(.overview-phase-linear),#roleStepButtons .role-circle-step-marker,#discoveryView .discovery-workflow .workflow-step .milestone-circle,#planningView .design-milestone-list .atgv-milestone .milestone-circle {
   box-sizing:border-box; width:var(--atgv-ui-circle)!important;height:var(--atgv-ui-circle)!important;
   min-width:var(--atgv-ui-circle)!important;flex:0 0 var(--atgv-ui-circle)!important;
   border-radius:50%;border-width:var(--atgv-ui-circle-border)!important;
   font-size:var(--atgv-ui-circle-value)!important;
   transition:background-color var(--atgv-ui-transition) ease,border-color var(--atgv-ui-transition) ease,color var(--atgv-ui-transition) ease;
 }
-#landingView .overview-phase-ring {border:0!important;--phase-color:var(--atgv-ui-active)}
-#landingView .overview-phase-ring::before {inset:var(--atgv-ui-ring-track)!important;background:var(--atgv-ui-surface)}
+#landingView .overview-phase-ring:not(.overview-phase-linear) {border:0!important;--phase-color:var(--atgv-ui-active)}
+#landingView .overview-phase-ring:not(.overview-phase-linear)::before {inset:var(--atgv-ui-ring-track)!important;background:var(--atgv-ui-surface)}
 #landingView .overview-phase-value {font-size:var(--atgv-ui-circle-value);font-weight:700}
 #landingView .overview-phase[data-state="complete"] .overview-phase-ring {--phase-color:var(--atgv-ui-complete)}
 #landingView .overview-phase[data-state="untracked"] .overview-phase-ring {--phase-color:var(--atgv-ui-idle)}
@@ -58,12 +61,12 @@ main h3, #landingView h3, #workView h3, #planningView h3, #discoveryView h3, #pr
 #workView .developer-br-steps .developer-br-stage.done::before {border-color:var(--atgv-ui-complete)!important}
 /* A single motion profile, only for active stages; completed and idle remain still. */
 @keyframes atgv-ui-active-ring {0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--atgv-ui-active) 32%,transparent);transform:scale(1)}50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--atgv-ui-active) 16%,transparent);transform:scale(1.08)}}
-#landingView .overview-phase[data-state="in-progress"] .overview-phase-ring,#roleStepButtons .role-circle-step.selected:not([data-status="completed"]) .role-circle-step-marker,#discoveryView .discovery-workflow .workflow-step.current:not([data-status="success"]) .milestone-circle,#planningView .design-milestone-list .atgv-milestone.current:not([data-status="success"]) .milestone-circle,#workView .developer-br-steps .developer-br-stage.current::before {
+#landingView .overview-phase[data-state="in-progress"] .overview-phase-ring:not(.overview-phase-linear),#roleStepButtons .role-circle-step.selected:not([data-status="completed"]) .role-circle-step-marker,#discoveryView .discovery-workflow .workflow-step.current:not([data-status="success"]) .milestone-circle,#planningView .design-milestone-list .atgv-milestone.current:not([data-status="success"]) .milestone-circle,#workView .developer-br-steps .developer-br-stage.current::before {
   animation:atgv-ui-active-ring var(--atgv-ui-pulse-duration) ease-in-out infinite!important;
 }
 #discoveryView .discovery-workflow .workflow-step.current .milestone-circle::after {animation:none!important}
 #workView .developer-br-steps .developer-br-stage:not(.current)::before,#roleStepButtons .role-circle-step:not(.selected) .role-circle-step-marker,#landingView .overview-phase[data-state="complete"] .overview-phase-ring {animation:none!important}
-@media(prefers-reduced-motion:reduce){#landingView .overview-phase-ring,#roleStepButtons .role-circle-step-marker,#discoveryView .discovery-workflow .workflow-step .milestone-circle,#planningView .design-milestone-list .atgv-milestone .milestone-circle,#workView .developer-br-steps .developer-br-stage::before {animation:none!important;transition:none!important;transform:none!important}}
+@media(prefers-reduced-motion:reduce){#landingView .overview-phase-ring:not(.overview-phase-linear),#roleStepButtons .role-circle-step-marker,#discoveryView .discovery-workflow .workflow-step .milestone-circle,#planningView .design-milestone-list .atgv-milestone .milestone-circle,#workView .developer-br-steps .developer-br-stage::before {animation:none!important;transition:none!important;transform:none!important}}
 
 /* v0.3.73: circular milestones adapt to their actual panel width.
    The connector gap and circle diameter shrink together, keeping all stages on one line. */
@@ -73,24 +76,24 @@ main h3, #landingView h3, #workView h3, #planningView h3, #discoveryView h3, #pr
 #planningView .design-milestone-list,
 #workView .ux-design-workflow,
 #workView .developer-br-steps{container-type:inline-size;min-width:0;width:100%;gap:clamp(2px,0.6cqi,8px)}
-#landingView .overview-phase-grid{--atgv-fluid-circle:clamp(20px,9cqi,46px);grid-template-columns:repeat(7,minmax(0,1fr))!important}
+#landingView .overview-phase-grid{--atgv-fluid-circle:clamp(20px,9cqi,46px);grid-template-columns:repeat(auto-fit,minmax(min(100%,130px),1fr))!important}
 #roleStepButtons.role-circle-steps{--atgv-fluid-circle:clamp(22px,10cqi,46px);grid-template-columns:repeat(var(--role-step-count,4),minmax(0,1fr))!important;overflow-x:hidden!important}
 #discoveryView .discovery-workflow{--atgv-fluid-circle:clamp(18px,7cqi,46px);grid-template-columns:repeat(10,minmax(0,1fr))!important;overflow-x:hidden!important}
 #planningView .design-milestone-list{--atgv-fluid-circle:clamp(20px,11cqi,46px);grid-template-columns:repeat(6,minmax(0,1fr))!important;overflow-x:hidden!important}
 #workView .ux-design-workflow{--atgv-fluid-circle:clamp(20px,11cqi,46px);grid-template-columns:repeat(6,minmax(0,1fr))!important;row-gap:0!important}
 #workView .developer-br-steps{--atgv-fluid-circle:clamp(18px,7cqi,46px);--atgv-tdd-circle:var(--atgv-fluid-circle)!important;grid-template-columns:repeat(9,minmax(0,1fr))!important;overflow-x:hidden!important}
 #landingView .overview-phase,#roleStepButtons .role-circle-step,#discoveryView .discovery-workflow .workflow-step,#planningView .design-milestone-list .atgv-milestone,#workView .ux-workflow-step,#workView .developer-br-stage{min-width:0!important;max-width:100%;padding-inline:clamp(1px,0.5cqi,7px);overflow-wrap:anywhere}
-#landingView .overview-phase-ring,#roleStepButtons .role-circle-step-marker,#discoveryView .discovery-workflow .workflow-step .milestone-circle,#planningView .design-milestone-list .atgv-milestone .milestone-circle,#workView .ux-design-workflow .ux-workflow-number{width:var(--atgv-fluid-circle)!important;height:var(--atgv-fluid-circle)!important;min-width:var(--atgv-fluid-circle)!important;flex:0 0 var(--atgv-fluid-circle)!important;font-size:clamp(9px,2.4cqi,15px)!important}
+#landingView .overview-phase-ring:not(.overview-phase-linear),#roleStepButtons .role-circle-step-marker,#discoveryView .discovery-workflow .workflow-step .milestone-circle,#planningView .design-milestone-list .atgv-milestone .milestone-circle,#workView .ux-design-workflow .ux-workflow-number{width:var(--atgv-fluid-circle)!important;height:var(--atgv-fluid-circle)!important;min-width:var(--atgv-fluid-circle)!important;flex:0 0 var(--atgv-fluid-circle)!important;font-size:clamp(9px,2.4cqi,15px)!important}
 #workView .developer-br-steps .developer-br-stage::before{width:var(--atgv-fluid-circle)!important;height:var(--atgv-fluid-circle)!important;flex:0 0 var(--atgv-fluid-circle)!important;font-size:clamp(9px,2.2cqi,15px)!important}
-#landingView .overview-phase-ring::before{inset:clamp(2px,0.75cqi,5px)!important}
-#landingView .overview-phase-value{font-size:clamp(9px,2.2cqi,15px)!important}
+#landingView .overview-phase-ring:not(.overview-phase-linear)::before{inset:clamp(2px,0.75cqi,5px)!important}
+#landingView .overview-phase-ring:not(.overview-phase-linear) .overview-phase-value{font-size:clamp(9px,2.2cqi,15px)!important}
 #roleStepButtons .role-circle-step::after{top:calc(var(--atgv-fluid-circle) / 2 + 2px)!important;left:calc(50% + var(--atgv-fluid-circle) / 2 + 1px)!important;right:calc(-50% + var(--atgv-fluid-circle) / 2 + 1px)!important}
 #workView .developer-br-stage:not(:last-child)::after{top:calc(var(--atgv-fluid-circle) / 2)!important;left:calc(50% + var(--atgv-fluid-circle) / 2 + 1px)!important;width:calc(100% - var(--atgv-fluid-circle) - 2px)!important}
 #discoveryView .discovery-workflow::before,#discoveryView .discovery-workflow::after,#planningView .design-milestone-list::before,#planningView .design-milestone-list::after{top:calc(var(--atgv-fluid-circle) / 2 + 10px)!important}
 #workView .ux-design-workflow::before{top:calc(var(--atgv-fluid-circle) / 2 + 6px)!important;display:block!important}
 #landingView .overview-phase-label,#roleStepButtons .role-circle-step-title,#discoveryView .discovery-workflow .milestone-label,#planningView .design-milestone-list .milestone-label,#workView .developer-br-stage strong,#workView .ux-workflow-label{min-width:0;max-width:100%;font-size:clamp(9px,1.5cqi,12px)!important;overflow-wrap:anywhere}
 @keyframes atgv-ui-rotating-circle{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
-#landingView .overview-phase[data-state="in-progress"] .overview-phase-ring::after,
+#landingView .overview-phase[data-state="in-progress"] .overview-phase-ring:not(.overview-phase-linear)::after,
 #roleStepButtons .role-circle-step.selected:not([data-status="completed"]):not([data-status="blocked"]) .role-circle-step-marker::after,
 #discoveryView .discovery-workflow .workflow-step.current:not([data-status="success"]) .milestone-circle::before,
 #planningView .design-milestone-list .atgv-milestone.current:not([data-status="success"]) .milestone-circle::before{
@@ -99,7 +102,7 @@ main h3, #landingView h3, #workView h3, #planningView h3, #discoveryView h3, #pr
   border-top-color:var(--atgv-ui-active);border-right-color:var(--atgv-ui-active);
   animation:atgv-ui-rotating-circle 1000ms linear infinite!important;
 }
-#landingView .overview-phase-ring,#roleStepButtons .role-circle-step-marker,
+#landingView .overview-phase-ring:not(.overview-phase-linear),#roleStepButtons .role-circle-step-marker,
 #discoveryView .milestone-circle,#planningView .design-milestone-list .milestone-circle{position:relative}
 #workView .developer-br-stage.current{position:relative}
 #workView .developer-br-stage.current strong::before{
@@ -113,7 +116,7 @@ main h3, #landingView h3, #workView h3, #planningView h3, #discoveryView h3, #pr
 /* UI/UX already has an independently rotating overlay; normalize it to the same profile. */
 #workView .ux-workflow-step.running .ux-workflow-number::after{animation:atgv-ui-rotating-circle 1000ms linear infinite!important}
 @media(prefers-reduced-motion:reduce){
- #landingView .overview-phase[data-state="in-progress"] .overview-phase-ring::after,
+ #landingView .overview-phase[data-state="in-progress"] .overview-phase-ring:not(.overview-phase-linear)::after,
  #roleStepButtons .role-circle-step.selected .role-circle-step-marker::after,
  #discoveryView .discovery-workflow .workflow-step.current .milestone-circle::before,
  #planningView .design-milestone-list .atgv-milestone.current .milestone-circle::before,

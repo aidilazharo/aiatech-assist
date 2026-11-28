@@ -559,36 +559,36 @@ button:focus-visible{outline:2px solid var(--vscode-focusBorder,#649ed2);outline
 @media(max-width:480px){#workView .ux-design-workflow{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* Dedicated UI/UX preview page follows the Solution Designs full-width hero pattern. */
 #uxPreviewView.ux-preview-dedicated{width:100%;max-width:none;box-sizing:border-box;min-width:0}
-#uxPreviewView .ux-preview-hero{padding:30px 34px 26px;border:1px solid #40454c;border-radius:10px 10px 0 0;background:#1e2024;min-width:0}
-#uxPreviewView .ux-preview-hero-top{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:0 0 22px}
-#uxPreviewView .ux-preview-kicker{font-size:11px;color:#489dff;font-weight:800;letter-spacing:.12em}
+#uxPreviewView .ux-preview-hero{padding:12px 16px;border:1px solid var(--atgv-ui-line);border-radius:var(--atgv-ui-card-radius) var(--atgv-ui-card-radius) 0 0;background:var(--atgv-ui-surface);min-width:0}
+#uxPreviewView .ux-preview-hero-top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:0 0 8px}
+#uxPreviewView .ux-preview-kicker{font-size:11px;color:var(--vscode-textLink-foreground,var(--atgv-ui-active));font-weight:800;letter-spacing:.12em}
 #uxPreviewView .ux-preview-title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap}
-#uxPreviewView .ux-preview-title-row h1{font-size:28px;line-height:1.25;margin:0 0 14px;max-width:90%;overflow-wrap:anywhere}
+#uxPreviewView .ux-preview-title-row h1{font-size:var(--atgv-ui-title);line-height:1.25;margin:0 0 8px;max-width:90%;overflow-wrap:anywhere}
 #uxPreviewView .ux-preview-summary{max-width:740px;font-size:13px;line-height:1.7;margin:0 0 13px}
 #uxPreviewView .ux-preview-meta{font-size:11px;display:flex;gap:16px;flex-wrap:wrap;margin:10px 0 15px}
 #uxPreviewView .ux-preview-review-state{margin:8px 0 16px}
 #uxPreviewView .ux-preview-hero-actions{display:flex;gap:9px;flex-wrap:wrap}
-#uxPreviewView .ux-design-preview-page{border:1px solid #40454c;border-top:0;border-radius:0 0 10px 10px;background:#1c1d21;padding:25px 32px 32px;min-width:0}
-#uxPreviewView .ux-preview-group{margin:0 0 20px;padding:20px;border:1px solid #3d4149;border-radius:9px;background:#25272b;min-width:0}
+#uxPreviewView .ux-design-preview-page{border:1px solid var(--atgv-ui-line);border-top:0;border-radius:0 0 var(--atgv-ui-card-radius) var(--atgv-ui-card-radius);background:var(--atgv-ui-background);padding:12px;min-width:0}
+#uxPreviewView .ux-preview-group{margin:0 0 8px;padding:8px;border:1px solid var(--atgv-ui-line);border-radius:var(--atgv-ui-card-radius);background:var(--atgv-ui-surface);min-width:0}
 #uxPreviewView .ux-preview-group>h2{font-size:19px;margin:0 0 15px}
-#uxPreviewView .ux-design-preview{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:15px}
-#uxPreviewView .ux-visual-screen{padding:16px;border:1px solid #434954;border-radius:9px;background:#2c3035;min-width:0}
+#uxPreviewView .ux-design-preview{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:8px}
+#uxPreviewView .ux-visual-screen{padding:8px;border:1px solid var(--atgv-ui-line);border-radius:var(--atgv-ui-card-radius);background:var(--atgv-ui-surface);min-width:0}
 #uxPreviewView .ux-visual-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:13px}
 #uxPreviewView .ux-visual-image{display:block;max-width:100%;width:100%;height:auto;margin:0 auto;background:#e8eef7;border-radius:7px}
-#uxPreviewView .ux-flow-diagram{overflow:auto;max-width:100%;background:#1d232b;border:1px solid #3d5166;border-radius:9px;padding:8px}
+#uxPreviewView .ux-flow-diagram{overflow:auto;max-width:100%;background:var(--atgv-ui-background);border:1px solid var(--atgv-ui-line);border-radius:9px;padding:8px}
 #uxPreviewView .ux-flow-diagram svg{width:100%;min-width:600px;display:block;height:auto}
 #uxPreviewView .ux-prototype-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
-#uxPreviewView .ux-prototype-screen{padding:18px;background:#2c3035;border:1px solid #434954;border-radius:9px;display:grid;gap:11px}
+#uxPreviewView .ux-prototype-screen{padding:18px;background:var(--atgv-ui-surface);border:1px solid var(--atgv-ui-line);border-radius:9px;display:grid;gap:11px}
 #uxPreviewView .ux-prototype-field{display:grid;gap:6px;font-size:12px}
 #uxPreviewView .ux-prototype-field input{max-width:420px}
 #uxPreviewView .ux-prototype-screen>button{max-width:250px}
-#uxPreviewView .ux-review-actions{border-top:1px solid #41464d;padding:20px 0 0;display:grid;gap:10px}
+#uxPreviewView .ux-review-actions{border-top:1px solid var(--atgv-ui-line);padding:20px 0 0;display:grid;gap:10px}
 #uxPreviewView .ux-review-actions label{display:grid;gap:8px}
 #uxPreviewView .ux-review-actions textarea{width:100%;max-width:100%;box-sizing:border-box}
 #uxPreviewView .ux-developer-handoff{font-size:12px;line-height:1.6}
 #uxPreviewView .ux-developer-handoff h4{font-size:13px;margin:12px 0 5px}
-#uxPreviewView .ux-visual-screen.expanded{position:fixed;inset:18px;z-index:9999;overflow:auto;background:#1a222e;box-shadow:0 0 0 99vmax rgba(0,0,0,.65)}
-@media(max-width:680px){#uxPreviewView .ux-preview-hero{padding:20px}#uxPreviewView .ux-design-preview-page{padding:15px}#uxPreviewView .ux-design-preview{grid-template-columns:minmax(0,1fr)}#uxPreviewView .ux-preview-title-row h1{font-size:23px}}
+#uxPreviewView .ux-visual-screen.expanded{position:fixed;inset:18px;z-index:9999;overflow:auto;background:var(--atgv-ui-background);box-shadow:0 0 0 99vmax rgba(0,0,0,.65)}
+@media(max-width:680px){#uxPreviewView .ux-preview-hero{padding:8px}#uxPreviewView .ux-design-preview-page{padding:8px}#uxPreviewView .ux-design-preview{grid-template-columns:minmax(0,1fr)}#uxPreviewView .ux-preview-title-row h1{font-size:var(--atgv-ui-title)}}
 
 /* v0.2.33: compact UI/UX toolbar and ticket metadata; review panels collapsed by default. */
 #workView .ux-design-toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin:12px 0 16px}
@@ -602,9 +602,9 @@ button:focus-visible{outline:2px solid var(--vscode-focusBorder,#649ed2);outline
 #workView .ux-design-ticket-row #uxDesignVersionInfo summary{cursor:pointer}
 #workView #uxDesignStatus.hidden{display:none}
 #uxPreviewView details.ux-preview-group{padding:0;overflow:hidden}
-#uxPreviewView details.ux-preview-group>summary{display:list-item;min-height:54px;box-sizing:border-box;padding:17px 20px;cursor:pointer;font-size:15px;font-weight:750;list-style-position:inside}
-#uxPreviewView details.ux-preview-group[open]>summary{border-bottom:1px solid #3d4149}
-#uxPreviewView .ux-preview-group-body{padding:18px 20px 20px}
+#uxPreviewView details.ux-preview-group>summary{display:list-item;min-height:40px;box-sizing:border-box;padding:8px 12px;cursor:pointer;font-size:15px;font-weight:750;list-style-position:inside}
+#uxPreviewView details.ux-preview-group[open]>summary{border-bottom:1px solid var(--atgv-ui-line)}
+#uxPreviewView .ux-preview-group-body{padding:8px}
 #uxPreviewView .ux-preview-group-body .ux-design-preview{margin:0}
 #uxPreviewView details.ux-review-actions{display:block}
 #uxPreviewView details.ux-review-actions.hidden{display:none}
@@ -635,13 +635,13 @@ button:focus-visible{outline:2px solid var(--vscode-focusBorder,#649ed2);outline
 #uxPreviewView .ux-prototype-launch-status:empty{display:none}
 #uxPreviewView .ux-flow-toolbar{display:flex;justify-content:flex-end;align-items:center;gap:7px;margin-bottom:12px}
 #uxPreviewView .ux-flow-toolbar button{min-width:38px;min-height:34px;padding:5px 12px}
-#uxPreviewView .ux-flow-zoom-label{min-width:40px;text-align:right;font-size:11px;color:#bdc7d2}
-#uxPreviewView .ux-flow-viewport{height:460px;overflow:auto;border:1px solid #3d5166;border-radius:8px;background:#1d232b;outline-offset:2px}
+#uxPreviewView .ux-flow-zoom-label{min-width:40px;text-align:right;font-size:11px;color:var(--atgv-ui-muted)}
+#uxPreviewView .ux-flow-viewport{height:clamp(240px,52vh,460px);overflow:auto;border:1px solid var(--atgv-ui-line);border-radius:8px;background:var(--atgv-ui-background);outline-offset:2px}
 #uxPreviewView .ux-flow-diagram{padding:12px}
 #uxPreviewView .ux-flow-diagram svg{display:block;min-width:0!important;max-width:none!important;touch-action:none}
 #uxPreviewView .ux-flow-node{cursor:grab;touch-action:none;outline:none}
 #uxPreviewView .ux-flow-node.dragging{cursor:grabbing}
-#uxPreviewView .ux-flow-node:focus-visible rect{stroke:#f5cb57;stroke-width:3}
+#uxPreviewView .ux-flow-node:focus-visible rect{stroke:var(--atgv-ui-focus);stroke-width:3}
 @media(max-width:760px){#workView .ux-design-heading #uxDesignVersionInfo{text-align:left;flex-basis:100%}#workView .ux-design-reference-row #uxSelectedTicket{width:100%;flex-basis:100%}#workView .ux-design-toolbar{flex-direction:column}#workView .ux-design-toolbar .ux-design-actions{align-self:flex-end}#uxPreviewView .ux-preview-hero-actions .ux-preview-prototype-launch{margin-left:0}}
 
 /* v0.2.35: ten reference slots, ticket-scoped framework and cancellable generation. */
@@ -660,7 +660,7 @@ button:focus-visible{outline:2px solid var(--vscode-focusBorder,#649ed2);outline
 #uxPreviewView .ux-preview-hero #uxReviewActions{display:block;max-width:640px;border:0;margin:12px 0 6px;padding:0}
 #uxPreviewView .ux-preview-hero #uxReviewActions.hidden{display:none}
 #uxPreviewView .ux-preview-hero #uxReviewActions label{display:grid;gap:6px;font-size:12px;font-weight:600}
-#uxPreviewView .ux-preview-hero #uxRejectReason{box-sizing:border-box;width:100%;min-height:70px;resize:vertical;font:inherit;font-weight:400;padding:10px;border:1px solid #4c545e;border-radius:6px;background:#25292f;color:inherit}
+#uxPreviewView .ux-preview-hero #uxRejectReason{box-sizing:border-box;width:100%;min-height:70px;resize:vertical;font:inherit;font-weight:400;padding:10px;border:1px solid var(--vscode-input-border,var(--atgv-ui-line));border-radius:6px;background:var(--vscode-input-background,var(--atgv-ui-background));color:inherit}
 @media(max-width:1150px){#workView .ux-design-reference-preview{grid-template-columns:repeat(5,minmax(0,1fr))}}
 @media(max-width:640px){#workView .ux-design-reference-preview{grid-template-columns:repeat(3,minmax(0,1fr))}#workView .ux-design-reference-row #uxDesignFramework{width:100%;max-width:100%}}
 
@@ -1607,34 +1607,34 @@ button:focus-visible{outline:2px solid var(--vscode-focusBorder,#649ed2);outline
 #workView .ux-design-support-row .ux-framework-source{margin:0;font-size:11px;line-height:1.5}
 #workView .ux-design-danger-zone{margin-top:22px;justify-content:space-between}
 #workView #uxDeleteDesignStatus:empty{display:none}
-#uxPreviewView .ux-preview-hero{padding:24px 28px;border-radius:12px 12px 0 0}
-#uxPreviewView .ux-preview-hero-top{margin-bottom:20px}
-#uxPreviewView .ux-preview-title-row h1{margin-bottom:8px;font-size:26px}
+#uxPreviewView .ux-preview-hero{padding:12px 16px;border-radius:var(--atgv-ui-card-radius) var(--atgv-ui-card-radius) 0 0}
+#uxPreviewView .ux-preview-hero-top{margin-bottom:8px}
+#uxPreviewView .ux-preview-title-row h1{margin-bottom:8px;font-size:var(--atgv-ui-title)}
 #uxPreviewView .ux-preview-meta{font-size:11px;line-height:1.5;margin:8px 0 16px}
 #uxPreviewView #uxPreviewVersion{white-space:nowrap}
-#uxPreviewView #uxPreviewVersion.ux-approved{color:#7be0b2;border-color:#26845c}
-#uxPreviewView .ux-preview-context{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 18px;padding:12px 14px;border:1px solid #414954;background:#242a30;border-radius:8px}
-#uxPreviewView .ux-preview-context p{margin:0;line-height:1.5;font-size:12px;max-width:800px;color:#d0d7e0}
-#uxPreviewView .ux-preview-artifact-count{font-size:11px;font-weight:700;color:#92caff;white-space:nowrap}
+#uxPreviewView #uxPreviewVersion.ux-approved{color:var(--atgv-ui-complete);border-color:var(--atgv-ui-complete)}
+#uxPreviewView .ux-preview-context{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 8px;padding:8px;border:1px solid var(--atgv-ui-line);background:var(--atgv-ui-surface);border-radius:var(--atgv-ui-card-radius)}
+#uxPreviewView .ux-preview-context p{margin:0;line-height:1.5;font-size:12px;max-width:800px;color:var(--atgv-ui-text)}
+#uxPreviewView .ux-preview-artifact-count{font-size:11px;font-weight:700;color:var(--vscode-textLink-foreground,var(--atgv-ui-active));white-space:nowrap}
 #uxPreviewView .ux-preview-hero-actions{display:flex;align-items:center;justify-content:space-between;gap:12px}
 #uxPreviewView .ux-preview-decision-actions,#uxPreviewView .ux-preview-external-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
 #uxPreviewView .ux-preview-hero-actions .ux-preview-prototype-launch{margin-left:0}
-#uxPreviewView .ux-design-preview-page{padding:22px 28px 26px}
-#uxPreviewView .ux-preview-group{margin-bottom:12px;border-radius:9px}
-#uxPreviewView details.ux-preview-group>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;list-style:none;min-height:54px;padding:15px 18px;font-size:14px}
+#uxPreviewView .ux-design-preview-page{padding:12px}
+#uxPreviewView .ux-preview-group{margin-bottom:8px;border-radius:var(--atgv-ui-card-radius)}
+#uxPreviewView details.ux-preview-group>summary{display:flex;align-items:center;justify-content:space-between;gap:8px;list-style:none;min-height:40px;padding:8px 12px;font-size:14px}
 #uxPreviewView details.ux-preview-group>summary::-webkit-details-marker{display:none}
-#uxPreviewView details.ux-preview-group>summary:before{content:"▸";color:#9cacbd;font-size:13px;margin-right:1px}
+#uxPreviewView details.ux-preview-group>summary:before{content:"▸";color:var(--atgv-ui-muted);font-size:13px;margin-right:1px}
 #uxPreviewView details.ux-preview-group[open]>summary:before{content:"▾"}
 #uxPreviewView details.ux-preview-group>summary>span:first-child{flex:1}
-#uxPreviewView .ux-preview-group-count{font-size:11px;font-weight:650;color:#a4bacd;white-space:nowrap}
-#uxPreviewView .ux-preview-group-body{padding:16px 18px 18px}
-#uxPreviewView .ux-preview-footer{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-top:18px;padding-top:18px;border-top:1px solid #40454c}
+#uxPreviewView .ux-preview-group-count{font-size:11px;font-weight:650;color:var(--atgv-ui-muted);white-space:normal;overflow-wrap:anywhere}
+#uxPreviewView .ux-preview-group-body{padding:8px}
+#uxPreviewView .ux-preview-footer{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-top:18px;padding-top:18px;border-top:1px solid var(--atgv-ui-line)}
 #uxPreviewView .ux-preview-footer p{margin:0;max-width:770px;font-size:11px;line-height:1.5}
-#uxPreviewView .ux-preview-footer .br-danger{flex:none;border:1px solid #c45b64;background:transparent;color:#ffb5bb}
-#uxPreviewView .ux-preview-footer .br-danger:hover:not(:disabled){background:#572a2f}
+#uxPreviewView .ux-preview-footer .br-danger{flex:none;border:1px solid var(--atgv-ui-error);background:transparent;color:var(--atgv-ui-error)}
+#uxPreviewView .ux-preview-footer .br-danger:hover:not(:disabled){background:var(--vscode-inputValidation-errorBackground,var(--atgv-ui-surface))}
 #uxPreviewView .ux-preview-footer .br-danger:disabled{opacity:.5}
 @media(max-width:1100px){#workView .ux-design-toolbar .ux-design-reference-row{grid-template-columns:minmax(220px,1fr) minmax(220px,1fr)}#workView .ux-design-toolbar .ux-design-actions{grid-column:1/-1;justify-self:end}#workView .ux-design-toolbar .ux-design-actions>button{min-width:190px}}
-@media(max-width:760px){#workView .ux-design-heading #uxDesignVersionInfo{flex-basis:100%;min-width:0;text-align:left}#workView .ux-design-toolbar .ux-design-reference-row{grid-template-columns:minmax(0,1fr)}#workView .ux-design-toolbar .ux-design-actions{grid-column:auto;justify-self:stretch;width:100%}#workView .ux-design-toolbar .ux-design-actions>button{width:100%}#workView .ux-design-feedback-row{flex-wrap:wrap}#workView .ux-design-reference-controls #uxReferenceInfo{margin-left:0}#uxPreviewView .ux-preview-context,#uxPreviewView .ux-preview-footer{flex-direction:column;align-items:stretch}#uxPreviewView .ux-preview-artifact-count{white-space:normal}#uxPreviewView .ux-preview-hero-actions{align-items:stretch;flex-direction:column}#uxPreviewView .ux-preview-decision-actions,#uxPreviewView .ux-preview-external-actions{width:100%}#uxPreviewView .ux-preview-hero{padding:20px}#uxPreviewView .ux-design-preview-page{padding:14px}}
+@media(max-width:760px){#workView .ux-design-heading #uxDesignVersionInfo{flex-basis:100%;min-width:0;text-align:left}#workView .ux-design-toolbar .ux-design-reference-row{grid-template-columns:minmax(0,1fr)}#workView .ux-design-toolbar .ux-design-actions{grid-column:auto;justify-self:stretch;width:100%}#workView .ux-design-toolbar .ux-design-actions>button{width:100%}#workView .ux-design-feedback-row{flex-wrap:wrap}#workView .ux-design-reference-controls #uxReferenceInfo{margin-left:0}#uxPreviewView .ux-preview-context,#uxPreviewView .ux-preview-footer{flex-direction:column;align-items:stretch}#uxPreviewView .ux-preview-artifact-count{white-space:normal}#uxPreviewView .ux-preview-hero-actions{align-items:stretch;flex-direction:column}#uxPreviewView .ux-preview-decision-actions,#uxPreviewView .ux-preview-external-actions{width:100%}#uxPreviewView .ux-preview-hero{padding:8px}#uxPreviewView .ux-design-preview-page{padding:8px}}
 @media(prefers-reduced-motion:reduce){#workView .ux-workflow-step.running .ux-workflow-number::after{animation:none}}
 
 /* v0.3.14: keep the on-demand TDD troubleshooting download separate from workspace navigation. */

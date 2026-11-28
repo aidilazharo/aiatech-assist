@@ -2,7 +2,7 @@
 
 Baseline: `d26dcc7543348aae7cf9941c44768b7d544ce89c` (extension 0.1.66). 2026-11-29 MYT.
 
-0/40 fully verified; items 02 and 03 are in progress (shared diagnostic/retry hardening), item 05 has a tested improvement, cross-role live verification pending. Pending means not yet verified against the complete requested acceptance criteria; existing implementations must be inspected before modification.
+0/40 fully verified; items 02, 03, 11, 13, 28, 34 and 37 are in progress; item 05 implemented — cross-role verification pending. Pending means not yet verified against the complete acceptance criteria.
 
 | ID | Priority | Description | Status |
 |---|---|---|---|
@@ -16,9 +16,9 @@ Baseline: `d26dcc7543348aae7cf9941c44768b7d544ce89c` (extension 0.1.66). 2026-11
 | 08 | P0 | Affected-only artifact regeneration | Pending |
 | 09 | P0 | Standard/custom SA approval consistency | Pending |
 | 10 | P0 | Persist workflow and recovery checkpoints | Pending |
-| 11 | P1 | Consolidate CSS | Pending |
+| 11 | P1 | Consolidate CSS | In progress |
 | 12 | P1 | Shared UI components | Pending |
-| 13 | P1 | Standardize controls typography and alignment | Pending |
+| 13 | P1 | Standardize controls typography and alignment | In progress |
 | 14 | P1 | Remove duplicate navigation/functions | Pending |
 | 15 | P1 | Shared Jira inventory with role filters | Pending |
 | 16 | P1 | Expandable compact Jira tables | Pending |
@@ -33,16 +33,16 @@ Baseline: `d26dcc7543348aae7cf9941c44768b7d544ce89c` (extension 0.1.66). 2026-11
 | 25 | P2 | Role-specific bulk assignment/workload | Pending |
 | 26 | P2 | SA repository/dependency/mock workflow | Pending |
 | 27 | P2 | SA runtime readiness | Pending |
-| 28 | P2 | Maximize UX prototype space | Pending |
+| 28 | P2 | Maximize UX prototype space | In progress |
 | 29 | P2 | Design revision comparison/approval | Pending |
 | 30 | P2 | Separate developer action groups | Pending |
 | 31 | P2 | Remove redundant progress indicators | Pending |
 | 32 | P2 | Generate UAT from approved AC | Pending |
 | 33 | P2 | Consolidate UAT results/evidence/defects | Pending |
-| 34 | P3 | Responsive webview | Pending |
+| 34 | P3 | Responsive webview | In progress |
 | 35 | P3 | Offline/slow internet | Pending |
 | 36 | P3 | Unified activity/AI/error logs | Pending |
-| 37 | P3 | Light/dark/high contrast | Pending |
+| 37 | P3 | Light/dark/high contrast | In progress |
 | 38 | P4 | Full regression suite | Pending |
 | 39 | P4 | Live Cat Name CRUD E2E with screenshots | Pending |
 | 40 | P4 | Build/verify VSIX and authorized release | Pending |
@@ -78,3 +78,12 @@ Baseline: `d26dcc7543348aae7cf9941c44768b7d544ce89c` (extension 0.1.66). 2026-11
 - Modified: `src/project-artifacts.js`, `test/role-diagnostic-identity.test.js`, this tracker.
 - Tests: 2 passed, 0 failed (Node 22.16.0, exact roleId and constants in isolated harness; test blob `a502b04f14da5f1c958c8aa54ac61b5ea5fba7a0`). Execution 2 focused total: 10 passed, 0 failed. Full diagnostic file IO and provider/role end-to-end remain unverified.
 - Commit SHA: see commit introducing this entry. Items 02/03 remain In progress, 05 remains Implemented — verification pending, 37 other items Pending. 0/40 fully verified. Next: full checkout and validate actual role-provider wiring, persistent recovery checkpoints and BR evidence gates.
+
+## Execution 3 — design tokens, overview progress and designer preview (11, 13, 28, 34, 37)
+
+- Baseline: `181afdac829552120e3540c5252e51569e0c8b60` (0.1.66). Library unchanged.
+- Root causes: duplicate shared token overrides; circular sizing and animation incorrectly applied to linear overview indicators; fixed-width preview gallery and dark-only preview chrome.
+- Implementation: canonical 32px control height, 4px control radius, 6px card radius, 16px section gap; shared stylesheet consumes generated tokens; exclude linear progress from circular styling, use adaptive overview grid; compact designer preview and native VS Code theme variables, preserve screen image canvas and review controls.
+- Modified: design-system/atgv-ui-theme.json, scripts/generate-ui-theme.js, media/atgv-ui-theme.css, media/atgv-consistency.css, media/start.css, test/shared-ui-design-contract.test.js, this tracker.
+- Verification: actual baseline and patched generator executed with isolated in-memory filesystem adapter; generated CSS check passed. Three exact new contract tests passed against proposed complete file contents in JS harness. These are source contract checks, not live VS Code rendering, accessibility or end-to-end tests.
+- Commit: see commit introducing this entry. All five items remain In progress pending complete UI verification. 0/40 fully verified. No version bump or mirror changes. Direct checkout DNS unavailable; full regression, runtime screenshots, VSIX and release remain blocked. Next: verify rendered layouts across widths and themes; continue navigation/component consolidation and role-specific workflows.
