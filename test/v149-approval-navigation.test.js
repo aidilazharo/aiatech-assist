@@ -37,8 +37,8 @@ test('compact buttons retain their semantic text while displaying icons with ful
  assert.match(frontend,/\.ba-step-reopen > button/);
  assert.match(css,/button\.atgv-icon-action\{font-size:0!important/);
 });
-test('every role uses a black left navigation and preserves the per-role accent',()=>{
- assert.match(frontend,/nav\.style\.setProperty\('--role-pane-bg','#000000'\)/);
- assert.match(frontend,/nav\.style\.setProperty\('--role-nav-accent',colors\[1\]\)/);
- assert.match(css,/\.sidebar,\.sidebar-footer\{background:#000000!important\}/);
+test('every role uses native VS Code sidebar colors and focus accent',()=>{
+ assert.match(frontend,/nav\.style\.setProperty\('--role-pane-bg','var\(--vscode-sideBar-background/);
+ assert.match(frontend,/nav\.style\.setProperty\('--role-nav-accent','var\(--vscode-focusBorder/);
+ assert.match(css,/\.sidebar,\.sidebar-footer\{background:var\(--vscode-sideBar-background/);
 });
