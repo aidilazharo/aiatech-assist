@@ -4,10 +4,11 @@ const {create}=require('../media/recovery-controller');
 const ev=(remaining,action='repair',fingerprint='finding')=>({eligible:true,remaining,action,fingerprint});
 test('recovery continues on verified improvement and pauses repeated failures',()=>{
  const c=create();assert.equal(c.begin('p',ev(3)),true);assert.equal(c.begin('p',ev(3)),false);
- c.finish('p');assert.equal(c.begin('p',ev(2)),true);c.finish('p');
- assert.equal(c.begin('p',ev(2)),true);c.finish('p');
- assert.equal(c.begin('p',ev(2)),false);assert.equal(c.get('p').paused,true);
- assert.equal(c.resume('p'),true);assert.equal(c.begin('p',ev(2)),true);
+ const improved=ev(2,'repair','remaining-findings');
+ c.finish('p');assert.equal(c.begin('p',improved),true);c.finish('p');
+ assert.equal(c.begin('p',improved),true);c.finish('p');
+ assert.equal(c.begin('p',improved),false);assert.equal(c.get('p').paused,true);
+ assert.equal(c.resume('p'),true);assert.equal(c.begin('p',improved),true);
 });
 test('cancel, failure, independent scopes and finite total budget',()=>{
  const c=create({maxActions:2});
