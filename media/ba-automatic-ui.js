@@ -425,9 +425,9 @@
   const mapped=new Set(brState?.mappingCompleted?.sourceDigests||brState?.mappingCompleted?.digests||[]);
   const sources=brState?.sourceDocuments||[];
   const sourceReady=sources.length>0&&sources.every(doc=>doc.digest&&mapped.has(doc.digest));
-  const discoveryReady=!!brState?.discoveryRevision&&brState.reviewRevision===brState.discoveryRevision&&currentDiscoveryReadiness().filled===12;
+  const discoveryReady=!!brState?.discoveryRevision&&brState.reviewRevision===brState.discoveryRevision&&Object.values(brState?.discoveryAnswers||{}).filter(value=>typeof value==='string'&&value.trim()).length>=12;
   const brs=requirements();
-  const requirementsReady=(brs.length>0||brState?.brs?.some(br=>br.status==='retire-proposed'&&!br.archivedFromRestart))&&!brState?.baDraftQuality?.excluded?.some(row=>brs.some(br=>br.id===row.id))&&!brs.some(br=>br.needsRefresh||br.externalReviewRequired||br.roleReviewRequired||br.dependencyReviewRequired);
+  const requirementsReady=(brs.length>0||brState?.brs?.some(br=>br.status==='retire-proposed'&&!br.archivedFromRestart))&&!brState?.baDraftQuality?.excluded?.some(row=>brs.some(br=>br.id===row.id))&&!brs.some(br=>br.status==='approved'&&br.needsRefresh||br.externalReviewRequired||br.roleReviewRequired||br.dependencyReviewRequired);
   return phase==='ready'&&currentJiraPreview()&&sourceReady&&discoveryReady&&requirementsReady&&!state.preview.reopenSkipped?.length&&!unsaved&&!busy()&&!baBusyTask;
  }
  // Percentages describe verified section evidence, never elapsed time.
@@ -493,7 +493,7 @@
  }
  function renderReadyPanels(phase){
   const sourceReady=!!source()?.digest;
-  const discoveryReady=!!brState?.discoveryRevision&&brState.reviewRevision===brState.discoveryRevision&&!!brState?.mappingCompleted&&currentDiscoveryReadiness().filled===12&&!discoveryDirty;
+  const discoveryReady=!!brState?.discoveryRevision&&brState.reviewRevision===brState.discoveryRevision&&!!brState?.mappingCompleted&&Object.values(brState?.discoveryAnswers||{}).filter(value=>typeof value==='string'&&value.trim()).length>=12&&!discoveryDirty;
   const requirementsReady=requirements().length>0&&phase!=='running'&&!brState?.baDraftQuality?.excluded?.length;
   const jiraReady=rowsForTable().length>0&&phase!=='running';
   // Use exactly the same completed-cycle index as the history renderer.
