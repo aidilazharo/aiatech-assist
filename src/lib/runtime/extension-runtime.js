@@ -4628,6 +4628,7 @@ async function assessAutomaticDrafts(projectId,signal){
  const register=await brWorkflow.load(registry,projectId);
  const drafts=register.brs.filter(br=>br.status==='draft'&&!br.archivedFromRestart);
  const checked=Object.fromEntries(drafts.map(br=>[br.id,baAutomatic.qualityFingerprint(register,br)]));
+ const warnings=[];
  const previous=register.baDraftQuality?.checked||{};
  for(const br of register.brs){
   if(br.status==='approved'&&!br.archivedFromRestart&&previous[br.id]&&previous[br.id]===baAutomatic.qualityFingerprint(register,br))
@@ -4647,7 +4648,7 @@ async function assessAutomaticDrafts(projectId,signal){
   const crossSource=(register.sourceConflicts||[]).some(item=>item.brId===draft.id&&register.sourceConflictDecisions?.[item.id]!==true);
   let reason=local||(crossSource?'This draft has conflicting rules in its verified sources.':'');
   let finding=null;
-  if(!reason){
+  try{if(!reason){
    target||=await activeAiTarget();skill||=await roleSkillPrompt('business-analyst');
    const review=baAutomatic.draftForReview(draft),parts=[[]];
    for(const work of review.work){
@@ -4666,6 +4667,16 @@ async function assessAutomaticDrafts(projectId,signal){
     if(reason)break;
    }
   }
+  }catch(error){
+   signal.throwIfAborted();
+   // A malformed model response is not a successful review. Leave this
+   // fingerprint unchecked but retain results for other completed drafts.
+   delete checked[draft.id];
+   const message=draft.id+' quality review incomplete: '+atgvJobSafeError(error);
+   warnings.push(message);
+   await recordBAProcess({stage:'requirements',action:'quality-review',status:'needs-review',details:message});
+   continue;
+  }
   if(reason){
    const inferred=local?/acceptance criteria|business purpose|scope/i.exec(local)?.[0]:crossSource?'Source evidence':'';
    excluded.push({id:draft.id,reason,fingerprint:checked[draft.id],
@@ -4677,6 +4688,7 @@ async function assessAutomaticDrafts(projectId,signal){
  if(activeProject?.id!==projectId)throw Error('Project changed during BR quality review.');
  const updated=await brWorkflow.write(registry,projectId,register.revision,next=>{next.baDraftQuality={checked,excluded};});
  await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
+ return warnings.join('; ');
 }
 
 async function runBRPreparation(from,{repairReport}={}){
