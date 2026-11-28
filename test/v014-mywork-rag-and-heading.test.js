@@ -52,7 +52,7 @@ test('My Work role chat host uses project index, read-only AI system grounding a
  assert.match(handler,/myWorkRag\.retrieve\(projectKnowledge,msg\.message,cfg\(\)\.get\('rag.maxChunks',5\)\)/);
  assert.match(handler,/activeProject\?\.id!==projectId\|\|store!==projectKnowledge/);
  assert.match(handler,/askAiSendConsent/);
- assert.match(handler,/aiAnswer\(target,prompt,7000,\{diagnosticRole:roleId,system:rag\.system\+/);
+ assert.match(handler,/aiAnswer\(target,prompt,7000,\{diagnosticRole:roleId,projectRole:role,system:rag\.system\+/);
  assert.match(handler,/activityContextText\(activity\)/);
  assert.match(handler,/liveProjectActivity\(projectId\)/);
  assert.match(handler,/myWorkRag\.references\(retrieved\)/);

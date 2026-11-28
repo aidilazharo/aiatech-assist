@@ -34,7 +34,7 @@ test('BR quality validator produces specific safe retry feedback and still rejec
 test('role chat and automatic quality retries use the diagnostic gateway',async()=>{
  const runtime=await fs.readFile(path.join(__dirname,'../src/lib/runtime/extension-runtime.js'),'utf8');
  assert.match(runtime,/projectDiagnosticArtifacts\.diagnosticContext\(root,projectId/);
- assert.match(runtime,/diagnosticRole:roleId,system:rag\.system/);
+ assert.match(runtime,/aiAnswer\(target,prompt,7000,\{diagnosticRole:roleId,projectRole:role,system:rag\.system/);
  assert.match(runtime,/Previous response was rejected by the host validator/);
  assert.match(runtime,/quality review failed validation after 3 attempts/);
  assert.match(runtime,/aiDiagnosticProjects\.get\(target\)!==projectId/);

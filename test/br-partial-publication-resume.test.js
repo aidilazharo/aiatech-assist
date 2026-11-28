@@ -1,5 +1,6 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const baJiraRepublish=require('../src/ba-jira-republish');
 const source=fs.readFileSync(path.join(__dirname,'../src/lib/runtime/extension-runtime.js'),'utf8');
 const start=source.indexOf('async function publishPreparedBRs('),end=source.indexOf('async function prepareBRJiraPreview(',start);
 const code=source.slice(start,end);
@@ -15,7 +16,7 @@ function harness({confirm=true,blocked=false}={}){
  jiraReadIssue:async()=>({id:'1',fields:{project:{key:'TC'},issuetype:{name:'Epic'},labels:['marker']}}),jiraScopedMarker:()=> 'marker',jiraMarker:()=> 'marker',
  postBAPreparation:async(id,state)=>{calls.push(state.phase);const next={...sessions.get(id),...state};sessions.set(id,next);return next;},
  notice:async()=>{},prepareBRJiraPreview:async()=>{calls.push('refresh');return refreshed;},baseAtlassian:()=> 'site',verifiedBAActor:async()=> 'BA',
- uiWarning:async(_title,_options,action)=>{calls.push('confirmation');return confirm?action:undefined;},baJiraRepublish:{preview:async()=>({blocked:[],rows:[],skipped:[]})},reopenServices:()=>({}),
+ uiWarning:async(_title,_options,action)=>{calls.push('confirmation');return confirm?action:undefined;},baJiraRepublish,reopenServices:()=>({}),
  approvedJiraPreviewRevision:null,approvedJiraPreviewBinding:null,syncApprovedBRs:async()=>{calls.push('publish');assert.deepEqual(remaining.map(x=>x.path),['BR-015/F-001/S-002']);remaining=[];},brPreparationTitle:()=>''};
  const publish=new Function(...Object.keys(env),code+'\nreturn publishPreparedBRs;')(...Object.values(env));
  return {calls,sessions,publish:()=>publish({projectId:'p',revision:'r',registerRevision:'r'})};
