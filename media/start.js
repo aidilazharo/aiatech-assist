@@ -14,16 +14,16 @@ function atgvJobsModal(open){
 function atgvJobRow(job){
  const row=document.createElement('div');row.className='atgv-jobs-row';
  const heading=document.createElement('div');heading.className='atgv-jobs-row-heading';
- const label=document.createElement('strong');label.textContent=(job.role||'ATGV')+' · '+(job.command||'Operation');
+ const label=document.createElement('strong');label.textContent=(job.role||'ATGV')+' · '+atgvActivityName(job.command);
  const state=document.createElement('span');state.className='atgv-job-state';
- state.dataset.status=job.status||'interrupted';state.textContent=job.status||'Unknown';
+ state.dataset.status=job.status||'interrupted';state.textContent=atgvActivityName(job.status||'Unknown');
  heading.append(label,state);row.append(heading);
  const meta=document.createElement('p');meta.className='muted';
- const stage=job.phase||'Unknown stage',progress=Number.isFinite(job.progress)?job.progress:0;
- meta.textContent='Stage: '+stage+' · '+progress+'% · Last updated: '+(job.updatedAt?new Date(job.updatedAt).toLocaleString():'Unknown');row.append(meta);
- const progressBar=document.createElement('progress');progressBar.max=100;progressBar.value=progress;
- progressBar.setAttribute('aria-label','Completion for '+(job.command||'operation'));row.append(progressBar);
- if(job.error){const error=document.createElement('p');error.className='atgv-job-error';error.textContent=job.error;row.append(error);}
+ const stage=atgvActivityName(job.phase||'Unknown stage'),progress=Number.isFinite(job.progress)?Math.max(0,Math.min(100,job.progress)):null;
+ meta.textContent=stage+(progress!==null?' · '+progress+'%':'')+' · '+(job.updatedAt?new Date(job.updatedAt).toLocaleString():'Unknown time');row.append(meta);
+ if(job.status==='running'||job.status==='queued'){const progressBar=document.createElement('progress');progressBar.max=100;if(progress!==null)progressBar.value=progress;
+ progressBar.setAttribute('aria-label','Completion for '+atgvActivityName(job.command));row.append(progressBar);}
+ if(job.error){const details=document.createElement('details');details.className='atgv-technical-details';const summary=document.createElement('summary');summary.textContent='Technical details';const error=document.createElement('pre');error.className='atgv-job-error';error.textContent=job.error;details.append(summary,error);row.append(details);}
  if(job.status==='failed'||job.status==='interrupted'||job.status==='reconcile-required'){
   const button=document.createElement('button');button.type='button';button.className='secondary';
   if(job.kind==='write'||job.kind==='install'||!job.retryable){
@@ -39,18 +39,29 @@ function atgvJobRow(job){
  }
  return row;
 }
+function atgvActivityName(value){
+ const names={baPublishPrepared:'Publish Business Requirements',baPreparationState:'Prepare Business Requirements',baRefreshArtifacts:'Refresh BR artifacts',baAutoResolveAttention:'Repair BR findings',syncApprovedBRs:'Publish Jira changes'};
+ const raw=String(value||'Operation');return names[raw]||raw.replace(/([a-z0-9])([A-Z])/g,'$1 $2').replace(/[-_]+/g,' ').replace(/^./,c=>c.toUpperCase());
+}
+function atgvActivityMatches(job,filter){
+ const state=job.status;
+ return filter==='all'||filter==='active'&&['queued','running','waiting','retrying'].includes(state)||filter==='attention'&&['failed','interrupted','reconcile-required','needs-attention'].includes(state)||filter==='finished'&&['completed','succeeded','cancelled','stopped'].includes(state);
+}
 function renderAtgvJobs(items=[],projectId=''){
  const root=$('atgvJobsList');root.replaceChildren();
  atgvJobItems=Array.isArray(items)?items:[];atgvJobProject=projectId;
- $('atgvJobsSummary').textContent=!projectId?'Open an ATGV project to see job history.':
-  atgvJobItems.length+' recent job(s) · '+atgvJobItems.filter(job=>job.status==='running').length+' running';
- if(!atgvJobItems.length){const text=document.createElement('p');text.className='muted';
-  text.textContent='No recorded jobs yet. Start a workflow in any role to see processing history.';root.append(text);return;}
- for(const job of atgvJobItems.slice(0,30))root.append(atgvJobRow(job));
+ const filter=$('atgvJobsFilter')?.value||'all';
+ const filtered=atgvJobItems.filter(job=>atgvActivityMatches(job,filter));
+ $('atgvJobsSummary').textContent=!projectId?'Open a project to see activity.':
+  filtered.length+' shown · '+atgvJobItems.filter(job=>atgvActivityMatches(job,'active')).length+' active · '+atgvJobItems.filter(job=>atgvActivityMatches(job,'attention')).length+' need attention';
+ if(!filtered.length){const text=document.createElement('p');text.className='muted';
+  text.textContent='No matching activity.';root.append(text);return;}
+ for(const job of filtered.slice(0,30))root.append(atgvJobRow(job));
 }
 $('atgvJobsButton').addEventListener('click',()=>atgvJobsModal(true));
 $('atgvJobsClose').addEventListener('click',()=>atgvJobsModal(false));
 $('atgvJobsRefresh').addEventListener('click',()=>send('getWorkflowJobs'));
+$('atgvJobsFilter').addEventListener('change',()=>renderAtgvJobs(atgvJobItems,atgvJobProject));
 $('atgvJobsDialog').addEventListener('click',event=>{if(event.target===$('atgvJobsDialog'))atgvJobsModal(false);});
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('atgvJobsDialog').classList.contains('hidden')){event.preventDefault();atgvJobsModal(false);}});
 window.addEventListener('message',event=>{
@@ -2292,7 +2303,7 @@ function renderOverviewSdlcPhases(){
  for(const phase of phases){
   total+=phase.total;completed+=phase.completed;
   const node=document.createElement('div');node.className='overview-phase';node.dataset.phase=phase.id;node.dataset.state=phase.state;
-  const circle=document.createElement('div');circle.className='overview-phase-ring';
+  const circle=document.createElement('div');circle.className='overview-phase-ring overview-phase-linear';
   circle.setAttribute('role','progressbar');circle.setAttribute('aria-valuemin','0');circle.setAttribute('aria-valuemax','100');
   circle.setAttribute('aria-valuenow',String(phase.percent));
   circle.setAttribute('aria-valuetext',phase.total?`${phase.completed} of ${phase.total} local tasks complete`:'No local tasks recorded');
@@ -2303,7 +2314,7 @@ function renderOverviewSdlcPhases(){
   const label=document.createElement('strong');label.className='overview-phase-label';label.textContent=phase.label;
   const count=document.createElement('small');count.className='overview-phase-count';
   count.textContent=phase.total?`${phase.completed} / ${phase.total} tasks`:'No tracked tasks';
-  node.append(circle,label,count);container.append(node);
+  node.append(label,circle,count);container.append(node);
  }
  $('overviewPhaseSummary').textContent=total?`${completed} / ${total} local tasks complete`:'No local SDLC tasks recorded';
 }
