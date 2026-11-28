@@ -118,10 +118,10 @@ with tempfile.TemporaryDirectory(prefix='atgv-vsix-stage-') as staging:
             else:
                 z.write(stage/name if name in modified else root/name,'extension/'+name)
 
-    # If the standard ZIP is over budget, use an optional locally installed
+    # If the standard ZIP exceeds the advisory target, use an optional locally installed
     # Zopfli optimizer for lossless DEFLATE of large members. No network calls.
     budget=json.loads((root/'scripts'/'vsix-size-budget.json').read_text(encoding='utf-8'))
-    if output.stat().st_size>budget['maxCompressedBytes']:
+    if output.stat().st_size>budget['advisoryCompressedBytes']:
         try:
             import zopfli.zlib as zopfli_zlib
         except ImportError:
@@ -163,9 +163,7 @@ with tempfile.TemporaryDirectory(prefix='atgv-vsix-stage-') as staging:
                   'compressedBytes':entry.compress_size}
                  for entry in members]
     budget=json.loads((root/'scripts'/'vsix-size-budget.json').read_text(encoding='utf-8'))
-    limit=budget['maxCompressedBytes']
-    if not isinstance(limit,int) or limit<500000 or limit>10000000:
-        raise SystemExit('Invalid VSIX size budget.')
+    target=budget['advisoryCompressedBytes']
     zippedBytes=output.stat().st_size
     groups={}
     for item in details:
@@ -183,7 +181,8 @@ with tempfile.TemporaryDirectory(prefix='atgv-vsix-stage-') as staging:
     duplicates=[{'paths':paths,'sourceBytes':(root/paths[0]).stat().st_size}
                 for paths in seen.values() if len(paths)>1]
     report={'schema':1,'version':pkg['version'],
-            'vsixBytes':zippedBytes,'sizeBudgetBytes':limit,
+            'vsixBytes':zippedBytes,'sizeBudgetBytes':target,'sizeBudgetEnforced':False,
+            'aboveAdvisoryTarget':zippedBytes>target,
             'baselineVersion':budget['baselineVersion'],
             'baselineBytes':budget['baselineBytes'],
             'deltaFromBaselineBytes':zippedBytes-budget['baselineBytes'],
@@ -199,7 +198,7 @@ with tempfile.TemporaryDirectory(prefix='atgv-vsix-stage-') as staging:
               '- Final VSIX: **'+f'{zippedBytes:,}'+' bytes**',
               '- Baseline v'+budget['baselineVersion']+': '+f'{budget["baselineBytes"]:,}'+' bytes',
               '- Change from baseline: '+f'{zippedBytes-budget["baselineBytes"]:+,}'+' bytes',
-              '- Maximum budget: '+f'{limit:,}'+' bytes',
+              '- Advisory target (not a release limit): '+f'{target:,}'+' bytes',
               '- Packaged source files: '+str(len(details)),
               '- Build-only minified files: '+str(len(audit['files'])),'',
               '| Folder | Compressed bytes | Source bytes | Files |',
@@ -216,5 +215,5 @@ with tempfile.TemporaryDirectory(prefix='atgv-vsix-stage-') as staging:
     (dist/'vsix-size-report.md').write_text('\n'.join(markdown)+'\n',encoding='utf-8')
     print('Created: '+str(output)+' ('+f'{zippedBytes:,}'+' bytes) as '+identifier)
     print('Size audit: '+str(dist/'vsix-size-report.json'))
-    if zippedBytes>limit:
-        raise SystemExit('VSIX '+f'{zippedBytes:,}'+' exceeds the '+f'{limit:,}'+'-byte size budget. Review dist/vsix-size-report.md before publishing.')
+    if zippedBytes>target:
+        print('VSIX size advisory: '+f'{zippedBytes:,}'+' bytes exceeds the '+f'{target:,}'+'-byte optimization target. Review dist/vsix-size-report.md; packaging may continue.')

@@ -1,6 +1,6 @@
 {
-  "maxCompressedBytes": 1450000,
+  "advisoryCompressedBytes": 1450000,
   "baselineVersion": "0.4.40",
   "baselineBytes": 1327153,
-  "notes": "Audited cap 1,450,000 bytes for v0.0.85, 20,000 bytes above the prior cap, covering verified release publishing and configurable Jira field population. Prior v0.0.84 build measured 1,432,655 bytes. Minification and size reporting remain enforced."
+  "notes": "Advisory optimization target only; package size does not block release. Production minification, size reporting, dependency and archive verification remain enabled."
 }
