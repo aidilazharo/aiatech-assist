@@ -406,6 +406,7 @@
   panel.hidden=false;panel.dataset.status=status;
   if(!panel.dataset.initialized){panel.open=false;panel.dataset.initialized='true';}
   else if(['ready','completed'].includes(status)&&!['ready','completed'].includes(previous)&&!dirty())panel.open=false;
+  if(status==='needs-attention'&&previous!==status)panel.open=true;
  }
  // A verified automatic Jira projection uses drafts until the user confirms
  // publication. Prepared is not the same as formally approved or published.
@@ -619,7 +620,20 @@
   const messages={idle:source()?'Preparing source…':'Upload a document to start.',running:'Preparing affected artifacts…',draft:'Draft. Refresh affected artifacts to continue.',
    ready:!currentJiraPreview()?'Jira preview is out of date. Refresh affected artifacts.':reopen?reopen+' linked Jira item'+(reopen===1?'':'s')+' will move to To Do.':'Jira preview is ready.',
    publishing:'Publishing approved changes to Jira…',published:'Jira publication is up to date.'};
-  const detail=unsaved?'Save your edits to refresh the affected artifacts.':state?.error||((messages[phase]||'')+(['ready','published'].includes(phase)?statusWarning:''));
+  const mapped=new Set(brState?.mappingCompleted?.sourceDigests||brState?.mappingCompleted?.digests||[]);
+  const missingSources=(brState?.sourceDocuments||[]).filter(doc=>!doc.digest||!mapped.has(doc.digest)).length;
+  const answers=Object.values(brState?.discoveryAnswers||{}).filter(value=>typeof value==='string'&&value.trim()).length;
+  const excluded=(brState?.baDraftQuality?.excluded||[]).filter(row=>requirements().some(br=>br.id===row.id)).length;
+  const blockers=[];
+  if(missingSources)blockers.push(missingSources+' source document(s) not fully processed');
+  if(answers<12)blockers.push((12-answers)+' discovery answer(s) missing');
+  if(brState?.reviewRevision!==brState?.discoveryRevision)blockers.push('discovery review is out of date');
+  if(excluded)blockers.push(excluded+' requirement(s) need repair');
+  if(!currentJiraPreview())blockers.push('Jira preview requires refresh or conflict resolution');
+  if(skipped)blockers.push(skipped+' Jira status reset(s) unavailable');
+  if(requirements().some(br=>br.status==='approved'&&br.needsRefresh||br.externalReviewRequired||br.roleReviewRequired||br.dependencyReviewRequired))blockers.push('requirement review is out of date');
+  const blockedReady=phase==='ready'&&publish.disabled&&!busy()&&!sharedReadOnly()&&!unsaved;
+  const detail=unsaved?'Save your edits to refresh the affected artifacts.':state?.error||(blockedReady?'Publication blocked: '+(blockers.join('; ')||'required preparation evidence is incomplete')+'.':(messages[phase]||'')+(['ready','published'].includes(phase)?statusWarning:''));
   renderPublicationFeedback(phase,detail);
   if(phase==='ready'&&publish.disabled&&!unsaved&&!busy()&&!sharedReadOnly())publish.setAttribute('aria-describedby','baAutoStatus');else publish.removeAttribute('aria-describedby');
   const discoverySave=get('discoverySave');
