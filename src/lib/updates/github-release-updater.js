@@ -181,7 +181,7 @@ async function latestAcrossRepositories({version,request=getBytes,includeCurrent
    release={...selected.release,buildIdentity:selected.build};
   }
  }
- return {release,latest:{version:newest.version,tag:newest.tag,url:newest.url,repository:newest.repository,publishedAt:newest.publishedAt,installable:!!release&&release.version===newest.version},errors};
+ return {release,latest:{version:newest.version,tag:newest.tag,url:newest.url,repository:newest.repository,publishedAt:newest.publishedAt,installable:!!release&&release.repository===newest.repository&&release.tag===newest.tag},errors};
 }
 function verifyChecksum(checksumBytes,assetBytes,filename){
  const lines=checksumBytes.toString('utf8').split(/\r?\n/);
