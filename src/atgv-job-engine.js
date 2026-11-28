@@ -14,11 +14,13 @@ const KINDS=new Set(['ai','read','write','local','install','external']);
 const MAX_JOBS=120, MAX_FILE=1024*1024;
 function fingerprint(value){return crypto.createHash('sha256').update(typeof value==='string'?value:JSON.stringify(value??null)).digest('hex');}
 function safeError(error){
- let m=String(error?.message||error||'Unknown error').replace(/[\r\n\t]/g,' ');
- m=m.replace(/(?:Bearer\s+|Basic\s+|ghp_|github_pat_|sk-)[A-Za-z0-9_.\-+/=]{6,}/gi,'[REDACTED]');
- m=m.replace(/https?:\/\/[^\s/]+:[^@\s]+@/gi,'[REDACTED]@');
- m=m.replace(/([?&](?:token|key|password|secret|access_token)=)[^&\s]+/gi,'$1[REDACTED]');
- return m.slice(0,200);
+ let m=String(error?.message||error||'Unknown error');
+ m=m.replace(/-----BEGIN (?:RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----[\s\S]*?(?:-----END (?:RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----|$)/g,'[REDACTED PRIVATE KEY]');
+ m=m.replace(/(?:Bearer\s+|Basic\s+|gh[pousr]_|github_pat_|sk-|ATATT)[A-Za-z0-9_.\-+\/~=]{6,}/gi,'[REDACTED]');
+ m=m.replace(/https?:\/\/[^\s/@]+@/gi,'[REDACTED]@');
+ m=m.replace(/([?&](?:token|key|password|secret|access_token|api_key|client_secret|refresh_token|signature)=)[^&#\s]+/gi,'$1[REDACTED]');
+ m=m.replace(/(\b(?:password|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|auth[_-]?token|github[_-]?token|authorization|token)["']?\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;}&]+)/gi,'$1[REDACTED]');
+ return m.replace(/[\r\n\t]/g,' ').slice(0,200);
 }
 function category(command){
  if(!SAFE_COMMAND.test(String(command||'')))throw Error('Invalid workflow command.');
@@ -290,17 +292,22 @@ class DurableWorkflowEngine{
 }
 function transient(error){
  const code=String(error?.code||''),status=Number(error?.status||error?.statusCode)||0,message=String(error?.message||'');
- return ['ETIMEDOUT','ECONNRESET','ECONNREFUSED','EAI_AGAIN','ATGV_SOURCE_AI_TIMEOUT'].includes(code)||[408,429,500,502,503,504].includes(status)||/timeout|rate limit|temporarily unavailable/i.test(message);
+ if(error?.name==='AbortError'||['ABORT_ERR','EACCES','EPERM'].includes(code)||[400,401,403,404,409,422].includes(status)||/permission|forbidden|unauthori[sz]ed|credential|ownership|not assigned|quota|billing|approval required|checkpoint.*(?:changed|mismatch|unsafe)|\bHTTP\s*(?:401|403|404|409|422)\b/i.test(message))return false;
+ return ['ETIMEDOUT','ECONNRESET','ECONNREFUSED','EAI_AGAIN','ATGV_SOURCE_AI_TIMEOUT'].includes(code)||[408,429,500,502,503,504].includes(status)||/timeout|timed out|rate limit|temporarily unavailable/i.test(message);
+}
+function throwIfCancelled(signal){
+ if(signal?.aborted)throw Object.assign(Error('Operation cancelled.'),{name:'AbortError'});
 }
 async function retryRecoverable(operation,{kind='read',maxAttempts=3,baseDelayMs=400,signal,onRetry}={}){
  if(typeof operation!=='function')throw Error('Retry operation must be callable.');
  if(!['read','ai'].includes(kind))throw Error('Remote writes, installs and mutations cannot be automatically retried.');
  if(!Number.isInteger(maxAttempts)||maxAttempts<1||maxAttempts>5)throw Error('Invalid retry budget.');
  for(let attempt=1;attempt<=maxAttempts;attempt++){
-  if(signal?.aborted)throw Object.assign(Error('Operation cancelled.'),{name:'AbortError'});
-  try{return await operation({attempt,signal});}
+  throwIfCancelled(signal);
+  try{const result=await operation({attempt,signal});throwIfCancelled(signal);return result;}
   catch(error){
-   if(signal?.aborted||!transient(error)||attempt===maxAttempts)throw error;
+   throwIfCancelled(signal);
+   if(!transient(error)||attempt===maxAttempts)throw error;
    const wait=Math.min(12000,Math.max(0,Number(error?.retryAfterMs)||baseDelayMs*Math.pow(2,attempt-1)))+Math.floor(Math.random()*100);
    onRetry?.({attempt,waitMs:wait,reason:safeError(error)});
    await sleep(wait,undefined,{signal});

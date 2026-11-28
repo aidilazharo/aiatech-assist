@@ -2,13 +2,13 @@
 
 Baseline: `d26dcc7543348aae7cf9941c44768b7d544ce89c` (extension 0.1.66). 2026-11-29 MYT.
 
-0/40 fully verified; item 05 has a tested improvement, cross-role live verification pending. Pending means not yet verified against the complete requested acceptance criteria; existing implementations must be inspected before modification.
+0/40 fully verified; items 02 and 03 are in progress (shared diagnostic/retry hardening), item 05 has a tested improvement, cross-role live verification pending. Pending means not yet verified against the complete requested acceptance criteria; existing implementations must be inspected before modification.
 
 | ID | Priority | Description | Status |
 |---|---|---|---|
 | 01 | P0 | Unified workflow state engine | Pending |
-| 02 | P0 | Role AI access to logs and artifacts | Pending |
-| 03 | P0 | Automatic root cause analysis, repair and retry | Pending |
+| 02 | P0 | Role AI access to logs and artifacts | In progress |
+| 03 | P0 | Automatic root cause analysis, repair and retry | In progress |
 | 04 | P0 | Stall detection and checkpoint resume | Pending |
 | 05 | P0 | Bound repeated recovery loops | Implemented — verification pending |
 | 06 | P0 | Process every BR document and section | Pending |
@@ -57,3 +57,14 @@ Baseline: `d26dcc7543348aae7cf9941c44768b7d544ce89c` (extension 0.1.66). 2026-11
 - Commit SHA: see the commit introducing this tracker (self-reference cannot be embedded in the same commit).
 - Outstanding blockers: direct git checkout unavailable (DNS); full test suite, all role integrations, live VS Code/Jira/Confluence/AI Cat Name CRUD test, screenshots, package and release not executed. No change to version or mirrors. `.vscodeignore` already excludes `.memory`.
 - Remaining items: 01–04, 06–40 require inspection and verification; 05 requires full integration verification. All uninspected rows have root cause, files, tests, evidence and commit pending.
+
+## Execution 2 — items 02, 03, 05
+
+- Baseline: `370baf9e35548f35a720f1d8b8b2d7ce96b3e126` (0.1.66). Library main: `744f63b3da6a01a0668226ec9dc2ecdbd0f635d1`.
+- Root causes: transient classifier accepted permission/ownership/quota failures mentioning timeouts; a provider resolving or rejecting after cancellation could report success or a non-cancellation error; common credentials were not covered by journal redaction.
+- Implementation: fail closed for explicit non-retryable errors, recheck cancellation after execution, expand redaction before truncation. Existing mutation retry restrictions and maxAttempts preserved.
+- Modified: `src/atgv-job-engine.js`, `test/shared-job-recovery-safety.test.js`, this tracker.
+- Tests: Node 22.16.0, 4 new focused tests passed against the exact replacement functions in an isolated harness; 4 prior recovery-controller tests passed against the main-matching controller. 8 passed, 0 failed. Full engine and role integration not tested. Test blob `6dec10d00a6e6111777fae94e932898e54514df0`.
+- Commit SHA: see commit introducing this execution entry.
+- Blockers: git ls-remote fails DNS for github.com in execution environment. No full checkout, integration/E2E, screenshots, packaging, or release. Library and mirrors unchanged; version unchanged.
+- Items 02 and 03 remain In progress; 05 remains Implemented — verification pending. Next: inspect actual role AI diagnostic context wiring and durable recovery/resume integration (01–04, 10), then BA completeness/revision gates (06–08). No other items marked complete.
