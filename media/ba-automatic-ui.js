@@ -21,7 +21,7 @@
  let state=null,requestedProject='',artifactProject='',jiraView='list',jiraTab='all',tableKey='',brKey='',kind='iso',sourceDigest='',artifactContext=null,request=0;
  let aiResolve={running:false,message:'',stopping:false};
  const recovery=window.ATGVRecoveryController?.create();
- let recoveryTimer=null,recoveryAction=null;
+ let recoveryTimer=null,recoveryAction=null,pendingRefreshProject='';
  let jiraFieldView=null,jiraFieldDirty=false,jiraFieldLoading=false,jiraFieldRequest=0;
  const collapsed=new Set();
  const input=get('baAutoArtifactText'),quillMount=get('baAutoQuillEditor');
@@ -29,7 +29,7 @@
  const quillHelp=get('baAutoQuillHelp'),quillRetry=get('baAutoQuillRetry'),quillFallback=get('baAutoQuillFallback'),quillActions=get('baAutoQuillActions');
 
  const active=()=>view==='discovery'&&selectedRole==='business-analyst';
- const busy=()=>aiResolve.running||state?.phase==='running'||state?.phase==='publishing'||recoveryAction?.project===activeId;
+ const busy=()=>aiResolve.running||state?.phase==='running'||state?.phase==='publishing'||recoveryAction?.project===activeId||pendingRefreshProject===activeId;
  function stageSummary(){
   const current=state?.projectId===activeId?state:null;
   const phase=current?.phase||'idle';
@@ -197,14 +197,20 @@
   syncDocumentActions();
  }
 
+ function missingDraftTaskRoles(){
+  if(state?.projectId!==activeId||state?.preview?.revision!==brState?.revision)return [];
+  return (state.preview.changes||[]).filter(item=>item.kind==='Task'&&item.action==='create'&&!item.roleLabel&&!item.staleJiraDetails&&
+   !brState.pending?.[item.path]&&requirements().some(br=>br.id===item.path.split('/')[0]&&br.status==='draft'&&baCanEdit('ba-br-'+br.id)));
+ }
  function renderAttentionActions(findings){
   const bar=get('baAutoRequirementsToolbar');
   const action=get('baAutoResolveAttention'),stop=get('baAutoResolveStop');
   const eligible=findings.filter(row=>requirements().some(br=>br.id===row.id&&br.status==='draft'&&baCanEdit('ba-br-'+br.id)));
-  bar.hidden=!findings.length&&!aiResolve.running&&!aiResolve.message;
-  const blocker=aiResolve.running?'AI repair is running.':busy()||baBusyTask||discoveryImportBusy?'Finish the current BR operation first.':dirty()?'Save your edits before AI repair.':!baCanEdit('ba-discovery')||baOwnerState?.cached||baOwnerState?.scope==='local'?'Connect to Jira and Confluence to verify ownership.':!eligible.length?'No affected draft is owned by you. Request transfer or ask its owner to resolve it.':'';
+  const roles=missingDraftTaskRoles();
+  bar.hidden=!findings.length&&!roles.length&&!aiResolve.running&&!aiResolve.message;
+  const blocker=aiResolve.running?'AI repair is running.':busy()||baBusyTask||discoveryImportBusy?'Finish the current BR operation first.':dirty()?'Save your edits before AI repair.':!baCanEdit('ba-discovery')||baOwnerState?.cached||baOwnerState?.scope==='local'?'Connect to Jira and Confluence to verify ownership.':!eligible.length&&!roles.length?'No affected draft is owned by you or no repairable findings remain.':'';
   action.disabled=!!blocker;
-  action.title=blocker||'Use AI to repair '+eligible.length+' owned draft(s). Previous approvals and Jira unchanged.';
+  action.title=blocker||'Use AI to repair '+eligible.length+' owned BR draft(s) and '+roles.length+' missing Jira task role(s). Previous approvals and Jira unchanged.';
   const recoveryState=recovery?.get(activeId);
   action.textContent=recoveryState?.paused?'Resume AI':'Resolve with AI';
   stop.hidden=!aiResolve.running&&(!recovery||!findings.length||!!recoveryState?.paused);stop.disabled=aiResolve.stopping;
@@ -719,7 +725,8 @@
   if(!['ready','draft','published'].includes(state.phase))return null;
   const findings=(brState.baDraftQuality?.excluded||[]).filter(row=>requirements().some(br=>br.id===row.id));
   const eligible=findings.filter(row=>requirements().some(br=>br.id===row.id&&br.status==='draft'&&baCanEdit('ba-br-'+br.id)));
-  if(eligible.length)return {eligible:true,action:'repair',remaining:findings.length,fingerprint:JSON.stringify(eligible.map(row=>[row.id,row.field,row.reason]).sort())};
+  const roles=missingDraftTaskRoles();
+   if(eligible.length||roles.length)return {eligible:true,action:'repair',remaining:eligible.length+roles.length,fingerprint:JSON.stringify([eligible.map(row=>[row.id,row.field,row.reason]).sort(),roles.map(row=>row.path).sort()])};
   if(findings.length)return null;
   // A stale preview can be refreshed, but do not guess missing SDLC roles,
   // resolve permission conflicts, or repeat an already-current conflicting plan.
@@ -773,7 +780,7 @@
   }
   render();
  });
- get('baAutoRefresh').addEventListener('click',()=>{if(!sharedReadOnly()&&!get('baAutoRefresh').disabled&&!recoveryAction){recovery?.resume(activeId);invoke('baRefreshArtifacts');}});
+ get('baAutoRefresh').addEventListener('click',()=>{if(!sharedReadOnly()&&!get('baAutoRefresh').disabled&&!recoveryAction){recovery?.resume(activeId);pendingRefreshProject=activeId;render();invoke('baRefreshArtifacts');}});
  get('baAutoStop').addEventListener('click',()=>{recovery?.pause(activeId);invoke('baStopPreparation');});
  get('baAutoPublish').addEventListener('click',()=>{
   if(sharedReadOnly()||get('baAutoPublish').disabled)return;
@@ -804,7 +811,7 @@
    render();return;
   }
   if(m.type==='baAutoResolveResult'&&recoveryAction?.project===m.projectId&&recoveryAction.action==='repair'){
-   recovery?.finish(m.projectId,{cancelled:recovery.get(m.projectId).paused||m.cancelled===true,failed:!!m.error,reason:m.error?'AI recovery failed; download the troubleshooting log.':undefined});recoveryAction=null;
+   recovery?.finish(m.projectId,{cancelled:recovery.get(m.projectId).paused||m.cancelled===true,failed:!!(m.error||m.failed),reason:m.error||m.failed?'AI recovery failed; download the troubleshooting log.':undefined});recoveryAction=null;
   }
   if(m.projectId===activeId&&m.type==='baAutoResolveResult'){
    aiResolve.running=false;aiResolve.stopping=false;
@@ -819,6 +826,7 @@
    }
   }
   if(m.type==='baPreparation'&&m.state?.projectId===activeId){
+    if(pendingRefreshProject===activeId)pendingRefreshProject='';
    const previous=state?.phase;
    state=m.state;
    if(state.preview){
