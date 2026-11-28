@@ -12,9 +12,10 @@ test('host AI activity signal is reference counted across concurrent calls and f
  const sent=[],pending=[];
  const dashboard={webview:{postMessage:message=>{sent.push(message);return Promise.resolve(true);}}};
  const sendAiText=()=>new Promise((resolve,reject)=>pending.push({resolve,reject}));
- const tracker=new Function('dashboard','report','sendAiText','vscode',
+ // Supply the host bindings for requests made before a project is opened.
+ const tracker=new Function('dashboard','report','sendAiText','vscode','activeProject','aiDiagnosticProjects',
   host.slice(start,end)+'return {aiAnswer,active:()=>activeAiRequests};'
- )(dashboard,()=>{},sendAiText,{});
+ )(dashboard,()=>{},sendAiText,{},undefined,new WeakMap());
  const first=tracker.aiAnswer({},'question 1',100);
  const second=tracker.aiAnswer({},'question 2',100);
  assert.equal(tracker.active(),2);
