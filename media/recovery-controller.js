@@ -8,6 +8,7 @@
 })(typeof globalThis!=='undefined'?globalThis:this,function(){
  function create({maxStagnant=2,maxActions=12}={}){
   const scopes=new Map();
+  const histories=new WeakMap();
   const get=scope=>{
    if(!scopes.has(scope))scopes.set(scope,{paused:false,running:false,actions:0,stagnant:0,last:null,reason:''});
    return scopes.get(scope);
@@ -19,11 +20,15 @@
    if(s.paused||s.running||!evidence?.eligible||!evidence.action)return false;
    const current={action:evidence.action,fingerprint:String(evidence.fingerprint||''),remaining:Number(evidence.remaining)};
    if(!current.fingerprint||!Number.isFinite(current.remaining)||current.remaining<0)return false;
-   if(s.last){
-    if(current.remaining<s.last.remaining)s.stagnant=0;
-    else if(current.action===s.last.action)s.stagnant++;
-    else s.stagnant=0;
-   }
+   // Compare like-for-like evidence. Switching from repair to preview (or
+   // back) must not erase a stagnant action or compare incompatible units.
+   if(!histories.has(s))histories.set(s,new Map());
+   const history=histories.get(s);
+   const prior=history.get(current.action);
+   const improved=prior&&current.remaining<prior.best&&current.fingerprint!==prior.fingerprint;
+   s.stagnant=prior&&!improved?prior.stagnant+1:0;
+   history.set(current.action,{best:prior?Math.min(prior.best,current.remaining):current.remaining,
+    fingerprint:current.fingerprint,stagnant:s.stagnant});
    if(s.stagnant>=maxStagnant||s.actions>=maxActions){
     pause(scope,'AI recovery paused: no sufficient verified improvement. Review remaining findings and resume.');return false;
    }
