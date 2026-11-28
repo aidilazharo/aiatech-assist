@@ -89,7 +89,7 @@ function failureDetails(output){
  return details.slice(0,500);
 }
 function runChild(args,log){
- const fd=fs.openSync(log,'w');
+ const fd=fs.openSync(log,'wx');
  try{
   const result=spawnSync(process.execPath,args,{cwd:root,stdio:['ignore',fd,fd],windowsHide:true});
   if(result.error)fs.writeSync(fd,'\nRunner error: '+result.error.message+'\n');
@@ -104,7 +104,12 @@ function main(args=process.argv.slice(2)){
  const selected=args[0]||'all',files=inventory();
  const total=Object.values(files).flat().length;
  if(!total){console.error('No test files found.');return 1;}
- const logDir=fs.mkdtempSync(path.join(os.tmpdir(),'atgv-test-'));
+ const external=selected!=='--audit'&&process.env.ATGV_TEST_LOG_DIR;
+ const logDir=external?path.resolve(external):fs.mkdtempSync(path.join(os.tmpdir(),'atgv-test-'));
+ const prefix=external?String(process.env.ATGV_TEST_LOG_PREFIX||''):'';
+ if(external&&(!/^build-atgv-release-\d{8}-\d{6}-[A-Za-z0-9_-]+$/.test(prefix)||!fs.statSync(logDir).isDirectory()))throw new Error('Invalid ATGV test log destination');
+ const logPath=name=>path.join(logDir,(prefix?prefix+'-':'')+name);
+ const failFast=process.env.ATGV_TEST_FAIL_FAST==='1';
  if(selected==='--audit'){
   const report=audit();
   const output=path.join(logDir,'audit.json');
@@ -114,7 +119,7 @@ function main(args=process.argv.slice(2)){
   console.log('Audit report: '+output);return 0;
  }
  console.log('ATGV test groups');
- if(!runChild(['scripts/generate-source-test-index.js'],path.join(logDir,'source-index.log'))){
+ if(!runChild(['scripts/generate-source-test-index.js'],logPath('source-index.log'))){
   console.error('Source index: FAILED');console.error('Detailed logs: '+logDir);return 1;
  }
  const keys=selected==='all'?Object.keys(groups):[selected];
@@ -125,14 +130,15 @@ function main(args=process.argv.slice(2)){
   // Explicit paths avoid Windows glob inconsistencies. Keep the local-network
   // guard and default Node isolation/concurrency for all existing tests.
   console.log(label+' ('+entries.length+' files) ...');
-  const started=Date.now(),log=path.join(logDir,key+'.log');
+  const started=Date.now(),log=logPath(key+'.log');
   const ok=runChild(['--require','./test/local-network-only.js','--test','--test-reporter=tap',...entries.map(name=>'test/'+name)],log);
   const output=fs.readFileSync(log,'utf8'),stats=summary(output);
   const complete=Object.values(stats).every(Number.isInteger);
   const passed=ok&&complete&&stats.fail===0&&stats.cancelled===0&&stats.tests>0;
-  if(!passed){failed++;for(const detail of failureDetails(output))console.error(detail);}
+  if(!passed){failed++;for(const detail of failureDetails(output))console.error(detail);console.error('Failed group log: '+log);}
   if(complete)for(const key of Object.keys(totals))totals[key]+=stats[key];
   console.log(label+': '+(passed?'PASS':'FAIL')+(complete?' | '+stats.pass+' passed, '+stats.fail+' failed, '+stats.skipped+' skipped, '+stats.cancelled+' cancelled, '+stats.todo+' todo':' | incomplete runner output')+' | '+((Date.now()-started)/1000).toFixed(1)+'s');
+  if(!passed&&failFast){console.error('ATGV fail-fast: repair failed group before rerunning the complete suite.');break;}
  }
  if(!keys.some(key=>files[key].length))failed++;
  console.log('Total: '+totals.tests+' tests | '+totals.pass+' passed, '+totals.fail+' failed, '+totals.skipped+' skipped, '+totals.cancelled+' cancelled, '+totals.todo+' todo | '+failed+' failed groups');
