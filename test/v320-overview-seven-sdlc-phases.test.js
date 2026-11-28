@@ -31,11 +31,11 @@ test('v320: phase progress uses only verified local task flags, not invented app
  assert.ok(out.every(p=>Number.isFinite(p.percent)&&p.percent>=0&&p.percent<=100));
  assert.deepEqual(phases.aggregate(null,null).map(x=>x.state),Array(7).fill('untracked'));
 });
-test('v320: Overview keeps phase circles before metric tiles without duplicate title',()=>{
+test('v320: Overview keeps phase indicators before metric tiles without duplicate title',()=>{
  const intro=source.indexOf('class="overview-intro"');
  const circles=source.indexOf('id="overviewPhaseCircles"');
  const summary=source.indexOf('id="overviewProgress"');
- assert.ok(intro>=0&&circles>intro&&summary>circles,'phase circles must precede the metric tiles');
+ assert.ok(intro>=0&&circles>intro&&summary>circles,'phase indicators must precede the metric tiles');
  assert.ok(!source.slice(intro,circles).includes('<h1>Overview</h1>'),'redundant title should be removed');
  assert.match(source,/overviewSdlcJs=webview\.asWebviewUri/);
  assert.ok(source.indexOf('<script src="${overviewSdlcJs}"></script>')<source.indexOf('<script src="${js}"></script>'));
@@ -43,7 +43,7 @@ test('v320: Overview keeps phase circles before metric tiles without duplicate t
  assert.match(css,/\.overview-phase-ring/);
  assert.match(css,/@media\(max-width:520px\)/);
 });
-test('v320: webview update replaces all seven circles and exposes accessible live progress values',()=>{
+test('v320: webview update replaces all seven indicators and exposes accessible live progress values',()=>{
  const from=webview.indexOf('function renderOverviewSdlcPhases(){');
  const to=webview.indexOf('function renderOverviewRoles(',from);
  assert.ok(from>0&&to>from);
@@ -60,9 +60,9 @@ test('v320: webview update replaces all seven circles and exposes accessible liv
  assert.equal(elements.overviewPhaseCircles.children.length,7);
  assert.equal(elements.overviewPhaseSummary.textContent,'1 / 2 local tasks complete');
  const req=elements.overviewPhaseCircles.children[1];
- assert.equal(req.children[0].attributes['aria-valuenow'],'50');
- assert.equal(req.children[0].attributes['aria-valuetext'],'1 of 2 local tasks complete');
- assert.equal(req.children[0].style['--phase-percent'],'50%');
+ assert.equal(req.children[1].attributes['aria-valuenow'],'50');
+ assert.equal(req.children[1].attributes['aria-valuetext'],'1 of 2 local tasks complete');
+ assert.equal(req.children[1].style['--phase-percent'],'50%');
  context.roleData.progress['business-analyst'].review=true;
  context.renderOverviewSdlcPhases();
  assert.equal(elements.overviewPhaseCircles.children.length,7,'must replace old DOM instead of duplicating');
