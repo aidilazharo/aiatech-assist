@@ -55,7 +55,7 @@ test('only current, actively rejected drafts are eligible',()=>{
 
 test('AI repair is bounded and does not bypass approval or publish Jira',()=>{
  const runtime=read('src/lib/runtime/extension-runtime.js');
- const a=runtime.indexOf('async function resolveBAAttention('),b=runtime.indexOf('async function runBRPreparation(',a);
+ const a=runtime.indexOf('async function repairMissingDraftTaskRoles('),b=runtime.indexOf('async function runBRPreparation(',a);
  assert.ok(a>0&&b>a);
  const worker=runtime.slice(a,b);
  assert.match(worker,/attempt<=2/);
@@ -77,4 +77,41 @@ test('literal DoD [ ] text continues as plain text',()=>{
  const requirementView=ui.slice(ui.indexOf('function renderRequirements('),ui.indexOf('function renderJira('));
  assert.ok(requirementView.length>0);
  assert.doesNotMatch(requirementView,/createElement\('input'\).*type='checkbox'/);
+});
+
+test('automatic preparation invokes repair before preparing Jira, without a webview scheduler',()=>{
+ const runtime=read('src/lib/runtime/extension-runtime.js');
+ const ui=read('media/ba-automatic-ui.js');
+ const a=runtime.indexOf('prepareJira:async()=>{'),b=runtime.indexOf('const currentState=await current()',a);
+ const prepare=runtime.slice(a,b);
+ assert.ok(a>0&&b>a);
+ assert.ok(prepare.indexOf('await repairAutomaticBAFindings(')>-1);
+ assert.ok(prepare.indexOf('await repairAutomaticBAFindings(')<prepare.indexOf('await prepareBRJiraPreview('));
+ assert.doesNotMatch(ui,/scheduleRecovery\(\)/);
+ assert.match(runtime,/await runBRPreparation\('jira',\{repairReport:report\}\)/);
+});
+
+test('automatic role repair preserves existing roles, skips foreign and approved work, and falls back to PM triage',async()=>{
+ const runtime=read('src/lib/runtime/extension-runtime.js');
+ const a=runtime.indexOf('async function repairMissingDraftTaskRoles('),b=runtime.indexOf('async function repairAutomaticBAFindings(',a);
+ const rows=[
+  {path:'BR-001/T-001',title:'Implement API',kind:'Task',action:'create',hash:'a'},
+  {path:'BR-001/T-002',title:'Coordinate unclear task',kind:'Task',action:'create',hash:'b'},
+  {path:'BR-001/T-003',title:'Manual role',kind:'Task',action:'create',roleLabel:'atgv-role-ux-designer'},
+  {path:'BR-002/T-001',title:'Foreign',kind:'Task',action:'create'},
+  {path:'BR-003/T-001',title:'Approved',kind:'Task',action:'create'}
+ ];
+ const register={revision:'r',pending:{},brs:[{id:'BR-001',status:'draft'},{id:'BR-002',status:'draft'},{id:'BR-003',status:'approved'}]};
+ const saved=[];
+ const fn=vm.runInNewContext(runtime.slice(a,b)+'\nrepairMissingDraftTaskRoles',{
+  require:()=>({roleChoices:()=>[],normalizeRole:x=>x==='software-developer'?x:''}),
+  activeProject:{id:'p'},registry:{},brWorkflow:{load:async()=>register,projectPreparedJira:x=>x,plan:()=>rows,
+   saveJiraIssueDetails:async(_r,_p,_v,item)=>{saved.push(item);rows.find(x=>x.path===item.path).roleLabel='atgv-role-'+item.roleId;return register;}},
+  requireBAOwner:async()=>({actor:'me'}),activeAiTarget:async()=>({}),
+  aiAnswer:async(_target,prompt)=>prompt.includes('Implement API')?'{"roleId":"software-developer","quote":"Implement API"}':'{"roleId":"","quote":""}',
+  parseAIChangeResolutionJson:JSON.parse,dashboard:null,recordBAProcess:async()=>{},atgvJobSafeError:e=>e.message
+ });
+ const result=await fn('p',new Set(['ba-br-BR-001','ba-br-BR-003']),new AbortController().signal,()=>{});
+ assert.deepEqual(saved.map(x=>[x.path,x.roleId]),[['BR-001/T-001','software-developer'],['BR-001/T-002','project-manager']]);
+ assert.equal(result.fixed,2);assert.equal(result.remaining,0);assert.equal(result.warnings.length,1);
 });
