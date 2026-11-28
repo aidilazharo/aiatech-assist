@@ -63,10 +63,11 @@ test('Updates contains exactly four visible update buttons, with independent rel
 });
 test('startup and manual prompts override dismissal without bypassing version verification',async()=>{
  const host=read('src/lib/runtime/extension-runtime.js');
+ const deferredCheck=host.slice(host.indexOf('function resumeDeferredLibraryCheck()'),host.indexOf('function updatePreferences()'));
  const source=host.slice(host.indexOf('async function checkSoftwareUpdates('),host.indexOf('function scheduleSoftwareUpdates()'));
  const calls=[];
  const fn=new Function('calls',`
- let softwareCheckBusy=false,pendingStartupUpdateCheck=false,catalogBusy=false;
+ let softwareCheckBusy=false,pendingStartupUpdateCheck=false,pendingLibraryReleaseCheck=false,catalogBusy=false;
  const extensionRelease={version:'2.0.0'},libraryRelease={version:'2.0.0'};
  const publishUpdateStatus=async()=>{},updatePreferences=()=>({autoCheckExtension:true,autoCheckLibrary:true});
  const catalogCheck=async()=>calls.push('catalog');
@@ -74,6 +75,7 @@ test('startup and manual prompts override dismissal without bypassing version ve
  const promptExtensionRelease=async(_,options)=>calls.push(['extension-prompt',options.force]);
  const promptLibraryRelease=async(_,options)=>calls.push(['library-prompt',options.force]);
  const report=()=>{};
+ ${deferredCheck}
  ${source}
  return checkSoftwareUpdates;
  `)(calls);
@@ -86,7 +88,7 @@ test('startup and manual prompts override dismissal without bypassing version ve
  await fn({prompt:true});
  assert.deepEqual(calls,['extension-check','library-check',['extension-prompt',false],['library-prompt',false]]);
  assert.match(host,/const comparison=result\?releaseUpdater\.compareVersion\(result\.version,installed\):null/);
- assert.match(host,/buildIdentity\.newerBuild\(buildIdentity\.identity\(manifest,installed\),remote\)/);
+ assert.match(host,/else if\(comparison===0\)\{\s*const remote=await releaseUpdater\.inspectReleaseBuild\(result,\{request\}\);\s*if\(buildIdentity\.eligibleBuild\(manifest,remote\)\)extensionRelease=/);
  assert.match(host,/if\(!comparison\.available\|\|!updatePreferences\(\)\.promptForUpdates/);
 });
 
