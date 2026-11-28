@@ -40,6 +40,7 @@ async function registerFixture(t){
   next.importEpoch=1;next.importDigest='1'.repeat(64);next.importName='Visitor Check-in BRD v2.pdf';
   next.discoveryRevision='discovery';next.reviewRevision='discovery';
   next.discoveryAnswers=automatic.mappedAnswers(paragraphs);
+  next.sourceDocuments=[{digest:next.importDigest,name:next.importName}];next.mappingCompleted={sourceDigests:[next.importDigest]};
   next.reviewText=JSON.stringify({readiness:'Ready',suggestions:[]});
  });
  return {registry,register};
@@ -81,7 +82,8 @@ test('a source-supported draft is previewable without recording approval until t
   {approvedBR:candidate.brs[0].approvedContent});
  assert.ok(fields.extraFields.customfield_10011);
  assert.doesNotMatch(fields.description,/Definition of done/,'DoD cannot be invented without an approved project policy');
- const saved=await workflow.approvePreparedJira(registry,'demo',draft.revision,{
+ const verified=await workflow.write(registry,'demo',draft.revision,next=>{next.baDraftQuality={checked:Object.fromEntries(next.brs.map(br=>[br.id,automatic.qualityFingerprint(next,br)])),excluded:[]};});
+ const saved=await workflow.approvePreparedJira(registry,'demo',verified.revision,{
   actor:'verified BA',publication:{roots:[],rows:[]},expectedPlan:sha(JSON.stringify(plan))
  });
  assert.equal(saved.brs[0].status,'approved');
@@ -130,12 +132,12 @@ test('retains user Discovery edits and identifies unresolved material facts',()=
  assert.equal(Object.keys(answers).length,QUESTIONS.length);
  assert.equal(answers.scope,'Reception and security');
  assert.equal(answers.data,automatic.missing);
- assert.deepEqual(automatic.publicationIssues({discoveryAnswers:answers,discoveryRevision:'x',reviewRevision:'x'}),[]);
+ assert.ok(automatic.publicationIssues({discoveryAnswers:answers,discoveryRevision:'x',reviewRevision:'x'}).some(issue=>issue.startsWith('Business Documents:')));
  const corrected=automatic.applyGroundedReview(answers,{suggestions:[{key:'scope',suggestedAnswer:'Reception and security with a 100% SLA.'}]});
  assert.equal(corrected.scope,'Reception and security');
  const blocked=automatic.mappedAnswers({...paragraphs,questions:'Who can approve high-risk visits?'});
  const open={discoveryAnswers:blocked,discoveryRevision:'x',reviewRevision:'x'};
- assert.deepEqual(automatic.publicationIssues(open),[]);
+ assert.ok(automatic.publicationIssues(open).some(issue=>issue.startsWith('Generated Requirements:')));
  assert.match(automatic.sourceNotes(open).join(' '),/question 12/);
 });
 
@@ -288,7 +290,7 @@ test('Jira preview projects eligible requirements while reporting other BRs that
  assert.throws(()=>workflow.projectPreparedJira(mixed),/Save the BR draft/);
 });
 
-test('an all-flagged BR still gets a verified preview and approval, while failed Jira checks block publishing',async t=>{
+test('an all-flagged BR gets preview details but cannot be approved until findings are resolved',async t=>{
  const {registry,register}=await registerFixture(t);
  const draft=await workflow.generated(registry,'demo',register.revision,{discoveryRevision:'discovery',requirements:[edited],actor:'BA',automatic:true});
  const flagged=await workflow.write(registry,'demo',draft.revision,next=>{
@@ -323,47 +325,19 @@ test('an all-flagged BR still gets a verified preview and approval, while failed
  assert.equal(diagnostics[0].action,'verify-work-items');
  inventoryFailure=false;
  const ready=await prepare({automatic:true,qualityWarning:'Draft quality review: model timed out'});
- assert.equal(ready.conflicts.length,0);
+ assert.ok(ready.conflicts.some(issue=>issue.includes('unresolved quality findings')));
  assert.match(ready.sourceNotes.join('\n'),/BR-001 · Visitor rules need clarification/);
  assert.match(ready.sourceNotes.join('\n'),/Discovery needs more detail/);
  assert.match(ready.sourceNotes.join('\n'),/conflicting rules/);
  assert.match(ready.sourceNotes.join('\n'),/model timed out/);
- assert.ok(ready.verifiedAt>0);
+ assert.equal(ready.verifiedAt,0);
  assert.ok(ready.fieldPlans[draft.brs[0].id].schema);
  assert.equal(ready.checkedCount,1);
  assert.equal((await workflow.load(registry,'demo')).brs[0].status,'draft');
- let confirm=false;
- const published=[];
- const publish=hostFunction(host,'async function publishPreparedBRs(','async function prepareBRJiraPreview(',{
-  requireBAWorkspace:()=>{},activeProject:{id:'demo'},registry,brWorkflow:workflow,sha,
-  baPreparationRun:null,baAttentionRun:null,jiraSyncBusy:false,approvedJiraPreviewRevision:null,approvedJiraPreviewBinding:null,
-  baPreparationSessions:new Map([['demo',{phase:'ready',preview:ready}]]),jiraPreviewFieldPlans:ready.fieldPlans,
-  effectiveConfig:()=>target.config,baseAtlassian:()=>ready.site,validProjectKey:key=>key,
-  requireBAOwner:async()=>{},requireBAWritableCycle:async()=>{},verifiedBAActor:async()=>'BA',
-  uiWarning:async(_title,options,action)=>{
-   assert.match(options.detail,/BR-001 · Visitor rules need clarification/);
-   return confirm?action:undefined;
-  },
-  postBAPreparation:async()=>{},getAtlassianToken:async()=>target.token,baJiraRepublish:resets,
-  reopenServices:()=>({}),brPreparationTitle:()=>edited.title,
-  syncApprovedBRs:async revision=>{
-   const approved=await workflow.load(registry,'demo');
-   assert.equal(approved.revision,revision);
-   const [item]=workflow.plan(approved);
-   published.push(item.path);
-   await workflow.recorded(registry,'demo',revision,{...item,key:'TC-42'});
-  }
- });
- await publish({projectId:'demo',revision:flagged.revision});
- assert.deepEqual(published,[]);
+ await assert.rejects(workflow.approvePreparedJira(registry,'demo',flagged.revision,{
+  actor:'BA',expectedPlan:ready.planHash,publication:{roots:[],rows:[]}
+ }),/unresolved quality findings/);
  assert.equal((await workflow.load(registry,'demo')).brs[0].status,'draft');
- confirm=true;
- await publish({projectId:'demo',revision:flagged.revision});
- const saved=await workflow.load(registry,'demo');
- assert.equal(saved.brs[0].status,'approved');
- assert.deepEqual(published,['BR-001']);
- assert.equal(saved.synced['BR-001'].key,'TC-42');
- assert.equal(saved.sourceConflictDecisions['source-conflict'],undefined);
 });
 
 test('automatic identity verification checks all markers from the completed inventory',async()=>{
