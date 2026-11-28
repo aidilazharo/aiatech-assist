@@ -6,7 +6,7 @@ const crypto=require('node:crypto');
 const baSourceSelectionGuard=require('./ba-source-selection-guard');
 const baBrTextPipeline=require('./ba-br-md-pipeline');
 const generalization=require('./ba-generalization');
-const {withLock}=require('./file-lock');
+const {withLock,replaceFileWithRetry,retryFilesystem}=require('./file-lock');
 const {checksum}=require('./document-editor');
 const changeEngine=require('./change-engine');
 const jiraLinkReconciliation=require('./jira-link-reconciliation');
@@ -81,7 +81,16 @@ async function write(registry,id,expected,mutate){
   await mutate(next);
   changeEngine.rebuild(next,current);
   const raw=JSON.stringify(next,null,2)+'\n',temp=file+'.'+crypto.randomBytes(10).toString('hex')+'.tmp';
-  try{await fs.writeFile(temp,raw,{flag:'wx',mode:0o600});if((await load(registry,id)).revision!==expected)throw Error('BR register changed while saving.');await fs.rename(temp,file);}finally{await fs.rm(temp,{force:true});}
+  try{
+   await fs.writeFile(temp,raw,{flag:'wx',mode:0o600});
+   await replaceFileWithRetry(temp,file,{check:async()=>{
+    if((await retryFilesystem(()=>load(registry,id))).revision!==expected)throw Error('BR register changed while saving.');
+   }});
+  }finally{
+   // A scanner can also hold the unique temporary file. Cleanup must never
+   // hide the original save result or remove the existing register.
+   await retryFilesystem(()=>fs.rm(temp,{force:true})).catch(()=>{});
+  }
   return load(registry,id);
  });
 }
@@ -1154,7 +1163,7 @@ async function exportDraft(registry,id,br){
  if(existing?.isSymbolicLink()||(existing&&!existing.isDirectory()))throw Error('Invalid draft BR folder.');
  await fs.mkdir(dir,{recursive:true});
  const file=path.join(dir,`${br.id}.md`),temp=file+'.'+crypto.randomBytes(8).toString('hex')+'.tmp';
- try{await fs.writeFile(temp,asMarkdown({...br,approvedContent:null}),{flag:'wx',mode:0o600});await fs.rename(temp,file);}finally{await fs.rm(temp,{force:true});}
+ try{await fs.writeFile(temp,asMarkdown({...br,approvedContent:null}),{flag:'wx',mode:0o600});await replaceFileWithRetry(temp,file);}finally{await retryFilesystem(()=>fs.rm(temp,{force:true})).catch(()=>{});}
  return file;
 }
 async function beginRevision(registry,id,revision,{brId,actor='Local editor'}){
