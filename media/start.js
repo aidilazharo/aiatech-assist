@@ -3675,6 +3675,15 @@ function renderDeveloperBrStages(){
  start.classList.toggle('is-stopping',developerBrStopping);
  start.classList.toggle('is-running',processing&&!developerBrStopping);
  start.title=processing?'Stop the current AI development process':!roleJiraLoaded||roleJiraProject!==activeId?'Refresh Jira tasks to verify Developer ownership.':!ownsScope?'Assign the remaining Developer tasks for this BR before starting development.':(typeof developerBrRecovery!=='undefined'&&developerBrRecovery?.available)?'Resume from the failed criterion using persisted repair history and the currently selected AI model':developerBrDone?'Review required acceptance and delivery evidence':initialMode&&initialReady?'Run the initial application or begin TDD after runtime readiness':'Start initial implementation without tests; delivery stays locked until TDD and verification';
+ const toolbar=start.closest?.('.developer-br-topbar');
+ if(toolbar){
+  let reason=toolbar.querySelector('.atgv-developer-action-reason');
+  if(!reason){reason=document.createElement('p');reason.id='developerBrActionReason';reason.className='atgv-developer-action-reason';reason.setAttribute('role','status');toolbar.append(reason);}
+  const message=!start.disabled?'':!developerBrSelected?'Select an approved BR to start.':developerBrStopping?'Stopping development…':developerBrAssignmentBusy?'Updating role assignment…':developerBrServerBusy?'Waiting for application runtime…':!roleJiraLoaded||roleJiraProject!==activeId?'Sync Jira to verify Developer ownership.':!ownsScope?'Assign your Developer tasks for this BR first.':'Wait for the current operation.';
+  if(reason.textContent!==message)reason.textContent=message;
+  reason.hidden=!message;
+  if(message)start.setAttribute('aria-describedby',reason.id);else if(start.getAttribute('aria-describedby')===reason.id)start.removeAttribute('aria-describedby');
+ }
  const inDevelopment=developerBrBusy||developerBrServerRunning||developerBrServerBusy;
  const stop=$('developerBrStop');stop.disabled=!inDevelopment;stop.classList.toggle('hidden',true);
  $('developerBrOpenWorktree').disabled=developerBrBusy||!developerBrWorktree;
@@ -4028,7 +4037,7 @@ function showDeveloperAssignedTickets(items){
  root.replaceChildren();
  const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent=mine.length?'Select assigned development task':'No assigned development tasks';root.append(placeholder);
  $('developerAssignedTaskCount').textContent='('+new Set(mine.map(item=>item.brId)).size+' BRs)';
- $('developerTaskStatus').textContent=mine.length?`${mine.length} Developer task(s) assigned to you.`:'No BR assigned to you. Use Assign Entire BR in the Jira register after stack approval.';
+ $('developerTaskStatus').textContent=mine.length?`${mine.length} Developer task(s) assigned to you.`:'No BR assigned to you. Use Assign My Role Tasks in the Jira register after stack approval.';
  for(const item of mine){
   const option=document.createElement('option');option.value=item.key;
   option.textContent=`${item.key} · ${item.summary||'Untitled Jira issue'} · ${item.status||'Unknown'}`;
@@ -4241,7 +4250,7 @@ function renderRoleJiraIssues(items,incomplete=false){
  roleJiraItems=rows;roleJiraIncomplete=incomplete;
  if(selectedRole==='software-developer')showDeveloperAssignedTickets(rows);
  if(selectedRole==='ux-designer')renderUxTickets(rows);
- $('roleJiraStatus').textContent=`${rows.length} Jira project item(s)${incomplete?' · results truncated':''} · All issue types are visible. Assign/Release Entire BR changes only tasks for your selected role.`+(developerBrSyncWarnings.length?' · '+developerBrSyncWarnings.join(' · '):'');
+ $('roleJiraStatus').textContent=`${rows.length} Jira project item(s)${incomplete?' · results truncated':''} · All issue types are visible. Assign or release tasks for your selected role; shared BR ownership stays unchanged.`+(developerBrSyncWarnings.length?' · '+developerBrSyncWarnings.join(' · '):'');
  // Keep role selectors, ownership checks and refresh state above intact, but
  // do not mount a hidden duplicate project-wide table.
  if($('roleJiraWork').hidden){root.replaceChildren();return;}
@@ -4265,10 +4274,10 @@ function renderRoleJiraIssues(items,incomplete=false){
    if(item.brRoot)item={...item,mine:!!roleScope?.mine,unassigned:!!roleScope?.available&&!roleScope?.mine};
    const cell=document.createElement('div');cell.className='jira-row-actions';
    const btn=document.createElement('button');btn.type='button';btn.className='secondary';
-   btn.textContent=!item.brRoot?'View Only':item.mine?'Release Entire BR':item.unassigned?'Assign Entire BR':'Assigned to Other / unavailable';
+   btn.textContent=!item.brRoot?'View Only':item.mine?'Release My Role Tasks':item.unassigned?'Assign My Role Tasks':'Assigned to Other / unavailable';
    btn.disabled=developerBrAssignmentBusy||developerBrBusy||!item.brRoot||(!item.mine&&!item.unassigned);
    btn.title=item.brRoot?'This action covers '+(roleScope?.count||0)+' mapped tasks for the selected role in '+item.brId+'; BR ownership remains even without tasks. Shared parents and other roles are unchanged.':'Use the BR row to assign tasks for the selected role.';
-   btn.setAttribute('aria-label',item.mine?`Unassign Jira ${item.key}`:`Assign Jira ${item.key} to me`);
+   btn.setAttribute('aria-label',!item.brRoot?`View ${item.key}`:item.mine?`Release my role tasks for ${item.key}`:`Assign my role tasks for ${item.key}`);
    btn.addEventListener('click',()=>{
     if(developerBrAssignmentBusy||developerBrBusy)return;
     if(!developer&&item.mine){
@@ -6137,6 +6146,9 @@ function renderSourcePreflight(){
  const unresolvedIssues=(info.issues||[]).filter(x=>!resolvedIssues.has(String(x.detail||'').trim().toLowerCase()));
  const risks=unresolvedIssues.filter(x=>x.severity==='warning').length;
  const blockers=unresolvedIssues.filter(x=>x.severity==='blocker').length;
+ const attention=phase==='blocked'||blockers>0;
+ if(attention&&panel.dataset.attention!=='true')panel.open=true;
+ panel.dataset.attention=String(attention);
  $('baSourcePreflightCounts').textContent=`${fixes} safe text correction(s) · ${(info.resolutions||[]).length} industry-standard recommendation(s) (provisional) · ${risks} unresolved warning(s) · ${blockers} business blocker(s) · Original unchanged`;
  const detail=$('baSourcePreflightFindings');detail.replaceChildren();
  for(const fix of (info.applied||[]).slice(0,5)){
