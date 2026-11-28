@@ -115,3 +115,21 @@ test('automatic role repair preserves existing roles, skips foreign and approved
  assert.deepEqual(saved.map(x=>[x.path,x.roleId]),[['BR-001/T-001','software-developer'],['BR-001/T-002','project-manager']]);
  assert.equal(result.fixed,2);assert.equal(result.remaining,0);assert.equal(result.warnings.length,1);
 });
+
+test('automatic projection supplies the same provisional role for preview and approval without editing the draft',()=>{
+ const code=read('src/br-workflow.js');
+ const a=code.indexOf('function projectPreparedJira('),b=code.indexOf('async function renumberDrafts(',a);
+ const state={brs:[{id:'BR-015',status:'draft',title:'Initiation'},{id:'BR-016',status:'draft',title:'Other'}],pending:{'BR-015/T-002':{}},synced:{},jiraIssueDetails:{}};
+ const tasks=[{path:'BR-015/T-001',kind:'Task',action:'create'},{path:'BR-015/T-002',kind:'Task',action:'create'},{path:'BR-015/T-003',kind:'Task',action:'create',roleLabel:'atgv-role-software-developer'}];
+ const project=vm.runInNewContext(code.slice(a,b)+'\nprojectPreparedJira',{
+  structuredClone,approveRecord:(register,id)=>{const row=register.brs.find(x=>x.id===id);row.status='approved';row.approvedContent={title:row.title};},
+  digest:x=>JSON.stringify(x),plan:()=>tasks,jiraPreviewDetails:{normalizeDetails:x=>x}
+ });
+ const preview=project(state,{blockers:[]}),approval=project(state,{actor:'BA'});
+ assert.equal(preview.jiraIssueDetails['BR-015/T-001'].roleId,'project-manager');
+ assert.equal(preview.jiraIssueDetails['BR-015/T-001'].automaticRoleTriage,true);
+ assert.deepEqual(preview.jiraIssueDetails,approval.jiraIssueDetails);
+ assert.equal(Object.keys(project(state,{roleFallback:false}).jiraIssueDetails).length,0);
+ assert.equal(Object.keys(state.jiraIssueDetails).length,0);
+ assert.equal(Object.keys(preview.jiraIssueDetails).length,1);
+});
