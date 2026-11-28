@@ -3,7 +3,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const source=fs.readFileSync(require.resolve('../media/ba-automatic-ui.js'),'utf8');
 const from=source.indexOf(' function generatedRequirementsStatus('),to=source.indexOf(' function renderReadyPanels(',from);
 assert.ok(from>=0&&to>from);
-const build=new Function('state','activeId','brState','busy','baBusyTask',source.slice(from,to)+';return {generatedRequirementsStatus,currentJiraPreview,canPublishPrepared};');
+const build=new Function('state','activeId','brState','busy','baBusyTask',source.slice(from,to)+';function requirements(){return brState.brs||[];} return {generatedRequirementsStatus,currentJiraPreview,canPublishPrepared};');
 const {generatedRequirementsStatus:status}=build(null,'p',{revision:'r'});
 const baseline={sourceReady:true,discoveryReady:true,excluded:false,requirementsReady:true,allApproved:false,phase:'ready',previewCurrent:true,unsaved:false};
 test('verified generated drafts are ready, not in progress or approved',()=>{
@@ -28,17 +28,23 @@ test('preview is scoped to active project and exact BR revision with zero confli
  assert.equal(build({projectId:'old',preview:{revision:'r',conflicts:[]}},'p',{revision:'r'}).currentJiraPreview(),false);
  assert.equal(current(null),false);
 });
-test('Approved and Publish is available with open BR findings on a verified Jira preview',()=>{
- const brState={revision:'r',baDraftQuality:{excluded:[{id:'BR-001',reason:'Scope needs clarification.'}]}};
- const state={projectId:'p',preview:{revision:'r',sourceNotes:['BR-001 · Scope needs clarification.'],reopenSkipped:[{key:'TC-1455',message:'No available transition to To Do from Open.'}],conflicts:[]}};
+test('Approved and Publish requires all preparation sections and no open findings',()=>{
+ const brState={revision:'r',sourceDocuments:[{digest:'d'}],mappingCompleted:{sourceDigests:['d']},discoveryRevision:'x',reviewRevision:'x',discoveryAnswers:Object.fromEntries(Array.from({length:12},(_,i)=>['q'+i,'answer'])),brs:[{id:'BR-001',status:'draft'}],baDraftQuality:{excluded:[]}};
+ const state={projectId:'p',preview:{revision:'r',reopenSkipped:[],conflicts:[]}};
  const canPublish=build(state,'p',brState,()=>false,null).canPublishPrepared;
  assert.equal(canPublish('ready',false),true);
  assert.equal(canPublish('ready',true),false);
  assert.equal(canPublish('publishing',false),false);
- assert.equal(canPublish('published',false,true),true);
- assert.equal(canPublish('idle',false,true),true);
- assert.equal(canPublish('published',true,true),false);
- assert.equal(canPublish('publishing',false,true),false);
+ assert.equal(canPublish('published',false,true),false);
+ brState.baDraftQuality.excluded.push({id:'BR-001',reason:'Scope needs clarification.'});
+ assert.equal(canPublish('ready',false),false);
+ brState.baDraftQuality.excluded=[];
+ state.preview.reopenSkipped.push({key:'TC-1455',message:'No available transition'});
+ assert.equal(canPublish('ready',false),false);
+ state.preview.reopenSkipped=[];
  state.preview.conflicts.push('Jira Create Issues permission is required.');
+ assert.equal(canPublish('ready',false),false);
+ state.preview.conflicts=[];
+ brState.mappingCompleted=null;
  assert.equal(canPublish('ready',false),false);
 });
