@@ -897,6 +897,7 @@ function html(webview,{resumeLibrary=false}={}){
       <div class="ux-preview-hero-top"><span class="ux-preview-kicker">ATGV · UI/UX DESIGNER / DESIGN PREVIEW</span><button id="uxBackToBuilder" type="button" class="secondary ux-preview-back">← Back to Design Workspace</button></div>
       <div class="ux-preview-title-row"><h1 id="uxPreviewHeading">UI/UX Design Preview</h1><span id="uxPreviewVersion" class="pill">Draft</span></div>
       <div id="uxPreviewMetadata" class="ux-preview-meta muted"></div>
+      <div id="uxPreviewComparison" hidden></div>
       <div class="ux-preview-context" aria-live="polite"><p id="uxPreviewGuidance">Review the generated design artifacts and interactive prototype before approving the developer handoff.</p><span id="uxPreviewArtifacts" class="ux-preview-artifact-count"></span></div>
       <p id="uxPreviewReviewState" class="muted ux-preview-review-state hidden" role="status"></p>
       <div class="ux-preview-hero-actions"><div class="ux-preview-decision-actions"><button type="button" id="uxApproveDesign">Approve UI/UX</button><button type="button" id="uxRejectDesign" class="secondary" aria-controls="uxReviewActions" aria-expanded="false">Disapprove Design</button></div><div class="ux-preview-external-actions"><button id="uxOpenPrototypeBrowser" type="button" class="secondary ux-preview-prototype-launch">Interactive Prototype ↗</button><button id="uxPublishFrontend" type="button" class="hidden">Generate &amp; Publish UI/UX Code</button></div></div>
