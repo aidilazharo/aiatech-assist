@@ -242,7 +242,7 @@
     item.append(name,message);list.append(item);
    }
    const guidance=document.createElement('p');guidance.className='ba-auto-attention-guidance';
-   guidance.textContent='You can publish these requirements with open findings and edit them later.';
+   guidance.textContent='Resolve outstanding findings before approving and publishing.';
    notice.append(heading,list,guidance);body.append(notice);
   }
   if(impact.length){
@@ -422,7 +422,13 @@
   return !!state?.preview&&state.projectId===activeId&&state.preview.revision===brState?.revision&&Array.isArray(state.preview.conflicts)&&state.preview.conflicts.length===0;
  }
  function canPublishPrepared(phase,unsaved,completed=false){
-  return (phase==='ready'&&currentJiraPreview()||completed)&&!['running','publishing'].includes(phase)&&!unsaved&&!busy()&&!baBusyTask;
+  const mapped=new Set(brState?.mappingCompleted?.sourceDigests||brState?.mappingCompleted?.digests||[]);
+  const sources=brState?.sourceDocuments||[];
+  const sourceReady=sources.length>0&&sources.every(doc=>doc.digest&&mapped.has(doc.digest));
+  const discoveryReady=!!brState?.discoveryRevision&&brState.reviewRevision===brState.discoveryRevision&&currentDiscoveryReadiness().filled===12;
+  const brs=requirements();
+  const requirementsReady=(brs.length>0||brState?.brs?.some(br=>br.status==='retire-proposed'&&!br.archivedFromRestart))&&!brState?.baDraftQuality?.excluded?.some(row=>brs.some(br=>br.id===row.id))&&!brs.some(br=>br.needsRefresh||br.externalReviewRequired||br.roleReviewRequired||br.dependencyReviewRequired);
+  return phase==='ready'&&currentJiraPreview()&&sourceReady&&discoveryReady&&requirementsReady&&!state.preview.reopenSkipped?.length&&!unsaved&&!busy()&&!baBusyTask;
  }
  // Percentages describe verified section evidence, never elapsed time.
  function sectionProgress({register,brs,rows,preview,groups,statuses,unsaved,discoveryFilled}){
@@ -487,7 +493,7 @@
  }
  function renderReadyPanels(phase){
   const sourceReady=!!source()?.digest;
-  const discoveryReady=!!brState?.discoveryRevision&&!!brState?.mappingCompleted&&!discoveryDirty;
+  const discoveryReady=!!brState?.discoveryRevision&&brState.reviewRevision===brState.discoveryRevision&&!!brState?.mappingCompleted&&currentDiscoveryReadiness().filled===12&&!discoveryDirty;
   const requirementsReady=requirements().length>0&&phase!=='running'&&!brState?.baDraftQuality?.excluded?.length;
   const jiraReady=rowsForTable().length>0&&phase!=='running';
   // Use exactly the same completed-cycle index as the history renderer.
@@ -508,10 +514,11 @@
   if(discoveryForm.parentElement!==discoveryTarget)discoveryTarget.append(discoveryForm);
   get('baAutoDiscoveryEntry').hidden=true;
   const phaseRunning=phase==='running'||phase==='publishing';
-  const excluded=!!brState?.baDraftQuality?.excluded?.length;
+  const excluded=!!brState?.baDraftQuality?.excluded?.some(row=>requirements().some(br=>br.id===row.id))||!!state?.preview?.reviewIssues?.some(issue=>issue.startsWith('Generated Requirements:'));
   const allApproved=requirementsReady&&requirements().every(br=>['approved','published','completed'].includes(String(br.status||'').toLowerCase())&&!br.needsRefresh&&!br.externalReviewRequired&&!br.roleReviewRequired&&!br.dependencyReviewRequired);
   const previewCurrent=currentJiraPreview();
-  const sourceStatus=!sourceReady?'not-started':artifactDirty()||phase==='running'&&!brState.mappingCompleted?'in-progress':brState.mappingCompleted?'ready':'in-progress';
+  const mappedSources=new Set(brState?.mappingCompleted?.sourceDigests||brState?.mappingCompleted?.digests||[]);
+  const sourceStatus=!sourceReady?'not-started':artifactDirty()||!(brState.sourceDocuments||[]).every(doc=>mappedSources.has(doc.digest))?'in-progress':'ready';
   const discoveryStatus=!sourceReady?'not-started':discoveryDirty?'in-progress':discoveryReady?'ready':'in-progress';
   const requirementsStatus=generatedRequirementsStatus({sourceReady,discoveryReady,excluded,requirementsReady,allApproved,phase,previewCurrent,unsaved:dirty()});
   const jiraStatus=(state?.preview?.conflicts?.length||(state?.preview?.reopenSkipped||state?.reopenSkipped||[]).length)?'needs-attention':phase==='published'?'completed':
@@ -582,7 +589,7 @@
   publish.title=publishLabel;publish.setAttribute('aria-label',publishLabel);
   const completed=ATGVCompletedBRHistory.group(completedBARecords()).length>0;
   publish.disabled=sharedReadOnly()||!canPublishPrepared(phase,unsaved,completed);
-  if(completed&&!currentJiraPreview()&&!publish.disabled)publish.title='Check published requirements and refresh the Jira preview if needed.';if(foreignOwners().length)publish.title=readOnlyMessage();
+  if(publish.disabled&&!busy())publish.title='All preparation sections must be Ready or Completed before publication.';if(foreignOwners().length)publish.title=readOnlyMessage();
   const reopen=state?.preview?.reopenRows?.length||0;
   const skipped=(state?.preview?.reopenSkipped||state?.reopenSkipped||[]).length;
   const statusWarning=skipped?' '+skipped+' Jira status reset(s) unavailable; publishing can continue.':'';
