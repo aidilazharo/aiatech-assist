@@ -5093,7 +5093,7 @@ async function prepareBRJiraPreview({automatic=false,signal,qualityWarning=''}={
  const payload={changes,issueTypes,jiraProject,fieldPlans:jiraPreviewFieldPlans,conflicts:blockers,linkCandidates,protection,revision:register.revision,checkedCount};
  if(automatic){
   return {...payload,reviewIssues,projectionIssues,reopenRoots,reopenRows:reopen.rows,reopenSkipped:reopen.skipped||[],
-   sourceNotes:[...baAutomatic.sourceNotes(original),...(qualityWarning?[qualityWarning]:[])],projectId,planHash,fieldPlansHash,verifiedAt,site,
+   sourceNotes:[...baAutomatic.sourceNotes(original),...changes.filter(item=>register.jiraIssueDetails?.[item.path]?.automaticRoleTriage).map(item=>item.path+': provisionally routed to Project Manager for role triage.'),...(qualityWarning?[qualityWarning]:[])],projectId,planHash,fieldPlansHash,verifiedAt,site,
    rows:projected.map(item=>({...item,key:register.synced?.[item.path]?.key||'',jiraType:issueTypes[item.path]||register.synced?.[item.path]?.issueType||''})),
    republish:changes.some(item=>register.synced[item.path.split('/')[0]]?.key)||reopenRoots.length>0};
  }
