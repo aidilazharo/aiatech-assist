@@ -4937,7 +4937,7 @@ async function publishPreparedBRs(msg){
  }
  if(typeof baAutomatic!=='undefined'){
   const issues=baAutomatic.publicationIssues(register);
-  if(issues.length||preview.reopenSkipped?.length)throw Error([...issues,...(preview.reopenSkipped||[]).map(row=>row.message)].join(' '));
+  if(issues.length)throw Error(issues.join(' '));
  }
  const config=effectiveConfig(activeProject);
  if(baseAtlassian(config)!==preview.site||validProjectKey(config.get('jira.projectKey'))!==preview.jiraProject)
@@ -4949,7 +4949,7 @@ async function publishPreparedBRs(msg){
  const actor=await verifiedBAActor();
  const reopenLines=preview.reopenRows.map(row=>row.key+'  '+row.from+' → '+row.to);
  const retired=preview.changes.filter(item=>item.action==='retire').map(item=>item.key);
- const skipped=preview.reopenSkipped||[];
+ const skipped=[...(preview.reopenSkipped||[])];
  const action='Approved and Publish';
  const decision=await uiWarning(action+' for '+scope.size+' Business Requirement(s)?\n\n'+preview.changes.length+
   ' Jira issue change(s), '+reopenLines.length+' status reset(s), and '+skipped.length+' status reset(s) skipped.',
@@ -4959,14 +4959,15 @@ async function publishPreparedBRs(msg){
  if(activeProject?.id!==projectId||baPreparationRun||jiraSyncBusy)throw Error('The project or operation changed during Jira confirmation.');
  const token=await getAtlassianToken(activeProject);
  const fresh=await baJiraRepublish.preview(register,preview.reopenRoots,{...reopenServices(register,config,token),retiring:preview.changes.filter(item=>item.action==='retire').map(item=>item.path)});
- if(fresh.blocked.length||JSON.stringify(fresh.rows)!==JSON.stringify(preview.reopenRows)||JSON.stringify(fresh.skipped||[])!==JSON.stringify(skipped))
-  throw Error('Jira status or transitions changed after preview. Refresh affected artifacts and review the current reset list.');
+ if(fresh.blocked.length)throw Error('Jira identity or status could not be verified: '+fresh.blocked.join('; '));
+ const resetPlan=baJiraRepublish.reconcileConfirmed(preview.reopenRows,skipped,fresh);
+ skipped.splice(0,skipped.length,...resetPlan.skipped);
  if(activeProject?.id!==projectId||(await brWorkflow.load(registry,projectId)).revision!==preview.revision)
   throw Error('The Business Requirements revision changed. Refresh the preview.');
  await requireBAWritableCycle(register);
  for(const id of scope)await requireBAOwner('ba-br-'+id);
  const saved=await brWorkflow.approvePreparedJira(registry,projectId,preview.revision,{actor,expectedPlan:preview.planHash,
-  publication:{roots:preview.reopenRoots,rows:preview.reopenRows}});
+  publication:{roots:preview.reopenRoots,rows:resetPlan.rows}});
  approvedJiraPreviewRevision=saved.revision;
  const items=brWorkflow.plan(saved);
  approvedJiraPreviewBinding=sha(JSON.stringify({atgvProjectId:projectId,site:preview.site,project:config.get('jira.projectKey'),actor,items,fields:jiraPreviewFieldPlans}));
@@ -5146,7 +5147,7 @@ async function prepareBRJiraPreview({automatic=false,signal,qualityWarning=''}={
  assertCurrent();
  for(const item of changes.filter(row=>row.staleJiraDetails))conflicts.push('Review saved Jira acceptance criteria and definition of done for '+item.path+' because its approved BR changed.');
  const projected=automatic?brWorkflow.flattenApproved(register.brs.filter(br=>!br.archivedFromRestart)):[];
- const reviewIssues=automatic?[...baAutomatic.publicationIssues(original),...(reopen.skipped||[]).map(row=>'Jira Work Items: '+row.message)]:[];
+ const reviewIssues=automatic?baAutomatic.publicationIssues(original):[];
  if(automatic&&!projected.length&&!activeRetirements&&!projectionIssues.length)
   reviewIssues.push('Prepare at least one Business Requirement before publishing.');
  const blockers=[...new Set([...projectionIssues,...conflicts,...reviewIssues])];
@@ -5285,10 +5286,11 @@ async function syncApprovedBRs(expectedRevision,automatic=null){
   for(const row of resets){
    assertProject();
    await publishProgress('publishing','Moving '+row.key+' from '+row.from+' to '+row.to+'…',{currentKey:row.key});
-   await baJiraRepublish.apply(row,reopenServices(state,config,token));
+   const outcome=await baJiraRepublish.apply(row,reopenServices(state,config,token));
+   if(outcome?.skipped)automatic.skipped.push(outcome.skipped);
    state=await brWorkflow.write(registry,pinnedProject,state.revision,next=>{
     next.baPendingReopen.rows=next.baPendingReopen.rows.filter(item=>item.path!==row.path);
-    next.events=(next.events||[]).concat({action:'jira-reset-for-br-republish',key:row.key,from:row.from,to:row.to,at:new Date().toISOString()}).slice(-200);
+    if(!outcome?.skipped)next.events=(next.events||[]).concat({action:'jira-reset-for-br-republish',key:row.key,from:row.from,to:row.to,at:new Date().toISOString()}).slice(-200);
    });
    confirmed++;
   }
@@ -5321,7 +5323,7 @@ async function syncApprovedBRs(expectedRevision,automatic=null){
      if(pmJiraAssignment.canAssign(perms)){
       const live=[];const scan=await jiraProjectInventory.scanProject({config,token,projectKey:roleProjectKey,shouldContinue:()=>activeProject?.id===pinnedProject,onPage:async page=>live.push(...page.issues)});
       if(!scan.truncated&&!scan.cancelled){
-       const synced=await brRoleOwnership.sync({store,records:shared.documents,register:state,items:live,projectKey:roleProjectKey,shouldContinue:()=>activeProject?.id===pinnedProject,readIssue:key=>jiraReadIssue(config,token,key),setAssignee:(key,accountId)=>requestJson(roleBase+'/rest/api/3/issue/'+encodeURIComponent(key)+'/assignee',{...roleAuth,method:'PUT',data:{accountId}})});
+       const synced=await brRoleOwnership.sync({store,records:shared.documents,register:state,items:live,projectKey:roleProjectKey,excludeKeys:new Set((automatic?.skipped||[]).map(row=>row.key)),shouldContinue:()=>activeProject?.id===pinnedProject,readIssue:key=>jiraReadIssue(config,token,key),setAssignee:(key,accountId)=>requestJson(roleBase+'/rest/api/3/issue/'+encodeURIComponent(key)+'/assignee',{...roleAuth,method:'PUT',data:{accountId}})});
        if(synced.warnings.length)report('BR role assignment needs attention: '+synced.warnings.slice(0,5).join('; '));
       }
      }

@@ -70,7 +70,7 @@ function recordFor(records,epic,roleId,issueId){
  const r=records[recordKey(epic,roleId)];
  return r&&r.issueId===String(issueId||'')?r:null;
 }
-async function sync({store,records,register,items,projectKey,readIssue,setAssignee,shouldContinue=()=>true,limit=100}){
+async function sync({store,records,register,items,projectKey,readIssue,setAssignee,shouldContinue=()=>true,limit=100,excludeKeys=new Set()}){
  const warnings=[],changed=new Map();let attempts=0;
  for(const r of Object.values(records)){
   if(!r.ownerId||!shouldContinue())continue;
@@ -79,6 +79,7 @@ async function sync({store,records,register,items,projectKey,readIssue,setAssign
   let targets;
   try{targets=candidates({items,register,epic:r.epic,brId:r.brId,roleId:r.roleId});}catch{continue;}
   for(const {item,entry,chain} of targets){
+   if(excludeKeys.has(item.key))continue;
    if(item.assigneeId===r.ownerId)continue;
    if(item.assigneeId){warnings.push(item.key+' has a different assignee; review ownership conflict.');continue;}
    if(!shouldContinue()||attempts>=limit)return {changed,warnings};

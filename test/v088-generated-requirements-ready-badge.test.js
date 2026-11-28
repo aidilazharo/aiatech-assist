@@ -40,7 +40,7 @@ test('Approved and Publish requires all preparation sections and no open finding
  assert.equal(canPublish('ready',false),false);
  brState.baDraftQuality.excluded=[];
  state.preview.reopenSkipped.push({key:'TC-1455',message:'No available transition'});
- assert.equal(canPublish('ready',false),false);
+ assert.equal(canPublish('ready',false),true);
  state.preview.reopenSkipped=[];
  state.preview.conflicts.push('Jira Create Issues permission is required.');
  assert.equal(canPublish('ready',false),false);

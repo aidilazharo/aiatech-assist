@@ -429,7 +429,7 @@
   const discoveryReady=!!brState?.discoveryRevision&&brState.reviewRevision===brState.discoveryRevision&&Object.values(brState?.discoveryAnswers||{}).filter(value=>typeof value==='string'&&value.trim()).length>=12;
   const brs=requirements();
   const requirementsReady=(brs.length>0||brState?.brs?.some(br=>br.status==='retire-proposed'&&!br.archivedFromRestart))&&!brState?.baDraftQuality?.excluded?.some(row=>brs.some(br=>br.id===row.id))&&!brs.some(br=>br.status==='approved'&&br.needsRefresh||br.externalReviewRequired||br.roleReviewRequired||br.dependencyReviewRequired);
-  return phase==='ready'&&currentJiraPreview()&&sourceReady&&discoveryReady&&requirementsReady&&!state.preview.reopenSkipped?.length&&!unsaved&&!busy()&&!baBusyTask;
+  return phase==='ready'&&currentJiraPreview()&&sourceReady&&discoveryReady&&requirementsReady&&!unsaved&&!busy()&&!baBusyTask;
  }
  // Percentages describe verified section evidence, never elapsed time.
  function sectionProgress({register,brs,rows,preview,groups,statuses,unsaved,discoveryFilled}){
@@ -444,7 +444,7 @@
   const stale=br=>br.needsRefresh||br.externalReviewRequired||br.roleReviewRequired||br.dependencyReviewRequired;
   const clean=brs.filter(br=>!excluded.has(br.id)).length; // Draft quality is distinct from approval freshness.
   const items=rows.filter(row=>row.category!=='br');
-  const conflicts=[...new Set([...(preview?.conflicts||[]),...(preview?.reopenSkipped||[]).map(row=>row.message||row.key||'Status reset unavailable')].map(String))];
+  const conflicts=[...new Set((preview?.conflicts||[]).map(String))];
   const blocked=new Set();let unmatched=0;
   for(const conflict of conflicts){
    const matches=items.filter(row=>row.path&&(conflict===row.path||conflict.startsWith(row.path+':')||conflict.startsWith(row.path+' ')));
@@ -522,7 +522,7 @@
   const sourceStatus=!sourceReady?'not-started':artifactDirty()||!(brState.sourceDocuments||[]).every(doc=>mappedSources.has(doc.digest))?'in-progress':'ready';
   const discoveryStatus=!sourceReady?'not-started':discoveryDirty?'in-progress':discoveryReady?'ready':'in-progress';
   const requirementsStatus=generatedRequirementsStatus({sourceReady,discoveryReady,excluded,requirementsReady,allApproved,phase,previewCurrent,unsaved:dirty()});
-  const jiraStatus=(state?.preview?.conflicts?.length||(state?.preview?.reopenSkipped||state?.reopenSkipped||[]).length)?'needs-attention':phase==='published'?'completed':
+  const jiraStatus=state?.preview?.conflicts?.length?'needs-attention':phase==='published'?'completed':
    phaseRunning?'in-progress':phase==='ready'&&previewCurrent&&!dirty()?'ready':jiraReady?'in-progress':'not-started';
   const historyStatus=completedReady?'completed':'not-started';
   const panels=[
@@ -616,7 +616,7 @@
   if(publish.disabled&&!busy())publish.title='All preparation sections must be Ready or Completed before publication.';if(foreignOwners().length)publish.title=readOnlyMessage();
   const reopen=state?.preview?.reopenRows?.length||0;
   const skipped=(state?.preview?.reopenSkipped||state?.reopenSkipped||[]).length;
-  const statusWarning=skipped?' '+skipped+' Jira status reset(s) unavailable; resolve before publishing.':'';
+  const statusWarning=skipped?' '+skipped+' Jira work item(s) retain their current status and assignee (To Do transition unavailable).':'';
   const messages={idle:source()?'Preparing source…':'Upload a document to start.',running:'Preparing affected artifacts…',draft:'Draft. Refresh affected artifacts to continue.',
    ready:!currentJiraPreview()?'Jira preview is out of date. Refresh affected artifacts.':reopen?reopen+' linked Jira item'+(reopen===1?'':'s')+' will move to To Do.':'Jira preview is ready.',
    publishing:'Publishing approved changes to Jira…',published:'Jira publication is up to date.'};
@@ -630,7 +630,7 @@
   if(brState?.reviewRevision!==brState?.discoveryRevision)blockers.push('discovery review is out of date');
   if(excluded)blockers.push(excluded+' requirement(s) need repair');
   if(!currentJiraPreview())blockers.push('Jira preview requires refresh or conflict resolution');
-  if(skipped)blockers.push(skipped+' Jira status reset(s) unavailable');
+  
   if(requirements().some(br=>br.status==='approved'&&br.needsRefresh||br.externalReviewRequired||br.roleReviewRequired||br.dependencyReviewRequired))blockers.push('requirement review is out of date');
   const blockedReady=phase==='ready'&&publish.disabled&&!busy()&&!sharedReadOnly()&&!unsaved;
   const detail=unsaved?'Save your edits to refresh the affected artifacts.':state?.error||(blockedReady?'Publication blocked: '+(blockers.join('; ')||'required preparation evidence is incomplete')+'.':(messages[phase]||'')+(['ready','published'].includes(phase)?statusWarning:''));

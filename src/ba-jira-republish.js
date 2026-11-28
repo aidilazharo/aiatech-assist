@@ -4,6 +4,30 @@ const root=path=>String(path||'').split('/')[0];
 const normal=name=>String(name||'').toLowerCase().trim().replace(/[\s_-]+/g,'');
 const isToDo=name=>normal(name)==='todo';
 
+function retained(row){
+ return {path:row.path,key:row.key,from:row.from,statusId:row.statusId,assigneeId:row.assigneeId,message:row.key+' has no available transition to To Do from '+row.from+'. Requirement changes can be published; current status and assignee are retained.'};
+}
+// A disappearing transition is a safe downgrade, not permission to select a new transition.
+function reconcileConfirmed(rows,skipped,fresh){
+ const original=new Map([...rows,...skipped].map(row=>[row.path,row]));
+ const approved=new Map(rows.map(row=>[row.path,row]));
+ const nextRows=[],nextSkipped=[];
+ const same=(a,b)=>a&&a.key===b.key&&a.statusId===b.statusId&&a.from===b.from&&a.assigneeId===b.assigneeId;
+ for(const row of fresh.rows){
+  const old=original.get(row.path);
+  if(!same(old,row))throw Error('Jira status or assignee changed after preview. Refresh affected artifacts.');
+  if(approved.has(row.path)){
+   if(JSON.stringify(approved.get(row.path))!==JSON.stringify(row))throw Error('Jira transition changed after preview. Refresh affected artifacts.');
+   nextRows.push(row);
+  }else nextSkipped.push({...retained(row),message:row.key+' status reset was skipped in the approved preview; current status and assignee are retained.'});
+ }
+ for(const row of fresh.skipped){
+  if(!same(original.get(row.path),row))throw Error('Jira status or assignee changed after preview. Refresh affected artifacts.');
+  nextSkipped.push(row);
+ }
+ if(nextRows.length+nextSkipped.length!==original.size)throw Error('Jira status or linked issues changed after preview. Refresh affected artifacts.');
+ return {rows:nextRows,skipped:nextSkipped};
+}
 function shouldReopen(status){
  return !!status?.name&&!isToDo(status.name);
 }
@@ -40,7 +64,7 @@ async function apply(row,{read,transitions,verify,move}){
  if(!shouldReopen(status)||String(status.id||'')!==row.statusId||status.name!==row.from)
   throw Error(row.key+' changed status after preview. Refresh the Jira preview.');
  const transition=(await transitions(row.key)).find(value=>String(value.id)===row.transitionId&&isToDo(value.to));
- if(!transition)throw Error(row.key+' can no longer transition to To Do.');
+ if(!transition)return {skipped:retained(row)};
  await move(row.key,transition.id,live.fields.updated);
  const confirmed=await read(row.key);
  verify(row.path,confirmed);
@@ -48,4 +72,4 @@ async function apply(row,{read,transitions,verify,move}){
  if(!isToDo(confirmed.fields?.status?.name))throw Error('Jira did not confirm To Do for '+row.key+'.');
 }
 
-module.exports={shouldReopen,preview,apply};
+module.exports={shouldReopen,preview,apply,reconcileConfirmed};
