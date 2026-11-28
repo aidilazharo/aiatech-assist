@@ -72,7 +72,7 @@ function selectRelease(releases,currentVersion,repositoryUrl=DEFAULT_RELEASE_URL
   const name=`atgv-aiatech-assist-${version}.vsix`;
   const asset=(release.assets||[]).find(a=>validAsset(a,name,repository));
   const checksum=(release.assets||[]).find(a=>validAsset(a,'vsix.sha256',repository));
-  if(asset&&(checksum||(/-local\.[a-f0-9]{7,40}$/.test(release.tag_name)&&/^sha256:[a-f0-9]{64}$/.test(String(asset.digest||'')))))return {version,tag:release.tag_name,url:release.html_url,repository,releaseUrl,publishedAt:release.published_at||'',description:String(release.body||'').slice(0,1500),asset,checksum};
+  if(asset&&(checksum||/^sha256:[a-f0-9]{64}$/.test(String(asset.digest||''))))return {version,tag:release.tag_name,url:release.html_url,repository,releaseUrl,publishedAt:release.published_at||'',description:String(release.body||'').slice(0,1500),asset,checksum};
  }
  return null;
 }
@@ -139,7 +139,7 @@ async function latestRelease({version,repositoryUrl=DEFAULT_RELEASE_URL,request=
  const {repo,releases}=await fetchReleaseList({repositoryUrl,request});
  return selectRelease(releases,version,repo.url,{includeCurrent});
 }
-async function latestAcrossRepositories({version,request=getBytes,includeCurrent=true,verifyAccess=false,exactVersion='',excludeRepository=''}={}){
+async function latestAcrossRepositories({version,request=getBytes,includeCurrent=true,verifyAccess=false,exactVersion='',excludeRepository='',installedManifest=null}={}){
  const results=await Promise.allSettled(RELEASE_REPOSITORIES.map(repository=>fetchReleaseList({repositoryUrl:`https://github.com/${repository}/releases/latest`,request})));
  const errors=results.flatMap((result,index)=>result.status==='rejected'?[RELEASE_REPOSITORIES[index]+': '+String(result.reason?.message||result.reason)]:[]);
  if(errors.length===results.length)throw Error('Cannot check ATGV extension releases: '+errors.join('; '));
@@ -157,17 +157,31 @@ async function latestAcrossRepositories({version,request=getBytes,includeCurrent
  if(!newest)return {release:null,latest:null,errors};
  let release=selectRelease([newest.row],version,newest.releaseUrl,{includeCurrent});
  if(verifyAccess){
-  release=null;const seen=new Set();
+  release=null;const seen=new Set(),sameVersionBuilds=[];
   for(const candidate of found){
    if(compareVersion(candidate.version,version)<0||(exactVersion&&candidate.version!==exactVersion)||candidate.repository===excludeRepository)continue;
    const key=candidate.repository+'|'+candidate.tag;if(seen.has(key))continue;seen.add(key);
    const next=selectRelease([candidate.row],version,candidate.releaseUrl,{includeCurrent});
    if(!next)continue;
-   try{await assertReleaseAccessible(next,{request});release=next;break;}
-   catch{errors.push('A release package is unavailable.');}
+   try{
+    await assertReleaseAccessible(next,{request});
+    if(installedManifest&&compareVersion(next.version,version)===0){
+     const build=await inspectReleaseBuild(next,{request});
+     if(build)sameVersionBuilds.push({release:next,build});
+     continue;
+    }
+    release=next;break;
+   }catch{errors.push('A release package is unavailable or its build identity could not be verified.');}
+  }
+  if(!release&&sameVersionBuilds.length){
+   // Release metadata can be touched without rebuilding the package. Compare
+   // the verified embedded payload SHA and build timestamp across both sources.
+   sameVersionBuilds.sort((a,b)=>Date.parse(b.build.builtAt)-Date.parse(a.build.builtAt));
+   const selected=sameVersionBuilds.find(x=>buildIdentity.eligibleBuild(installedManifest,x.build))||sameVersionBuilds[0];
+   release={...selected.release,buildIdentity:selected.build};
   }
  }
- return {release,latest:{version:newest.version,tag:newest.tag,url:newest.url,repository:newest.repository,publishedAt:newest.publishedAt,installable:!!release&&release.repository===newest.repository&&release.tag===newest.tag},errors};
+ return {release,latest:{version:newest.version,tag:newest.tag,url:newest.url,repository:newest.repository,publishedAt:newest.publishedAt,installable:!!release&&release.version===newest.version},errors};
 }
 function verifyChecksum(checksumBytes,assetBytes,filename){
  const lines=checksumBytes.toString('utf8').split(/\r?\n/);
@@ -186,7 +200,7 @@ async function verifiedBytes(release,{request=getBytes,onProgress=async()=>{}}={
  if(release.repository&&release.repository!==repo.repository)throw Error('Release repository does not match its source.');
  const digest=String(release.asset?.digest||'');
  const checksumValid=validAsset(release.checksum,'vsix.sha256',repo.repository);
- if(!validAsset(release.asset,filename,repo.repository)||(!checksumValid&&!(/-local\.[a-f0-9]{7,40}$/.test(release.tag)&&/^sha256:[a-f0-9]{64}$/.test(digest))))throw Error('Release assets are not trusted GitHub API assets.');
+ if(!validAsset(release.asset,filename,repo.repository)||(!checksumValid&&!/^sha256:[a-f0-9]{64}$/.test(digest)))throw Error('Release assets are not trusted GitHub API assets.');
  await onProgress('downloading');
  const [vsix,checksum]=await Promise.all([
   request(release.asset.url,{maxBytes:MAX_ASSET,accept:'application/octet-stream'}),
@@ -233,7 +247,7 @@ async function assertReleaseAccessible(release,{request=getBytes}={}){
  const trusted=(a,name)=>!!a&&validAsset(a,name,repository)&&/^https:\/\/api\.github\.com\/repos\/[^/]+\/[^/]+\/releases\/assets\/\d+$/.test(a.url);
  if(!allowed.includes(repository)||filename!==expected||!trusted(asset,expected))throw Error('Release package is not verified.');
  const checksum=trusted(release.checksum,checksumName)?release.checksum:null;
- if(!checksum&&!(/^sha256:[a-f0-9]{64}$/.test(String(asset.digest||''))&&/-local\.[a-f0-9]{7,40}$/.test(release.tag)))throw Error('Release checksum is not verified.');
+ if(!checksum&&!(/^sha256:[a-f0-9]{64}$/.test(String(asset.digest||''))&&(!library||/-local\.[a-f0-9]{7,40}$/.test(release.tag))))throw Error('Release checksum is not verified.');
  const [prefix,proof]=await Promise.all([
   request(asset.url,{accept:'application/octet-stream',maxBytes:4,probe:true}),
   checksum?request(checksum.url,{accept:'application/octet-stream',maxBytes:10000}):Promise.resolve(null)
