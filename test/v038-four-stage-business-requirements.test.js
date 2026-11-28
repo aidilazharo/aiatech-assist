@@ -226,26 +226,40 @@ test('Jira mapping audit supports a 297-item BR project without skipping verific
 
 test('the preparation bridge clears the busy state for both ready and failed previews',async()=>{
  const host=await fs.readFile(hostFile,'utf8');
- const messages=[],statuses=new Map();
+ const messages=[],statuses=new Map(),calls=[];
  let fail=false;
- const run=hostFunction(host,'async function runBRPreparation(','function requireBAWorkspace(',{
+ const context={
   AbortController,baAutomatic:automatic,activeProject:{id:'demo'},baPreparationRun:null,jiraSyncBusy:false,baPublishIntent:false,
   registry:{},brWorkflow:{load:async()=>({sourceDocuments:[{}],revision:'expected',synced:{}})},
   requireOpened:()=>{},requireBAOwner:async()=>{},requireBAWritableCycle:async()=>{},brPreparationStage:()=> 'jira',brPreparationTitle:()=> 'Visitor check-in',assessAutomaticDrafts:async()=>{},
-  prepareBRJiraPreview:async()=>{if(fail)throw Error('Jira preview could not be built');return {revision:'expected',changes:[{}],reopenRows:[],conflicts:[]};},
+  repairAutomaticBAFindings:async()=>{
+   calls.push('repair');
+   return {qualityWarning:'',unresolved:[],roleUnresolved:0,result:'No findings to repair'};
+  },
+  recordBAProcess:async()=>{},atgvJobSafeError:error=>error.message,
+  prepareBRJiraPreview:async()=>{
+   calls.push('preview');
+   if(fail)throw Error('Jira preview could not be built');
+   return {revision:'expected',changes:[{}],reopenRows:[],conflicts:[]};
+  },
   baPreparationSessions:statuses,postBAPreparation:async(id,state)=>{statuses.set(id,state);},
   dashboard:{webview:{postMessage:async message=>messages.push(message)}}
- });
+ };
+ const run=hostFunction(host,'async function runBRPreparation(','function requireBAWorkspace(',context);
  await run('jira');
- assert.equal(statuses.get('demo').phase,'ready');
+ assert.equal(statuses.get('demo').phase,'ready',statuses.get('demo').error);
+ assert.equal(context.baPreparationRun,null);
  assert.equal(messages.at(-1).task,'preparation');
  assert.equal(messages.at(-1).done,true);
  assert.equal(messages.at(-1).failed,false);
  fail=true;
  await run('jira');
  assert.equal(statuses.get('demo').phase,'draft');
+ assert.equal(statuses.get('demo').error,'Jira preview could not be built');
+ assert.equal(context.baPreparationRun,null);
  assert.equal(messages.at(-1).done,true);
  assert.equal(messages.at(-1).failed,true);
+ assert.deepEqual(calls,['repair','preview','repair','preview']);
 });
 
 test('build renders four steps and puts collapsible artifacts and skill on the BA page',async()=>{
