@@ -46,3 +46,15 @@ test('legacy build can migrate only to a valid verified stamped package; content
  assert.deepEqual(identity.identity(manifest({...next,sourceSha}),version),{...next,sourceSha});
  assert.deepEqual(identity.identity(manifest({...next,sourceSha:'bad'}),version),next);
 });
+
+test('ordinary same-version release accepts a GitHub asset digest without separate checksum',async()=>{
+ const repository=updater.RELEASE_REPOSITORIES[1],name='atgv-aiatech-assist-'+version+'.vsix',bytes=zip(manifest(next));
+ const digest='sha256:'+crypto.createHash('sha256').update(bytes).digest('hex');
+ const tag='v'+version,asset={name,url:'https://api.github.com/repos/'+repository+'/releases/assets/123',size:bytes.length,digest};
+ const row={tag_name:tag,html_url:'https://github.com/'+repository+'/releases/tag/'+tag,assets:[asset]};
+ const selected=updater.selectRelease([row],version,'https://github.com/'+repository+'/releases',{includeCurrent:true});
+ assert.ok(selected);assert.equal(await updater.assertReleaseAccessible(selected,{request:async()=>bytes.subarray(0,4)}),true);
+ assert.deepEqual(await updater.inspectReleaseBuild(selected,{request:async()=>bytes}),next);
+ assert.equal(identity.eligibleBuild(manifest(old),next),true);
+ assert.equal(identity.eligibleBuild(manifest(next),next),false);
+});
