@@ -4632,7 +4632,7 @@ async function resolveBAAttention(msg){
 
 async function assessAutomaticDrafts(projectId,signal){
  const register=await brWorkflow.load(registry,projectId);
- const drafts=register.brs.filter(br=>br.status==='draft'&&!br.archivedFromRestart);
+ const drafts=register.brs.filter(br=>['draft','approved'].includes(br.status)&&!br.archivedFromRestart);
  const checked=Object.fromEntries(drafts.map(br=>[br.id,baAutomatic.qualityFingerprint(register,br)]));
  const warnings=[];
  const previous=register.baDraftQuality?.checked||{};
@@ -4897,6 +4897,10 @@ async function publishPreparedBRs(msg){
   // remaining plan. Never silently return to Ready or create already linked issues.
   if(typeof recordBAProcess==='function')await recordBAProcess({stage:'publish',action:'refresh-publication-preview',status:'completed',details:preview.changes.length+' remaining Jira changes verified; awaiting approval.'});
  }
+ if(typeof baAutomatic!=='undefined'){
+  const issues=baAutomatic.publicationIssues(register);
+  if(issues.length||preview.reopenSkipped?.length)throw Error([...issues,...(preview.reopenSkipped||[]).map(row=>row.message)].join(' '));
+ }
  const config=effectiveConfig(activeProject);
  if(baseAtlassian(config)!==preview.site||validProjectKey(config.get('jira.projectKey'))!==preview.jiraProject)
   throw Error('The Jira destination changed. Refresh the preview.');
@@ -5104,7 +5108,7 @@ async function prepareBRJiraPreview({automatic=false,signal,qualityWarning=''}={
  assertCurrent();
  for(const item of changes.filter(row=>row.staleJiraDetails))conflicts.push('Review saved Jira acceptance criteria and definition of done for '+item.path+' because its approved BR changed.');
  const projected=automatic?brWorkflow.flattenApproved(register.brs.filter(br=>!br.archivedFromRestart)):[];
- const reviewIssues=automatic?baAutomatic.publicationIssues(original):[];
+ const reviewIssues=automatic?[...baAutomatic.publicationIssues(original),...(reopen.skipped||[]).map(row=>'Jira Work Items: '+row.message)]:[];
  if(automatic&&!projected.length&&!activeRetirements&&!projectionIssues.length)
   reviewIssues.push('Prepare at least one Business Requirement before publishing.');
  const blockers=[...new Set([...projectionIssues,...conflicts,...reviewIssues])];
