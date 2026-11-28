@@ -5511,8 +5511,11 @@ function renderSoftwareUpdates(data,force=false){
   data.libraryLatest?`Library published release: v${mirrorLibrary}${data.libraryLatestAvailable?'. Pull Library Updates to check source main first and install only a newer verified version.':'; verified ZIP or checksum is unavailable or the installed Library is newer.'}`:
   `Library: no published release yet. Check selected GitHub source main for updates.`;
  const publishedLabel=metadata=>metadata?.publishedAt?' · Published '+new Date(metadata.publishedAt).toLocaleString():'';
- if(data.installedBuildSha)$('softwareExtensionStatus').textContent+=' · Source '+data.installedBuildSha.slice(0,8);
- if(data.latest?.sourceSha)$('softwareExtensionStatus').textContent+=' → '+data.latest.sourceSha.slice(0,8);
+ const installedSha=data.installedBuildSha||data.installedContentSha256||'';
+ const latestSha=data.latest?.sourceSha||data.latest?.contentSha256||'';
+ if(installedSha)$('softwareExtensionStatus').textContent+=' · SHA '+installedSha.slice(0,8);
+ if(latestSha)$('softwareExtensionStatus').textContent+=' → '+latestSha.slice(0,8);
+ if(data.latest?.sameVersion&&data.installedContentSha256&&data.latest?.contentSha256&&data.installedContentSha256!==data.latest.contentSha256)$('softwareExtensionStatus').textContent+=' · Build '+data.installedContentSha256.slice(0,8)+' → '+data.latest.contentSha256.slice(0,8);
  $('softwareExtensionStatus').textContent+=publishedLabel(data.extensionLatest);
  $('softwareLibraryStatus').textContent+=publishedLabel(data.libraryReleaseMetadata);
  if(data.extensionReleaseWarnings?.length)$('softwareExtensionStatus').textContent+=' · Some sources unavailable.';
@@ -10266,6 +10269,12 @@ window.addEventListener('message',event=>{
  renderExtensionUpgradeInstallState('ready');
  $('extensionUpgradeCurrent').textContent='v'+String(message.currentVersion||'?');
  $('extensionUpgradeNext').textContent='v'+String(message.version||'?');
+ if(message.sameVersion){
+  const current=String(message.currentContentSha256||message.currentBuildSha||'');
+  const next=String(message.nextContentSha256||message.nextBuildSha||'');
+  if(current)$('extensionUpgradeCurrent').textContent+=' · '+current.slice(0,8);
+  if(next)$('extensionUpgradeNext').textContent+=' · '+next.slice(0,8);
+ }
  $('extensionUpgradeDescription').textContent='ATGV v'+String(message.version||'?')+(message.legacyBuild?' has a verified build. Your installed build identity is unavailable; approve this one-time migration only if you want to replace it.':message.sameVersion?' has an updated build.':' is available.');
  const modal=$('extensionUpgradeModal');modal.classList.remove('hidden');modal.setAttribute('aria-hidden','false');
  $('extensionUpgradeInstall').focus();
