@@ -21,7 +21,7 @@
  let state=null,requestedProject='',artifactProject='',jiraView='list',jiraTab='all',tableKey='',brKey='',kind='iso',sourceDigest='',artifactContext=null,request=0;
  let aiResolve={running:false,message:'',stopping:false};
  const recovery=window.ATGVRecoveryController?.create();
- let recoveryTimer=null,recoveryAction=null,pendingRefreshProject='';
+ let recoveryAction=null,pendingRefreshProject='';
  let jiraFieldView=null,jiraFieldDirty=false,jiraFieldLoading=false,jiraFieldRequest=0;
  const collapsed=new Set();
  const input=get('baAutoArtifactText'),quillMount=get('baAutoQuillEditor');
@@ -600,7 +600,7 @@
   renderBACompletedRecords();
   renderReadyPanels(phase);
   renderArtifacts();renderRequirements();renderJira();
-  scheduleRecovery();
+  // The extension host repairs findings within preparation; do not launch a second repair from render().
  }
 
 
@@ -743,24 +743,6 @@
   invoke('baAutoResolveAttention',{revision:brState.revision});
   return true;
  }
- function scheduleRecovery(){
-  if(!recovery||recoveryTimer!==null||!active()||!activeId||recovery.get(activeId).paused)return;
-  const project=activeId;
-  recoveryTimer=setTimeout(()=>{
-   recoveryTimer=null;
-   if(project!==activeId||!active())return;
-   const evidence=recoveryEvidence();
-   if(!evidence)return;
-   if(!recovery.begin(project,evidence)){
-    if(recovery.get(project).paused)render();
-    return;
-   }
-   recoveryAction={project,action:evidence.action};
-   if(evidence.action==='repair'){
-    if(!startAttentionRepair()){recovery.finish(project,{failed:true,reason:'AI recovery paused: repair no longer eligible.'});recoveryAction=null;render();}
-   }else{invoke('baRefreshArtifacts');render();}
-  },900);
- }
  get('baAutoResolveAttention').addEventListener('click',()=>{
   if(get('baAutoResolveAttention').disabled||recoveryAction)return;
   if(recovery){
@@ -789,7 +771,7 @@
  });
 
  window.addEventListener('atgv:viewchange',()=>{
-  if(!active()){if(recoveryTimer!==null){clearTimeout(recoveryTimer);recoveryTimer=null;}requestedProject='';if(!dirty())resetWorkflowPanels();}
+  if(!active()){requestedProject='';if(!dirty())resetWorkflowPanels();}
   render();
  });
  window.addEventListener('message',({data:m})=>{
