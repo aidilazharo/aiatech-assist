@@ -35,3 +35,14 @@ test('verified same-version build inspection rejects checksum mismatch and selec
  assert.equal(selected.tag,newer.tag_name);assert.deepEqual(await updater.inspectReleaseBuild(selected,{request:async url=>url.endsWith('/1')?bytes:Buffer.from(sha+'  '+filename+'\n')}),next);
  await assert.rejects(updater.inspectReleaseBuild(selected,{request:async url=>url.endsWith('/1')?bytes:Buffer.from('0'.repeat(64)+'  '+filename+'\n')}),/checksum verification/);
 });
+
+test('legacy build can migrate only to a valid verified stamped package; content identity still deduplicates',()=>{
+ const legacy=manifest(undefined),sourceSha='c'.repeat(40);
+ assert.equal(identity.eligibleBuild(legacy,next),true);
+ assert.equal(identity.eligibleBuild(legacy,null),false);
+ assert.equal(identity.eligibleBuild({...legacy,atgvBuild:{schema:999}},next),false);
+ assert.equal(identity.eligibleBuild(manifest(next),{...next,builtAt:'2026-11-29T01:00:00.000Z'}),false);
+ assert.equal(identity.eligibleBuild(manifest(next),old),false);
+ assert.deepEqual(identity.identity(manifest({...next,sourceSha}),version),{...next,sourceSha});
+ assert.deepEqual(identity.identity(manifest({...next,sourceSha:'bad'}),version),next);
+});

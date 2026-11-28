@@ -33,7 +33,7 @@ function select(releases,repository=REPO){
   const checksum=(release.assets||[]).find(a=>trustedAsset(a,'library-source.sha256',repository));
   if(archive&&(checksum||(/-local\.[a-f0-9]{7,40}$/.test(release.tag_name)&&/^sha256:[a-f0-9]{64}$/.test(String(archive.digest||'')))))candidates.push({...version,filename,archive,checksum,tag:release.tag_name,url:release.html_url,repository,publishedAt:release.published_at||''});
  }
- candidates.sort((a,b)=>updater.compareVersion(b.version,a.version)||b.build-a.build);
+ candidates.sort((a,b)=>updater.compareVersion(b.version,a.version)||((Date.parse(b.publishedAt)||0)-(Date.parse(a.publishedAt)||0))||b.build-a.build);
  return candidates[0]||null;
 }
 async function fetchReleaseList({repository=REPO,request=updater.getBytes}={}){
@@ -62,7 +62,7 @@ async function latestAcrossRepositories({request=updater.getBytes}={}){
    found.push({...version,tag:row.tag_name,url:row.html_url,repository,publishedAt:row.published_at||'',row});
   }
  });
- found.sort((a,b)=>updater.compareVersion(b.version,a.version)||b.build-a.build||((Date.parse(b.publishedAt)||0)-(Date.parse(a.publishedAt)||0))||RELEASE_REPOSITORIES.indexOf(a.repository)-RELEASE_REPOSITORIES.indexOf(b.repository));
+ found.sort((a,b)=>updater.compareVersion(b.version,a.version)||((Date.parse(b.publishedAt)||0)-(Date.parse(a.publishedAt)||0))||b.build-a.build||RELEASE_REPOSITORIES.indexOf(a.repository)-RELEASE_REPOSITORIES.indexOf(b.repository));
  const newest=found[0];
  if(!newest)return {release:null,latest:null,errors};
  const release=select([newest.row],newest.repository);

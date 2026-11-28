@@ -54,3 +54,20 @@ test('the update modal displays semantic versions without build suffixes',()=>{
  assert.ok(modal.includes("latest?'v'+latest:'Version unavailable'"));
  assert.doesNotMatch(modal,/ · build |installedBuild|latestBuild/);
 });
+
+test('same-version Library checks compare verified same-source SHA rather than release tags',()=>{
+ const installed={version:'0.0.11',repository:'aidilazharo/tech-stacks-skills',sha:'a'.repeat(40)};
+ const changed={...installed,sha:'b'.repeat(40)};
+ assert.equal(versions.compareInstalledSource(installed,changed).reason,'changed-source');
+ assert.equal(versions.compareInstalledRelease(installed,{...changed,tag:'v0.0.11-source-build.99'}).available,true);
+ assert.equal(versions.compareInstalledRelease(installed,{...installed,tag:'v0.0.11-source-build.99'}).available,false);
+ assert.equal(versions.compareInstalledSource(installed,{...changed,repository:'other/repo'}).available,false);
+ assert.equal(versions.compareInstalledSource(installed,{...changed,version:'0.0.10'}).available,false);
+ assert.equal(versions.compareInstalledSource(installed,{...changed,sha:'bad'}).available,false);
+});
+test('catalog busy state queues a fresh check and pull permits verified changed source SHA',()=>{
+ const host=read('src/lib/runtime/extension-runtime.js');
+ assert.match(host,/if\(catalogBusy\)\{pendingLibraryReleaseCheck=true/);
+ assert.match(host,/finally\{resumeDeferredLibraryCheck\(\);\}/);
+ assert.match(host,/libraryUpdateVersion\.compareInstalledSource\(installed,remote\)\.available/);
+});

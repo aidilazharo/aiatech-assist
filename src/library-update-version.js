@@ -16,8 +16,17 @@ function releaseBuild(tag,version){
  const match=/^v?(\d+\.\d+\.\d+)(?:-source-build\.(\d+))?$/.exec(String(tag||''));
  return match&&match[1]===version?Number(match[2]||0):null;
 }
+// Verified main SHA identifies a source revision. Pull still pins the SHA and enforces Git safeguards.
+function compareInstalledSource(installed,remote){
+ const base=compareInstalledRemote(installed?.version,remote?.version);
+ if(base.reason!=='same')return base;
+ const sha=value=>/^[a-f0-9]{40}$/.test(String(value||''));
+ if(!sha(installed?.sha)||!sha(remote?.sha)||!installed?.repository||!remote?.repository||installed.repository.toLowerCase()!==remote.repository.toLowerCase())return base;
+ return installed.sha===remote.sha?base:{...base,available:true,reason:'changed-source'};
+}
 function compareInstalledRelease(installed,remote){
  const base=compareInstalledRemote(installed?.version,remote?.version);
+ if(base.reason==='same'&&remote?.sha)return compareInstalledSource(installed,{...remote,repository:remote.sourceRepository||remote.repository});
  if(base.reason!=='same'||!remote?.tag)return base;
  const next=releaseBuild(remote.tag,base.remote),current=releaseBuild(installed?.releaseTag,base.installed);
  if(next===null)return {...base,available:false,reason:'remote-unverified'};
@@ -42,4 +51,4 @@ function verifyActivatedPull(expected,selected){
   throw Error('Library pull verification failed: GitHub main v'+remote+' differs from active v'+active+'. Refresh the catalog checkout, then retry Pull Library.');
  return {version:active,source:'git'};
 }
-module.exports={validVersion,compareInstalledRemote,compareInstalledRelease,displayLibraryUpdate,verifyActivatedPull};
+module.exports={validVersion,compareInstalledRemote,compareInstalledSource,compareInstalledRelease,displayLibraryUpdate,verifyActivatedPull};

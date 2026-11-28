@@ -109,6 +109,15 @@ with tempfile.TemporaryDirectory(prefix='atgv-vsix-stage-') as staging:
         fingerprint.update(name.encode('utf-8')+b'\0'+hashlib.sha256(data).digest())
     packaged_manifest=dict(pkg)
     packaged_manifest['atgvBuild']={'schema':1,'contentSha256':fingerprint.hexdigest(),'builtAt':datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00','Z')}
+    # Optional provenance from the exact clean tracked source checkout.
+    try:
+        git_root=subprocess.check_output(['git','rev-parse','--show-toplevel'],cwd=root,stderr=subprocess.DEVNULL,text=True,timeout=10).strip()
+        if Path(git_root).resolve()==root.resolve():
+            source_sha=subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,stderr=subprocess.DEVNULL,text=True,timeout=10).strip()
+            if re.fullmatch(r'[a-f0-9]{40}',source_sha) and not subprocess.check_output(['git','status','--porcelain','--untracked-files=no'],cwd=root,stderr=subprocess.DEVNULL,text=True,timeout=10).strip():
+                packaged_manifest['atgvBuild']['sourceSha']=source_sha
+    except (OSError,subprocess.SubprocessError):
+        pass # Standalone source archives still carry the payload fingerprint.
     with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as z:
         z.writestr('[Content_Types].xml',types)
         z.writestr('extension.vsixmanifest',xml)

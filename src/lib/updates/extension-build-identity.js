@@ -8,10 +8,17 @@ function identity(manifest,version){
  const b=manifest?.atgvBuild;
  if(manifest?.name!=='atgv-aiatech-assist'||manifest?.publisher!=='aia-my'||manifest?.version!==version||
     b?.schema!==1||!HEX.test(String(b.contentSha256||''))||!Number.isFinite(date(b.builtAt)))return null;
- return {schema:1,contentSha256:b.contentSha256,builtAt:b.builtAt};
+ return {schema:1,contentSha256:b.contentSha256,builtAt:b.builtAt,...(/^[a-f0-9]{40}$/.test(String(b.sourceSha||''))?{sourceSha:b.sourceSha}:{})};
 }
 function newerBuild(installed,candidate){
  return !!installed&&!!candidate&&candidate.contentSha256!==installed.contentSha256&&date(candidate.builtAt)>date(installed.builtAt);
+}
+// A legacy package has no trustworthy build time; migrate only with explicit approval.
+function eligibleBuild(manifest,candidate){
+ if(!candidate||!HEX.test(String(candidate.contentSha256||''))||!Number.isFinite(date(candidate.builtAt)))return false;
+ if(manifest?.name!=='atgv-aiatech-assist'||manifest?.publisher!=='aia-my')return false;
+ const installed=identity(manifest,manifest.version);
+ return installed?newerBuild(installed,candidate):!manifest.atgvBuild;
 }
 // Read exactly one bounded ZIP central-directory member; never extract paths,
 // run code or trust arbitrary compression sizes. Python packager uses normal
@@ -48,4 +55,4 @@ function readManifest(bytes){
  if(pos!==e||!member)throw Error('VSIX package manifest unavailable.');
  return member;
 }
-module.exports={identity,newerBuild,readManifest};
+module.exports={identity,newerBuild,eligibleBuild,readManifest};

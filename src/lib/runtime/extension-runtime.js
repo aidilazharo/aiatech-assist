@@ -598,7 +598,7 @@ async function catalogCheck({interactive=false}={}){
     report('Library update available: active v'+installed.version+'; verified GitHub main v'+info.version+'. Awaiting Pull Library approval.');
   }
  }catch(error){catalogRemote=null;catalogLastError=librarySourceFallback.safeMessage(error);report('Library check: '+error.message);if(interactive)throw Error(catalogLastError);}
- finally{catalogBusy=false;await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});}
+ finally{catalogBusy=false;try{await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});}finally{resumeDeferredLibraryCheck();}}
 }
 function scheduleCatalogChecks(){
   if(catalogWatch){clearInterval(catalogWatch);catalogWatch=null;}
@@ -616,7 +616,12 @@ let extensionRelease=null,extensionLatest=null,libraryRelease=null,extensionUpda
 let libraryLatest=null,libraryReleaseAvailable=false;
 const LEGACY_RELEASE_DOWNLOAD_PAT_SECRET='atgvAssist.releaseDownload.pat';
 let extensionReleaseWarnings=[],libraryReleaseWarnings=[];
-let startupSessionId=0,startupUpdateSessionChecked=0,pendingStartupUpdateCheck=false;
+let startupSessionId=0,startupUpdateSessionChecked=0,pendingStartupUpdateCheck=false,pendingLibraryReleaseCheck=false;
+function resumeDeferredLibraryCheck(){
+ if(!pendingLibraryReleaseCheck||catalogBusy||softwareCheckBusy)return;
+ pendingLibraryReleaseCheck=false;
+ void checkSoftwareUpdates({prompt:true,force:true}).catch(e=>report('Deferred Library update check: '+e.message));
+}
 function updatePreferences(){
  const routes=updateRepositoryRoutes.forOwner(extensionSettings?.github?.owner);
  return {
@@ -632,7 +637,8 @@ function updatePreferences(){
  };
 }
 function updateStatus(){return {settings:updatePreferences(),installedVersion:require('../../../package.json').version,
- latest:extensionRelease?{version:extensionRelease.version,tag:extensionRelease.tag,url:extensionRelease.url,sameVersion:!!extensionRelease.sameVersion}:null,
+ installedBuildSha:require('../../../package.json').atgvBuild?.sourceSha||'',
+ latest:extensionRelease?{version:extensionRelease.version,tag:extensionRelease.tag,url:extensionRelease.url,sameVersion:!!extensionRelease.sameVersion,sourceSha:extensionRelease.buildIdentity?.sourceSha||''}:null,
  extensionLatest,
  extensionLastCheck:extensionUpdateChecked,extensionError:extensionUpdateError,
  libraryLastCheck:catalogLastCheck,libraryError:libraryUpdateError,
@@ -718,7 +724,7 @@ async function performVerifiedExtensionInstall(operation){
    const manifest=require('../../../package.json');
    const actual=identity.identity(identity.readManifest(await fs.readFile(vsix)),manifest.version);
    const expected=operation.release.buildIdentity;
-   if(!actual||actual.contentSha256!==expected?.contentSha256||actual.builtAt!==expected?.builtAt||!identity.newerBuild(identity.identity(manifest,manifest.version),actual))throw Error('The verified build changed or is not newer. Check for updates again.');
+   if(!actual||actual.contentSha256!==expected?.contentSha256||actual.builtAt!==expected?.builtAt||!identity.eligibleBuild(manifest,actual)||actual.sourceSha!==expected?.sourceSha)throw Error('The verified build changed or is not newer. Check for updates again.');
   }
   await postExtensionInstallProgress(operation,'installing','Installing extension…','VS Code is installing the verified package. Keep this dialog open.');
   await vscode.commands.executeCommand('workbench.extensions.installExtension',vscode.Uri.file(vsix));
@@ -754,7 +760,7 @@ async function offerBrandedExtensionUpgrade(release){
   pendingExtensionUpgradeOffers.set(requestId,{resolve,timer});
   Promise.resolve(dashboard.webview.postMessage({type:'extensionUpgradeOffer',requestId,
     currentVersion:require('../../../package.json').version,version:release.version,
-    publishedAt:release.publishedAt,sameVersion:!!release.sameVersion})).then(success=>{
+    publishedAt:release.publishedAt,sameVersion:!!release.sameVersion,legacyBuild:!!release.legacyBuild})).then(success=>{
       if(!success){const entry=pendingExtensionUpgradeOffers.get(requestId);if(entry){clearTimeout(entry.timer);pendingExtensionUpgradeOffers.delete(requestId);resolve({action:'Later',requestId});}}
     }).catch(()=>{clearTimeout(timer);pendingExtensionUpgradeOffers.delete(requestId);resolve({action:'Later',requestId});});
  });
@@ -785,9 +791,9 @@ async function checkExtensionRelease({prompt=false,interactive=false,forcePrompt
   extensionLatest=checked.latest;extensionRelease=null;
   const comparison=result?releaseUpdater.compareVersion(result.version,installed):null;
   if(comparison>0)extensionRelease=result;
-  else if(comparison===0&&buildIdentity.identity(manifest,installed)){
+  else if(comparison===0){
    const remote=await releaseUpdater.inspectReleaseBuild(result,{request});
-   if(buildIdentity.newerBuild(buildIdentity.identity(manifest,installed),remote))extensionRelease={...result,sameVersion:true,buildIdentity:remote};
+   if(buildIdentity.eligibleBuild(manifest,remote))extensionRelease={...result,sameVersion:true,legacyBuild:!manifest.atgvBuild,buildIdentity:remote};
   }
   extensionUpdateError='';extensionUpdateChecked=new Date().toISOString();
   if(prompt&&extensionRelease)await promptExtensionRelease(extensionRelease,{force:forcePrompt});
@@ -819,8 +825,8 @@ async function offerBrandedPrerequisiteInstall(plan){
  });
 }
 
-async function offerBrandedLibraryUpdate({repository,installedVersion,remoteVersion,installedTag='',remoteTag='',installedVersionWarning='',publishedAt=''}){
- const comparison=libraryUpdateVersion.compareInstalledRelease({version:installedVersion,releaseTag:installedTag},{version:remoteVersion,tag:remoteTag});
+async function offerBrandedLibraryUpdate({repository,installedVersion,remoteVersion,installedTag='',remoteTag='',installedSha='',remoteSha='',installedRepository='',sourceRepository='',installedVersionWarning='',publishedAt=''}){
+ const comparison=libraryUpdateVersion.compareInstalledRelease({version:installedVersion,releaseTag:installedTag,sha:installedSha,repository:installedRepository},{version:remoteVersion,tag:remoteTag,sha:remoteSha,sourceRepository});
  if(!comparison.available)throw Error('The remote library version is not newer than the installed library.');
  const message='SDLC Library v'+comparison.remote+' is available '+(comparison.installed?'(installed v'+comparison.installed+')':'(not yet installed)')+'. Download the verified catalog? Active project files remain unchanged.';
  if(!dashboard)return vscode.window.showInformationMessage(message,{modal:true},'Pull Library','Later');
@@ -854,11 +860,11 @@ async function promptLibraryRelease(release,{force=false}={}){
  const comparison=libraryUpdateVersion.compareInstalledRelease(installedCatalog,release);
  if(!comparison.available||!updatePreferences().promptForUpdates||!getWorkspace()||pendingLibraryUpdateOffers.size||activeLibraryUpdatePullRequestId)return;
  const key='atgvAssist.updates.promptedLibrary';
- const promptId=String(release.repository||'')+'|'+String(release.tag||release.version)+'|'+(comparison.installed||'not-installed')+'|'+getWorkspace().uri.fsPath;
+ const promptId=String(release.repository||'')+'|'+String(release.sha||release.tag||release.version)+'|'+(installedCatalog.sha||comparison.installed||'not-installed')+'|'+getWorkspace().uri.fsPath;
  if(!force&&context.globalState.get(key)===promptId)return;
  await context.globalState.update(key,promptId);
  const answer=await offerBrandedLibraryUpdate({repository:release.repository||'tech-stacks-skills',installedVersion:comparison.installed,
-  remoteVersion:comparison.remote,installedTag:installedCatalog.releaseTag||'',remoteTag:release.tag||'',installedVersionWarning:installedCatalog.versionWarning||'',publishedAt:release.publishedAt||''});
+  remoteVersion:comparison.remote,installedTag:installedCatalog.releaseTag||'',remoteTag:release.tag||'',installedSha:installedCatalog.sha||'',remoteSha:release.sha||'',installedRepository:installedCatalog.repository||'',sourceRepository:release.sourceRepository||'',installedVersionWarning:installedCatalog.versionWarning||'',publishedAt:release.publishedAt||''});
  if(answer==='Pull Library'&&!dashboard){
   if(!getWorkspace())await uiInformation('Open an ATGV workspace to update the SDLC Library.');
   else await handleDashboardMessage({command:'catalogPull'});
@@ -866,7 +872,7 @@ async function promptLibraryRelease(release,{force=false}={}){
 }
 async function checkLibraryRelease({prompt=false,interactive=false,forcePrompt=false}={}){
  try{
-  if(catalogBusy){libraryRelease=null;libraryUpdateError='Library update check is waiting for another catalog operation.';return null;}
+  if(catalogBusy){pendingLibraryReleaseCheck=true;libraryRelease=null;libraryReleaseAvailable=false;libraryUpdateError='Library update check queued until the current catalog operation finishes.';return null;}
   const request=releaseUpdater.authorizedRequest(await githubIssueAccessToken());
   const checked=await libraryReleaseUpdater.latestAcrossRepositories({request});
   libraryRelease=checked.release;libraryLatest=checked.latest;libraryReleaseWarnings=checked.errors;
@@ -875,12 +881,13 @@ async function checkLibraryRelease({prompt=false,interactive=false,forcePrompt=f
   // verified catalogue commit/version with a mirror's older release tag.
   catalogLastCheck=new Date().toISOString();catalogLastError='';libraryUpdateError='';
   const installedCatalog=(await catalogUiState()).installed||{};
-  libraryReleaseAvailable=!!libraryRelease&&libraryUpdateVersion.compareInstalledRelease(installedCatalog,libraryRelease).available;
-  if(!libraryReleaseAvailable)return null;
-  // The Pull action uses the configured Git source, not necessarily the release repository.
-  // Verify the exact same source and credential silently before showing an offer.
+  // Compare verified source main even when the semantic version is unchanged.
   const config=catalogConfig();
   const {remote:source}=await resolveLibrarySource(config,{interactive:false});
+  catalogRemote={sha:source.sha,repository:source.repository,private:source.private,version:source.version};
+  if(libraryRelease&&source?.sha&&source.version===libraryRelease.version)libraryRelease={...libraryRelease,sha:source.sha,sourceRepository:source.repository};
+  libraryReleaseAvailable=!!libraryRelease&&libraryUpdateVersion.compareInstalledRelease(installedCatalog,libraryRelease).available;
+  if(!libraryReleaseAvailable)return null;
   if(!source?.sha||source.version!==libraryRelease.version)throw Error('Library update unavailable: configured main does not match the published release version.');
   await releaseUpdater.assertReleaseAccessible(libraryRelease,{request});
   const remote=libraryRelease.version;
@@ -890,7 +897,7 @@ async function checkLibraryRelease({prompt=false,interactive=false,forcePrompt=f
  finally{await publishUpdateStatus();}
 }
 async function checkSoftwareUpdates({prompt=false,interactive=false,force=false,startup=false,extensionOnly=false}={}){
- if(softwareCheckBusy){if(startup)pendingStartupUpdateCheck=true;return;}
+ if(softwareCheckBusy){if(startup||force)pendingStartupUpdateCheck=true;return;}
  softwareCheckBusy=true;await publishUpdateStatus();
  const config=updatePreferences();const errors=[];
  try{
@@ -906,7 +913,7 @@ async function checkSoftwareUpdates({prompt=false,interactive=false,force=false,
    if(!extensionOnly&&libraryRelease)await promptLibraryRelease(libraryRelease,{force:startup||interactive});
   }
   if(errors.length&&interactive)throw Error(errors.join(' | '));
- }finally{softwareCheckBusy=false;await publishUpdateStatus();if(pendingStartupUpdateCheck){pendingStartupUpdateCheck=false;void checkSoftwareUpdates({prompt:true,force:true,startup:true}).catch(e=>report('Startup update check: '+e.message));}}
+ }finally{softwareCheckBusy=false;await publishUpdateStatus();if(pendingStartupUpdateCheck){pendingStartupUpdateCheck=false;void checkSoftwareUpdates({prompt:true,force:true,startup:true}).catch(e=>report('Startup update check: '+e.message));}else resumeDeferredLibraryCheck();}
 }
 function scheduleSoftwareUpdates(){
  if(softwareUpdateTimer)clearInterval(softwareUpdateTimer);
@@ -7724,8 +7731,9 @@ async function handleDashboardMessage(msg){
         if(installed?.sha===remote.sha){await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});await dashboard?.webview.postMessage({type:'architectCatalogAction',success:true,message:'Technology stack catalog is already up to date.'});break;}
         const confirmation=await uiWarning(`Install the latest verified Library from ${remote.repository} (main)?\n\nCurrent: ${installed?.sha?.slice(0,12)||'not installed'}\nLatest: ${remote.sha.slice(0,12)}\n\nThe stable .atgv/library/repository Git checkout will fast-forward from origin/main, preserving your generated application code, Git branches and approved documents. Local catalog modifications will block the pull rather than be overwritten.`,{modal:true},'Pull & Update');
         if(confirmation!=='Pull & Update'){await dashboard?.webview.postMessage({type:'architectCatalogAction',success:false,message:'Catalog update cancelled; nothing downloaded.'});break;}
-        catalogBusy=true;await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});
+        catalogBusy=true;
         try{
+          await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});
           if(!getWorkspace())throw Error('Open a workspace before pulling the Library.');
           await ensureWorkspaceLibrary(getWorkspace().uri.fsPath);
           const snapshot=await sdlcCatalog.syncGitWorkspace(config,token,getWorkspace().uri.fsPath,context.globalStorageUri.fsPath);
@@ -7734,7 +7742,7 @@ async function handleDashboardMessage(msg){
           catalogRemote={sha:pinned.sha,repository:pinned.repository,version:pinned.version};catalogLastError='';catalogLastCheck=new Date().toISOString();
           await dashboard?.webview.postMessage({type:'architectCatalogAction',success:true,message:`Catalog v${selected.version} verified and installed (${selected.sha?.slice(0,12)||'offline'}). Existing applications unchanged.`});
           await refreshDashboard();
-        }finally{catalogBusy=false;await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});}
+        }finally{catalogBusy=false;try{await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});}finally{resumeDeferredLibraryCheck();}}
         await refreshDashboard();break;
       }
       case 'architectUseConfiguredRepo':{
@@ -10034,7 +10042,7 @@ async function handleDashboardMessage(msg){
           }
         }catch(error){catalogLastError=error.message;report('Library Studio catalog sync: '+error.message);
           await dashboard?.webview.postMessage({type:'librarySyncResult',success:false,message:'Catalog sync failed; previous library retained. '+error.message});
-        }finally{catalogBusy=false;await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});}
+        }finally{catalogBusy=false;try{await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});}finally{resumeDeferredLibraryCheck();}}
         break;
       }
       case 'libraryRead':{
@@ -10346,9 +10354,9 @@ async function handleDashboardMessage(msg){
         }
         let config=catalogConfig();
         catalogBusy=true;
-        await progress('running',5,'Preparing SDLC Library update…','Verifying the configured GitHub Library main branch.');
-        await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});
         try{
+          await progress('running',5,'Preparing SDLC Library update…','Verifying the configured GitHub Library main branch.');
+          await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});
           if(!getWorkspace())throw Error('Open a workspace before pulling the SDLC Library.');
           const workspace=getWorkspace().uri.fsPath;
           const installed=await sdlcCatalog.activeRoot(workspace).catch(error=>{
@@ -10362,7 +10370,7 @@ async function handleDashboardMessage(msg){
             throw Error('Cannot verify the GitHub Library main branch. Update your GitHub credentials in Settings, then retry Pull Library.');
           catalogRemote={repository:remote.repository,version:remote.version,sha:remote.sha};
           const verified=await verifiedActiveLibrary(workspace,installed);
-          const newer=!installed||libraryUpdateVersion.compareInstalledRemote(installed.version,remote.version).available;
+          const newer=!installed||libraryUpdateVersion.compareInstalledRemote(installed.version,remote.version).available||libraryUpdateVersion.compareInstalledSource(installed,remote).available;
           const sourceSwitch=resolved.fallback&&!!installed?.repository&&installed.repository.toLowerCase()!==remote.repository.toLowerCase();
           const repairSameVersion=(sourceSwitch||msg.requiredLibrary===true&&!verified)&&installed?.version===remote.version;
           if(!newer&&!repairSameVersion){
@@ -10407,7 +10415,7 @@ async function handleDashboardMessage(msg){
           throw Error(catalogLastError);
         }finally{
           catalogBusy=false;
-          await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});
+          try{await dashboard?.webview.postMessage({type:'catalogState',catalog:await catalogUiState()});}finally{resumeDeferredLibraryCheck();}
         }
         break;
       }

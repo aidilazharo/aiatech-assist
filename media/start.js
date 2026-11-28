@@ -5502,13 +5502,17 @@ function renderSoftwareUpdates(data,force=false){
  const mirrorBehind=!!installedLibrary&&compareSemver(mirrorLibrary,installedLibrary)<0;
  const sourceBehind=!!installedLibrary&&compareSemver(sourceLibrary,installedLibrary)<0;
  const sourceAhead=!!installedLibrary&&compareSemver(sourceLibrary,installedLibrary)>0;
+ const sourceChanged=compareSemver(sourceLibrary,installedLibrary)===0&&!!catalogState?.installed?.sha&&!!data.libraryLatestSha&&catalogState.installed.sha!==data.libraryLatestSha&&!!catalogState?.installed?.repository&&catalogState.installed.repository===catalogState?.remote?.repository;
  $('softwareLibraryStatus').textContent=data.libraryError?`Library: ${data.libraryError}`:
+  sourceChanged?`Library v${installedLibrary}: new source revision ${data.libraryLatestSha.slice(0,8)} available. Pull Library Updates.`:
   sourceAhead?`Library source main v${sourceLibrary} is newer than active v${installedLibrary}. Pull Library Updates to verify and update the selected source.`:
   mirrorBehind?`Active Library v${installedLibrary} is newer than public mirror v${mirrorLibrary}. ${sourceLibrary?'Selected source main v'+sourceLibrary+(sourceBehind?' is also older.':' is verified.'):'Check selected GitHub source main for newer commits.'} No downgrade available.`:
   installedLibrary&&mirrorLibrary&&compareSemver(mirrorLibrary,installedLibrary)===0?`Active Library v${installedLibrary} matches the verified published release. Check selected source main for updates.`:
   data.libraryLatest?`Library published release: v${mirrorLibrary}${data.libraryLatestAvailable?'. Pull Library Updates to check source main first and install only a newer verified version.':'; verified ZIP or checksum is unavailable or the installed Library is newer.'}`:
   `Library: no published release yet. Check selected GitHub source main for updates.`;
  const publishedLabel=metadata=>metadata?.publishedAt?' · Published '+new Date(metadata.publishedAt).toLocaleString():'';
+ if(data.installedBuildSha)$('softwareExtensionStatus').textContent+=' · Source '+data.installedBuildSha.slice(0,8);
+ if(data.latest?.sourceSha)$('softwareExtensionStatus').textContent+=' → '+data.latest.sourceSha.slice(0,8);
  $('softwareExtensionStatus').textContent+=publishedLabel(data.extensionLatest);
  $('softwareLibraryStatus').textContent+=publishedLabel(data.libraryReleaseMetadata);
  if(data.extensionReleaseWarnings?.length)$('softwareExtensionStatus').textContent+=' · Some sources unavailable.';
@@ -10262,7 +10266,7 @@ window.addEventListener('message',event=>{
  renderExtensionUpgradeInstallState('ready');
  $('extensionUpgradeCurrent').textContent='v'+String(message.currentVersion||'?');
  $('extensionUpgradeNext').textContent='v'+String(message.version||'?');
- $('extensionUpgradeDescription').textContent='ATGV v'+String(message.version||'?')+(message.sameVersion?' has an updated build.':' is available.');
+ $('extensionUpgradeDescription').textContent='ATGV v'+String(message.version||'?')+(message.legacyBuild?' has a verified build. Your installed build identity is unavailable; approve this one-time migration only if you want to replace it.':message.sameVersion?' has an updated build.':' is available.');
  const modal=$('extensionUpgradeModal');modal.classList.remove('hidden');modal.setAttribute('aria-hidden','false');
  $('extensionUpgradeInstall').focus();
 });
