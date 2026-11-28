@@ -160,7 +160,7 @@ function publicationIssues(register){
  if(!active.length&&!(register.brs||[]).some(br=>!br.archivedFromRestart&&br.status==='retire-proposed'&&br.approvedContent))
   blockers.push('Generated Requirements: prepare Business Requirements.');
  for(const br of active){
-  if(!['draft','approved'].includes(br.status)||br.status==='draft'&&!br.draftSavedAt||br.needsRefresh||br.externalReviewRequired||br.roleReviewRequired||br.dependencyReviewRequired)
+  if(!['draft','approved'].includes(br.status)||br.status==='draft'&&(!br.draftSavedAt||br.draftSource?.digest!==register.importDigest||br.draftSource?.discoveryRevision!==register.discoveryRevision||br.draftSource?.epoch!==register.importEpoch)||br.status==='approved'&&br.needsRefresh||br.externalReviewRequired||br.roleReviewRequired||br.dependencyReviewRequired)
    blockers.push('Generated Requirements: '+br.id+' is not ready.');
   if(register.baDraftQuality?.checked?.[br.id]!==qualityFingerprint(register,br))
    blockers.push('Generated Requirements: '+br.id+' quality verification is incomplete.');
