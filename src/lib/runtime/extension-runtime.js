@@ -4009,7 +4009,7 @@ async function generateBusinessRequirements(options={}){
  const check=()=>{options.signal?.throwIfAborted();if(activeProject?.id!==projectId)throw Error('Project changed during BR generation.');};
  check();
  const saved=await discovery.load(registry,activeProject.id),register=await brWorkflow.load(registry,activeProject.id);
- await requireBAWritableCycle(register);
+ if(options.autoResolve!==true)await requireBAWritableCycle(register);
  if(!register.sourceDocuments.length)throw Error('No active source documents. Upload or restore evidence before generating new BR drafts. Existing BRs and Jira are preserved.');
  if(!register.importEpoch||register.reviewRevision!==saved.revision||register.discoveryRevision!==saved.revision)
   throw Error('Import Word/PDF, save Discovery, and review it with an AI model before generating BR drafts.');
@@ -4024,9 +4024,9 @@ async function generateBusinessRequirements(options={}){
  const staleDrafts=(register.brs||[]).filter(br=>br.status==='draft'&&(br.staleReason==='Discovery answers changed'||br.staleReason==='New source mapping completed'||br.source?.discoveryRevision!==register.discoveryRevision));
  const currentDrafts=(register.brs||[]).filter(br=>br.status==='draft'&&!staleDrafts.includes(br));
  const resolutionIds=options.autoResolve===true?new Set(Array.isArray(options.targetBrIds)?options.targetBrIds:[]):null;
- const resolutionDrafts=resolutionIds?[...resolutionIds].map(id=>currentDrafts.find(br=>br.id===id)):[];
+ const resolutionDrafts=resolutionIds?[...resolutionIds].map(id=>register.brs.find(br=>br.id===id&&baAutomatic.repairEligible(register,br))):[];
  if(resolutionIds&&(!resolutionIds.size||resolutionDrafts.some(br=>!br)))
-  throw Error('AI repair requires current draft revisions. Regenerate outdated affected drafts before AI repair.');
+  throw Error('AI repair requires current owned requirements without pending change or external review blockers.');
  if(resolutionIds)for(const br of resolutionDrafts)await requireBAOwner('ba-br-'+br.id);
  if(!automatic&&currentDrafts.length&&!options.selective&&!options.regenerate)throw Error('Review or approve the current Business Requirements drafts, or choose Regenerate Proposal to improve them.');
  if(options.regenerate&&(!(resolutionIds?resolutionDrafts:currentDrafts).length||!resolutionIds&&currentDrafts.some(br=>br.approvedContent)))throw Error('Regeneration requires editable, unapproved drafts. Start a controlled revision for approved requirements.');
@@ -4520,7 +4520,7 @@ function brPreparationTitle(register){
 // approves a BR, alters an approved revision, or publishes a Jira issue.
 function currentAttentionFindings(register){
  return (register.baDraftQuality?.excluded||[]).filter(row=>{
-  const draft=(register.brs||[]).find(br=>br.id===row.id&&!br.archivedFromRestart&&br.status==='draft');
+  const draft=(register.brs||[]).find(br=>br.id===row.id&&!br.archivedFromRestart&&['draft','approved'].includes(br.status));
   return !!draft&&baAutomatic.hasQualityFinding(register,draft);
  });
 }
@@ -4594,16 +4594,17 @@ async function repairAutomaticBAFindings(projectId,signal,report,initialWarning=
   const ownership=await listOwnership();
   if(!ownership.me||ownership.cached||ownership.scope==='local')throw Error('AI repair requires live verified ownership. Reconnect to Jira and Confluence.');
   const owned=new Set(ownership.documents.filter(row=>row.ownerId===ownership.me).map(row=>row.documentId));
-  const selected=findings.filter(row=>owned.has('ba-br-'+row.id)&&before.brs.some(br=>br.id===row.id&&br.status==='draft'));
+  const selected=findings.filter(row=>owned.has('ba-br-'+row.id)&&before.brs.some(br=>br.id===row.id&&baAutomatic.repairEligible(before,br)));
   for(const item of selected)await requireBAOwner('ba-br-'+item.id);
   const originalIds=[...new Set(selected.map(row=>row.id))];
   let targets=originalIds,changed=new Set();
+  for(const item of findings)await recordBAProcess({stage:'requirements',action:'repair-finding',status:'needs-review',key:item.id,details:atgvJobSafeError(new Error((item.field?item.field+': ':'')+(item.reason||'Unresolved quality finding.')))});
   try{for(let attempt=1;attempt<=2&&targets.length;attempt++){
    signal.throwIfAborted();
-   await report('baAutoResolveProgress','AI repair '+attempt+'/2: correcting '+targets.length+' source-backed BR draft(s)…');
+   await report('baAutoResolveProgress','AI repair '+attempt+'/2: correcting '+targets.length+' source-backed BR revision(s)…');
    const updated=await generateBusinessRequirements({
     autoResolve:true,automatic:true,regenerate:true,targetBrIds:targets,signal,
-    feedback:'Correct only the cited findings using verified source and Discovery evidence. Keep BR identities, unaffected scope, test cases and unresolved business decisions.'
+    feedback:'Correct only the cited findings using verified source and Discovery evidence. Keep BR identities, existing feature/story/task IDs, unaffected scope, test cases and unresolved business decisions. For previously approved BRs propose a new draft revision, never replace approved content. Preserve every existing work item.'
    });
    if(!updated)throw Error('AI repair did not save a draft.');
    signal.throwIfAborted();
@@ -4614,22 +4615,22 @@ async function repairAutomaticBAFindings(projectId,signal,report,initialWarning=
    const checked=await brWorkflow.load(registry,projectId);
    const remaining=currentAttentionFindings(checked).filter(row=>originalIds.includes(row.id));
    if(!remaining.length||impact.length>0&&impact.every(row=>row.change==='unchanged'))break;
-   targets=remaining.filter(row=>checked.brs.some(br=>br.id===row.id&&br.status==='draft')).map(row=>row.id);
+   targets=remaining.filter(row=>checked.brs.some(br=>br.id===row.id&&baAutomatic.repairEligible(checked,br))).map(row=>row.id);
    if(!targets.length)break;
   }
   }catch(error){signal.throwIfAborted();qualityWarning=atgvJobSafeError(error);}
   const roles=await repairMissingDraftTaskRoles(projectId,owned,signal,report);
   const final=await brWorkflow.load(registry,projectId);
-  const unresolved=currentAttentionFindings(final).filter(row=>originalIds.includes(row.id))
-   .map(row=>({id:row.id,field:row.field||'',reason:row.reason||''}));
-  const fixed=originalIds.length-unresolved.length;
-  const result='AI repair: '+fixed+'/'+originalIds.length+' BR findings resolved; '+unresolved.length+' unresolved; '+changed.size+' BR(s) revised. '+
+  const outcome=baAutomatic.repairOutcome(final,findings.map(row=>row.id));
+  const unresolved=outcome.unresolved;
+  const fixed=outcome.resolved;
+  const result='AI repair: '+fixed+'/'+outcome.total+' BR findings resolved; '+unresolved.length+' unresolved; '+changed.size+' BR(s) revised. '+
    roles.fixed+' Jira task role(s) repaired; '+roles.remaining+' still require review. '+
    (qualityWarning?'Quality verification incomplete: '+qualityWarning+'. ':'')+
-   (findings.length>selected.length?'Some findings belong to another owner. ':'')+
+   (findings.length>selected.length?'Some findings are owned by another BA or require separate change/review reconciliation. ':'')+
    'Review the refreshed Jira preview before publication.';
 
- return {result,resolved:fixed,total:originalIds.length,changed:changed.size,unresolved,roleRepairs:roles.fixed,roleUnresolved:roles.remaining,qualityWarning:[qualityWarning,...roles.warnings].filter(Boolean).join('; ')};
+ return {result,resolved:fixed,total:outcome.total,changed:changed.size,unresolved,roleRepairs:roles.fixed,roleUnresolved:roles.remaining,qualityWarning:[qualityWarning,...roles.warnings].filter(Boolean).join('; ')};
 }
 
 async function resolveBAAttention(msg){
@@ -4719,7 +4720,7 @@ async function assessAutomaticDrafts(projectId,signal){
    await recordBAProcess({stage:'requirements',action:'quality-review',status:'needs-review',details:message});
    continue;
   }
-  await recordBAProcess({stage:'requirements',action:'quality-review',status:reason?'needs-review':'verified',key:draft.id,details:reason?'Validated quality finding recorded.':'Current requirement fingerprint verified.'});
+  await recordBAProcess({stage:'requirements',action:'quality-review',status:reason?'needs-review':'verified',key:draft.id,details:reason?'Validated quality finding: '+atgvJobSafeError(new Error(reason)):'Current requirement fingerprint verified.'});
   if(reason){
    const inferred=local?/acceptance criteria|business purpose|scope/i.exec(local)?.[0]:crossSource?'Source evidence':'';
    excluded.push({id:draft.id,reason,fingerprint:checked[draft.id],

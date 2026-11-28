@@ -1079,7 +1079,7 @@ async function generated(registry,id,revision,{discoveryRevision,requirements,ri
   const selective=targetBrIds!==null;
   const selected=selective?new Set(targetBrIds):null;
   if(selective&&(!Array.isArray(targetBrIds)||!targetBrIds.length||targetBrIds.some(x=>!next.brs.some(b=>b.id===x))))throw Error('Invalid selective regeneration target.');
-  if(repairDraft&&(!automatic||!selective||[...selected].some(id=>!next.brs.some(br=>br.id===id&&br.status==='draft'&&!br.archivedFromRestart))))throw Error('AI repair requires current draft revisions.');
+  if(repairDraft&&(!automatic||!selective||[...selected].some(id=>!next.brs.some(br=>br.id===id&&automaticWorkflow.repairEligible(next,br)))))throw Error('AI repair requires current editable requirements without pending change or review blockers.');
   for(const [proposalIndex,proposal] of proposals.entries()){
    const verified=evidence[proposalIndex]||[];
    const questionRefs=changeEngine.QUESTION_KEYS.filter(key=>{const answer=next.discoveryAnswers?.[key]||'';return answer&&overlap(answer,[proposal.title,proposal.objective,proposal.scope,proposal.acceptanceCriteria].join(' '))>=.2;});
@@ -1109,7 +1109,20 @@ async function generated(registry,id,revision,{discoveryRevision,requirements,ri
     used.add(existing.id);
     const candidate=automatic?{...proposal,...existing.baManualFields}:proposal;
     const stable={...stableProposal(candidate,existing),id:existing.id},previous=repairDraft?existing:existing.approvedContent||existing;
+    if(repairDraft&&existing.approvedContent){
+     // Keep the approved hierarchy and its Jira identities intact during repair.
+     // A deletion or structural retirement requires separate change control.
+     const paths=br=>new Set((br.features||[]).flatMap(f=>[f.id,...(f.stories||[]).flatMap(s=>[f.id+'/'+s.id,...(s.tasks||[]).map(t=>f.id+'/'+s.id+'/'+t.id)])]));
+     const proposedPaths=paths(stable);
+     if([...paths(existing)].some(id=>!proposedPaths.has(id)))throw Error('AI repair would remove an existing work item from '+existing.id+'. Preserve work item identities; retirements require separate change control.');
+    }
     const unchanged=normalizedContent(previous)===normalizedContent(stable);
+    if(repairDraft&&existing.status==='approved'&&unchanged){
+     impact.push({id:existing.id,title:existing.title,change:'unchanged',approved:true});
+     continue;
+    }
+    if(repairDraft&&existing.status==='approved')
+     event(next,'br-revision-started',{brId:existing.id,baseRevision:existing.approvedRevision,actor:String(actor).slice(0,120),reason:'Automatic quality repair'});
     if(unchanged){
      // An identical regenerated draft is not a modification. Preserve its
      // saved state and history while refreshing verified source references.

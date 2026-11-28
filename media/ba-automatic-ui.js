@@ -205,12 +205,12 @@
  function renderAttentionActions(findings){
   const bar=get('baAutoRequirementsToolbar');
   const action=get('baAutoResolveAttention'),stop=get('baAutoResolveStop');
-  const eligible=findings.filter(row=>requirements().some(br=>br.id===row.id&&br.status==='draft'&&baCanEdit('ba-br-'+br.id)));
+  const eligible=findings.filter(row=>requirements().some(br=>br.id===row.id&&['draft','approved'].includes(br.status)&&!br.archivedFromRestart&&!br.externalReviewRequired&&!br.roleReviewRequired&&!br.dependencyReviewRequired&&(br.status!=='approved'||(!br.needsRefresh&&!!br.approvedContent))&&baCanEdit('ba-br-'+br.id)));
   const roles=missingDraftTaskRoles();
   bar.hidden=!findings.length&&!roles.length&&!aiResolve.running&&!aiResolve.message;
-  const blocker=aiResolve.running?'AI repair is running.':busy()||baBusyTask||discoveryImportBusy?'Finish the current BR operation first.':dirty()?'Save your edits before AI repair.':!baCanEdit('ba-discovery')||baOwnerState?.cached||baOwnerState?.scope==='local'?'Connect to Jira and Confluence to verify ownership.':!eligible.length&&!roles.length?'No affected draft is owned by you or no repairable findings remain.':'';
+  const blocker=aiResolve.running?'AI repair is running.':busy()||baBusyTask||discoveryImportBusy?'Finish the current BR operation first.':dirty()?'Save your edits before AI repair.':!baCanEdit('ba-discovery')||baOwnerState?.cached||baOwnerState?.scope==='local'?'Connect to Jira and Confluence to verify ownership.':!eligible.length&&!roles.length?'No owned requirement is eligible for automatic repair. Check outstanding reviews.':'';
   action.disabled=!!blocker;
-  action.title=blocker||'Use AI to repair '+eligible.length+' owned BR draft(s) and '+roles.length+' missing Jira task role(s). Previous approvals and Jira unchanged.';
+  action.title=blocker||'Use AI to repair '+eligible.length+' owned BR revision(s) and '+roles.length+' missing Jira task role(s). Previous approvals and Jira unchanged.';
   const recoveryState=recovery?.get(activeId);
   action.textContent=recoveryState?.paused?'Resume AI':'Resolve with AI';
   stop.hidden=!aiResolve.running&&(!recovery||!findings.length||!!recoveryState?.paused);stop.disabled=aiResolve.stopping;
@@ -755,7 +755,7 @@
    !baCanEdit('ba-discovery')||baOwnerState?.cached||baOwnerState?.scope==='local')return null;
   if(!['ready','draft','published'].includes(state.phase))return null;
   const findings=(brState.baDraftQuality?.excluded||[]).filter(row=>requirements().some(br=>br.id===row.id));
-  const eligible=findings.filter(row=>requirements().some(br=>br.id===row.id&&br.status==='draft'&&baCanEdit('ba-br-'+br.id)));
+  const eligible=findings.filter(row=>requirements().some(br=>br.id===row.id&&['draft','approved'].includes(br.status)&&!br.archivedFromRestart&&!br.externalReviewRequired&&!br.roleReviewRequired&&!br.dependencyReviewRequired&&(br.status!=='approved'||(!br.needsRefresh&&!!br.approvedContent))&&baCanEdit('ba-br-'+br.id)));
   const roles=missingDraftTaskRoles();
    if(eligible.length||roles.length)return {eligible:true,action:'repair',remaining:eligible.length+roles.length,fingerprint:JSON.stringify([eligible.map(row=>[row.id,row.field,row.reason]).sort(),roles.map(row=>row.path).sort()])};
   if(findings.length)return null;

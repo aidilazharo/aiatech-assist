@@ -153,6 +153,30 @@ function invalidDraft(br){
  return '';
 }
 
+// Approved content is immutable; a repair may propose a new active revision.
+function repairEligible(register,br){
+ if(!br||br.archivedFromRestart||!['draft','approved'].includes(br.status))return false;
+ if(br.externalReviewRequired||br.roleReviewRequired||br.dependencyReviewRequired)return false;
+ if((register.changeQueue||[]).some(x=>x.status==='pending'&&x.targetIds?.some(id=>id===br.id||id.startsWith(br.id+'/'))))return false;
+ if(br.status==='approved')return !!br.approvedContent&&!br.needsRefresh;
+ return br.staleReason!=='Discovery answers changed'&&br.staleReason!=='New source mapping completed'&&br.source?.discoveryRevision===register.discoveryRevision;
+}
+function repairOutcome(register,ids){
+ const initial=[...new Set(ids)],unresolved=[];
+ const active=(register.brs||[]).filter(br=>!br.archivedFromRestart&&['draft','approved'].includes(br.status));
+ for(const br of active){
+  const current=qualityFingerprint(register,br);
+  const finding=(register.baDraftQuality?.excluded||[]).find(row=>row.id===br.id&&row.fingerprint===current);
+  if(finding)unresolved.push({id:br.id,field:finding.field||'',reason:finding.reason||'Unresolved quality finding.'});
+  else if(register.baDraftQuality?.checked?.[br.id]!==current)unresolved.push({id:br.id,field:'Quality verification',reason:'Current requirement has not completed quality verification.'});
+  else if(invalidDraft(br))unresolved.push({id:br.id,field:'Requirement',reason:invalidDraft(br)});
+ }
+ for(const id of initial)if(!active.some(br=>br.id===id))unresolved.push({id,field:'Requirement identity',reason:'Affected requirement is no longer available for verification.'});
+ const blocked=new Set(unresolved.map(x=>x.id));
+ const resolved=initial.filter(id=>!blocked.has(id)).length;
+ return {resolved,total:new Set([...initial,...blocked]).size,unresolved};
+}
+
 function publicationIssues(register){
  const blockers=[];
  const sources=register.sourceDocuments||[];
@@ -188,4 +212,4 @@ async function run(from,{prepareSource,developRequirements,prepareJira,progress,
 }
 
 module.exports={stages,missing,titleFromSource,mappedAnswers,applyGroundedReview,isoDocument,publicationIssues,sourceConcerns,sourceNotes,
- draftForReview,qualityFingerprint,hasQualityFinding,qualityPrompt,parseQuality,invalidDraft,run};
+ draftForReview,qualityFingerprint,hasQualityFinding,qualityPrompt,parseQuality,invalidDraft,repairEligible,repairOutcome,run};
