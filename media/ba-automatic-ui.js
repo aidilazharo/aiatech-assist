@@ -21,7 +21,7 @@
  let state=null,requestedProject='',artifactProject='',jiraView='list',jiraTab='all',tableKey='',brKey='',kind='iso',sourceDigest='',artifactContext=null,request=0;
  let aiResolve={running:false,message:'',stopping:false};
  const recovery=window.ATGVRecoveryController?.create();
- let recoveryAction=null,pendingRefreshProject='';
+ let recoveryAction=null,pendingRefreshProject='',livePublication=null;
  let jiraFieldView=null,jiraFieldDirty=false,jiraFieldLoading=false,jiraFieldRequest=0;
  const collapsed=new Set();
  const input=get('baAutoArtifactText'),quillMount=get('baAutoQuillEditor');
@@ -539,6 +539,29 @@
   }
  }
 
+ function renderPublicationFeedback(phase,detail){
+  const live=livePublication?.projectId===activeId?livePublication:null;
+  const running=phase==='publishing'&&live&&['preparing','publishing','verifying'].includes(live.phase);
+  const technical=/\b(?:EPERM|EBUSY|EACCES|ENOSPC|ETIMEDOUT|ECONNRESET|ENOTFOUND|HTTP (?:401|403|429|5\d\d))\b/i.test(detail);
+  const details=get('baAutoTechnicalDetails'),raw=get('baAutoTechnicalMessage');
+  details.hidden=!technical;if(!technical)details.open=false;
+  const rawText=technical?detail:'';
+  if(raw.textContent!==rawText)raw.textContent=rawText;
+  const friendly=technical?(/EPERM|EBUSY|EACCES/i.test(detail)?'Local save blocked. Check file access, then refresh.':/ENOSPC/i.test(detail)?'Local storage is full. Free space, then refresh.':/HTTP (401|403)/i.test(detail)?'Connection or permission check failed. Review Settings.':'Connection interrupted. Review technical details and refresh.'):detail;
+  const message=running?String(live.message||'Publishing Jira changes…'):friendly;
+  const status=get('baAutoStatus');
+  if(status.textContent!==message)status.textContent=message;
+  const track=get('baAutoLivePublish'),bar=get('baAutoLivePublishProgress'),count=get('baAutoLivePublishCount');
+  track.hidden=!running;
+  if(running){
+   const total=Number(live.total),confirmed=Number(live.confirmed);
+   if(total>0&&Number.isFinite(confirmed)){
+    bar.value=Math.max(0,Math.min(100,confirmed/total*100));
+    count.textContent=Math.min(total,Math.max(0,confirmed))+' / '+total+' confirmed';
+   }else{bar.removeAttribute('value');count.textContent='Checking Jira…';}
+  }
+ }
+
  function render(){
   placeSkill();
   const showingBusinessRequirements=selectedRole==='business-analyst'&&['baOverview','discovery'].includes(view);
@@ -592,12 +615,13 @@
   if(publish.disabled&&!busy())publish.title='All preparation sections must be Ready or Completed before publication.';if(foreignOwners().length)publish.title=readOnlyMessage();
   const reopen=state?.preview?.reopenRows?.length||0;
   const skipped=(state?.preview?.reopenSkipped||state?.reopenSkipped||[]).length;
-  const statusWarning=skipped?' '+skipped+' Jira status reset(s) unavailable; publishing can continue.':'';
+  const statusWarning=skipped?' '+skipped+' Jira status reset(s) unavailable; resolve before publishing.':'';
   const messages={idle:source()?'Preparing source…':'Upload a document to start.',running:'Preparing affected artifacts…',draft:'Draft. Refresh affected artifacts to continue.',
    ready:!currentJiraPreview()?'Jira preview is out of date. Refresh affected artifacts.':reopen?reopen+' linked Jira item'+(reopen===1?'':'s')+' will move to To Do.':'Jira preview is ready.',
    publishing:'Publishing approved changes to Jira…',published:'Jira publication is up to date.'};
   const detail=unsaved?'Save your edits to refresh the affected artifacts.':state?.error||((messages[phase]||'')+(['ready','published'].includes(phase)?statusWarning:''));
-  if(get('baAutoStatus').textContent!==detail)get('baAutoStatus').textContent=detail;
+  renderPublicationFeedback(phase,detail);
+  if(phase==='ready'&&publish.disabled&&!unsaved&&!busy()&&!sharedReadOnly())publish.setAttribute('aria-describedby','baAutoStatus');else publish.removeAttribute('aria-describedby');
   const discoverySave=get('discoverySave');
   discoverySave.type='submit';discoverySave.textContent='Save Discovery';
   discoverySave.classList.remove('hidden');discoverySave.disabled=!discoveryDirty||!baCanEdit('ba-discovery')||busy()||!source()||!!baBusyTask;
@@ -783,6 +807,11 @@
  });
  window.addEventListener('message',({data:m})=>{
   if(!m)return;
+  if(m.type==='brJiraPublishProgress'&&m.projectId===activeId){
+   livePublication=m;
+   if(active()&&state?.projectId===activeId&&state.phase==='publishing')renderPublicationFeedback('publishing','Publishing approved changes to Jira…');
+   return;
+  }
    if(m.type==='librarySyncResult'&&quillRetrying){
     quillRetrying=false;quillRetry.disabled=false;
     get('baAutoArtifactStatus').textContent=m.message||'Library sync finished. Reopen Business Documents if the editor reloads.';
