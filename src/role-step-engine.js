@@ -8,6 +8,25 @@ const ID = /^[a-z][a-z0-9-]{0,48}$/;
 const SCOPE = /^(project|BR-[0-9]{1,12}|[A-Z][A-Z0-9_]{1,16}-[0-9]{1,12})$/;
 const DEFAULT_STEPS = ['Prepare', 'Execute', 'Review', 'Complete'];
 const CONFIGS = {};
+const pendingWrites = new Map();
+
+async function withRoleStepWriteLock(filename, write) {
+    // Queue local writers before acquiring the lock shared across processes.
+    const previous = pendingWrites.get(filename);
+    let release;
+    const current = new Promise(resolve => { release = resolve; });
+    pendingWrites.set(filename, current);
+    await previous;
+    try {
+        return await withLock(filename, write);
+    }
+    finally {
+        if (pendingWrites.get(filename) === current)
+            pendingWrites.delete(filename);
+        release();
+    }
+}
+
 function register(roleId, items) {
     if (!ID.test(roleId) || !Array.isArray(items) || items.length < 1 || items.length > 6)
         throw Error('Invalid role plan.');
@@ -106,7 +125,7 @@ async function update(registry, projectId, roles, action) {
         throw Error('Invalid role workflow step.');
     const filename = await safeFile(registry, projectId);
     await fs.mkdir(path.dirname(filename), { recursive: true });
-    return withLock(filename, async () => {
+    return withRoleStepWriteLock(filename, async () => {
         const data = await load(registry, projectId), group = data.scopes[key] || {}, entry = group[step.id] || { outputs: [] };
         if (!Array.isArray(entry.outputs) || entry.outputs.length > 250)
             throw Error('Too many outputs recorded.');

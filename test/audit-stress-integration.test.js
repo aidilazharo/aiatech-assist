@@ -15,9 +15,24 @@ const developer = {id:'software-developer',label:'Developer',tasks:[]};
 const architect = {id:'solution-architect',label:'Solution Architect',tasks:[]};
 
 test('stress: parallel output writes retain all items and unique IDs', async t => {
-  const {registry} = await fixture(t);
+  const {root,registry} = await fixture(t);
   const projectId = 'project-a';
   const requests = Array.from({length:72},(_,i)=>({roleId:developer.id,scopeId:'TC-101',stepId:'development',kind:'add',title:`Commit evidence ${i+1}`}));
+  const lockPath = path.join(root, projectId, 'sdlc', 'role-steps.json.lock');
+  const open = fs.open;
+  let lockAcquisitions = 0;
+  let lockCollisions = 0;
+  t.mock.method(fs, 'open', async (file, ...options) => {
+    if (file !== lockPath) return open(file, ...options);
+    try {
+      const handle = await open(file, ...options);
+      lockAcquisitions++;
+      return handle;
+    } catch (error) {
+      if (error.code === 'EEXIST') lockCollisions++;
+      throw error;
+    }
+  });
   // Burst concurrency with bounded retries to emulate multiple developer sessions.
   const runs = await Promise.all(requests.map(async request=>{
     for(let attempt=0;attempt<7;attempt++) {
@@ -32,6 +47,8 @@ test('stress: parallel output writes retain all items and unique IDs', async t =
   assert.equal(outputs.length,72);
   assert.equal(new Set(outputs.map(o=>o.id)).size,72);
   assert.equal(new Set(outputs.map(o=>o.title)).size,72);
+  assert.equal(lockAcquisitions, requests.length, 'each write must acquire the disk lock');
+  assert.equal(lockCollisions, 0, 'local writes should not compete for the disk lock');
 });
 
 test('stress: repeated same title cannot create duplicate outputs', async t => {
