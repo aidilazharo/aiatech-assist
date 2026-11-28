@@ -7,6 +7,7 @@ const crypto=require('node:crypto');
 const {withLock}=require('./file-lock');
 const {safeKey}=require('./developer-task-artifacts');
 const {checkPath}=require('./ux-ticket-designs');
+const {designDigest,comparePrevious}=require('./ux-revision-comparison');
 const STEPS=Object.freeze(['Upload Design Reference','User Flow','Wireframe','UI Mockup','Interactive Prototype','Developer Handoff']);
 const hash=text=>crypto.createHash('sha256').update(text).digest('hex');
 const clamp=(value,max)=>String(value??'').trim().slice(0,max);
@@ -51,13 +52,13 @@ function buildHandoff(key,flow,wireframe,mockup,metadata){
   repositorySource:metadata.repositorySource||null,sourceBRHash:clamp(metadata.sourceBRHash,120),sourceStoryKey:clamp(metadata.sourceStoryKey,40)||safeKey(key),
   implementationNote:'Review prototype interactions and confirm the approved design before starting implementation. No application has been deployed.'};
 }
-async function read(root,key){
+async function read(root,key,{includeComparison=true}={}){
  const k=safeKey(key),file=location(root,k);await checkPath(root,file);
  const raw=await fs.readFile(file,'utf8').catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
  if(raw===null)return {exists:false,key:k,revision:'',revisionNumber:0,status:'not-started',steps:STEPS,history:[]};
  const value=JSON.parse(raw);
  if(value.key!==k||!['review','approved','rejected'].includes(value.status)||!Number.isInteger(value.revisionNumber)||value.revisionNumber<1)throw Error('Invalid UI/UX workflow record.');
- return {...value,exists:true,revision:hash(raw),steps:STEPS};
+ return {...value,exists:true,revision:hash(raw),steps:STEPS,comparison:includeComparison?await comparePrevious(root,file,value,checkPath):null};
 }
 async function atomicSave(file,record){
  const temp=file+'.'+crypto.randomUUID()+'.tmp';
@@ -70,10 +71,10 @@ async function generate(root,key,payload,expectedRevision='',metadata={}){
  const prototype=buildPrototype(mockup),handoff=buildHandoff(k,flow,wireframe,mockup,metadata);
  await checkPath(root,file);await fs.mkdir(path.dirname(file),{recursive:true});await checkPath(root,file);
  return withLock(file,async()=>{
-  const prior=await read(root,k);
+  const prior=await read(root,k,{includeComparison:false});
   if(prior.revision!==String(expectedRevision||''))throw Error('UI/UX design changed. Reload before regenerating.');
   const now=new Date().toISOString(),revisionNumber=prior.revisionNumber+1;
-  const history=[...(prior.history||[]).map(h=>({...h})),...(prior.exists?[{version:prior.revisionNumber,generatedAt:prior.generatedAt,designer:prior.designer,status:prior.status,reviewedAt:prior.reviewedAt||'',reviewedBy:prior.reviewedBy||'',reason:prior.reviewReason||''}]:[])];
+  const history=[...(prior.history||[]).map(h=>({...h})),...(prior.exists?[{version:prior.revisionNumber,generatedAt:prior.generatedAt,designer:prior.designer,status:prior.status,reviewedAt:prior.reviewedAt||'',reviewedBy:prior.reviewedBy||'',reason:prior.reviewReason||'',designDigest:designDigest(prior)}]:[])];
   const record={schema:1,key:k,revisionNumber,status:'review',generatedAt:now,designer:clamp(metadata.designer,150)||'UI/UX Designer',
    aiModel:clamp(metadata.aiModel,160),jiraUpdated:clamp(metadata.jiraUpdated,100),sourceBRHash:clamp(metadata.sourceBRHash,120),
    designReferenceHash:clamp(metadata.designReferenceHash,120),sourceStoryKey:clamp(metadata.sourceStoryKey,40)||k,sourceBrId:clamp(metadata.sourceBrId,40),sourceTaskKeys:(metadata.sourceTaskKeys||[]).map(safeKey),wireframeRevision:clamp(metadata.wireframeRevision,120),mockupRevision:clamp(metadata.mockupRevision,120),
@@ -90,13 +91,13 @@ async function decide(root,key,decision,expectedRevision,actor,reason=''){
  if(!['approved','rejected'].includes(decision))throw Error('Unknown UI/UX review decision.');
  const k=safeKey(key),file=location(root,k);await checkPath(root,file);
  return withLock(file,async()=>{
-  const prior=await read(root,k);
+  const prior=await read(root,k,{includeComparison:false});
   if(!prior.exists)throw Error('Generate the complete UI/UX first.');
   if(prior.revision!==String(expectedRevision||''))throw Error('UI/UX version changed. Reload the preview before reviewing.');
   if(prior.status!=='review'&&!(decision==='rejected'&&prior.status==='approved'))throw Error('This UI/UX version is not waiting for that review decision.');
   const reviewer=clamp(actor,150);if(!reviewer)throw Error('A verified reviewer identity is required.');
   if(decision==='rejected'&&!String(reason||'').trim())throw Error('Give a reason for rejecting the design before regenerating.');
-  const record={...prior};delete record.exists;delete record.revision;delete record.steps;
+  const record={...prior};delete record.exists;delete record.revision;delete record.steps;delete record.comparison;
   record.status=decision;record.reviewedAt=new Date().toISOString();record.reviewedBy=reviewer;record.reviewReason=clamp(reason,3000);
   record.handoff={...record.handoff,status:decision==='approved'?'approved-ready-for-developer-handoff':'rejected-not-for-developer-use'};
   await atomicSave(file,record);

@@ -705,3 +705,9 @@ body:is(.vscode-high-contrast,.vscode-high-contrast-light) :is(.ba-auto-badge,.a
     scroll-behavior:auto!important;
   }
 }
+
+/* Read-only design revision comparison; use native theme colors. */
+.ux-revision-comparison{border:1px solid var(--atgv-ui-line);border-radius:var(--atgv-ui-control-radius);padding:8px;text-align:left;min-width:0;overflow-wrap:anywhere;margin:8px 0}
+.ux-revision-comparison>summary{cursor:pointer;font-weight:600;color:var(--atgv-ui-text)}
+.ux-revision-comparison>p{margin:6px 0;font-size:var(--atgv-ui-label)}
+.ux-revision-comparison>ul{padding-inline-start:20px;margin:6px 0;display:grid;gap:4px;font-size:var(--atgv-ui-label)}

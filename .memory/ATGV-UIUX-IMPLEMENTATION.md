@@ -2,7 +2,7 @@
 
 Baseline: `d26dcc7543348aae7cf9941c44768b7d544ce89c` (extension 0.1.66). 2026-11-29 MYT.
 
-0/40 fully verified; items 02, 03, 11, 13, 17, 18, 28, 31, 34, 36 and 37 are in progress; item 05 implemented — cross-role verification pending. Pending means not yet verified against the complete acceptance criteria.
+0/40 fully verified; items 02, 03, 11, 13, 17, 18, 28, 29, 31, 34, 36 and 37 are in progress; item 05 implemented — cross-role verification pending. Pending means not yet verified against the complete acceptance criteria.
 
 | ID | Priority | Description | Status |
 |---|---|---|---|
@@ -34,7 +34,7 @@ Baseline: `d26dcc7543348aae7cf9941c44768b7d544ce89c` (extension 0.1.66). 2026-11
 | 26 | P2 | SA repository/dependency/mock workflow | Pending |
 | 27 | P2 | SA runtime readiness | Pending |
 | 28 | P2 | Maximize UX prototype space | In progress |
-| 29 | P2 | Design revision comparison/approval | Pending |
+| 29 | P2 | Design revision comparison/approval | In progress |
 | 30 | P2 | Separate developer action groups | Pending |
 | 31 | P2 | Remove redundant progress indicators | In progress |
 | 32 | P2 | Generate UAT from approved AC | Pending |
@@ -96,3 +96,11 @@ Baseline: `d26dcc7543348aae7cf9941c44768b7d544ce89c` (extension 0.1.66). 2026-11
 - Modified: media/start.js, media/atgv-consistency.css, test/shared-activity-state-and-progress.test.js, this tracker.
 - Verification: four new source/helper regression cases passed against exact proposed source in isolated JS harness; full start.js syntax compilation passed. No live provider/browser or full suite claims. Total execution 3: seven focused cases passed, generator check passed.
 - Commit: see commit introducing this entry. Items 17, 18, 31, 36 remain In progress; full role-specific acceptance pending. 0/40 fully verified. Version unchanged, main only, no mirrors.
+
+### Execution 3 continued — Designer revision comparison (29)
+
+- Prior main: `50fef69dc0cc6dec3a9e75a3ccc6118ad8862dcf`.
+- Existing pipeline archives immutable generated snapshots but only displays history metadata. Added a read-only current-versus-immediately-previous revision comparison, screen additions/removals/edits, changed flow and artifact/reference sections, SHA-256 design digest in future history entries, and explicit legacy/missing/tampered snapshot messages.
+- Modified: src/ux-revision-comparison.js, src/ux-design-pipeline.js, media/start.js, media/atgv-consistency.css, test/ux-revision-comparison.test.js, this tracker. Approval checks and canonical record persistence preserved; comparison is computed, not saved into approval records.
+- Node v22.16.0: node --test test/ux-revision-comparison.test.js — 4 passed, 0 failed using actual temporary filesystem and SHA-256. Tested helper blob 9533180af36a81861fa705c80b8259b0a18d5b4b; tested test blob a1b678be9e122eeb803fb22e1800b8a5bdd1ed3f. Patched pipeline and webview syntax compile in JS harness. Full host integration and rendered comparison not verified. Item 29 remains In progress. Arbitrary older-version selection not implemented; current vs previous only.
+- Execution 3: eleven focused cases passed (seven in-memory source/helper contracts, four Node filesystem tests); generated stylesheet check passed. Full regression, live SDLC, screenshots, package/release still outstanding. No version increment, main only.
