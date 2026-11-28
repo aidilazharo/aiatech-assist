@@ -4838,17 +4838,27 @@ async function publishPreparedBRs(msg){
  if(baPreparationRun||baAttentionRun||jiraSyncBusy)throw Error('A Business Requirements operation is already running.');
  const projectId=activeProject.id;
  let session=baPreparationSessions.get(projectId),preview=session?.preview;
- const register=await brWorkflow.load(registry,projectId);
- const validPreview=()=>preview&&session.phase==='ready'&&!preview.conflicts.length&&preview.revision===register.revision&&
-   msg.revision===preview.revision&&Date.now()-preview.verifiedAt<=300000&&preview.fieldPlansHash===sha(JSON.stringify(jiraPreviewFieldPlans));
- if(!validPreview()){
+ let register=await brWorkflow.load(registry,projectId);
+ const previewIssues=()=>[
+  ...(!preview?['No cached Jira preview']:[]),
+  ...(session?.phase!=='ready'?['Preview is not ready']:[]),
+  ...(preview?.conflicts?.length?['Preview contains conflicts']:[]),
+  ...(preview?.revision!==register.revision?['Saved BR revision changed']:[]),
+  ...(msg.revision!==preview?.revision?['Displayed preview revision changed']:[]),
+  ...(!preview?.verifiedAt||Date.now()-preview.verifiedAt>300000?['Preview verification expired']:[]),
+  ...(preview?.fieldPlansHash!==sha(JSON.stringify(jiraPreviewFieldPlans))?['Field plan changed']:[])
+ ];
+ const refreshReasons=previewIssues();
+ if(refreshReasons.length){
+  if(typeof recordBAProcess==='function')await recordBAProcess({stage:'publish',action:'refresh-publication-preview',status:'running',details:refreshReasons.join('; ')});
+
   // Completed history keeps the action available even after a restart. A
   // click checks Jira or refreshes a preview, never blindly republishes.
   const completed=(register.completedCycles||[]).flatMap(cycle=>cycle.requirements||[]).filter(br=>br.jiraKey);
   const active=(register.brs||[]).filter(br=>!br.archivedFromRestart&&br.status!=='retired');
   const current=active.filter(br=>br.approvedContent&&register.synced?.[br.id]?.key).map(br=>({id:br.id,jiraKey:register.synced[br.id].key}));
-  if(msg.registerRevision!==register.revision||!completed.length&&!current.length)
-   throw Error('The Jira preview changed or expired. Refresh affected artifacts before publishing.');
+  if(msg.registerRevision!==register.revision&&msg.revision!==register.revision&&(!preview||preview.projectId&&preview.projectId!==projectId))
+   throw Error('The Business Requirements revision changed. Reopen the project before publishing.');
   await requireBAOwner('ba-discovery');
   await requireBAWritableCycle(register);
   const config=effectiveConfig(activeProject),token=await getAtlassianToken(activeProject);
@@ -4865,16 +4875,27 @@ async function publishPreparedBRs(msg){
    if(!(issue.fields.labels||[]).some(label=>label===jiraScopedMarker(register,config,br.id)||label===jiraMarker(config,br.id)))continue;
    confirmed++;
   }
-  if(!confirmed)throw Error('No completed BR Epic could be verified in the connected Jira project.');
-  if(!active.length||active.every(br=>br.status==='approved'&&!br.needsRefresh&&!br.externalReviewRequired&&!br.roleReviewRequired&&!br.dependencyReviewRequired)&&!brWorkflow.plan(register).length&&!register.baPendingReopen){
+  if(confirmed&&(!active.length||active.every(br=>br.status==='approved'&&!br.needsRefresh&&!br.externalReviewRequired&&!br.roleReviewRequired&&!br.dependencyReviewRequired)&&!brWorkflow.plan(register).length&&!register.baPendingReopen)){
    await postBAPreparation(projectId,{phase:'published',stage:'publish',preview:null,error:''});
    await notice('Approved and Published: '+confirmed+' existing Jira BR Epic(s) verified. No duplicate issues created.');
    return;
   }
+  await postBAPreparation(projectId,{phase:'running',stage:'jira',error:''});
   const refreshed=await prepareBRJiraPreview({automatic:true});
-  await postBAPreparation(projectId,{phase:refreshed.conflicts.length?'draft':'ready',stage:'jira',preview:refreshed,sourceNotes:refreshed.sourceNotes,reopenSkipped:refreshed.reopenSkipped||[],error:refreshed.conflicts[0]||''});
-  await notice(refreshed.conflicts.length?'Jira preview refreshed; review the remaining publication conflicts.':'Jira preview refreshed. Review the changes and click Approved and Publish to confirm.');
-  return;
+  if(activeProject?.id!==projectId)throw Error('Project changed during publication preview refresh.');
+  register=await brWorkflow.load(registry,projectId);
+  if(refreshed.revision!==register.revision||refreshed.fieldPlansHash!==sha(JSON.stringify(jiraPreviewFieldPlans)))
+   throw Error('Business Requirements changed during publication verification. Refresh affected artifacts.');
+  preview=refreshed;
+  session=await postBAPreparation(projectId,{phase:refreshed.conflicts.length?'draft':'ready',stage:'jira',preview:refreshed,sourceNotes:refreshed.sourceNotes,reopenSkipped:refreshed.reopenSkipped||[],error:refreshed.conflicts[0]||''});
+  if(typeof dashboard!=='undefined')await dashboard?.webview.postMessage({type:'brUpdated',register});
+  if(refreshed.conflicts.length){
+   await notice('Jira preview refreshed; review the remaining publication conflicts.');
+   return;
+  }
+  // Continue to the explicit confirmation below using the freshly verified
+  // remaining plan. Never silently return to Ready or create already linked issues.
+  if(typeof recordBAProcess==='function')await recordBAProcess({stage:'publish',action:'refresh-publication-preview',status:'completed',details:preview.changes.length+' remaining Jira changes verified; awaiting approval.'});
  }
  const config=effectiveConfig(activeProject);
  if(baseAtlassian(config)!==preview.site||validProjectKey(config.get('jira.projectKey'))!==preview.jiraProject)
@@ -4892,7 +4913,7 @@ async function publishPreparedBRs(msg){
   ' Jira issue change(s), '+reopenLines.length+' status reset(s), and '+skipped.length+' status reset(s) skipped.',
   {modal:true,detail:[reopenLines.length?'Move to To Do:\n'+reopenLines.join('\n'):'',retired.length?'Mark obsolete:\n'+retired.join('\n'):'',
    skipped.length?'Jira status warnings (status unchanged):\n'+skipped.map(row=>row.message).join('\n'):'',preview.sourceNotes?.length?'BR findings for follow-up:\n'+preview.sourceNotes.join('\n'):''].filter(Boolean).join('\n\n').slice(0,14000)},action);
- if(decision!==action){await postBAPreparation(projectId,{phase:'ready'});return;}
+ if(decision!==action){if(typeof recordBAProcess==='function')await recordBAProcess({stage:'publish',action:'publication-confirmation',status:'cancelled',details:'User did not confirm the reviewed Jira plan.'});await postBAPreparation(projectId,{phase:'ready'});return;}
  if(activeProject?.id!==projectId||baPreparationRun||jiraSyncBusy)throw Error('The project or operation changed during Jira confirmation.');
  const token=await getAtlassianToken(activeProject);
  const fresh=await baJiraRepublish.preview(register,preview.reopenRoots,{...reopenServices(register,config,token),retiring:preview.changes.filter(item=>item.action==='retire').map(item=>item.path)});
@@ -4907,10 +4928,12 @@ async function publishPreparedBRs(msg){
  approvedJiraPreviewRevision=saved.revision;
  const items=brWorkflow.plan(saved);
  approvedJiraPreviewBinding=sha(JSON.stringify({atgvProjectId:projectId,site:preview.site,project:config.get('jira.projectKey'),actor,items,fields:jiraPreviewFieldPlans}));
+ if(typeof recordBAProcess==='function')await recordBAProcess({stage:'publish',action:'publication-confirmation',status:'confirmed',details:items.length+' remaining Jira changes approved.'});
  await postBAPreparation(projectId,{phase:'publishing',stage:'publish',error:''});
  try{
   await syncApprovedBRs(saved.revision,{confirmed:true,projectId,roots:preview.reopenRoots,skipped});
   const state=await brWorkflow.load(registry,projectId);
+  if(brWorkflow.plan(state).length||state.baPendingReopen)throw Error('Jira publication remains incomplete; refresh and resume the remaining changes.');
   await postBAPreparation(projectId,{phase:'published',stage:'publish',title:brPreparationTitle(state),preview:null,reopenSkipped:skipped,error:''});
  }catch(error){
   await postBAPreparation(projectId,{phase:'draft',stage:'jira',preview:null,error:String(error.message||error).slice(0,550)});
