@@ -14,8 +14,9 @@ async function initializeWorkspaceFolders(workspace, registry) {
 }
 async function installationSignature(extensionDirectory, version) {
     const manifest = path.join(extensionDirectory, 'package.json');
-    const stat = await fs.stat(manifest);
-    return `${version}|${path.resolve(extensionDirectory)}|${stat.ctimeMs}`;
+    const stat = await fs.stat(manifest, { bigint: true });
+    // Replacements can share a change time, and the filesystem can reuse file IDs.
+    return `${version}|${path.resolve(extensionDirectory)}|${stat.dev}|${stat.ino}|${stat.birthtimeNs}|${stat.ctimeNs}`;
 }
 function lifecycleAction(signature, lastSignature, pendingStart) {
     if (pendingStart)

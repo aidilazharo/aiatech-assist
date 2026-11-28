@@ -63,16 +63,34 @@ test('ATGV: Start will not scaffold through a symlinked projects directory',asyn
 test('installation identity distinguishes version changes and same-version reinstall',async()=>{
   const root=await temp();
   try{
-    await fs.writeFile(path.join(root,'package.json'),'{}');
+    const manifest=path.join(root,'package.json');
+    const replacement=path.join(root,'replacement.json');
+    await fs.writeFile(manifest,'{}');
     const old=await installationSignature(root,'0.0.6');
+    assert.equal(await installationSignature(root,'0.0.6'),old);
     assert.equal(lifecycleAction(old,'',false),'offer-reload');
     assert.equal(lifecycleAction(old,old,false),'none');
     assert.equal(lifecycleAction(old,old,true),'start');
     assert.notEqual(await installationSignature(root,'0.0.7'),old);
-    await fs.rm(path.join(root,'package.json'));
-    await fs.writeFile(path.join(root,'package.json'),'{}');
+    // Stage the replacement while the original still owns its file ID.
+    await fs.writeFile(replacement,'{}');
+    await fs.rename(replacement,manifest);
     assert.notEqual(await installationSignature(root,'0.0.6'),old);
   }finally{await fs.rm(root,{recursive:true,force:true});}
+});
+
+test('installation identity distinguishes replacements with the same change timestamp',async t=>{
+  const original={dev:1n,ino:2n,birthtimeNs:1000n,ctimeNs:2000n,ctimeMs:0.002};
+  let metadata=original;
+  t.mock.method(fs,'stat',async()=>metadata);
+  const signature=()=>installationSignature(__dirname,'0.0.6');
+  const old=await signature();
+
+  metadata={...original,ino:3n};
+  assert.notEqual(await signature(),old,'a different file ID identifies a replacement');
+
+  metadata={...original,birthtimeNs:1500n};
+  assert.notEqual(await signature(),old,'creation time distinguishes a reused file ID');
 });
 
 test('install notification reloads on approval then opens ATGV: Start after reload',async()=>{
