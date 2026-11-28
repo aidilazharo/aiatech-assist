@@ -22,19 +22,25 @@ test('UX audit: new attention opens a panel without overriding a manual collapse
 });
 
 test('UX audit: publication remains gated by source coverage, discovery and valid Jira preview',()=>{
- const start=ba.indexOf(' function canPublishPrepared(');
+ const start=ba.indexOf(' function currentJiraPreview(');
  const end=ba.indexOf(' // Percentages describe verified section evidence',start);
  assert.ok(start>=0&&end>start);
- const register={sourceDocuments:[{digest:'source1'}],mappingCompleted:{sourceDigests:['source1']},discoveryRevision:1,reviewRevision:1,discoveryAnswers:Object.fromEntries(Array.from({length:12},(_,i)=>['q'+i,'answer']))};
+ const register={revision:'r1',sourceDocuments:[{digest:'source1'}],mappingCompleted:{sourceDigests:['source1']},discoveryRevision:1,reviewRevision:1,discoveryAnswers:Object.fromEntries(Array.from({length:12},(_,i)=>['q'+i,'answer']))};
  const brs=[{id:'BR-001',status:'draft'}];
- const ctx={brState:register,state:{preview:{reopenSkipped:[]}},requirements:()=>brs,currentJiraPreview:()=>true,busy:()=>false,baBusyTask:false};
+ const preview={revision:'r1',conflicts:[],reopenSkipped:[]};
+ const ctx={brState:register,activeId:'demo',state:{projectId:'demo',preview},requirements:()=>brs,busy:()=>false,baBusyTask:false};
  const can=vm.runInNewContext(ba.slice(start,end)+'\ncanPublishPrepared',ctx);
  assert.equal(can('ready',false),true);
  register.sourceDocuments.push({digest:'source2'});assert.equal(can('ready',false),false);register.sourceDocuments.pop();
  register.reviewRevision=0;assert.equal(can('ready',false),false);register.reviewRevision=1;
- ctx.state.preview.reopenSkipped=['JIRA-1'];assert.equal(can('ready',false),false);ctx.state.preview.reopenSkipped=[];
+ preview.reopenSkipped.push({key:'JIRA-1',message:'No available transition to To Do'});
+ assert.equal(can('ready',false),true);
  assert.equal(can('ready',true),false);
- ctx.currentJiraPreview=()=>false;assert.equal(can('ready',false),false);
+ preview.conflicts.push('Jira issue identity could not be verified.');
+ assert.equal(can('ready',false),false);
+ preview.conflicts.pop();
+ preview.revision='stale';
+ assert.equal(can('ready',false),false);
 });
 
 test('UX audit: disabled controls and role scope expose useful visible feedback',()=>{
