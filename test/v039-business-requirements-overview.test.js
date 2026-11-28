@@ -7,6 +7,7 @@ const os=require('node:os');
 const path=require('node:path');
 const vm=require('node:vm');
 const {sha}=require('../src/utils');
+const {safeError:atgvJobSafeError}=require('../src/atgv-job-engine');
 const auto=require('../src/ba-automatic-workflow');
 const ids=require('../src/ba-jira-draft-ids');
 const workflow=require('../src/br-workflow');
@@ -46,15 +47,18 @@ test('review findings block publication until corrected, then BA can publish and
  const start=runtime.indexOf('async function assessAutomaticDrafts('),end=runtime.indexOf('async function runBRPreparation(',start);
  assert.ok(start>=0&&end>start);
  let calls=0;
+ const qualityEvents=[];
  const assess=vm.runInNewContext('('+runtime.slice(start,end).trim()+')',{
   registry,brWorkflow:workflow,baAutomatic:auto,activeProject:{id:'test'},dashboard:null,
   activeAiTarget:async()=>({}),roleSkillPrompt:async()=>'',
+  atgvJobSafeError,recordBAProcess:async event=>{qualityEvents.push(event);},
   aiAnswer:async(_target,prompt)=>{calls++;return JSON.stringify({excluded:prompt.includes('"id":"BR-002","title"')&&prompt.includes(verdict.quote)?[verdict]:[]});}
  });
  const {signal}=new AbortController();
  await assess('test',signal);
  await assess('test',signal);
  assert.equal(calls,2);
+ assert.deepEqual(qualityEvents.map(({key,status})=>[key,status]),[['BR-001','verified'],['BR-002','needs-review']]);
  const reviewed=await workflow.load(registry,'test');
  assert.ok(auto.publicationIssues(reviewed).some(issue=>issue.includes('BR-002')&&issue.includes('unresolved quality findings')));
  assert.match(auto.sourceNotes(reviewed).join(' '),/question 12/);
