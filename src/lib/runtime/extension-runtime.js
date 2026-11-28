@@ -638,7 +638,8 @@ function updatePreferences(){
 }
 function updateStatus(){return {settings:updatePreferences(),installedVersion:require('../../../package.json').version,
  installedBuildSha:require('../../../package.json').atgvBuild?.sourceSha||'',
- latest:extensionRelease?{version:extensionRelease.version,tag:extensionRelease.tag,url:extensionRelease.url,sameVersion:!!extensionRelease.sameVersion,sourceSha:extensionRelease.buildIdentity?.sourceSha||''}:null,
+ installedContentSha256:require('../../../package.json').atgvBuild?.contentSha256||'',
+ latest:extensionRelease?{version:extensionRelease.version,tag:extensionRelease.tag,url:extensionRelease.url,sameVersion:!!extensionRelease.sameVersion,sourceSha:extensionRelease.buildIdentity?.sourceSha||'',contentSha256:extensionRelease.buildIdentity?.contentSha256||''}:null,
  extensionLatest,
  extensionLastCheck:extensionUpdateChecked,extensionError:extensionUpdateError,
  libraryLastCheck:catalogLastCheck,libraryError:libraryUpdateError,
@@ -760,7 +761,10 @@ async function offerBrandedExtensionUpgrade(release){
   pendingExtensionUpgradeOffers.set(requestId,{resolve,timer});
   Promise.resolve(dashboard.webview.postMessage({type:'extensionUpgradeOffer',requestId,
     currentVersion:require('../../../package.json').version,version:release.version,
-    publishedAt:release.publishedAt,sameVersion:!!release.sameVersion,legacyBuild:!!release.legacyBuild})).then(success=>{
+    publishedAt:release.publishedAt,sameVersion:!!release.sameVersion,legacyBuild:!!release.legacyBuild,
+     currentBuildSha:require('../../../package.json').atgvBuild?.sourceSha||require('../../../package.json').atgvBuild?.contentSha256||'',
+     nextBuildSha:release.buildIdentity?.sourceSha||release.buildIdentity?.contentSha256||'',
+     currentContentSha256:require('../../../package.json').atgvBuild?.contentSha256||'',nextContentSha256:release.buildIdentity?.contentSha256||''})).then(success=>{
       if(!success){const entry=pendingExtensionUpgradeOffers.get(requestId);if(entry){clearTimeout(entry.timer);pendingExtensionUpgradeOffers.delete(requestId);resolve({action:'Later',requestId});}}
     }).catch(()=>{clearTimeout(timer);pendingExtensionUpgradeOffers.delete(requestId);resolve({action:'Later',requestId});});
  });
@@ -786,7 +790,7 @@ async function checkExtensionRelease({prompt=false,interactive=false,forcePrompt
   const manifest=require('../../../package.json'),installed=manifest.version;
   const buildIdentity=require('../updates/extension-build-identity');
   const request=releaseUpdater.authorizedRequest(await githubIssueAccessToken());
-  const checked=await releaseUpdater.latestAcrossRepositories({version:installed,includeCurrent:true,request,verifyAccess:true});
+  const checked=await releaseUpdater.latestAcrossRepositories({version:installed,includeCurrent:true,request,verifyAccess:true,installedManifest:manifest});
   const result=checked.release;extensionReleaseWarnings=checked.errors;
   extensionLatest=checked.latest;extensionRelease=null;
   const comparison=result?releaseUpdater.compareVersion(result.version,installed):null;
