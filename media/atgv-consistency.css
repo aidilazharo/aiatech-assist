@@ -593,9 +593,9 @@ body:not(.gate-mode) #topNotification .top-notification-actions button{
 #atgvJobsFilter{width:auto;max-width:100%;min-height:32px}
 #atgvJobsDialog .atgv-jobs-row{padding:10px 12px;border-radius:6px;min-width:0}
 #atgvJobsDialog .atgv-jobs-row-heading{gap:8px;flex-wrap:wrap}
-#atgvJobsDialog .atgv-job-state[data-status="running"],#atgvJobsDialog .atgv-job-state[data-status="queued"]{color:var(--atgv-status-running)}
+#atgvJobsDialog .atgv-job-state:is([data-status="running"],[data-status="queued"],[data-status="pending"],[data-status="waiting"],[data-status="retrying"],[data-status="repairing"],[data-status="auto-repairing"],[data-status="in-progress"]){color:var(--atgv-status-running)}
 #atgvJobsDialog .atgv-job-state[data-status="failed"],#atgvJobsDialog .atgv-job-state[data-status="interrupted"]{color:var(--atgv-status-failed)}
-#atgvJobsDialog .atgv-job-state[data-status="reconcile-required"]{color:var(--atgv-status-attention)}
+#atgvJobsDialog .atgv-job-state:is([data-status="reconcile-required"],[data-status="needs-attention"],[data-status="review-required"],[data-status="needs-review"],[data-status="blocked"]){color:var(--atgv-status-attention)}
 #atgvJobsDialog .atgv-job-state[data-status="completed"],#atgvJobsDialog .atgv-job-state[data-status="succeeded"]{color:var(--atgv-status-complete)}
 
 #landingView .overview-phase{align-items:stretch;text-align:left;padding:8px;gap:6px;min-width:0;border:1px solid var(--atgv-consistency-border);border-radius:6px;background:var(--vscode-editor-background)}

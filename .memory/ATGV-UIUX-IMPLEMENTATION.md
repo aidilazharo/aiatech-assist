@@ -2,7 +2,7 @@
 
 Baseline: `d26dcc7543348aae7cf9941c44768b7d544ce89c` (extension 0.1.66). 2026-11-29 MYT.
 
-0/40 fully verified; items 02, 03, 11, 13, 28, 34 and 37 are in progress; item 05 implemented — cross-role verification pending. Pending means not yet verified against the complete acceptance criteria.
+0/40 fully verified; items 02, 03, 11, 13, 17, 18, 28, 31, 34, 36 and 37 are in progress; item 05 implemented — cross-role verification pending. Pending means not yet verified against the complete acceptance criteria.
 
 | ID | Priority | Description | Status |
 |---|---|---|---|
@@ -22,8 +22,8 @@ Baseline: `d26dcc7543348aae7cf9941c44768b7d544ce89c` (extension 0.1.66). 2026-11
 | 14 | P1 | Remove duplicate navigation/functions | Pending |
 | 15 | P1 | Shared Jira inventory with role filters | Pending |
 | 16 | P1 | Expandable compact Jira tables | Pending |
-| 17 | P1 | Unified status terminology | Pending |
-| 18 | P1 | Standard empty/loading/error/recovery states | Pending |
+| 17 | P1 | Unified status terminology | In progress |
+| 18 | P1 | Standard empty/loading/error/recovery states | In progress |
 | 19 | P1 | Remove unnecessary UI decoration/text | Pending |
 | 20 | P1 | Consolidate settings with separate scopes | Pending |
 | 21 | P2 | Five-stage BA workflow | Pending |
@@ -36,12 +36,12 @@ Baseline: `d26dcc7543348aae7cf9941c44768b7d544ce89c` (extension 0.1.66). 2026-11
 | 28 | P2 | Maximize UX prototype space | In progress |
 | 29 | P2 | Design revision comparison/approval | Pending |
 | 30 | P2 | Separate developer action groups | Pending |
-| 31 | P2 | Remove redundant progress indicators | Pending |
+| 31 | P2 | Remove redundant progress indicators | In progress |
 | 32 | P2 | Generate UAT from approved AC | Pending |
 | 33 | P2 | Consolidate UAT results/evidence/defects | Pending |
 | 34 | P3 | Responsive webview | In progress |
 | 35 | P3 | Offline/slow internet | Pending |
-| 36 | P3 | Unified activity/AI/error logs | Pending |
+| 36 | P3 | Unified activity/AI/error logs | In progress |
 | 37 | P3 | Light/dark/high contrast | In progress |
 | 38 | P4 | Full regression suite | Pending |
 | 39 | P4 | Live Cat Name CRUD E2E with screenshots | Pending |
@@ -87,3 +87,12 @@ Baseline: `d26dcc7543348aae7cf9941c44768b7d544ce89c` (extension 0.1.66). 2026-11
 - Modified: design-system/atgv-ui-theme.json, scripts/generate-ui-theme.js, media/atgv-ui-theme.css, media/atgv-consistency.css, media/start.css, test/shared-ui-design-contract.test.js, this tracker.
 - Verification: actual baseline and patched generator executed with isolated in-memory filesystem adapter; generated CSS check passed. Three exact new contract tests passed against proposed complete file contents in JS harness. These are source contract checks, not live VS Code rendering, accessibility or end-to-end tests.
 - Commit: see commit introducing this entry. All five items remain In progress pending complete UI verification. 0/40 fully verified. No version bump or mirror changes. Direct checkout DNS unavailable; full regression, runtime screenshots, VSIX and release remain blocked. Next: verify rendered layouts across widths and themes; continue navigation/component consolidation and role-specific workflows.
+
+### Execution 3 continued — Activity presentation and project isolation (17, 18, 31, 36)
+
+- Prior main: `62326f96276c7f57ae091307fc5e153089dcbe72`.
+- Root causes: stored percentages were displayed without a measured work total; late responses could display activity when no project was active; recovery action gating was looser than the durable resume engine; capped lists reported incorrect displayed counts.
+- Implementation: shared explicit state labels and filters, indeterminate progress without valid confirmed counts, correct displayed counts, visible manual reconciliation reason, strict project envelope checks and clear activity/recovery on project change. Restrict resume affordance to explicitly retryable read/AI failed or interrupted jobs; existing host approval remains authoritative.
+- Modified: media/start.js, media/atgv-consistency.css, test/shared-activity-state-and-progress.test.js, this tracker.
+- Verification: four new source/helper regression cases passed against exact proposed source in isolated JS harness; full start.js syntax compilation passed. No live provider/browser or full suite claims. Total execution 3: seven focused cases passed, generator check passed.
+- Commit: see commit introducing this entry. Items 17, 18, 31, 36 remain In progress; full role-specific acceptance pending. 0/40 fully verified. Version unchanged, main only, no mirrors.

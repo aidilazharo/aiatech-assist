@@ -8,7 +8,11 @@ function atgvJobsModal(open){
  const modal=$('atgvJobsDialog');
  modal.classList.toggle('hidden',!open);
  modal.setAttribute('aria-hidden',open?'false':'true');
- if(open){send('getWorkflowJobs');$('atgvJobsClose').focus();}
+ if(open){
+  if(atgvJobProject!==(activeId||''))resetAtgvActivity();
+  if(activeId){if(!atgvJobItems.length)$('atgvJobsSummary').textContent='Loading activity…';send('getWorkflowJobs');}
+  $('atgvJobsClose').focus();
+ }
  else $('atgvJobsButton').focus();
 }
 function atgvJobRow(job){
@@ -19,43 +23,67 @@ function atgvJobRow(job){
  state.dataset.status=job.status||'interrupted';state.textContent=atgvActivityName(job.status||'Unknown');
  heading.append(label,state);row.append(heading);
  const meta=document.createElement('p');meta.className='muted';
- const stage=atgvActivityName(job.phase||'Unknown stage'),progress=Number.isFinite(job.progress)?Math.max(0,Math.min(100,job.progress)):null;
- meta.textContent=stage+(progress!==null?' · '+progress+'%':'')+' · '+(job.updatedAt?new Date(job.updatedAt).toLocaleString():'Unknown time');row.append(meta);
- if(job.status==='running'||job.status==='queued'){const progressBar=document.createElement('progress');progressBar.max=100;if(progress!==null)progressBar.value=progress;
- progressBar.setAttribute('aria-label','Completion for '+atgvActivityName(job.command));row.append(progressBar);}
+ const stage=atgvActivityName(job.phase||'Unknown stage'),progress=atgvActivityProgress(job);
+ const updated=job.updatedAt?new Date(job.updatedAt):null;
+ meta.textContent=stage+(progress?' · '+progress.completed+' / '+progress.total+' confirmed':'')+' · '+(updated&&Number.isFinite(updated.getTime())?updated.toLocaleString():'Unknown time');row.append(meta);
+ if(atgvActivityMatches(job,'active')){const progressBar=document.createElement('progress');
+  if(progress){progressBar.max=progress.total;progressBar.value=progress.completed;}
+  progressBar.setAttribute('aria-label',(progress?'Confirmed work for ':'Processing, total unknown: ')+atgvActivityName(job.command));row.append(progressBar);}
  if(job.error){const details=document.createElement('details');details.className='atgv-technical-details';const summary=document.createElement('summary');summary.textContent='Technical details';const error=document.createElement('pre');error.className='atgv-job-error';error.textContent=job.error;details.append(summary,error);row.append(details);}
  if(job.status==='failed'||job.status==='interrupted'||job.status==='reconcile-required'){
   const button=document.createElement('button');button.type='button';button.className='secondary';
-  if(job.kind==='write'||job.kind==='install'||!job.retryable){
+  if(!atgvActivityCanResume(job)){
    button.textContent='Manual reconciliation required';button.disabled=true;
    button.title='Check remote state and existing work before restarting this operation from its original role screen.';
   }else{
    button.textContent='Prepare Resume';button.addEventListener('click',()=>{
+    if(!activeId||atgvJobProject!==activeId||(job.projectId&&job.projectId!==activeId))return;
     $('atgvJobsRecovery').textContent='Checking whether this job can be resumed safely…';
     send('retryWorkflowJob',{jobId:job.id});
    });
   }
   row.append(button);
+  if(button.disabled){const reason=document.createElement('p');reason.className='muted';reason.textContent='Verify current state and resume from the original role screen.';row.append(reason);}
  }
  return row;
 }
 function atgvActivityName(value){
- const names={baPublishPrepared:'Publish Business Requirements',baPreparationState:'Prepare Business Requirements',baRefreshArtifacts:'Refresh BR artifacts',baAutoResolveAttention:'Repair BR findings',syncApprovedBRs:'Publish Jira changes'};
- const raw=String(value||'Operation');return names[raw]||raw.replace(/([a-z0-9])([A-Z])/g,'$1 $2').replace(/[-_]+/g,' ').replace(/^./,c=>c.toUpperCase());
+ const names={baPublishPrepared:'Publish Business Requirements',baPreparationState:'Prepare Business Requirements',baRefreshArtifacts:'Refresh BR artifacts',baAutoResolveAttention:'Repair BR findings',syncApprovedBRs:'Publish Jira changes',
+  running:'In progress',queued:'Pending',waiting:'Pending',retrying:'Retrying',repairing:'Automatically repairing','auto-repairing':'Automatically repairing','review-required':'Review required','needs-review':'Review required','needs-attention':'Needs attention','reconcile-required':'Manual reconciliation required',succeeded:'Completed',stopped:'Cancelled'};
+ const raw=String(value||'Operation');return Object.hasOwn(names,raw)?names[raw]:raw.replace(/([a-z0-9])([A-Z])/g,'$1 $2').replace(/[-_]+/g,' ').replace(/^./,c=>c.toUpperCase());
 }
 function atgvActivityMatches(job,filter){
- const state=job.status;
- return filter==='all'||filter==='active'&&['queued','running','waiting','retrying'].includes(state)||filter==='attention'&&['failed','interrupted','reconcile-required','needs-attention'].includes(state)||filter==='finished'&&['completed','succeeded','cancelled','stopped'].includes(state);
+ const state=job?.status;
+ return filter==='all'||filter==='active'&&['queued','pending','running','waiting','retrying','repairing','auto-repairing','in-progress'].includes(state)||filter==='attention'&&['failed','interrupted','reconcile-required','needs-attention','review-required','needs-review','blocked'].includes(state)||filter==='finished'&&['completed','succeeded','cancelled','stopped'].includes(state);
+}
+function atgvActivityProgress(job){
+ const total=job?.metadata?.totalUnits,completed=job?.metadata?.completedUnits;
+ return Number.isSafeInteger(total)&&total>0&&Number.isSafeInteger(completed)&&completed>=0&&completed<=total?{total,completed}:null;
+}
+function atgvActivityCanResume(job){
+ return job?.retryable===true&&['read','ai'].includes(job.kind)&&['failed','interrupted'].includes(job.status);
+}
+function atgvActivityScopedItems(items,projectId,currentProject){
+ if(!currentProject||projectId!==currentProject||!Array.isArray(items))return [];
+ return items.filter(job=>job&&typeof job==='object'&&(!job.projectId||job.projectId===projectId));
+}
+function atgvActivitySummary(items,filter,projectId){
+ if(!projectId)return 'Open a project to see activity.';
+ const matching=items.filter(job=>atgvActivityMatches(job,filter)).length,shown=Math.min(matching,30);
+ return shown+(matching>shown?' of '+matching:'')+' shown · '+items.filter(job=>atgvActivityMatches(job,'active')).length+' active · '+items.filter(job=>atgvActivityMatches(job,'attention')).length+' need attention';
+}
+function resetAtgvActivity(){
+ $('atgvJobsRecovery').textContent='';
+ renderAtgvJobs([],activeId||'');
 }
 function renderAtgvJobs(items=[],projectId=''){
  const root=$('atgvJobsList');root.replaceChildren();
- atgvJobItems=Array.isArray(items)?items:[];atgvJobProject=projectId;
+ atgvJobProject=activeId||'';atgvJobItems=atgvActivityScopedItems(items,projectId,atgvJobProject);
  const filter=$('atgvJobsFilter')?.value||'all';
  const filtered=atgvJobItems.filter(job=>atgvActivityMatches(job,filter));
- $('atgvJobsSummary').textContent=!projectId?'Open a project to see activity.':
-  filtered.length+' shown · '+atgvJobItems.filter(job=>atgvActivityMatches(job,'active')).length+' active · '+atgvJobItems.filter(job=>atgvActivityMatches(job,'attention')).length+' need attention';
+ $('atgvJobsSummary').textContent=atgvActivitySummary(atgvJobItems,filter,atgvJobProject);
  if(!filtered.length){const text=document.createElement('p');text.className='muted';
-  text.textContent='No matching activity.';root.append(text);return;}
+  text.textContent=!atgvJobProject?'Select a project to view its activity.':atgvJobItems.length?'No matching activity.':'No saved activity for this project.';root.append(text);return;}
  for(const job of filtered.slice(0,30))root.append(atgvJobRow(job));
 }
 $('atgvJobsButton').addEventListener('click',()=>atgvJobsModal(true));
@@ -76,10 +104,10 @@ document.addEventListener('keydown',event=>{
 window.addEventListener('message',event=>{
  const msg=event.data||{};
  if(msg.type==='atgvWorkflowJobs'){
-  if(activeId&&msg.projectId!==activeId)return;
+  if(!activeId||msg.projectId!==activeId)return;
   renderAtgvJobs(msg.jobs,msg.projectId);
  }
- if(msg.type==='atgvWorkflowRecovery'&&(!activeId||msg.projectId===activeId)){
+ if(msg.type==='atgvWorkflowRecovery'&&activeId&&msg.projectId===activeId){
   $('atgvJobsRecovery').textContent=String(msg.message||'Resume available from the original role screen.').slice(0,500);
   if(msg.command==='processDiscoverySources')navigate('discovery');
  }
@@ -1110,7 +1138,10 @@ function updateState(msg){
   $('gateFolderAlert').classList.toggle('hidden',workspaceFolderAvailable);
 
   if(!aiProviderLoaded){aiProviderLoaded=true;send('getAiProviderState');}
-  projects=msg.projects||[];activeId=msg.activeId||null;healthData=msg.health||null;usedRoleIds=new Set(msg.usedRoles||[]);designState=msg.designState||null;approvedDesignHash=msg.approvedDesignHash||'';blueprintRegistry=msg.blueprintRegister||null;blueprintAssessment=msg.blueprintAssessment||null;extensionSettings=msg.extensionSettings||{};updateHeaderUserName(extensionSettings.jira?.email||extensionSettings.atlassian?.email||msg.startupSetup?.saved?.email);techStacks=msg.techStacks||[];renderCatalog(msg.catalog);jiraBrowseBaseUrl=msg.jiraBrowseBaseUrl||'';
+  const previousActivityProject=activeId;
+  projects=msg.projects||[];activeId=msg.activeId||null;
+  if(previousActivityProject!==activeId)resetAtgvActivity();
+  healthData=msg.health||null;usedRoleIds=new Set(msg.usedRoles||[]);designState=msg.designState||null;approvedDesignHash=msg.approvedDesignHash||'';blueprintRegistry=msg.blueprintRegister||null;blueprintAssessment=msg.blueprintAssessment||null;extensionSettings=msg.extensionSettings||{};updateHeaderUserName(extensionSettings.jira?.email||extensionSettings.atlassian?.email||msg.startupSetup?.saved?.email);techStacks=msg.techStacks||[];renderCatalog(msg.catalog);jiraBrowseBaseUrl=msg.jiraBrowseBaseUrl||'';
   recentIds=msg.recentProjects||[];projectReadiness=msg.projectReadiness||{};unmanagedFolders=msg.unmanagedFolders||[];
   startupProjectMappings=msg.startupProjectMappings||{};
    architectErrorLogProjectId=msg.activeId||'';architectErrorLogCount=Number(msg.architectErrorLogCount)||0;
