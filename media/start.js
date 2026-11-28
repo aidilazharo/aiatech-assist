@@ -3604,8 +3604,7 @@ function developerStageRingModel({stage,initial,preview,ready,running,done,compl
 }
 function renderDeveloperStageRing(completed){
  const result=developerStageRingModel({stage:developerBrStage,initial:developerBrInitial,preview:developerBrPreviewOnly,ready:developerBrInitialReady,running:developerBrServerRunning,done:developerBrDone,completed,cycleIndex:developerBrCycleIndex,cycleTotal:developerBrCycleTotal,failedAt:windowDeveloperBrFailedAt()});
- $('developerBrRingArc').setAttribute('stroke',result.color);
- $('developerBrRingArc').setAttribute('stroke-dasharray',result.percent+' 100');
+ $('developerBrRingPercent').style.color=result.color;
  $('developerBrRingPercent').textContent=result.percent+'%';
  $('developerBrRingTitle').textContent=result.title;
  $('developerBrRingDetail').textContent=result.detail;
