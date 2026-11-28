@@ -30,13 +30,14 @@ async function fixture(t){
  const register=await workflow.write(registry,'test',initial.revision,next=>{
   next.importEpoch=1;next.importDigest=sha('document');next.importName='Project intake.pdf';
   next.discoveryRevision='revision';next.reviewRevision='revision';next.discoveryAnswers=auto.mappedAnswers(source);
-  next.mappingCompleted={preflights:[{issues:[{severity:'blocker',category:'contradiction',detail:'The source describes both parallel and sequential workshops.'}]}]};
+  next.sourceDocuments=[{digest:next.importDigest,name:next.importName}];
+  next.mappingCompleted={sourceDigests:[next.importDigest],preflights:[{issues:[{severity:'blocker',category:'contradiction',detail:'The source describes both parallel and sequential workshops.'}]}]};
  });
  const drafts=await workflow.generated(registry,'test',register.revision,{discoveryRevision:'revision',requirements:[intake,sequencing],automatic:true,actor:'BA'});
  return {registry,drafts};
 }
 
-test('review findings stay visible while the BA publishes both flagged and clean drafts and later updates the same Epic',async t=>{
+test('review findings block publication until corrected, then BA can publish and update the same Epic',async t=>{
  const {registry,drafts}=await fixture(t);
  const input=drafts.brs.map(auto.draftForReview),concerns=auto.sourceConcerns(drafts);
  const verdict={id:'BR-002',quote:'The workshop must finish before drafting starts.',reason:'Unresolved conflict.',conflict:0};
@@ -55,7 +56,7 @@ test('review findings stay visible while the BA publishes both flagged and clean
  await assess('test',signal);
  assert.equal(calls,2);
  const reviewed=await workflow.load(registry,'test');
- assert.deepEqual(auto.publicationIssues(reviewed),[]);
+ assert.ok(auto.publicationIssues(reviewed).some(issue=>issue.includes('BR-002')&&issue.includes('unresolved quality findings')));
  assert.match(auto.sourceNotes(reviewed).join(' '),/question 12/);
  assert.match(auto.sourceNotes(reviewed).join(' '),/BR-002/);
  const changes=workflow.plan(workflow.projectPreparedJira(reviewed));
@@ -63,24 +64,27 @@ test('review findings stay visible while the BA publishes both flagged and clean
  assert.match(auto.isoDocument('Project intake.pdf',reviewed,''),/BR-002 · Enforce workshop sequencing/);
  assert.equal(reviewed.brs[1].status,'draft');
  assert.equal(changes.find(row=>row.title==='Confirm the project delivery owner').roleId,'project-manager');
- const after=await workflow.approvePreparedJira(registry,'test',reviewed.revision,{
+ await assert.rejects(workflow.approvePreparedJira(registry,'test',reviewed.revision,{
   actor:'BA',expectedPlan:sha(JSON.stringify(changes)),publication:{roots:[],rows:[]}
- });
- assert.equal(after.brs.find(br=>br.id==='BR-002').status,'approved');
- const epic=changes.find(row=>row.path==='BR-002');
- await workflow.recorded(registry,'test',after.revision,{...epic,key:'TC-42'});
- await assess('test',signal);
- const published=await workflow.load(registry,'test');
- assert.match(auto.sourceNotes(published).join(' '),/BR-002/);
- assert.equal(calls,2);
- await workflow.edit(registry,'test',published.revision,{brId:'BR-002',actor:'BA',automatic:true,
+ }),/unresolved quality findings/);
+ await workflow.edit(registry,'test',reviewed.revision,{brId:'BR-002',actor:'BA',automatic:true,
   content:{...sequencing,objective:'The BA records the agreed workshop schedule.',acceptanceCriteria:'The agreed schedule is available for review.'}});
  await assess('test',signal);
  const corrected=await workflow.load(registry,'test');
  assert.equal(corrected.baDraftQuality.excluded.length,0);
- const update=workflow.plan(workflow.projectPreparedJira(corrected)).find(row=>row.path===epic.path);
- assert.equal(update.action,'update');
- assert.equal(update.key,'TC-42');
+ assert.deepEqual(auto.publicationIssues(corrected),[]);
+ const correctedPlan=workflow.plan(workflow.projectPreparedJira(corrected));
+ const after=await workflow.approvePreparedJira(registry,'test',corrected.revision,{
+  actor:'BA',expectedPlan:sha(JSON.stringify(correctedPlan)),publication:{roots:[],rows:[]}
+ });
+ const epic=correctedPlan.find(row=>row.path==='BR-002');
+ const published=await workflow.recorded(registry,'test',after.revision,{...epic,key:'TC-42'});
+ await workflow.edit(registry,'test',published.revision,{brId:'BR-002',actor:'BA',automatic:true,
+  content:{...sequencing,objective:'The BA records the agreed workshop schedule.',acceptanceCriteria:'The agreed schedule is available for review and reporting.'}});
+ await assess('test',signal);
+ const revised=await workflow.load(registry,'test');
+ const update=workflow.plan(workflow.projectPreparedJira(revised)).find(row=>row.path===epic.path);
+ assert.equal(update.action,'update');assert.equal(update.key,'TC-42');
  assert.match(auto.invalidDraft({...intake,acceptanceCriteria:'TBD'}),/acceptance criteria/);
 });
 
