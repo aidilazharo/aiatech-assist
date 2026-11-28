@@ -4602,19 +4602,41 @@ async function repairAutomaticBAFindings(projectId,signal,report,initialWarning=
   try{for(let attempt=1;attempt<=2&&targets.length;attempt++){
    signal.throwIfAborted();
    await report('baAutoResolveProgress','AI repair '+attempt+'/2: correcting '+targets.length+' source-backed BR revision(s)…');
-   const updated=await generateBusinessRequirements({
-    autoResolve:true,automatic:true,regenerate:true,targetBrIds:targets,signal,
-    feedback:'Correct only the cited findings using verified source and Discovery evidence. Keep BR identities, existing feature/story/task IDs, unaffected scope, test cases and unresolved business decisions. For previously approved BRs propose a new draft revision, never replace approved content. Preserve every existing work item.'
-   });
-   if(!updated)throw Error('AI repair did not save a draft.');
-   signal.throwIfAborted();
-   const impact=(updated.impact||[]).filter(row=>targets.includes(row.id));
-   for(const item of impact)if(item.change==='modified')changed.add(item.id);
+   let modified=0;
+   for(const id of targets){
+    let feedback='';
+    for(let retry=0;retry<2;retry++){
+     try{
+      signal.throwIfAborted();if(activeProject?.id!==projectId)throw Error('Project changed during AI repair.');
+      const current=await brWorkflow.load(registry,projectId),br=current.brs.find(row=>row.id===id),finding=currentAttentionFindings(current).find(row=>row.id===id);
+      if(!finding||!baAutomatic.repairEligible(current,br))break;
+      await requireBAOwner('ba-br-'+id);
+      const target=await activeAiTarget();
+      const related=findings.map(item=>({id:item.id,field:item.field,reason:item.reason,priorResolution:baAutomatic.resolutionFor(current.brs.find(row=>row.id===item.id)||{})}));
+      const raw=await aiAnswer(target,baAutomatic.repairPrompt(current,br,finding,related,feedback),55000,{json:true,signal,diagnosticRole:'business-analyst'});
+      const {proposal}=baAutomatic.parseRepair(raw,br);
+      signal.throwIfAborted();if(activeProject?.id!==projectId)throw Error('Project changed during AI repair.');
+      const live=await listOwnership();
+      if(!live.me||live.cached||live.scope==='local'||live.me!==ownership.me||!live.documents.some(row=>row.documentId==='ba-br-'+id&&row.ownerId===live.me))throw Error('Verified BR ownership changed during repair.');
+      signal.throwIfAborted();if(activeProject?.id!==projectId)throw Error('Project changed during AI repair.');
+      const updated=await brWorkflow.repairRequirementText(registry,projectId,current.revision,{brId:id,proposal,actor:live.me});
+      modified++;changed.add(id);
+      await recordBAProcess({stage:'requirements',action:'proposed-rule-repair',status:'completed',key:id,details:atgvJobSafeError(new Error(proposal.basis+': '+proposal.rule+' · '+proposal.rationale))});
+      await dashboard?.webview.postMessage({type:'brUpdated',register:updated});
+      break;
+     }catch(error){
+      signal.throwIfAborted();if(activeProject?.id!==projectId)throw error;
+      feedback=atgvJobSafeError(error);
+      await recordBAProcess({stage:'requirements',action:'proposed-rule-repair',status:retry?'needs-review':'retrying',key:id,details:feedback});
+     }
+    }
+   }
+   if(modified)await brWorkflow.repairPendingExports(registry,projectId);
    await report('baAutoResolveProgress','Rechecking revised BR quality and evidence…');
    qualityWarning=(await assessAutomaticDrafts(projectId,signal))||'';
    const checked=await brWorkflow.load(registry,projectId);
    const remaining=currentAttentionFindings(checked).filter(row=>originalIds.includes(row.id));
-   if(!remaining.length||impact.length>0&&impact.every(row=>row.change==='unchanged'))break;
+   if(!remaining.length||!modified)break;
    targets=remaining.filter(row=>checked.brs.some(br=>br.id===row.id&&baAutomatic.repairEligible(checked,br))).map(row=>row.id);
    if(!targets.length)break;
   }

@@ -1170,6 +1170,22 @@ async function generated(registry,id,revision,{discoveryRevision,requirements,ri
   next.impact=selective?[...(next.impact||[]).filter(x=>!selected.has(x.id)),...impact]:impact;event(next,'impact-assessed',{summary:Object.fromEntries(['new','modified','unchanged','removed'].map(k=>[k,impact.filter(x=>x.change===k).length]))});
  });
 }
+async function repairRequirementText(registry,id,revision,{brId,proposal,actor}){
+ return write(registry,id,revision,next=>{
+  if(!next.importEpoch||!next.reviewRevision||next.reviewRevision!==next.discoveryRevision)throw Error('Current source and Discovery review are required.');
+  const br=next.brs.find(row=>row.id===brId);
+  if(!automaticWorkflow.repairEligible(next,br)||!automaticWorkflow.hasQualityFinding(next,br))throw Error('Current owned BR finding is no longer eligible for repair.');
+  const result=automaticWorkflow.applyRepair(br,proposal);
+  if(br.status==='draft')br.previousDrafts=(br.previousDrafts||[]).concat({at:new Date().toISOString(),discoveryRevision:br.source?.discoveryRevision||'',draftSavedAt:br.draftSavedAt||null,content:structuredClone(contentOf(br))}).slice(-20);
+  Object.assign(br,contentOf(result.updated));
+  br.status='draft';br.needsRefresh=true;br.staleReason='Revision awaiting approval';br.modifiedEpoch=next.importEpoch;
+  br.source={...br.source,name:next.importName,digest:next.importDigest,discoveryRevision:next.discoveryRevision};
+  br.baAiResolution={basis:result.proposal.basis,rule:result.proposal.rule,rationale:result.proposal.rationale,fingerprint:automaticWorkflow.repairFingerprint(br),at:new Date().toISOString()};
+  savePreparedDraft(next,br,actor);
+  next.impact=[...(next.impact||[]).filter(x=>x.id!==brId),{id:brId,title:br.title,change:'modified',approved:false}];
+  event(next,'br-ai-proposed-resolution',{brId,baseRevision:br.approvedRevision||0,basis:br.baAiResolution.basis,rule:br.baAiResolution.rule,rationale:br.baAiResolution.rationale,actor:String(actor).slice(0,120)});
+ });
+}
 async function exportDraft(registry,id,br){
  const dir=path.join(projectFolder(registry,id),'draft-brs');
  const existing=await fs.lstat(dir).catch(e=>e.code==='ENOENT'?null:Promise.reject(e));
@@ -1885,4 +1901,4 @@ async function finishChangeRequest(registry,id,revision,{paths,actor}){
   }
  });
 }
-module.exports={projectPreparedJira,renumberDrafts,changedPublishedBRs,approvePreparedJira,saveSourceArtifact,sourceReviewFindings,discoveryTargetScope,reconcileDiscoveryTargets,startOrRestart,repairRestart,linkJiraChangeRequest,recordAIChangeImpact,recordJiraWorkHistory,createChangeRequest,decideChangeRequest,finishChangeRequest,write,sourceLifecycle,archiveSource,restoreSource,forceDeleteArchivedSource,forceDeleteActiveSource,forceDeleteBusinessRequirement,exclusiveBRSourceEntries,discardEmptyIncompleteCycle,inProgressDeletionImpact,forceDeleteInProgressCycle,sourceDeletionImpact,activeSourceDeletionImpact,removeBRExports,sourceRemovalImpact,reviewSourceConflict,resolveDiscoveryProposal,recordRoleDocumentImpact,decideRoleDocumentImpact,endorse,clearDependencyImpact,changeEngine,propose,decideProposal,rejectConflictingProposals,proposalConflicts,recordLinkedJiraStatus,recordInboundJira,reviewInboundJira,reconcileRevertedJira,reconcileApprovedJira,load,imported,addSources,removeSource,selectSources,completeSourceMapping,commitSourceMapping,repairPendingExports,discoverySaved,reviewed,skipReview,confirmReview,generated,beginRevision,edit,approve,retire,keep,plan,saveJiraIssueDetails,approveRetirements,beginOperation,markAttempt,recorded,reconcileExistingJira,parseGenerated,promptForGeneration,validateProposal,flattenApproved,asMarkdown,normalizedContent,matchScore};
+module.exports={projectPreparedJira,renumberDrafts,changedPublishedBRs,approvePreparedJira,saveSourceArtifact,sourceReviewFindings,discoveryTargetScope,reconcileDiscoveryTargets,startOrRestart,repairRestart,linkJiraChangeRequest,recordAIChangeImpact,recordJiraWorkHistory,createChangeRequest,decideChangeRequest,finishChangeRequest,write,sourceLifecycle,archiveSource,restoreSource,forceDeleteArchivedSource,forceDeleteActiveSource,forceDeleteBusinessRequirement,exclusiveBRSourceEntries,discardEmptyIncompleteCycle,inProgressDeletionImpact,forceDeleteInProgressCycle,sourceDeletionImpact,activeSourceDeletionImpact,removeBRExports,sourceRemovalImpact,reviewSourceConflict,resolveDiscoveryProposal,recordRoleDocumentImpact,decideRoleDocumentImpact,endorse,clearDependencyImpact,changeEngine,propose,decideProposal,rejectConflictingProposals,proposalConflicts,recordLinkedJiraStatus,recordInboundJira,reviewInboundJira,reconcileRevertedJira,reconcileApprovedJira,load,imported,addSources,removeSource,selectSources,completeSourceMapping,commitSourceMapping,repairPendingExports,discoverySaved,reviewed,skipReview,confirmReview,generated,repairRequirementText,beginRevision,edit,approve,retire,keep,plan,saveJiraIssueDetails,approveRetirements,beginOperation,markAttempt,recorded,reconcileExistingJira,parseGenerated,promptForGeneration,validateProposal,flattenApproved,asMarkdown,normalizedContent,matchScore};
