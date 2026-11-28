@@ -4,6 +4,9 @@
 const fs=require('node:fs/promises');
 const path=require('node:path');
 const {safe}=require('./lib/startup-diagnostics');
+const manifest=require('../package.json');
+const buildIdentity=require('./lib/updates/extension-build-identity');
+const installedBuild=buildIdentity.identity(manifest,manifest.version);
 const MAX_BYTES=1024*1024,MAX_LINE=1200;
 const PROJECT=/^[a-z0-9][a-z0-9_-]{0,79}$/i;
 let writes=Promise.resolve();
@@ -14,7 +17,8 @@ function fileFor(base,projectId){
 function trim(value,n=240){return safe(String(value??'')).replace(/[\r\n\t]+/g,' ').slice(0,n);}
 function entry(value={}){
  const metadata={at:new Date().toISOString(),
-  version:require('../package.json').version,
+  version:manifest.version,
+  ...(installedBuild?{buildSha256:installedBuild.contentSha256,...(installedBuild.sourceSha?{sourceSha:installedBuild.sourceSha}:{})}:{}),
   stage:trim(value.stage||'workflow',65),
   action:trim(value.action||'status',100),
   status:trim(value.status||'info',40)};
@@ -55,7 +59,7 @@ async function read(base,projectId){
   try{
    const row=JSON.parse(line);
    if(!row||typeof row!=='object')continue;
-   entries.push({at:trim(row.at,40),stage:trim(row.stage,65),action:trim(row.action,100),
+   entries.push({at:trim(row.at,40),version:trim(row.version,40),buildSha256:/^[a-f0-9]{64}$/.test(String(row.buildSha256||''))?row.buildSha256:'',sourceSha:/^[a-f0-9]{40}$/.test(String(row.sourceSha||''))?row.sourceSha:'',stage:trim(row.stage,65),action:trim(row.action,100),
     status:trim(row.status,40),step:trim(row.step,75),key:trim(row.key,70),
     details:trim(row.details,420),durationMs:Number.isFinite(row.durationMs)?row.durationMs:null});
   }catch{/* Bad diagnostic line does not prevent remaining history from downloading. */}
@@ -73,6 +77,10 @@ function exportText({projectId,events=[],register={},checkpoint=null,preparation
  if(!PROJECT.test(String(projectId||'')))throw Error('Invalid BA project for export.');
  const lines=['ATGV AIATECH ASSIST · BUSINESS REQUIREMENTS PROCESS TROUBLESHOOTING LOG',
   'Project: '+projectId,'Generated: '+new Date().toISOString(),
+  'Extension version: '+manifest.version,
+  'Extension build SHA-256: '+(installedBuild?.contentSha256||'Unavailable (unstamped build)'),
+  'Extension source commit SHA: '+(installedBuild?.sourceSha||'Unavailable'),
+  'Extension built at: '+(installedBuild?.builtAt||'Unavailable'),
   'Logs contain bounded lifecycle metadata and errors. No source document text, credentials or raw API requests are included.',
   'Older diagnostic events may have rotated to keep storage bounded.',
   '',
@@ -98,7 +106,8 @@ function exportText({projectId,events=[],register={},checkpoint=null,preparation
  for(const item of events){
   lines.push('['+trim(item.at,45)+'] '+trim(item.stage,70)+' · '+trim(item.action,100)+' · '+trim(item.status,40)+
    (item.step?' · step='+trim(item.step,75):'')+(item.key?' · key='+trim(item.key,70):'')+
-   (item.durationMs!==null?' · '+item.durationMs+'ms':''));
+   (item.durationMs!==null?' · '+item.durationMs+'ms':'')+
+   (item.version?' · v'+trim(item.version,40):'')+(item.buildSha256?' · build='+trim(item.buildSha256,64):'')+(item.sourceSha?' · source='+trim(item.sourceSha,40):''));
   if(item.details)lines.push('  '+trim(item.details,420));
  }
  lines.push('','3. SAVED REQUIREMENTS REGISTER EVENT HISTORY');
