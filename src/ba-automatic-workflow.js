@@ -149,9 +149,24 @@ function invalidDraft(br){
 
 function publicationIssues(register){
  const blockers=[];
+ const sources=register.sourceDocuments||[];
+ const mapped=new Set(register.mappingCompleted?.sourceDigests||register.mappingCompleted?.digests||[]);
+ if(!sources.length||!register.mappingCompleted||sources.some(doc=>!doc.digest||!mapped.has(doc.digest)))
+  blockers.push('Business Documents: complete source mapping.');
  const answers=register.discoveryAnswers||{};
- if(!QUESTIONS.every(([key])=>String(answers[key]||'').trim()))blockers.push('Complete the 12 Discovery answers.');
- if(!register.reviewRevision||register.reviewRevision!==register.discoveryRevision)blockers.push('Refresh the AI review of the current Discovery answers.');
+ if(!QUESTIONS.every(([key])=>String(answers[key]||'').trim()))blockers.push('Discovery: complete all 12 answers.');
+ if(!register.reviewRevision||register.reviewRevision!==register.discoveryRevision)blockers.push('Discovery: complete the current AI review.');
+ const active=(register.brs||[]).filter(br=>!br.archivedFromRestart&&!['retired','retire-proposed'].includes(br.status));
+ if(!active.length&&!(register.brs||[]).some(br=>!br.archivedFromRestart&&br.status==='retire-proposed'&&br.approvedContent))
+  blockers.push('Generated Requirements: prepare Business Requirements.');
+ for(const br of active){
+  if(!['draft','approved'].includes(br.status)||br.status==='draft'&&!br.draftSavedAt||br.needsRefresh||br.externalReviewRequired||br.roleReviewRequired||br.dependencyReviewRequired)
+   blockers.push('Generated Requirements: '+br.id+' is not ready.');
+  if(register.baDraftQuality?.checked?.[br.id]!==qualityFingerprint(register,br))
+   blockers.push('Generated Requirements: '+br.id+' quality verification is incomplete.');
+  if(hasQualityFinding(register,br)||invalidDraft(br))
+   blockers.push('Generated Requirements: '+br.id+' has unresolved quality findings.');
+ }
  return [...new Set(blockers)];
 }
 
