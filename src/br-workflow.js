@@ -1296,7 +1296,7 @@ async function approve(registry,id,revision,{brId,actor='Local confirmation',req
  return (await repairPendingExports(registry,id)).register;
 
 }
-function projectPreparedJira(register,{actor='Business Analyst',blockers}={}){
+function projectPreparedJira(register,{actor='Business Analyst',blockers,roleFallback=true}={}){
  const next=structuredClone(register);
  const active=next.brs.filter(row=>!row.archivedFromRestart&&row.status!=='retired');
  if(!active.length){
@@ -1320,6 +1320,22 @@ function projectPreparedJira(register,{actor='Business Analyst',blockers}={}){
    // Keep a blocked requirement out of the preview projection while preserving its stored revision.
    const index=next.brs.indexOf(br);
    next.brs[index]=structuredClone(register.brs[index]);
+  }
+ }
+ // New, unpublished draft tasks must have a routing role. AI repair can inspect
+ // the raw projection first; a verified preview and its final approval use the
+ // same deterministic fallback even if the AI service cannot classify a task.
+ if(roleFallback){
+  const draftIds=new Set((register.brs||[]).filter(br=>br.status==='draft'&&!br.archivedFromRestart).map(br=>br.id));
+  for(const item of plan(next)){
+   const root=item.path.split('/')[0];
+   if(item.kind!=='Task'||item.action!=='create'||item.roleLabel||item.staleJiraDetails||
+      !draftIds.has(root)||register.pending?.[item.path]||register.synced?.[item.path])continue;
+   const br=next.brs.find(row=>row.id===root);
+   if(!br?.approvedContent)continue;
+   next.jiraIssueDetails||={};
+   next.jiraIssueDetails[item.path]={...jiraPreviewDetails.normalizeDetails({...item.jiraDetails,roleId:'project-manager'}),
+    approvedHash:digest(br.approvedContent),automaticRoleTriage:true};
   }
  }
  return next;
@@ -1509,10 +1525,10 @@ function plan(reg){
  obsolete.sort((a,b)=>b.path.split('/').length-a.path.split('/').length);
  return [...changes,...obsolete];
 }
-async function saveJiraIssueDetails(registry,id,revision,{path:issuePath,hash,acceptanceCriteria,definitionOfDone,summary,description,fieldValues,roleId,automatic=false,actor='Business Analyst'}={}){
+async function saveJiraIssueDetails(registry,id,revision,{path:issuePath,hash,acceptanceCriteria,definitionOfDone,summary,description,fieldValues,roleId,automatic=false,autoRoleRepair=false,actor='Business Analyst'}={}){
  const details=jiraPreviewDetails.normalizeDetails({acceptanceCriteria,definitionOfDone,summary,description,fieldValues,roleId});
  return write(registry,id,revision,next=>{
-  const state=automatic?projectPreparedJira(next):next;
+  const state=automatic?projectPreparedJira(next,autoRoleRepair?{blockers:[],roleFallback:false}:{}):next;
   const item=plan(state).find(row=>row.path===issuePath&&row.action!=='retire');
   if(!item||item.hash!==hash)throw Error('Jira preview changed. Generate the preview again before editing issue details.');
   const br=state.brs.find(row=>row.id===item.path.split('/')[0]);
